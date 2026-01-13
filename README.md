@@ -2,7 +2,7 @@
 
 _Note: This is the v1 of AlignFirst (formerly Vibe Flow). If you are looking for the AlignFirst as an Agent Skill, see the [main branch](https://github.com/paleo/alignfirst)._
 
-AlignFirst is a hackable set of prompts that enables _Spec-Driven Development_. It works well with any agent powered by a coding model such as:
+AlignFirst enables design-driven development with human-in-the-loop. It works well with any agent powered by a coding model such as:
 
 - **Claude Opus 4+** or **Claude Sonnet 4+** (Anthropic)
 - **GPT 5+** (OpenAI)
@@ -87,14 +87,6 @@ Everything must be written in (git-ignored) local files, because:
 
 1. The context window is limited, the compression mechanism is opaque, and we want to be able to continue an unfinished task in a fresh session.
 2. It's a way to keep track of what was agreed upon with the agent and what has been done.
-
-## Why "Spec-Driven Development"?
-
-Spec-Driven Development (SDD) first existed in API development as a design-first approach using OpenAPI/Swagger. With AI-assisted coding agents, the term expanded to describe a methodology: writing specifications before code, where specs become the source of truth guiding AI agents through structured phases: **spec → plan → implement**.
-
-SDD is the structured alternative to "vibe coding" — the ad-hoc approach where you prompt an AI and hope for the best. Tools like GitHub Spec Kit and AWS Kiro have popularized this approach.
-
-AlignFirst follows in their footsteps, but as a lightweight, agent-agnostic prompt system — no plugins, no platform lock-in. The same workflow works across any capable coding agent, making it easy for teams to adopt regardless of their tooling choices.
 
 ## Migrations (update from older version)
 

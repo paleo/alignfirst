@@ -13,7 +13,7 @@ Identify and state these values before starting the protocol.
 
 ## Phases
 
-When the user initiates AAD, you MUST follow this four-phase process:
+When the user initiates an Align-and-Do Protocol, you MUST follow this four-phase process:
 
 1. **Investigation Phase**: Research the codebase to understand the current implementation and context
 2. **Discussion Phase**: Collaborate with the user to explore the problem/solution space BEFORE taking action
@@ -57,6 +57,25 @@ You should ask questions freely to ensure you fully understand:
 
 **Important: always ensure the user approves your proposal before implementing anything!**
 
+### Before starting
+
+Create the summary file as a **working document**. Write it in TASK_DIR, composing the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
+
+The initial content should be a brief outline of what will be done:
+
+```markdown
+# AAD Summary - Short Title Here - (In Progress)
+
+## Topic
+Brief description of the problem/goal
+
+## Plan
+- Step 1: ...
+- Step 2: ...
+```
+
+### During implementation
+
 When implementing the solution, follow these guidelines:
 
 - **Code Style**: Adhere to the project's coding standards
@@ -64,11 +83,13 @@ When implementing the solution, follow these guidelines:
 - **Testing**: Verify your changes work as expected
 - **Communication**: Keep the user informed of progress and any unexpected findings
 
+**Update the summary file** as you complete major steps. Mark completed items, add notes about discoveries or decisions made during implementation. _This is a high priority if you detect that the context is about to end._ This provides real-time visibility and crash resilience.
+
 ## Phase 4. Summary Phase
 
-Write the summary in a markdown file in TASK_DIR. Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, write a new file `E6-AAD.summary.md`. Do not overwrite an existing file.
+Rewrite and clean up the summary file, keeping only the final summary of what was done. Remove the "- (In Progress)" marker and the step-by-step progress tracking.
 
-The summary should capture:
+The final summary should capture:
 
 - What was the topic or problem
 - What was decided or discovered
