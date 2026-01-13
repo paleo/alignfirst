@@ -2,7 +2,7 @@
 
 **_Important: This is the v2 of AlignFirst (formerly Vibe Flow). AlignFirst is now distributed as an Agent Skill. If you work with a compatible agent, go ahead. For other agents, you should probably install and use the [v1](https://github.com/paleo/alignfirst/blob/v1/README.md)._**
 
-AlignFirst is a hackable set of prompts that enables design-driven development with human-in-the-loop. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
+AlignFirst enables design-driven development with human-in-the-loop. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
 
 - **Claude Opus 4+** or **Claude Sonnet 4+** (Anthropic)
 - **GPT 5+** (OpenAI)
