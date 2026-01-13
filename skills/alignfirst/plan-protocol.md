@@ -83,7 +83,7 @@ Follow these guidelines:
 
 ### 3.2 Additional Requirements for Specialized Plans
 
-**Use this when multiple plans are created.**
+**Use this when multiple plans are created. For a single plan, skip this section entirely.**
 
 For specialized plans, add these additional requirements:
 

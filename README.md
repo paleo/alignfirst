@@ -1,8 +1,8 @@
 # AlignFirst Skill
 
-**_Important: This is the v2 of AlignFirst (formerly Vibe Flow). AlignFirst is now distributed as an Agent Skill following the [Agent Skills open standard](https://agentskills.io/). If you work exclusively with Claude Code, go ahead. For other agents, you should probably install and use the [v1](https://github.com/paleo/alignfirst/blob/v1/README.md)._**
+**_Important: This is the v2 of AlignFirst (formerly Vibe Flow). AlignFirst is now distributed as an Agent Skill. If you work with a compatible agent, go ahead. For other agents, you should probably install and use the [v1](https://github.com/paleo/alignfirst/blob/v1/README.md)._**
 
-AlignFirst is a hackable set of prompts that enables _Spec-Driven Development_. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
+AlignFirst is a hackable set of prompts that enables design-driven development with human-in-the-loop. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
 
 - **Claude Opus 4+** or **Claude Sonnet 4+** (Anthropic)
 - **GPT 5+** (OpenAI)
@@ -29,12 +29,12 @@ Then, start using the workflow.
 
 ### Enable Agent Skills
 
-Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental:
+Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental. Here are the documentations:
 
-- [Enable Agent Skills in VS Code / GitHub Copilot](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
-- [Enable Agent Skills in Cursor](https://cursor.com/docs/context/skills)
-- [Agent Skills in Claude Code](https://code.claude.com/docs/en/skills)
-- [Agent Skills in Codex](https://developers.openai.com/codex/skills/)
+- [Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
+- [Cursor](https://cursor.com/docs/context/skills)
+- [Claude Code](https://code.claude.com/docs/en/skills)
+- [Codex](https://developers.openai.com/codex/skills/)
 
 ## Using AlignFirst
 
@@ -91,13 +91,9 @@ Specs, plans, and summaries must be written in well-organized (git-ignored) loca
 
 See the [ParoiCMS repository](https://gitlab.com/paroi/opensource/paroicms/) for a real-world example.
 
-## Why "Spec-Driven Development"?
+## Is it "Spec-Driven Development" (SDD)?
 
-Spec-Driven Development (SDD) first existed in API development as a design-first approach using OpenAPI/Swagger. With AI-assisted coding agents, the term expanded to describe a methodology: writing specifications before code, where specs become the source of truth guiding AI agents through structured phases: **spec → plan → implement**.
-
-SDD is the structured alternative to "vibe coding" — the ad-hoc approach where you prompt an AI and hope for the best. Tools like GitHub Spec Kit and AWS Kiro have popularized this approach.
-
-AlignFirst follows in their footsteps, but as a lightweight, agent-agnostic prompt system — no plugins, no platform lock-in. The same workflow works across any capable coding agent, making it easy for teams to adopt regardless of their tooling choices.
+I don't know. If you have a clue, let me know, I'm interested.
 
 ## Technical Documentation Authoring Skill
 
