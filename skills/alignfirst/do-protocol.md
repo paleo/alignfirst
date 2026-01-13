@@ -89,7 +89,7 @@ When implementing the solution, follow these guidelines:
 
 ## Phase 4. Summary Phase
 
-Rewrite and clean up the summary file, keeping only the final summary of what was done. Remove the "(In Progress)" marker and the step-by-step progress tracking.
+Rewrite and clean up the summary file, keeping only the final summary of what was done. Remove the "- (In Progress)" marker and the step-by-step progress tracking.
 
 The final summary should capture:
 
