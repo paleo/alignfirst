@@ -4,7 +4,7 @@
 
 You need:
 
-- the TASK_DIR - if you don't have it, use your instructions on finding the **ticket ID**, or ask the user
+- the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
 - the current CYCLE_LETTER and the bumped FILE_NUMBER - deduce them yourself
 
 Identify and state these values before starting the protocol.
@@ -81,11 +81,11 @@ Note: The list of used skills should exclude `alignfirst`.
 Decide whether to use your subagent tool based on the nature of the work:
 
 - **Work alone** when the task is small enough to be manageable
-- You can decide to **use subagents** when you encounter:
+- You can decide to **delegate to subagents** when the work is complex and you encounter:
   - **Stack boundaries**: Different technologies or specialization areas requiring distinct skills or custom agents
-  - **Distinct logical units**: Separate features or modules large enough to warrant isolation
+  - Or, **distinct logical units**: Separate features or modules large enough to warrant isolation
 
-Each subagent invocation should target a **coherent, completable unit of work**. Avoid splitting work that is tightly coupled.
+  Each subagent invocation should target a **coherent, completable unit of work**. Avoid splitting work that is tightly coupled.
 
 Update the summary file during implementation progress if there is something significant to report. This provides real-time visibility and crash resilience.
 

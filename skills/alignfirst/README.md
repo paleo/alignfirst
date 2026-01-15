@@ -48,17 +48,17 @@ Plans orchestrate what agents or subagents will do:
 /alplan
 ```
 
-The agent reads the spec and writes plan(s) in `_plans/123/A2-plan*.md`.
+The agent reads the spec and write a plan `_plans/123/A2-plan.md`, or a main plan `_plans/123/A2-main-plan.md` with several sub-plans.
 
 ### Implementation
 
 **Clear the context**, then execute the plan(s):
 
 ```markdown
-Execute the plan `_plans/123/A2-plan-orchestrator.md`
+Execute the plan `_plans/123/A2-main-plan.md`
 ```
 
-The agent executes and writes handover document(s) (`.summary.md` files).
+The agent executes and writes `.summary.md` files.
 
 ### Align-and-Do Protocol (AAD)
 
