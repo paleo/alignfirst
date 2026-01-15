@@ -185,23 +185,17 @@ Write a **main plan handover document**. This document should:
    - Detail any issues encountered during execution
 
 Keep this handover very short. Do not combine or repeat the content of individual handovers. Write this document in `{PLAN_FILE_PATH}.summary.md`. Avoid overwriting an existing file. Ignore lint errors (formatting issues) in this file.
-````
 
-Note:
-
-- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `_plans/123/A2-main-plan.md`, use `_plans/123/A2-main-plan`, resulting in `_plans/123/A2-main-plan.summary.md`)
-
-### 4.2 Footer for Main Plan
-
-Add the following content to the very end of the main plan:
-
-```markdown
 ---
 
 Do not trust this plan blindly. Be sure you understand the codebase and all specialized plans before coordinating their execution.
 
 **IMPORTANT**: Do NOT use external search tools (Context7, web search, documentation fetching) during implementation unless explicitly allowed in these plans. All context should be provided in these plans or discoverable in the codebase.
-```
+````
+
+Note:
+
+- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `_plans/123/A2-main-plan.md`, use `_plans/123/A2-main-plan`, resulting in `_plans/123/A2-main-plan.summary.md`)
 
 ## Phase 5. Writing Phase
 
