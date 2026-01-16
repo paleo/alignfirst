@@ -42,7 +42,7 @@ Based on your investigation, determine the plan structure:
 First, evaluate if the work should be split into multiple specialized plans (a.k.a. sub-plans) or handled as a single plan:
 
 - **Single plan**: Preferred when work is small enough to be manageable, especially if it is cohesive within one area
-- **Multiple specialized plans**: When the work is complex, split it into multiple plans with a main plan, based on:
+- **Multiple specialized plans with a main plan**: Split the work when it is complex, based on:
   - **Distinct logical units**: When large enough, separate features or modules within the same stack
   - **Stack boundaries**: Different technologies or specialization areas
   - Each specialized plan should produce a **coherent deliverable**
@@ -67,7 +67,7 @@ Design an implementation plan based on the SPEC. Include all useful information 
 
 ### 3.1 Common Plan Guidelines
 
-**These guidelines apply to all plans (single plan or specialized plans).**
+_These guidelines apply to all plans (single plan or specialized plans)._
 
 Follow these guidelines:
 
@@ -83,7 +83,7 @@ Follow these guidelines:
 
 ### 3.2 Additional Requirements for Specialized Plans
 
-**Use this when multiple plans are created. For a single plan, skip this section entirely.**
+_Use this when multiple plans are created. For a single plan, skip this section entirely. **I insist: NEVER mention any "Assigned to" in a single plan.**_
 
 For specialized plans, add these additional requirements:
 
@@ -102,7 +102,7 @@ For specialized plans, add these additional requirements:
 
 ### 3.3 Add a Final Step to Plans
 
-**For single plans and specialized plans**, add a final step named "Write a Handover Document" with this content:
+_For single plans and specialized plans_, add a final step named "Write a Handover Document" with this content:
 
 ```markdown
 Write a **handover document**. This document must contain the list of all files you updated. Also, summarize the changes made in a very concise way. Add only relevant information that will help your teammates understand what's new. Do not mention obvious information. It's not a course or a tutorial, if there is nothing to explain, then do not explain. Write this handover document in `{PLAN_FILE_PATH}.summary.md`. Avoid overwriting an existing file. Ignore lint errors (formatting issues) in this file.
