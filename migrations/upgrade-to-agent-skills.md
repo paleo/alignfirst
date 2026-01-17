@@ -1,6 +1,6 @@
 # Upgrade to Agent Skills
 
-This migration converts your Vibe Flow v1 installation from the `_docs/` system to the Agent Skills standard.
+This migration converts your AlignFirst (or Vibe Flow) v1 installation from the `_docs/` system to the Agent Skills standard.
 
 **Reference**: <https://agentskills.io/specification.md>
 
@@ -8,7 +8,7 @@ This migration converts your Vibe Flow v1 installation from the `_docs/` system 
 
 ## Pre-requisites
 
-- Verify `_docs/vibe-flow/` or `_docs/alignfirst/` exists. If neither exists, STOP - this is not an AlignFirst/Vibe Flow v1 installation.
+- Verify `_docs/alignfirst/` or `_docs/vibe-flow/` exists. If neither exists, STOP - this codebase is not an AlignFirst/Vibe Flow v1 installation.
 - If this is a git repository, verify the working tree is clean. DO NOT PROCEED with uncommitted changes.
 
 ## Install the AlignFirst Skill
@@ -16,7 +16,7 @@ This migration converts your Vibe Flow v1 installation from the `_docs/` system 
 ### 1. Delete Old AlignFirst/Vibe Flow Files
 
 ```bash
-rm -rf _docs/vibe-flow _docs/alignfirst
+rm -rf _docs/alignfirst _docs/vibe-flow
 ```
 
 ### 2. Detect Skills Directory
@@ -83,15 +83,15 @@ Then, follow the instructions in **[install-commands.md](https://raw.githubuserc
 
 ### 5. Clean AGENTS.md
 
-Remove all references to `_docs/vibe-flow/` and `_docs/alignfirst/` files from `AGENTS.md`. This includes references to:
+Remove all references to `_docs/alignfirst/` and `_docs/vibe-flow/` files from `AGENTS.md`. This includes references to:
 
-- `Vibe Flow Guide.md` or `AlignFirst Guide.md`
+- `AlignFirst Guide.md` or `Vibe Flow Guide.md`
 - `How to Write a Technical Specification.md`
 - `How to Write Implementation Plans.md`
 - `How to Write a Description.md`
 - `Discuss-Then-Do Protocol.md` or `Align-and-Do Protocol.md`
 
-Remove the entire "Vibe Flow" or "AlignFirst" section if it becomes empty after removing these references.
+Remove the entire "AlignFirst" or  "Vibe Flow" section if it becomes empty after removing these references.
 
 ## Detect Legacy Documentation Skill
 
