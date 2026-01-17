@@ -39,37 +39,29 @@ Based on your investigation, determine the plan structure:
 
 ### 2.1 Assess Work Scopes
 
-First, evaluate if the work should be split into multiple specialized plans (a.k.a. sub-plans) or handled as a single plan:
+Evaluate if the work should be split into multiple specialized plans or handled as a single plan:
 
 - **Single plan**: Preferred when work is small enough to be manageable, especially if it is cohesive within one area
 - **Multiple specialized plans with a main plan**: Split the work when it is complex, based on:
   - **Distinct logical units**: When large enough, separate features or modules within the same stack
-  - **Stack boundaries**: Different technologies or specialization areas
+  - **Stack boundaries**: Different technologies or specialization areas (if custom agents are defined, their descriptions can help identify these boundaries)
   - Each specialized plan should produce a **coherent deliverable**
 
 ### 2.2 Identify Relevant Skills
 
-For each plan, identify which **skills** are relevant:
+Identify which **skills** are relevant for the work:
 
 - List the skills that the implementing agent should read and follow
 - Skills provide domain-specific guidelines that must be followed during implementation
 - For complex skills with reference files, identify specific files that should be loaded
 
-### 2.3 Assign Custom Agents (Optional)
-
-If **Custom Agents** are defined in the project, assign each plan to the appropriate agent based on their specialization. Otherwise, skip this step.
-
-**Multiple instances**: The same custom agent can be assigned to multiple plans. Each plan runs in a separate custom agent instance, so don't group unrelated work into one plan just because it uses the same custom agent. Split by logical unit, not by custom agent.
-
 ## Phase 3. Designing Phase - Implementation Plan Structure
 
 Design an implementation plan based on the SPEC. Include all useful information from the spec. If the spec is already detailed enough, you can extract and reuse parts of it. Add implementation details, file paths, and a breakdown into steps that weren't in the spec.
 
-### 3.1 Common Plan Guidelines
+### 3.1 Plan Content Guidelines
 
-_These guidelines apply to all plans (single plan or specialized plans)._
-
-Follow these guidelines:
+Follow these guidelines for all plans (single or specialized):
 
 - The plan must be a **self-explanatory prompt** for the coding agent, so help it by explaining what you discovered that is relevant.
 - Give some context: explain how it works currently, and how it will work after the task is done.
@@ -81,18 +73,28 @@ Follow these guidelines:
 - Do not include sections like "Benefits", "Code Style Compliance", "Rationale" or anything that adds no actionable information. Focus on the problem and the solution.
 - List **existing functions to reuse or refactor**. Plan thin wrappers, not re-implementations. Each operation should have one proper place.
 
-### 3.2 Additional Requirements for Specialized Plans
+### 3.2 Single Plan Format
 
-_Use this when multiple plans are created. For a single plan, skip this section entirely. **I insist: NEVER mention any "Assigned to" in a single plan.**_
+_Use this when writing a single plan. Skip this section for multiple plans._
+
+A single plan has no header with assignment or skills — the skills are listed in the Prerequisites section within the plan body.
+
+### 3.3 Specialized Plan Format
+
+_Use this when writing multiple plans. Skip this section for a single plan._
 
 For specialized plans, add these additional requirements:
 
-**At the top of each specialized plan**, add a header with assignment and skills:
+**At the top of each specialized plan**, add a header:
 
 ```markdown
-**Assigned to**: [Custom Agent Name or "Agent"]
+**Assigned to**: [Custom Agent Name]  <!-- only if applicable -->
 **Skills**: [List of relevant skills for this plan]
 ```
+
+Only include the "Assigned to" line if a custom agent is appropriate for the plan's scope. If none fits, omit that line entirely. The same custom agent can be assigned to multiple plans — each runs in a separate instance.
+
+_Note: "Custom agent" refers to configured agent profiles in your environment (e.g., custom agents in Copilot, custom subagents in Claude Code). If your environment doesn't support this, ignore the "Assigned to" field._
 
 **In the context section**, explain what you discovered **relevant to this plan's scope** and how it works currently and will work after the task is done **within its scope**.
 
@@ -100,9 +102,9 @@ For specialized plans, add these additional requirements:
 
 **Coordination notes**: If this plan depends on another plan, mention it explicitly.
 
-### 3.3 Add a Final Step to Plans
+### 3.4 Add a Final Step to Plans
 
-_For single plans and specialized plans_, add a final step named "Write a Handover Document" with this content:
+_For all plans (single or specialized)_, add a final step named "Write a Handover Document" with this content:
 
 ```markdown
 Write a **handover document**. This document must contain the list of all files you updated. Also, summarize the changes made in a very concise way. Add only relevant information that will help your teammates understand what's new. Do not mention obvious information. It's not a course or a tutorial, if there is nothing to explain, then do not explain. Write this handover document in `{PLAN_FILE_PATH}.summary.md`. Avoid overwriting an existing file. Ignore lint errors (formatting issues) in this file.
@@ -113,9 +115,9 @@ Note:
 - This is a regular step, it should be numbered like the other steps. For example, if your plan has 5 steps, this becomes step 6.
 - Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `_plans/123/A2-plan-backend.md`, use `_plans/123/A2-plan-backend`, resulting in `_plans/123/A2-plan-backend.summary.md`).
 
-### 3.4 Common Footer for All Plans
+### 3.5 Common Footer for All Plans
 
-Add the following content to the very end of each plan (single plan or specialized plan):
+Add the following content to the very end of each plan:
 
 ```markdown
 ---
@@ -136,7 +138,7 @@ The main plan coordinates the execution of all specialized plans. It should cont
 1. **Reference to the specification**: Mention the spec file but do not repeat its content.
 2. **Execution strategy** section: Specify if plans can be executed in parallel or must be sequential, with dependencies clearly noted.
 3. **Plan assignments** section: For each specialized plan, specify:
-   - Which agent should execute it (custom agent name or "Agent")
+   - Which custom agent should execute it (only if one is assigned)
    - Which **skills** are relevant for that plan
 4. **Main Handover Document** section
 
@@ -160,12 +162,11 @@ OR
 Execute these specialized plans:
 
 1. **Plan A** (`A3-plan-xxx.md`)
-   - **Assigned to**: `custom-agent-name` or `Agent`
+   - **Assigned to**: `custom-agent-name`  <!-- only if applicable -->
    - **Skills**: `skill-1`, `skill-2`
    - **Description**: [Brief description of what this plan accomplishes]
 
 2. **Plan B** (`A4-plan-yyy.md`)
-   - **Assigned to**: `custom-agent-name` or `Agent`
    - **Skills**: `skill-3`
    - **Description**: [Brief description of what this plan accomplishes]
 
@@ -236,6 +237,6 @@ Repeat the review until you think all plans are solid.
 **Additional review for multiple plans**:
 
 - Each specialized plan is self-contained
-- Each specialized plan clearly states its assignment and relevant skills
+- Each specialized plan clearly states its relevant skills (and assignment if applicable)
 - The main plan correctly references all specialized plans with their skills
 - Dependencies between plans are clearly documented
