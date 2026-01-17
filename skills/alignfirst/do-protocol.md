@@ -45,13 +45,12 @@ For **complex work** only (risk of context exhaustion):
 
 Write the summary file in TASK_DIR. Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
 
-Keep it concise:
+The finalized summary is a **very concise handover document** that should capture:
 
-- Problem/goal
-- Skills used (exclude alignfirst)
-- Decision or discovery
-- Action taken
-- Outcomes or next steps
+- What was the topic or problem
+- What was decided or discovered
+- What action was taken (if any)
+- Key outcomes or next steps
 
 The shorter the better.
 
