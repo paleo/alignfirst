@@ -20,6 +20,7 @@ Identify and state these values before starting the protocol.
 - Write in markdown:
   - If there is one subject, write a single paragraph.
   - Otherwise, write a bulleted list with one subject per item.
+- **Describe only WHAT was done, never WHY.** Never include explanations, justifications, or reasoning for the changes. Only state what was implemented or modified.
 - **Keep it minimal and functional.** Mention each subject very concisely—just the essentials. Most subjects can be summarized in one sentence of about 5 to 15 words.
 - **Always prefer functional/business descriptions.** Avoid technical implementation details unless absolutely necessary.
 - **CRITICAL: Merge related subjects whenever possible.** Look for opportunities to combine similar changes into a single, cohesive subject. This keeps the description focused and readable.
