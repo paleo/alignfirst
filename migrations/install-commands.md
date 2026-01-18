@@ -22,10 +22,10 @@ mkdir -p .claude/commands
 
 Fetch:
 
-- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/.claude/commands/alspec.md) → `.claude/commands/alspec.md`
-- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/.claude/commands/alplan.md) → `.claude/commands/alplan.md`
-- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/.claude/commands/al.md) → `.claude/commands/al.md`
-- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/.claude/commands/aldescription.md) → `.claude/commands/aldescription.md`
+- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/commands/alspec.md) → `.claude/commands/alspec.md`
+- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/commands/alplan.md) → `.claude/commands/alplan.md`
+- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/commands/al.md) → `.claude/commands/al.md`
+- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/v1/commands/aldescription.md) → `.claude/commands/aldescription.md`
 
 ### Codex
 
