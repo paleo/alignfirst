@@ -9,7 +9,7 @@ Investigate the codebase to discover essential knowledge that helps an AI agent 
 Search for existing AI conventions:
 
 ```
-**/{.github/copilot-instructions.md,AGENT.md,AGENTS.md,CLAUDE.md,.cursorrules,.windsurfrules,.clinerules,.cursor/rules/**,.windsurf/rules/**,.clinerules/**,README.md}
+**/{.github/copilot-instructions.md,AGENT.md,AGENTS.md,CLAUDE.md,GEMINI.md,.cursorrules,.windsurfrules,.clinerules,.cursor/rules/**,.windsurf/rules/**,.clinerules/**,.agent/rules/**,README.md}
 ```
 
 Focus on:

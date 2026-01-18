@@ -6,68 +6,47 @@ This prompt installs or updates AlignFirst commands to all applicable agent loca
 
 ## Instructions
 
-Overwrite AlignFirst commands to **all** applicable agent locations. Check each of the following and download commands wherever applicable.
+Add or overwrite command files to **all** applicable agents.
 
 **Important**: Use `curl -o "filename"` or `wget -O "filename"` to download files directly. Do NOT fetch file contents into your context.
 
-### Claude Code
+## Source Files
 
-**If** `.claude/` directory exists, OR `CLAUDE.md` file exists, OR you are Claude Code:
+There are 4 source files to download:
+
+- File `al`: `https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md`
+- File `alspec`: `https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alspec.md`
+- File `alplan`: `https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alplan.md`
+- File `aldescription`: `https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/aldescription.md`
+
+## Agent Configurations
+
+For each applicable agent, create the target directory (if it doesn't exist) and download all 4 source files into it.
+
+| Agent | Condition | Target Directory | File Extension |
+|-------|-----------|------------------|----------------|
+| Claude Code | `.claude/` exists, `CLAUDE.md` exists, or you are Claude Code | `.claude/commands/` | `.md` |
+| Codex | `.codex/` exists, or you are Codex | `.codex/prompts/` | `.md` |
+| GitHub Copilot | `.github/` exists, or you are GitHub Copilot | `.github/prompts/` | `.prompt.md` |
+| Cursor | `.cursor/` exists, `.cursorrules` exists, or you are Cursor | `.cursor/commands/` | `.md` |
+| Antigravity | `.agent/` exists, or you are Antigravity | `.agent/workflows/` | `.md` |
+
+_Note: Gemini CLI `.toml` files are not provided at this time._
+
+### Example
+
+For Claude Code:
 
 ```bash
 mkdir -p .claude/commands
+curl -o .claude/commands/al.md "https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md"
+# ... repeat for other files
 ```
 
-Fetch:
-
-- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alspec.md) → `.claude/commands/alspec.md`
-- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alplan.md) → `.claude/commands/alplan.md`
-- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md) → `.claude/commands/al.md`
-- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/aldescription.md) → `.claude/commands/aldescription.md`
-
-### Codex
-
-**If** `.codex/` directory exists, OR you are Codex:
-
-```bash
-mkdir -p .codex/prompts
-```
-
-Fetch:
-
-- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alspec.md) → `.codex/prompts/alspec.md`
-- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alplan.md) → `.codex/prompts/alplan.md`
-- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md) → `.codex/prompts/al.md`
-- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/aldescription.md) → `.codex/prompts/aldescription.md`
-
-### GitHub Copilot
-
-**If** `.github/` directory exists, OR you are GitHub Copilot:
+For GitHub Copilot (note the `.prompt.md` extension):
 
 ```bash
 mkdir -p .github/prompts
+curl -o .github/prompts/al.prompt.md "https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md"
+# ... repeat for other files
 ```
-
-Fetch (note the `.prompt.md` extension):
-
-- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alspec.md) → `.github/prompts/alspec.prompt.md`
-- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alplan.md) → `.github/prompts/alplan.prompt.md`
-- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md) → `.github/prompts/al.prompt.md`
-- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/aldescription.md) → `.github/prompts/aldescription.prompt.md`
-
-_Note: GitHub Copilot uses the `.prompt.md` extension for prompt files._
-
-### Cursor
-
-**If** `.cursor/` directory exists, OR `.cursorrules` file exists, OR you are Cursor:
-
-```bash
-mkdir -p .cursor/commands
-```
-
-Fetch:
-
-- [alspec.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alspec.md) → `.cursor/commands/alspec.md`
-- [alplan.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/alplan.md) → `.cursor/commands/alplan.md`
-- [al.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/al.md) → `.cursor/commands/al.md`
-- [aldescription.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/commands/aldescription.md) → `.cursor/commands/aldescription.md`

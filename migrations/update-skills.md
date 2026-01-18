@@ -19,6 +19,8 @@ Check these directories:
 - `.codex/skills/`
 - `.github/skills/`
 - `.cursor/skills/`
+- `.gemini/skills/`
+- `.agent/skills/`
 
 **Important**: Ignore directories inside dependencies (`node_modules/`, `vendor/`, `venv/`, `.venv/`, `target/`, `build/`, `dist/`, etc.).
 

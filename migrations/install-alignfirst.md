@@ -38,6 +38,8 @@ Search for existing `skills/` directories in the repository root:
 - `.codex/skills/`
 - `.github/skills/`
 - `.cursor/skills/`
+- `.gemini/skills/`
+- `.agent/skills/`
 
 **Decision:**
 
@@ -46,6 +48,8 @@ Search for existing `skills/` directories in the repository root:
   - Codex → `.codex/skills/`
   - GitHub Copilot → `.github/skills/`
   - Cursor → `.cursor/skills/`
+  - Gemini CLI → `.gemini/skills/`
+  - Antigravity → `.agent/skills/`
   - Other/unknown → `.claude/skills/`
 
 - **If exactly one exists**: Use that directory.

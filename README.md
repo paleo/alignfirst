@@ -1,13 +1,13 @@
 # AlignFirst Skill
 
-**_Important: This is the v2 of AlignFirst (formerly Vibe Flow). AlignFirst is now distributed as an Agent Skill. If you work with a compatible agent, go ahead. For other agents, you should probably install and use the [v1](https://github.com/paleo/alignfirst/blob/v1/README.md)._**
+**_Important: This is the v2 of AlignFirst (formerly Vibe Flow). AlignFirst is now distributed as an Agent Skill. If you work with a compatible agent, go ahead. For other agents, you want probably install the [v1](https://github.com/paleo/alignfirst/blob/v1/README.md)._**
 
-AlignFirst helps to produce good plans in order to let the AI code autonomously. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
+AlignFirst helps produce good plans that enable AI agents to code autonomously. It's distributed as an _Agent Skill_ and works well with any agent powered by a coding model such as:
 
 - **Claude Opus 4+** or **Claude Sonnet 4+** (Anthropic)
 - **GPT 5+** (OpenAI)
 - **Composer 1** (Cursor)
-- **Gemini 3 Pro**
+- **Gemini 3 Pro** (Google)
 
 ## Get Started
 
@@ -17,7 +17,7 @@ AlignFirst helps to produce good plans in order to let the AI code autonomously.
 It will install the AlignFirst skill:
 
 ```text
-{.claude|.github|.cursor|.codex}/skills/alignfirst/
+{.claude|.github|.cursor|.codex|.gemini|.agent}/skills/alignfirst/
 ├── SKILL.md
 ├── README.md
 ├── spec-protocol.md
@@ -27,16 +27,6 @@ It will install the AlignFirst skill:
 ```
 
 Then, start using the workflow.
-
-### Enable Agent Skills
-
-Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental. Here are the documentations:
-
-- [Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
-- [Cursor](https://cursor.com/docs/context/skills)
-- [Claude Code](https://code.claude.com/docs/en/skills)
-- [Codex](https://developers.openai.com/codex/skills/)
-- [Gemini CLI](https://geminicli.com/docs/cli/skills/)
 
 ## Using AlignFirst
 
@@ -60,7 +50,7 @@ Plans orchestrate what agents or subagents will do:
 /alplan
 ```
 
-The agent reads the spec and write a plan `_plans/123/A2-plan.md`, or a main plan `_plans/123/A2-main-plan.md` with several sub-plans.
+The agent reads the spec and writes a plan `_plans/123/A2-plan.md`, or a main plan `_plans/123/A2-main-plan.md` with several sub-plans.
 
 ### Implementation
 
@@ -70,17 +60,17 @@ The agent reads the spec and write a plan `_plans/123/A2-plan.md`, or a main pla
 Execute the plan `_plans/123/A2-main-plan.md`
 ```
 
-The agent executes and writes `.summary.md` files.
+The agent executes the plan and writes `.summary.md` files.
 
 ### Align-and-Do Protocol (AAD)
 
-There is also a lighter prompt for small tasks without spec/plans. Here's how to trigger it:
+There is also a lighter prompt for small tasks without specs or plans. Here's how to trigger it:
 
 ```markdown
 /al [something to do]
 ```
 
-The agent will discuss first, then it will directly work on the codebase. At the end a `_plans/123/A1-AAD.summary.md` file will be written.
+The agent will discuss it with you first, then work directly on the codebase. At the end, a `_plans/123/A1-AAD.summary.md` file will be written.
 
 ## Rationale
 
@@ -99,7 +89,7 @@ I don't know. If you have a clue, let me know, I'm interested.
 
 ## Technical Documentation Authoring Skill
 
-The **Technical Documentation Authoring** skill is independent from AlignFirst but provided here. It helps you create skills that document your project:
+The **Technical Documentation Authoring** skill is independent of AlignFirst but is provided here. It helps you create skills that document your project:
 
 1. Give your agent **[this installation prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-technical-documentation-authoring.md)**.
 2. Clear the context, then ask it:
@@ -113,6 +103,17 @@ It can also work alongside AlignFirst:
 ```markdown
 /al We need a documentation about [topic]. Use technical-documentation-authoring.
 ```
+
+### About Agent Skills
+
+Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental. Here are the documentations:
+
+- [Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
+- [Cursor](https://cursor.com/docs/context/skills)
+- [Claude Code](https://code.claude.com/docs/en/skills)
+- [Codex](https://developers.openai.com/codex/skills/)
+- [Gemini CLI](https://geminicli.com/docs/cli/skills/)
+- [Antigravity](https://antigravity.google/docs/skills)
 
 ## Installation, Migrations
 
