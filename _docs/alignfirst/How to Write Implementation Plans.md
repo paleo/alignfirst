@@ -90,6 +90,8 @@ For specialized plans, add these additional requirements:
 **At the top of each specialized plan**, add a header:
 
 ```markdown
+# Specialized Plan - [Short Title Here]
+
 **Assigned to**: [Custom Agent Name]  <!-- only if applicable -->
 **Documentation**: [List of relevant documentation for this plan]
 ```
