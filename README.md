@@ -7,6 +7,7 @@ AlignFirst helps to produce good plans in order to let the AI code autonomously.
 - **Claude Opus 4+** or **Claude Sonnet 4+** (Anthropic)
 - **GPT 5+** (OpenAI)
 - **Composer 1** (Cursor)
+- **Gemini 3 Pro**
 
 ## Get Started
 
@@ -35,6 +36,7 @@ Agent Skills is an [open standard](https://agentskills.io/) that works out of th
 - [Cursor](https://cursor.com/docs/context/skills)
 - [Claude Code](https://code.claude.com/docs/en/skills)
 - [Codex](https://developers.openai.com/codex/skills/)
+- [Gemini CLI](https://geminicli.com/docs/cli/skills/)
 
 ## Using AlignFirst
 
