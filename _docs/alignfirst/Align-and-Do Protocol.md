@@ -6,36 +6,24 @@ Before you start, read the `AlignFirst Guide.md` entirely.
 
 You need:
 
-- the TASK_DIR - if you don't have it, use your instructions on finding the **ticket ID**, or ask the user
+- the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
 - the current CYCLE_LETTER and the bumped FILE_NUMBER - deduce them yourself
 
 Identify and state these values before starting the protocol.
 
-## Phases
+---
 
-When the user initiates an Align-and-Do Protocol, you MUST follow this four-phase process:
+## 1. Investigate
 
-1. **Investigation Phase**: Research the codebase to understand the current implementation and context
-2. **Discussion Phase**: Collaborate with the user to explore the problem/solution space BEFORE taking action
-3. **Action Phase**: Only after user approval, implement the agreed-upon solution
-4. **Summary Phase**: Write a brief summary of what was discussed, decided, and done
+List all available documentation files and read each one whose description applies to any aspect of the task. In each documentation file, take the time to **read the relevant references**.
 
-The discussion phase is MANDATORY. Remember that you are a newcomer to this project while the user has extensive experience with the codebase and will be happy to help guide you.
+Explore the codebase. Take the time to understand how it currently works and what needs to change.
 
-## Phase 1. Investigation Phase
+## 2. Discuss
 
-Investigate the codebase yourself, find the relevant source code, think carefully, take the time to understand how it currently works and what needs to be done. If the Context7 MCP is available, feel free to use it.
+Present your findings and proposed approach. Ask clarifying questions. Explore trade-offs and edge cases.
 
-List all available documentation files and read each one whose description applies to any aspect of the task.
-
-Your goal is to build a solid understanding of:
-
-- The current implementation and relevant code paths
-- How the system currently behaves
-- What needs to change or be addressed
-- Potential approaches and their implications
-
-## Phase 2. Discussion Phase
+**Remember**: This discussion happens BEFORE any implementation or formal specification writing.
 
 Engage in a thorough collaborative discussion covering:
 
@@ -44,58 +32,36 @@ Engage in a thorough collaborative discussion covering:
 - **Approach evaluation**: Discuss potential solutions and their trade-offs
 - **Edge cases and implications**: Explore potential issues and broader system impacts
 
-You should ask questions freely to ensure you fully understand:
+**This phase is mandatory.** You're new to this project, the user can guide you.
 
-- The context and requirements
-- Existing patterns and conventions in the codebase
-- User preferences for implementation approaches
-- Any constraints or considerations you might have missed
+## 3. Act
 
-**Remember**: This discussion happens BEFORE any implementation or formal specification writing.
+When you and the user agree, start implementing.
 
-## Phase 3. Action Phase
+For **complex work** only (risk of context exhaustion):
 
-**Important: always ensure the user approves your proposal before implementing anything!**
+- Create your summary file as you go, then update it as a working document.
+- Use subagents (your subagent tool) for distinct, isolated units of work when beneficial.
 
-### Before starting
+## 4. Summarize
 
-Create the summary file as a **working document**. Write it in TASK_DIR, composing the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
+Write the summary file in TASK_DIR. Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
 
-The initial content should be a brief outline of what will be done:
+Start the summary with:
 
 ```markdown
-# AAD Summary - Short Title Here - (In Progress)
+# AAD Summary - <very short title in a few words>
 
-## Topic
-Brief description of the problem/goal
-
-## Plan
-- Step 1: ...
-- Step 2: ...
+Used Documentation: <list, excluding AlignFirst files>
 ```
 
-### During implementation
-
-When implementing the solution, follow these guidelines:
-
-- **Code Style**: Adhere to the project's coding standards
-- **Scope**: Implement only what was discussed and agreed upon
-- **Testing**: Verify your changes work as expected
-- **Communication**: Keep the user informed of progress and any unexpected findings
-
-**Update the summary file** as you complete major steps. Mark completed items, add notes about discoveries or decisions made during implementation. _This is a high priority if you detect that the context is about to end._ This provides real-time visibility and crash resilience.
-
-## Phase 4. Summary Phase
-
-Rewrite and clean up the summary file, keeping only the final summary of what was done. Remove the "- (In Progress)" marker and the step-by-step progress tracking.
-
-The final summary should capture:
+The finalized summary is a **very concise handover document** that should capture:
 
 - What was the topic or problem
 - What was decided or discovered
 - What action was taken (if any)
 - Key outcomes or next steps
 
-Keep it concise—the shorter the better.
+The shorter the better.
 
-_Important Note: There will be lint errors in the markdown file you write. Ignore them. NEVER FIX LINT ERRORS (FORMATTING ISSUES) IN THE SUMMARY._
+_Ignore markdown lint errors in the summary file._
