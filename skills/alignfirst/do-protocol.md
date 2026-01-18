@@ -48,9 +48,9 @@ Write the summary file in TASK_DIR. Compose the filename using the current CYCLE
 Start the summary with:
 
 ```markdown
-# AAD Summary - <very short title in a few words>
+# AAD Summary - [very short title in a few words]
 
-Used Skills: <list, excluding alignfirst>
+Used Skills: [list, excluding alignfirst]
 ```
 
 The finalized summary is a **very concise handover document** that should capture:

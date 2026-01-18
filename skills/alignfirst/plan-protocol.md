@@ -88,6 +88,8 @@ For specialized plans, add these additional requirements:
 **At the top of each specialized plan**, add a header:
 
 ```markdown
+# Specialized Plan - [Short Title Here]
+
 **Assigned to**: [Custom Agent Name]  <!-- only if applicable -->
 **Skills**: [List of relevant skills for this plan]
 ```
@@ -145,7 +147,7 @@ The main plan coordinates the execution of all specialized plans. It should cont
 Format example:
 
 ````markdown
-# Main Plan - Short Title Here
+# Main Plan - [Short Title Here]
 
 This main plan coordinates the implementation of [reference spec file].
 
