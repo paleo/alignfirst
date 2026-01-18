@@ -72,18 +72,27 @@ There is also a lighter prompt for small tasks without specs or plans. Here's ho
 
 The agent will discuss it with you first, then work directly on the codebase. At the end, a `_plans/123/A1-AAD.summary.md` file will be written.
 
-## Rationale
+## Additional Information
+
+### About Agent Skills
+
+Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental. Here are the documentations:
+
+- [Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
+- [Cursor](https://cursor.com/docs/context/skills)
+- [Claude Code](https://code.claude.com/docs/en/skills)
+- [Codex](https://developers.openai.com/codex/skills/)
+- [Gemini CLI](https://geminicli.com/docs/cli/skills/)
+- [Antigravity](https://antigravity.google/docs/skills)
+
+### Rationale
 
 Specs, plans, and summaries must be written in well-organized (git-ignored) local files, because:
 
 1. The context window is limited, the compression mechanism is opaque, and we want to be able to continue an unfinished task in a fresh session.
 2. It's a way to keep track of what was agreed upon with the agent and what has been done.
 
-## Example
-
-See the [ParoiCMS repository](https://gitlab.com/paroi/opensource/paroicms/) for a real-world example.
-
-## Is it "Spec-Driven Development" (SDD)?
+### Is it "Spec-Driven Development" (SDD)?
 
 I don't know. If you have a clue, let me know, I'm interested.
 
@@ -103,17 +112,6 @@ It can also work alongside AlignFirst:
 ```markdown
 /al We need a documentation about [topic]. Use technical-documentation-authoring.
 ```
-
-### About Agent Skills
-
-Agent Skills is an [open standard](https://agentskills.io/) that works out of the box in Claude Code. Editor support is still experimental. Here are the documentations:
-
-- [Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
-- [Cursor](https://cursor.com/docs/context/skills)
-- [Claude Code](https://code.claude.com/docs/en/skills)
-- [Codex](https://developers.openai.com/codex/skills/)
-- [Gemini CLI](https://geminicli.com/docs/cli/skills/)
-- [Antigravity](https://antigravity.google/docs/skills)
 
 ## Installation, Migrations
 
