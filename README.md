@@ -13,9 +13,9 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 npx skills add paleo/alignfirst --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
 ```
 
-> **Note:** We recommend installing the alignfirst skill globally so it's easier to update.
+> **Note:** We recommend installing these skills globally so they're easier to update.
 
-Now, your project needs to be configured. Give your agent this prompt:
+Now, configure your project. Give your agent this prompt:
 
 ````markdown
 I just installed the alignfirst skill. Please help me configure it:
@@ -63,7 +63,7 @@ I just installed the alignfirst skill. Please help me configure it:
 
 ### Align-and-Do Protocol (AAD)
 
-This is a light prompt for small tasks without specs or plans, similar to the built-in "plan" mode of your agent. Here's how to trigger it:
+A lightweight protocol for small tasks that don't need specs or plans:
 
 ```markdown
 /al [something to do]
@@ -79,9 +79,9 @@ A specification can be written long before the implementation. The agent helps y
 /alspec [something to do]
 ```
 
-The agent will discuss with you, then write a `.plans/123/A1-spec.md` file.
+The agent will discuss it with you, then write a `.plans/123/A1-spec.md` file.
 
-_Note: `123` is the ticket ID. If it can be deduced from the branch name, it will. Otherwise the agent will ask you. `A1` means it's the first file of cycle A (files are organized by cycles)._
+_Note: `123` is the ticket ID. If it can be deduced from the branch name, it will be. Otherwise the agent will ask you. `A1` means it's the first file of cycle A (files are organized by cycles)._
 
 ### Generate Implementation Plan(s)
 
@@ -105,7 +105,7 @@ The agent executes the plan and writes `.summary.md` files.
 
 ### Generate PR/MR Description
 
-After implementation, generate a description summarizing the work done and a commit message:
+After implementation, generate a summary of the work done, along with a commit message:
 
 ```markdown
 /aldescription
