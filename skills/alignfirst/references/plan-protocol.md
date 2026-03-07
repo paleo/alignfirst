@@ -8,7 +8,7 @@ You need:
 
 - the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
 - the current CYCLE_LETTER and the bumped FILE_NUMBER - deduce them yourself
-- a **spec file** in the `.plans/{TASK_DIR}/` directory
+- a **spec file** in the TASK_DIR
 
 Identify and state these values before starting the protocol. If any of these pieces of information is missing, STOP AND ASK THE USER.
 
@@ -210,17 +210,17 @@ Write the plan file(s) according to the determined structure:
 
 **Single Plan**:
 
-- **Single plan**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan.md`
+- **Single plan**: `{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan.md`
   - Example: `.plans/123/A2-plan.md`
   - Handover: `.plans/123/A2-plan.summary.md`
   - No main plan needed
 
 **Multiple Plans**:
 
-- **Main plan**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`
+- **Main plan**: `{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`
   - Example: `.plans/123/A2-main-plan.md`
   - Handover: `.plans/123/A2-main-plan.summary.md` (written after all specialized plans complete)
-- **Specialized plans**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan-{DESCRIPTOR}.md`
+- **Specialized plans**: `{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan-{DESCRIPTOR}.md`
   - Use a descriptive name as `{DESCRIPTOR}` (e.g., work scope, stack area)
   - Example: `.plans/123/A3-plan-api.md`, `.plans/123/A4-plan-ui.md`
   - Handovers: `.plans/123/A3-plan-api.summary.md`, etc.
