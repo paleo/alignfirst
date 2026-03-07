@@ -47,9 +47,21 @@ You should ask questions freely to ensure you fully understand:
 
 After the user approves your proposal, write the specification in a markdown file in TASK_DIR. Compose the filename with the current CYCLE_LETTER and the next FILE_NUMBER, e.g. `A1-spec.md`. Do not overwrite an existing file.
 
-- List the skills required for implementing the specification (e.g., "Required skills: code-style, testing")
+- Start the spec with required documentation files and skills (no explanation). List each doc file individually — never a folder. Always exclude `alignfirst` from skills. Example:
+
+  ```text
+  # [{TICKET_ID}] Short Title
+
+  Required Documentation:
+
+  - `docs/topic-a/doc-1.md`
+  - `docs/topic-b/doc-2.md`
+
+  Required skills: `skill-1`, `skill-2`
+  ```
+
 - Usually a specification is around 40~60 lines
-- **Do not add backward compatibility** unless explicitly requested. Prefer clean code. Unused code must be removed.
+- **Do not specify backward compatibility** unless explicitly requested. Prefer clean break by default. Unused code must be removed.
 - A specification is not always immediately executed, and you have to assume that the code can change before it is executed. You can mention a function by name, but NEVER mention specific line numbers as they will become obsolete
 - Do not include any detailed code in the specification. Instead, refer to the relevant source files by their paths or function names
 - Do not include sections like "Benefits", "Code Style Compliance" or anything that adds no new information. Focus on the problem and the solution

@@ -7,22 +7,20 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 - **Claude Code**
 - **OpenAI Codex**
 
-## Installation (Automatic)
+## Installation
 
-This is the all-in-one-prompt installation. It downloads files and configures your project — you trust the prompt to run `curl` commands and edit your files.
+```bash
+npx skills add paleo/alignfirst --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+```
 
-Give your agent **[this installation prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-alignfirst.md)**.
+> **Note:** We recommend installing the alignfirst skill globally so it's easier to update.
 
-## Or, Post-Install Setup after a Manual Installation
-
-If you installed the skill files yourself (downloaded them or used a third-party skill manager), your project still needs to be configured. Give your agent this prompt:
-
-**Prompt to run:**
+Now, your project needs to be configured. Give your agent this prompt:
 
 ````markdown
 I just installed the alignfirst skill. Please help me configure it:
 
-1. Create `_plans/.gitkeep` if it doesn't exist, and add `_plans/*` and `!_plans/.gitkeep` to `.gitignore` if needed.
+1. Create `.plans/` directory if it doesn't exist, and add `.plans` to `.gitignore` if needed.
 2. Check if `AGENTS.md` or `CLAUDE.md` exists. If one exists, use it. If neither exists, create `AGENTS.md`. This file is our INSTRUCTION_FILE.
 3. Look at our git branches (`git branch -a`) to detect our ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
    - If no pattern is found, ask me for our ticket ID format:
@@ -30,15 +28,36 @@ I just installed the alignfirst skill. Please help me configure it:
       > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.)"
 
 4. Insert the following into the INSTRUCTION_FILE (skip any part already present):
-   - Add this line: "Always ignore the `_plans` directory when searching the codebase."
+   - Add this line: "Always ignore the `.plans` directory when searching the codebase."
    - If a ticket ID format was found, add this section:
 
    > ## Ticket ID
    >
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
-
-5. Install commands by following the instructions in [install-commands.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-commands.md).
 ````
+
+## Upgrade from v1 or v2
+
+1. Install the docfront skill:
+
+   ```bash
+   npx skills add paleo/docfront --skill docfront
+   ```
+
+   Then, ask your agent to install the docfront CLI:
+
+   ```text
+   Use your docfront skill. Install docfront CLI in this project.
+   ```
+
+2. Give your agent **[this upgrade prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade.md)**.
+3. Install the new alignfirst skill:
+
+   ```bash
+   npx skills add paleo/alignfirst --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+   ```
+
+> **Note:** We recommend installing both the alignfirst and docfront skills globally so it's easier to update.
 
 ## Usage
 
@@ -50,7 +69,7 @@ This is a light prompt for small tasks without specs or plans, similar to the bu
 /al [something to do]
 ```
 
-The agent will discuss it with you first, then work directly on the codebase. At the end, a `_plans/123/A1-AAD.summary.md` file will be written.
+The agent will discuss it with you first, then work directly on the codebase. At the end, a `.plans/123/A1-AAD.summary.md` file will be written.
 
 ### Generate Technical Specification
 
@@ -60,7 +79,7 @@ A specification can be written long before the implementation. The agent helps y
 /alspec [something to do]
 ```
 
-The agent will discuss with you, then write a `_plans/123/A1-spec.md` file.
+The agent will discuss with you, then write a `.plans/123/A1-spec.md` file.
 
 _Note: `123` is the ticket ID. If it can be deduced from the branch name, it will. Otherwise the agent will ask you. `A1` means it's the first file of cycle A (files are organized by cycles)._
 
@@ -72,14 +91,14 @@ Plans orchestrate what agents or subagents will do:
 /alplan
 ```
 
-The agent reads the spec and writes a plan `_plans/123/A2-plan.md`, or a main plan `_plans/123/A2-main-plan.md` with several sub-plans.
+The agent reads the spec and writes a plan `.plans/123/A2-plan.md`, or a main plan `.plans/123/A2-main-plan.md` with several sub-plans.
 
 ### Implementation
 
 **Clear the context**, then execute the plan(s):
 
 ```markdown
-Execute the plan `_plans/123/A2-main-plan.md`
+Execute the plan `.plans/123/A2-main-plan.md`
 ```
 
 The agent executes the plan and writes `.summary.md` files.
@@ -92,7 +111,7 @@ After implementation, generate a description summarizing the work done and a com
 /aldescription
 ```
 
-The agent reads all specs and summaries in the task directory, then writes a concise `_plans/123/B1-description.md` file with a functional description of what was done and a Conventional Commits message.
+The agent reads all specs and summaries in the task directory, then writes a concise `.plans/123/B1-description.md` file with a functional description of what was done and a Conventional Commits message.
 
 ## Additional Information
 
@@ -107,29 +126,6 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
 
 I don't know. If you have a clue, let me know, I'm interested.
 
-## Technical Documentation Authoring Skill
-
-The **Technical Documentation Authoring** skill is independent of AlignFirst but is provided here. It helps you create skills that document your project:
-
-1. Give your agent **[this installation prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-technical-documentation-authoring.md)**.
-2. Clear the context, then ask it:
-
-    ```markdown
-    Help me bootstrap our project skills. Use technical-documentation-authoring.
-    ```
-
-It can also work alongside AlignFirst:
-
-```markdown
-/al We need a documentation about [topic]. Use technical-documentation-authoring.
-```
-
-## Migrations
-
-- **[Install AlignFirst Skill](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-alignfirst.md)**
-- **[Install Technical Documentation Authoring Skill](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/install-technical-documentation-authoring.md)**
-- **[Upgrade from v1](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade-to-agent-skills.md)**: If you have an old `_docs/alignfirst/` installation, migrate to the Agent Skills standard
-- **[Update Skills](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/update-skills.md)**: Update installed _AlignFirst_ and/or _Technical Documentation Authoring_ skills to the latest version
 
 ## License
 

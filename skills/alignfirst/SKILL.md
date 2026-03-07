@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols: write technical specifica
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "2.2.2"
+  version: "3.0.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -21,7 +21,7 @@ Choose the appropriate protocol based on the task:
 
 ## TASK_DIR Location
 
-**TASK_DIR** is the directory where work files related to a task are stored. Usually, we use **TASK_DIR** = `_plans/{TICKET_ID}/` (a sub-directory of the `_plans` folder). If no ticket ID is known, ask the user for it.
+**TASK_DIR** is the directory where work files related to a task are stored. Usually, we use **TASK_DIR** = `.plans/{TICKET_ID}/` (a sub-directory of the `.plans` folder). If no ticket ID is known, ask the user for it.
 
 - Create TASK_DIR if it doesn't exist
 - Or, list existing files
@@ -39,7 +39,7 @@ Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
 **Example structure:**
 
 ```text
-_plans/
+.plans/
 ├── 123/
 │   ├── A1-spec.md
 │   ├── A2-plan.md

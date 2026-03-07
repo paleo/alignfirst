@@ -102,7 +102,7 @@ Fetch the following files into `{SKILLS_DIR}/alignfirst/references/`:
 
    Then, insert the following into `AGENTS.md` (skip any part that is already present):
 
-   - Add this line (anywhere near the top): _"Always ignore the `_plans` directory when searching the codebase."_
+   - Add this line (anywhere near the top): _"Always ignore the `.plans` directory when searching the codebase."_
    - If a ticket ID format was detected (or provided by the user), add this section:
 
      ```markdown
@@ -111,17 +111,17 @@ Fetch the following files into `{SKILLS_DIR}/alignfirst/references/`:
      _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
      ```
 
-3. Create `_plans/.gitkeep` if it doesn't exist:
+3. Create `.plans/.gitkeep` if it doesn't exist:
 
    ```bash
-   mkdir -p _plans && touch _plans/.gitkeep
+   mkdir -p .plans && touch .plans/.gitkeep
    ```
 
 4. Add to `.gitignore` if not already present:
 
    ```text
-   _plans/*
-   !_plans/.gitkeep
+   .plans/*
+   !.plans/.gitkeep
    ```
 
 ## Step 6 - Install Commands (Optional)

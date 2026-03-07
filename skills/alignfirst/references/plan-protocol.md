@@ -8,7 +8,7 @@ You need:
 
 - the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
 - the current CYCLE_LETTER and the bumped FILE_NUMBER - deduce them yourself
-- a **spec file** in the `_plans/{TASK_DIR}/` directory
+- a **spec file** in the `.plans/{TASK_DIR}/` directory
 
 Identify and state these values before starting the protocol. If any of these pieces of information is missing, STOP AND ASK THE USER.
 
@@ -19,7 +19,7 @@ Before starting, **read the spec file** and understand it entirely.
 In order to generate implementation plans, you MUST follow this process:
 
 1. **Investigation Phase**: Explore the codebase, understand the current implementation, and identify the problem
-2. **Analysis Phase**: Determine the plan structure (single or multiple plans) and identify relevant skills
+2. **Analysis Phase**: Determine the plan structure (single or multiple plans) and identify relevant documentation and skills
 3. **Designing Phase - Implementation Plan(s)**: Design plan(s) based on the analysis - If you discover issues or missing design decisions, STOP AND ASK THE USER
 4. **Designing Phase - Main Plan**: If multiple plans, design a main plan to coordinate them
 5. **Writing Phase**: Write the plan file(s)
@@ -47,12 +47,11 @@ Evaluate if the work should be split into multiple specialized plans or handled 
   - **Stack boundaries**: Different technologies or specialization areas (if custom agents are defined, their descriptions can help identify these boundaries)
   - Each specialized plan should produce a **coherent deliverable**
 
-### 2.2 Identify Relevant Skills
+### 2.2 Identify Relevant Documentation and Skills
 
-Identify which **skills** are relevant for the work:
+Identify which **documentation** and **skills** are relevant for the work:
 
-- List the skills that the implementing agent should read and follow
-- Skills provide domain-specific guidelines that must be followed during implementation
+- List the documentation and skills that the implementing agent should read and follow. Always exclude `alignfirst` from skills.
 - For complex skills with reference files, identify specific files that should be loaded
 
 ## Phase 3. Designing Phase - Implementation Plan Structure
@@ -65,7 +64,7 @@ Follow these guidelines for all plans (single or specialized):
 
 - The plan must be a **self-explanatory prompt** for the coding agent, so help it by explaining what you discovered that is relevant.
 - Give some context: explain how it works currently, and how it will work after the task is done.
-- In a "Prerequisites" section, list **relevant skills** to use. Do not repeat any skill content.
+- In a "Prerequisites" section, list **relevant documentation and skills** to use. Do not repeat their content.
 - Mention a way to find **important source files**: by giving file paths, or by providing a function name to search for, for example. If needed, line numbers can be mentioned in the plan.
 - Include a list of **numbered steps**.
 - **Never plan backward compatibility** unless explicitly requested. Prefer clean code. Unused code must be removed.
@@ -77,7 +76,7 @@ Follow these guidelines for all plans (single or specialized):
 
 _Use this when writing a single plan. Skip this section for multiple plans._
 
-A single plan has no header with assignment or skills — the skills are listed in the Prerequisites section within the plan body.
+A single plan has no header with assignment, documentation, or skills — they are listed in the Prerequisites section within the plan body.
 
 ### 3.3 Specialized Plan Format
 
@@ -85,18 +84,21 @@ _Use this when writing multiple plans. Skip this section for a single plan._
 
 For specialized plans, add these additional requirements:
 
-**At the top of each specialized plan**, add a header:
+**At the top of each specialized plan**, add a header. Only include fields that have content — omit any field with nothing to list. One agent can be assigned to multiple plans (separate instances).
+
+_Note: "Custom agent" refers to configured agent profiles in your environment (e.g., custom agents in Copilot, custom subagents in Claude Code). If your environment doesn't support this, ignore the "Assigned to" field._
+
+Example:
 
 ```markdown
 # Specialized Plan - [Short Title Here]
 
-**Assigned to**: [Custom Agent Name]  <!-- only if applicable -->
-**Skills**: [List of relevant skills for this plan]
+- **Assigned to**: `agent-name`
+- **Documentation**:
+  - `docs/topic-a/relevant-doc.md`
+  - `docs/topic-b/other-doc.md`
+- **Skills**: `skill-a`, `skill-b`
 ```
-
-Only include the "Assigned to" line if a custom agent is appropriate for the plan's scope. If none fits, omit that line entirely. The same custom agent can be assigned to multiple plans — each runs in a separate instance.
-
-_Note: "Custom agent" refers to configured agent profiles in your environment (e.g., custom agents in Copilot, custom subagents in Claude Code). If your environment doesn't support this, ignore the "Assigned to" field._
 
 **In the context section**, explain what you discovered **relevant to this plan's scope** and how it works currently and will work after the task is done **within its scope**.
 
@@ -115,7 +117,7 @@ Write a **handover document**. This document must contain the list of all files 
 Note:
 
 - This is a regular step, it should be numbered like the other steps. For example, if your plan has 5 steps, this becomes step 6.
-- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `_plans/123/A2-plan-backend.md`, use `_plans/123/A2-plan-backend`, resulting in `_plans/123/A2-plan-backend.summary.md`).
+- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `.plans/123/A2-plan-backend.md`, use `.plans/123/A2-plan-backend`, resulting in `.plans/123/A2-plan-backend.summary.md`).
 
 ### 3.5 Common Footer for All Plans
 
@@ -139,9 +141,7 @@ The main plan coordinates the execution of all specialized plans. It should cont
 
 1. **Reference to the specification**: Mention the spec file but do not repeat its content.
 2. **Execution strategy** section: Specify if plans can be executed in parallel or must be sequential, with dependencies clearly noted.
-3. **Plan assignments** section: For each specialized plan, specify:
-   - Which custom agent should execute it (only if one is assigned)
-   - Which **skills** are relevant for that plan
+3. **Plan assignments** section: For each specialized plan, include only applicable fields — assignment, documentation, skills, and a brief description
 4. **Main Handover Document** section
 
 Format example:
@@ -164,13 +164,17 @@ OR
 Execute these specialized plans:
 
 1. **Plan A** (`A3-plan-xxx.md`)
-   - **Assigned to**: `custom-agent-name`  <!-- only if applicable -->
-   - **Skills**: `skill-1`, `skill-2`
-   - **Description**: [Brief description of what this plan accomplishes]
+   - **Assigned to**: `agent-name`
+   - **Documentation**:
+     - `docs/topic-a/doc-1.md`
+     - `docs/topic-b/doc-2.md`
+   - **Skills**: `skill-a`, `skill-b`
+   - **Description**: [Brief description]
 
 2. **Plan B** (`A4-plan-yyy.md`)
-   - **Skills**: `skill-3`
-   - **Description**: [Brief description of what this plan accomplishes]
+   - **Documentation**:
+     - `docs/topic-b/doc-3.md`
+   - **Description**: [Brief description]
 
 _**Important:** In the prompt you give to the subagent tool, do not reproduce the specialized plan. Instead, provide the file path._
 
@@ -198,7 +202,7 @@ Do not trust this plan blindly. Be sure you understand the codebase and all spec
 
 Note:
 
-- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `_plans/123/A2-main-plan.md`, use `_plans/123/A2-main-plan`, resulting in `_plans/123/A2-main-plan.summary.md`)
+- Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `.plans/123/A2-main-plan.md`, use `.plans/123/A2-main-plan`, resulting in `.plans/123/A2-main-plan.summary.md`)
 
 ## Phase 5. Writing Phase
 
@@ -206,20 +210,20 @@ Write the plan file(s) according to the determined structure:
 
 **Single Plan**:
 
-- **Single plan**: `_plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan.md`
-  - Example: `_plans/123/A2-plan.md`
-  - Handover: `_plans/123/A2-plan.summary.md`
+- **Single plan**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan.md`
+  - Example: `.plans/123/A2-plan.md`
+  - Handover: `.plans/123/A2-plan.summary.md`
   - No main plan needed
 
 **Multiple Plans**:
 
-- **Main plan**: `_plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`
-  - Example: `_plans/123/A2-main-plan.md`
-  - Handover: `_plans/123/A2-main-plan.summary.md` (written after all specialized plans complete)
-- **Specialized plans**: `_plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan-{DESCRIPTOR}.md`
+- **Main plan**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`
+  - Example: `.plans/123/A2-main-plan.md`
+  - Handover: `.plans/123/A2-main-plan.summary.md` (written after all specialized plans complete)
+- **Specialized plans**: `.plans/{TASK_DIR}/{CYCLE_LETTER}{FILE_NUMBER}-plan-{DESCRIPTOR}.md`
   - Use a descriptive name as `{DESCRIPTOR}` (e.g., work scope, stack area)
-  - Example: `_plans/123/A3-plan-api.md`, `_plans/123/A4-plan-ui.md`
-  - Handovers: `_plans/123/A3-plan-api.summary.md`, etc.
+  - Example: `.plans/123/A3-plan-api.md`, `.plans/123/A4-plan-ui.md`
+  - Handovers: `.plans/123/A3-plan-api.summary.md`, etc.
 
 **Important**:
 
@@ -239,6 +243,6 @@ Repeat the review until you think all plans are solid.
 **Additional review for multiple plans**:
 
 - Each specialized plan is self-contained
-- Each specialized plan clearly states its relevant skills (and assignment if applicable)
-- The main plan correctly references all specialized plans with their skills
+- Each specialized plan header includes only applicable fields (assignment, documentation, skills)
+- The main plan correctly references all specialized plans with their applicable fields
 - Dependencies between plans are clearly documented
