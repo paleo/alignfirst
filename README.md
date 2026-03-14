@@ -109,7 +109,7 @@ The agent will discuss it with you first, then work directly on the codebase. At
 
 ### PR/MR Description
 
-Generate a summary of the work done from all specs and summaries in the task directory:
+Generate a summary of the work done, using all specs and summaries in the task directory:
 
 ```markdown
 /aldescription
