@@ -65,16 +65,6 @@ I just installed the alignfirst skill. Help me configure it:
 
 ## Usage
 
-### Align-and-Do Protocol (AAD)
-
-A lightweight protocol for small tasks that don't need specs or plans:
-
-```markdown
-/al [something to do]
-```
-
-The agent will discuss it with you first, then work directly on the codebase. At the end, a `.plans/123/A1-AAD.summary.md` file will be written.
-
 ### Generate Technical Specification
 
 A specification can be written long before the implementation. The agent helps you write it by investigating and initiating a discussion:
@@ -106,6 +96,16 @@ Execute the plan `.plans/123/A2-main-plan.md`
 ```
 
 The agent executes the plan and writes `.summary.md` files.
+
+### Align-and-Do Protocol (AAD)
+
+A lightweight protocol for small tasks that don't need specs or plans:
+
+```markdown
+/al [something to do]
+```
+
+The agent will discuss it with you first, then work directly on the codebase. At the end, a `.plans/123/A1-AAD.summary.md` file will be written.
 
 ### Generate PR/MR Description
 
