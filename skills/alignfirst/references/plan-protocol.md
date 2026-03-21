@@ -151,6 +151,8 @@ Format example:
 ````markdown
 # Main Plan - [Short Title Here]
 
+Branch: `[suggested-branch-name]`
+
 This main plan coordinates the implementation of [reference spec file].
 
 ## Execution Strategy
@@ -205,6 +207,7 @@ Do not trust this plan blindly. Be sure you understand the codebase and all spec
 Note:
 
 - Replace "{PLAN_FILE_PATH}" with the actual plan file path without extension (e.g., for plan `.plans/123/A2-main-plan.md`, use `.plans/123/A2-main-plan`, resulting in `.plans/123/A2-main-plan.summary.md`)
+- Include a suggested branch name only if you are already aware of the branch naming convention. Otherwise, skip the branch line entirely.
 
 ## Phase 5. Writing Phase
 

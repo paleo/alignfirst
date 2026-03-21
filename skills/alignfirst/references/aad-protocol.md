@@ -49,12 +49,14 @@ For **complex work** only (risk of context exhaustion):
 
 Write the summary file in TASK_DIR. Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
 
-Start the summary with a header. Omit any field with nothing to list. Always exclude `alignfirst` from skills.
+Start the summary with a header, then a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). Omit any field with nothing to list. Always exclude `alignfirst` from skills.
 
 Example:
 
 ```markdown
 # AAD Summary - [very short title]
+
+Suggested commit message: `<commit message>`
 
 Used documentation:
 
