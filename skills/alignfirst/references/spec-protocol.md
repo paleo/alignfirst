@@ -49,7 +49,7 @@ You should ask questions freely to ensure you fully understand:
 
 After the user approves your proposal, write the specification in a markdown file in TASK_DIR. Compose the filename with the current CYCLE_LETTER and the next FILE_NUMBER, e.g. `A1-spec.md`. Do not overwrite an existing file.
 
-- After the title, include a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`), then the required documentation and skills. List each doc file individually — never a folder. Always exclude `alignfirst` from skills. Omit any field with nothing to list. Example:
+- After the title, include a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). The shorter the better. Then list the required documentation and skills. List each doc file individually — never a folder. Always exclude `alignfirst` from skills. Omit any field with nothing to list. Example:
 
   ```text
   # [{TICKET_ID}] Short Title
