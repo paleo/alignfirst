@@ -28,32 +28,25 @@ This prompt detects your current AlignFirst version (v1 or v2) and runs the appr
 
 Check if `AGENTS.md` or `CLAUDE.md` exists. If one exists, use it as the INSTRUCTION_FILE. If neither exists, create `AGENTS.md`.
 
-Check if the INSTRUCTION_FILE already contains an `## AlignFirst` section with ticket ID, commit message, and branch naming conventions. If it does and it looks correct, skip ahead. Otherwise:
+Check if the INSTRUCTION_FILE already contains an `## AlignFirst` section with ticket ID and commit message conventions. If it does and it looks correct, skip ahead. Otherwise:
 
 1. Look at git branches (`git branch -a`) to detect a ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
 2. If no pattern is found, ask the user:
 
    > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.)"
 
-3. From the same branch list, deduce the branch naming convention (e.g., `<type>/<ticket-id>`, `<type>/<ticket-id>-<short-description>`, `<ticket-id>-<short-description>`, etc.).
+3. From recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
 4. If no pattern is found, ask the user:
-
-   > "I couldn't detect a branch naming convention. Please describe it (e.g., `<type>/<ticket-id>`, `feature/123-short-desc`, etc.) or type 'skip' to omit."
-
-5. From recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
-6. If no pattern is found, ask the user:
 
    > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
 
-7. Add (or fix) this section in the INSTRUCTION_FILE (include each convention line only if one was detected or provided):
+5. Add (or fix) this section in the INSTRUCTION_FILE (include each convention line only if one was detected or provided):
 
-   > ## AlignFirst - Ticket ID, Commit Message, Branch Name
+   > ## AlignFirst - Ticket ID, Commit Message
    >
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
    > _Commit message convention_: `{DETECTED_CONVENTION}`
-   >
-   > _Branch naming convention_: `{DETECTED_CONVENTION}`
 
 ## Step 3 — Detect Version
 

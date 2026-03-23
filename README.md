@@ -15,7 +15,7 @@ npx skills add paleo/alignfirst --global --skill alignfirst --skill al --skill a
 
 > **Note:** We recommend installing these skills globally so they're easier to update.
 
-Now, configure your project. Give your agent this prompt:
+Now, configure your project. This adds `.plans` to `.gitignore` and an AlignFirst section to your `AGENTS.md` (or `CLAUDE.md`). Give your agent this prompt:
 
 ````markdown
 I just installed the alignfirst skill. Help me configure it:
@@ -27,27 +27,20 @@ I just installed the alignfirst skill. Help me configure it:
 
       > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.)"
 
-4. From the same branch list, deduce the branch naming convention (e.g., `<type>/<ticket-id>`, `<type>/<ticket-id>-<short-description>`, `<ticket-id>-<short-description>`, etc.).
-   - If no pattern is found, ask me for our branch naming convention:
-
-      > "I couldn't detect a branch naming convention. Please describe it (e.g., `<type>/<ticket-id>`, `feature/123-short-desc`, etc.) or type 'skip' to omit."
-
-5. From our recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
+4. From our recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
    - If no pattern is found, ask me for our commit message convention:
 
       > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
 
-6. Insert the following into the INSTRUCTION_FILE (skip any part already present):
+5. Insert the following into the INSTRUCTION_FILE (skip any part already present):
    - Add this line: "Always ignore the `.plans` directory when searching the codebase."
    - If a ticket ID format was found, add this section (include each convention line only if one was detected or provided):
 
-   > ## AlignFirst - Ticket ID, Commit Message, Branch Name
+   > ## AlignFirst - Ticket ID, Commit Message
    >
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
    > _Commit message convention_: `{DETECTED_CONVENTION}`
-   >
-   > _Branch naming convention_: `{DETECTED_CONVENTION}`
 ````
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
