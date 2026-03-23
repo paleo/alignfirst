@@ -25,7 +25,7 @@ I just installed the alignfirst skill. Help me configure it:
 3. Look at our git branches (`git branch -a`) to detect our ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
    - If no pattern is found, ask me for our ticket ID format:
 
-      > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.)"
+      > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.) or type 'skip' to omit."
 
 4. From our recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
    - If no pattern is found, ask me for our commit message convention:
@@ -33,7 +33,7 @@ I just installed the alignfirst skill. Help me configure it:
       > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
 
 5. Insert the following into the INSTRUCTION_FILE (skip any part already present):
-   - Add this line: "Always ignore the `.plans` directory when searching the codebase."
+   - Add this line where it feels appropriate: "Always ignore the `.plans` directory when searching the codebase."
    - If a ticket ID format was found, add this section (include each convention line only if one was detected or provided):
 
    > ## AlignFirst - Ticket ID, Commit Message
