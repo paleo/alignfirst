@@ -17,7 +17,7 @@ npx skills add paleo/alignfirst --global --skill alignfirst --skill al --skill a
 
 Now, configure your project. This adds `.plans` to `.gitignore` and an AlignFirst section to your `AGENTS.md` (or `CLAUDE.md`). Give your agent this prompt:
 
-````markdown
+```markdown
 I just installed the alignfirst skill. Help me configure it:
 
 1. Create `.plans/` directory if it doesn't exist, and add `.plans` to `.gitignore` if needed.
@@ -41,7 +41,7 @@ I just installed the alignfirst skill. Help me configure it:
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
    > _Commit message convention_: `{DETECTED_CONVENTION}`
-````
+```
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
 
