@@ -110,4 +110,4 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
 ## Environment Variables
 
 - `ALIGNFIRST_AGENT_LOG_DIR` — If set, the script writes input/output logs to this directory.
-- `ALIGNFIRST_AGENT_AUTO_APPROVE` — If set, uses `--dangerously-skip-permissions` instead of `--permission-mode auto`.
+- `ALIGNFIRST_AGENT_SKIP_PERMISSIONS` — If set, uses `--dangerously-skip-permissions` instead of `--permission-mode auto`.

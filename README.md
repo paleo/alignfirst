@@ -140,8 +140,8 @@ npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-c
 Optional environment variables:
 
 ```bash
-export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory  # Write input/output logs
-export ALIGNFIRST_AGENT_AUTO_APPROVE=1             # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
+export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 ```
 
 ## License

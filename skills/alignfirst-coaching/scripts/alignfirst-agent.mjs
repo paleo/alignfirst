@@ -124,7 +124,7 @@ function logErrorAndExit(msg, logMsg = msg) {
 
 const args = [prompt, "-p", "--output-format", "json"];
 
-if (process.env.ALIGNFIRST_AGENT_AUTO_APPROVE) {
+if (process.env.ALIGNFIRST_AGENT_SKIP_PERMISSIONS === "1") {
   args.push("--dangerously-skip-permissions");
 } else {
   args.push("--permission-mode", "auto");
