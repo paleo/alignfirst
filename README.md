@@ -10,7 +10,7 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
-npx skills add paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
 ```
 
 > **Note:** We recommend installing these skills globally so they're easier to update.
@@ -65,7 +65,7 @@ I just installed the alignfirst skill. Help me configure it:
 3. Install the new alignfirst skill:
 
    ```bash
-   npx skills add paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
    ```
 
 > **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
@@ -130,6 +130,19 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
 
 1. The context window is limited, the compression mechanism is opaque, and we want to be able to continue an unfinished task in a fresh session.
 2. It's a way to keep track of what was agreed upon with the agent and what has been done.
+
+## AlignFirst Coaching (experimental)
+
+```bash
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-coaching
+```
+
+Optional environment variables:
+
+```bash
+export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory  # Write input/output logs
+export ALIGNFIRST_AGENT_AUTO_APPROVE=1             # Use --dangerously-skip-permissions instead of --permission-mode auto
+```
 
 ## License
 
