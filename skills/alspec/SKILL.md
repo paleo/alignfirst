@@ -1,6 +1,7 @@
 ---
 name: alspec
 description: "Create a technical specification (spec) for a feature or task."
+disable-model-invocation: true
 ---
 
 Read the *alignfirst* (`../alignfirst/SKILL.md`) skill, then `references/spec-protocol.md` in the alignfirst skill, before doing anything else.

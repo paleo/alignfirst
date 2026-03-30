@@ -113,7 +113,7 @@ Example:
 _For all plans (single or specialized)_, add a final step named "Write a Handover Document" with this content:
 
 ```markdown
-Write a **handover document**. This document must contain the list of all files you updated. Also, summarize the changes made in a very concise way. Add only relevant information that will help your teammates understand what's new. Do not mention obvious information. It's not a course or a tutorial, if there is nothing to explain, then do not explain. Write this handover document in `{PLAN_FILE_PATH}.summary.md`. Ignore lint errors (formatting issues) in this file.
+Write a **handover document**. This document must contain the list of all files you updated. Also, summarize the changes made in a very concise way. Add only relevant information that will help your teammates understand what's new. Do not mention obvious information. It's not a course or a tutorial, if there is nothing to explain, then do not explain. Write this handover document in `{PLAN_FILE_PATH}.summary.md`. Ignore lint errors (formatting issues) in this file. _Then, mention the path of this handover file to the user._
 ```
 
 Note:
@@ -233,6 +233,7 @@ Write the plan file(s) according to the determined structure:
 - Use lowercase, hyphenated descriptors for plan names (work scope descriptor)
 - When multiple plans are created, the main plan should be written first and have the lowest FILE_NUMBER
 - Be careful never to overwrite an existing file
+- _Mention the path of the plan file to the user_ (for a single plan: the plan file; for multiple plans: the main plan file)
 
 _Important Note: There will be lint errors in the markdown files you write. Ignore them. NEVER FIX LINT ERRORS (FORMATTING ISSUES) IN THE PLANS._
 

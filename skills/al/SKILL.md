@@ -1,6 +1,7 @@
 ---
 name: al
 description: "Align-and-Do Protocol (AAD). Use for smaller tasks that don't need formal specs or plans."
+disable-model-invocation: true
 ---
 
 Read the *alignfirst* (`../alignfirst/SKILL.md`) skill, then `references/aad-protocol.md` in the alignfirst skill, before doing anything else.

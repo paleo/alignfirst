@@ -1,23 +1,23 @@
 ---
 name: alignfirst
-description: "Collaborative problem-solving protocols: write technical specifications (spec, or alspec), create implementation plans (plan, or alplan), or use Align-and-Do Protocol (AAD). Also generates PR/MR descriptions (aldescription)."
+description: "Collaborative problem-solving protocols. Write technical specifications (spec, or alspec), create implementation plans (plan, or alplan), or use Align-and-Do Protocol (AAD). Also generates PR/MR descriptions (aldescription)."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.1.2"
+  version: "3.2.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
 # AlignFirst Guide
 
+If you don't already know which protocol to use, read [overview.md](references/overview.md) first.
+
 ## Protocols
 
-Choose the appropriate protocol based on the task:
-
-- **Technical Specification** (_spec_, or _alspec_): Read [spec-protocol.md](references/spec-protocol.md) to write a technical specification
-- **Implementation Plans** (_plan_, or _alplan_): Read [plan-protocol.md](references/plan-protocol.md) to create implementation plans from a spec
-- **Align-and-Do Protocol** (_AAD_): Read [aad-protocol.md](references/aad-protocol.md) for smaller tasks without formal spec/plans
-- **Description** (_aldescription_): Read [description-protocol.md](references/description-protocol.md) to write a description summarizing implemented work
+- **Technical Specification** (_spec_, or _alspec_): [spec-protocol.md](references/spec-protocol.md)
+- **Implementation Plans** (_plan_, or _alplan_): [plan-protocol.md](references/plan-protocol.md)
+- **Align-and-Do Protocol** (_AAD_): [aad-protocol.md](references/aad-protocol.md)
+- **Description** (_aldescription_): [description-protocol.md](references/description-protocol.md)
 
 ## TASK_DIR Location
 

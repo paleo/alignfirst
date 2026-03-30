@@ -1,6 +1,7 @@
 ---
 name: aldescription
 description: "Write a description summarizing implemented work. Generates PR/MR descriptions from completed changes."
+disable-model-invocation: true
 ---
 
 Read the *alignfirst* (`../alignfirst/SKILL.md`) skill, then `references/description-protocol.md` in the alignfirst skill, before doing anything else.
