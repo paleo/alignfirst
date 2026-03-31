@@ -19,7 +19,7 @@ We need:
 - The intent
 - A short description of how it is done
 - Is it the optimal way to implement this intent?
-- Also if you see portions of code that could use a rewrite, we need the source file + start line (do not write a range, only the start line of the range) with explanations.
+- If you see portions of code that could use a rewrite, the source file + start line (or range) with explanations
 
 Be very concise.
 
@@ -46,9 +46,13 @@ Write your report in a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR.
 
 ## Suggested Rewrites
 
-- `path/to/file1.ts?L12`: [concise reason]
-- `path/to/file2.ts?L34`: [concise reason]
+- `[file1.ts#10](/path/to/file1.ts#L10)`: [concise reason]
+- `[file2.ts#20](/path/to/file2.ts#L20-L25)`: [concise reason]
 ```
+
+Note:
+
+- Paths to source files should be relative to the repository root. Never include a range in the link label.
 
 ---
 
