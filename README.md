@@ -51,31 +51,6 @@ I just installed the alignfirst skill. Help me configure it:
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
 
-## Upgrade from v1 or v2
-
-1. Install the docfront skill:
-
-   ```bash
-   npx skills add paleo/docfront --skill docfront
-   ```
-
-   Then, ask your agent to install the docfront CLI:
-
-   ```text
-   Use your docfront skill. Install docfront CLI in this project.
-   ```
-
-   At the end, the agent will suggest available instructions: ignore them, we will handle that in the prompt of step 2.
-
-2. Give your agent **[this upgrade prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade.md)**.
-3. Install the new alignfirst skill:
-
-   ```bash
-   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread
-   ```
-
-> **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
-
 ## Usage
 
 _Note: Our commands need a ticket ID. If it can't be deduced, the agent will ask you for it. This is actually a directory name in `.plans/`, feel free to invent one if needed, like `AB-123`._
@@ -175,6 +150,31 @@ Optional environment variables:
 export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
 export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 ```
+
+## Upgrade from v1 or v2
+
+1. Install the docfront skill:
+
+   ```bash
+   npx skills add paleo/docfront --skill docfront
+   ```
+
+   Then, ask your agent to install the docfront CLI:
+
+   ```text
+   Use your docfront skill. Install docfront CLI in this project.
+   ```
+
+   At the end, the agent will suggest available instructions: ignore them, we will handle that in the prompt of step 2.
+
+2. Give your agent **[this upgrade prompt](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade.md)**.
+3. Install the new alignfirst skill:
+
+   ```bash
+   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread
+   ```
+
+> **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
 
 ## License
 
