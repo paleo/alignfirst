@@ -5,8 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the claude CLI
 metadata:
   author: Paleo
-  version: "0.1.0"
-  repository: https://github.com/paleo/alignfirst
+  version: "0.2.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` before doing anything else.
@@ -15,9 +14,42 @@ Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overv
 
 # AlignFirst Coaching Guide
 
-`scripts/alignfirst-agent.mjs` wraps the `claude` CLI for non-interactive usage. It invokes AlignFirst protocols (`/alspec`, `/alplan`, etc.), parses the JSON response, and outputs the relevant portion to stdout.
+The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.claude/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.claude/skills/alignfirst-coaching/scripts/alignfirst-agent.mjs`.
+
+The script wraps the `claude` CLI for non-interactive usage. It invokes AlignFirst protocols (`/alspec`, `/alplan`, etc.), parses the JSON response, and outputs the relevant portion to stdout.
 
 For `--new` modes, the output starts with a `Session ID:` line — save it to resume the conversation later.
+
+## CLI Reference
+
+```
+node scripts/alignfirst-agent.mjs --new --protocol <protocol> --ticket <id> [--message "..."]
+node scripts/alignfirst-agent.mjs --new --message "..."
+node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [--message "..."]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--new` | Start a new session. |
+| `--resume <id>` | Continue an existing session. `--protocol` is optional. |
+| `--protocol` | One of: `spec`, `plan`, `aad`, `description`, `read`, `review`. Optional. |
+| `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
+| `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol` is given. |
+| `--model <model>` | Optional model override. |
+
+**Key pattern — no protocol:** When no `--protocol` is given, the message is sent as-is (no AlignFirst slash command is invoked). This is used to:
+- Continue a discussion in an existing session (e.g. answering agent questions)
+- Execute a plan in a new session
+- Ask the agent a question in a new session
+
+```bash
+node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer"
+node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+```
+
+**Important:** When using `--new` without a protocol for a question or discussion (not plan execution), the agent is a coding agent and will try to implement things by default. End your message with a clear constraint, e.g.: *"Do not implement anything. We need to talk first."*
 
 ## Spec-Plan-Execute Workflow
 
@@ -26,7 +58,7 @@ The default workflow. Always start with it, except for very insignificant tasks.
 ### Step 1 — Create a spec
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --ticket AB-123 --spec --message "Description of the feature or task"
+node scripts/alignfirst-agent.mjs --new --protocol spec --ticket AB-123 --message "Description of the feature or task"
 ```
 
 The agent investigates the codebase and responds with its findings and questions. Save the session ID from the output. There may be several back-and-forths before the agent is satisfied and writes the spec file — see [Answering agent questions](#answering-agent-questions).
@@ -36,7 +68,7 @@ The agent investigates the codebase and responds with its findings and questions
 Once the spec is written, request a plan in the same session:
 
 ```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --plan
+node scripts/alignfirst-agent.mjs --resume <sessionId> --protocol plan
 ```
 
 The agent writes a plan file (e.g. `.plans/AB-123/the-new-plan.md`) and provides its path in the output. The agent rarely asks questions at this stage.
@@ -46,7 +78,7 @@ The agent writes a plan file (e.g. `.plans/AB-123/the-new-plan.md`) and provides
 Start a **new** session to execute the plan:
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/the-new-plan.md\`"
+node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
 ```
 
 The agent implements the plan and writes a summary file (e.g. `.plans/AB-123/the-new-plan.summary.md`), providing its path in the output.
@@ -62,7 +94,7 @@ For smaller tasks that don't need a formal spec and plan. The agent investigates
 ### Step 1 — Start an AAD session
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --ticket AB-123 --aad --message "Description of the task"
+node scripts/alignfirst-agent.mjs --new --protocol aad --ticket AB-123 --message "Description of the task"
 ```
 
 Like the spec workflow, the agent investigates the codebase and asks questions. Save the session ID. Answer questions the same way — see [Answering agent questions](#answering-agent-questions).
@@ -78,14 +110,32 @@ The summary file contains a suggested commit message. Commit locally as in the s
 Generates a PR/MR description for work already committed. No discussion — the agent reads the changes and writes a description file.
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --ticket AB-123 --description
+node scripts/alignfirst-agent.mjs --new --protocol description --ticket AB-123
 ```
 
 The agent writes a markdown file with the description and provides its path in the output.
 
+## Read (Load Context)
+
+Loads the spec and summary files for a ticket into the agent's context. Useful before starting a new protocol in an existing session.
+
+```bash
+node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123
+```
+
+## Review (Code Review)
+
+Reviews the current branch against the base branch and writes a review report.
+
+```bash
+node scripts/alignfirst-agent.mjs --new --protocol review --ticket AB-123
+```
+
+The agent writes a review file (e.g. `.plans/AB-123/A3-review.md`) and provides its path in the output.
+
 ## Answering Agent Questions
 
-During spec and AAD sessions, the agent asks questions before proceeding. Resume the session to answer:
+During spec and AAD sessions, the agent asks questions before proceeding. Resume the session **without a protocol** to answer:
 
 ```bash
 node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer here"
@@ -93,21 +143,22 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer he
 
 There may be several back-and-forths before the agent is satisfied.
 
-**When the agent asks a technical question** (architecture, code patterns, existing behavior): ask it to explore the codebase and form its own opinion.
+### Technical vs functional questions — this is critical
+
+**When the agent asks a technical question** (architecture, code patterns, existing behavior, implementation details): **never escalate to the user.** Instead, tell the agent to explore the codebase itself:
 
 ```bash
 node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
   "Explore the codebase to find out, and give me your opinion."
 ```
 
-**When the agent asks a functional or UX question** (product behavior, user-facing details, business rules): these require human judgement. Escalate to your user or product owner, then relay their answer.
+Technical questions include: "Is X used elsewhere?", "How does Y work?", "Should we remove Z?", "What's the best approach for...?" — anything answerable by reading the code.
+
+**When the agent asks a functional or UX question** (product behavior, user-facing decisions, business rules): these require human judgement. Escalate to your user, then relay their answer:
 
 ```bash
 node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
   "We checked with the team: the answer is ..."
 ```
 
-## Environment Variables
-
-- `ALIGNFIRST_AGENT_LOG_DIR` — If set, the script writes input/output logs to this directory.
-- `ALIGNFIRST_AGENT_SKIP_PERMISSIONS` — If set, uses `--dangerously-skip-permissions` instead of `--permission-mode auto`.
+**When in doubt**, ask the agent to explore first. Only escalate to the user if the question truly cannot be answered from the codebase.

@@ -7,16 +7,15 @@ import { parseArgs } from "node:util";
 
 // --- CLI argument parsing ---
 
+const PROTOCOLS = ["spec", "plan", "aad", "description", "read", "review"];
+
 const { values } = parseArgs({
   options: {
     new: { type: "boolean", default: false },
     resume: { type: "string" },
     ticket: { type: "string" },
-    spec: { type: "boolean", default: false },
+    protocol: { type: "string" },
     message: { type: "string" },
-    plan: { type: "boolean", default: false },
-    description: { type: "boolean", default: false },
-    aad: { type: "boolean", default: false },
     model: { type: "string" },
   },
   strict: true,
@@ -25,6 +24,7 @@ const { values } = parseArgs({
 const isNew = values.new;
 const sessionId = values.resume;
 const isResume = sessionId !== undefined;
+const protocol = values.protocol;
 
 // --- Validation ---
 
@@ -36,26 +36,22 @@ function fail(msg) {
 if (isNew && isResume) fail("Error: --new and --resume are mutually exclusive.");
 if (!isNew && !isResume) fail("Error: at least one of --new or --resume is required.");
 
-const modeFlags = [values.spec, values.plan, values.description, values.aad].filter(Boolean);
-if (modeFlags.length === 0) fail("Error: one of --spec, --plan, --description, or --aad is required.");
-if (modeFlags.length > 1) fail("Error: --spec, --plan, --description, and --aad are mutually exclusive.");
+if (protocol !== undefined && !PROTOCOLS.includes(protocol)) {
+  fail(`Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`);
+}
 
-if (values.spec) {
-  if (!isNew) fail("Error: --spec requires --new.");
-  if (!values.ticket) fail("Error: --spec requires --ticket.");
-  if (!values.message) fail("Error: --spec requires --message.");
+if (!protocol && !values.message) {
+  fail("Error: --message is required when --protocol is not specified.");
 }
-if (values.aad) {
-  if (!values.message) fail("Error: --aad requires --message.");
-  if (isNew && !values.ticket) fail("Error: --aad with --new requires --ticket.");
+
+if (isNew && protocol && !values.ticket) {
+  fail("Error: --ticket is required with --new and --protocol.");
 }
-if (values.description) {
-  if (!isNew) fail("Error: --description requires --new.");
-  if (!values.ticket) fail("Error: --description requires --ticket.");
+
+if (["spec", "aad"].includes(protocol) && !values.message) {
+  fail(`Error: --protocol ${protocol} requires --message.`);
 }
-if (values.plan) {
-  if (!isResume) fail("Error: --plan requires --resume.");
-}
+
 if (values.ticket !== undefined && !isNew) {
   fail("Error: --ticket is only valid with --new.");
 }
@@ -64,17 +60,23 @@ if (values.ticket !== undefined && !isNew) {
 
 let prompt;
 
-if (values.spec) {
-  prompt = `/alspec Ticket ID = ${values.ticket}\n\n${values.message}`;
-} else if (values.aad) {
-  const prefix = isNew ? `/al Ticket ID = ${values.ticket}` : `/al`;
-  prompt = `${prefix}\n\n${values.message}`;
-} else if (values.plan) {
+if (!protocol) {
+  // No protocol: just send the message as-is
+  prompt = values.message;
+} else if (protocol === "spec") {
+  const ticketPart = values.ticket ? ` Ticket ID = ${values.ticket}` : "";
+  prompt = `/alspec${ticketPart}\n\n${values.message}`;
+} else if (protocol === "aad") {
+  const ticketPart = values.ticket ? ` Ticket ID = ${values.ticket}` : "";
+  prompt = `/al${ticketPart}\n\n${values.message}`;
+} else if (protocol === "plan") {
   prompt = values.message ? `/alplan\n\n${values.message}` : `/alplan`;
-} else if (values.description) {
+} else if (protocol === "description") {
   prompt = values.message ? `/aldescription\n\n${values.message}` : `/aldescription`;
-} else {
-  fail("Error: invalid argument combination.");
+} else if (protocol === "read") {
+  prompt = values.message ? `/alread\n\n${values.message}` : `/alread`;
+} else if (protocol === "review") {
+  prompt = values.message ? `/alreview\n\n${values.message}` : `/alreview`;
 }
 
 // --- Log file (inputs) ---
