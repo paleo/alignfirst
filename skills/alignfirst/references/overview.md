@@ -34,6 +34,10 @@ Use Spec-Plan-Execute when:
 
 A standalone utility (`/aldescription`). It reads specs and summaries that have been generated for a ticket and produces a concise description of what was implemented. Typically used to generate a PR/MR description once the work is done.
 
+## Code Review
+
+A standalone utility (`/alreview`). It compares the current branch to a base branch (defaults to the repo's default branch), understands the intent, and writes a concise review report with an assessment and suggested rewrites.
+
 ## Typical Lifecycle of a Ticket
 
 A ticket usually progresses through:

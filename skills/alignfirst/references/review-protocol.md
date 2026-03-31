@@ -1,0 +1,57 @@
+# How to Write a Code Review Report
+
+## Pre-requisites
+
+You need:
+
+- the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
+- the next CYCLE_LETTER - deduce it yourself - start with a new cycle (bump the CYCLE_LETTER, reset the FILE_NUMBER to 1)
+- the **base branch** to compare against - use the branch provided by the user, or fall back to the default branch.
+
+Identify and state these values before starting the protocol.
+
+## Overview
+
+We need a code review for this branch, compared to the base branch. Take the time to understand the intent.
+
+We need:
+
+- The intent
+- A short description of how it is done
+- Is it the optimal way to implement this intent?
+- Also if you see portions of code that could use a rewrite, we need the source file + start line (do not write a range, only the start line of the range) with explanations.
+
+Be very concise.
+
+Write your report in a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR.
+
+## Output Format
+
+```md
+# Code Review - [very short title]
+
+**Base branch:** `<base_branch>`
+
+## Intent
+
+[One or two sentences describing what this branch is trying to accomplish.]
+
+## How It's Done
+
+[Short description of the approach taken to implement the intent.]
+
+## Assessment
+
+[Is this the optimal way to implement this intent? Be direct. If yes, say so briefly. If not, explain what a better approach would be.]
+
+## Suggested Rewrites
+
+- `path/to/file1.ts?L12`: [concise reason]
+- `path/to/file2.ts?L34`: [concise reason]
+```
+
+---
+
+_Ignore lint errors (formatting issues) in the review file._
+
+At the end, give the path of the review file to the user.

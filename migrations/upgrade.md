@@ -40,13 +40,17 @@ Check if the INSTRUCTION_FILE already contains an `## AlignFirst` section with t
 
    > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
 
-5. Add (or fix) this section in the INSTRUCTION_FILE (include each convention line only if one was detected or provided):
+5. Detect the default branch with `git remote show origin | grep "HEAD branch"` (e.g., `main`, `master`, `develop`).
 
-   > ## AlignFirst - Ticket ID, Commit Message
+6. Add (or fix) this section in the INSTRUCTION_FILE (include each convention line only if one was detected or provided):
+
+   > ## AlignFirst - Ticket ID, Commit Message, Default Branch
    >
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
    > _Commit message convention_: `{DETECTED_CONVENTION}`
+   >
+   > _Default branch_: `{DETECTED_DEFAULT_BRANCH}`
 
 ## Step 3 — Detect Version
 

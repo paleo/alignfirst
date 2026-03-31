@@ -10,12 +10,14 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview
 ```
 
 > **Note:** We recommend installing these skills globally so they're easier to update.
 
-Now, configure your project. This adds `.plans` to `.gitignore` and an AlignFirst section to your `AGENTS.md` (or `CLAUDE.md`). Give your agent this prompt:
+### Configure your project (optional)
+
+This adds `.plans` to `.gitignore` and an AlignFirst section to your `AGENTS.md` (or `CLAUDE.md`). Give your agent this prompt:
 
 ```markdown
 I just installed the alignfirst skill. Help me configure it:
@@ -30,17 +32,21 @@ I just installed the alignfirst skill. Help me configure it:
 4. From our recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
    - If no pattern is found, ask me for our commit message convention:
 
-      > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
+      > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [AB-123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
 
-5. Insert the following into the INSTRUCTION_FILE (skip any part already present):
+5. Detect the default branch with `git remote show origin | grep "HEAD branch"` (e.g., `main`, `master`, `develop`).
+
+6. Insert the following into the INSTRUCTION_FILE (skip any part already present):
    - Add this line where it feels appropriate: "Always ignore the `.plans` directory when searching the codebase."
    - If a ticket ID format was found, add this section (include each convention line only if one was detected or provided):
 
-   > ## AlignFirst - Ticket ID, Commit Message
+   > ## AlignFirst - Ticket ID, Commit Message, Default Branch
    >
    > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
    > _Commit message convention_: `{DETECTED_CONVENTION}`
+   >
+   > _Default branch_: `{DETECTED_DEFAULT_BRANCH}`
 ```
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
@@ -65,12 +71,14 @@ I just installed the alignfirst skill. Help me configure it:
 3. Install the new alignfirst skill:
 
    ```bash
-   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription
+   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview
    ```
 
 > **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
 
 ## Usage
+
+_Note: Our commands need a ticket ID. If it can be deduced, the agent will ask you for it. This is actually a directory name in `.plans/`, feel free to invent one if needed, like `AB-123`._
 
 ### Specification
 
@@ -80,9 +88,9 @@ A technical specification can be written long before the implementation. The age
 /alspec [something to do]
 ```
 
-The agent will discuss it with you, then write a `.plans/123/A1-spec.md` file.
+The agent will discuss it with you, then write a `.plans/AB-123/A1-spec.md` file.
 
-_Note: `123` is the ticket ID. If it can be deduced from the branch name, it will be. Otherwise the agent will ask you. `A1` means it's the first file of cycle A (files are organized into cycles)._
+_Note: `A1` means it's the first file of cycle A (files are organized into cycles, it's just a way to keep files chronologically ordered)._
 
 ### Plan(s)
 
@@ -92,14 +100,14 @@ Implementation plans orchestrate what agents or subagents will do:
 /alplan
 ```
 
-The agent reads the spec and writes a plan `.plans/123/A2-plan.md`, or a main plan `.plans/123/A2-main-plan.md` with several sub-plans.
+The agent reads the spec and writes a plan `.plans/AB-123/A2-plan.md`, or a main plan `.plans/AB-123/A2-main-plan.md` with several sub-plans.
 
 ### Implementation
 
 **Clear the context**, then execute the plan(s):
 
 ```markdown
-Execute the plan `.plans/123/A2-main-plan.md`
+Execute the plan `.plans/AB-123/A2-main-plan.md`
 ```
 
 The agent executes the plan and writes `.summary.md` files.
@@ -112,7 +120,7 @@ A lightweight protocol for small tasks that don't need specs or plans:
 /al [something to do]
 ```
 
-The agent will discuss it with you first, then work directly on the codebase. At the end, a `.plans/123/A1-AAD.summary.md` file will be written.
+The agent will discuss it with you first, then work directly on the codebase. At the end, a `.plans/AB-123/A1-AAD.summary.md` file will be written.
 
 ### PR/MR Description
 
@@ -122,7 +130,23 @@ Generate a summary of the work done, using all specs and summaries in the task d
 /aldescription
 ```
 
-The agent writes a `.plans/123/B1-description.md` file with a short description of what was done and a Conventional Commits message.
+The agent writes a `.plans/AB-123/B1-description.md` file with a short description of what was done and a Conventional Commits message.
+
+### Code Review
+
+Generate a code review report for what is commited in the current branch:
+
+```markdown
+/alreview
+```
+
+To compare against a specific branch instead of the default:
+
+```markdown
+/alreview compare to the `feat/456` branch
+```
+
+The agent writes a `.plans/AB-123/B1-review.md` file.
 
 ## Rationale
 

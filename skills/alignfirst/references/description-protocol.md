@@ -13,7 +13,7 @@ Identify and state these values before starting the protocol.
 
 1. Find the current ticket plan directory.
 2. Read every `*spec.md` and `*summary.md` file in the ticket plan directory.
-3. Write a new file `{CYCLE_LETTER}1-description.md` with the next cycle letter, containing a commit message and a description. _Then, mention the path of the description file to the user._
+3. Write a new file `{CYCLE_LETTER}1-description.md` with the next cycle letter, containing a commit message and a description.
 
 ## Output Format
 
@@ -43,3 +43,5 @@ Start with a suggested commit message (follow the convention you are aware of, o
 ---
 
 _Ignore lint errors (formatting issues) in the description file._
+
+At the end, give the path of the description file to the user.

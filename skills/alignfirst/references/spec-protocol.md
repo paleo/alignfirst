@@ -47,7 +47,7 @@ You should ask questions freely to ensure you fully understand:
 
 ## Phase 3. Specification Phase
 
-After the user approves your proposal, write the specification in a markdown file in TASK_DIR. Compose the filename with the current CYCLE_LETTER and the next FILE_NUMBER, e.g. `A1-spec.md`. Do not overwrite an existing file. _Then, mention the path of the spec file to the user._
+After the user approves your proposal, write the specification in a markdown file in TASK_DIR. Compose the filename with the current CYCLE_LETTER and the next FILE_NUMBER, e.g. `A1-spec.md`. Do not overwrite an existing file.
 
 - After the title, include a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). The shorter the better. Then list the required documentation and skills. List each doc file individually — never a folder. Always exclude `alignfirst` from skills. Omit any field with nothing to list. Example:
 
@@ -66,8 +66,10 @@ After the user approves your proposal, write the specification in a markdown fil
 
 - Usually a specification is around 40~60 lines
 - **Do not specify backward compatibility** unless explicitly requested. Prefer clean break by default. Unused code must be removed.
-- A specification is not always immediately executed, and you have to assume that the code can change before it is executed. You can mention a function by name, but NEVER mention specific line numbers as they will become obsolete
-- Do not include any detailed code in the specification. Instead, refer to the relevant source files by their paths or function names
-- Do not include sections like "Benefits", "Code Style Compliance" or anything that adds no new information. Focus on the problem and the solution
+- A specification is not always immediately executed, and you have to assume that the code can change before it is executed. You can mention a function by name, but NEVER mention specific line numbers as they will become obsolete.
+- Do not include any detailed code in the specification. Instead, refer to the relevant source files by their paths or function names.
+- Do not include sections like "Benefits", "Code Style Compliance" or anything that adds no new information. Focus on the problem and the solution.
 
-_Important Note: There will be lint errors in the markdown file you write. Ignore them. NEVER FIX LINT ERRORS (FORMATTING ISSUES) IN THE SPEC._
+_Important Note:_ There will be lint errors in the markdown file you write. Ignore them. NEVER FIX LINT ERRORS (FORMATTING ISSUES) IN THE SPEC.
+
+At the end, give the path of the spec file to the user.
