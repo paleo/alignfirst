@@ -10,7 +10,7 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread
 ```
 
 > **Note:** We recommend installing these skills globally so they're easier to update.
@@ -71,7 +71,7 @@ I just installed the alignfirst skill. Help me configure it:
 3. Install the new alignfirst skill:
 
    ```bash
-   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview
+   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread
    ```
 
 > **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
@@ -147,6 +147,14 @@ To compare against a specific branch instead of the default:
 ```
 
 The agent writes a `.plans/AB-123/B1-review.md` file.
+
+### Read Task Context
+
+Load all specs and summaries for a task into context:
+
+```markdown
+/alread
+```
 
 ## Rationale
 
