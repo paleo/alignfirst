@@ -150,7 +150,7 @@ The agent writes a `.plans/AB-123/B1-review.md` file.
 
 ### Read Task Context
 
-Load all specs and summaries of the current ticket into context:
+Load into context all specs and summaries of the current ticket:
 
 ```markdown
 /alread
