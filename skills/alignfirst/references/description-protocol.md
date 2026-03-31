@@ -12,7 +12,8 @@ Identify and state these values before starting the protocol.
 ## Steps
 
 1. Find the current ticket plan directory.
-2. Read every `*spec.md` and `*summary.md` file in the ticket plan directory.
+2. If a `*description.md` file already exists in the TASK_DIR, find the latest one. Only read `*spec.md` and `*summary.md` files that come *after* it — earlier work is already covered.
+   Otherwise, read all `*spec.md` and `*summary.md` files.
 3. Write a new file `{CYCLE_LETTER}1-description.md` with the next cycle letter, containing a commit message and a description.
 
 ## Output Format
