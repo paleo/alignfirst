@@ -78,7 +78,7 @@ I just installed the alignfirst skill. Help me configure it:
 
 ## Usage
 
-_Note: Our commands need a ticket ID. If it can be deduced, the agent will ask you for it. This is actually a directory name in `.plans/`, feel free to invent one if needed, like `AB-123`._
+_Note: Our commands need a ticket ID. If it can't be deduced, the agent will ask you for it. This is actually a directory name in `.plans/`, feel free to invent one if needed, like `AB-123`._
 
 ### Specification
 
@@ -134,7 +134,7 @@ The agent writes a `.plans/AB-123/B1-description.md` file with a short descripti
 
 ### Code Review
 
-Generate a code review report for what is commited in the current branch:
+Generate a code review report for the current branch:
 
 ```markdown
 /alreview
@@ -150,7 +150,7 @@ The agent writes a `.plans/AB-123/B1-review.md` file.
 
 ### Read Task Context
 
-Load all specs and summaries into context:
+Load all specs and summaries of the current ticket into context:
 
 ```markdown
 /alread
