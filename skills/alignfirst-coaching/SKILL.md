@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the claude CLI
 metadata:
   author: Paleo
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` before doing anything else.
@@ -33,20 +33,21 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [
 | Flag | Description |
 |------|-------------|
 | `--new` | Start a new session. |
-| `--resume <id>` | Continue an existing session. `--protocol` is optional. |
+| `--resume <id>` | Continue an existing session. |
 | `--protocol` | One of: `spec`, `plan`, `aad`, `description`, `read`, `review`. Optional. |
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
-| `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol` is given. |
+| `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol` is given. Optional for other protocols. |
 | `--model <model>` | Optional model override. |
 
 **Key pattern — no protocol:** When no `--protocol` is given, the message is sent as-is (no AlignFirst slash command is invoked). This is used to:
 - Continue a discussion in an existing session (e.g. answering agent questions)
-- Execute a plan in a new session
+- Execute an existing plan file in a new session
 - Ask the agent a question in a new session
 
 ```bash
 node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer"
 node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+node scripts/alignfirst-agent.mjs --new --message "Explain how the authentication works in this project. Do not implement anything. We need to talk first."
 ```
 
 **Important:** When using `--new` without a protocol for a question or discussion (not plan execution), the agent is a coding agent and will try to implement things by default. End your message with a clear constraint, e.g.: *"Do not implement anything. We need to talk first."*
@@ -71,7 +72,7 @@ Once the spec is written, request a plan in the same session:
 node scripts/alignfirst-agent.mjs --resume <sessionId> --protocol plan
 ```
 
-The agent writes a plan file (e.g. `.plans/AB-123/the-new-plan.md`) and provides its path in the output. The agent rarely asks questions at this stage.
+The agent writes a plan file (e.g. `.plans/AB-123/A2-plan.md`) and provides its path in the output. The agent rarely asks questions at this stage.
 
 ### Step 3 — Execute the plan
 
@@ -81,7 +82,7 @@ Start a **new** session to execute the plan:
 node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
 ```
 
-The agent implements the plan and writes a summary file (e.g. `.plans/AB-123/the-new-plan.summary.md`), providing its path in the output.
+The agent implements the plan and writes a summary file (e.g. `.plans/AB-123/A2-plan.summary.md`), providing its path in the output.
 
 ### Step 4 — Commit
 
@@ -117,10 +118,11 @@ The agent writes a markdown file with the description and provides its path in t
 
 ## Read (Load Context)
 
-Loads the spec and summary files for a ticket into the agent's context. Useful before starting a new protocol in an existing session.
+Loads the spec and summary files for a ticket into the agent's context. Without `--message`, the agent describes what was done for the ticket. With `--message`, it loads context then processes the message in a single call — useful to ask questions about prior work.
 
 ```bash
 node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123
+node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123 --message "Did we propagate the changes in...? Do not implement anything. We need to talk first."
 ```
 
 ## Review (Code Review)
