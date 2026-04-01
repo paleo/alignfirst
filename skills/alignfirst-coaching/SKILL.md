@@ -14,7 +14,7 @@ Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overv
 
 # AlignFirst Coaching Guide
 
-The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.claude/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.claude/skills/alignfirst-coaching/scripts/alignfirst-agent.mjs`.
+The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-coaching/scripts/alignfirst-agent.mjs`.
 
 The script wraps the `claude` CLI for non-interactive usage. It invokes AlignFirst protocols (`/alspec`, `/alplan`, etc.), parses the JSON response, and outputs the relevant portion to stdout.
 
