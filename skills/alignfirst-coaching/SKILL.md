@@ -47,7 +47,7 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [
 ```bash
 node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer"
 node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
-node scripts/alignfirst-agent.mjs --new --message "Explain how the authentication works in this project. Do not implement anything. We need to talk first."
+node scripts/alignfirst-agent.mjs --new --message "Explain how ... works in this project. Do not implement anything. We need to talk first."
 ```
 
 **Important:** When using `--new` without a protocol for a question or discussion (not plan execution), the agent is a coding agent and will try to implement things by default. End your message with a clear constraint, e.g.: *"Do not implement anything. We need to talk first."*
@@ -122,7 +122,7 @@ Loads the spec and summary files for a ticket into the agent's context. Without 
 
 ```bash
 node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123
-node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123 --message "Did we propagate the changes in...? Do not implement anything. We need to talk first."
+node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123 --message "Did we propagate the changes in ...? Do not implement anything. We need to talk first."
 ```
 
 ## Review (Code Review)
