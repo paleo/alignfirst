@@ -145,22 +145,27 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer he
 
 There may be several back-and-forths before the agent is satisfied.
 
+The agent often asks multiple questions at once. Answer them all in a single message, numbered to match:
+
+```bash
+node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
+  "1 - Explore the codebase to find out, and give me your opinion.
+2 - Is that a good design? We need the cleanest code possible.
+3 - We checked with the team: yes, it should be optional."
+```
+
 ### Technical vs functional questions — this is critical
 
-**When the agent asks a technical question** (architecture, code patterns, existing behavior, implementation details): **never escalate to the user.** Instead, tell the agent to explore the codebase itself:
+**Technical questions** — architecture, code patterns, existing behavior, implementation details. Anything answerable by reading the code: "Is X used elsewhere?", "How does Y work?", "Should we remove Z?", "What's the best approach for...?"
 
-```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
-  "Explore the codebase to find out, and give me your opinion."
-```
+**Never escalate these to the user.** Push the agent to investigate and think for itself. Example responses:
 
-Technical questions include: "Is X used elsewhere?", "How does Y work?", "Should we remove Z?", "What's the best approach for...?" — anything answerable by reading the code.
+- `"Explore the codebase to find out, and give me your opinion."`
+- `"Do not rush. Take the time to fully understand the situation first."`
+- `"What would be the most elegant and proper way to do it?"`
+- `"Is that a good design? We need the cleanest code possible."`
+- `"If it is a better design, then yes. If you're not sure, take the time to investigate more."`
 
-**When the agent asks a functional or UX question** (product behavior, user-facing decisions, business rules): these require human judgement. Escalate to your user, then relay their answer:
-
-```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
-  "We checked with the team: the answer is ..."
-```
+**Functional or UX questions** — product behavior, user-facing decisions, business rules. These require human judgement. Escalate to your user, then relay their answer.
 
 **When in doubt**, ask the agent to explore first. Only escalate to the user if the question truly cannot be answered from the codebase.
