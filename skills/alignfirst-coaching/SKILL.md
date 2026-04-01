@@ -165,6 +165,7 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
 - `"What would be the most elegant and proper way to do it?"`
 - `"Is that a good design? We need the cleanest code possible."`
 - `"If it is a better design, then yes. If you're not sure, take the time to investigate more."`
+- `"Check if a similar pattern is already implemented elsewhere in the codebase."`
 
 **Functional or UX questions** — product behavior, user-facing decisions, business rules. These require human judgement. Escalate to your user, then relay their answer.
 
