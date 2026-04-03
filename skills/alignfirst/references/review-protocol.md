@@ -52,7 +52,7 @@ Write your report in a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR.
 
 Note:
 
-- Paths to source files should be relative to the repository root. Never include a range in the link label.
+- Link URLs must start with `/` (absolute from workspace root, e.g. `/src/file.ts#L10`). Never include a range in the link label.
 
 ---
 
