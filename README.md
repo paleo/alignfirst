@@ -14,6 +14,8 @@ npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst -
 ```
 
 > **Note:** We recommend installing these skills globally so they're easier to update.
+>
+> After installation, you need to restart your agent (start a new session) for the skills to become available.
 
 ### Configure your project (optional)
 
