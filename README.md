@@ -44,11 +44,11 @@ I just installed the alignfirst skill. Help me configure it:
 
    > ## AlignFirst - Ticket ID, Commit Message, Default Branch
    >
-   > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
+   > _Ticket ID:_ Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
    >
-   > _Commit message convention_: `{DETECTED_CONVENTION}`
+   > _Commit message convention:_ `{DETECTED_CONVENTION}`
    >
-   > _Default branch_: `{DETECTED_DEFAULT_BRANCH}`
+   > _Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
 ```
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
