@@ -64,7 +64,7 @@ After the user approves your proposal, write the specification in a markdown fil
   Required skills: `skill-1`, `skill-2`
   ```
 
-- Usually a specification is around 40~60 lines
+- Usually a specification is around 70~120 lines
 - **Do not specify backward compatibility** unless explicitly requested. Prefer clean break by default. Unused code must be removed.
 - A specification is not always immediately executed, and you have to assume that the code can change before it is executed. You can mention a function by name, but NEVER mention specific line numbers as they will become obsolete.
 - Do not include any detailed code in the specification. Instead, refer to the relevant source files by their paths or function names.
