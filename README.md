@@ -13,7 +13,7 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread
 ```
 
-> **Note:** We recommend installing these skills globally so they're easier to update.
+> **Note:** We recommend installing these skills globally.
 >
 > After installation, you need to restart your agent (start a new session) for the skills to become available.
 
