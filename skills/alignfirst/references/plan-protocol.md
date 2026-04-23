@@ -7,7 +7,7 @@
 You need:
 
 - the TASK_DIR - if you don't have it, use your instructions for finding the **ticket ID**, or ask the user
-- the current CYCLE_LETTER and the bumped FILE_NUMBER - deduce them yourself
+- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle (same CYCLE_LETTER, bump FILE_NUMBER)
 - a **spec file** in the TASK_DIR
 
 Identify and state these values before starting the protocol. If any of these pieces of information is missing, STOP AND ASK THE USER.
