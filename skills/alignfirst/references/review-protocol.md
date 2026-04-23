@@ -12,7 +12,9 @@ Identify and state these values before starting the protocol.
 
 ## Overview
 
-We need a code review for this branch, compared to the base branch. Take the time to understand the intent.
+We need a code review for this branch, compared to the base branch.
+
+Review with fresh eyes: derive intent from the code and the diff. Do not read specs, plans, summaries or any file content in TASK_DIR.
 
 We need:
 
