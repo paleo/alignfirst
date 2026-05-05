@@ -58,25 +58,31 @@ if (values.ticket !== undefined && !isNew) {
 
 // --- Build prompt ---
 
+const PROTOCOL_LABELS = {
+  spec: "spec",
+  aad: "AAD",
+  plan: "plan",
+  description: "description",
+  review: "review",
+};
+
+function buildProtocolPrompt(label, ticket, message) {
+  const ticketPart = ticket ? ` Ticket ID = ${ticket}.` : "";
+  const messagePart = message ? `\n\n${message}` : "";
+  return `Run the _${label}_ protocol from the *alignfirst* skill.${ticketPart}${messagePart}`;
+}
+
 let prompt;
 
 if (!protocol) {
   // No protocol: just send the message as-is
   prompt = values.message;
-} else if (protocol === "spec") {
-  const ticketPart = values.ticket ? ` Ticket ID = ${values.ticket}` : "";
-  prompt = `/alspec${ticketPart}\n\n${values.message}`;
-} else if (protocol === "aad") {
-  const ticketPart = values.ticket ? ` Ticket ID = ${values.ticket}` : "";
-  prompt = `/al${ticketPart}\n\n${values.message}`;
-} else if (protocol === "plan") {
-  prompt = values.message ? `/alplan\n\n${values.message}` : `/alplan`;
-} else if (protocol === "description") {
-  prompt = values.message ? `/aldescription\n\n${values.message}` : `/aldescription`;
 } else if (protocol === "read") {
-  prompt = values.message ? `/alread\n\n${values.message}` : `/alread`;
-} else if (protocol === "review") {
-  prompt = values.message ? `/alreview\n\n${values.message}` : `/alreview`;
+  const ticketPart = values.ticket ? ` for ticket ${values.ticket}` : "";
+  const messagePart = values.message ? `\n\n${values.message}` : "";
+  prompt = `Use the *alignfirst* skill to determine the TASK_DIR${ticketPart}. Then read every \`*spec.md\` and \`*summary.md\` file in the TASK_DIR.${messagePart}`;
+} else {
+  prompt = buildProtocolPrompt(PROTOCOL_LABELS[protocol], values.ticket, values.message);
 }
 
 // --- Log file (inputs) ---

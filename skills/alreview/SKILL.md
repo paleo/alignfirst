@@ -4,6 +4,6 @@ description: "Write a code review report comparing the current branch to a base 
 disable-model-invocation: true
 ---
 
-Read the *alignfirst* (`../alignfirst/SKILL.md`) skill, then `references/review-protocol.md` in the alignfirst skill, before doing anything else.
+Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/review-protocol.md` if not already loaded.
 
-**Mandatory: Do not use your plan mode. Execute the _review_ protocol from alignfirst.**
+Execute the _review_ protocol from the *alignfirst* skill. Do not use your own plan mode.

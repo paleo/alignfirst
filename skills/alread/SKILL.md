@@ -4,6 +4,4 @@ description: "Read all specs and summaries in the current task directory to prep
 disable-model-invocation: true
 ---
 
-Read the *alignfirst* (`../alignfirst/SKILL.md`) skill to determine the TASK_DIR.
-
-Read every `*spec.md` and `*summary.md` file in the TASK_DIR.
+Determine the TASK_DIR — read the *alignfirst* skill (`../alignfirst/SKILL.md`) if not already loaded. Then read every `*spec.md` and `*summary.md` file in the TASK_DIR.

@@ -4,6 +4,6 @@ description: "Align-and-Do Protocol (AAD). Use for smaller tasks that don't need
 disable-model-invocation: true
 ---
 
-Read the *alignfirst* (`../alignfirst/SKILL.md`) skill, then `references/aad-protocol.md` in the alignfirst skill, before doing anything else.
+Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/aad-protocol.md` if not already loaded.
 
-**Mandatory: Do not use your plan mode. Execute the _AAD_ protocol from alignfirst.**
+Execute the _AAD_ protocol from the *alignfirst* skill. Do not use your own plan mode.
