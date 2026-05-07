@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 
 // --- CLI argument parsing ---
 
-const PROTOCOLS = ["spec", "plan", "aad", "description", "read", "review"];
+const PROTOCOLS = ["spec", "plan", "aad", "description", "read", "review", "resolveconflicts"];
 
 const { values } = parseArgs({
   options: {
@@ -64,6 +64,7 @@ const PROTOCOL_LABELS = {
   plan: "plan",
   description: "description",
   review: "review",
+  resolveconflicts: "resolve-conflicts",
 };
 
 function buildProtocolPrompt(label, ticket, message) {

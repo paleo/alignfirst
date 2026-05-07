@@ -38,6 +38,10 @@ A standalone utility (`/aldescription`). It reads specs and summaries that have 
 
 A standalone utility (`/alreview`). It compares the current branch to a base branch (defaults to the repo's default branch), understands the intent, and writes a concise review report with an assessment and suggested rewrites.
 
+## Resolve Conflicts
+
+A standalone utility (`/alresolveconflicts`). After a merge or rebase, the agent investigates both sides, resolves the conflicts (with a special case for lock files), and writes a brief summary of the resolutions.
+
 ## Typical Lifecycle of a Ticket
 
 A ticket usually progresses through:
