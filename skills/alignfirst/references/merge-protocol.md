@@ -11,17 +11,17 @@ Identify and state these values before starting the protocol.
 
 ---
 
-This protocol applies when a branch was just merged (or rebased) and there are conflicts. Follow the steps below.
+This protocol applies when a merge or rebase has produced conflicts, or when the user provides an incoming branch to merge. Follow the steps below.
 
 ## 1. Check git status
 
 Run `git status` to check for conflicts.
 
-**If there are no conflicts:** stop and ask the user which branch to merge. Once they answer, merge it (e.g. `git merge <branch>`). If the merge completes cleanly with no conflicts, you are done — no summary file needed. Otherwise, continue with the steps below.
+**If there are no conflicts:** start the merge — use the incoming branch if the user provided one, otherwise ask which branch to merge. If the merge completes cleanly, you are done — no summary file needed. Otherwise, continue with the steps below.
 
 ## 2. Investigate
 
-Take the time to understand how things work in the base branch and in the current branch. For each conflicting file, read enough surrounding context to understand the intent on both sides.
+Take the time to understand how things work in the incoming branch and in the current branch. For each conflicting file, read enough surrounding context to understand the intent on both sides.
 
 ## 3. Resolve
 
@@ -29,7 +29,7 @@ Resolve the conflicts properly — preserve both intents whenever possible. Do n
 
 **Special case for lock files:** If a lock file has conflicts:
 
-1. Accept all the changes from the base branch.
+1. Accept all the changes from the incoming branch.
 2. After all other conflicts are resolved, run the proper install command so the package manager re-applies the current branch's dependency changes.
 
 ## 4. Finalize the merge

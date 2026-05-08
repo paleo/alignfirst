@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the claude CLI
 metadata:
   author: Paleo
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
@@ -137,13 +137,21 @@ The agent writes a review file (e.g. `.plans/AB-123/A3-review.md`) and provides 
 
 ## Merge
 
-Resolves conflicts after a merge or rebase, then writes a brief summary of the tricky resolutions.
+Resolves merge or rebase conflicts and summarizes the tricky resolutions. Can also start the merge when given an incoming branch.
+
+When conflicts are already present:
 
 ```bash
 node scripts/alignfirst-agent.mjs --new --protocol merge --ticket AB-123
 ```
 
-If there have been conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summary.md`), providing its path in the output.
+When the merge has not started, pass the incoming branch via `--message`:
+
+```bash
+node scripts/alignfirst-agent.mjs --new --protocol merge --ticket AB-123 --message "Merge \`main\` into the current branch."
+```
+
+On conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summary.md`) and provides its path. On a clean merge, no summary is written.
 
 ## Answering Agent Questions
 
