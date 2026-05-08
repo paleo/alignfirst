@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the claude CLI
 metadata:
   author: Paleo
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
@@ -34,7 +34,7 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [
 |------|-------------|
 | `--new` | Start a new session. |
 | `--resume <id>` | Continue an existing session. |
-| `--protocol` | One of: `spec`, `plan`, `aad`, `description`, `read`, `review`, `resolveconflicts`. Optional. |
+| `--protocol` | One of: `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol` is given. Optional for other protocols. |
 | `--model <model>` | Optional model override. |
@@ -135,15 +135,15 @@ node scripts/alignfirst-agent.mjs --new --protocol review --ticket AB-123
 
 The agent writes a review file (e.g. `.plans/AB-123/A3-review.md`) and provides its path in the output.
 
-## Resolve Conflicts
+## Merge
 
 Resolves conflicts after a merge or rebase, then writes a brief summary of the tricky resolutions.
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol resolveconflicts --ticket AB-123
+node scripts/alignfirst-agent.mjs --new --protocol merge --ticket AB-123
 ```
 
-The agent investigates both sides of each conflict, resolves them, and writes a summary file (e.g. `.plans/AB-123/A4-resolve-conflicts.summary.md`), providing its path in the output.
+If there have been conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summary.md`), providing its path in the output.
 
 ## Answering Agent Questions
 

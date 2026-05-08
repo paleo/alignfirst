@@ -13,11 +13,17 @@ Identify and state these values before starting the protocol.
 
 This protocol applies when a branch was just merged (or rebased) and there are conflicts. Follow the steps below.
 
-## 1. Investigate
+## 1. Check git status
+
+Run `git status` to check for conflicts.
+
+**If there are no conflicts:** stop and ask the user which branch to merge. Once they answer, merge it (e.g. `git merge <branch>`). If the merge completes cleanly with no conflicts, you are done — no summary file needed. Otherwise, continue with the steps below.
+
+## 2. Investigate
 
 Take the time to understand how things work in the base branch and in the current branch. For each conflicting file, read enough surrounding context to understand the intent on both sides.
 
-## 2. Resolve
+## 3. Resolve
 
 Resolve the conflicts properly — preserve both intents whenever possible. Do not blindly accept one side.
 
@@ -26,16 +32,20 @@ Resolve the conflicts properly — preserve both intents whenever possible. Do n
 1. Accept all the changes from the base branch.
 2. After all other conflicts are resolved, run the proper install command so the package manager re-applies the current branch's dependency changes.
 
-## 3. Summarize
+## 4. Finalize the merge
 
-Write your summary in a new file `{CYCLE_LETTER}{FILE_NUMBER}-resolve-conflicts.summary.md` in the TASK_DIR.
+Finalize the merge using git's default commit message (e.g. `git commit --no-edit`). Do not write your own commit message — git has already prepared the proper merge message.
+
+## 5. Summarize
+
+Write your summary in a new file `{CYCLE_LETTER}{FILE_NUMBER}-merge.summary.md` in the TASK_DIR.
 
 **Keep it lean.** Only document challenging conflicts and the choices made to resolve them. Do not list straightforward resolutions — if everything was trivial, the summary should be almost empty (just a header and a one-line note that there was nothing tricky). Do not include a commit message — git already provides one for merges.
 
 Example:
 
 ```markdown
-# Resolve Conflicts Summary - [very short title]
+# Merge Summary - [very short title]
 
 ## Notable resolutions
 

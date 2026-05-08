@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Write technical specifica
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.4.0"
+  version: "3.5.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -19,7 +19,7 @@ If you don't already know which protocol to use, read [overview.md](references/o
 - **Align-and-Do Protocol** (_AAD_): [aad-protocol.md](references/aad-protocol.md)
 - **Description** (_aldescription_): [description-protocol.md](references/description-protocol.md)
 - **Code Review** (_alreview_): [review-protocol.md](references/review-protocol.md)
-- **Resolve Conflicts** (_resolve-conflicts_, or _alresolveconflicts_): [resolve-conflicts-protocol.md](references/resolve-conflicts-protocol.md)
+- **Merge** (_merge_, or _almerge_): [merge-protocol.md](references/merge-protocol.md)
 
 ## TASK_DIR Location
 
@@ -39,7 +39,7 @@ Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
 - `AAD.summary` - AAD summary document
 - `description` - PR/MR description
 - `review` - code review report
-- `resolve-conflicts.summary` - merge conflicts resolution summary
+- `merge.summary` - merge conflicts resolution summary
 
 **Example structure:**
 

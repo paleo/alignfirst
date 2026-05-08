@@ -10,7 +10,7 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill alresolveconflicts
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill almerge
 ```
 
 > **Note:** We recommend installing these skills globally.
@@ -125,15 +125,15 @@ To compare against a specific branch instead of the default:
 
 The agent writes a `.plans/AB-123/B1-review.md` file.
 
-### Resolve Conflicts
+### Merge
 
 Resolve conflicts after a merge or rebase:
 
 ```markdown
-/alresolveconflicts
+/almerge
 ```
 
-The agent investigates both sides of each conflict, resolves them, and writes a `.plans/AB-123/A4-resolve-conflicts.summary.md` file documenting any tricky resolutions.
+The agent investigates both sides of each conflict, resolves them, and writes a `.plans/AB-123/A4-merge.summary.md` file documenting any tricky resolutions.
 
 ### Read Task Context
 
@@ -183,7 +183,7 @@ export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permi
 3. Install the new alignfirst skill:
 
    ```bash
-   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill alresolveconflicts
+   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill almerge
    ```
 
 > **Note:** We recommend installing the alignfirst skills globally so they're easier to update. For the docfront skill, prefer a local/project installation.
