@@ -1,1 +1,5 @@
 .local
+.plans
+.env
+node_modules
+dist/
