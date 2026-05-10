@@ -8,7 +8,7 @@
 
 import { runDevServer } from "@paleo/worktree-env";
 
-runDevServer({
+await runDevServer({
   basePort: 8100,                            // ADAPT
   devLimitEnvVar: "MYAPP_DEV_LIMIT",         // ADAPT
 

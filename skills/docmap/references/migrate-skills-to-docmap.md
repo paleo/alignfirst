@@ -90,7 +90,7 @@ If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, add 
 
 _**Note**: Adapt the commands to the project's package manager (see the [installation reference](installation.md) for the full command table)._
 
-> ## Docront - Seek Documentation
+> ## Docmap - Seek Documentation
 >
 > **Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse relevant subdirectories (`npm run docmap -- --dir topic-a --dir topic-b/sub-topic-c`) or list everything (`npm run docmap -- --recursive`).
 

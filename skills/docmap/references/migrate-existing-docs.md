@@ -1,6 +1,6 @@
 # Migrate Existing Documents to Docmap Conventions
 
-Bring an existing folder of Markdown documents into compliance with docmap conventions: kebab-case naming and YAML frontmatter on every file. The migration happens **in place** by default unless the user specifies a different target directory.
+Bring an existing folder of Markdown documents into compliance with docmap conventions: kebab-case naming, and YAML frontmatter where it adds value. The migration happens **in place** by default unless the user specifies a different target directory.
 
 ## Prerequisites
 

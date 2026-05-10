@@ -117,6 +117,7 @@ function isPortBusy(port: number): Promise<boolean> {
 
 function spawnServer(server: ServerDescriptor): number {
   mkdirSync(dirname(server.logFile), { recursive: true });
+  mkdirSync(dirname(server.pidFile), { recursive: true });
   const logFd = openSync(server.logFile, "w");
   const child = spawn(server.command, server.args, {
     detached: true,

@@ -1,5 +1,5 @@
 import { type Dirent, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { extractFallbackTitle, extractMetadata, stripFrontmatter } from "./parser.js";
 
 const SHELL_SAFE_NAME = /^[\w.-]+$/;
@@ -190,11 +190,15 @@ export function readDocFile(
     normalized = normalized.slice("docs".length).replace(/^\/+/, "");
 
   // Try as a direct path under docs/
-  try {
-    const content = readFileSync(resolve(baseDir, normalized), "utf-8");
-    return { path: `docs/${normalized}`, content: stripFrontmatter(content) };
-  } catch {
-    // fall through to recursive search
+  const resolvedBase = resolve(baseDir);
+  const resolvedTarget = resolve(resolvedBase, normalized);
+  if (isUnder(resolvedBase, resolvedTarget)) {
+    try {
+      const content = readFileSync(resolvedTarget, "utf-8");
+      return { path: `docs/${normalized}`, content: stripFrontmatter(content) };
+    } catch {
+      // fall through to recursive search
+    }
   }
 
   // Search recursively for a file whose relative path ends with the given suffix
@@ -262,4 +266,10 @@ export function checkAll(dirPath: string, relDir: string): CheckIssue[] {
 
 function shouldSkipFile(name: string): boolean {
   return name.startsWith("CHANGELOG");
+}
+
+function isUnder(base: string, target: string): boolean {
+  if (target === base) return true;
+  const rel = relative(base, target);
+  return rel.length > 0 && rel !== ".." && !rel.startsWith(`..${sep}`);
 }

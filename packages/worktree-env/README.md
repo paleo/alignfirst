@@ -77,8 +77,10 @@ await runDevServer({
       portConfig: { file: ".env", var: "PORT" },
     },
   ],
-  printSummary: ({ slot, owner, ports, pids }) =>
-    `Dev servers started in slot ${slot} (${owner})`,
+  printSummary: ({ slot, servers }) =>
+    `Dev servers started in slot ${slot.slot} (${slot.owner}): ${servers
+      .map((s) => `${s.server.name} :${s.port} (PID ${s.pid})`)
+      .join(", ")}`,
 });
 ```
 
