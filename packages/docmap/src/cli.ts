@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   checkAll,
+  collectAllFiles,
   formatDirectory,
   formatRecursive,
   listDirectory,
@@ -70,14 +71,16 @@ export function main(options?: MainOptions): number {
     }
     if (anyFiles) {
       stdout.write(
-        `Tip: Use \`${pm} --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md\` to read the specified files.\n`,
+        `Tip: Use \`${pm} --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md\` to read the specified files (repeat \`--read\` for each file).\n`,
       );
     }
   }
 
   if (read) {
     if (needsListing) stdout.write("\n");
-    const results = read.map((fileArg) => readDocFile(baseDir, fileArg));
+    let cachedFiles: string[] | undefined;
+    const getAllFiles = (): string[] => (cachedFiles ??= collectAllFiles(baseDir, ""));
+    const results = read.map((fileArg) => readDocFile(baseDir, fileArg, getAllFiles));
     const output = results
       .map(
         ({ path, content }) =>
@@ -113,11 +116,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
       recursive = true;
     } else if (args[i] === "--check") {
       check = true;
-    } else if (args[i] === "--read") {
+    } else if (args[i] === "--read" && i + 1 < args.length) {
       read ??= [];
-      while (i + 1 < args.length && !args[i + 1].startsWith("--")) {
-        read.push(args[++i]);
-      }
+      read.push(args[++i]);
     } else if (args[i] === "--root" && i + 1 < args.length) {
       root = args[++i];
     }

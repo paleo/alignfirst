@@ -100,9 +100,14 @@ function readPortFromConfig(portConfig: PortConfig): number {
 function isPortBusy(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ port, host: "127.0.0.1" });
+    socket.setTimeout(500);
     socket.once("connect", () => {
       socket.destroy();
       resolve(true);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
     });
     socket.once("error", () => {
       resolve(false);

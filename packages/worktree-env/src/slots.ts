@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -144,13 +144,15 @@ export function lookupSlotForCwd(): ResolvedSlot | undefined {
 }
 
 export function synthesizeMainSlot(basePort: number): ResolvedSlot | undefined {
-  const gitCommonDir = execSync("git rev-parse --path-format=absolute --git-common-dir", {
-    encoding: "utf-8",
-  }).trim();
+  const gitCommonDir = execFileSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { encoding: "utf-8" },
+  ).trim();
   const mainWorktree = dirname(gitCommonDir);
   const cwd = resolve(process.cwd());
   if (resolve(mainWorktree) !== cwd) return undefined;
-  const branch = execSync("git branch --show-current", { encoding: "utf-8" }).trim();
+  const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
   return { slot: basePort, worktree: cwd, branch, owner: "default" };
 }
 

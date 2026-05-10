@@ -180,7 +180,11 @@ export function formatSubdirTree(
   return lines;
 }
 
-export function readDocFile(baseDir: string, fileArg: string): { path: string; content: string } {
+export function readDocFile(
+  baseDir: string,
+  fileArg: string,
+  getAllFiles: () => string[] = () => collectAllFiles(baseDir, ""),
+): { path: string; content: string } {
   let normalized = fileArg.replace(/\/+$/, "");
   if (normalized === "docs" || normalized.startsWith("docs/"))
     normalized = normalized.slice("docs".length).replace(/^\/+/, "");
@@ -194,7 +198,7 @@ export function readDocFile(baseDir: string, fileArg: string): { path: string; c
   }
 
   // Search recursively for a file whose relative path ends with the given suffix
-  const allFiles = collectAllFiles(baseDir, "");
+  const allFiles = getAllFiles();
   const found = allFiles.find((rel) => rel === normalized || rel.endsWith(`/${normalized}`));
   if (!found) return { path: fileArg, content: `⚠ File not found: ${fileArg}` };
 

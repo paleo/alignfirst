@@ -4,7 +4,7 @@ description: "Conventions for writing, organizing, and browsing documentation in
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.4.0"
+  version: "0.5.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -20,7 +20,7 @@ All project documentation lives in the `docs/` directory. The `docmap` CLI lets 
 docmap                                          # list root docs
 docmap --dir topic-a --dir topic-b/sub-topic-c  # list subdirectories
 docmap --recursive                              # list everything
-docmap --read doc-1.md topic-a/doc-2.md         # read documents (frontmatter stripped)
+docmap --read doc-1.md --read topic-a/doc-2.md  # read documents (frontmatter stripped)
 docmap --check                                  # validate all files
 ```
 

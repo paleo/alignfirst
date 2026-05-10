@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { basename, dirname, join, resolve } from "node:path";
 
 export interface WorktreeContext {
@@ -16,10 +16,14 @@ function stdioFor(ctx: RunCtx): "inherit" | "pipe" {
 }
 
 export function detectWorktree(): WorktreeContext {
-  const currentWorktree = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
-  const gitCommonDir = execSync("git rev-parse --path-format=absolute --git-common-dir", {
+  const currentWorktree = execFileSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf-8",
   }).trim();
+  const gitCommonDir = execFileSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { encoding: "utf-8" },
+  ).trim();
   const mainWorktree = dirname(gitCommonDir);
   const isMainWorktree = resolve(currentWorktree) === resolve(mainWorktree);
   return { currentWorktree, mainWorktree, isMainWorktree };
@@ -33,11 +37,11 @@ export function computeWorktreePath(mainWorktree: string, branch: string): strin
 
 export function branchExists(branch: string): boolean {
   try {
-    execSync(`git rev-parse --verify ${branch}`, { stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--verify", branch], { stdio: "pipe" });
     return true;
   } catch {
     try {
-      execSync(`git rev-parse --verify origin/${branch}`, { stdio: "pipe" });
+      execFileSync("git", ["rev-parse", "--verify", `origin/${branch}`], { stdio: "pipe" });
       return true;
     } catch {
       return false;
@@ -55,7 +59,7 @@ export function useExistingBranch(
     process.exit(1);
   }
   const worktreePath = computeWorktreePath(ctx.mainWorktree, branch);
-  execSync(`git worktree add ${worktreePath} ${branch}`, { stdio: stdioFor(run) });
+  execFileSync("git", ["worktree", "add", worktreePath, branch], { stdio: stdioFor(run) });
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 
@@ -73,14 +77,16 @@ export function createBranch(
     finalBranch = `${requestedBranch}-${suffix}`;
   }
   const worktreePath = computeWorktreePath(ctx.mainWorktree, finalBranch);
-  execSync(`git worktree add -b ${finalBranch} ${worktreePath}`, { stdio: stdioFor(run) });
+  execFileSync("git", ["worktree", "add", "-b", finalBranch, worktreePath], {
+    stdio: stdioFor(run),
+  });
   console.log(`Branch: ${finalBranch}`);
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 
 export function verifyBranchAbsentFromRemote(branch: string, run: RunCtx): void {
-  execSync("git fetch", { stdio: stdioFor(run) });
-  const remoteBranches = execSync(`git branch -r --list "origin/${branch}"`, {
+  execFileSync("git", ["fetch"], { stdio: stdioFor(run) });
+  const remoteBranches = execFileSync("git", ["branch", "-r", "--list", `origin/${branch}`], {
     encoding: "utf-8",
   }).trim();
   if (remoteBranches.length > 0) {
@@ -92,7 +98,7 @@ export function verifyBranchAbsentFromRemote(branch: string, run: RunCtx): void 
 }
 
 export function getCurrentBranch(worktreePath: string): string {
-  return execSync("git branch --show-current", {
+  return execFileSync("git", ["branch", "--show-current"], {
     encoding: "utf-8",
     cwd: worktreePath,
   }).trim();
@@ -118,5 +124,5 @@ export function enforceWorktreeMode(
 }
 
 export function removeWorktree(worktreePath: string, run: RunCtx): void {
-  execSync(`git worktree remove --force ${worktreePath}`, { stdio: stdioFor(run) });
+  execFileSync("git", ["worktree", "remove", "--force", worktreePath], { stdio: stdioFor(run) });
 }
