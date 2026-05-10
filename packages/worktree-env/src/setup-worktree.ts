@@ -40,17 +40,19 @@ import {
   readPid,
 } from "./process-control.js";
 
+/** Context passed to setup-time hooks (`setupWorktreeData`, `installAndBuild`, `afterDatabase`). */
 export interface SetupContext {
   currentWorktree: string;
   mainWorktree: string;
   slot: number;
   branch: string;
-  owner: string;
+  owner?: string;
   ports: Record<string, number>;
   force: boolean;
   verbose: boolean;
 }
 
+/** Context passed to {@link ConfigFileEntry.patch}. */
 export interface PatchContext {
   slot: number;
   ports: Record<string, number>;
@@ -58,42 +60,64 @@ export interface PatchContext {
   currentWorktree: string;
 }
 
+/** One config file copied from the main worktree and patched per slot. */
 export interface ConfigFileEntry {
+  /** Path relative to the worktree root. Same path is read from main and written to current. */
   path: string;
+  /** Returns the patched content given the source content and the slot's ports. */
   patch: (content: string, ctx: PatchContext) => string;
+  /** When `true`, abort if the source file is missing in the main worktree. Defaults to `false`. */
   required?: boolean;
 }
 
+/** Context passed to {@link SetupWorktreeConfig.printSummary}. */
 export interface SummaryContext {
   slot: number;
   branch: string;
-  owner: string;
+  owner?: string;
   ports: Record<string, number>;
   currentWorktree: string;
   mainWorktree: string;
 }
 
+/** Context passed to {@link SetupWorktreeConfig.teardownInfrastructure}. */
 export interface TeardownContext {
   worktree: string;
   mainWorktree: string;
   verbose: boolean;
 }
 
+/** Configuration accepted by {@link runSetupWorktree}. */
 export interface SetupWorktreeConfig {
+  /** Anchor port for the slot range. Slots are derived from this value. */
   basePort: number;
+  /** Distance between consecutive slots. Defaults to `10`. */
   portStep?: number;
+  /** Maximum number of slots. Defaults to `9`. */
   maxSlotCount?: number;
+  /** Custom port computation; takes precedence over `portNames`. */
   ports?: (slot: number) => Record<string, number>;
+  /** Named offsets `[name0, name1, ...]` mapped to `slot+0`, `slot+1`, ... Required if `ports` is omitted. */
   portNames?: string[];
-  perWorktreeDirs?: string[];
+  /** Directories symlinked from the main worktree. Defaults to `[".local", ".plans"]`. */
   sharedDirs?: string[];
+  /** PID files written by `dev-server`, used by `--remove` to stop processes before teardown. */
   devServerPidFiles: string[];
-  devLimitEnvVar?: string;
+  /** Config files copied from the main worktree and patched per slot. */
   configFiles: ConfigFileEntry[];
-  provisionDatabase: (ctx: SetupContext) => Promise<void> | void;
+  /**
+   * Runs after symlinks and config files. Owns per-worktree data setup:
+   * create any required directories (e.g. `.local-data/...`), copy or
+   * provision databases / file storage, start infrastructure containers.
+   */
+  setupWorktreeData: (ctx: SetupContext) => Promise<void> | void;
+  /** Tears down infrastructure on `--remove` (e.g. `docker compose down -v`). Best-effort; errors should be swallowed. */
   teardownInfrastructure?: (ctx: TeardownContext) => Promise<void> | void;
+  /** Runs after `setupWorktreeData`. Typically `npm install && npm run build`. */
   installAndBuild: (ctx: SetupContext) => Promise<void> | void;
+  /** Runs after `installAndBuild`. Typically migrations and seeds. */
   afterDatabase?: (ctx: SetupContext) => Promise<void> | void;
+  /** Builds the post-setup summary printed to stdout. */
   printSummary: (ctx: SummaryContext) => string;
 }
 
@@ -194,9 +218,7 @@ async function runSetup(
   );
 
   const sharedDirs = config.sharedDirs ?? [".local", ".plans"];
-  const perWorktreeDirs = config.perWorktreeDirs ?? [".local-data"];
 
-  setupLocalDirectories(setupCtx.currentWorktree, perWorktreeDirs);
   linkSharedDirectories(setupCtx, sharedDirs, log);
   generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, log);
 
@@ -212,7 +234,7 @@ async function runSetup(
     verbose: run.verbose,
   };
 
-  await config.provisionDatabase(setupContext);
+  await config.setupWorktreeData(setupContext);
   await config.installAndBuild(setupContext);
   if (config.afterDatabase) await config.afterDatabase(setupContext);
 
@@ -232,12 +254,6 @@ function ensureWorktree(args: SetupArgs, ctx: WorktreeContext, run: RunCtx): Wor
   if (args.use) return useExistingBranch(args.use, ctx, run);
   if (args.create) return createBranch(args.create, ctx, run);
   return ctx;
-}
-
-function setupLocalDirectories(worktreePath: string, dirs: string[]): void {
-  for (const dir of dirs) {
-    mkdirSync(join(worktreePath, dir), { recursive: true });
-  }
 }
 
 function linkSharedDirectories(
@@ -290,6 +306,7 @@ interface RemoveTarget {
   slotPort: string;
   branch: string;
   worktreePath: string;
+  owner?: string;
 }
 
 function resolveRemoveTarget(
@@ -311,7 +328,12 @@ function resolveRemoveTarget(
       console.error("Error: No slot found for this worktree in the registry.");
       process.exit(1);
     }
-    return { slotPort: entry[0], branch: entry[1].branch, worktreePath: ctx.currentWorktree };
+    return {
+      slotPort: entry[0],
+      branch: entry[1].branch,
+      worktreePath: ctx.currentWorktree,
+      owner: entry[1].owner,
+    };
   }
 
   const branch = args.remove ?? "";
@@ -325,7 +347,7 @@ function resolveRemoveTarget(
     console.error("Error: You are currently in this worktree. Use --remove-self instead.");
     process.exit(1);
   }
-  return { slotPort: entry[0], branch, worktreePath };
+  return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
 }
 
 async function stopDevServerByPidFiles(
@@ -374,13 +396,17 @@ async function handleRemove(
     verifyBranchAbsentFromRemote(target.branch, run);
   }
 
+  const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
+
   if (!existsSync(target.worktreePath)) {
     console.warn(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
     delete registry.slots[target.slotPort];
     writeSlots(ctx.mainWorktree, registry);
-    console.log(`Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}).`);
+    console.log(
+      `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
+    );
     return;
   }
 
@@ -404,14 +430,16 @@ async function handleRemove(
 
   removeWorktree(target.worktreePath, run);
 
-  console.log(`Removed worktree for branch "${target.branch}" (slot ${target.slotPort}).`);
+  console.log(
+    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
+  );
   if (removeSelf) {
     console.log(`Now run: cd ${ctx.mainWorktree}`);
   }
 }
 
 function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
-  const newOwner = args["set-owner"] ?? "default";
+  const newOwner = args["set-owner"];
   const { slotPort } = handleSetOwner({
     newOwner,
     currentWorktree: ctx.currentWorktree,
@@ -423,13 +451,14 @@ function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
   const devServersPath = join(ctx.mainWorktree, ".local/worktrees/dev-servers.json");
   if (existsSync(devServersPath)) {
     const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
-      servers: { worktree: string; owner: string }[];
+      servers: { worktree: string; owner?: string }[];
     };
     let changed = false;
     const resolvedCurrent = resolve(ctx.currentWorktree);
     for (const server of data.servers) {
       if (resolve(server.worktree) === resolvedCurrent) {
-        server.owner = newOwner;
+        if (newOwner !== undefined) server.owner = newOwner;
+        else delete server.owner;
         changed = true;
       }
     }
@@ -439,5 +468,5 @@ function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
     }
   }
 
-  console.log(`Owner for slot ${slotPort}: ${newOwner}`);
+  console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
 }

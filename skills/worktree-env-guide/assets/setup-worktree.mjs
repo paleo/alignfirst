@@ -8,10 +8,27 @@
 // =============================================================================
 
 import { execSync } from "node:child_process";
-import { basename } from "node:path";
+import { mkdirSync } from "node:fs";
+import { basename, join } from "node:path";
 import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 
-const config = {
+// ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
+// `setupWorktreeData` and the `docker-compose.yml` configFile entry with a
+// copy from the main worktree:
+//
+//   import { cpSync, existsSync, readdirSync } from "node:fs";
+//   import { join } from "node:path";
+//   setupWorktreeData: ({ currentWorktree, mainWorktree, force }) => {
+//     const localData = join(currentWorktree, ".local-data/data");
+//     const mainData = join(mainWorktree, ".local-data/data");
+//     mkdirSync(localData, { recursive: true });
+//     if (readdirSync(localData).length > 0 && !force) return;
+//     if (!existsSync(mainData)) return;
+//     cpSync(mainData, localData, { recursive: true, force: true });
+//   },
+//   teardownInfrastructure: undefined,
+
+await runSetupWorktree({
   // ADAPT: anchor port for the slot range. 8100 is the safe default.
   basePort: 8100,
 
@@ -19,9 +36,6 @@ const config = {
   // simple `slot+i` mapping, or supply `ports(slot)` for full control.
   portNames: ["server", "frontend", "db"],
   // ports: (slot) => ({ server: slot, frontend: slot + 1, db: slot + 2 }),
-
-  // ADAPT: env-var name used by the dev-server cap (must match dev-server.mjs).
-  devLimitEnvVar: "MYAPP_DEV_LIMIT",
 
   // ADAPT: PID files written by the dev-server (must match dev-server.mjs).
   devServerPidFiles: [".local-data/dev-server.pid"],
@@ -55,9 +69,10 @@ const config = {
     },
   ],
 
-  // ADAPT: Docker-managed DB flow. Replace with a file-copy if you ship SQLite
-  // (see ALTERNATIVE block below).
-  provisionDatabase: async ({ currentWorktree }) => {
+  // ADAPT: per-worktree data setup. Runs after symlinks and config files.
+  // Create any required directories first, then provision DB / file storage.
+  setupWorktreeData: async ({ currentWorktree }) => {
+    mkdirSync(join(currentWorktree, ".local-data"), { recursive: true });
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
@@ -99,27 +114,9 @@ const config = {
   printSummary: ({ slot, branch, owner, ports }) => `
 Worktree setup complete!
   Slot:     ${slot}
-  Branch:   ${branch}
-  Owner:    ${owner}
+  Branch:   ${branch}${owner ? `\n  Owner:    ${owner}` : ""}
   Server:   http://localhost:${ports.server}/
   Frontend: http://localhost:${ports.frontend}/
   DB port:  ${ports.db}
 `,
-};
-
-// ALTERNATIVE: file-based DB (SQLite). Replace `provisionDatabase` and the
-// `docker-compose.yml` configFile entry with a copy from the main worktree:
-//
-//   import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
-//   import { join } from "node:path";
-//   provisionDatabase: ({ currentWorktree, mainWorktree, force }) => {
-//     const localData = join(currentWorktree, ".local-data/data");
-//     const mainData = join(mainWorktree, ".local-data/data");
-//     mkdirSync(localData, { recursive: true });
-//     if (readdirSync(localData).length > 0 && !force) return;
-//     if (!existsSync(mainData)) return;
-//     cpSync(mainData, localData, { recursive: true, force: true });
-//   },
-//   teardownInfrastructure: undefined,
-
-await runSetupWorktree(config);
+});

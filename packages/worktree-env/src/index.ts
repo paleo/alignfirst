@@ -13,7 +13,6 @@ export type {
   DevServerConfig,
   DevServerSummaryContext,
   ServerDescriptor,
-  PortConfig,
 } from "./dev-server.js";
 
 export type { ResolvedSlot } from "./slots.js";

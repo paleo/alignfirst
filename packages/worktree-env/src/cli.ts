@@ -29,7 +29,7 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
   owner: {
     type: "string",
     arg: "name",
-    description: 'Owner of the slot (free-form label, defaults to "default")',
+    description: "Owner of the slot (free-form label, optional)",
   },
   "set-owner": {
     type: "string",

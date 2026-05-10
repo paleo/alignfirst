@@ -41,7 +41,6 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 await runSetupWorktree({
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
-  devLimitEnvVar: "MYAPP_DEV_LIMIT",
   devServerPidFiles: [".local-data/dev-server.pid"],
   configFiles: [
     {
@@ -53,32 +52,33 @@ await runSetupWorktree({
         }),
     },
   ],
-  provisionDatabase: async () => {},
+  setupWorktreeData: async ({ currentWorktree }) => {
+    // Create per-worktree directories, copy seed data, start containers, etc.
+  },
   installAndBuild: async () => {},
   printSummary: ({ slot, branch, owner, ports }) =>
-    `Slot ${slot} (${branch}, ${owner}) — server :${ports.server}`,
+    `Slot ${slot} (${branch}${owner ? `, ${owner}` : ""}) — server :${ports.server}`,
 });
 ```
 
 ```ts
-import { runDevServer } from "@paleo/worktree-env";
+import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100,
-  devLimitEnvVar: "MYAPP_DEV_LIMIT",
+  devLimit: 5,
   servers: [
     {
       name: "dev",
-      command: "npm",
-      args: ["run", "dev"],
+      exec: { command: "npm", args: ["run", "dev"] },
+      port: helpers.readPortFromEnvFile(".env", "PORT"),
       pidFile: ".local-data/dev-server.pid",
       logFile: ".local-data/logs/dev-server.log",
       detectSuccess: (log) => log.includes("Server is ready on port"),
-      portConfig: { file: ".env", var: "PORT" },
     },
   ],
   printSummary: ({ slot, servers }) =>
-    `Dev servers started in slot ${slot.slot} (${slot.owner}): ${servers
+    `Dev servers started in slot ${slot.slot}${slot.owner ? ` (${slot.owner})` : ""}: ${servers
       .map((s) => `${s.server.name} :${s.port} (PID ${s.pid})`)
       .join(", ")}`,
 });

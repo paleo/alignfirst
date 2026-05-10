@@ -25,7 +25,7 @@ The script creates the worktree in the correct sibling directory, assigns a port
 
 ### Slot Owner
 
-Each slot records an owner (free-form label, defaults to `"default"`). An AI bot passes its Discord username; on a personal laptop, omit it.
+Each slot records an optional owner (free-form label). An AI bot passes its Discord username; on a personal laptop, omit it.
 
 ```sh
 npm run setup-worktree -- --use fix/123 --owner alice

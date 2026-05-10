@@ -10,7 +10,7 @@ export const SLOTS_FILE = ".local/worktrees/slots.json";
 export interface SlotEntry {
   worktree: string;
   branch: string;
-  owner: string;
+  owner?: string;
 }
 
 export interface SlotsRegistry {
@@ -21,7 +21,7 @@ export interface ResolvedSlot {
   slot: number;
   worktree: string;
   branch: string;
-  owner: string;
+  owner?: string;
 }
 
 export function readSlots(mainWorktree: string): SlotsRegistry {
@@ -83,23 +83,20 @@ export interface RegisterSlotInput {
   requestedOwner?: string;
 }
 
-export function resolveAndRegisterSlot(input: RegisterSlotInput): { port: number; owner: string } {
+export function resolveAndRegisterSlot(input: RegisterSlotInput): {
+  port: number;
+  owner: string | undefined;
+} {
   const registry = readSlots(input.mainWorktree);
   const port = pickSlotPort(input, registry);
   const existing = registry.slots[String(port)];
-  let owner: string;
-  if (input.requestedOwner !== undefined) {
-    owner = input.requestedOwner;
-  } else if (existing && existing.owner !== undefined) {
-    owner = existing.owner;
-  } else {
-    owner = "default";
-  }
-  registry.slots[String(port)] = {
+  const owner = input.requestedOwner ?? existing?.owner;
+  const entry: SlotEntry = {
     worktree: input.currentWorktree,
     branch: input.branch,
-    owner,
   };
+  if (owner !== undefined) entry.owner = owner;
+  registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, registry);
   return { port, owner };
 }
@@ -136,7 +133,7 @@ export function lookupSlotForCwd(): ResolvedSlot | undefined {
         slot: Number(port),
         worktree: entry.worktree,
         branch: entry.branch,
-        owner: entry.owner ?? "default",
+        owner: entry.owner,
       };
     }
   }
@@ -153,7 +150,7 @@ export function synthesizeMainSlot(basePort: number): ResolvedSlot | undefined {
   const cwd = resolve(process.cwd());
   if (resolve(mainWorktree) !== cwd) return undefined;
   const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
-  return { slot: basePort, worktree: cwd, branch, owner: "default" };
+  return { slot: basePort, worktree: cwd, branch };
 }
 
 export function resolveCurrentSlot(basePort: number): ResolvedSlot {
@@ -166,13 +163,16 @@ export function resolveCurrentSlot(basePort: number): ResolvedSlot {
 }
 
 export interface SetOwnerInput {
-  newOwner: string;
+  newOwner: string | undefined;
   currentWorktree: string;
   mainWorktree: string;
   isMainWorktree: boolean;
 }
 
-export function handleSetOwner(input: SetOwnerInput): { slotPort: string; owner: string } {
+export function handleSetOwner(input: SetOwnerInput): {
+  slotPort: string;
+  owner: string | undefined;
+} {
   if (input.isMainWorktree) {
     console.error("Error: --set-owner must be run from a linked worktree.");
     process.exit(1);
@@ -187,7 +187,12 @@ export function handleSetOwner(input: SetOwnerInput): { slotPort: string; owner:
     process.exit(1);
   }
   const [slotPort, slotData] = entry;
-  registry.slots[slotPort] = { ...slotData, owner: input.newOwner };
+  const updated: SlotEntry = {
+    worktree: slotData.worktree,
+    branch: slotData.branch,
+  };
+  if (input.newOwner !== undefined) updated.owner = input.newOwner;
+  registry.slots[slotPort] = updated;
   writeSlots(input.mainWorktree, registry);
   return { slotPort, owner: input.newOwner };
 }

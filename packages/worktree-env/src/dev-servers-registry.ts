@@ -10,7 +10,7 @@ export interface DevServerEntry {
   slot: number;
   worktree: string;
   branch: string;
-  owner: string;
+  owner?: string;
   pids: Record<string, number>;
   startedAt: string;
 }
@@ -89,7 +89,8 @@ function formatEntry(entry: DevServerEntry): string {
   const pids = Object.entries(entry.pids)
     .map(([name, pid]) => `${name}=${pid}`)
     .join(",");
-  return `  slot ${entry.slot}  branch=${entry.branch}  owner=${entry.owner}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
+  const ownerPart = entry.owner ? `  owner=${entry.owner}` : "";
+  return `  slot ${entry.slot}  branch=${entry.branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
 }
 
 export function printActiveServers(active: DevServerEntry[]): void {
@@ -123,7 +124,8 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
     return;
   }
   for (const entry of data.servers) {
-    console.log(`Stopping slot ${entry.slot} (${entry.branch}, owner=${entry.owner})...`);
+    const ownerSuffix = entry.owner ? `, owner=${entry.owner}` : "";
+    console.log(`Stopping slot ${entry.slot} (${entry.branch}${ownerSuffix})...`);
     for (const [name, pid] of Object.entries(entry.pids)) {
       if (!isProcessAlive(pid)) continue;
       console.log(`  ${name} (PID ${pid})`);

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 
@@ -9,7 +9,6 @@ import {
   validateDevServerFlags,
   type DevServerArgs,
 } from "./cli.js";
-import { readDevLimit } from "./dev-limit.js";
 import {
   listDevServers,
   printActiveServers,
@@ -24,77 +23,42 @@ import { cleanupPidFile, isProcessAlive, readPid, stopByPidFile } from "./proces
 import { resolveCurrentSlot, type ResolvedSlot } from "./slots.js";
 import { detectWorktree } from "./worktree.js";
 
-export type PortConfig = { file: string; var: string } | { file: string; jsonPath: string };
-
+/** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
+  /** Anchor port for the slot range. Used to synthesize the main worktree's slot. */
   basePort: number;
-  devLimitEnvVar: string;
-  defaultLimit?: number;
+  /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
+  devLimit?: number;
+  /** One entry per process to spawn. Started in array order. */
   servers: ServerDescriptor[];
+  /** Hook invoked once before any dev-server is spawned (e.g. `docker compose up -d`). */
   ensureInfrastructure?: () => Promise<void> | void;
+  /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
   printSummary?: (ctx: DevServerSummaryContext) => string;
 }
 
+/** Describes one process to spawn. */
 export interface ServerDescriptor {
+  /** Short label used in logs and the registry. */
   name: string;
-  command: string;
-  args: string[];
+  /** Command and arguments passed to `child_process.spawn`. */
+  exec: { command: string; args: string[] };
+  /** Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile` to read it from a config file. */
+  port: number;
+  /** Path (relative to cwd) where the spawned PID is written. */
   pidFile: string;
+  /** Path (relative to cwd) where stdout+stderr are tee'd. */
   logFile: string;
+  /** Returns `true` once the log content indicates the server is ready. */
   detectSuccess: (logContent: string) => boolean;
+  /** Returns a non-empty marker string when the log content indicates a fatal error, or `false` otherwise. */
   detectError?: (logContent: string) => string | false;
-  portConfig: PortConfig;
 }
 
+/** Context passed to {@link DevServerConfig.printSummary}. */
 export interface DevServerSummaryContext {
   slot: ResolvedSlot;
   servers: { server: ServerDescriptor; port: number; pid: number }[];
-}
-
-function readEnvFileVar(filePath: string, varName: string): string {
-  const content = readFileSync(filePath, "utf-8");
-  const match = content.match(new RegExp(`^${varName}=(.+)`, "m"));
-  if (!match) {
-    console.error(`Error: ${varName} not found in ${filePath}.`);
-    process.exit(1);
-  }
-  return match[1].trim();
-}
-
-function readJsonPath(filePath: string, jsonPath: string): string {
-  const content = readFileSync(filePath, "utf-8");
-  const data = JSON.parse(content);
-  const segments = jsonPath.split(".");
-  let cur: unknown = data;
-  for (const seg of segments) {
-    if (cur === null || cur === undefined || typeof cur !== "object") {
-      console.error(`Error: ${jsonPath} not found in ${filePath}.`);
-      process.exit(1);
-    }
-    cur = (cur as Record<string, unknown>)[seg];
-  }
-  if (cur === undefined || cur === null) {
-    console.error(`Error: ${jsonPath} not found in ${filePath}.`);
-    process.exit(1);
-  }
-  return String(cur);
-}
-
-function readPortFromConfig(portConfig: PortConfig): number {
-  if (!existsSync(portConfig.file)) {
-    console.error(`Error: ${portConfig.file} not found. Run setup-worktree first.`);
-    process.exit(1);
-  }
-  const raw =
-    "var" in portConfig
-      ? readEnvFileVar(portConfig.file, portConfig.var)
-      : readJsonPath(portConfig.file, portConfig.jsonPath);
-  const port = Number(raw);
-  if (!Number.isFinite(port)) {
-    console.error(`Error: invalid port "${raw}" in ${portConfig.file}.`);
-    process.exit(1);
-  }
-  return port;
 }
 
 function isPortBusy(port: number): Promise<boolean> {
@@ -119,7 +83,7 @@ function spawnServer(server: ServerDescriptor): number {
   mkdirSync(dirname(server.logFile), { recursive: true });
   mkdirSync(dirname(server.pidFile), { recursive: true });
   const logFd = openSync(server.logFile, "w");
-  const child = spawn(server.command, server.args, {
+  const child = spawn(server.exec.command, server.exec.args, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
@@ -180,12 +144,9 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
 }
 
 async function start(config: DevServerConfig, mainWorktree: string): Promise<void> {
-  const limit = readDevLimit({
-    projectVar: config.devLimitEnvVar,
-    defaultLimit: config.defaultLimit,
-  });
+  const limit = config.devLimit;
   const active = pruneAndPersist(mainWorktree).servers;
-  if (limit > 0 && active.length >= limit) {
+  if (limit !== undefined && active.length >= limit) {
     console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
     printActiveServers(active);
     console.error("Run `dev:down` in another worktree, or `dev:down --all`.");
@@ -194,7 +155,7 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
 
   const serverPorts: [ServerDescriptor, number][] = config.servers.map((server) => [
     server,
-    readPortFromConfig(server.portConfig),
+    server.port,
   ]);
 
   const busyResults = await Promise.all(serverPorts.map(([, port]) => isPortBusy(port)));
@@ -285,7 +246,8 @@ function defaultPrintSummary(
   pids: number[],
 ): void {
   console.log("\nDev servers started!");
-  console.log(`  Worktree: slot ${slot.slot}, owner ${slot.owner}`);
+  const ownerSuffix = slot.owner ? `, owner ${slot.owner}` : "";
+  console.log(`  Worktree: slot ${slot.slot}${ownerSuffix}`);
   servers.forEach((server, i) => {
     const url = `http://localhost:${ports[i]}/`;
     const logPath = join(process.cwd(), server.logFile);

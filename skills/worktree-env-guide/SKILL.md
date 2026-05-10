@@ -14,7 +14,7 @@ metadata:
 
 This skill helps you implement a system for running multiple local development environments simultaneously using git worktrees. It is meant to be adapted to any repository, regardless of tech stack or database engine.
 
-**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, PID + process-group control, log polling, CLI parsing, dev-limit ladder. Consumers supply project-specific callbacks (`provisionDatabase`, `installAndBuild`, `printSummary`, optional `teardownInfrastructure`, optional `ensureInfrastructure`) plus a `configFiles` list with patch functions.
+**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, PID + process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`setupWorktreeData`, `installAndBuild`, `printSummary`, optional `teardownInfrastructure`, optional `ensureInfrastructure`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
@@ -71,7 +71,7 @@ The slot is identified by the primary port number itself (e.g., `--slot 8120`).
 {
   "slots": {
     "8110": { "worktree": "/absolute/path/to/myproject-feat-214", "branch": "feat/214", "owner": "alice" },
-    "8130": { "worktree": "/absolute/path/to/myproject-feat-234", "branch": "feat/234", "owner": "default" }
+    "8130": { "worktree": "/absolute/path/to/myproject-feat-234", "branch": "feat/234" }
   }
 }
 ```
@@ -80,15 +80,7 @@ The main worktree's port is implicit and never stored in the registry.
 
 ### Concurrent dev-server cap
 
-Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The template enforces a cap on every `dev:up`.
-
-Resolution order for the limit:
-
-1. `<PROJECT>_DEV_LIMIT` (project-specific env var name set via an `ADAPT` constant; e.g. `MYAPP_DEV_LIMIT`).
-2. `PROJECT_DEV_LIMIT` (cross-project default — set once in shell rc).
-3. Hardcoded `DEV_LIMIT_DEFAULT = 5`.
-
-`0` means unlimited. Empty / unset / non-numeric values fall through to the next candidate.
+Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
 A second registry, `.local/worktrees/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path).
 
@@ -117,14 +109,13 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 
 1. **Creates the worktree.** Path computed automatically (`../<reponame>-<sanitized-branch>`). With `--create`, branch-name dedup (appends `-2`, `-3`...) when the name is taken.
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
-3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner }` in the slot registry. `owner` defaults to `"default"`; `--owner NAME` overrides it; on re-setup without `--owner`, the existing owner is preserved.
-4. **Creates per-worktree directories** from `config.perWorktreeDirs` (default `[".local-data"]`).
-5. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
-6. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, patch(content, ctx), required? }`; the file is copied from the main worktree and run through `patch`. `required: true` upgrades the "missing source" warning to an error.
-7. **Provisions the database** via `await config.provisionDatabase(ctx)`. The goal is that the worktree ends with a working database (see "Database provisioning" below).
-8. **Installs and builds** via `await config.installAndBuild(ctx)`.
-9. **Optional `await config.afterDatabase(ctx)`** for migrations / seeding once both the DB and the build exist.
-10. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
+3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
+4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
+5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, patch(content, ctx), required? }`; the file is copied from the main worktree and run through `patch`. `required: true` upgrades the "missing source" warning to an error.
+6. **Sets up worktree data** via `await config.setupWorktreeData(ctx)`. This callback owns per-worktree directory creation, database / file-storage provisioning, and infrastructure startup. The goal is that the worktree ends with a working database and any required local data in place (see "Database provisioning" below).
+7. **Installs and builds** via `await config.installAndBuild(ctx)`.
+8. **Optional `await config.afterDatabase(ctx)`** for migrations / seeding once both the DB and the build exist.
+9. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
 
 **Lifecycle for removal (with `--remove` / `--remove-self`):**
 
@@ -141,7 +132,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | `--use BRANCH` | Create a worktree for an existing branch, then set up the local environment |
 | `--create BRANCH` | Create a new branch (with suffix dedup) + worktree, then set up the local environment |
 | `--self` | Set up the local environment in the current linked worktree |
-| `--owner NAME` | Owner of the slot (free-form label, defaults to `"default"`) |
+| `--owner NAME` | Owner of the slot (free-form label, optional) |
 | `--set-owner NAME` | Update the owner of the current linked worktree's slot — no rebuild |
 | `--remove BRANCH` | Stop dev server + free slot + remove worktree by branch name |
 | `--remove-self` | Remove the current linked worktree (same as `--remove`, but for the worktree you are in) |
@@ -159,13 +150,12 @@ Running the script with no mode flag shows help.
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
 - `devServerPidFiles: string[]` — one entry per PID file your dev-server writes; used by `--remove` to stop the dev server cleanly.
-- `provisionDatabase(ctx)` — required callback. Must end with a working database. Project-specific (Docker, file copy, migrations…).
+- `setupWorktreeData(ctx)` — required callback. Runs after symlinks and config files. Owns per-worktree directory creation (e.g. `mkdirSync(".local-data/...")` at the top), database / file-storage provisioning, and infrastructure startup. Must end with a working database (see "Database provisioning" below).
 - `installAndBuild(ctx)` — required callback. `npm install && npm run build`, `pip install`, `cargo build`, etc.
 - `afterDatabase(ctx)` — optional. Migrations / seeding.
 - `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
 - `printSummary(ctx)` — required. Returns the string to print after setup completes.
-- `perWorktreeDirs`, `sharedDirs` — optional, override the defaults.
-- `devLimitEnvVar` — optional here; required in `DevServerConfig` (kept here for symmetry / future use).
+- `sharedDirs` — optional, overrides the default (`[".local", ".plans"]`).
 
 ### Database provisioning
 
@@ -191,14 +181,14 @@ This script starts the dev server in the background, waits for it to be ready, a
 
 A "dev server" can be a single process or several cooperating processes (e.g. an API watcher plus a frontend bundler). `runDevServer(config: DevServerConfig)` handles either case via `config.servers: ServerDescriptor[]` — one entry per process — but conceptually they form one dev server.
 
-Each `ServerDescriptor` is `{ name, command, args, pidFile, logFile, detectSuccess, detectError?, portConfig }`. `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. The `portConfig` discriminated shape is `{ file, var }` for `KEY=VALUE` `.env`-style files, or `{ file, jsonPath }` for a dotted JSON path — pick whichever matches your project's existing config format.
+Each `ServerDescriptor` is `{ name, exec: { command, args }, port, pidFile, logFile, detectSuccess, detectError? }`. `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
 
 See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
 
 **Lifecycle:**
 
-1. Reads each server's port from its `portConfig` and verifies no port is already in use.
-2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets the cap (`config.devLimitEnvVar` → `PROJECT_DEV_LIMIT` → `config.defaultLimit` (default `5`); `0` = unlimited).
+1. Verifies that each server's `port` is not already in use.
+2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit).
 3. Aborts if a sibling dev-server in this worktree is already running (PID file + alive check).
 4. Calls optional `config.ensureInfrastructure?.()` before any dev server. The standard Docker pattern is `docker compose up -d`; the kernel does no infrastructure I/O of its own.
 5. Iterates `config.servers`, spawning each as a detached process group with stdout/stderr to its log file and PID written to its PID file.
@@ -208,7 +198,7 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 
 `dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every PID in every entry, removes per-worktree PID files, and clears the registry. Neither touches infrastructure.
 
-**Main worktree synthesis:** the main worktree never has a row in `slots.json`. When `dev:up` (or `dev:list` / `dev:down --all`) runs there, it synthesizes an in-memory slot using `BASE_PORT`, the current branch, and `owner: "default"` so the entry still flows through `dev-servers.json` and counts toward the cap.
+**Main worktree synthesis:** the main worktree never has a row in `slots.json`. When `dev:up` (or `dev:list` / `dev:down --all`) runs there, it synthesizes an in-memory slot using `BASE_PORT`, the current branch, and no owner so the entry still flows through `dev-servers.json` and counts toward the cap.
 
 A single-process dev server uses a `SERVERS` array with one entry; the script's structure stays the same.
 
@@ -224,8 +214,7 @@ This separation matters because infrastructure services (databases, caches) are 
 **Config fields to populate:**
 
 - `basePort` — required (used to synthesize the main worktree's slot).
-- `devLimitEnvVar` — required, your project's env-var name (e.g. `MYAPP_DEV_LIMIT`).
-- `defaultLimit` — optional (default `5`).
+- `devLimit?` — optional number. The cap on concurrent dev-servers across all worktrees; omit for no limit. Hardcode a sensible value (e.g. `5`) or read it from any source you like.
 - `servers: ServerDescriptor[]` — one entry per process. `detectError` is optional; supply it to fail fast on known fatal log patterns.
 - `ensureInfrastructure?` — optional async hook to start Docker / databases before the dev server.
 - `printSummary?` — optional. Receives `{ slot, servers: [{ server, port, pid }, …] }` and returns a string to print. The kernel prints a sensible default if you omit it.
@@ -356,7 +345,7 @@ The agents need to know:
 - [ ] **Write `setup-worktree`** using [assets/setup-worktree.mjs](assets/setup-worktree.mjs) as a starting point. Search for `ADAPT` comments.
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
 - [ ] **Add npm scripts** (or Makefile targets, etc.) for `setup-worktree`, `dev:up`, `dev:down`.
-- [ ] **Choose your project-specific dev-limit env-var name** (`<PROJECT>_DEV_LIMIT`) and review the default cap (`5`).
+- [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories. Make sure `.local/worktrees/` is covered (slot registry and dev-server registry live there).
 - [ ] **Write agent documentation** if applicable (see [assets/agent-local-env.md](assets/agent-local-env.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
