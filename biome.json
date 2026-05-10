@@ -68,9 +68,13 @@
       "**",
       "!**/.local",
       "!**/.local-data",
+      "!**/.plans",
       "!**/dist",
       "!**/node_modules",
-      "!**/package.json"
+      "!**/package.json",
+      "!migrations",
+      "!skills",
+      "!packages/docmap/test/fixtures"
     ]
   },
   "vcs": {

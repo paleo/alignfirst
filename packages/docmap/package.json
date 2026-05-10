@@ -1,0 +1,42 @@
+{
+  "name": "@paleo/docmap",
+  "version": "0.3.0",
+  "license": "CC0-1.0",
+  "description": "A lightweight documentation system for AI agents and humans.",
+  "keywords": [
+    "documentation",
+    "ai",
+    "agent",
+    "markdown",
+    "docmap"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/docmap"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "npm@11.11.0",
+  "type": "module",
+  "bin": {
+    "docmap": "bin/docmap.mjs"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clear": "rimraf dist/*",
+    "test": "vitest run",
+    "docmap": "node bin/docmap.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.3",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.5"
+  }
+}

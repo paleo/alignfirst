@@ -1,13 +1,39 @@
 # @paleo/worktree-env
 
-Kernel for the worktree-based concurrent local-env system. Two entry points:
+Run multiple local dev environments side by side, one per git worktree, with isolated ports, databases, and config files. Built for branches worked in parallel, by humans or AI agents.
+
+Each project writes two custom scripts on top, using these entry points:
 
 - `runSetupWorktree(config)` — worktree lifecycle (create / setup / remove / set-owner).
 - `runDevServer(config)` — background dev-server start / stop / list.
 
-Design rationale, port scheme, two-tier shutdown, and the slot/dev-server registry layout are documented in the [`worktree-env-guide skill`](../../skills/worktree-env-guide/SKILL.md). This README only covers the API surface.
+## Setup
 
-## Usage
+The `worktree-env-guide` skill is a setup-time companion. Install the skill (globally or locally):
+
+```bash
+npx skills add https://github.com/paleo/alignfirst --skill worktree-env-guide
+```
+
+Then, in your project, ask your agent:
+
+```text
+Use your worktree-env-guide skill. Set up worktree-based local environments in this project.
+```
+
+The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/worktree-env` as a dev dependency, and wires the npm scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
+
+## Workflow
+
+```sh
+npm run setup-worktree -- --create feat/42   # new branch + worktree + isolated env
+npm run dev:up                               # start dev server in the background
+npm run dev:list                             # active dev-servers across all worktrees
+npm run dev:down                             # stop dev server (infrastructure stays up)
+npm run setup-worktree -- --remove feat/42   # full teardown
+```
+
+## API
 
 ```ts
 import { runSetupWorktree, helpers } from "@paleo/worktree-env";

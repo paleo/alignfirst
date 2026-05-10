@@ -14,7 +14,7 @@ metadata:
 
 This skill helps you implement a system for running multiple local development environments simultaneously using git worktrees. It is meant to be adapted to any repository, regardless of tech stack or database engine.
 
-**Node consumers** install [`@paleo/worktree-env`](../../packages/worktree-env/) and write two thin scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, PID + process-group control, log polling, CLI parsing, dev-limit ladder. Consumers supply project-specific callbacks (`provisionDatabase`, `installAndBuild`, `printSummary`, optional `teardownInfrastructure`, optional `ensureInfrastructure`) plus a `configFiles` list with patch functions.
+**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, PID + process-group control, log polling, CLI parsing, dev-limit ladder. Consumers supply project-specific callbacks (`provisionDatabase`, `installAndBuild`, `printSummary`, optional `teardownInfrastructure`, optional `ensureInfrastructure`) plus a `configFiles` list with patch functions.
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
