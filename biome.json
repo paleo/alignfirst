@@ -1,0 +1,93 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "useSimplifiedLogicExpression": "off",
+        "noImportantStyles": "off"
+      },
+      "a11y": {
+        "useHtmlLang": "off",
+        "useKeyWithClickEvents": "warn",
+        "noLabelWithoutControl": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "correctness": {
+        "noConstantCondition": "off",
+        "noUnusedImports": "error",
+        "noUnusedVariables": {
+          "level": "error",
+          "options": {
+            "ignoreRestSiblings": true
+          }
+        },
+        "useExhaustiveDependencies": "off",
+        "useHookAtTopLevel": "off",
+        "useImportExtensions": {
+          "level": "off",
+          "options": {
+            "forceJsExtensions": true
+          }
+        }
+      },
+      "style": {
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error",
+        "noDescendingSpecificity": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/.local",
+      "!**/.local-data",
+      "!**/.plans",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/package.json",
+      "!migrations",
+      "!skills",
+      "!packages/docmap/test/fixtures"
+    ]
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off",
+        "useSortedProperties": "on"
+      }
+    }
+  }
+}
