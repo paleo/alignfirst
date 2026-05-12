@@ -13,9 +13,9 @@ read_when:
 When the user asks to "set up a new local environment" or "set up a new worktree":
 
 ```sh
-npm run setup-worktree -- --use fix/123       # existing branch
-npm run setup-worktree -- --create fix/123    # new branch (dedup: appends -2, -3… if taken)
-npm run setup-worktree -- --here              # manual worktree (created with git worktree add)
+npm run setup-worktree -- --create fix/123    # new branch + worktree (dedup: appends -2, -3… if taken)
+npm run setup-worktree -- --use fix/123       # new worktree on an existing branch
+npm run setup-worktree -- --here              # set up the current worktree
 ```
 
 <!-- ADAPT: Update the setup command if your project uses a different task runner.

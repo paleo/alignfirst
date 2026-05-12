@@ -224,9 +224,9 @@ This separation matters because infrastructure services (databases, caches) are 
 ### Setting up a new local environment
 
 ```sh
-npm run setup-worktree -- --use feat/42          # existing branch
-npm run setup-worktree -- --create feat/42       # new branch (dedup: appends -2, -3… if taken)
-npm run setup-worktree -- --here                 # manual worktree (created with git worktree add)
+npm run setup-worktree -- --create feat/42       # new branch + worktree (dedup: appends -2, -3… if taken)
+npm run setup-worktree -- --use feat/42          # new worktree on an existing branch
+npm run setup-worktree -- --here                 # set up the current worktree
 
 # Tag a slot's owner (free-form label; useful for AI bots passing a Discord username)
 npm run setup-worktree -- --use feat/42 --owner alice
