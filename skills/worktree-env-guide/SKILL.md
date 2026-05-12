@@ -39,7 +39,7 @@ Example split:
 | -------------- | ---------------------- | -------------------------------- |
 | `.local/`      | Shared (symlinked)     | Slot registry, personal notes    |
 | `.plans/`      | Shared (symlinked)     | Task planning files              |
-| `.local-data/` | Per-worktree           | Databases, caches, backups, logs |
+| `.local-wt/`   | Per-worktree           | Databases, caches, backups, logs |
 
 The setup script creates symlinks for shared directories and creates fresh copies of per-worktree directories. The naming doesn't matter — what matters is that you consciously decide which category each directory falls into.
 
@@ -150,7 +150,7 @@ Running the script with no mode flag shows help.
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
 - `devServerPidFiles: string[]` — one entry per PID file your dev-server writes; used by `--remove` to stop the dev server cleanly.
-- `setupWorktreeData(ctx)` — required callback. Runs after symlinks and config files. Owns per-worktree directory creation (e.g. `mkdirSync(".local-data/...")` at the top), database / file-storage provisioning, and infrastructure startup. Must end with a working database (see "Database provisioning" below).
+- `setupWorktreeData(ctx)` — required callback. Runs after symlinks and config files. Owns per-worktree directory creation (e.g. `mkdirSync(".local-wt/...")` at the top), database / file-storage provisioning, and infrastructure startup. Must end with a working database (see "Database provisioning" below).
 - `installAndBuild(ctx)` — required callback. `npm install && npm run build`, `pip install`, `cargo build`, etc.
 - `afterDatabase(ctx)` — optional. Migrations / seeding.
 - `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
@@ -346,6 +346,6 @@ The agents need to know:
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
 - [ ] **Add npm scripts** (or Makefile targets, etc.) for `setup-worktree`, `dev:up`, `dev:down`.
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
-- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories. Make sure `.local/worktrees/` is covered (slot registry and dev-server registry live there).
+- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/worktrees/` is covered (slot registry and dev-server registry live there).
 - [ ] **Write agent documentation** if applicable (see [assets/agent-local-env.md](assets/agent-local-env.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

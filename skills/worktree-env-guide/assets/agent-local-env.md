@@ -63,10 +63,10 @@ npm run dev:list         # List active dev-servers across all worktrees
 npm run dev:down -- --all # Stop every active dev-server
 ```
 
-<!-- ADAPT: Document where the log/PID files are stored (e.g., .local-data/).
+<!-- ADAPT: Document where the log/PID files are stored (e.g., .local-wt/).
      Mention any project-specific URLs to open after starting. -->
 
-Logs and PID files are stored in `.local-data/logs/` and `.local-data/` (per-worktree).
+Logs and PID files are stored in `.local-wt/logs/` and `.local-wt/` (per-worktree).
 
 The script detects port conflicts: it will refuse to start if a dev server is already running.
 
@@ -90,4 +90,4 @@ npm run dev:down                     # 4. stop when done (same directory)
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
 - **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `worktrees/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `worktrees/dev-servers.json` (live dev-server registry).
-- **`.local-data/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).
+- **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).

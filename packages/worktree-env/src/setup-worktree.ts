@@ -107,7 +107,7 @@ export interface SetupWorktreeConfig {
   configFiles: ConfigFileEntry[];
   /**
    * Runs after symlinks and config files. Owns per-worktree data setup:
-   * create any required directories (e.g. `.local-data/...`), copy or
+   * create any required directories (e.g. `.local-wt/...`), copy or
    * provision databases / file storage, start infrastructure containers.
    */
   setupWorktreeData: (ctx: SetupContext) => Promise<void> | void;

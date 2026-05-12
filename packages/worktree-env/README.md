@@ -41,7 +41,7 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 await runSetupWorktree({
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
-  devServerPidFiles: [".local-data/dev-server.pid"],
+  devServerPidFiles: [".local-wt/dev-server.pid"],
   configFiles: [
     {
       path: ".env",
@@ -72,8 +72,8 @@ await runDevServer({
       name: "dev",
       exec: { command: "npm", args: ["run", "dev"] },
       port: helpers.readPortFromEnvFile(".env", "PORT"),
-      pidFile: ".local-data/dev-server.pid",
-      logFile: ".local-data/logs/dev-server.log",
+      pidFile: ".local-wt/dev-server.pid",
+      logFile: ".local-wt/logs/dev-server.log",
       detectSuccess: (log) => log.includes("Server is ready on port"),
     },
   ],

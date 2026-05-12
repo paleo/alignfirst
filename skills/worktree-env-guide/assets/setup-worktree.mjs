@@ -19,8 +19,8 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 //   import { cpSync, existsSync, readdirSync } from "node:fs";
 //   import { join } from "node:path";
 //   setupWorktreeData: ({ currentWorktree, mainWorktree, force }) => {
-//     const localData = join(currentWorktree, ".local-data/data");
-//     const mainData = join(mainWorktree, ".local-data/data");
+//     const localData = join(currentWorktree, ".local-wt/data");
+//     const mainData = join(mainWorktree, ".local-wt/data");
 //     mkdirSync(localData, { recursive: true });
 //     if (readdirSync(localData).length > 0 && !force) return;
 //     if (!existsSync(mainData)) return;
@@ -38,7 +38,7 @@ await runSetupWorktree({
   // ports: (slot) => ({ server: slot, frontend: slot + 1, db: slot + 2 }),
 
   // ADAPT: PID files written by the dev-server (must match dev-server.mjs).
-  devServerPidFiles: [".local-data/dev-server.pid"],
+  devServerPidFiles: [".local-wt/dev-server.pid"],
 
   // ADAPT: gitignored config files copied from the main worktree and patched
   // per slot. The source is the same path in the main worktree.
@@ -72,7 +72,7 @@ await runSetupWorktree({
   // ADAPT: per-worktree data setup. Runs after symlinks and config files.
   // Create any required directories first, then provision DB / file storage.
   setupWorktreeData: async ({ currentWorktree }) => {
-    mkdirSync(join(currentWorktree, ".local-data"), { recursive: true });
+    mkdirSync(join(currentWorktree, ".local-wt"), { recursive: true });
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
