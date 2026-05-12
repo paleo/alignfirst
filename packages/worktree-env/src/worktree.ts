@@ -80,7 +80,6 @@ export function createBranch(
   execFileSync("git", ["worktree", "add", "-b", finalBranch, worktreePath], {
     stdio: stdioFor(run),
   });
-  console.log(`Branch: ${finalBranch}`);
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 

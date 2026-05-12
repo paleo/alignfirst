@@ -67,8 +67,8 @@ Whenever a user request involves something about a project, open a fresh thread 
 
 Call `sessions_spawn` with:
 
-- `thread: true` — bind to a freshly created thread
-- `context: "isolated"` — required override; thread-bound spawns default to `"fork"`
+- `thread: true`
+- `context: "isolated"`
+- `mode: "session"`
 - `task: "<bootstrap message>"` — the new session's first turn; everything it needs must be included here.
-- `label: "<ticket-ID> - <very short description>"` — names the Discord thread. Format: ticket ID prefix plus a 1–5 word summary, separated by ` - `. Examples: `"AB-123 - Bold price label"`, `"AB-345 - Caching"`. If the ticket ID isn't known yet, drop the prefix and use the description alone (`"Bold price label"`).
-- `mode: "session"` — only if the user is expected to keep replying in the thread; omit for fire-and-forget.
+- `label: "<ticket-ID> - <very short description>"` — names the Discord thread. Format: ticket ID prefix plus a 1–5 word description, separated by ` - `. Examples: `"AB-123 - Very short description"`. If the ticket ID isn't known yet, drop the prefix and use the description alone (`"Very short description"`).

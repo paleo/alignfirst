@@ -121,7 +121,7 @@ export interface SetupWorktreeConfig {
   printSummary: (ctx: SummaryContext) => string;
 }
 
-function makeLog(verbose: boolean): (msg: string) => void {
+function makeVerboseLog(verbose: boolean): (msg: string) => void {
   return (msg) => {
     if (verbose) console.log(msg);
   };
@@ -189,7 +189,7 @@ async function runSetup(
   run: RunCtx,
   config: SetupWorktreeConfig,
 ): Promise<void> {
-  const log = makeLog(run.verbose);
+  const verboseLog = makeVerboseLog(run.verbose);
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
 
@@ -211,16 +211,18 @@ async function runSetup(
   });
   const ports = portsFn(slot);
 
-  log(
+  verboseLog(
     `Using slot ${slot} (${Object.entries(ports)
       .map(([k, v]) => `${k}: ${v}`)
       .join(", ")})`,
   );
 
+  console.log(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
+
   const sharedDirs = config.sharedDirs ?? [".local", ".plans"];
 
-  linkSharedDirectories(setupCtx, sharedDirs, log);
-  generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, log);
+  linkSharedDirectories(setupCtx, sharedDirs, verboseLog);
+  generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, verboseLog);
 
   const force = args.force ?? false;
   const setupContext: SetupContext = {
@@ -387,7 +389,7 @@ async function handleRemove(
   run: RunCtx,
   config: SetupWorktreeConfig,
 ): Promise<void> {
-  const log = makeLog(run.verbose);
+  const verboseLog = makeVerboseLog(run.verbose);
   const removeHere = Boolean(args["remove-here"]);
   const registry = readSlots(ctx.mainWorktree);
   const target = resolveRemoveTarget(args, ctx, registry, removeHere);
@@ -410,7 +412,7 @@ async function handleRemove(
     return;
   }
 
-  await stopDevServerByPidFiles(target.worktreePath, config.devServerPidFiles, log);
+  await stopDevServerByPidFiles(target.worktreePath, config.devServerPidFiles, verboseLog);
 
   if (config.teardownInfrastructure) {
     await config.teardownInfrastructure({
