@@ -21,14 +21,20 @@ Lean toward delegating; the less you touch the project directly, the better. Tha
 
 Hand off to the coding agent for:
 
-- Worktree creation and dev-environment setup
+- Branch/worktree creation and dev-environment setup
 - Writing code (using `alignfirst` protocols)
 - Commits and pushes
 - Opening PRs
 
-## Commit & push cadence
+## Worktrees and the base branch
 
-Inside a working thread, have the coding agent commit and push whenever a meaningful step is reached — and whenever the user asks. Frequent small commits beat long-lived dirty trees; WIP and even non-compiling commits are acceptable.
+The main worktree must always stay on the base branch. Never switch it to another branch — it is shared across sessions and you are not the only one working there.
+
+Never edit files while the base branch is checked out. Any work on another branch happens in a linked worktree; ask the coding agent to create one if it doesn't exist yet.
+
+## Updating the base branch
+
+Keep the base branch fresh: `git pull` it regularly, and always before creating a new branch or worktree so the new work starts from up-to-date code.
 
 ## Updating a branch with the base branch
 
@@ -40,6 +46,10 @@ When the current branch needs to catch up with the base branch:
    - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile. Push it too if the thread already has remote commits. Never start the merge with risky uncommitted work in the tree.
 
 The merge itself (in either case) is delegated to the coding agent via `alignfirst-coaching` (`merge` protocol).
+
+## Commit & push cadence
+
+Inside a working thread, have the coding agent commit and push whenever a meaningful step is reached — and whenever the user asks. Frequent small commits beat long-lived dirty trees; WIP and even non-compiling commits are acceptable.
 
 ## Resetting a thread session
 
