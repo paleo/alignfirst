@@ -34,8 +34,8 @@ describe("validateSetupFlags", () => {
     expect(() => validateSetupFlags(args)).toThrow(/--slot and --force/);
   });
 
-  it("rejects --remove + --remove-self", () => {
-    const args = parseSetupArgs(["--remove", "a", "--remove-self"]);
+  it("rejects --remove + --remove-here", () => {
+    const args = parseSetupArgs(["--remove", "a", "--remove-here"]);
     expect(() => validateSetupFlags(args)).toThrow(/mutually exclusive/);
   });
 

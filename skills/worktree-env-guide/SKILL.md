@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.4.0"
+  version: "0.5.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -117,7 +117,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 8. **Optional `await config.afterDatabase(ctx)`** for migrations / seeding once both the DB and the build exist.
 9. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
 
-**Lifecycle for removal (with `--remove` / `--remove-self`):**
+**Lifecycle for removal (with `--remove` / `--remove-here`):**
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
@@ -131,12 +131,12 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | --- | --- |
 | `--use BRANCH` | Create a worktree for an existing branch, then set up the local environment |
 | `--create BRANCH` | Create a new branch (with suffix dedup) + worktree, then set up the local environment |
-| `--self` | Set up the local environment in the current linked worktree |
+| `--here` | Set up the local environment in the current linked worktree |
 | `--owner NAME` | Owner of the slot (free-form label, optional) |
 | `--set-owner NAME` | Update the owner of the current linked worktree's slot — no rebuild |
 | `--remove BRANCH` | Stop dev server + free slot + remove worktree by branch name |
-| `--remove-self` | Remove the current linked worktree (same as `--remove`, but for the worktree you are in) |
-| `--no-remote-check` | Skip remote branch verification when removing (use with `--remove` or `--remove-self`) |
+| `--remove-here` | Remove the current linked worktree (same as `--remove`, but for the worktree you are in) |
+| `--no-remote-check` | Skip remote branch verification when removing (use with `--remove` or `--remove-here`) |
 | `--slot PORT` | Use a specific slot instead of auto-assigning |
 | `--force` | Overwrite existing config files and re-provision the database |
 | `--verbose` | Show intermediate output |
@@ -226,7 +226,7 @@ This separation matters because infrastructure services (databases, caches) are 
 ```sh
 npm run setup-worktree -- --use feat/42          # existing branch
 npm run setup-worktree -- --create feat/42       # new branch (dedup: appends -2, -3… if taken)
-npm run setup-worktree -- --self                 # manual worktree (created with git worktree add)
+npm run setup-worktree -- --here                 # manual worktree (created with git worktree add)
 
 # Tag a slot's owner (free-form label; useful for AI bots passing a Discord username)
 npm run setup-worktree -- --use feat/42 --owner alice
@@ -242,11 +242,11 @@ npm run dev:up
 
 ```sh
 npm run setup-worktree -- --remove feat/42       # remove by branch name
-npm run setup-worktree -- --remove-self          # remove the current worktree
+npm run setup-worktree -- --remove-here          # remove the current worktree
 npm run setup-worktree -- --remove feat/42 --no-remote-check # skip remote branch check
 ```
 
-`--remove-self` prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.
+`--remove-here` prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.
 
 ### Stopping the dev server (keeping infrastructure)
 

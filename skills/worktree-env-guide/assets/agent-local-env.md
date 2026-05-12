@@ -15,7 +15,7 @@ When the user asks to "set up a new local environment" or "set up a new worktree
 ```sh
 npm run setup-worktree -- --use fix/123       # existing branch
 npm run setup-worktree -- --create fix/123    # new branch (dedup: appends -2, -3… if taken)
-npm run setup-worktree -- --self              # manual worktree (created with git worktree add)
+npm run setup-worktree -- --here              # manual worktree (created with git worktree add)
 ```
 
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
@@ -36,13 +36,13 @@ npm run setup-worktree -- --set-owner bob   # update later, no rebuild
 
 ```sh
 npm run setup-worktree -- --remove fix/123    # remove by branch name
-npm run setup-worktree -- --remove-self       # remove the current worktree
+npm run setup-worktree -- --remove-here       # remove the current worktree
 npm run setup-worktree -- --remove fix/123 --no-remote-check # skip remote branch check
 ```
 
 Stops the dev server (if running), frees the slot, and removes the worktree.
 
-By default, it verifies the branch has been removed from the remote first. Use `--no-remote-check` to skip that. With `--remove-self`, the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
+By default, it verifies the branch has been removed from the remote first. Use `--no-remote-check` to skip that. With `--remove-here`, the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 

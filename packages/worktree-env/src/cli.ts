@@ -22,7 +22,7 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     description:
       "Create a new branch + worktree, then set up the local environment. If the branch already exists, appends a numeric suffix (-2, -3, ...)",
   },
-  self: {
+  here: {
     type: "boolean",
     description: "Set up the local environment in the current linked worktree",
   },
@@ -41,7 +41,7 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     arg: "branch",
     description: "Remove a worktree by branch name (stop dev server, free slot, delete directory)",
   },
-  "remove-self": {
+  "remove-here": {
     type: "boolean",
     description:
       "Remove the current linked worktree (same as --remove, but for the worktree you are in)",
@@ -49,7 +49,7 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
   "no-remote-check": {
     type: "boolean",
     description:
-      "Skip remote branch verification when removing (use with --remove or --remove-self)",
+      "Skip remote branch verification when removing (use with --remove or --remove-here)",
   },
   slot: {
     type: "string",
@@ -75,11 +75,11 @@ export interface SetupArgs {
   help?: boolean;
   use?: string;
   create?: string;
-  self?: boolean;
+  here?: boolean;
   owner?: string;
   "set-owner"?: string;
   remove?: string;
-  "remove-self"?: boolean;
+  "remove-here"?: boolean;
   "no-remote-check"?: boolean;
   slot?: string;
   force?: boolean;
@@ -140,11 +140,11 @@ export function printDevServerHelp(): void {
 }
 
 export function isSetupMode(args: SetupArgs): boolean {
-  return args.use !== undefined || args.create !== undefined || Boolean(args.self);
+  return args.use !== undefined || args.create !== undefined || Boolean(args.here);
 }
 
 export function isRemoveMode(args: SetupArgs): boolean {
-  return args.remove !== undefined || Boolean(args["remove-self"]);
+  return args.remove !== undefined || Boolean(args["remove-here"]);
 }
 
 export function isSetOwnerMode(args: SetupArgs): boolean {
@@ -155,28 +155,28 @@ export function validateSetupFlags(args: SetupArgs): void {
   const modeFlags = [
     args.use,
     args.create,
-    args.self,
+    args.here,
     isRemoveMode(args),
     isSetOwnerMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
-      "Error: --use, --create, --self, --remove, --remove-self, and --set-owner are mutually exclusive.",
+      "Error: --use, --create, --here, --remove, --remove-here, and --set-owner are mutually exclusive.",
     );
   }
-  if (args.remove !== undefined && args["remove-self"]) {
-    throw new ConfigError("Error: --remove and --remove-self are mutually exclusive.");
+  if (args.remove !== undefined && args["remove-here"]) {
+    throw new ConfigError("Error: --remove and --remove-here are mutually exclusive.");
   }
   if ((args.slot !== undefined || args.force) && !isSetupMode(args)) {
     throw new ConfigError(
-      "Error: --slot and --force can only be used with --use, --create, or --self.",
+      "Error: --slot and --force can only be used with --use, --create, or --here.",
     );
   }
   if (args.owner !== undefined && !isSetupMode(args)) {
-    throw new ConfigError("Error: --owner is only valid with --use, --create, or --self.");
+    throw new ConfigError("Error: --owner is only valid with --use, --create, or --here.");
   }
   if (args["no-remote-check"] && !isRemoveMode(args)) {
-    throw new ConfigError("Error: --no-remote-check is only valid with --remove or --remove-self.");
+    throw new ConfigError("Error: --no-remote-check is only valid with --remove or --remove-here.");
   }
 }
 

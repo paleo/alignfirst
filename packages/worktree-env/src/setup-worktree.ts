@@ -313,9 +313,9 @@ function resolveRemoveTarget(
   args: SetupArgs,
   ctx: WorktreeContext,
   registry: ReturnType<typeof readSlots>,
-  removeSelf: boolean,
+  removeHere: boolean,
 ): RemoveTarget {
-  if (removeSelf) {
+  if (removeHere) {
     if (ctx.isMainWorktree) {
       console.error("Error: Cannot remove the main worktree.");
       process.exit(1);
@@ -344,7 +344,7 @@ function resolveRemoveTarget(
   }
   const worktreePath = entry[1].worktree;
   if (resolve(ctx.currentWorktree) === resolve(worktreePath)) {
-    console.error("Error: You are currently in this worktree. Use --remove-self instead.");
+    console.error("Error: You are currently in this worktree. Use --remove-here instead.");
     process.exit(1);
   }
   return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
@@ -388,9 +388,9 @@ async function handleRemove(
   config: SetupWorktreeConfig,
 ): Promise<void> {
   const log = makeLog(run.verbose);
-  const removeSelf = Boolean(args["remove-self"]);
+  const removeHere = Boolean(args["remove-here"]);
   const registry = readSlots(ctx.mainWorktree);
-  const target = resolveRemoveTarget(args, ctx, registry, removeSelf);
+  const target = resolveRemoveTarget(args, ctx, registry, removeHere);
 
   if (!args["no-remote-check"]) {
     verifyBranchAbsentFromRemote(target.branch, run);
@@ -424,7 +424,7 @@ async function handleRemove(
   writeSlots(ctx.mainWorktree, registry);
   removeDevServerEntryByWorktree(ctx.mainWorktree, target.worktreePath);
 
-  if (removeSelf) {
+  if (removeHere) {
     process.chdir(ctx.mainWorktree);
   }
 
@@ -433,7 +433,7 @@ async function handleRemove(
   console.log(
     `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
   );
-  if (removeSelf) {
+  if (removeHere) {
     console.log(`Now run: cd ${ctx.mainWorktree}`);
   }
 }

@@ -105,7 +105,7 @@ export function getCurrentBranch(worktreePath: string): string {
 }
 
 export function enforceWorktreeMode(
-  args: { use?: string; create?: string; self?: boolean },
+  args: { use?: string; create?: string; here?: boolean },
   ctx: WorktreeContext,
 ): void {
   if (args.use || args.create) {
@@ -113,10 +113,10 @@ export function enforceWorktreeMode(
       console.error("Error: --use and --create must be run from the main worktree.");
       process.exit(1);
     }
-  } else if (args.self) {
+  } else if (args.here) {
     if (ctx.isMainWorktree) {
       console.error(
-        "Error: --self must be run from a linked worktree, not from the main worktree.",
+        "Error: --here must be run from a linked worktree, not from the main worktree.",
       );
       process.exit(1);
     }
