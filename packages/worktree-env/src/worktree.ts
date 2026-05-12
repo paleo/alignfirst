@@ -11,10 +11,6 @@ export interface RunCtx {
   verbose: boolean;
 }
 
-function stdioFor(ctx: RunCtx): "inherit" | "pipe" {
-  return ctx.verbose ? "inherit" : "pipe";
-}
-
 export function detectWorktree(): WorktreeContext {
   const currentWorktree = execFileSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf-8",
@@ -29,22 +25,21 @@ export function detectWorktree(): WorktreeContext {
   return { currentWorktree, mainWorktree, isMainWorktree };
 }
 
-export function computeWorktreePath(mainWorktree: string, branch: string): string {
-  const repoName = basename(mainWorktree);
-  const sanitized = branch.replaceAll("/", "-");
-  return join(dirname(mainWorktree), `${repoName}-${sanitized}`);
-}
-
-export function branchExists(branch: string): boolean {
-  try {
-    execFileSync("git", ["rev-parse", "--verify", branch], { stdio: "pipe" });
-    return true;
-  } catch {
-    try {
-      execFileSync("git", ["rev-parse", "--verify", `origin/${branch}`], { stdio: "pipe" });
-      return true;
-    } catch {
-      return false;
+export function enforceWorktreeMode(
+  args: { use?: string; create?: string; here?: boolean },
+  ctx: WorktreeContext,
+): void {
+  if (args.use || args.create) {
+    if (!ctx.isMainWorktree) {
+      console.error("Error: --use and --create must be run from the main worktree.");
+      process.exit(1);
+    }
+  } else if (args.here) {
+    if (ctx.isMainWorktree) {
+      console.error(
+        "Error: --here must be run from a linked worktree, not from the main worktree.",
+      );
+      process.exit(1);
     }
   }
 }
@@ -103,25 +98,30 @@ export function getCurrentBranch(worktreePath: string): string {
   }).trim();
 }
 
-export function enforceWorktreeMode(
-  args: { use?: string; create?: string; here?: boolean },
-  ctx: WorktreeContext,
-): void {
-  if (args.use || args.create) {
-    if (!ctx.isMainWorktree) {
-      console.error("Error: --use and --create must be run from the main worktree.");
-      process.exit(1);
-    }
-  } else if (args.here) {
-    if (ctx.isMainWorktree) {
-      console.error(
-        "Error: --here must be run from a linked worktree, not from the main worktree.",
-      );
-      process.exit(1);
+export function removeWorktree(worktreePath: string, run: RunCtx): void {
+  execFileSync("git", ["worktree", "remove", "--force", worktreePath], { stdio: stdioFor(run) });
+}
+
+export function computeWorktreePath(mainWorktree: string, branch: string): string {
+  const repoName = basename(mainWorktree);
+  const sanitized = branch.replaceAll("/", "-");
+  return join(dirname(mainWorktree), `${repoName}-${sanitized}`);
+}
+
+function branchExists(branch: string): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", branch], { stdio: "pipe" });
+    return true;
+  } catch {
+    try {
+      execFileSync("git", ["rev-parse", "--verify", `origin/${branch}`], { stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
     }
   }
 }
 
-export function removeWorktree(worktreePath: string, run: RunCtx): void {
-  execFileSync("git", ["worktree", "remove", "--force", worktreePath], { stdio: stdioFor(run) });
+function stdioFor(ctx: RunCtx): "inherit" | "pipe" {
+  return ctx.verbose ? "inherit" : "pipe";
 }

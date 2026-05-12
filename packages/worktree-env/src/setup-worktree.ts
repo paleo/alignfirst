@@ -15,6 +15,13 @@ import { ConfigError } from "./errors.js";
 import { copyAndPatchFile } from "./helpers.js";
 import { defaultComputePorts, resolvePortScheme, type PortScheme } from "./ports.js";
 import {
+  cleanupPidFile,
+  isProcessAlive,
+  isProcessGroupAlive,
+  killProcessGroup,
+  readPid,
+} from "./process-control.js";
+import {
   handleSetOwner,
   readSlots,
   resolveAndRegisterSlot,
@@ -32,60 +39,6 @@ import {
   verifyBranchAbsentFromRemote,
   type WorktreeContext,
 } from "./worktree.js";
-import {
-  cleanupPidFile,
-  isProcessAlive,
-  isProcessGroupAlive,
-  killProcessGroup,
-  readPid,
-} from "./process-control.js";
-
-/** Context passed to setup-time hooks (`setupWorktreeData`, `installAndBuild`, `afterDatabase`). */
-export interface SetupContext {
-  currentWorktree: string;
-  mainWorktree: string;
-  slot: number;
-  branch: string;
-  owner?: string;
-  ports: Record<string, number>;
-  force: boolean;
-  verbose: boolean;
-}
-
-/** Context passed to {@link ConfigFileEntry.patch}. */
-export interface PatchContext {
-  slot: number;
-  ports: Record<string, number>;
-  mainWorktree: string;
-  currentWorktree: string;
-}
-
-/** One config file copied from the main worktree and patched per slot. */
-export interface ConfigFileEntry {
-  /** Path relative to the worktree root. Same path is read from main and written to current. */
-  path: string;
-  /** Returns the patched content given the source content and the slot's ports. */
-  patch: (content: string, ctx: PatchContext) => string;
-  /** When `true`, abort if the source file is missing in the main worktree. Defaults to `false`. */
-  required?: boolean;
-}
-
-/** Context passed to {@link SetupWorktreeConfig.printSummary}. */
-export interface SummaryContext {
-  slot: number;
-  branch: string;
-  owner?: string;
-  ports: Record<string, number>;
-  currentWorktree: string;
-  mainWorktree: string;
-}
-
-/** Context passed to {@link SetupWorktreeConfig.teardownInfrastructure}. */
-export interface TeardownContext {
-  worktree: string;
-  mainWorktree: string;
-  verbose: boolean;
-}
 
 /** Configuration accepted by {@link runSetupWorktree}. */
 export interface SetupWorktreeConfig {
@@ -121,18 +74,51 @@ export interface SetupWorktreeConfig {
   printSummary: (ctx: SummaryContext) => string;
 }
 
-function makeVerboseLog(verbose: boolean): (msg: string) => void {
-  return (msg) => {
-    if (verbose) console.log(msg);
-  };
+/** Context passed to setup-time hooks (`setupWorktreeData`, `installAndBuild`, `afterDatabase`). */
+export interface SetupContext {
+  currentWorktree: string;
+  mainWorktree: string;
+  slot: number;
+  branch: string;
+  owner?: string;
+  ports: Record<string, number>;
+  force: boolean;
+  verbose: boolean;
 }
 
-function resolvePortsFn(config: SetupWorktreeConfig): (slot: number) => Record<string, number> {
-  if (config.ports) return config.ports;
-  if (config.portNames && config.portNames.length > 0) {
-    return defaultComputePorts(config.portNames);
-  }
-  throw new ConfigError("Config error: provide either `ports` (function) or `portNames` (array).");
+/** Context passed to {@link SetupWorktreeConfig.printSummary}. */
+export interface SummaryContext {
+  slot: number;
+  branch: string;
+  owner?: string;
+  ports: Record<string, number>;
+  currentWorktree: string;
+  mainWorktree: string;
+}
+
+/** Context passed to {@link SetupWorktreeConfig.teardownInfrastructure}. */
+export interface TeardownContext {
+  worktree: string;
+  mainWorktree: string;
+  verbose: boolean;
+}
+
+/** One config file copied from the main worktree and patched per slot. */
+export interface ConfigFileEntry {
+  /** Path relative to the worktree root. Same path is read from main and written to current. */
+  path: string;
+  /** Returns the patched content given the source content and the slot's ports. */
+  patch: (content: string, ctx: PatchContext) => string;
+  /** When `true`, abort if the source file is missing in the main worktree. Defaults to `false`. */
+  required?: boolean;
+}
+
+/** Context passed to {@link ConfigFileEntry.patch}. */
+export interface PatchContext {
+  slot: number;
+  ports: Record<string, number>;
+  mainWorktree: string;
+  currentWorktree: string;
 }
 
 export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<void> {
@@ -250,6 +236,96 @@ async function runSetup(
       mainWorktree: setupCtx.mainWorktree,
     }),
   );
+}
+
+async function handleRemove(
+  args: SetupArgs,
+  ctx: WorktreeContext,
+  run: RunCtx,
+  config: SetupWorktreeConfig,
+): Promise<void> {
+  const verboseLog = makeVerboseLog(run.verbose);
+  const removeHere = Boolean(args["remove-here"]);
+  const registry = readSlots(ctx.mainWorktree);
+  const target = resolveRemoveTarget(args, ctx, registry, removeHere);
+
+  if (!args["no-remote-check"]) {
+    verifyBranchAbsentFromRemote(target.branch, run);
+  }
+
+  const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
+
+  if (!existsSync(target.worktreePath)) {
+    console.warn(
+      `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
+    );
+    delete registry.slots[target.slotPort];
+    writeSlots(ctx.mainWorktree, registry);
+    console.log(
+      `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
+    );
+    return;
+  }
+
+  await stopDevServerByPidFiles(target.worktreePath, config.devServerPidFiles, verboseLog);
+
+  if (config.teardownInfrastructure) {
+    await config.teardownInfrastructure({
+      worktree: target.worktreePath,
+      mainWorktree: ctx.mainWorktree,
+      verbose: run.verbose,
+    });
+  }
+
+  delete registry.slots[target.slotPort];
+  writeSlots(ctx.mainWorktree, registry);
+  removeDevServerEntryByWorktree(ctx.mainWorktree, target.worktreePath);
+
+  if (removeHere) {
+    process.chdir(ctx.mainWorktree);
+  }
+
+  removeWorktree(target.worktreePath, run);
+
+  console.log(
+    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
+  );
+  if (removeHere) {
+    console.log(`Now run: cd ${ctx.mainWorktree}`);
+  }
+}
+
+function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
+  const newOwner = args["set-owner"];
+  const { slotPort } = handleSetOwner({
+    newOwner,
+    currentWorktree: ctx.currentWorktree,
+    mainWorktree: ctx.mainWorktree,
+    isMainWorktree: ctx.isMainWorktree,
+  });
+
+  // Propagate to dev-servers.json entries for this worktree.
+  const devServersPath = join(ctx.mainWorktree, ".local/worktrees/dev-servers.json");
+  if (existsSync(devServersPath)) {
+    const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
+      servers: { worktree: string; owner?: string }[];
+    };
+    let changed = false;
+    const resolvedCurrent = resolve(ctx.currentWorktree);
+    for (const server of data.servers) {
+      if (resolve(server.worktree) === resolvedCurrent) {
+        if (newOwner !== undefined) server.owner = newOwner;
+        else delete server.owner;
+        changed = true;
+      }
+    }
+    if (changed) {
+      mkdirSync(dirname(devServersPath), { recursive: true });
+      writeFileSync(devServersPath, `${JSON.stringify(data, undefined, 2)}\n`);
+    }
+  }
+
+  console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
 }
 
 function ensureWorktree(args: SetupArgs, ctx: WorktreeContext, run: RunCtx): WorktreeContext {
@@ -383,92 +459,16 @@ async function stopDevServerByPidFiles(
   }
 }
 
-async function handleRemove(
-  args: SetupArgs,
-  ctx: WorktreeContext,
-  run: RunCtx,
-  config: SetupWorktreeConfig,
-): Promise<void> {
-  const verboseLog = makeVerboseLog(run.verbose);
-  const removeHere = Boolean(args["remove-here"]);
-  const registry = readSlots(ctx.mainWorktree);
-  const target = resolveRemoveTarget(args, ctx, registry, removeHere);
-
-  if (!args["no-remote-check"]) {
-    verifyBranchAbsentFromRemote(target.branch, run);
+function resolvePortsFn(config: SetupWorktreeConfig): (slot: number) => Record<string, number> {
+  if (config.ports) return config.ports;
+  if (config.portNames && config.portNames.length > 0) {
+    return defaultComputePorts(config.portNames);
   }
-
-  const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
-
-  if (!existsSync(target.worktreePath)) {
-    console.warn(
-      `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
-    );
-    delete registry.slots[target.slotPort];
-    writeSlots(ctx.mainWorktree, registry);
-    console.log(
-      `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
-    );
-    return;
-  }
-
-  await stopDevServerByPidFiles(target.worktreePath, config.devServerPidFiles, verboseLog);
-
-  if (config.teardownInfrastructure) {
-    await config.teardownInfrastructure({
-      worktree: target.worktreePath,
-      mainWorktree: ctx.mainWorktree,
-      verbose: run.verbose,
-    });
-  }
-
-  delete registry.slots[target.slotPort];
-  writeSlots(ctx.mainWorktree, registry);
-  removeDevServerEntryByWorktree(ctx.mainWorktree, target.worktreePath);
-
-  if (removeHere) {
-    process.chdir(ctx.mainWorktree);
-  }
-
-  removeWorktree(target.worktreePath, run);
-
-  console.log(
-    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
-  );
-  if (removeHere) {
-    console.log(`Now run: cd ${ctx.mainWorktree}`);
-  }
+  throw new ConfigError("Config error: provide either `ports` (function) or `portNames` (array).");
 }
 
-function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
-  const newOwner = args["set-owner"];
-  const { slotPort } = handleSetOwner({
-    newOwner,
-    currentWorktree: ctx.currentWorktree,
-    mainWorktree: ctx.mainWorktree,
-    isMainWorktree: ctx.isMainWorktree,
-  });
-
-  // Propagate to dev-servers.json entries for this worktree.
-  const devServersPath = join(ctx.mainWorktree, ".local/worktrees/dev-servers.json");
-  if (existsSync(devServersPath)) {
-    const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
-      servers: { worktree: string; owner?: string }[];
-    };
-    let changed = false;
-    const resolvedCurrent = resolve(ctx.currentWorktree);
-    for (const server of data.servers) {
-      if (resolve(server.worktree) === resolvedCurrent) {
-        if (newOwner !== undefined) server.owner = newOwner;
-        else delete server.owner;
-        changed = true;
-      }
-    }
-    if (changed) {
-      mkdirSync(dirname(devServersPath), { recursive: true });
-      writeFileSync(devServersPath, `${JSON.stringify(data, undefined, 2)}\n`);
-    }
-  }
-
-  console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
+function makeVerboseLog(verbose: boolean): (msg: string) => void {
+  return (msg) => {
+    if (verbose) console.log(msg);
+  };
 }

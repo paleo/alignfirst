@@ -61,43 +61,6 @@ export interface DevServerSummaryContext {
   servers: { server: ServerDescriptor; port: number; pid: number }[];
 }
 
-function isPortBusy(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
-    socket.setTimeout(500);
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", () => {
-      resolve(false);
-    });
-  });
-}
-
-function spawnServer(server: ServerDescriptor): number {
-  mkdirSync(dirname(server.logFile), { recursive: true });
-  mkdirSync(dirname(server.pidFile), { recursive: true });
-  const logFd = openSync(server.logFile, "w");
-  const child = spawn(server.exec.command, server.exec.args, {
-    detached: true,
-    stdio: ["ignore", logFd, logFd],
-  });
-  if (child.pid === undefined) {
-    closeSync(logFd);
-    console.error(`Error: failed to spawn ${server.name}.`);
-    process.exit(1);
-  }
-  writeFileSync(server.pidFile, String(child.pid));
-  child.unref();
-  closeSync(logFd);
-  return child.pid;
-}
-
 export async function runDevServer(config: DevServerConfig): Promise<void> {
   let args: DevServerArgs;
   try {
@@ -239,6 +202,13 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
   }
 }
 
+async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise<void> {
+  for (const server of config.servers) {
+    await stopByPidFile(server.pidFile, server.name, (msg) => console.log(msg));
+  }
+  unregisterDevServer(mainWorktree, process.cwd());
+}
+
 function defaultPrintSummary(
   slot: ResolvedSlot,
   servers: ServerDescriptor[],
@@ -257,9 +227,39 @@ function defaultPrintSummary(
   console.log("");
 }
 
-async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise<void> {
-  for (const server of config.servers) {
-    await stopByPidFile(server.pidFile, server.name, (msg) => console.log(msg));
+function spawnServer(server: ServerDescriptor): number {
+  mkdirSync(dirname(server.logFile), { recursive: true });
+  mkdirSync(dirname(server.pidFile), { recursive: true });
+  const logFd = openSync(server.logFile, "w");
+  const child = spawn(server.exec.command, server.exec.args, {
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  if (child.pid === undefined) {
+    closeSync(logFd);
+    console.error(`Error: failed to spawn ${server.name}.`);
+    process.exit(1);
   }
-  unregisterDevServer(mainWorktree, process.cwd());
+  writeFileSync(server.pidFile, String(child.pid));
+  child.unref();
+  closeSync(logFd);
+  return child.pid;
+}
+
+function isPortBusy(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host: "127.0.0.1" });
+    socket.setTimeout(500);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once("error", () => {
+      resolve(false);
+    });
+  });
 }

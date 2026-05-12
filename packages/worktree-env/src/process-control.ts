@@ -1,5 +1,32 @@
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 
+export async function stopByPidFile(
+  pidFile: string,
+  label: string,
+  log: (msg: string) => void = () => {},
+): Promise<void> {
+  const pid = readPid(pidFile);
+  if (pid === undefined || !isProcessAlive(pid)) {
+    cleanupPidFile(pidFile);
+    log(`No ${label} process is running.`);
+    return;
+  }
+  log(`Stopping ${label} (PID ${pid})...`);
+  await stopProcessGroup(pid);
+  cleanupPidFile(pidFile);
+  log(`${label} stopped.`);
+}
+
+export async function stopProcessGroup(pid: number, timeoutMs = 10_000): Promise<void> {
+  killProcessGroup(pid, "SIGTERM");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 300));
+    if (!isProcessGroupAlive(pid)) return;
+  }
+  killProcessGroup(pid, "SIGKILL");
+}
+
 export function readPid(pidFile: string): number | undefined {
   if (!existsSync(pidFile)) return undefined;
   const raw = readFileSync(pidFile, "utf-8").trim();
@@ -40,31 +67,4 @@ export function killProcessGroup(pid: number, signal: NodeJS.Signals): void {
 
 export function cleanupPidFile(pidFile: string): void {
   if (existsSync(pidFile)) unlinkSync(pidFile);
-}
-
-export async function stopProcessGroup(pid: number, timeoutMs = 10_000): Promise<void> {
-  killProcessGroup(pid, "SIGTERM");
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 300));
-    if (!isProcessGroupAlive(pid)) return;
-  }
-  killProcessGroup(pid, "SIGKILL");
-}
-
-export async function stopByPidFile(
-  pidFile: string,
-  label: string,
-  log: (msg: string) => void = () => {},
-): Promise<void> {
-  const pid = readPid(pidFile);
-  if (pid === undefined || !isProcessAlive(pid)) {
-    cleanupPidFile(pidFile);
-    log(`No ${label} process is running.`);
-    return;
-  }
-  log(`Stopping ${label} (PID ${pid})...`);
-  await stopProcessGroup(pid);
-  cleanupPidFile(pidFile);
-  log(`${label} stopped.`);
 }

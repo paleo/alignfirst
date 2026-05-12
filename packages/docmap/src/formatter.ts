@@ -3,9 +3,6 @@ import { join, relative, resolve, sep } from "node:path";
 import { extractFallbackTitle, extractMetadata, stripFrontmatter } from "./parser.js";
 
 const SHELL_SAFE_NAME = /^[\w.-]+$/;
-function validateName(name: string): string | undefined {
-  return SHELL_SAFE_NAME.test(name) ? undefined : "Name contains spaces or special characters";
-}
 
 export interface FileEntry {
   name: string;
@@ -26,6 +23,41 @@ export interface FormatResult {
   lines: string[];
   hasSubdirList: boolean;
   hasFiles: boolean;
+}
+
+export interface CheckIssue {
+  path: string;
+  message: string;
+}
+
+export function checkAll(dirPath: string, relDir: string): CheckIssue[] {
+  const issues: CheckIssue[] = [];
+  let entries: Dirent<string>[];
+  try {
+    entries = readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return issues;
+  }
+
+  for (const entry of entries) {
+    const rel = relDir ? `docs/${relDir}/${entry.name}` : `docs/${entry.name}`;
+    const nameWarning = validateName(entry.name);
+
+    if (entry.isDirectory()) {
+      if (nameWarning) issues.push({ path: rel, message: nameWarning });
+      const subRel = relDir ? `${relDir}/${entry.name}` : entry.name;
+      issues.push(...checkAll(join(dirPath, entry.name), subRel));
+    } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+      if (nameWarning) issues.push({ path: rel, message: nameWarning });
+      const content = readFileSync(join(dirPath, entry.name), "utf-8");
+      const meta = extractMetadata(content);
+      if (meta.error) issues.push({ path: rel, message: meta.error });
+      const title = meta.title ?? extractFallbackTitle(content);
+      if (!title) issues.push({ path: rel, message: "Missing title" });
+    }
+  }
+
+  return issues;
 }
 
 export function listDirectory(dirPath: string): DirectoryListing {
@@ -74,6 +106,33 @@ export function listDirectory(dirPath: string): DirectoryListing {
   return { subdirs, files, subdirWarnings };
 }
 
+export function formatDirectory(
+  dirPath: string,
+  title: string,
+  result: DirectoryListing,
+  relDir: string,
+): FormatResult {
+  const lines: string[] = [];
+  const titleDisplay = title.includes("/") ? `\`${title}\`` : title;
+
+  lines.push(`# ${titleDisplay}`);
+  lines.push("");
+
+  if (result.subdirs.length > 0) {
+    lines.push("## Sub-directories");
+    lines.push("");
+    lines.push(...formatSubdirTree(dirPath, result.subdirs, "", result.subdirWarnings));
+    lines.push("");
+  }
+
+  if (result.files.length > 0) {
+    lines.push(...formatFileBullets(result.files, relDir));
+    lines.push("");
+  }
+
+  return { lines, hasSubdirList: result.subdirs.length > 0, hasFiles: result.files.length > 0 };
+}
+
 export function formatRecursive(
   dirPath: string,
   title: string,
@@ -104,33 +163,6 @@ export function formatRecursive(
   }
 
   return { lines, hasSubdirList: false, hasFiles };
-}
-
-export function formatDirectory(
-  dirPath: string,
-  title: string,
-  result: DirectoryListing,
-  relDir: string,
-): FormatResult {
-  const lines: string[] = [];
-  const titleDisplay = title.includes("/") ? `\`${title}\`` : title;
-
-  lines.push(`# ${titleDisplay}`);
-  lines.push("");
-
-  if (result.subdirs.length > 0) {
-    lines.push("## Sub-directories");
-    lines.push("");
-    lines.push(...formatSubdirTree(dirPath, result.subdirs, "", result.subdirWarnings));
-    lines.push("");
-  }
-
-  if (result.files.length > 0) {
-    lines.push(...formatFileBullets(result.files, relDir));
-    lines.push("");
-  }
-
-  return { lines, hasSubdirList: result.subdirs.length > 0, hasFiles: result.files.length > 0 };
 }
 
 export function formatFileBullets(files: FileEntry[], relDir: string): string[] {
@@ -189,7 +221,6 @@ export function readDocFile(
   if (normalized === "docs" || normalized.startsWith("docs/"))
     normalized = normalized.slice("docs".length).replace(/^\/+/, "");
 
-  // Try as a direct path under docs/
   const resolvedBase = resolve(baseDir);
   const resolvedTarget = resolve(resolvedBase, normalized);
   if (isUnder(resolvedBase, resolvedTarget)) {
@@ -201,7 +232,6 @@ export function readDocFile(
     }
   }
 
-  // Search recursively for a file whose relative path ends with the given suffix
   const allFiles = getAllFiles();
   const found = allFiles.find((rel) => rel === normalized || rel.endsWith(`/${normalized}`));
   if (!found) return { path: fileArg, content: `⚠ File not found: ${fileArg}` };
@@ -229,39 +259,8 @@ export function collectAllFiles(dirPath: string, prefix: string): string[] {
   return result;
 }
 
-export interface CheckIssue {
-  path: string;
-  message: string;
-}
-
-export function checkAll(dirPath: string, relDir: string): CheckIssue[] {
-  const issues: CheckIssue[] = [];
-  let entries: Dirent<string>[];
-  try {
-    entries = readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    return issues;
-  }
-
-  for (const entry of entries) {
-    const rel = relDir ? `docs/${relDir}/${entry.name}` : `docs/${entry.name}`;
-    const nameWarning = validateName(entry.name);
-
-    if (entry.isDirectory()) {
-      if (nameWarning) issues.push({ path: rel, message: nameWarning });
-      const subRel = relDir ? `${relDir}/${entry.name}` : entry.name;
-      issues.push(...checkAll(join(dirPath, entry.name), subRel));
-    } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
-      if (nameWarning) issues.push({ path: rel, message: nameWarning });
-      const content = readFileSync(join(dirPath, entry.name), "utf-8");
-      const meta = extractMetadata(content);
-      if (meta.error) issues.push({ path: rel, message: meta.error });
-      const title = meta.title ?? extractFallbackTitle(content);
-      if (!title) issues.push({ path: rel, message: "Missing title" });
-    }
-  }
-
-  return issues;
+function validateName(name: string): string | undefined {
+  return SHELL_SAFE_NAME.test(name) ? undefined : "Name contains spaces or special characters";
 }
 
 function shouldSkipFile(name: string): boolean {

@@ -19,86 +19,7 @@ export interface DevServersData {
   servers: DevServerEntry[];
 }
 
-function filePath(mainWorktree: string): string {
-  return join(mainWorktree, DEV_SERVERS_FILE);
-}
-
-export function readDevServers(mainWorktree: string): DevServersData {
-  const fp = filePath(mainWorktree);
-  if (!existsSync(fp)) return { servers: [] };
-  return JSON.parse(readFileSync(fp, "utf-8")) as DevServersData;
-}
-
-export function writeDevServers(mainWorktree: string, data: DevServersData): void {
-  const fp = filePath(mainWorktree);
-  mkdirSync(join(mainWorktree, WORKTREES_DIR), { recursive: true });
-  writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
-}
-
 export type IsAliveFn = (pid: number) => boolean;
-
-export function pruneDeadServers(
-  data: DevServersData,
-  isAlive: IsAliveFn = isProcessAlive,
-): DevServersData {
-  const live = data.servers.filter((entry) =>
-    Object.values(entry.pids).some((pid) => isAlive(pid)),
-  );
-  return { servers: live };
-}
-
-export function pruneAndPersist(
-  mainWorktree: string,
-  isAlive: IsAliveFn = isProcessAlive,
-): DevServersData {
-  const data = readDevServers(mainWorktree);
-  const pruned = pruneDeadServers(data, isAlive);
-  if (pruned.servers.length !== data.servers.length) {
-    writeDevServers(mainWorktree, pruned);
-  }
-  return pruned;
-}
-
-export function registerDevServer(mainWorktree: string, entry: DevServerEntry): void {
-  const data = pruneAndPersist(mainWorktree);
-  data.servers.push(entry);
-  writeDevServers(mainWorktree, data);
-}
-
-export function unregisterDevServer(mainWorktree: string, worktreePath: string): void {
-  const fp = filePath(mainWorktree);
-  if (!existsSync(fp)) return;
-  const data = pruneAndPersist(mainWorktree);
-  const target = resolve(worktreePath);
-  const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
-  if (filtered.length === data.servers.length) return;
-  writeDevServers(mainWorktree, { servers: filtered });
-}
-
-export function removeDevServerEntryByWorktree(mainWorktree: string, worktreePath: string): void {
-  const fp = filePath(mainWorktree);
-  if (!existsSync(fp)) return;
-  const data = readDevServers(mainWorktree);
-  const target = resolve(worktreePath);
-  const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
-  if (filtered.length === data.servers.length) return;
-  writeDevServers(mainWorktree, { servers: filtered });
-}
-
-function formatEntry(entry: DevServerEntry): string {
-  const pids = Object.entries(entry.pids)
-    .map(([name, pid]) => `${name}=${pid}`)
-    .join(",");
-  const ownerPart = entry.owner ? `  owner=${entry.owner}` : "";
-  return `  slot ${entry.slot}  branch=${entry.branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
-}
-
-export function printActiveServers(active: DevServerEntry[]): void {
-  const sorted = [...active].sort((a, b) => a.slot - b.slot);
-  for (const entry of sorted) {
-    process.stderr.write(`${formatEntry(entry)}\n`);
-  }
-}
 
 export function listDevServers(mainWorktree: string): void {
   const data = pruneAndPersist(mainWorktree);
@@ -109,6 +30,13 @@ export function listDevServers(mainWorktree: string): void {
   const sorted = [...data.servers].sort((a, b) => a.slot - b.slot);
   for (const entry of sorted) {
     console.log(formatEntry(entry));
+  }
+}
+
+export function printActiveServers(active: DevServerEntry[]): void {
+  const sorted = [...active].sort((a, b) => a.slot - b.slot);
+  for (const entry of sorted) {
+    process.stderr.write(`${formatEntry(entry)}\n`);
   }
 }
 
@@ -138,4 +66,76 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
   }
   writeDevServers(input.mainWorktree, { servers: [] });
   console.log(`Stopped ${data.servers.length} dev-server(s).`);
+}
+
+export function registerDevServer(mainWorktree: string, entry: DevServerEntry): void {
+  const data = pruneAndPersist(mainWorktree);
+  data.servers.push(entry);
+  writeDevServers(mainWorktree, data);
+}
+
+export function unregisterDevServer(mainWorktree: string, worktreePath: string): void {
+  const fp = filePath(mainWorktree);
+  if (!existsSync(fp)) return;
+  const data = pruneAndPersist(mainWorktree);
+  const target = resolve(worktreePath);
+  const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
+  if (filtered.length === data.servers.length) return;
+  writeDevServers(mainWorktree, { servers: filtered });
+}
+
+export function removeDevServerEntryByWorktree(mainWorktree: string, worktreePath: string): void {
+  const fp = filePath(mainWorktree);
+  if (!existsSync(fp)) return;
+  const data = readDevServers(mainWorktree);
+  const target = resolve(worktreePath);
+  const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
+  if (filtered.length === data.servers.length) return;
+  writeDevServers(mainWorktree, { servers: filtered });
+}
+
+export function pruneAndPersist(
+  mainWorktree: string,
+  isAlive: IsAliveFn = isProcessAlive,
+): DevServersData {
+  const data = readDevServers(mainWorktree);
+  const pruned = pruneDeadServers(data, isAlive);
+  if (pruned.servers.length !== data.servers.length) {
+    writeDevServers(mainWorktree, pruned);
+  }
+  return pruned;
+}
+
+export function pruneDeadServers(
+  data: DevServersData,
+  isAlive: IsAliveFn = isProcessAlive,
+): DevServersData {
+  const live = data.servers.filter((entry) =>
+    Object.values(entry.pids).some((pid) => isAlive(pid)),
+  );
+  return { servers: live };
+}
+
+export function readDevServers(mainWorktree: string): DevServersData {
+  const fp = filePath(mainWorktree);
+  if (!existsSync(fp)) return { servers: [] };
+  return JSON.parse(readFileSync(fp, "utf-8")) as DevServersData;
+}
+
+export function writeDevServers(mainWorktree: string, data: DevServersData): void {
+  const fp = filePath(mainWorktree);
+  mkdirSync(join(mainWorktree, WORKTREES_DIR), { recursive: true });
+  writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
+}
+
+function filePath(mainWorktree: string): string {
+  return join(mainWorktree, DEV_SERVERS_FILE);
+}
+
+function formatEntry(entry: DevServerEntry): string {
+  const pids = Object.entries(entry.pids)
+    .map(([name, pid]) => `${name}=${pid}`)
+    .join(",");
+  const ownerPart = entry.owner ? `  owner=${entry.owner}` : "";
+  return `  slot ${entry.slot}  branch=${entry.branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
 }
