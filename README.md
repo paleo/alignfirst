@@ -1,4 +1,4 @@
-# alignfirst monorepo
+# AlignFirst monorepo
 
 Companion products for AI-assisted software work. They can be used independently.
 
@@ -18,6 +18,6 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 We're currently working on building an AI developer with _OpenClaw_. See [autonomous-agent.md](autonomous-agent.md).
 
-## License
+----
 
-CC0 1.0 Universal.
+**License:** CC0 1.0 Universal.
