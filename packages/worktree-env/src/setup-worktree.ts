@@ -469,6 +469,16 @@ async function handleRemove(
   const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const target = resolveRemoveTarget(args, ctx, registry, removeHere);
 
+  // Refuse to remove while the detached finalize is still writing to slots.json / wt-setup.log:
+  // racing the two corrupts the registry and leaves the worktree directory orphaned.
+  if (registry.slots[target.slotPort]?.status === "pending") {
+    console.error(
+      `Error: Setup is still in progress for slot ${target.slotPort}. ` +
+        `Run 'setup-worktree --wait --slot ${target.slotPort}' to wait for it to finish (or fail), then retry --remove.`,
+    );
+    process.exit(1);
+  }
+
   if (!args["no-remote-check"]) {
     verifyBranchAbsentFromRemote(target.branch, run);
   }

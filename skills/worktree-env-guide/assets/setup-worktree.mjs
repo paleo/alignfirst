@@ -85,7 +85,13 @@ await runSetupWorktree({
   //
   // MUST BE IDEMPOTENT — `setup-worktree --here` is the documented retry
   // path. Guard each block against pre-existing state so re-runs are no-ops.
+  //
+  // Run `npm install` first: any later failure then leaves a worktree with
+  // usable node_modules, so `--here` can re-import @paleo/worktree-env.
   finalizeWorktree: async ({ currentWorktree }) => {
+    // `npm install` and `npm run build` are idempotent.
+    execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
+    execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
     // `docker compose up -d` is already idempotent.
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
@@ -103,9 +109,6 @@ await runSetupWorktree({
       }
     }
     if (!ready) throw new Error("Database did not become ready within 30s.");
-    // `npm install` and `npm run build` are idempotent.
-    execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
-    execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
     // Migrations are idempotent; seeds typically guard on existing rows.
     execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
     execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });

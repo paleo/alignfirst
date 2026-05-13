@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.0"
+  version: "0.6.1"
   repository: https://github.com/paleo/skills
 ---
 
@@ -155,7 +155,7 @@ Running the script with no mode flag shows help.
 - `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log, dev-server PID files, and dev-server logs.
 - `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
-- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
+- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `--here` retry can't import `@paleo/worktree-env`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
 - `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 
