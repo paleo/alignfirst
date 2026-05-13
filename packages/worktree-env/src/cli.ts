@@ -137,6 +137,7 @@ export function printDevServerHelp(): void {
 }
 
 export function validateSetupFlags(args: SetupArgs): void {
+  // --wait may chain after --use/--create/--here; --info is standalone.
   const modeFlags = [
     args.use,
     args.create,
@@ -144,20 +145,24 @@ export function validateSetupFlags(args: SetupArgs): void {
     isRemoveMode(args),
     isSetOwnerMode(args),
     isFinalizeMode(args),
-    isWaitMode(args),
     isInfoMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
-      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, --wait, and --info are mutually exclusive.",
+      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, and --info are mutually exclusive.",
+    );
+  }
+  if (isWaitMode(args) && (isRemoveMode(args) || isSetOwnerMode(args) || isInfoMode(args))) {
+    throw new ConfigError(
+      "Error: --wait can only be combined with --use, --create, or --here (or used standalone).",
     );
   }
   if (args.remove !== undefined && args["remove-here"]) {
     throw new ConfigError("Error: --remove and --remove-here are mutually exclusive.");
   }
-  if (args.slot !== undefined && !isSetupMode(args) && !isWaitMode(args)) {
+  if (args.slot !== undefined && !isSetupMode(args) && !isWaitMode(args) && !isInfoMode(args)) {
     throw new ConfigError(
-      "Error: --slot can only be used with --use, --create, --here, or --wait.",
+      "Error: --slot can only be used with --use, --create, --here, --wait, or --info.",
     );
   }
   if (args.force && !isSetupMode(args) && !isFinalizeMode(args)) {

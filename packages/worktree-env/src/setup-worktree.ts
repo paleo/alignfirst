@@ -189,13 +189,13 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
     return;
   }
 
-  if (isWaitMode(args)) {
+  if (isWaitMode(args) && !isSetupMode(args)) {
     await runWait(args, config);
     return;
   }
 
   if (isInfoMode(args)) {
-    runInfo(config);
+    runInfo(args, config);
     return;
   }
 
@@ -218,7 +218,11 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
     return;
   }
 
-  await runSetup(args, ctx, run, config);
+  const { slot } = await runSetup(args, ctx, run, config);
+
+  if (isWaitMode(args)) {
+    await waitForSlot(slot, config);
+  }
 }
 
 async function runSetup(
@@ -226,7 +230,7 @@ async function runSetup(
   ctx: WorktreeContext,
   run: RunCtx,
   config: SetupWorktreeConfig,
-): Promise<void> {
+): Promise<{ slot: number }> {
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
 
@@ -253,6 +257,9 @@ async function runSetup(
   const runtimeDir = join(setupCtx.currentWorktree, config.runtimeDir);
   mkdirSync(runtimeDir, { recursive: true });
   const logPath = join(runtimeDir, "wt-setup.log");
+  // Truncate any prior log so `--here` retries start with a clean record (the previous run's
+  // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
+  writeFileSync(logPath, "");
   // Opened "a" so the same fd can be inherited by the detached finalize child below.
   const logFd = openSync(logPath, "a");
   const teeLog = (message: string): void => {
@@ -285,7 +292,7 @@ async function runSetup(
   );
 
   teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
-  teeLog(`Setup continuing in background. Tail: ${config.runtimeDir}/wt-setup.log`);
+  teeLog(`Setup continuing in background. Tail: ${logPath}`);
 
   const child = spawn(process.execPath, [config.scriptPath, "--__finalize", String(slot)], {
     detached: true,
@@ -294,6 +301,7 @@ async function runSetup(
   });
   child.unref();
   closeSync(logFd);
+  return { slot };
 }
 
 async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
@@ -348,7 +356,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
   }
 }
 
-function resolveWaitSlot(args: SetupArgs, config: SetupWorktreeConfig): number {
+function resolveTargetSlot(args: SetupArgs, config: SetupWorktreeConfig): number {
   if (args.slot !== undefined) {
     const slot = Number(args.slot);
     const scheme = resolvePortScheme(config);
@@ -398,14 +406,29 @@ function printWorktreeInfo(
   );
 }
 
-function runInfo(config: SetupWorktreeConfig): void {
+function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
+  if (args.slot !== undefined) {
+    const slot = resolveTargetSlot(args, config);
+    const ctx = detectWorktree();
+    const entry = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+    if (!entry) {
+      console.error(`Error: No slot ${slot} in registry.`);
+      process.exit(1);
+    }
+    printWorktreeInfo(config, slot, entry.worktree, { branch: entry.branch, owner: entry.owner });
+    return;
+  }
   const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
   printWorktreeInfo(config, resolved.slot, ".", { branch: resolved.branch, owner: resolved.owner });
 }
 
 async function runWait(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
+  const slot = resolveTargetSlot(args, config);
+  await waitForSlot(slot, config);
+}
+
+async function waitForSlot(slot: number, config: SetupWorktreeConfig): Promise<void> {
   const ctx = detectWorktree();
-  const slot = resolveWaitSlot(args, config);
   const initial = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
   if (!initial) {
     console.error(`Error: No slot ${slot} in registry.`);
@@ -485,7 +508,8 @@ async function handleRemove(
   removeWorktree(target.worktreePath, run);
 
   console.log(
-    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
+    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}). ` +
+      `Branch "${target.branch}" kept.`,
   );
   if (removeHere) {
     console.log(`Now run: cd ${ctx.mainWorktree}`);

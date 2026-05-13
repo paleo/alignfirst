@@ -70,6 +70,9 @@ export function createBranch(
       ++suffix;
     }
     finalBranch = `${requestedBranch}-${suffix}`;
+    console.warn(
+      `Warning: Branch "${requestedBranch}" already exists; using "${finalBranch}" instead.`,
+    );
   }
   const worktreePath = computeWorktreePath(ctx.mainWorktree, finalBranch);
   execFileSync("git", ["worktree", "add", "-b", finalBranch, worktreePath], {
