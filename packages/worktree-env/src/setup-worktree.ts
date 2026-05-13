@@ -117,7 +117,11 @@ export interface SetupContext {
   verbose: boolean;
 }
 
-/** Context passed to {@link SetupWorktreeConfig.printSummary}. */
+/**
+ * Context passed to {@link SetupWorktreeConfig.printSummary}.
+ *
+ * Called after worktree creation; the dev-server is not running yet.
+ */
 export interface SummaryContext {
   slot: number;
   branch: string;

@@ -130,13 +130,12 @@ await runSetupWorktree({
     }
   },
 
-  // ADAPT
-  printSummary: ({ slot, branch, owner, ports }) => `
+  // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
+  // at this point. The worktree path is the useful pointer.
+  printSummary: ({ slot, branch, owner, currentWorktree }) => `
 Worktree setup complete!
   Slot:     ${slot}
   Branch:   ${branch}${owner ? `\n  Owner:    ${owner}` : ""}
-  Server:   http://localhost:${ports.server}/
-  Frontend: http://localhost:${ports.frontend}/
-  DB port:  ${ports.db}
+  Path:     ${currentWorktree}
 `,
 });
