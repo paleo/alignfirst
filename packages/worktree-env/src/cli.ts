@@ -15,6 +15,7 @@ export interface SetupArgs {
   slot?: string;
   force?: boolean;
   verbose?: boolean;
+  __finalize?: string;
 }
 
 export interface DevServerArgs {
@@ -66,6 +67,7 @@ export function validateSetupFlags(args: SetupArgs): void {
     args.here,
     isRemoveMode(args),
     isSetOwnerMode(args),
+    isFinalizeMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
@@ -109,6 +111,10 @@ export function isSetOwnerMode(args: SetupArgs): boolean {
   return args["set-owner"] !== undefined;
 }
 
+export function isFinalizeMode(args: SetupArgs): boolean {
+  return args.__finalize !== undefined;
+}
+
 function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {
   const cfg: ParseArgsConfig = { options: options as ParseArgsConfig["options"], strict: true };
   if (argv) cfg.args = argv;
@@ -119,6 +125,7 @@ function parseOptions<T>(argv: string[] | undefined, options: Record<string, Opt
 function formatHelp(usage: string, intro: string, options: Record<string, OptionDef>): string {
   const lines = [`Usage: ${usage}`, "", intro, ""];
   for (const [name, opt] of Object.entries(options)) {
+    if (opt.description === "") continue;
     const shortFlag = opt.short ? `-${opt.short}, ` : "";
     const argSuffix = opt.arg ? ` <${opt.arg}>` : "";
     const flag = `${shortFlag}--${name}${argSuffix}`;
@@ -180,6 +187,7 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     description: "Overwrite existing config files and re-provision the database",
   },
   verbose: { type: "boolean", short: "v", description: "Show intermediate output" },
+  __finalize: { type: "string", arg: "slot", description: "" },
 };
 
 const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {

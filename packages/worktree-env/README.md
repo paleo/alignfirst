@@ -41,7 +41,8 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 await runSetupWorktree({
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
-  devServerPidFiles: [".local-wt/dev-server.pid"],
+  sharedDirs: [".local", ".plans"],
+  localWt: ".local-wt",
   configFiles: [
     {
       path: ".env",
@@ -52,28 +53,28 @@ await runSetupWorktree({
         }),
     },
   ],
-  setupWorktreeData: async ({ currentWorktree }) => {
-    // Create per-worktree directories, copy seed data, start containers, etc.
+  finalizeWorktree: async ({ currentWorktree }) => {
+    // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
-  installAndBuild: async () => {},
   printSummary: ({ slot, branch, owner, ports }) =>
     `Slot ${slot} (${branch}${owner ? `, ${owner}` : ""}) — server :${ports.server}`,
 });
 ```
+
+Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<localWt>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step.
 
 ```ts
 import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100,
+  localWt: ".local-wt",
   devLimit: 5,
   servers: [
     {
       name: "dev",
       exec: { command: "npm", args: ["run", "dev"] },
       port: helpers.readPortFromEnvFile(".env", "PORT"),
-      pidFile: ".local-wt/dev-server.pid",
-      logFile: ".local-wt/logs/dev-server.log",
       detectSuccess: (log) => log.includes("Server is ready on port"),
     },
   ],

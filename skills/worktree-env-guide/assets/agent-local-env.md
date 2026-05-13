@@ -15,13 +15,22 @@ When the user asks to "set up a new local environment" or "set up a new worktree
 ```sh
 npm run setup-worktree -- --create fix/123    # new branch + worktree (dedup: appends -2, -3… if taken)
 npm run setup-worktree -- --use fix/123       # new worktree on an existing branch
-npm run setup-worktree -- --here              # set up the current worktree
+npm run setup-worktree -- --here              # set up the current worktree (idempotent — also the retry path)
 ```
 
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
      Document any project-specific ports or URLs the developer should know about. -->
 
 The script creates the worktree in the correct sibling directory, assigns a port slot, installs dependencies, builds, generates config files, and provisions the database.
+
+### Recovery from a Failed Setup
+
+If `--create` or `--use` fails (or the background finalize step fails — check `<localWt>/wt-setup.log`), the worktree is half-created. Do not delete it. Instead:
+
+    cd <worktree>
+    npm run setup-worktree -- --here
+
+`--here` is idempotent and will retry the finalize step. Repeat until the log ends with `READY: ...`.
 
 ### Slot Owner
 

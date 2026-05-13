@@ -39,6 +39,11 @@ describe("validateSetupFlags", () => {
     expect(() => validateSetupFlags(args)).toThrow(/mutually exclusive/);
   });
 
+  it("rejects --__finalize combined with another mode flag", () => {
+    const args = parseSetupArgs(["--__finalize", "8110", "--here"]);
+    expect(() => validateSetupFlags(args)).toThrow(ConfigError);
+  });
+
   it("accepts a valid setup invocation", () => {
     const args = parseSetupArgs(["--use", "a", "--owner", "alice", "--slot", "8110", "--force"]);
     expect(() => validateSetupFlags(args)).not.toThrow();

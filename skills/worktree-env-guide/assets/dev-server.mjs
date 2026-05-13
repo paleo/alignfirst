@@ -10,6 +10,7 @@ import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100, // ADAPT
+  localWt: ".local-wt", // Per-worktree runtime directory; pid/log paths derive from this + each server's name.
   devLimit: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
   servers: [
@@ -17,8 +18,6 @@ await runDevServer({
       name: "dev",                                          // ADAPT
       exec: { command: "npm", args: ["run", "dev"] },       // ADAPT
       port: helpers.readPortFromEnvFile(".env", "PORT"),    // ADAPT — or helpers.readPortFromJsonFile("config.json", "server.port")
-      pidFile: ".local-wt/dev-server.pid",                // ADAPT
-      logFile: ".local-wt/logs/dev-server.log",           // ADAPT
       detectSuccess: (log) => log.includes("Server is ready on port"), // ADAPT
       // ADAPT: return the matched label, or false. Example with fatal markers:
       //   detectError: (log) => ["[ExceptionHandler]", "Node.js v"].find((m) => log.includes(m)) ?? false,
@@ -28,8 +27,6 @@ await runDevServer({
     //   name: "api",
     //   exec: { command: "npm", args: ["run", "watch:api"] },
     //   port: helpers.readPortFromEnvFile(".env", "SERVER_PORT"),
-    //   pidFile: ".local-wt/api.pid",
-    //   logFile: ".local-wt/logs/api.log",
     //   detectSuccess: (log) => log.includes("API listening on"),
     //   detectError: (log) => log.includes("Node.js v") ? "Node.js v" : false,
     // },
@@ -37,8 +34,6 @@ await runDevServer({
     //   name: "front",
     //   exec: { command: "npm", args: ["run", "watch:front"] },
     //   port: helpers.readPortFromEnvFile(".env", "PORT"),
-    //   pidFile: ".local-wt/front.pid",
-    //   logFile: ".local-wt/logs/front.log",
     //   detectSuccess: (log) => log.includes("ready in"),
     // },
   ],

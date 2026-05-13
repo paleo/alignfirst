@@ -18,6 +18,8 @@ export interface SlotEntry {
   worktree: string;
   branch: string;
   owner?: string;
+  createdAt: string;
+  ready: boolean;
 }
 
 export interface SlotsRegistry {
@@ -43,6 +45,7 @@ export interface RegisterSlotInput {
   scheme: PortScheme;
   branch: string;
   requestedOwner?: string;
+  ready?: boolean;
 }
 
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
@@ -53,14 +56,26 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const port = pickSlotPort(input, registry);
   const existing = registry.slots[String(port)];
   const owner = input.requestedOwner ?? existing?.owner;
+  const createdAt = existing?.createdAt ?? new Date().toISOString();
+  const ready = input.ready ?? existing?.ready ?? false;
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
     branch: input.branch,
+    createdAt,
+    ready,
   };
   if (owner !== undefined) entry.owner = owner;
   registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, registry);
   return { port, owner };
+}
+
+export function markSlotReady(mainWorktree: string, slotPort: number): void {
+  const registry = readSlots(mainWorktree);
+  const entry = registry.slots[String(slotPort)];
+  if (!entry) return;
+  entry.ready = true;
+  writeSlots(mainWorktree, registry);
 }
 
 export function validateSlotAvailability(
@@ -120,6 +135,8 @@ export function handleSetOwner(input: SetOwnerInput): {
   const updated: SlotEntry = {
     worktree: slotData.worktree,
     branch: slotData.branch,
+    createdAt: slotData.createdAt,
+    ready: slotData.ready,
   };
   if (input.newOwner !== undefined) updated.owner = input.newOwner;
   registry.slots[slotPort] = updated;

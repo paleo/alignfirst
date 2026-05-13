@@ -27,6 +27,8 @@ import { detectWorktree } from "./worktree.js";
 export interface DevServerConfig {
   /** Anchor port for the slot range. Used to synthesize the main worktree's slot. */
   basePort: number;
+  /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
+  localWt: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
   devLimit?: number;
   /** One entry per process to spawn. Started in array order. */
@@ -39,20 +41,24 @@ export interface DevServerConfig {
 
 /** Describes one process to spawn. */
 export interface ServerDescriptor {
-  /** Short label used in logs and the registry. */
+  /** Short label used in logs and the registry. Derives `<localWt>/<name>.pid` and `<localWt>/logs/<name>.log`. */
   name: string;
   /** Command and arguments passed to `child_process.spawn`. */
   exec: { command: string; args: string[] };
   /** Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile` to read it from a config file. */
   port: number;
-  /** Path (relative to cwd) where the spawned PID is written. */
-  pidFile: string;
-  /** Path (relative to cwd) where stdout+stderr are tee'd. */
-  logFile: string;
   /** Returns `true` once the log content indicates the server is ready. */
   detectSuccess: (logContent: string) => boolean;
   /** Returns a non-empty marker string when the log content indicates a fatal error, or `false` otherwise. */
   detectError?: (logContent: string) => string | false;
+}
+
+function pidFileFor(localWt: string, name: string): string {
+  return join(localWt, `${name}.pid`);
+}
+
+function logFileFor(localWt: string, name: string): string {
+  return join(localWt, "logs", `${name}.log`);
 }
 
 /** Context passed to {@link DevServerConfig.printSummary}. */
@@ -94,7 +100,7 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
   if (args.stop && args.all) {
     await stopAllRegistered({
       mainWorktree,
-      pidFiles: config.servers.map((s) => s.pidFile),
+      pidFiles: config.servers.map((s) => pidFileFor(config.localWt, s.name)),
     });
     return;
   }
@@ -133,12 +139,13 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
   if (anyBusy) process.exit(1);
 
   for (const server of config.servers) {
-    const existingPid = readPid(server.pidFile);
+    const pidFile = pidFileFor(config.localWt, server.name);
+    const existingPid = readPid(pidFile);
     if (existingPid !== undefined && isProcessAlive(existingPid)) {
       console.error(`Error: ${server.name} is already running (PID ${existingPid}).`);
       process.exit(1);
     }
-    cleanupPidFile(server.pidFile);
+    cleanupPidFile(pidFile);
   }
 
   if (config.ensureInfrastructure) await config.ensureInfrastructure();
@@ -146,13 +153,13 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
   const pids: number[] = [];
   for (const server of config.servers) {
     console.log(`Starting ${server.name} dev server...`);
-    pids.push(spawnServer(server));
+    pids.push(spawnServer(server, config.localWt));
   }
 
   try {
     const pollables: PollableServer[] = config.servers.map((s) => ({
       name: s.name,
-      logFile: s.logFile,
+      logFile: logFileFor(config.localWt, s.name),
       detectSuccess: s.detectSuccess,
       detectError: s.detectError,
     }));
@@ -198,13 +205,16 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
       config.servers,
       serverPorts.map(([, p]) => p),
       pids,
+      config.localWt,
     );
   }
 }
 
 async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise<void> {
   for (const server of config.servers) {
-    await stopByPidFile(server.pidFile, server.name, (msg) => console.log(msg));
+    await stopByPidFile(pidFileFor(config.localWt, server.name), server.name, (msg) =>
+      console.log(msg),
+    );
   }
   unregisterDevServer(mainWorktree, process.cwd());
 }
@@ -214,23 +224,26 @@ function defaultPrintSummary(
   servers: ServerDescriptor[],
   ports: number[],
   pids: number[],
+  localWt: string,
 ): void {
   console.log("\nDev servers started!");
   const ownerSuffix = slot.owner ? `, owner ${slot.owner}` : "";
   console.log(`  Worktree: slot ${slot.slot}${ownerSuffix}`);
   servers.forEach((server, i) => {
     const url = `http://localhost:${ports[i]}/`;
-    const logPath = join(process.cwd(), server.logFile);
+    const logPath = join(process.cwd(), logFileFor(localWt, server.name));
     console.log(`  ${server.name}: ${url}  (PID ${pids[i]})`);
     console.log(`    log: ${logPath}`);
   });
   console.log("");
 }
 
-function spawnServer(server: ServerDescriptor): number {
-  mkdirSync(dirname(server.logFile), { recursive: true });
-  mkdirSync(dirname(server.pidFile), { recursive: true });
-  const logFd = openSync(server.logFile, "w");
+function spawnServer(server: ServerDescriptor, localWt: string): number {
+  const logFile = logFileFor(localWt, server.name);
+  const pidFile = pidFileFor(localWt, server.name);
+  mkdirSync(dirname(logFile), { recursive: true });
+  mkdirSync(dirname(pidFile), { recursive: true });
+  const logFd = openSync(logFile, "w");
   const child = spawn(server.exec.command, server.exec.args, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -240,7 +253,7 @@ function spawnServer(server: ServerDescriptor): number {
     console.error(`Error: failed to spawn ${server.name}.`);
     process.exit(1);
   }
-  writeFileSync(server.pidFile, String(child.pid));
+  writeFileSync(pidFile, String(child.pid));
   child.unref();
   closeSync(logFd);
   return child.pid;

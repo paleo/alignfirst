@@ -1,7 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 import {
+  isFinalizeMode,
   isRemoveMode,
   isSetOwnerMode,
   isSetupMode,
@@ -23,6 +35,7 @@ import {
 } from "./process-control.js";
 import {
   handleSetOwner,
+  markSlotReady,
   readSlots,
   resolveAndRegisterSlot,
   validateSlotAvailability,
@@ -52,29 +65,26 @@ export interface SetupWorktreeConfig {
   ports?: (slot: number) => Record<string, number>;
   /** Named offsets `[name0, name1, ...]` mapped to `slot+0`, `slot+1`, ... Required if `ports` is omitted. */
   portNames?: string[];
-  /** Directories symlinked from the main worktree. Defaults to `[".local", ".plans"]`. */
-  sharedDirs?: string[];
-  /** PID files written by `dev-server`, used by `--remove` to stop processes before teardown. */
-  devServerPidFiles: string[];
+  /** Directories symlinked from the main worktree. */
+  sharedDirs: string[];
+  /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
+  localWt: string;
   /** Config files copied from the main worktree and patched per slot. */
   configFiles: ConfigFileEntry[];
   /**
-   * Runs after symlinks and config files. Owns per-worktree data setup:
-   * create any required directories (e.g. `.local-wt/...`), copy or
-   * provision databases / file storage, start infrastructure containers.
+   * MUST be idempotent. After a failure, the user re-runs `setup-worktree --here` from inside
+   * the worktree — this callback will be invoked again with the same context. Re-runs must not
+   * error on pre-existing state (created directories, started containers, ran migrations,
+   * installed deps, etc.).
    */
-  setupWorktreeData: (ctx: SetupContext) => Promise<void> | void;
+  finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
   /** Tears down infrastructure on `--remove` (e.g. `docker compose down -v`). Best-effort; errors should be swallowed. */
   teardownInfrastructure?: (ctx: TeardownContext) => Promise<void> | void;
-  /** Runs after `setupWorktreeData`. Typically `npm install && npm run build`. */
-  installAndBuild: (ctx: SetupContext) => Promise<void> | void;
-  /** Runs after `installAndBuild`. Typically migrations and seeds. */
-  afterDatabase?: (ctx: SetupContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
   printSummary: (ctx: SummaryContext) => string;
 }
 
-/** Context passed to setup-time hooks (`setupWorktreeData`, `installAndBuild`, `afterDatabase`). */
+/** Context passed to {@link SetupWorktreeConfig.finalizeWorktree}. */
 export interface SetupContext {
   currentWorktree: string;
   mainWorktree: string;
@@ -147,6 +157,11 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
     throw err;
   }
 
+  if (isFinalizeMode(args)) {
+    await runFinalize(args, config);
+    return;
+  }
+
   if (!isSetupMode(args) && !isRemoveMode(args) && !isSetOwnerMode(args)) {
     printSetupHelp();
     return;
@@ -175,7 +190,6 @@ async function runSetup(
   run: RunCtx,
   config: SetupWorktreeConfig,
 ): Promise<void> {
-  const verboseLog = makeVerboseLog(run.verbose);
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
 
@@ -194,8 +208,22 @@ async function runSetup(
     scheme,
     branch,
     requestedOwner: args.owner,
+    ready: false,
   });
   const ports = portsFn(slot);
+
+  const localWtDir = join(setupCtx.currentWorktree, config.localWt);
+  mkdirSync(localWtDir, { recursive: true });
+  const logPath = join(localWtDir, "wt-setup.log");
+  const logFd = openSync(logPath, "w");
+  const teeLog = (message: string): void => {
+    console.log(message);
+    appendFileSync(logFd, `${message}\n`);
+  };
+  const verboseLog = (msg: string): void => {
+    if (run.verbose) teeLog(msg);
+    else appendFileSync(logFd, `${msg}\n`);
+  };
 
   verboseLog(
     `Using slot ${slot} (${Object.entries(ports)
@@ -203,30 +231,10 @@ async function runSetup(
       .join(", ")})`,
   );
 
-  console.log(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
-
-  const sharedDirs = config.sharedDirs ?? [".local", ".plans"];
-
-  linkSharedDirectories(setupCtx, sharedDirs, verboseLog);
+  linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
   generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, verboseLog);
 
-  const force = args.force ?? false;
-  const setupContext: SetupContext = {
-    currentWorktree: setupCtx.currentWorktree,
-    mainWorktree: setupCtx.mainWorktree,
-    slot,
-    branch,
-    owner,
-    ports,
-    force,
-    verbose: run.verbose,
-  };
-
-  await config.setupWorktreeData(setupContext);
-  await config.installAndBuild(setupContext);
-  if (config.afterDatabase) await config.afterDatabase(setupContext);
-
-  console.log(
+  teeLog(
     config.printSummary({
       slot,
       branch,
@@ -236,6 +244,65 @@ async function runSetup(
       mainWorktree: setupCtx.mainWorktree,
     }),
   );
+
+  teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
+  teeLog(`Setup continuing in background. Tail: ${config.localWt}/wt-setup.log`);
+
+  closeSync(logFd);
+
+  const finalizeLogFd = openSync(logPath, "a");
+  const child = spawn(process.execPath, [process.argv[1], "--__finalize", String(slot)], {
+    detached: true,
+    stdio: ["ignore", finalizeLogFd, finalizeLogFd],
+    cwd: setupCtx.currentWorktree,
+  });
+  child.unref();
+  closeSync(finalizeLogFd);
+}
+
+async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
+  const slot = Number(args.__finalize);
+  const ctx = detectWorktree();
+  const registry = readSlots(ctx.mainWorktree);
+  const entry = registry.slots[String(slot)];
+  if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
+    console.error(`Error: No matching slot ${slot} for worktree ${ctx.currentWorktree}.`);
+    process.exit(1);
+  }
+
+  const portsFn = resolvePortsFn(config);
+  const ports = portsFn(slot);
+  const logPath = join(ctx.currentWorktree, config.localWt, "wt-setup.log");
+  const appendLog = (message: string): void => {
+    appendFileSync(logPath, `${message}\n`);
+  };
+
+  appendLog(`--- finalizing slot ${slot} at ${new Date().toISOString()} ---`);
+
+  const setupContext: SetupContext = {
+    currentWorktree: ctx.currentWorktree,
+    mainWorktree: ctx.mainWorktree,
+    slot,
+    branch: entry.branch,
+    owner: entry.owner,
+    ports,
+    force: false,
+    verbose: false,
+  };
+
+  try {
+    await config.finalizeWorktree(setupContext);
+    markSlotReady(ctx.mainWorktree, slot);
+    appendLog("============================================================");
+    appendLog(`READY: branch ${entry.branch} (slot ${slot})`);
+    appendLog("============================================================");
+  } catch (err) {
+    const message = (err as Error).message;
+    const stack = (err as Error).stack ?? "";
+    appendLog(`FAILED: ${message}`);
+    if (stack) appendLog(stack);
+    process.exit(1);
+  }
 }
 
 async function handleRemove(
@@ -267,7 +334,7 @@ async function handleRemove(
     return;
   }
 
-  await stopDevServerByPidFiles(target.worktreePath, config.devServerPidFiles, verboseLog);
+  await stopAllDevServersInLocalWt(target.worktreePath, config.localWt, verboseLog);
 
   if (config.teardownInfrastructure) {
     await config.teardownInfrastructure({
@@ -428,13 +495,21 @@ function resolveRemoveTarget(
   return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
 }
 
-async function stopDevServerByPidFiles(
+async function stopAllDevServersInLocalWt(
   worktreePath: string,
-  pidFiles: string[],
+  localWt: string,
   log: (msg: string) => void,
 ): Promise<void> {
-  for (const pidFileRel of pidFiles) {
-    const pidFile = join(worktreePath, pidFileRel);
+  const dir = join(worktreePath, localWt);
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name.endsWith(".pid")) continue;
+    const pidFile = join(dir, name);
     const pid = readPid(pidFile);
     if (pid === undefined) continue;
     if (!isProcessAlive(pid)) {
