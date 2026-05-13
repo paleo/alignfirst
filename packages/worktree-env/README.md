@@ -37,9 +37,12 @@ npm run setup-worktree -- --remove feat/42   # full teardown
 ## API
 
 ```ts
+import { fileURLToPath } from "node:url";
 import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 
 await runSetupWorktree({
+  scriptPath: fileURLToPath(import.meta.url),
+  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
   sharedDirs: [".local", ".plans"],
@@ -77,6 +80,7 @@ await runDevServer({
   devLimit: 5,
   servers: [
     {
+      kind: "spawn",
       name: "dev",
       exec: { command: "npm", args: ["run", "dev"] },
       port: helpers.readPortFromEnvFile(".env", "PORT"),

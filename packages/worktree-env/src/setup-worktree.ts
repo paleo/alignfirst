@@ -23,7 +23,7 @@ import {
   type SetupArgs,
   validateSetupFlags,
 } from "./cli.js";
-import { removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
+import { findOwnEntry, removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import { copyAndPatchFile } from "./helpers.js";
 import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
@@ -499,7 +499,12 @@ async function handleRemove(
     return;
   }
 
-  stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
+  const targetEntry = findOwnEntry(ctx.mainWorktree, config.registryDir, target.worktreePath);
+  if (targetEntry) {
+    stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
+  } else {
+    verboseLog(`No dev-server running in ${target.worktreePath}; skipping --stop.`);
+  }
 
   if (config.purgeInfrastructure) {
     await config.purgeInfrastructure({

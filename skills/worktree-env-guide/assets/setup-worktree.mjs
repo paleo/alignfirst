@@ -42,8 +42,8 @@ await runSetupWorktree({
   // ADAPT: directories symlinked from the main worktree.
   sharedDirs: [".local", ".plans"],
 
-  // Per-worktree runtime directory. The package writes the setup log,
-  // pid files, and dev-server logs under here.
+  // Per-worktree runtime directory. The package writes the setup log
+  // and dev-server logs under here.
   runtimeDir: ".local-wt",
 
   // Shared registry directory holding `slots.json` and `dev-servers.json`.

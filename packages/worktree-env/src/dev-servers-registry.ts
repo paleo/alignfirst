@@ -100,6 +100,7 @@ async function stopCallbacksForVictim(
   worktree: string,
 ): Promise<void> {
   for (const server of [...callbackServers].reverse()) {
+    console.log(`  ${server.name} (callback)`);
     try {
       await server.stop({ cwd: worktree });
     } catch (err) {

@@ -125,8 +125,8 @@ async function start(
   const ctx: ServerContext = { cwd: process.cwd() };
 
   await enforceCap(config, mainWorktree, evict);
-  await checkPortsFree(config.servers);
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
+  await checkPortsFree(config.servers);
 
   const spawnPids: Record<string, number> = {};
   const startedCallbacks: CallbackServer[] = [];
@@ -198,6 +198,7 @@ async function rollbackStart(
     }
   }
   for (const server of [...startedCallbacks].reverse()) {
+    console.log(`Stopping ${server.name}...`);
     try {
       await server.stop(ctx);
     } catch (err) {
@@ -289,6 +290,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
   }
   const callbacks = callbackServersOf(config);
   for (const server of [...callbacks].reverse()) {
+    console.log(`Stopping ${server.name}...`);
     try {
       await server.stop(ctx);
     } catch (err) {

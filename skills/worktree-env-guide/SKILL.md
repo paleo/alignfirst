@@ -31,7 +31,7 @@ When you work on multiple branches at the same time (or when AI agents work in p
 The first thing to decide is: for each gitignored directory in your project, should it be **shared** across worktrees or **isolated** per worktree?
 
 - **Shared directories** are symlinked in worktrees (pointing to the main worktree). They contain things that should be the same everywhere: the slot registry, personal notes, task plans, etc.
-- **Per-worktree directories** are created independently in each worktree. They contain things that must differ: databases, caches, logs, PID files, Docker volumes, etc.
+- **Per-worktree directories** are created independently in each worktree. They contain things that must differ: databases, caches, logs, Docker volumes, etc.
 
 Example split:
 
@@ -39,7 +39,7 @@ Example split:
 | -------------- | ---------------------- | -------------------------------- |
 | `.local/`      | Shared (symlinked)     | Slot registry, personal notes    |
 | `.plans/`      | Shared (symlinked)     | Task planning files              |
-| `.local-wt/`   | Per-worktree           | Databases, caches, backups, logs |
+| `.local-wt/`   | Per-worktree           | Databases, caches, logs          |
 
 The setup script creates symlinks for shared directories and creates fresh copies of per-worktree directories. The naming can be customized.
 
@@ -112,10 +112,8 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
 4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
 5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, patch(content, ctx), required? }`; the file is copied from the main worktree and run through `patch`. `required: true` upgrades the "missing source" warning to an error.
-6. **Sets up worktree data** via `await config.setupWorktreeData(ctx)`. This callback owns per-worktree directory creation, database / file-storage provisioning, and infrastructure startup. The goal is that the worktree ends with a working database and any required local data in place (see "Database provisioning" below).
-7. **Installs and builds** via `await config.installAndBuild(ctx)`.
-8. **Optional `await config.afterDatabase(ctx)`** for migrations / seeding once both the DB and the build exist.
-9. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
+6. **Runs `await config.finalizeWorktree(ctx)`** in a detached background process. This callback owns infrastructure startup, dependency install / build, database provisioning, migrations, and seeding (see "Database provisioning" below). It MUST be idempotent — `setup-worktree --here` re-runs it as the documented retry path.
+7. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
 
 **Lifecycle for removal (with `--remove` / `--remove-here`):**
 
@@ -223,7 +221,7 @@ A single-process dev server uses a `SERVERS` array with one entry; the script's 
 **Two-tier shutdown:**
 
 - **`--stop` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast.
-- **`--remove` (setup-worktree)**: Shells out to `node <devServerScript> --stop` in the target worktree (which runs the target's own `dev:down` — kills spawn PIDs and runs callback `stop()` from the target's branch), then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. Re-execing rather than calling in-process picks up extra callback servers declared on the target's branch.
+- **`--remove` (setup-worktree)**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> --stop` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. The re-exec is structural: `setup-worktree` doesn't import your dev-server config, so it cannot dispatch callbacks in-process; delegating to the target's `dev-server.mjs` is how the kernel reaches them.
 
 Decide what each callback's `stop()` does based on the soft-stop intent: containers down, data kept. The destructive part (volumes, container removal) lives in `purgeInfrastructure`. Data initialization is the expensive part; the dev server itself starts in seconds.
 

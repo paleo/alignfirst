@@ -8,6 +8,8 @@ read_when:
 
 # Local Environment Management for Agents
 
+Examples below use `npm` syntax. Adapt for your package manager — flag-forwarding rules (e.g. the `--` separator) vary.
+
 ## Setting Up a Local Environment
 
 When the user asks to "set up a new local environment" or "set up a new worktree":
@@ -72,10 +74,10 @@ npm run dev:list         # List active dev-servers across all worktrees
 npm run dev:down -- --all # Stop every active dev-server
 ```
 
-<!-- ADAPT: Document where the log/PID files are stored (e.g., .local-wt/).
+<!-- ADAPT: Document where the logs are stored (e.g., .local-wt/logs/).
      Mention any project-specific URLs to open after starting. -->
 
-Logs and PID files are stored in `.local-wt/logs/` and `.local-wt/` (per-worktree).
+Logs are stored in `.local-wt/logs/` (per-worktree).
 
 The script detects port conflicts: it will refuse to start if a dev server is already running.
 
@@ -98,5 +100,5 @@ npm run dev:down                     # 4. stop when done (same directory)
 
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
-- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `wt/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `wt/dev-servers.json` (live dev-server registry).
-- **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).
+- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `wt-registry/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `wt-registry/dev-servers.json` (live dev-server registry).
+- **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
