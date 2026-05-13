@@ -1,6 +1,69 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
-
 import { ConfigError } from "./errors.js";
+
+const SETUP_OPTIONS: Record<string, OptionDef> = {
+  help: { type: "boolean", short: "h", description: "Show this help message" },
+  use: {
+    type: "string",
+    arg: "branch",
+    description: "Create a worktree for an existing branch, then set up the local environment",
+  },
+  create: {
+    type: "string",
+    arg: "branch",
+    description:
+      "Create a new branch + worktree, then set up the local environment. If the branch already exists, appends a numeric suffix (-2, -3, ...)",
+  },
+  here: {
+    type: "boolean",
+    description: "Set up the local environment in the current linked worktree",
+  },
+  owner: {
+    type: "string",
+    arg: "name",
+    description: "Owner of the slot (free-form label, optional)",
+  },
+  "set-owner": {
+    type: "string",
+    arg: "name",
+    description: "Update the owner of the current linked worktree's slot (no rebuild)",
+  },
+  remove: {
+    type: "string",
+    arg: "branch",
+    description: "Remove a worktree by branch name (stop dev server, free slot, delete directory)",
+  },
+  "remove-here": {
+    type: "boolean",
+    description:
+      "Remove the current linked worktree (same as --remove, but for the worktree you are in)",
+  },
+  "no-remote-check": {
+    type: "boolean",
+    description:
+      "Skip remote branch verification when removing (use with --remove or --remove-here)",
+  },
+  slot: {
+    type: "string",
+    short: "s",
+    arg: "port",
+    description: "Use a specific slot instead of auto-assigning",
+  },
+  force: {
+    type: "boolean",
+    description: "Overwrite existing config files and re-provision the database",
+  },
+  verbose: { type: "boolean", short: "v", description: "Show intermediate output" },
+  __finalize: { type: "string", arg: "slot", description: "" },
+};
+
+const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
+  help: { type: "boolean", short: "h", description: "Show this help message" },
+  stop: { type: "boolean", description: "Stop dev servers in the current worktree" },
+  list: { type: "boolean", description: "List active dev-servers across all worktrees" },
+  all: { type: "boolean", description: "Apply --stop to every active dev-server" },
+  evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
+};
 
 export interface SetupArgs {
   help?: boolean;
@@ -137,67 +200,3 @@ function formatHelp(usage: string, intro: string, options: Record<string, Option
   }
   return lines.join("\n");
 }
-
-const SETUP_OPTIONS: Record<string, OptionDef> = {
-  help: { type: "boolean", short: "h", description: "Show this help message" },
-  use: {
-    type: "string",
-    arg: "branch",
-    description: "Create a worktree for an existing branch, then set up the local environment",
-  },
-  create: {
-    type: "string",
-    arg: "branch",
-    description:
-      "Create a new branch + worktree, then set up the local environment. If the branch already exists, appends a numeric suffix (-2, -3, ...)",
-  },
-  here: {
-    type: "boolean",
-    description: "Set up the local environment in the current linked worktree",
-  },
-  owner: {
-    type: "string",
-    arg: "name",
-    description: "Owner of the slot (free-form label, optional)",
-  },
-  "set-owner": {
-    type: "string",
-    arg: "name",
-    description: "Update the owner of the current linked worktree's slot (no rebuild)",
-  },
-  remove: {
-    type: "string",
-    arg: "branch",
-    description: "Remove a worktree by branch name (stop dev server, free slot, delete directory)",
-  },
-  "remove-here": {
-    type: "boolean",
-    description:
-      "Remove the current linked worktree (same as --remove, but for the worktree you are in)",
-  },
-  "no-remote-check": {
-    type: "boolean",
-    description:
-      "Skip remote branch verification when removing (use with --remove or --remove-here)",
-  },
-  slot: {
-    type: "string",
-    short: "s",
-    arg: "port",
-    description: "Use a specific slot instead of auto-assigning",
-  },
-  force: {
-    type: "boolean",
-    description: "Overwrite existing config files and re-provision the database",
-  },
-  verbose: { type: "boolean", short: "v", description: "Show intermediate output" },
-  __finalize: { type: "string", arg: "slot", description: "" },
-};
-
-const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
-  help: { type: "boolean", short: "h", description: "Show this help message" },
-  stop: { type: "boolean", description: "Stop dev servers in the current worktree" },
-  list: { type: "boolean", description: "List active dev-servers across all worktrees" },
-  all: { type: "boolean", description: "Apply --stop to every active dev-server" },
-  evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
-};

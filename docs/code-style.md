@@ -20,10 +20,42 @@ read_when:
 
 The general rule is: **Usage comes first**, implementation comes after. Except for inheritance: for example, when an interface _extends_ another, write the parent interface first.
 
-- Order code: (1) exported and internal vars, (2) type definitions (public first, then private), (3) exported/public functions, (4) internal/helper functions
-- Follow function order: Calling functions first, helper functions after
-- Type definition ordering: types shared by several functions go at the top of the file (after imports and module-level constants), public types first, then private types. Apply the "usage comes first" principle recursively within each group (a type used as a member of another type comes after it).
+- Order code top-down: each file reads as a story, from entry point to leaves. The reader meets the highest-level thing first, then drills down into its dependencies:
+
+  ```ts
+  // 1. Imports
+  import { ... } from "...";
+
+  // 2. Module-level constants and variables (exported first, then internal)
+  export const PUBLIC_CONST = ...;
+  const INTERNAL_CONST = ...;
+
+  // 3. Shared types — main type first, then types it references
+  export interface MainType {
+    detail: DetailType;
+  }
+  export interface DetailType { ... }
+
+  // 4. Entry-point (exported) function
+  export function doThing() {
+    stepOne();
+    stepTwo();
+  }
+
+  // 5. Internal functions called by the entry point, in call order
+  function stepOne() {
+    stepOneHelper();
+  }
+  function stepOneHelper() { ... }
+
+  function stepTwo() { ... }
+  ```
+
+- Module-level constants and variables (`const`, `let`, `var` value declarations at the top of the file — both exported and internal) MUST be placed immediately after imports, before any type definitions, functions, or classes. This is the first thing a reader sees and treats them as the file's configuration surface.
+- Functions: write the caller first, then the functions it calls, recursively. A helper appears _just below_ its caller, not grouped at the bottom of the file. If a helper is called by several siblings, place it after its first caller.
+- Types: write the main (top-level) type first, then the types it references, recursively. Same "usage comes first" principle as functions.
 - Types attached to a single function (or class, or other declaration) — i.e. used only in that one signature, like a `MyComponentProps` interface used only by `MyComponent` — must be placed immediately before that declaration, not in the top type block.
+- Exports are not a sorting criterion on their own: a `function` being `export`ed does not pull it to the top — its position is determined by who calls it. The entry points of a file are usually exported, which is why they tend to appear first, but that is a consequence of the top-down rule, not the rule itself.
 
 ## Code Quality Standards
 
