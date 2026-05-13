@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -41,7 +41,7 @@ Example split:
 | `.plans/`      | Shared (symlinked)     | Task planning files              |
 | `.local-wt/`   | Per-worktree           | Databases, caches, backups, logs |
 
-The setup script creates symlinks for shared directories and creates fresh copies of per-worktree directories. The naming doesn't matter — what matters is that you consciously decide which category each directory falls into.
+The setup script creates symlinks for shared directories and creates fresh copies of per-worktree directories. The naming can be customized.
 
 ### Contiguous port scheme
 
