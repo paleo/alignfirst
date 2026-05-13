@@ -9,6 +9,7 @@
 
 import { execSync } from "node:child_process";
 import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
@@ -26,6 +27,10 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 //   }
 
 await runSetupWorktree({
+  // Required. The package re-spawns this script for the detached finalize phase, so it must know
+  // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
+  scriptPath: fileURLToPath(import.meta.url),
+
   // ADAPT: anchor port for the slot range. 8100 is the safe default.
   basePort: 8100,
 

@@ -54,6 +54,15 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     description: "Overwrite existing config files and re-provision the database",
   },
   verbose: { type: "boolean", short: "v", description: "Show intermediate output" },
+  wait: {
+    type: "boolean",
+    description:
+      "Wait for the background finalize to reach READY (exit 0, prints the worktree summary) or FAILED (exit 1). Uses the current worktree's slot, or --slot PORT to target another.",
+  },
+  info: {
+    type: "boolean",
+    description: "Print the worktree summary (ports, branch, readiness) for the current worktree.",
+  },
   __finalize: { type: "string", arg: "slot", description: "" },
 };
 
@@ -78,6 +87,8 @@ export interface SetupArgs {
   slot?: string;
   force?: boolean;
   verbose?: boolean;
+  wait?: boolean;
+  info?: boolean;
   /** @internal Set by `runSetupWorktree` when it re-spawns itself to run the finalize phase. */
   __finalize?: string;
 }
@@ -133,17 +144,21 @@ export function validateSetupFlags(args: SetupArgs): void {
     isRemoveMode(args),
     isSetOwnerMode(args),
     isFinalizeMode(args),
+    isWaitMode(args),
+    isInfoMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
-      "Error: --use, --create, --here, --remove, --remove-here, and --set-owner are mutually exclusive.",
+      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, --wait, and --info are mutually exclusive.",
     );
   }
   if (args.remove !== undefined && args["remove-here"]) {
     throw new ConfigError("Error: --remove and --remove-here are mutually exclusive.");
   }
-  if (args.slot !== undefined && !isSetupMode(args)) {
-    throw new ConfigError("Error: --slot can only be used with --use, --create, or --here.");
+  if (args.slot !== undefined && !isSetupMode(args) && !isWaitMode(args)) {
+    throw new ConfigError(
+      "Error: --slot can only be used with --use, --create, --here, or --wait.",
+    );
   }
   if (args.force && !isSetupMode(args) && !isFinalizeMode(args)) {
     throw new ConfigError("Error: --force can only be used with --use, --create, or --here.");
@@ -183,6 +198,14 @@ export function isSetOwnerMode(args: SetupArgs): boolean {
 
 export function isFinalizeMode(args: SetupArgs): boolean {
   return args.__finalize !== undefined;
+}
+
+export function isWaitMode(args: SetupArgs): boolean {
+  return Boolean(args.wait);
+}
+
+export function isInfoMode(args: SetupArgs): boolean {
+  return Boolean(args.info);
 }
 
 function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {

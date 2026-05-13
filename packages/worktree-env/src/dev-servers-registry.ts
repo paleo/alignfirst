@@ -88,8 +88,8 @@ export async function evictOldest(
       if (isAlive(pid)) await stop(pid);
     }
   }
-  const victimWorktrees = new Set(victims.map((v) => v.worktree));
-  const filtered = data.servers.filter((entry) => !victimWorktrees.has(entry.worktree));
+  const victimSlots = new Set(victims.map((v) => v.slot));
+  const filtered = data.servers.filter((entry) => !victimSlots.has(entry.slot));
   writeDevServers(mainWorktree, { servers: filtered });
   return victims;
 }

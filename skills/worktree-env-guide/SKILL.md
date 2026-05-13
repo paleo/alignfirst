@@ -139,12 +139,15 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | `--no-remote-check` | Skip remote branch verification when removing (use with `--remove` or `--remove-here`) |
 | `--slot PORT` | Use a specific slot instead of auto-assigning |
 | `--force` | Overwrite existing config files and re-provision the database |
+| `--wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
+| `--info` | Print the summary (ports, branch, readiness) for the current worktree |
 | `--verbose` | Show intermediate output |
 
 Running the script with no mode flag shows help.
 
 **Config fields to populate:**
 
+- `scriptPath: string` — required. Absolute path to your wrapper script. Pass `fileURLToPath(import.meta.url)`. The package re-spawns this script for the detached finalize phase.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).

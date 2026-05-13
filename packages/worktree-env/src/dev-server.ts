@@ -184,6 +184,9 @@ async function start(
   }
 }
 
+// TOCTOU: the cap check and the subsequent register are not atomic. Two concurrent `dev:up --evict`
+// from different worktrees can both pass the cap check and both register, exceeding the limit by
+// one. Accepted: the race window is narrow and the consequence is bounded (one extra dev-server).
 async function enforceCap(
   config: DevServerConfig,
   mainWorktree: string,
