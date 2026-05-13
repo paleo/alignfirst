@@ -28,6 +28,7 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 ```sh
 npm run setup-worktree -- --create feat/42   # new branch + worktree + isolated env
 npm run dev:up                               # start dev server in the background
+npm run dev:up -- --evict                    # if devLimit is reached, evict the oldest dev-server and start
 npm run dev:list                             # active dev-servers across all worktrees
 npm run dev:down                             # stop dev server (infrastructure stays up)
 npm run setup-worktree -- --remove feat/42   # full teardown
@@ -41,7 +42,9 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 await runSetupWorktree({
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
-  devServerPidFiles: [".local-data/dev-server.pid"],
+  sharedDirs: [".local", ".plans"],
+  runtimeDir: ".local-wt",
+  registryDir: ".local/wt-registry",
   configFiles: [
     {
       path: ".env",
@@ -52,28 +55,31 @@ await runSetupWorktree({
         }),
     },
   ],
-  setupWorktreeData: async ({ currentWorktree }) => {
-    // Create per-worktree directories, copy seed data, start containers, etc.
+  finalizeWorktree: async ({ currentWorktree }) => {
+    // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
-  installAndBuild: async () => {},
   printSummary: ({ slot, branch, owner, ports }) =>
     `Slot ${slot} (${branch}${owner ? `, ${owner}` : ""}) — server :${ports.server}`,
 });
 ```
+
+Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait` from inside the worktree (or `setup-worktree --wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
+
+`--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev:up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev:list` + `dev:down` deterministically.
 
 ```ts
 import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100,
+  runtimeDir: ".local-wt",
+  registryDir: ".local/wt-registry",
   devLimit: 5,
   servers: [
     {
       name: "dev",
       exec: { command: "npm", args: ["run", "dev"] },
       port: helpers.readPortFromEnvFile(".env", "PORT"),
-      pidFile: ".local-data/dev-server.pid",
-      logFile: ".local-data/logs/dev-server.log",
       detectSuccess: (log) => log.includes("Server is ready on port"),
     },
   ],

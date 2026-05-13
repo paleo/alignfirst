@@ -1,13 +1,5 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
-
 import { ConfigError } from "./errors.js";
-
-interface OptionDef {
-  type: "boolean" | "string";
-  short?: string;
-  arg?: string;
-  description: string;
-}
 
 const SETUP_OPTIONS: Record<string, OptionDef> = {
   help: { type: "boolean", short: "h", description: "Show this help message" },
@@ -62,6 +54,16 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     description: "Overwrite existing config files and re-provision the database",
   },
   verbose: { type: "boolean", short: "v", description: "Show intermediate output" },
+  wait: {
+    type: "boolean",
+    description:
+      "Wait for the background finalize to reach READY (exit 0, prints the worktree summary) or FAILED (exit 1). Uses the current worktree's slot, or --slot PORT to target another.",
+  },
+  info: {
+    type: "boolean",
+    description: "Print the worktree summary (ports, branch, readiness) for the current worktree.",
+  },
+  __finalize: { type: "string", arg: "slot", description: "" },
 };
 
 const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
@@ -69,6 +71,7 @@ const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
   stop: { type: "boolean", description: "Stop dev servers in the current worktree" },
   list: { type: "boolean", description: "List active dev-servers across all worktrees" },
   all: { type: "boolean", description: "Apply --stop to every active dev-server" },
+  evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
 };
 
 export interface SetupArgs {
@@ -84,6 +87,10 @@ export interface SetupArgs {
   slot?: string;
   force?: boolean;
   verbose?: boolean;
+  wait?: boolean;
+  info?: boolean;
+  /** @internal Set by `runSetupWorktree` when it re-spawns itself to run the finalize phase. */
+  __finalize?: string;
 }
 
 export interface DevServerArgs {
@@ -91,13 +98,14 @@ export interface DevServerArgs {
   stop?: boolean;
   list?: boolean;
   all?: boolean;
+  evict?: boolean;
 }
 
-function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {
-  const cfg: ParseArgsConfig = { options: options as ParseArgsConfig["options"], strict: true };
-  if (argv) cfg.args = argv;
-  const { values } = parseArgs(cfg);
-  return values as T;
+interface OptionDef {
+  type: "boolean" | "string";
+  short?: string;
+  arg?: string;
+  description: string;
 }
 
 export function parseSetupArgs(argv?: string[]): SetupArgs {
@@ -106,17 +114,6 @@ export function parseSetupArgs(argv?: string[]): SetupArgs {
 
 export function parseDevServerArgs(argv?: string[]): DevServerArgs {
   return parseOptions<DevServerArgs>(argv, DEV_SERVER_OPTIONS);
-}
-
-function formatHelp(usage: string, intro: string, options: Record<string, OptionDef>): string {
-  const lines = [`Usage: ${usage}`, "", intro, ""];
-  for (const [name, opt] of Object.entries(options)) {
-    const shortFlag = opt.short ? `-${opt.short}, ` : "";
-    const argSuffix = opt.arg ? ` <${opt.arg}>` : "";
-    const flag = `${shortFlag}--${name}${argSuffix}`;
-    lines.push(`  ${flag.padEnd(28)} ${opt.description}`);
-  }
-  return lines.join("\n");
 }
 
 export function printSetupHelp(): void {
@@ -139,18 +136,6 @@ export function printDevServerHelp(): void {
   );
 }
 
-export function isSetupMode(args: SetupArgs): boolean {
-  return args.use !== undefined || args.create !== undefined || Boolean(args.here);
-}
-
-export function isRemoveMode(args: SetupArgs): boolean {
-  return args.remove !== undefined || Boolean(args["remove-here"]);
-}
-
-export function isSetOwnerMode(args: SetupArgs): boolean {
-  return args["set-owner"] !== undefined;
-}
-
 export function validateSetupFlags(args: SetupArgs): void {
   const modeFlags = [
     args.use,
@@ -158,19 +143,25 @@ export function validateSetupFlags(args: SetupArgs): void {
     args.here,
     isRemoveMode(args),
     isSetOwnerMode(args),
+    isFinalizeMode(args),
+    isWaitMode(args),
+    isInfoMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
-      "Error: --use, --create, --here, --remove, --remove-here, and --set-owner are mutually exclusive.",
+      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, --wait, and --info are mutually exclusive.",
     );
   }
   if (args.remove !== undefined && args["remove-here"]) {
     throw new ConfigError("Error: --remove and --remove-here are mutually exclusive.");
   }
-  if ((args.slot !== undefined || args.force) && !isSetupMode(args)) {
+  if (args.slot !== undefined && !isSetupMode(args) && !isWaitMode(args)) {
     throw new ConfigError(
-      "Error: --slot and --force can only be used with --use, --create, or --here.",
+      "Error: --slot can only be used with --use, --create, --here, or --wait.",
     );
+  }
+  if (args.force && !isSetupMode(args) && !isFinalizeMode(args)) {
+    throw new ConfigError("Error: --force can only be used with --use, --create, or --here.");
   }
   if (args.owner !== undefined && !isSetupMode(args)) {
     throw new ConfigError("Error: --owner is only valid with --use, --create, or --here.");
@@ -187,4 +178,51 @@ export function validateDevServerFlags(args: DevServerArgs): void {
   if (args.list && (args.stop || args.all)) {
     throw new ConfigError("Error: --list is mutually exclusive with --stop and --all.");
   }
+  if (args.evict && (args.stop || args.list || args.all)) {
+    const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
+    throw new ConfigError(`Error: --evict cannot be combined with ${conflict}.`);
+  }
+}
+
+export function isSetupMode(args: SetupArgs): boolean {
+  return args.use !== undefined || args.create !== undefined || Boolean(args.here);
+}
+
+export function isRemoveMode(args: SetupArgs): boolean {
+  return args.remove !== undefined || Boolean(args["remove-here"]);
+}
+
+export function isSetOwnerMode(args: SetupArgs): boolean {
+  return args["set-owner"] !== undefined;
+}
+
+export function isFinalizeMode(args: SetupArgs): boolean {
+  return args.__finalize !== undefined;
+}
+
+export function isWaitMode(args: SetupArgs): boolean {
+  return Boolean(args.wait);
+}
+
+export function isInfoMode(args: SetupArgs): boolean {
+  return Boolean(args.info);
+}
+
+function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {
+  const cfg: ParseArgsConfig = { options: options as ParseArgsConfig["options"], strict: true };
+  if (argv) cfg.args = argv;
+  const { values } = parseArgs(cfg);
+  return values as T;
+}
+
+function formatHelp(usage: string, intro: string, options: Record<string, OptionDef>): string {
+  const lines = [`Usage: ${usage}`, "", intro, ""];
+  for (const [name, opt] of Object.entries(options)) {
+    if (opt.description === "") continue;
+    const shortFlag = opt.short ? `-${opt.short}, ` : "";
+    const argSuffix = opt.arg ? ` <${opt.arg}>` : "";
+    const flag = `${shortFlag}--${name}${argSuffix}`;
+    lines.push(`  ${flag.padEnd(28)} ${opt.description}`);
+  }
+  return lines.join("\n");
 }

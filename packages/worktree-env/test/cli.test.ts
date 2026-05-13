@@ -31,12 +31,17 @@ describe("validateSetupFlags", () => {
 
   it("rejects --slot without a setup mode", () => {
     const args = parseSetupArgs(["--slot", "8110"]);
-    expect(() => validateSetupFlags(args)).toThrow(/--slot and --force/);
+    expect(() => validateSetupFlags(args)).toThrow(/--slot/);
   });
 
   it("rejects --remove + --remove-here", () => {
     const args = parseSetupArgs(["--remove", "a", "--remove-here"]);
     expect(() => validateSetupFlags(args)).toThrow(/mutually exclusive/);
+  });
+
+  it("rejects --__finalize combined with another mode flag", () => {
+    const args = parseSetupArgs(["--__finalize", "8110", "--here"]);
+    expect(() => validateSetupFlags(args)).toThrow(ConfigError);
   });
 
   it("accepts a valid setup invocation", () => {

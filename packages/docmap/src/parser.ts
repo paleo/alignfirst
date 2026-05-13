@@ -64,13 +64,6 @@ export function extractMetadata(content: string): Metadata {
   return { title, summary, readWhen, error: undefined };
 }
 
-export function stripFrontmatter(content: string): string {
-  if (!content.startsWith("---")) return content;
-  const closingIndex = content.indexOf("\n---", 3);
-  if (closingIndex === -1) return content;
-  return content.slice(closingIndex + 4).replace(/^\n+/, "");
-}
-
 export function extractFallbackTitle(content: string): string | undefined {
   const body = stripFrontmatter(content);
   const lines = body.split("\n");
@@ -107,4 +100,11 @@ export function extractFallbackTitle(content: string): string | undefined {
   }
 
   return undefined;
+}
+
+export function stripFrontmatter(content: string): string {
+  if (!content.startsWith("---")) return content;
+  const closingIndex = content.indexOf("\n---", 3);
+  if (closingIndex === -1) return content;
+  return content.slice(closingIndex + 4).replace(/^\n+/, "");
 }

@@ -1,15 +1,15 @@
-export interface PortSchemeOptions {
-  basePort: number;
-  portStep?: number;
-  maxSlotCount?: number;
-}
-
 export interface PortScheme {
   basePort: number;
   portStep: number;
   maxSlotCount: number;
   minPort: number;
   maxPort: number;
+}
+
+export interface PortSchemeOptions {
+  basePort: number;
+  portStep?: number;
+  maxSlotCount?: number;
 }
 
 export function resolvePortScheme(opts: PortSchemeOptions): PortScheme {

@@ -21,7 +21,25 @@ export interface AwaitOptions {
   isAlive?: (pid: number) => boolean;
 }
 
-export async function waitForReady(
+export async function awaitAllReady(
+  servers: PollableServer[],
+  pids: number[],
+  options?: AwaitOptions,
+): Promise<void> {
+  await Promise.all(servers.map((server, i) => waitForReady(server, pids[i], options)));
+}
+
+export function handleStartupFailure(err: StartupError): void {
+  console.error(`\nError: ${err.label} ${err.reason}.`);
+  if (err.logFile && existsSync(err.logFile)) {
+    const lines = readFileSync(err.logFile, "utf-8").split("\n").slice(-LOG_TAIL_LINES);
+    console.error(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
+    console.error(lines.join("\n"));
+    console.error(`--- end ---\nFull log: ${join(process.cwd(), err.logFile)}`);
+  }
+}
+
+async function waitForReady(
   server: PollableServer,
   pid: number,
   options: AwaitOptions = {},
@@ -53,22 +71,4 @@ export async function waitForReady(
     `did not become ready within ${timeoutMs / 1000}s`,
     server.logFile,
   );
-}
-
-export async function awaitAllReady(
-  servers: PollableServer[],
-  pids: number[],
-  options?: AwaitOptions,
-): Promise<void> {
-  await Promise.all(servers.map((server, i) => waitForReady(server, pids[i], options)));
-}
-
-export function handleStartupFailure(err: StartupError): void {
-  console.error(`\nError: ${err.label} ${err.reason}.`);
-  if (err.logFile && existsSync(err.logFile)) {
-    const lines = readFileSync(err.logFile, "utf-8").split("\n").slice(-LOG_TAIL_LINES);
-    console.error(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
-    console.error(lines.join("\n"));
-    console.error(`--- end ---\nFull log: ${join(process.cwd(), err.logFile)}`);
-  }
 }

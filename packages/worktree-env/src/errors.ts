@@ -17,8 +17,3 @@ export class ConfigError extends Error {
     this.exitCode = exitCode;
   }
 }
-
-export function exitWith(code: number, message: string): never {
-  console.error(message);
-  process.exit(code);
-}

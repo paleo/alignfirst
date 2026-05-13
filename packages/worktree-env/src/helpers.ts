@@ -63,15 +63,6 @@ export function readPortFromJsonFile(file: string, jsonPath: string): number {
   return toPort(String(cur), file);
 }
 
-function toPort(raw: string, file: string): number {
-  const port = Number(raw);
-  if (!Number.isFinite(port)) {
-    console.error(`Error: invalid port "${raw}" in ${file}.`);
-    process.exit(1);
-  }
-  return port;
-}
-
 export interface CopyAndPatchCtx {
   currentWorktree: string;
   mainWorktree: string;
@@ -109,4 +100,13 @@ export function copyAndPatchFile(
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
   ctx.log(`${alreadyExists ? "Overwritten" : "Created"} ${label}.`);
+}
+
+function toPort(raw: string, file: string): number {
+  const port = Number(raw);
+  if (!Number.isFinite(port)) {
+    console.error(`Error: invalid port "${raw}" in ${file}.`);
+    process.exit(1);
+  }
+  return port;
 }

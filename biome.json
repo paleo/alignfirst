@@ -67,7 +67,7 @@
     "includes": [
       "**",
       "!**/.local",
-      "!**/.local-data",
+      "!**/.local-wt",
       "!**/.plans",
       "!**/dist",
       "!**/node_modules",

@@ -8,27 +8,29 @@
 // =============================================================================
 
 import { execSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
-// `setupWorktreeData` and the `docker-compose.yml` configFile entry with a
+// `finalizeWorktree` and the `docker-compose.yml` configFile entry with a
 // copy from the main worktree:
 //
-//   import { cpSync, existsSync, readdirSync } from "node:fs";
+//   import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 //   import { join } from "node:path";
-//   setupWorktreeData: ({ currentWorktree, mainWorktree, force }) => {
-//     const localData = join(currentWorktree, ".local-data/data");
-//     const mainData = join(mainWorktree, ".local-data/data");
-//     mkdirSync(localData, { recursive: true });
-//     if (readdirSync(localData).length > 0 && !force) return;
-//     if (!existsSync(mainData)) return;
+//   // inside finalizeWorktree, before install/build:
+//   const localData = join(currentWorktree, ".local-wt/data");
+//   const mainData = join(mainWorktree, ".local-wt/data");
+//   mkdirSync(localData, { recursive: true });
+//   if (readdirSync(localData).length === 0 && existsSync(mainData)) {
 //     cpSync(mainData, localData, { recursive: true, force: true });
-//   },
-//   teardownInfrastructure: undefined,
+//   }
 
 await runSetupWorktree({
+  // Required. The package re-spawns this script for the detached finalize phase, so it must know
+  // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
+  scriptPath: fileURLToPath(import.meta.url),
+
   // ADAPT: anchor port for the slot range. 8100 is the safe default.
   basePort: 8100,
 
@@ -37,8 +39,17 @@ await runSetupWorktree({
   portNames: ["server", "frontend", "db"],
   // ports: (slot) => ({ server: slot, frontend: slot + 1, db: slot + 2 }),
 
-  // ADAPT: PID files written by the dev-server (must match dev-server.mjs).
-  devServerPidFiles: [".local-data/dev-server.pid"],
+  // ADAPT: directories symlinked from the main worktree.
+  sharedDirs: [".local", ".plans"],
+
+  // Per-worktree runtime directory. The package writes the setup log,
+  // pid files, and dev-server logs under here.
+  runtimeDir: ".local-wt",
+
+  // Shared registry directory holding `slots.json` and `dev-servers.json`.
+  // Must resolve to the same physical directory across linked worktrees —
+  // typically via a symlink listed in `sharedDirs` (e.g. `.local`).
+  registryDir: ".local/wt-registry",
 
   // ADAPT: gitignored config files copied from the main worktree and patched
   // per slot. The source is the same path in the main worktree.
@@ -69,24 +80,35 @@ await runSetupWorktree({
     },
   ],
 
-  // ADAPT: per-worktree data setup. Runs after symlinks and config files.
-  // Create any required directories first, then provision DB / file storage.
-  setupWorktreeData: async ({ currentWorktree }) => {
-    mkdirSync(join(currentWorktree, ".local-data"), { recursive: true });
+  // ADAPT: Detached finalization step. Runs in the background after the
+  // worktree is created and the foreground command has returned.
+  //
+  // MUST BE IDEMPOTENT — `setup-worktree --here` is the documented retry
+  // path. Guard each block against pre-existing state so re-runs are no-ops.
+  finalizeWorktree: async ({ currentWorktree }) => {
+    // `docker compose up -d` is already idempotent.
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
+    let ready = false;
     while (Date.now() < deadline) {
       try {
         execSync("docker compose exec database pg_isready", {
           stdio: "pipe",
           cwd: currentWorktree,
         });
-        return;
+        ready = true;
+        break;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
-    throw new Error("Database did not become ready within 30s.");
+    if (!ready) throw new Error("Database did not become ready within 30s.");
+    // `npm install` and `npm run build` are idempotent.
+    execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
+    execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
+    // Migrations are idempotent; seeds typically guard on existing rows.
+    execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
+    execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
   },
 
   // ADAPT: Docker teardown. Called by --remove. Drop on a non-Docker stack.
@@ -96,18 +118,6 @@ await runSetupWorktree({
     } catch {
       // container may not exist
     }
-  },
-
-  // ADAPT
-  installAndBuild: ({ currentWorktree }) => {
-    execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
-    execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
-  },
-
-  // ADAPT
-  afterDatabase: ({ currentWorktree }) => {
-    execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
-    execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
   },
 
   // ADAPT

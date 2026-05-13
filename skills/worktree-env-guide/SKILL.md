@@ -39,7 +39,7 @@ Example split:
 | -------------- | ---------------------- | -------------------------------- |
 | `.local/`      | Shared (symlinked)     | Slot registry, personal notes    |
 | `.plans/`      | Shared (symlinked)     | Task planning files              |
-| `.local-data/` | Per-worktree           | Databases, caches, backups, logs |
+| `.local-wt/`   | Per-worktree           | Databases, caches, backups, logs |
 
 The setup script creates symlinks for shared directories and creates fresh copies of per-worktree directories. The naming doesn't matter — what matters is that you consciously decide which category each directory falls into.
 
@@ -65,7 +65,7 @@ Each worktree gets a unique "slot" that determines its port(s). A central **slot
 
 The slot is identified by the primary port number itself (e.g., `--slot 8120`).
 
-**Registry format** (stored in a shared directory, e.g. `.local/worktrees/slots.json`):
+**Registry format** (stored in a shared directory, e.g. `.local/wt-registry/slots.json`):
 
 ```json
 {
@@ -82,7 +82,7 @@ The main worktree's port is implicit and never stored in the registry.
 
 Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
-A second registry, `.local/worktrees/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path).
+A second registry, `.local/wt-registry/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `dev:up --evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
 
 ### Config files must be gitignored
 
@@ -121,7 +121,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
-3. Stops the dev server processes by reading every PID file in `config.devServerPidFiles` and killing the process group.
+3. Stops the dev server processes by scanning `<runtimeDir>/*.pid` files in the target worktree and killing each process group.
 4. Calls optional `config.teardownInfrastructure(ctx)` — this is where Docker / database teardown lives (the kernel itself is Docker-agnostic).
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
 
@@ -139,23 +139,25 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | `--no-remote-check` | Skip remote branch verification when removing (use with `--remove` or `--remove-here`) |
 | `--slot PORT` | Use a specific slot instead of auto-assigning |
 | `--force` | Overwrite existing config files and re-provision the database |
+| `--wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
+| `--info` | Print the summary (ports, branch, readiness) for the current worktree |
 | `--verbose` | Show intermediate output |
 
 Running the script with no mode flag shows help.
 
 **Config fields to populate:**
 
+- `scriptPath: string` — required. Absolute path to your wrapper script. Pass `fileURLToPath(import.meta.url)`. The package re-spawns this script for the detached finalize phase.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
+- `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
+- `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log, dev-server PID files, and dev-server logs.
+- `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
-- `devServerPidFiles: string[]` — one entry per PID file your dev-server writes; used by `--remove` to stop the dev server cleanly.
-- `setupWorktreeData(ctx)` — required callback. Runs after symlinks and config files. Owns per-worktree directory creation (e.g. `mkdirSync(".local-data/...")` at the top), database / file-storage provisioning, and infrastructure startup. Must end with a working database (see "Database provisioning" below).
-- `installAndBuild(ctx)` — required callback. `npm install && npm run build`, `pip install`, `cargo build`, etc.
-- `afterDatabase(ctx)` — optional. Migrations / seeding.
+- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
 - `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
-- `printSummary(ctx)` — required. Returns the string to print after setup completes.
-- `sharedDirs` — optional, overrides the default (`[".local", ".plans"]`).
+- `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 
 ### Database provisioning
 
@@ -181,14 +183,14 @@ This script starts the dev server in the background, waits for it to be ready, a
 
 A "dev server" can be a single process or several cooperating processes (e.g. an API watcher plus a frontend bundler). `runDevServer(config: DevServerConfig)` handles either case via `config.servers: ServerDescriptor[]` — one entry per process — but conceptually they form one dev server.
 
-Each `ServerDescriptor` is `{ name, exec: { command, args }, port, pidFile, logFile, detectSuccess, detectError? }`. `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
+Each `ServerDescriptor` is `{ name, exec: { command, args }, port, detectSuccess, detectError? }`. PID and log paths are derived from `config.runtimeDir` + `name` (`<runtimeDir>/<name>.pid` and `<runtimeDir>/logs/<name>.log`). `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
 
 See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
 
 **Lifecycle:**
 
 1. Verifies that each server's `port` is not already in use.
-2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit).
+2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit). Pass `--evict` to stop the oldest live dev-server across all worktrees and proceed instead of aborting.
 3. Aborts if a sibling dev-server in this worktree is already running (PID file + alive check).
 4. Calls optional `config.ensureInfrastructure?.()` before any dev server. The standard Docker pattern is `docker compose up -d`; the kernel does no infrastructure I/O of its own.
 5. Iterates `config.servers`, spawning each as a detached process group with stdout/stderr to its log file and PID written to its PID file.
@@ -260,6 +262,7 @@ npm run dev:up     # Later, restart quickly
 ```sh
 npm run dev:list             # List active dev-servers across all worktrees
 npm run dev:down -- --all    # Stop every active dev-server (infrastructure stays up)
+npm run dev:up -- --evict    # If the cap is full, evict the oldest dev-server and start
 ```
 
 ### Creating a worktree without setup
@@ -346,6 +349,6 @@ The agents need to know:
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
 - [ ] **Add npm scripts** (or Makefile targets, etc.) for `setup-worktree`, `dev:up`, `dev:down`.
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
-- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories. Make sure `.local/worktrees/` is covered (slot registry and dev-server registry live there).
+- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/wt-registry/` is covered (slot registry and dev-server registry live there).
 - [ ] **Write agent documentation** if applicable (see [assets/agent-local-env.md](assets/agent-local-env.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

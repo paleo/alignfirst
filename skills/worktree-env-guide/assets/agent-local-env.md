@@ -15,13 +15,22 @@ When the user asks to "set up a new local environment" or "set up a new worktree
 ```sh
 npm run setup-worktree -- --create fix/123    # new branch + worktree (dedup: appends -2, -3… if taken)
 npm run setup-worktree -- --use fix/123       # new worktree on an existing branch
-npm run setup-worktree -- --here              # set up the current worktree
+npm run setup-worktree -- --here              # set up the current worktree (idempotent — also the retry path)
 ```
 
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
      Document any project-specific ports or URLs the developer should know about. -->
 
 The script creates the worktree in the correct sibling directory, assigns a port slot, installs dependencies, builds, generates config files, and provisions the database.
+
+### Recovery from a Failed Setup
+
+If `--create` or `--use` fails (or the background finalize step fails — check `<runtimeDir>/wt-setup.log`), the worktree is half-created. Do not delete it. Instead:
+
+    cd <worktree>
+    npm run setup-worktree -- --here
+
+`--here` is idempotent and will retry the finalize step. Repeat until the log ends with `READY: ...`.
 
 ### Slot Owner
 
@@ -63,10 +72,10 @@ npm run dev:list         # List active dev-servers across all worktrees
 npm run dev:down -- --all # Stop every active dev-server
 ```
 
-<!-- ADAPT: Document where the log/PID files are stored (e.g., .local-data/).
+<!-- ADAPT: Document where the log/PID files are stored (e.g., .local-wt/).
      Mention any project-specific URLs to open after starting. -->
 
-Logs and PID files are stored in `.local-data/logs/` and `.local-data/` (per-worktree).
+Logs and PID files are stored in `.local-wt/logs/` and `.local-wt/` (per-worktree).
 
 The script detects port conflicts: it will refuse to start if a dev server is already running.
 
@@ -89,5 +98,5 @@ npm run dev:down                     # 4. stop when done (same directory)
 
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
-- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `worktrees/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `worktrees/dev-servers.json` (live dev-server registry).
-- **`.local-data/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).
+- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `wt/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `wt/dev-servers.json` (live dev-server registry).
+- **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).
