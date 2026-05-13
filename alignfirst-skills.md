@@ -150,19 +150,6 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
 1. The context window is limited, the compression mechanism is opaque, and we want to be able to continue an unfinished task in a fresh session.
 2. It's a way to keep track of what was agreed upon with the agent and what has been done.
 
-## AlignFirst Coaching (experimental)
-
-```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-coaching
-```
-
-Optional environment variables:
-
-```bash
-export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
-export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
-```
-
 ## Upgrade from v1 or v2
 
 1. Install the docmap skill:

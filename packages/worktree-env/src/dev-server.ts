@@ -10,6 +10,7 @@ import {
   type DevServerArgs,
 } from "./cli.js";
 import {
+  evictOldest,
   listDevServers,
   printActiveServers,
   pruneAndPersist,
@@ -109,44 +110,17 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     return;
   }
 
-  await start(config, mainWorktree);
+  await start(config, mainWorktree, { evict: Boolean(args.evict) });
 }
 
-async function start(config: DevServerConfig, mainWorktree: string): Promise<void> {
-  const limit = config.devLimit;
-  const active = pruneAndPersist(mainWorktree).servers;
-  if (limit !== undefined && active.length >= limit) {
-    console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
-    printActiveServers(active);
-    console.error("Run `dev:down` in another worktree, or `dev:down --all`.");
-    process.exit(1);
-  }
-
-  const serverPorts: [ServerDescriptor, number][] = config.servers.map((server) => [
-    server,
-    server.port,
-  ]);
-
-  const busyResults = await Promise.all(serverPorts.map(([, port]) => isPortBusy(port)));
-  let anyBusy = false;
-  busyResults.forEach((busy, i) => {
-    if (busy) {
-      const [server, port] = serverPorts[i];
-      console.error(`Error: Port ${port} (${server.name}) is already in use.`);
-      anyBusy = true;
-    }
-  });
-  if (anyBusy) process.exit(1);
-
-  for (const server of config.servers) {
-    const pidFile = pidFileFor(config.localWt, server.name);
-    const existingPid = readPid(pidFile);
-    if (existingPid !== undefined && isProcessAlive(existingPid)) {
-      console.error(`Error: ${server.name} is already running (PID ${existingPid}).`);
-      process.exit(1);
-    }
-    cleanupPidFile(pidFile);
-  }
+async function start(
+  config: DevServerConfig,
+  mainWorktree: string,
+  { evict }: { evict: boolean },
+): Promise<void> {
+  await enforceCap(config, mainWorktree, evict);
+  await checkPortsFree(config.servers);
+  checkNoLocalPidConflict(config);
 
   if (config.ensureInfrastructure) await config.ensureInfrastructure();
 
@@ -194,7 +168,7 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
         slot,
         servers: config.servers.map((server, i) => ({
           server,
-          port: serverPorts[i][1],
+          port: server.port,
           pid: pids[i],
         })),
       }),
@@ -203,10 +177,66 @@ async function start(config: DevServerConfig, mainWorktree: string): Promise<voi
     defaultPrintSummary(
       slot,
       config.servers,
-      serverPorts.map(([, p]) => p),
+      config.servers.map((s) => s.port),
       pids,
       config.localWt,
     );
+  }
+}
+
+async function enforceCap(
+  config: DevServerConfig,
+  mainWorktree: string,
+  evict: boolean,
+): Promise<void> {
+  const limit = config.devLimit;
+  if (limit === undefined) return;
+  const active = pruneAndPersist(mainWorktree).servers;
+  if (active.length < limit) return;
+
+  if (!evict) {
+    console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
+    printActiveServers(active);
+    console.error("Run `dev:down` in another worktree, or `dev:down --all`.");
+    console.error("Re-run with --evict to evict the oldest.");
+    process.exit(1);
+  }
+
+  const toEvict = active.length - limit + 1;
+  console.log(`Evicting ${toEvict} dev-server(s) to make room (cap ${limit}).`);
+  const evicted = await evictOldest(mainWorktree, toEvict);
+  for (const entry of evicted) {
+    const ownerPart = entry.owner ? `, owner=${entry.owner}` : "";
+    console.log(
+      `Evicted slot ${entry.slot} (branch=${entry.branch}${ownerPart}, startedAt=${entry.startedAt}).`,
+    );
+    for (const name of config.servers.map((s) => s.name)) {
+      cleanupPidFile(join(entry.worktree, config.localWt, `${name}.pid`));
+    }
+  }
+}
+
+async function checkPortsFree(servers: ServerDescriptor[]): Promise<void> {
+  const busy = await Promise.all(servers.map((s) => isPortBusy(s.port)));
+  let anyBusy = false;
+  busy.forEach((b, i) => {
+    if (b) {
+      console.error(`Error: Port ${servers[i].port} (${servers[i].name}) is already in use.`);
+      anyBusy = true;
+    }
+  });
+  if (anyBusy) process.exit(1);
+}
+
+function checkNoLocalPidConflict(config: DevServerConfig): void {
+  for (const server of config.servers) {
+    const pidFile = pidFileFor(config.localWt, server.name);
+    const existingPid = readPid(pidFile);
+    if (existingPid !== undefined && isProcessAlive(existingPid)) {
+      console.error(`Error: ${server.name} is already running (PID ${existingPid}).`);
+      process.exit(1);
+    }
+    cleanupPidFile(pidFile);
   }
 }
 

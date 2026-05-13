@@ -23,6 +23,7 @@ export interface DevServerArgs {
   stop?: boolean;
   list?: boolean;
   all?: boolean;
+  evict?: boolean;
 }
 
 interface OptionDef {
@@ -96,6 +97,9 @@ export function validateDevServerFlags(args: DevServerArgs): void {
   }
   if (args.list && (args.stop || args.all)) {
     throw new ConfigError("Error: --list is mutually exclusive with --stop and --all.");
+  }
+  if (args.evict && (args.stop || args.list || args.all)) {
+    throw new ConfigError("Error: --evict cannot be combined with --stop, --list, or --all.");
   }
 }
 
@@ -195,4 +199,5 @@ const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
   stop: { type: "boolean", description: "Stop dev servers in the current worktree" },
   list: { type: "boolean", description: "List active dev-servers across all worktrees" },
   all: { type: "boolean", description: "Apply --stop to every active dev-server" },
+  evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
 };

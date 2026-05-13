@@ -82,7 +82,7 @@ The main worktree's port is implicit and never stored in the registry.
 
 Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
-A second registry, `.local/worktrees/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path).
+A second registry, `.local/worktrees/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `dev:up --evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
 
 ### Config files must be gitignored
 
@@ -188,7 +188,7 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 **Lifecycle:**
 
 1. Verifies that each server's `port` is not already in use.
-2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit).
+2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit). Pass `--evict` to stop the oldest live dev-server across all worktrees and proceed instead of aborting.
 3. Aborts if a sibling dev-server in this worktree is already running (PID file + alive check).
 4. Calls optional `config.ensureInfrastructure?.()` before any dev server. The standard Docker pattern is `docker compose up -d`; the kernel does no infrastructure I/O of its own.
 5. Iterates `config.servers`, spawning each as a detached process group with stdout/stderr to its log file and PID written to its PID file.
@@ -260,6 +260,7 @@ npm run dev:up     # Later, restart quickly
 ```sh
 npm run dev:list             # List active dev-servers across all worktrees
 npm run dev:down -- --all    # Stop every active dev-server (infrastructure stays up)
+npm run dev:up -- --evict    # If the cap is full, evict the oldest dev-server and start
 ```
 
 ### Creating a worktree without setup

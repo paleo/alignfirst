@@ -1,15 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { pruneDeadServers, type DevServerEntry } from "../src/dev-servers-registry.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-function entry(slot: number, pids: Record<string, number>): DevServerEntry {
+import {
+  evictOldest,
+  pruneDeadServers,
+  readDevServers,
+  writeDevServers,
+  type DevServerEntry,
+} from "../src/dev-servers-registry.js";
+
+function entry(
+  slot: number,
+  pids: Record<string, number>,
+  startedAt = "2026-05-10T00:00:00.000Z",
+): DevServerEntry {
   return {
     slot,
     worktree: `/tmp/wt-${slot}`,
     branch: `feat/${slot}`,
     owner: "alice",
     pids,
-    startedAt: "2026-05-10T00:00:00.000Z",
+    startedAt,
   };
 }
 
@@ -42,5 +56,58 @@ describe("pruneDeadServers", () => {
     const data = { servers: [entry(8110, { main: 2 })] };
     const round = JSON.parse(JSON.stringify(data));
     expect(pruneDeadServers(round, isAlive)).toEqual(data);
+  });
+});
+
+describe("evictOldest", () => {
+  let mainWorktree: string;
+  const isAlive = () => true;
+  const stop = async () => {};
+
+  beforeEach(() => {
+    mainWorktree = mkdtempSync(join(tmpdir(), "wt-env-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(mainWorktree, { recursive: true, force: true });
+  });
+
+  it("selects the entry with the smallest startedAt", async () => {
+    writeDevServers(mainWorktree, {
+      servers: [
+        entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
+        entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
+        entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
+      ],
+    });
+    const evicted = await evictOldest(mainWorktree, 1, { isAlive, stop });
+    expect(evicted).toHaveLength(1);
+    expect(evicted[0].slot).toBe(8110);
+  });
+
+  it("removes the victim from the registry", async () => {
+    writeDevServers(mainWorktree, {
+      servers: [
+        entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
+        entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
+      ],
+    });
+    await evictOldest(mainWorktree, 1, { isAlive, stop });
+    const remaining = readDevServers(mainWorktree).servers.map((e) => e.slot);
+    expect(remaining).toEqual([8120]);
+  });
+
+  it("removes the two oldest when count is 2", async () => {
+    writeDevServers(mainWorktree, {
+      servers: [
+        entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
+        entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
+        entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
+      ],
+    });
+    const evicted = await evictOldest(mainWorktree, 2, { isAlive, stop });
+    expect(evicted.map((e) => e.slot)).toEqual([8110, 8130]);
+    const remaining = readDevServers(mainWorktree).servers.map((e) => e.slot);
+    expect(remaining).toEqual([8120]);
   });
 });

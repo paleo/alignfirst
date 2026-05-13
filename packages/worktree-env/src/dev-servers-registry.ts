@@ -68,6 +68,32 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
   console.log(`Stopped ${data.servers.length} dev-server(s).`);
 }
 
+export interface EvictDeps {
+  isAlive?: IsAliveFn;
+  stop?: (pid: number) => Promise<void>;
+}
+
+export async function evictOldest(
+  mainWorktree: string,
+  count: number,
+  deps: EvictDeps = {},
+): Promise<DevServerEntry[]> {
+  const isAlive = deps.isAlive ?? isProcessAlive;
+  const stop = deps.stop ?? stopProcessGroup;
+  const data = pruneAndPersist(mainWorktree, isAlive);
+  const sorted = [...data.servers].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const victims = sorted.slice(0, count);
+  for (const entry of victims) {
+    for (const pid of Object.values(entry.pids)) {
+      if (isAlive(pid)) await stop(pid);
+    }
+  }
+  const victimWorktrees = new Set(victims.map((v) => v.worktree));
+  const filtered = data.servers.filter((entry) => !victimWorktrees.has(entry.worktree));
+  writeDevServers(mainWorktree, { servers: filtered });
+  return victims;
+}
+
 export function registerDevServer(mainWorktree: string, entry: DevServerEntry): void {
   const data = pruneAndPersist(mainWorktree);
   data.servers.push(entry);
