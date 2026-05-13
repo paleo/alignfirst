@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.1"
+  version: "0.6.2"
   repository: https://github.com/paleo/skills
 ---
 
@@ -14,7 +14,7 @@ metadata:
 
 This skill helps you implement a system for running multiple local development environments simultaneously using git worktrees. It is meant to be adapted to any repository, regardless of tech stack or database engine.
 
-**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, PID + process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`setupWorktreeData`, `installAndBuild`, `printSummary`, optional `teardownInfrastructure`, optional `ensureInfrastructure`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
+**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`finalizeWorktree`, `printSummary`, optional `purgeInfrastructure`, optional `devServerScript`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
@@ -121,8 +121,8 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
-3. Stops the dev server processes by scanning `<runtimeDir>/*.pid` files in the target worktree and killing each process group.
-4. Calls optional `config.teardownInfrastructure(ctx)` — this is where Docker / database teardown lives (the kernel itself is Docker-agnostic).
+3. Stops the dev server by shelling out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
+4. Calls optional `config.purgeInfrastructure(ctx)` — destructive teardown (typically `docker compose down -v` to wipe volumes). Runs after the dev-server stop.
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
 
 **CLI flags:**
@@ -152,11 +152,12 @@ Running the script with no mode flag shows help.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
 - `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
-- `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log, dev-server PID files, and dev-server logs.
+- `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs.
 - `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
 - `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `--here` retry can't import `@paleo/worktree-env`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
-- `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
+- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `--remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
+- `purgeInfrastructure(ctx)` — optional. Called by `--remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 
 ### Database provisioning
@@ -181,24 +182,39 @@ The slot port can also serve as the basis for naming: e.g., database `myapp_dev_
 
 This script starts the dev server in the background, waits for it to be ready, and returns. It's designed for AI agents that need to start a dev server, do their work, and stop it — without an interactive terminal.
 
-A "dev server" can be a single process or several cooperating processes (e.g. an API watcher plus a frontend bundler). `runDevServer(config: DevServerConfig)` handles either case via `config.servers: ServerDescriptor[]` — one entry per process — but conceptually they form one dev server.
+A "dev server" can be a single process or several cooperating processes (e.g. an API watcher plus a frontend bundler), optionally fronted by infrastructure (Docker, a database). `runDevServer(config: DevServerConfig)` handles either case via `config.servers: ServerDescriptor[]` — one entry per server — but conceptually they form one dev server.
 
-Each `ServerDescriptor` is `{ name, exec: { command, args }, port, detectSuccess, detectError? }`. PID and log paths are derived from `config.runtimeDir` + `name` (`<runtimeDir>/<name>.pid` and `<runtimeDir>/logs/<name>.log`). `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
+`ServerDescriptor` is a discriminated union on `kind`:
+
+- `kind: "spawn"` — `{ name, exec: { command, args }, port, detectSuccess, detectError? }`. The runner spawns the process with `cwd: ctx.cwd` (= `process.cwd()` at start time), writes stdout/stderr to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID in `dev-servers.json`. `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` or `helpers.readPortFromJsonFile(file, jsonPath)`.
+- `kind: "callback"` — `{ name, start(ctx), stop(ctx) }`. The user owns the lifecycle. The runner only invokes `start` (in array order) and `stop` (reverse order). No port, no log polling, no PID. `ctx: ServerContext` is `{ cwd: string }`.
+
+Servers start in array order. The typical layout is a `kind: "callback"` infra entry (Docker, DB) first, then `kind: "spawn"` app servers.
+
+#### Writing `kind: "callback"` servers
+
+The rules below are not enforceable by the type system. Read them carefully:
+
+- `start(ctx)` MUST resolve only once the resource is ready (no log polling on the runner's side).
+- Always thread `ctx.cwd` into every child-process call (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve any paths against `ctx.cwd`. Never call bare `execSync("docker compose ...")` — it picks up `process.cwd()` and breaks cross-worktree stop.
+- Do not capture paths or env values at module load. Resolve everything inside the callback from `ctx.cwd`.
+- Cross-worktree stop (`dev:down --all`, eviction) re-uses the **current process's** loaded callbacks with `ctx.cwd = <victim worktree>`. This works because git-worktrees of the same repo run the same dev-server script. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev:down` from inside that worktree finishes the cleanup. Same caveat applies to eviction.
+- Each worktree gets its own Docker stack on slot-scoped ports (host port remap; container port unchanged). `stop()` is local — no reference counting, no shared infra.
+- Registry liveness pruning is PID-based on spawn servers. If a user kills the spawn processes manually instead of running `dev:down`, the entry is pruned and callback `stop()` never fires (e.g. Docker is orphaned). Always use `dev:down`.
 
 See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
 
 **Lifecycle:**
 
-1. Verifies that each server's `port` is not already in use.
+1. Verifies that each spawn server's `port` is not already in use.
 2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit). Pass `--evict` to stop the oldest live dev-server across all worktrees and proceed instead of aborting.
-3. Aborts if a sibling dev-server in this worktree is already running (PID file + alive check).
-4. Calls optional `config.ensureInfrastructure?.()` before any dev server. The standard Docker pattern is `docker compose up -d`; the kernel does no infrastructure I/O of its own.
-5. Iterates `config.servers`, spawning each as a detached process group with stdout/stderr to its log file and PID written to its PID file.
-6. Polls each log file in parallel and asks `detectSuccess(logContent)` whether the server is ready. Fails fast when `detectError(logContent)` returns a label (e.g. matching `"[ExceptionHandler]"` or Node's `"Node.js v"` exit footer) or when the process dies, instead of waiting for the timeout.
-7. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, and exits non-zero.
-8. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
+3. Aborts if this worktree already has an entry in `dev-servers.json` whose spawn PIDs are alive. A stale entry (all PIDs dead) is dropped so the start can proceed.
+4. Iterates `config.servers` in array order. For `kind: "spawn"`: spawns a detached process group with stdout/stderr to `<runtimeDir>/logs/<name>.log` and records the PID in-memory. For `kind: "callback"`: `await server.start({ cwd: process.cwd() })`.
+5. Polls each spawn server's log in parallel and asks `detectSuccess(logContent)` whether it's ready. Fails fast when `detectError(logContent)` returns a label (e.g. matching `"[ExceptionHandler]"` or Node's `"Node.js v"` exit footer) or when the process dies, instead of waiting for the timeout.
+6. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero.
+7. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, spawn pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
 
-`dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every PID in every entry, removes per-worktree PID files, and clears the registry. Neither touches infrastructure.
+`dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
 
 **Main worktree synthesis:** the main worktree never has a row in `slots.json`. When `dev:up` (or `dev:list` / `dev:down --all`) runs there, it synthesizes an in-memory slot using `BASE_PORT`, the current branch, and no owner so the entry still flows through `dev-servers.json` and counts toward the cap.
 
@@ -206,20 +222,17 @@ A single-process dev server uses a `SERVERS` array with one entry; the script's 
 
 **Two-tier shutdown:**
 
-The `dev-server` script intentionally only manages dev server processes, not infrastructure services. This creates a clean separation:
+- **`--stop` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast.
+- **`--remove` (setup-worktree)**: Shells out to `node <devServerScript> --stop` in the target worktree (which runs the target's own `dev:down` — kills spawn PIDs and runs callback `stop()` from the target's branch), then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. Re-execing rather than calling in-process picks up extra callback servers declared on the target's branch.
 
-- **`--stop` (dev-server)**: Kills the dev server processes only. Leaves infrastructure (Docker containers, databases) running. This is the common case — the developer pauses work but may come back soon. Restarting the dev server is fast; restarting database containers is not.
-- **`--remove` (setup-worktree)**: Full cleanup — stops the dev server, stops infrastructure services, removes containers/volumes, releases the slot, and removes the worktree directory. This is for when the worktree is being torn down entirely.
-
-This separation matters because infrastructure services (databases, caches) are expensive to restart: they need to initialize, and the dev server may need to run migrations or wait for readiness. The dev server, by contrast, starts in seconds. Coupling their lifecycles wastes time on every stop/start cycle.
+Decide what each callback's `stop()` does based on the soft-stop intent: containers down, data kept. The destructive part (volumes, container removal) lives in `purgeInfrastructure`. Data initialization is the expensive part; the dev server itself starts in seconds.
 
 **Config fields to populate:**
 
 - `basePort` — required (used to synthesize the main worktree's slot).
 - `devLimit?` — optional number. The cap on concurrent dev-servers across all worktrees; omit for no limit. Hardcode a sensible value (e.g. `5`) or read it from any source you like.
-- `servers: ServerDescriptor[]` — one entry per process. `detectError` is optional; supply it to fail fast on known fatal log patterns.
-- `ensureInfrastructure?` — optional async hook to start Docker / databases before the dev server.
-- `printSummary?` — optional. Receives `{ slot, servers: [{ server, port, pid }, …] }` and returns a string to print. The kernel prints a sensible default if you omit it.
+- `servers: ServerDescriptor[]` — one entry per server. Mix `kind: "spawn"` and `kind: "callback"` entries; declare infra (Docker, DB) as a `kind: "callback"` server, typically first. `detectError` is optional on spawn entries; supply it to fail fast on known fatal log patterns.
+- `printSummary?` — optional. Receives `{ slot, servers: [{ server, port?, pid? }, …] }` (`port` and `pid` are present only on `kind: "spawn"` entries) and returns a string to print. The kernel prints a sensible default if you omit it.
 
 ## Workflow
 
@@ -250,10 +263,10 @@ npm run setup-worktree -- --remove feat/42 --no-remote-check # skip remote branc
 
 `--remove-here` prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.
 
-### Stopping the dev server (keeping infrastructure)
+### Stopping the dev server
 
 ```sh
-npm run dev:down   # Stop the dev server only — Docker containers keep running
+npm run dev:down   # Stop the spawn processes and run callback stop() (e.g. `docker compose down`)
 npm run dev:up     # Later, restart quickly
 ```
 
@@ -261,7 +274,7 @@ npm run dev:up     # Later, restart quickly
 
 ```sh
 npm run dev:list             # List active dev-servers across all worktrees
-npm run dev:down -- --all    # Stop every active dev-server (infrastructure stays up)
+npm run dev:down -- --all    # Stop every active dev-server (kills PIDs + runs callback stop() per worktree)
 npm run dev:up -- --evict    # If the cap is full, evict the oldest dev-server and start
 ```
 

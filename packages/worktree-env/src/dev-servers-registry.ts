@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import type { CallbackServer } from "./server-descriptor.js";
 
 const DEV_SERVERS_FILENAME = "dev-servers.json";
 
@@ -42,7 +43,9 @@ export function printActiveServers(active: DevServerEntry[]): void {
 export interface StopAllInput {
   mainWorktree: string;
   registryDir: string;
-  runtimeDir: string;
+  /** Callback-managed servers from the current process's config. Their `stop()` is invoked for each
+   *  victim with `ctx.cwd = entry.worktree`. */
+  callbackServers: CallbackServer[];
 }
 
 export async function stopAllRegistered(input: StopAllInput): Promise<void> {
@@ -59,42 +62,50 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
       console.log(`  ${name} (PID ${pid})`);
       await stopProcessGroup(pid);
     }
-    // `runtimeDir` is repo-wide, so each entry's PID files live at the same relative path.
-    // Server names vary per entry, hence reading them from `entry.pids` rather than caller config.
-    for (const name of Object.keys(entry.pids)) {
-      const fp = join(entry.worktree, input.runtimeDir, `${name}.pid`);
-      if (existsSync(fp)) unlinkSync(fp);
-    }
+    await stopCallbacksForVictim(input.callbackServers, entry.worktree);
   }
   writeDevServers(input.mainWorktree, input.registryDir, { servers: [] });
   console.log(`Stopped ${data.servers.length} dev-server(s).`);
 }
 
-export interface EvictDeps {
+export interface EvictInput {
+  mainWorktree: string;
+  registryDir: string;
+  count: number;
+  callbackServers: CallbackServer[];
   isAlive?: IsAliveFn;
   stop?: (pid: number) => Promise<void>;
 }
 
-export async function evictOldest(
-  mainWorktree: string,
-  registryDir: string,
-  count: number,
-  deps: EvictDeps = {},
-): Promise<DevServerEntry[]> {
-  const isAlive = deps.isAlive ?? isProcessAlive;
-  const stop = deps.stop ?? stopProcessGroup;
-  const data = pruneDeadServers(readDevServers(mainWorktree, registryDir), isAlive);
+export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> {
+  const isAlive = input.isAlive ?? isProcessAlive;
+  const stop = input.stop ?? stopProcessGroup;
+  const data = pruneDeadServers(readDevServers(input.mainWorktree, input.registryDir), isAlive);
   const sorted = [...data.servers].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const victims = sorted.slice(0, count);
+  const victims = sorted.slice(0, input.count);
   for (const entry of victims) {
     for (const pid of Object.values(entry.pids)) {
       if (isAlive(pid)) await stop(pid);
     }
+    await stopCallbacksForVictim(input.callbackServers, entry.worktree);
   }
   const victimSlots = new Set(victims.map((v) => v.slot));
   const filtered = data.servers.filter((entry) => !victimSlots.has(entry.slot));
-  writeDevServers(mainWorktree, registryDir, { servers: filtered });
+  writeDevServers(input.mainWorktree, input.registryDir, { servers: filtered });
   return victims;
+}
+
+async function stopCallbacksForVictim(
+  callbackServers: CallbackServer[],
+  worktree: string,
+): Promise<void> {
+  for (const server of [...callbackServers].reverse()) {
+    try {
+      await server.stop({ cwd: worktree });
+    } catch (err) {
+      console.error(`  Failed to stop ${server.name} (${worktree}): ${(err as Error).message}`);
+    }
+  }
 }
 
 export function registerDevServer(
@@ -133,6 +144,17 @@ export function removeDevServerEntryByWorktree(
   const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
   if (filtered.length === data.servers.length) return;
   writeDevServers(mainWorktree, registryDir, { servers: filtered });
+}
+
+/** Returns the entry whose worktree matches `worktreePath`, or `undefined`. Does not prune. */
+export function findOwnEntry(
+  mainWorktree: string,
+  registryDir: string,
+  worktreePath: string,
+): DevServerEntry | undefined {
+  const data = readDevServers(mainWorktree, registryDir);
+  const target = resolve(worktreePath);
+  return data.servers.find((entry) => resolve(entry.worktree) === target);
 }
 
 export function pruneAndPersist(

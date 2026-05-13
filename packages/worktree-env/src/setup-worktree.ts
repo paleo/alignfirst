@@ -1,11 +1,10 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
   existsSync,
   mkdirSync,
   openSync,
-  readdirSync,
   readFileSync,
   symlinkSync,
   writeFileSync,
@@ -28,13 +27,6 @@ import { removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import { copyAndPatchFile } from "./helpers.js";
 import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
-import {
-  cleanupPidFile,
-  isProcessAlive,
-  isProcessGroupAlive,
-  killProcessGroup,
-  readPid,
-} from "./process-control.js";
 import {
   handleSetOwner,
   markSlotFailed,
@@ -79,7 +71,7 @@ export interface SetupWorktreeConfig {
   sharedDirs: string[];
   /**
    * Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`).
-   * Holds the setup log, dev-server PID files, and dev-server logs.
+   * Holds the setup log and dev-server logs.
    */
   runtimeDir: string;
   /**
@@ -97,8 +89,18 @@ export interface SetupWorktreeConfig {
    * installed deps, etc.).
    */
   finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
-  /** Tears down infrastructure on `--remove` (e.g. `docker compose down -v`). Best-effort; errors should be swallowed. */
-  teardownInfrastructure?: (ctx: TeardownContext) => Promise<void> | void;
+  /**
+   * Absolute path to your dev-server script (the file that calls `runDevServer`). On `--remove`,
+   * the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
+   * Typically `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your
+   * `setup-worktree.mjs`.
+   */
+  devServerScript: string;
+  /**
+   * Destructive infrastructure teardown on `--remove` (e.g. `docker compose down -v` to wipe
+   * volumes). Runs after the dev-server stop. Best-effort; errors should be swallowed.
+   */
+  purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
   printSummary: (ctx: SummaryContext) => string;
 }
@@ -125,8 +127,8 @@ export interface SummaryContext {
   mainWorktree: string;
 }
 
-/** Context passed to {@link SetupWorktreeConfig.teardownInfrastructure}. */
-export interface TeardownContext {
+/** Context passed to {@link SetupWorktreeConfig.purgeInfrastructure}. */
+export interface PurgeContext {
   worktree: string;
   mainWorktree: string;
   verbose: boolean;
@@ -497,10 +499,10 @@ async function handleRemove(
     return;
   }
 
-  await stopAllDevServersInRuntimeDir(target.worktreePath, config.runtimeDir, verboseLog);
+  stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
 
-  if (config.teardownInfrastructure) {
-    await config.teardownInfrastructure({
+  if (config.purgeInfrastructure) {
+    await config.purgeInfrastructure({
       worktree: target.worktreePath,
       mainWorktree: ctx.mainWorktree,
       verbose: run.verbose,
@@ -664,42 +666,26 @@ function resolveRemoveTarget(
   return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
 }
 
-async function stopAllDevServersInRuntimeDir(
+/**
+ * Stops the dev-server running in the target worktree by shelling out to
+ * `node <devServerScript> --stop` with `cwd: worktreePath`. The subprocess runs the target's
+ * own stop flow — registry-based spawn-PID kill + callback `stop()` from the target's branch.
+ */
+function stopTargetDevServer(
+  devServerScript: string,
   worktreePath: string,
-  runtimeDir: string,
   log: (msg: string) => void,
-): Promise<void> {
-  const dir = join(worktreePath, runtimeDir);
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return;
-  }
-  for (const name of entries) {
-    if (!name.endsWith(".pid")) continue;
-    const pidFile = join(dir, name);
-    const pid = readPid(pidFile);
-    if (pid === undefined) continue;
-    if (!isProcessAlive(pid)) {
-      cleanupPidFile(pidFile);
-      continue;
-    }
-    log(`Stopping dev server (PID ${pid})...`);
-    killProcessGroup(pid, "SIGTERM");
-    const deadline = Date.now() + 5_000;
-    let stillAlive = true;
-    while (Date.now() < deadline) {
-      if (!isProcessGroupAlive(pid)) {
-        stillAlive = false;
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    if (stillAlive) {
-      killProcessGroup(pid, "SIGKILL");
-    }
-    cleanupPidFile(pidFile);
+): void {
+  log(`Stopping dev-server in ${worktreePath}...`);
+  const result = spawnSync(process.execPath, [devServerScript, "--stop"], {
+    cwd: worktreePath,
+    stdio: "inherit",
+    timeout: 30_000,
+  });
+  if (result.error) {
+    console.warn(`Warning: failed to run dev-server --stop: ${result.error.message}`);
+  } else if (result.status !== 0) {
+    console.warn(`Warning: dev-server --stop exited with code ${result.status}.`);
   }
 }
 

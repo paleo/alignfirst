@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 
@@ -11,18 +11,28 @@ import {
 } from "./cli.js";
 import {
   evictOldest,
+  findOwnEntry,
   listDevServers,
   printActiveServers,
   pruneAndPersist,
   registerDevServer,
+  removeDevServerEntryByWorktree,
   stopAllRegistered,
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
-import { cleanupPidFile, isProcessAlive, readPid, stopByPidFile } from "./process-control.js";
+import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import type {
+  CallbackServer,
+  ServerContext,
+  ServerDescriptor,
+  SpawnServer,
+} from "./server-descriptor.js";
 import { resolveCurrentSlot, type ResolvedSlot } from "./slots.js";
 import { detectWorktree } from "./worktree.js";
+
+export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
 /** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
@@ -38,40 +48,23 @@ export interface DevServerConfig {
   registryDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
   devLimit?: number;
-  /** One entry per process to spawn. Started in array order. */
+  /** One entry per server to start. Started in array order; stopped in reverse order. */
   servers: ServerDescriptor[];
-  /** Hook invoked once before any dev-server is spawned (e.g. `docker compose up -d`). */
-  ensureInfrastructure?: () => Promise<void> | void;
   /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
   printSummary?: (ctx: DevServerSummaryContext) => string;
-}
-
-/** Describes one process to spawn. */
-export interface ServerDescriptor {
-  /** Short label used in logs and the registry. Derives `<runtimeDir>/<name>.pid` and `<runtimeDir>/logs/<name>.log`. */
-  name: string;
-  /** Command and arguments passed to `child_process.spawn`. */
-  exec: { command: string; args: string[] };
-  /** Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile` to read it from a config file. */
-  port: number;
-  /** Returns `true` once the log content indicates the server is ready. */
-  detectSuccess: (logContent: string) => boolean;
-  /** Returns a non-empty marker string when the log content indicates a fatal error, or `false` otherwise. */
-  detectError?: (logContent: string) => string | false;
-}
-
-function pidFileFor(runtimeDir: string, name: string): string {
-  return join(runtimeDir, `${name}.pid`);
 }
 
 function logFileFor(runtimeDir: string, name: string): string {
   return join(runtimeDir, "logs", `${name}.log`);
 }
 
-/** Context passed to {@link DevServerConfig.printSummary}. */
+/**
+ * Context passed to {@link DevServerConfig.printSummary}. `port` and `pid` are present only for
+ * `kind: "spawn"` servers; callback servers expose neither.
+ */
 export interface DevServerSummaryContext {
   slot: ResolvedSlot;
-  servers: { server: ServerDescriptor; port: number; pid: number }[];
+  servers: { server: ServerDescriptor; port?: number; pid?: number }[];
 }
 
 export async function runDevServer(config: DevServerConfig): Promise<void> {
@@ -108,7 +101,7 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     await stopAllRegistered({
       mainWorktree,
       registryDir: config.registryDir,
-      runtimeDir: config.runtimeDir,
+      callbackServers: callbackServersOf(config),
     });
     return;
   }
@@ -120,74 +113,96 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
   await start(config, mainWorktree, { evict: Boolean(args.evict) });
 }
 
+function callbackServersOf(config: DevServerConfig): CallbackServer[] {
+  return config.servers.filter((s): s is CallbackServer => s.kind === "callback");
+}
+
 async function start(
   config: DevServerConfig,
   mainWorktree: string,
   { evict }: { evict: boolean },
 ): Promise<void> {
+  const ctx: ServerContext = { cwd: process.cwd() };
+
   await enforceCap(config, mainWorktree, evict);
   await checkPortsFree(config.servers);
-  checkNoLocalPidConflict(config);
+  checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
 
-  if (config.ensureInfrastructure) await config.ensureInfrastructure();
-
-  const pids: number[] = [];
-  for (const server of config.servers) {
-    console.log(`Starting ${server.name} dev server...`);
-    pids.push(spawnServer(server, config.runtimeDir));
-  }
+  const spawnPids: Record<string, number> = {};
+  const startedCallbacks: CallbackServer[] = [];
 
   try {
-    const pollables: PollableServer[] = config.servers.map((s) => ({
+    for (const server of config.servers) {
+      console.log(`Starting ${server.name} dev server...`);
+      if (server.kind === "spawn") {
+        spawnPids[server.name] = spawnServer(server, config.runtimeDir, ctx.cwd);
+      } else {
+        await server.start(ctx);
+        startedCallbacks.push(server);
+      }
+    }
+
+    const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
+    const pollables: PollableServer[] = spawnEntries.map((s) => ({
       name: s.name,
       logFile: logFileFor(config.runtimeDir, s.name),
       detectSuccess: s.detectSuccess,
       detectError: s.detectError,
     }));
-    await awaitAllReady(pollables, pids);
+    const pollPids = spawnEntries.map((s) => spawnPids[s.name]);
+    await awaitAllReady(pollables, pollPids);
   } catch (err) {
+    await rollbackStart(spawnPids, startedCallbacks, ctx);
     if (err instanceof StartupError) {
       handleStartupFailure(err);
-      console.error("\nStopping dev servers...");
-      await stopLocal(config, mainWorktree);
       process.exit(1);
     }
     throw err;
   }
 
   const slot = resolveCurrentSlot(config.basePort, config.registryDir);
-  const pidMap: Record<string, number> = {};
-  config.servers.forEach((server, i) => {
-    pidMap[server.name] = pids[i];
-  });
   registerDevServer(mainWorktree, config.registryDir, {
     slot: slot.slot,
     worktree: slot.worktree,
     branch: slot.branch,
     owner: slot.owner,
-    pids: pidMap,
+    pids: spawnPids,
     startedAt: new Date().toISOString(),
   });
 
+  const summaryServers = config.servers.map((server) => {
+    if (server.kind === "spawn") {
+      return { server, port: server.port, pid: spawnPids[server.name] };
+    }
+    return { server };
+  });
+
   if (config.printSummary) {
-    console.log(
-      config.printSummary({
-        slot,
-        servers: config.servers.map((server, i) => ({
-          server,
-          port: server.port,
-          pid: pids[i],
-        })),
-      }),
-    );
+    console.log(config.printSummary({ slot, servers: summaryServers }));
   } else {
-    defaultPrintSummary(
-      slot,
-      config.servers,
-      config.servers.map((s) => s.port),
-      pids,
-      config.runtimeDir,
-    );
+    defaultPrintSummary(slot, summaryServers, config.runtimeDir);
+  }
+}
+
+async function rollbackStart(
+  spawnPids: Record<string, number>,
+  startedCallbacks: CallbackServer[],
+  ctx: ServerContext,
+): Promise<void> {
+  console.error("\nStopping dev servers...");
+  for (const pid of Object.values(spawnPids)) {
+    try {
+      await stopProcessGroup(pid);
+    } catch (err) {
+      console.error(`  Failed to stop PID ${pid}: ${(err as Error).message}`);
+    }
+  }
+  for (const server of [...startedCallbacks].reverse()) {
+    try {
+      await server.stop(ctx);
+    } catch (err) {
+      console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
+    }
   }
 }
 
@@ -214,86 +229,110 @@ async function enforceCap(
 
   const toEvict = active.length - limit + 1;
   console.log(`Evicting ${toEvict} dev-server(s) to make room (cap ${limit}).`);
-  const evicted = await evictOldest(mainWorktree, config.registryDir, toEvict);
+  const evicted = await evictOldest({
+    mainWorktree,
+    registryDir: config.registryDir,
+    callbackServers: callbackServersOf(config),
+    count: toEvict,
+  });
   for (const entry of evicted) {
     const ownerPart = entry.owner ? `, owner=${entry.owner}` : "";
     console.log(
       `Evicted slot ${entry.slot} (branch=${entry.branch}${ownerPart}, startedAt=${entry.startedAt}).`,
     );
-    for (const name of Object.keys(entry.pids)) {
-      cleanupPidFile(join(entry.worktree, config.runtimeDir, `${name}.pid`));
-    }
   }
 }
 
 async function checkPortsFree(servers: ServerDescriptor[]): Promise<void> {
-  const busy = await Promise.all(servers.map((s) => isPortBusy(s.port)));
+  const spawnServers = servers.filter((s): s is SpawnServer => s.kind === "spawn");
+  const busy = await Promise.all(spawnServers.map((s) => isPortBusy(s.port)));
   let anyBusy = false;
   busy.forEach((b, i) => {
     if (b) {
-      console.error(`Error: Port ${servers[i].port} (${servers[i].name}) is already in use.`);
+      console.error(
+        `Error: Port ${spawnServers[i].port} (${spawnServers[i].name}) is already in use.`,
+      );
       anyBusy = true;
     }
   });
   if (anyBusy) process.exit(1);
 }
 
-function checkNoLocalPidConflict(config: DevServerConfig): void {
-  for (const server of config.servers) {
-    const pidFile = pidFileFor(config.runtimeDir, server.name);
-    const existingPid = readPid(pidFile);
-    if (existingPid !== undefined && isProcessAlive(existingPid)) {
-      console.error(`Error: ${server.name} is already running (PID ${existingPid}).`);
+function checkNoLocalRegistryConflict(
+  config: DevServerConfig,
+  mainWorktree: string,
+  cwd: string,
+): void {
+  const entry = findOwnEntry(mainWorktree, config.registryDir, cwd);
+  if (!entry) return;
+  for (const [name, pid] of Object.entries(entry.pids)) {
+    if (isProcessAlive(pid)) {
+      console.error(`Error: ${name} is already running (PID ${pid}).`);
       process.exit(1);
     }
-    cleanupPidFile(pidFile);
   }
+  // Stale entry — drop it so registration overwrites cleanly.
+  removeDevServerEntryByWorktree(mainWorktree, config.registryDir, cwd);
 }
 
 async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise<void> {
-  for (const server of config.servers) {
-    await stopByPidFile(pidFileFor(config.runtimeDir, server.name), server.name, (msg) =>
-      console.log(msg),
-    );
+  const ctx: ServerContext = { cwd: process.cwd() };
+  const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
+  if (!entry) {
+    console.log("No dev-server running in this worktree.");
+    return;
   }
-  unregisterDevServer(mainWorktree, config.registryDir, process.cwd());
+  for (const [name, pid] of Object.entries(entry.pids)) {
+    if (!isProcessAlive(pid)) continue;
+    console.log(`Stopping ${name} (PID ${pid})...`);
+    await stopProcessGroup(pid);
+  }
+  const callbacks = callbackServersOf(config);
+  for (const server of [...callbacks].reverse()) {
+    try {
+      await server.stop(ctx);
+    } catch (err) {
+      console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
+    }
+  }
+  unregisterDevServer(mainWorktree, config.registryDir, ctx.cwd);
 }
 
 function defaultPrintSummary(
   slot: ResolvedSlot,
-  servers: ServerDescriptor[],
-  ports: number[],
-  pids: number[],
+  servers: DevServerSummaryContext["servers"],
   runtimeDir: string,
 ): void {
   console.log("\nDev servers started!");
   const ownerSuffix = slot.owner ? `, owner ${slot.owner}` : "";
   console.log(`  Worktree: slot ${slot.slot}${ownerSuffix}`);
-  servers.forEach((server, i) => {
-    const url = `http://localhost:${ports[i]}/`;
-    const logPath = join(process.cwd(), logFileFor(runtimeDir, server.name));
-    console.log(`  ${server.name}: ${url}  (PID ${pids[i]})`);
-    console.log(`    log: ${logPath}`);
-  });
+  for (const { server, port, pid } of servers) {
+    if (server.kind === "spawn") {
+      const url = `http://localhost:${port}/`;
+      const logPath = join(process.cwd(), logFileFor(runtimeDir, server.name));
+      console.log(`  ${server.name}: ${url}  (PID ${pid})`);
+      console.log(`    log: ${logPath}`);
+    } else {
+      console.log(`  ${server.name}: ready`);
+    }
+  }
   console.log("");
 }
 
-function spawnServer(server: ServerDescriptor, runtimeDir: string): number {
+function spawnServer(server: SpawnServer, runtimeDir: string, cwd: string): number {
   const logFile = logFileFor(runtimeDir, server.name);
-  const pidFile = pidFileFor(runtimeDir, server.name);
   mkdirSync(dirname(logFile), { recursive: true });
-  mkdirSync(dirname(pidFile), { recursive: true });
   const logFd = openSync(logFile, "w");
   const child = spawn(server.exec.command, server.exec.args, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
+    cwd,
   });
   if (child.pid === undefined) {
     closeSync(logFd);
     console.error(`Error: failed to spawn ${server.name}.`);
     process.exit(1);
   }
-  writeFileSync(pidFile, String(child.pid));
   child.unref();
   closeSync(logFd);
   return child.pid;

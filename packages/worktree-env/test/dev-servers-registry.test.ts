@@ -11,6 +11,7 @@ import {
   writeDevServers,
   type DevServerEntry,
 } from "../src/dev-servers-registry.js";
+import type { CallbackServer } from "../src/server-descriptor.js";
 
 function entry(
   slot: number,
@@ -64,6 +65,7 @@ describe("evictOldest", () => {
   const registryDir = ".local/wt-registry";
   const isAlive = () => true;
   const stop = async () => {};
+  const callbackServers: never[] = [];
 
   beforeEach(() => {
     mainWorktree = mkdtempSync(join(tmpdir(), "wt-env-test-"));
@@ -81,7 +83,14 @@ describe("evictOldest", () => {
         entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
       ],
     });
-    const evicted = await evictOldest(mainWorktree, registryDir, 1, { isAlive, stop });
+    const evicted = await evictOldest({
+      mainWorktree,
+      registryDir,
+      count: 1,
+      callbackServers,
+      isAlive,
+      stop,
+    });
     expect(evicted).toHaveLength(1);
     expect(evicted[0].slot).toBe(8110);
   });
@@ -93,7 +102,7 @@ describe("evictOldest", () => {
         entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
       ],
     });
-    await evictOldest(mainWorktree, registryDir, 1, { isAlive, stop });
+    await evictOldest({ mainWorktree, registryDir, count: 1, callbackServers, isAlive, stop });
     const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.slot);
     expect(remaining).toEqual([8120]);
   });
@@ -106,9 +115,40 @@ describe("evictOldest", () => {
         entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
       ],
     });
-    const evicted = await evictOldest(mainWorktree, registryDir, 2, { isAlive, stop });
+    const evicted = await evictOldest({
+      mainWorktree,
+      registryDir,
+      count: 2,
+      callbackServers,
+      isAlive,
+      stop,
+    });
     expect(evicted.map((e) => e.slot)).toEqual([8110, 8130]);
     const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.slot);
     expect(remaining).toEqual([8120]);
+  });
+
+  it("invokes callback stop() with the victim's worktree", async () => {
+    writeDevServers(mainWorktree, registryDir, {
+      servers: [entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z")],
+    });
+    const seen: string[] = [];
+    const docker: CallbackServer = {
+      kind: "callback",
+      name: "docker",
+      start: async () => {},
+      stop: async (ctx) => {
+        seen.push(ctx.cwd);
+      },
+    };
+    await evictOldest({
+      mainWorktree,
+      registryDir,
+      count: 1,
+      callbackServers: [docker],
+      isAlive,
+      stop,
+    });
+    expect(seen).toEqual(["/tmp/wt-8110"]);
   });
 });

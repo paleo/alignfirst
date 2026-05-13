@@ -114,8 +114,15 @@ await runSetupWorktree({
     execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
   },
 
-  // ADAPT: Docker teardown. Called by --remove. Drop on a non-Docker stack.
-  teardownInfrastructure: ({ worktree }) => {
+  // Required. Absolute path to your dev-server script. On `--remove`, the
+  // kernel shells out to `node <devServerScript> --stop` with cwd set to the
+  // target worktree. Leave this line as-is.
+  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
+
+  // ADAPT: destructive infrastructure teardown — typically `docker compose
+  // down -v` to wipe volumes. Runs after the dev-server stop. Drop on a
+  // non-Docker stack.
+  purgeInfrastructure: ({ worktree }) => {
     try {
       execSync("docker compose down -v", { stdio: "pipe", cwd: worktree });
     } catch {

@@ -5,7 +5,7 @@ export type {
   SummaryContext,
   PatchContext,
   ConfigFileEntry,
-  TeardownContext,
+  PurgeContext,
 } from "./setup-worktree.js";
 
 export { runDevServer } from "./dev-server.js";
@@ -13,6 +13,9 @@ export type {
   DevServerConfig,
   DevServerSummaryContext,
   ServerDescriptor,
+  ServerContext,
+  SpawnServer,
+  CallbackServer,
 } from "./dev-server.js";
 
 export type { ResolvedSlot } from "./slots.js";
