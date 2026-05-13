@@ -43,7 +43,8 @@ await runSetupWorktree({
   basePort: 8100,
   portNames: ["server", "frontend", "db"],
   sharedDirs: [".local", ".plans"],
-  localWt: ".local-wt",
+  runtimeDir: ".local-wt",
+  registryDir: ".local/wt-registry",
   configFiles: [
     {
       path: ".env",
@@ -62,7 +63,7 @@ await runSetupWorktree({
 });
 ```
 
-Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<localWt>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait <slot>` — exits 0 on `READY`, 1 on `FAILED`.
+Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait` from inside the worktree (or `setup-worktree --wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
 
 `--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev:up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev:list` + `dev:down` deterministically.
 
@@ -71,7 +72,8 @@ import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100,
-  localWt: ".local-wt",
+  runtimeDir: ".local-wt",
+  registryDir: ".local/wt-registry",
   devLimit: 5,
   servers: [
     {

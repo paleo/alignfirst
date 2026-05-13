@@ -44,7 +44,12 @@ await runSetupWorktree({
 
   // Per-worktree runtime directory. The package writes the setup log,
   // pid files, and dev-server logs under here.
-  localWt: ".local-wt",
+  runtimeDir: ".local-wt",
+
+  // Shared registry directory holding `slots.json` and `dev-servers.json`.
+  // Must resolve to the same physical directory across linked worktrees —
+  // typically via a symlink listed in `sharedDirs` (e.g. `.local`).
+  registryDir: ".local/wt-registry",
 
   // ADAPT: gitignored config files copied from the main worktree and patched
   // per slot. The source is the same path in the main worktree.

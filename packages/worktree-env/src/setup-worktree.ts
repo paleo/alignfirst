@@ -27,7 +27,7 @@ import {
 import { removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import { copyAndPatchFile } from "./helpers.js";
-import { defaultComputePorts, resolvePortScheme, type PortScheme } from "./ports.js";
+import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
 import {
   cleanupPidFile,
   isProcessAlive,
@@ -37,6 +37,7 @@ import {
 } from "./process-control.js";
 import {
   handleSetOwner,
+  markSlotFailed,
   markSlotReady,
   readSlots,
   resolveAndRegisterSlot,
@@ -68,7 +69,7 @@ export interface SetupWorktreeConfig {
   basePort: number;
   /** Distance between consecutive slots. Defaults to `10`. */
   portStep?: number;
-  /** Maximum number of slots. Defaults to `9`. */
+  /** Maximum number of slots. Defaults to `19`. */
   maxSlotCount?: number;
   /** Custom port computation; takes precedence over `portNames`. */
   ports?: (slot: number) => Record<string, number>;
@@ -76,8 +77,17 @@ export interface SetupWorktreeConfig {
   portNames?: string[];
   /** Directories symlinked from the main worktree. */
   sharedDirs: string[];
-  /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
-  localWt: string;
+  /**
+   * Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`).
+   * Holds the setup log, dev-server PID files, and dev-server logs.
+   */
+  runtimeDir: string;
+  /**
+   * Shared registry directory, relative to a worktree root (e.g. `.local/wt-registry`).
+   * Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory
+   * across linked worktrees — typically via a symlink listed in `sharedDirs` (e.g. `.local`).
+   */
+  registryDir: string;
   /** Config files copied from the main worktree and patched per slot. */
   configFiles: ConfigFileEntry[];
   /**
@@ -204,7 +214,7 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
   }
 
   if (isSetOwnerMode(args)) {
-    handleSetOwnerMode(args, ctx);
+    handleSetOwnerMode(args, ctx, config);
     return;
   }
 
@@ -223,6 +233,7 @@ async function runSetup(
   validateSlotAvailability(args.slot, {
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
+    registryDir: config.registryDir,
     scheme,
   });
 
@@ -232,16 +243,18 @@ async function runSetup(
     slot: args.slot,
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
+    registryDir: config.registryDir,
     scheme,
     branch,
     requestedOwner: args.owner,
   });
   const ports = portsFn(slot);
 
-  const localWtDir = join(setupCtx.currentWorktree, config.localWt);
-  mkdirSync(localWtDir, { recursive: true });
-  const logPath = join(localWtDir, "wt-setup.log");
-  const logFd = openSync(logPath, "w");
+  const runtimeDir = join(setupCtx.currentWorktree, config.runtimeDir);
+  mkdirSync(runtimeDir, { recursive: true });
+  const logPath = join(runtimeDir, "wt-setup.log");
+  // Opened "a" so the same fd can be inherited by the detached finalize child below.
+  const logFd = openSync(logPath, "a");
   const teeLog = (message: string): void => {
     console.log(message);
     appendFileSync(logFd, `${message}\n`);
@@ -272,38 +285,33 @@ async function runSetup(
   );
 
   teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
-  teeLog(`Setup continuing in background. Tail: ${config.localWt}/wt-setup.log`);
+  teeLog(`Setup continuing in background. Tail: ${config.runtimeDir}/wt-setup.log`);
 
-  closeSync(logFd);
-
-  // Hand the detached child a fresh fd appended to the same log file; the parent's fd is closed
-  // just above so we cannot reuse it.
-  const finalizeLogFd = openSync(logPath, "a");
   const child = spawn(process.execPath, [config.scriptPath, "--__finalize", String(slot)], {
     detached: true,
-    stdio: ["ignore", finalizeLogFd, finalizeLogFd],
+    stdio: ["ignore", logFd, logFd],
     cwd: setupCtx.currentWorktree,
   });
   child.unref();
-  closeSync(finalizeLogFd);
+  closeSync(logFd);
 }
 
 async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
   const slot = Number(args.__finalize);
   const ctx = detectWorktree();
-  const logPath = join(ctx.currentWorktree, config.localWt, "wt-setup.log");
+  const logPath = join(ctx.currentWorktree, config.runtimeDir, "wt-setup.log");
   const appendLog = (message: string): void => {
     appendFileSync(logPath, `${message}\n`);
   };
 
-  const registry = readSlots(ctx.mainWorktree);
+  const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const entry = registry.slots[String(slot)];
   if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
     appendLog(`FAILED: No matching slot ${slot} for worktree ${ctx.currentWorktree}.`);
     process.exit(1);
   }
 
-  if (entry.ready && !args.force) {
+  if (entry.status === "ready" && !args.force) {
     appendLog(`READY: branch ${entry.branch} (slot ${slot}) already finalized; skipping.`);
     return;
   }
@@ -326,29 +334,33 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
 
   try {
     await config.finalizeWorktree(setupContext);
-    markSlotReady(ctx.mainWorktree, slot);
+    markSlotReady(ctx.mainWorktree, config.registryDir, slot);
     appendLog("============================================================");
     appendLog(`READY: branch ${entry.branch} (slot ${slot})`);
     appendLog("============================================================");
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
+    markSlotFailed(ctx.mainWorktree, config.registryDir, slot, message);
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
     process.exit(1);
   }
 }
 
-function resolveWaitSlot(args: SetupArgs, basePort: number): number {
+function resolveWaitSlot(args: SetupArgs, config: SetupWorktreeConfig): number {
   if (args.slot !== undefined) {
     const slot = Number(args.slot);
-    if (!Number.isFinite(slot)) {
-      console.error(`Error: --slot expects a port number; got "${args.slot}".`);
+    const scheme = resolvePortScheme(config);
+    if (!isValidPort(slot, scheme)) {
+      console.error(
+        `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${args.slot}".`,
+      );
       process.exit(1);
     }
     return slot;
   }
-  return resolveCurrentSlot(basePort).slot;
+  return resolveCurrentSlot(config.basePort, config.registryDir).slot;
 }
 
 function printWorktreeInfo(
@@ -358,17 +370,22 @@ function printWorktreeInfo(
   fallback: { branch: string; owner?: string },
 ): void {
   const ctx = detectWorktree();
-  const registry = readSlots(ctx.mainWorktree);
+  const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const entry = registry.slots[String(slot)];
   const ports = resolvePortsFn(config)(slot);
 
   const branch = entry?.branch ?? fallback.branch;
   const owner = entry?.owner ?? fallback.owner;
-  const ready = entry?.ready ?? ctx.isMainWorktree;
-  const status = ready
-    ? "ready"
-    : `not ready (tail ${join(worktreeForLog, config.localWt, "wt-setup.log")})`;
-  console.log(`Status: ${status}`);
+  // Main worktree has no slot entry by design — treat it as ready when the registry has no row.
+  const slotStatus = entry?.status ?? (ctx.isMainWorktree ? "ready" : "pending");
+  const logHint = ` (tail ${join(worktreeForLog, config.runtimeDir, "wt-setup.log")})`;
+  const display =
+    slotStatus === "ready"
+      ? "ready"
+      : slotStatus === "failed"
+        ? `failed: ${entry?.failure?.message ?? "(no message)"}${logHint}`
+        : `pending${logHint}`;
+  console.log(`Status: ${display}`);
   console.log(
     config.printSummary({
       slot,
@@ -382,49 +399,37 @@ function printWorktreeInfo(
 }
 
 function runInfo(config: SetupWorktreeConfig): void {
-  const resolved = resolveCurrentSlot(config.basePort);
+  const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
   printWorktreeInfo(config, resolved.slot, ".", { branch: resolved.branch, owner: resolved.owner });
 }
 
 async function runWait(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
   const ctx = detectWorktree();
-  const slot = resolveWaitSlot(args, config.basePort);
-  const registry = readSlots(ctx.mainWorktree);
-  const entry = registry.slots[String(slot)];
-  if (!entry) {
+  const slot = resolveWaitSlot(args, config);
+  const initial = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+  if (!initial) {
     console.error(`Error: No slot ${slot} in registry.`);
     process.exit(1);
   }
 
-  if (entry.ready) {
-    printWorktreeInfo(config, slot, entry.worktree, { branch: entry.branch, owner: entry.owner });
-    return;
-  }
-
-  const logPath = join(entry.worktree, config.localWt, "wt-setup.log");
-  let offset = 0;
   const pollMs = 500;
-  // Stream new content from wt-setup.log until we see READY: or FAILED: at line start.
+  // Poll slots.json — the finalize child writes `status` on success or failure. Tiny file, no
+  // log-tailing race.
   for (;;) {
-    if (existsSync(logPath)) {
-      const content = readFileSync(logPath, "utf-8");
-      if (content.length > offset) {
-        const fresh = content.slice(offset);
-        offset = content.length;
-        for (const line of fresh.split("\n")) {
-          if (line.startsWith("READY:")) {
-            printWorktreeInfo(config, slot, entry.worktree, {
-              branch: entry.branch,
-              owner: entry.owner,
-            });
-            return;
-          }
-          if (line.startsWith("FAILED:")) {
-            console.error(line);
-            process.exit(1);
-          }
-        }
-      }
+    const entry = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+    if (!entry) {
+      console.error(`Error: Slot ${slot} disappeared from registry.`);
+      process.exit(1);
+    }
+    if (entry.status === "ready") {
+      printWorktreeInfo(config, slot, entry.worktree, { branch: entry.branch, owner: entry.owner });
+      return;
+    }
+    if (entry.status === "failed") {
+      const logPath = join(entry.worktree, config.runtimeDir, "wt-setup.log");
+      console.error(`FAILED: ${entry.failure?.message ?? "(no message)"}`);
+      console.error(`Full log: ${logPath}`);
+      process.exit(1);
     }
     await new Promise((r) => setTimeout(r, pollMs));
   }
@@ -438,7 +443,7 @@ async function handleRemove(
 ): Promise<void> {
   const verboseLog = makeVerboseLog(run.verbose);
   const removeHere = Boolean(args["remove-here"]);
-  const registry = readSlots(ctx.mainWorktree);
+  const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const target = resolveRemoveTarget(args, ctx, registry, removeHere);
 
   if (!args["no-remote-check"]) {
@@ -452,14 +457,14 @@ async function handleRemove(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
     delete registry.slots[target.slotPort];
-    writeSlots(ctx.mainWorktree, registry);
+    writeSlots(ctx.mainWorktree, config.registryDir, registry);
     console.log(
       `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
     );
     return;
   }
 
-  await stopAllDevServersInLocalWt(target.worktreePath, config.localWt, verboseLog);
+  await stopAllDevServersInRuntimeDir(target.worktreePath, config.runtimeDir, verboseLog);
 
   if (config.teardownInfrastructure) {
     await config.teardownInfrastructure({
@@ -470,8 +475,8 @@ async function handleRemove(
   }
 
   delete registry.slots[target.slotPort];
-  writeSlots(ctx.mainWorktree, registry);
-  removeDevServerEntryByWorktree(ctx.mainWorktree, target.worktreePath);
+  writeSlots(ctx.mainWorktree, config.registryDir, registry);
+  removeDevServerEntryByWorktree(ctx.mainWorktree, config.registryDir, target.worktreePath);
 
   if (removeHere) {
     process.chdir(ctx.mainWorktree);
@@ -487,17 +492,22 @@ async function handleRemove(
   }
 }
 
-function handleSetOwnerMode(args: SetupArgs, ctx: WorktreeContext): void {
+function handleSetOwnerMode(
+  args: SetupArgs,
+  ctx: WorktreeContext,
+  config: SetupWorktreeConfig,
+): void {
   const newOwner = args["set-owner"];
   const { slotPort } = handleSetOwner({
     newOwner,
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
+    registryDir: config.registryDir,
     isMainWorktree: ctx.isMainWorktree,
   });
 
   // Propagate to dev-servers.json entries for this worktree.
-  const devServersPath = join(ctx.mainWorktree, ".local/worktrees/dev-servers.json");
+  const devServersPath = join(ctx.mainWorktree, config.registryDir, "dev-servers.json");
   if (existsSync(devServersPath)) {
     const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
       servers: { worktree: string; owner?: string }[];
@@ -620,12 +630,12 @@ function resolveRemoveTarget(
   return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
 }
 
-async function stopAllDevServersInLocalWt(
+async function stopAllDevServersInRuntimeDir(
   worktreePath: string,
-  localWt: string,
+  runtimeDir: string,
   log: (msg: string) => void,
 ): Promise<void> {
-  const dir = join(worktreePath, localWt);
+  const dir = join(worktreePath, runtimeDir);
   let entries: string[];
   try {
     entries = readdirSync(dir);

@@ -4,8 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { allPorts, isValidPort, type PortScheme } from "./ports.js";
 
-export const WORKTREES_DIR = ".local/worktrees";
-export const SLOTS_FILE = ".local/worktrees/slots.json";
+const SLOTS_FILENAME = "slots.json";
 
 export interface ResolvedSlot {
   slot: number;
@@ -14,27 +13,34 @@ export interface ResolvedSlot {
   owner?: string;
 }
 
+export type SlotStatus = "pending" | "ready" | "failed";
+
 export interface SlotEntry {
   worktree: string;
   branch: string;
   owner?: string;
   createdAt: string;
-  ready: boolean;
+  status: SlotStatus;
+  failure?: { at: string; message: string };
 }
 
 export interface SlotsRegistry {
   slots: Record<string, SlotEntry>;
 }
 
-export function readSlots(mainWorktree: string): SlotsRegistry {
-  const filePath = join(mainWorktree, SLOTS_FILE);
+export function readSlots(mainWorktree: string, registryDir: string): SlotsRegistry {
+  const filePath = join(mainWorktree, registryDir, SLOTS_FILENAME);
   if (!existsSync(filePath)) return { slots: {} };
   return JSON.parse(readFileSync(filePath, "utf-8")) as SlotsRegistry;
 }
 
-export function writeSlots(mainWorktree: string, registry: SlotsRegistry): void {
-  const filePath = join(mainWorktree, SLOTS_FILE);
-  mkdirSync(join(mainWorktree, WORKTREES_DIR), { recursive: true });
+export function writeSlots(
+  mainWorktree: string,
+  registryDir: string,
+  registry: SlotsRegistry,
+): void {
+  const filePath = join(mainWorktree, registryDir, SLOTS_FILENAME);
+  mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(registry, undefined, 2)}\n`);
 }
 
@@ -42,47 +48,66 @@ export interface RegisterSlotInput {
   slot?: string;
   currentWorktree: string;
   mainWorktree: string;
+  registryDir: string;
   scheme: PortScheme;
   branch: string;
   requestedOwner?: string;
-  ready?: boolean;
 }
 
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   port: number;
   owner: string | undefined;
 } {
-  const registry = readSlots(input.mainWorktree);
+  const registry = readSlots(input.mainWorktree, input.registryDir);
   const port = pickSlotPort(input, registry);
   const existing = registry.slots[String(port)];
   const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
-  // Preserve existing `ready` when caller omits it. `markSlotReady` is the only writer that flips
-  // it to true, so a re-run via `--here` keeps a previously finalized slot ready.
-  const ready = input.ready ?? existing?.ready ?? false;
+  // Re-runs of `--here` keep a previously finalized slot ready; otherwise reset to pending.
+  const status: SlotStatus = existing?.status === "ready" ? "ready" : "pending";
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
     branch: input.branch,
     createdAt,
-    ready,
+    status,
   };
   if (owner !== undefined) entry.owner = owner;
   registry.slots[String(port)] = entry;
-  writeSlots(input.mainWorktree, registry);
+  writeSlots(input.mainWorktree, input.registryDir, registry);
   return { port, owner };
 }
 
-export function markSlotReady(mainWorktree: string, slotPort: number): void {
-  const registry = readSlots(mainWorktree);
+export function markSlotReady(mainWorktree: string, registryDir: string, slotPort: number): void {
+  const registry = readSlots(mainWorktree, registryDir);
   const entry = registry.slots[String(slotPort)];
   if (!entry) return;
-  entry.ready = true;
-  writeSlots(mainWorktree, registry);
+  entry.status = "ready";
+  delete entry.failure;
+  writeSlots(mainWorktree, registryDir, registry);
+}
+
+export function markSlotFailed(
+  mainWorktree: string,
+  registryDir: string,
+  slotPort: number,
+  message: string,
+): void {
+  const registry = readSlots(mainWorktree, registryDir);
+  const entry = registry.slots[String(slotPort)];
+  if (!entry) return;
+  entry.status = "failed";
+  entry.failure = { at: new Date().toISOString(), message };
+  writeSlots(mainWorktree, registryDir, registry);
 }
 
 export function validateSlotAvailability(
   slotArg: string | undefined,
-  ctx: { currentWorktree: string; mainWorktree: string; scheme: PortScheme },
+  ctx: {
+    currentWorktree: string;
+    mainWorktree: string;
+    registryDir: string;
+    scheme: PortScheme;
+  },
 ): void {
   if (slotArg === undefined) return;
   const port = Number(slotArg);
@@ -90,7 +115,7 @@ export function validateSlotAvailability(
     console.error(`Error: Slot must be a valid port: ${allPorts(ctx.scheme).join(", ")}.`);
     process.exit(1);
   }
-  const registry = readSlots(ctx.mainWorktree);
+  const registry = readSlots(ctx.mainWorktree, ctx.registryDir);
   const existing = registry.slots[String(port)];
   if (existing && resolve(existing.worktree) !== resolve(ctx.currentWorktree)) {
     console.error(
@@ -100,8 +125,8 @@ export function validateSlotAvailability(
   }
 }
 
-export function resolveCurrentSlot(basePort: number): ResolvedSlot {
-  const slot = lookupSlotForCwd() ?? synthesizeMainSlot(basePort);
+export function resolveCurrentSlot(basePort: number, registryDir: string): ResolvedSlot {
+  const slot = lookupSlotForCwd(registryDir) ?? synthesizeMainSlot(basePort);
   if (!slot) {
     console.error("Error: No slot found for this worktree. Run setup-worktree first.");
     process.exit(1);
@@ -113,6 +138,7 @@ export interface SetOwnerInput {
   newOwner: string | undefined;
   currentWorktree: string;
   mainWorktree: string;
+  registryDir: string;
   isMainWorktree: boolean;
 }
 
@@ -124,7 +150,7 @@ export function handleSetOwner(input: SetOwnerInput): {
     console.error("Error: --set-owner must be run from a linked worktree.");
     process.exit(1);
   }
-  const registry = readSlots(input.mainWorktree);
+  const registry = readSlots(input.mainWorktree, input.registryDir);
   const resolvedCurrent = resolve(input.currentWorktree);
   const entry = Object.entries(registry.slots).find(
     ([, v]) => resolve(v.worktree) === resolvedCurrent,
@@ -137,12 +163,13 @@ export function handleSetOwner(input: SetOwnerInput): {
   const updated: SlotEntry = {
     worktree: slotData.worktree,
     branch: slotData.branch,
-    createdAt: slotData.createdAt ?? new Date().toISOString(),
-    ready: slotData.ready ?? false,
+    createdAt: slotData.createdAt,
+    status: slotData.status,
   };
+  if (slotData.failure) updated.failure = slotData.failure;
   if (input.newOwner !== undefined) updated.owner = input.newOwner;
   registry.slots[slotPort] = updated;
-  writeSlots(input.mainWorktree, registry);
+  writeSlots(input.mainWorktree, input.registryDir, registry);
   return { slotPort, owner: input.newOwner };
 }
 
@@ -184,10 +211,10 @@ function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
   process.exit(1);
 }
 
-function lookupSlotForCwd(): ResolvedSlot | undefined {
+function lookupSlotForCwd(registryDir: string): ResolvedSlot | undefined {
   const cwd = resolve(process.cwd());
-  // Reads slots.json relative to cwd's `.local` symlink (so works in linked worktrees too).
-  const filePath = SLOTS_FILE;
+  // Reads slots.json relative to cwd's shared-dir symlink (so works in linked worktrees too).
+  const filePath = join(registryDir, SLOTS_FILENAME);
   if (!existsSync(filePath)) return undefined;
   const registry = JSON.parse(readFileSync(filePath, "utf-8")) as SlotsRegistry;
   for (const [port, entry] of Object.entries(registry.slots)) {

@@ -25,7 +25,7 @@ The script creates the worktree in the correct sibling directory, assigns a port
 
 ### Recovery from a Failed Setup
 
-If `--create` or `--use` fails (or the background finalize step fails — check `<localWt>/wt-setup.log`), the worktree is half-created. Do not delete it. Instead:
+If `--create` or `--use` fails (or the background finalize step fails — check `<runtimeDir>/wt-setup.log`), the worktree is half-created. Do not delete it. Instead:
 
     cd <worktree>
     npm run setup-worktree -- --here
@@ -98,5 +98,5 @@ npm run dev:down                     # 4. stop when done (same directory)
 
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
-- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `worktrees/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `worktrees/dev-servers.json` (live dev-server registry).
+- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `wt/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `wt/dev-servers.json` (live dev-server registry).
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, PID files, `logs/` (dev server logs).

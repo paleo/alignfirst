@@ -3,8 +3,7 @@ import { join, resolve } from "node:path";
 
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 
-export const DEV_SERVERS_FILE = ".local/worktrees/dev-servers.json";
-export const WORKTREES_DIR = ".local/worktrees";
+const DEV_SERVERS_FILENAME = "dev-servers.json";
 
 export interface DevServerEntry {
   slot: number;
@@ -21,8 +20,8 @@ export interface DevServersData {
 
 export type IsAliveFn = (pid: number) => boolean;
 
-export function listDevServers(mainWorktree: string): void {
-  const data = pruneAndPersist(mainWorktree);
+export function listDevServers(mainWorktree: string, registryDir: string): void {
+  const data = pruneAndPersist(mainWorktree, registryDir);
   if (data.servers.length === 0) {
     console.log("No dev-servers running.");
     return;
@@ -42,11 +41,12 @@ export function printActiveServers(active: DevServerEntry[]): void {
 
 export interface StopAllInput {
   mainWorktree: string;
-  pidFiles: string[];
+  registryDir: string;
+  runtimeDir: string;
 }
 
 export async function stopAllRegistered(input: StopAllInput): Promise<void> {
-  const data = pruneAndPersist(input.mainWorktree);
+  const data = pruneAndPersist(input.mainWorktree, input.registryDir);
   if (data.servers.length === 0) {
     console.log("No dev-servers running.");
     return;
@@ -59,12 +59,14 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
       console.log(`  ${name} (PID ${pid})`);
       await stopProcessGroup(pid);
     }
-    for (const pidFile of input.pidFiles) {
-      const fp = join(entry.worktree, pidFile);
+    // `runtimeDir` is repo-wide, so each entry's PID files live at the same relative path.
+    // Server names vary per entry, hence reading them from `entry.pids` rather than caller config.
+    for (const name of Object.keys(entry.pids)) {
+      const fp = join(entry.worktree, input.runtimeDir, `${name}.pid`);
       if (existsSync(fp)) unlinkSync(fp);
     }
   }
-  writeDevServers(input.mainWorktree, { servers: [] });
+  writeDevServers(input.mainWorktree, input.registryDir, { servers: [] });
   console.log(`Stopped ${data.servers.length} dev-server(s).`);
 }
 
@@ -75,12 +77,13 @@ export interface EvictDeps {
 
 export async function evictOldest(
   mainWorktree: string,
+  registryDir: string,
   count: number,
   deps: EvictDeps = {},
 ): Promise<DevServerEntry[]> {
   const isAlive = deps.isAlive ?? isProcessAlive;
   const stop = deps.stop ?? stopProcessGroup;
-  const data = pruneAndPersist(mainWorktree, isAlive);
+  const data = pruneDeadServers(readDevServers(mainWorktree, registryDir), isAlive);
   const sorted = [...data.servers].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const victims = sorted.slice(0, count);
   for (const entry of victims) {
@@ -90,44 +93,57 @@ export async function evictOldest(
   }
   const victimSlots = new Set(victims.map((v) => v.slot));
   const filtered = data.servers.filter((entry) => !victimSlots.has(entry.slot));
-  writeDevServers(mainWorktree, { servers: filtered });
+  writeDevServers(mainWorktree, registryDir, { servers: filtered });
   return victims;
 }
 
-export function registerDevServer(mainWorktree: string, entry: DevServerEntry): void {
-  const data = pruneAndPersist(mainWorktree);
+export function registerDevServer(
+  mainWorktree: string,
+  registryDir: string,
+  entry: DevServerEntry,
+): void {
+  const data = pruneAndPersist(mainWorktree, registryDir);
   data.servers.push(entry);
-  writeDevServers(mainWorktree, data);
+  writeDevServers(mainWorktree, registryDir, data);
 }
 
-export function unregisterDevServer(mainWorktree: string, worktreePath: string): void {
-  const fp = filePath(mainWorktree);
+export function unregisterDevServer(
+  mainWorktree: string,
+  registryDir: string,
+  worktreePath: string,
+): void {
+  const fp = filePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return;
-  const data = pruneAndPersist(mainWorktree);
+  const data = pruneAndPersist(mainWorktree, registryDir);
   const target = resolve(worktreePath);
   const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
   if (filtered.length === data.servers.length) return;
-  writeDevServers(mainWorktree, { servers: filtered });
+  writeDevServers(mainWorktree, registryDir, { servers: filtered });
 }
 
-export function removeDevServerEntryByWorktree(mainWorktree: string, worktreePath: string): void {
-  const fp = filePath(mainWorktree);
+export function removeDevServerEntryByWorktree(
+  mainWorktree: string,
+  registryDir: string,
+  worktreePath: string,
+): void {
+  const fp = filePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return;
-  const data = readDevServers(mainWorktree);
+  const data = readDevServers(mainWorktree, registryDir);
   const target = resolve(worktreePath);
   const filtered = data.servers.filter((entry) => resolve(entry.worktree) !== target);
   if (filtered.length === data.servers.length) return;
-  writeDevServers(mainWorktree, { servers: filtered });
+  writeDevServers(mainWorktree, registryDir, { servers: filtered });
 }
 
 export function pruneAndPersist(
   mainWorktree: string,
+  registryDir: string,
   isAlive: IsAliveFn = isProcessAlive,
 ): DevServersData {
-  const data = readDevServers(mainWorktree);
+  const data = readDevServers(mainWorktree, registryDir);
   const pruned = pruneDeadServers(data, isAlive);
   if (pruned.servers.length !== data.servers.length) {
-    writeDevServers(mainWorktree, pruned);
+    writeDevServers(mainWorktree, registryDir, pruned);
   }
   return pruned;
 }
@@ -142,20 +158,24 @@ export function pruneDeadServers(
   return { servers: live };
 }
 
-export function readDevServers(mainWorktree: string): DevServersData {
-  const fp = filePath(mainWorktree);
+export function readDevServers(mainWorktree: string, registryDir: string): DevServersData {
+  const fp = filePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return { servers: [] };
   return JSON.parse(readFileSync(fp, "utf-8")) as DevServersData;
 }
 
-export function writeDevServers(mainWorktree: string, data: DevServersData): void {
-  const fp = filePath(mainWorktree);
-  mkdirSync(join(mainWorktree, WORKTREES_DIR), { recursive: true });
+export function writeDevServers(
+  mainWorktree: string,
+  registryDir: string,
+  data: DevServersData,
+): void {
+  const fp = filePath(mainWorktree, registryDir);
+  mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
 }
 
-function filePath(mainWorktree: string): string {
-  return join(mainWorktree, DEV_SERVERS_FILE);
+function filePath(mainWorktree: string, registryDir: string): string {
+  return join(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
 }
 
 function formatEntry(entry: DevServerEntry): string {

@@ -10,7 +10,8 @@ import { runDevServer, helpers } from "@paleo/worktree-env";
 
 await runDevServer({
   basePort: 8100, // ADAPT
-  localWt: ".local-wt", // Per-worktree runtime directory; pid/log paths derive from this + each server's name.
+  runtimeDir: ".local-wt", // Per-worktree runtime directory; pid/log paths derive from this + each server's name.
+  registryDir: ".local/wt-registry", // Shared registry dir (`slots.json`, `dev-servers.json`); reached via the `.local` symlink in linked worktrees.
   devLimit: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
   servers: [

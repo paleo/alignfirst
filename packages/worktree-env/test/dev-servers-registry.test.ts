@@ -61,6 +61,7 @@ describe("pruneDeadServers", () => {
 
 describe("evictOldest", () => {
   let mainWorktree: string;
+  const registryDir = ".local/wt-registry";
   const isAlive = () => true;
   const stop = async () => {};
 
@@ -73,41 +74,41 @@ describe("evictOldest", () => {
   });
 
   it("selects the entry with the smallest startedAt", async () => {
-    writeDevServers(mainWorktree, {
+    writeDevServers(mainWorktree, registryDir, {
       servers: [
         entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
         entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
         entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
       ],
     });
-    const evicted = await evictOldest(mainWorktree, 1, { isAlive, stop });
+    const evicted = await evictOldest(mainWorktree, registryDir, 1, { isAlive, stop });
     expect(evicted).toHaveLength(1);
     expect(evicted[0].slot).toBe(8110);
   });
 
   it("removes the victim from the registry", async () => {
-    writeDevServers(mainWorktree, {
+    writeDevServers(mainWorktree, registryDir, {
       servers: [
         entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
         entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
       ],
     });
-    await evictOldest(mainWorktree, 1, { isAlive, stop });
-    const remaining = readDevServers(mainWorktree).servers.map((e) => e.slot);
+    await evictOldest(mainWorktree, registryDir, 1, { isAlive, stop });
+    const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.slot);
     expect(remaining).toEqual([8120]);
   });
 
   it("removes the two oldest when count is 2", async () => {
-    writeDevServers(mainWorktree, {
+    writeDevServers(mainWorktree, registryDir, {
       servers: [
         entry(8120, { main: 2 }, "2026-05-10T02:00:00.000Z"),
         entry(8110, { main: 4 }, "2026-05-10T00:00:00.000Z"),
         entry(8130, { main: 6 }, "2026-05-10T01:00:00.000Z"),
       ],
     });
-    const evicted = await evictOldest(mainWorktree, 2, { isAlive, stop });
+    const evicted = await evictOldest(mainWorktree, registryDir, 2, { isAlive, stop });
     expect(evicted.map((e) => e.slot)).toEqual([8110, 8130]);
-    const remaining = readDevServers(mainWorktree).servers.map((e) => e.slot);
+    const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.slot);
     expect(remaining).toEqual([8120]);
   });
 });
