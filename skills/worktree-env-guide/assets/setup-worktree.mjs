@@ -15,7 +15,8 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 // `finalizeWorktree` and the `docker-compose.yml` configFile entry with a
 // copy from the main worktree:
 //
-//   import { cpSync } from "node:fs";
+//   import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+//   import { join } from "node:path";
 //   // inside finalizeWorktree, before install/build:
 //   const localData = join(currentWorktree, ".local-wt/data");
 //   const mainData = join(mainWorktree, ".local-wt/data");
@@ -78,17 +79,20 @@ await runSetupWorktree({
     // `docker compose up -d` is already idempotent.
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
+    let ready = false;
     while (Date.now() < deadline) {
       try {
         execSync("docker compose exec database pg_isready", {
           stdio: "pipe",
           cwd: currentWorktree,
         });
+        ready = true;
         break;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
+    if (!ready) throw new Error("Database did not become ready within 30s.");
     // `npm install` and `npm run build` are idempotent.
     execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
     execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });

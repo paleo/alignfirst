@@ -210,7 +210,7 @@ async function enforceCap(
     console.log(
       `Evicted slot ${entry.slot} (branch=${entry.branch}${ownerPart}, startedAt=${entry.startedAt}).`,
     );
-    for (const name of config.servers.map((s) => s.name)) {
+    for (const name of Object.keys(entry.pids)) {
       cleanupPidFile(join(entry.worktree, config.localWt, `${name}.pid`));
     }
   }

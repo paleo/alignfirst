@@ -208,7 +208,6 @@ async function runSetup(
     scheme,
     branch,
     requestedOwner: args.owner,
-    ready: false,
   });
   const ports = portsFn(slot);
 
@@ -250,6 +249,8 @@ async function runSetup(
 
   closeSync(logFd);
 
+  // Hand the detached child a fresh fd appended to the same log file; the parent's fd is closed
+  // just above so we cannot reuse it.
   const finalizeLogFd = openSync(logPath, "a");
   const child = spawn(process.execPath, [process.argv[1], "--__finalize", String(slot)], {
     detached: true,
@@ -263,19 +264,25 @@ async function runSetup(
 async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
   const slot = Number(args.__finalize);
   const ctx = detectWorktree();
-  const registry = readSlots(ctx.mainWorktree);
-  const entry = registry.slots[String(slot)];
-  if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
-    console.error(`Error: No matching slot ${slot} for worktree ${ctx.currentWorktree}.`);
-    process.exit(1);
-  }
-
-  const portsFn = resolvePortsFn(config);
-  const ports = portsFn(slot);
   const logPath = join(ctx.currentWorktree, config.localWt, "wt-setup.log");
   const appendLog = (message: string): void => {
     appendFileSync(logPath, `${message}\n`);
   };
+
+  const registry = readSlots(ctx.mainWorktree);
+  const entry = registry.slots[String(slot)];
+  if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
+    appendLog(`FAILED: No matching slot ${slot} for worktree ${ctx.currentWorktree}.`);
+    process.exit(1);
+  }
+
+  if (entry.ready && !args.force) {
+    appendLog(`READY: branch ${entry.branch} (slot ${slot}) already finalized; skipping.`);
+    return;
+  }
+
+  const portsFn = resolvePortsFn(config);
+  const ports = portsFn(slot);
 
   appendLog(`--- finalizing slot ${slot} at ${new Date().toISOString()} ---`);
 
@@ -286,7 +293,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     branch: entry.branch,
     owner: entry.owner,
     ports,
-    force: false,
+    force: args.force ?? false,
     verbose: false,
   };
 

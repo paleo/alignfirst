@@ -78,6 +78,7 @@ export interface SetupArgs {
   slot?: string;
   force?: boolean;
   verbose?: boolean;
+  /** @internal Set by `runSetupWorktree` when it re-spawns itself to run the finalize phase. */
   __finalize?: string;
 }
 
@@ -141,10 +142,11 @@ export function validateSetupFlags(args: SetupArgs): void {
   if (args.remove !== undefined && args["remove-here"]) {
     throw new ConfigError("Error: --remove and --remove-here are mutually exclusive.");
   }
-  if ((args.slot !== undefined || args.force) && !isSetupMode(args)) {
-    throw new ConfigError(
-      "Error: --slot and --force can only be used with --use, --create, or --here.",
-    );
+  if (args.slot !== undefined && !isSetupMode(args)) {
+    throw new ConfigError("Error: --slot can only be used with --use, --create, or --here.");
+  }
+  if (args.force && !isSetupMode(args) && !isFinalizeMode(args)) {
+    throw new ConfigError("Error: --force can only be used with --use, --create, or --here.");
   }
   if (args.owner !== undefined && !isSetupMode(args)) {
     throw new ConfigError("Error: --owner is only valid with --use, --create, or --here.");
@@ -162,7 +164,8 @@ export function validateDevServerFlags(args: DevServerArgs): void {
     throw new ConfigError("Error: --list is mutually exclusive with --stop and --all.");
   }
   if (args.evict && (args.stop || args.list || args.all)) {
-    throw new ConfigError("Error: --evict cannot be combined with --stop, --list, or --all.");
+    const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
+    throw new ConfigError(`Error: --evict cannot be combined with ${conflict}.`);
   }
 }
 

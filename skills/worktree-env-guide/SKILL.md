@@ -121,7 +121,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
-3. Stops the dev server processes by reading every PID file in `config.devServerPidFiles` and killing the process group.
+3. Stops the dev server processes by scanning `<localWt>/*.pid` files in the target worktree and killing each process group.
 4. Calls optional `config.teardownInfrastructure(ctx)` — this is where Docker / database teardown lives (the kernel itself is Docker-agnostic).
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
 
@@ -148,14 +148,12 @@ Running the script with no mode flag shows help.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
+- `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
+- `localWt: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log, dev-server PID files, and dev-server logs.
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
-- `devServerPidFiles: string[]` — one entry per PID file your dev-server writes; used by `--remove` to stop the dev server cleanly.
-- `setupWorktreeData(ctx)` — required callback. Runs after symlinks and config files. Owns per-worktree directory creation (e.g. `mkdirSync(".local-wt/...")` at the top), database / file-storage provisioning, and infrastructure startup. Must end with a working database (see "Database provisioning" below).
-- `installAndBuild(ctx)` — required callback. `npm install && npm run build`, `pip install`, `cargo build`, etc.
-- `afterDatabase(ctx)` — optional. Migrations / seeding.
+- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. Failures are logged to `<localWt>/wt-setup.log` with a `FAILED:` banner.
 - `teardownInfrastructure(ctx)` — optional. Called by `--remove`. The standard pattern is `docker compose down -v` if you use Docker.
-- `printSummary(ctx)` — required. Returns the string to print after setup completes.
-- `sharedDirs` — optional, overrides the default (`[".local", ".plans"]`).
+- `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 
 ### Database provisioning
 
@@ -181,7 +179,7 @@ This script starts the dev server in the background, waits for it to be ready, a
 
 A "dev server" can be a single process or several cooperating processes (e.g. an API watcher plus a frontend bundler). `runDevServer(config: DevServerConfig)` handles either case via `config.servers: ServerDescriptor[]` — one entry per process — but conceptually they form one dev server.
 
-Each `ServerDescriptor` is `{ name, exec: { command, args }, port, pidFile, logFile, detectSuccess, detectError? }`. `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
+Each `ServerDescriptor` is `{ name, exec: { command, args }, port, detectSuccess, detectError? }`. PID and log paths are derived from `config.localWt` + `name` (`<localWt>/<name>.pid` and `<localWt>/logs/<name>.log`). `detectSuccess(logContent) => boolean` decides when the server is ready; `detectError(logContent) => string | false` (optional) returns the matched label of a fatal log pattern, or `false` if none. `port` is the resolved port number — read it from your project's existing config file with `helpers.readPortFromEnvFile(file, varName)` for `KEY=VALUE` `.env`-style files, or `helpers.readPortFromJsonFile(file, jsonPath)` for a dotted JSON path.
 
 See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
 

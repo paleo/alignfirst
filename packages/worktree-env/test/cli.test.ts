@@ -31,7 +31,7 @@ describe("validateSetupFlags", () => {
 
   it("rejects --slot without a setup mode", () => {
     const args = parseSetupArgs(["--slot", "8110"]);
-    expect(() => validateSetupFlags(args)).toThrow(/--slot and --force/);
+    expect(() => validateSetupFlags(args)).toThrow(/--slot/);
   });
 
   it("rejects --remove + --remove-here", () => {

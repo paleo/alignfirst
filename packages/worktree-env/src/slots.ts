@@ -57,6 +57,8 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const existing = registry.slots[String(port)];
   const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
+  // Preserve existing `ready` when caller omits it. `markSlotReady` is the only writer that flips
+  // it to true, so a re-run via `--here` keeps a previously finalized slot ready.
   const ready = input.ready ?? existing?.ready ?? false;
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
@@ -135,8 +137,8 @@ export function handleSetOwner(input: SetOwnerInput): {
   const updated: SlotEntry = {
     worktree: slotData.worktree,
     branch: slotData.branch,
-    createdAt: slotData.createdAt,
-    ready: slotData.ready,
+    createdAt: slotData.createdAt ?? new Date().toISOString(),
+    ready: slotData.ready ?? false,
   };
   if (input.newOwner !== undefined) updated.owner = input.newOwner;
   registry.slots[slotPort] = updated;
