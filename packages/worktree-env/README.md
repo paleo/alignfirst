@@ -58,6 +58,11 @@ await runSetupWorktree({
         }),
     },
   ],
+  preSetup: ({ currentWorktree, isMainWorktree, log }) => {
+    // Idempotent. Bootstrap source files the kernel expects to find (e.g. seed `.env` from
+    // `.env.example` on the main worktree). MUST NOT mutate the main worktree from a linked
+    // worktree setup — bootstrap the main first via `setup-worktree --here`.
+  },
   finalizeWorktree: async ({ currentWorktree }) => {
     // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
@@ -67,6 +72,8 @@ await runSetupWorktree({
 ```
 
 Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait` from inside the worktree (or `setup-worktree --wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
+
+**Bootstrap the main worktree first.** Linked-worktree setup copies config sources from the main worktree, so the main must already have those files. Run `setup-worktree --here` once on the main checkout. Use `preSetup` (with `isMainWorktree === true`) to seed sources from examples or templates. `configFiles` entries are required by default; mark `optional: true` for sources that may legitimately be missing.
 
 `--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev:up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev:list` + `dev:down` deterministically.
 

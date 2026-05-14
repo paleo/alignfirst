@@ -21,6 +21,7 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
+import { detectCommonJsError } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import type {
@@ -147,7 +148,7 @@ async function start(
       name: s.name,
       logFile: logFileFor(config.runtimeDir, s.name),
       detectSuccess: s.detectSuccess,
-      detectError: s.detectError,
+      detectError: s.detectError ?? detectCommonJsError,
     }));
     const pollPids = spawnEntries.map((s) => spawnPids[s.name]);
     await awaitAllReady(pollables, pollPids);

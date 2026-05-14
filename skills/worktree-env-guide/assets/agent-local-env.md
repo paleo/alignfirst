@@ -29,6 +29,8 @@ The foreground command creates the worktree, assigns a port slot, sets up symlin
 npm run setup-worktree -- --wait --slot 8110  # block until ready (exit 0) or failed (exit 1)
 ```
 
+**Main worktree:** From a fresh clone, run `npm run setup-worktree -- --here` once on the main worktree. The main worktree must be bootstrapped before creating linked worktrees.
+
 ### Recovery from a Failed Setup
 
 If the background finalize fails (check `<runtimeDir>/wt-setup.log`), do **not** delete the worktree. From inside it:

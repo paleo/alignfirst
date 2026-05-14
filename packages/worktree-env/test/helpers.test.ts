@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractHost, patchEnvFile } from "../src/helpers.js";
+import { detectCommonJsError, extractHost, patchEnvFile } from "../src/helpers.js";
 
 describe("patchEnvFile", () => {
   it("replaces an existing line in place", () => {
@@ -42,5 +42,39 @@ describe("extractHost", () => {
 
   it("uses custom fallback", () => {
     expect(extractHost("", "API_URL", "fallback.example")).toBe("fallback.example");
+  });
+});
+
+describe("detectCommonJsError", () => {
+  it("matches nodemon crash", () => {
+    expect(detectCommonJsError("foo\n[nodemon] app crashed - waiting\n")).toBe(
+      "[nodemon] app crashed",
+    );
+  });
+
+  it("matches Node.js footer at line start", () => {
+    expect(detectCommonJsError("Error: bad\n    at x\nNode.js v24.11.1\n")).toBe("Node.js v");
+  });
+
+  it("does not match Node.js v inside another line", () => {
+    expect(detectCommonJsError("Running on Node.js v24 (info)")).toBe(false);
+  });
+
+  it("matches Cannot find module", () => {
+    expect(detectCommonJsError("Error: Cannot find module 'foo'")).toBe(
+      "Error: Cannot find module",
+    );
+  });
+
+  it("matches SyntaxError at line start", () => {
+    expect(detectCommonJsError("...\nSyntaxError: Unexpected token\n")).toBe("SyntaxError");
+  });
+
+  it("matches UnhandledPromiseRejection", () => {
+    expect(detectCommonJsError("UnhandledPromiseRejection: blah")).toBe("UnhandledPromiseRejection");
+  });
+
+  it("returns false on clean startup log", () => {
+    expect(detectCommonJsError("Server ready on port 3000\n")).toBe(false);
   });
 });

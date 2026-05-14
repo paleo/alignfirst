@@ -75,7 +75,7 @@ export function copyAndPatchFile(
   patchFn: (content: string) => string,
   label: string,
   force: boolean,
-  required = false,
+  optional = false,
 ): void {
   const targetPath = join(ctx.currentWorktree, relPath);
   const sourcePath = join(ctx.mainWorktree, relPath);
@@ -87,11 +87,14 @@ export function copyAndPatchFile(
   }
 
   if (!existsSync(sourcePath)) {
-    if (required) {
-      console.error(`Error: ${relPath} not found in main worktree (required).`);
+    if (!optional) {
+      console.error(
+        `Error: ${relPath} not found in main worktree. Bootstrap the main worktree first ` +
+          "(setup-worktree --here), or mark the entry as optional.",
+      );
       process.exit(1);
     }
-    ctx.log(`Warning: ${relPath} not found in main worktree, skipping.`);
+    ctx.log(`Warning: ${relPath} not found in main worktree, skipping (optional).`);
     return;
   }
 
@@ -100,6 +103,21 @@ export function copyAndPatchFile(
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
   ctx.log(`${alreadyExists ? "Overwritten" : "Created"} ${label}.`);
+}
+
+/**
+ * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
+ * naming the matched pattern, or `false` when none match. Used as the default `detectError`
+ * for spawn servers that don't supply one. A custom `detectError` can compose with this:
+ * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
+ */
+export function detectCommonJsError(log: string): string | false {
+  if (log.includes("[nodemon] app crashed")) return "[nodemon] app crashed";
+  if (/^Node\.js v/m.test(log)) return "Node.js v";
+  if (log.includes("Error: Cannot find module ")) return "Error: Cannot find module";
+  if (/^SyntaxError: /m.test(log)) return "SyntaxError";
+  if (log.includes("UnhandledPromiseRejection")) return "UnhandledPromiseRejection";
+  return false;
 }
 
 function toPort(raw: string, file: string): number {

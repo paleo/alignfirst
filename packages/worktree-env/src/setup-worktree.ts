@@ -91,6 +91,13 @@ export interface SetupWorktreeConfig {
   /** Config files copied from the main worktree and patched per slot. */
   configFiles: ConfigFileEntry[];
   /**
+   * Runs before `configFiles` are copied. Use this to bootstrap source files the kernel expects
+   * to find (e.g. seed `config.json` from `config.example.json` on the main worktree, decrypt
+   * an env file). MUST be idempotent. On a linked-worktree setup, MUST NOT mutate the main
+   * worktree — bootstrap the main worktree first via `setup-worktree --here`.
+   */
+  preSetup?: (ctx: PreSetupContext) => Promise<void> | void;
+  /**
    * MUST be idempotent. After a failure, the user re-runs `setup-worktree --here` from inside
    * the worktree — this callback will be invoked again with the same context. Re-runs must not
    * error on pre-existing state (created directories, started containers, ran migrations,
@@ -111,6 +118,18 @@ export interface SetupWorktreeConfig {
    * deduplication (`-2`, `-3`…) when the resulting directory already exists.
    */
   worktreeDirName?: WorktreeDirNameFn;
+}
+
+/** Context passed to {@link SetupWorktreeConfig.preSetup}. */
+export interface PreSetupContext {
+  currentWorktree: string;
+  mainWorktree: string;
+  /** `true` when running on the main worktree (i.e. `--here` from the main checkout). */
+  isMainWorktree: boolean;
+  /** Mirrors `--force`. Hooks may use it to overwrite previously bootstrapped files. */
+  force: boolean;
+  /** Writes to stdout and the setup log. */
+  log: (msg: string) => void;
 }
 
 /** Context passed to {@link SetupWorktreeConfig.finalizeWorktree}. */
@@ -152,8 +171,12 @@ export interface ConfigFileEntry {
   path: string;
   /** Returns the patched content given the source content and the slot's ports. */
   patch: (content: string, ctx: PatchContext) => string;
-  /** When `true`, abort if the source file is missing in the main worktree. Defaults to `false`. */
-  required?: boolean;
+  /**
+   * When `true`, a missing source on the main worktree logs a warning and skips the entry.
+   * Default: required (missing source aborts setup). Bootstrap the main worktree first via
+   * `setup-worktree --here`, or seed sources in `preSetup`.
+   */
+  optional?: boolean;
 }
 
 /** Context passed to {@link ConfigFileEntry.patch}. */
@@ -290,6 +313,16 @@ async function runSetup(
       .map(([k, v]) => `${k}: ${v}`)
       .join(", ")})`,
   );
+
+  if (config.preSetup) {
+    await config.preSetup({
+      currentWorktree: setupCtx.currentWorktree,
+      mainWorktree: setupCtx.mainWorktree,
+      isMainWorktree: setupCtx.isMainWorktree,
+      force: args.force ?? false,
+      log: teeLog,
+    });
+  }
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
   generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, verboseLog);
@@ -636,7 +669,7 @@ function generateConfigFiles(
         }),
       entry.path,
       force,
-      entry.required ?? false,
+      entry.optional ?? false,
     );
   }
 }
