@@ -23,16 +23,36 @@ npm run setup-worktree -- --here              # set up the current worktree (ide
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
      Document any project-specific ports or URLs the developer should know about. -->
 
-The script creates the worktree in the correct sibling directory, assigns a port slot, installs dependencies, builds, generates config files, and provisions the database.
+The foreground command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream progress to `<runtimeDir>/wt-setup.log`, ending with a `READY:` or `FAILED:` banner.
+
+```sh
+npm run setup-worktree -- --wait --slot 8110  # block until ready (exit 0) or failed (exit 1)
+```
 
 ### Recovery from a Failed Setup
 
-If `--create` or `--use` fails (or the background finalize step fails — check `<runtimeDir>/wt-setup.log`), the worktree is half-created. Do not delete it. Instead:
+If the background finalize fails (check `<runtimeDir>/wt-setup.log`), do **not** delete the worktree. From inside it:
 
-    cd <worktree>
-    npm run setup-worktree -- --here
+```sh
+npm run setup-worktree -- --here --wait    # retry the finalize step
+```
 
-`--here` is idempotent and will retry the finalize step. Repeat until the log ends with `READY: ...`.
+- `--here` is idempotent. Repeat until the log ends with `READY: ...`.
+- `--wait` blocks until READY or FAILED.
+
+**Edge case** — if `--here` errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@paleo/worktree-env'`, the worktree never got `node_modules/` because finalize failed before the dependency install. Fall back to the main worktree's wrapper:
+
+```sh
+cd <failed-worktree>
+node <main-worktree>/scripts/local-env/setup-worktree.mjs --here
+```
+
+### Take over an Existing Worktree
+
+```sh
+npm run setup-worktree -- --info  # print the current worktree's summary (ports, branch, readiness)
+npm run setup-worktree -- --info --slot 8110  # same, for another worktree
+```
 
 ### Slot Owner
 
@@ -68,10 +88,11 @@ When the user only wants a worktree (no ports, no build, no config), use `git wo
 `npm run dev:up` starts the dev server in the background with logs redirected to a file, and returns once the server is ready.
 
 ```sh
-npm run dev:up           # Start in background
-npm run dev:down         # Stop the background server
-npm run dev:list         # List active dev-servers across all worktrees
-npm run dev:down -- --all # Stop every active dev-server
+npm run dev:up             # Start in background
+npm run dev:down           # Stop the background server (this worktree only)
+npm run dev:list           # List active dev-servers across all worktrees
+npm run dev:down -- --all  # Stop every active dev-server
+npm run dev:up -- --evict  # If the cap is full, stop the oldest dev-server and start
 ```
 
 <!-- ADAPT: Document where the logs are stored (e.g., .local-wt/logs/).

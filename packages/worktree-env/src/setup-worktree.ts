@@ -47,6 +47,7 @@ import {
   useExistingBranch,
   verifyBranchAbsentFromRemote,
   type WorktreeContext,
+  type WorktreeDirNameFn,
 } from "./worktree.js";
 
 /** Configuration accepted by {@link runSetupWorktree}. */
@@ -57,6 +58,13 @@ export interface SetupWorktreeConfig {
    * — typically `fileURLToPath(import.meta.url)` from your `setup-worktree.mjs`.
    */
   scriptPath: string;
+  /**
+   * Absolute path to your dev-server script (the file that calls `runDevServer`). On `--remove`,
+   * the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
+   * Typically `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your
+   * `setup-worktree.mjs`.
+   */
+  devServerScript: string;
   /** Anchor port for the slot range. Slots are derived from this value. */
   basePort: number;
   /** Distance between consecutive slots. Defaults to `10`. */
@@ -90,19 +98,19 @@ export interface SetupWorktreeConfig {
    */
   finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
   /**
-   * Absolute path to your dev-server script (the file that calls `runDevServer`). On `--remove`,
-   * the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
-   * Typically `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your
-   * `setup-worktree.mjs`.
-   */
-  devServerScript: string;
-  /**
    * Destructive infrastructure teardown on `--remove` (e.g. `docker compose down -v` to wipe
    * volumes). Runs after the dev-server stop. Best-effort; errors should be swallowed.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
   printSummary: (ctx: SummaryContext) => string;
+  /**
+   * Optional override for the worktree directory basename. Receives `{ branch, repoName }` and
+   * returns the basename (e.g. `myrepo-feat-ABC-123`). Defaults to {@link defaultWorktreeDirName},
+   * which strips a recognizable ticket suffix and caps the slug at 22 chars. The kernel handles
+   * deduplication (`-2`, `-3`…) when the resulting directory already exists.
+   */
+  worktreeDirName?: WorktreeDirNameFn;
 }
 
 /** Context passed to {@link SetupWorktreeConfig.finalizeWorktree}. */
@@ -247,7 +255,7 @@ async function runSetup(
     scheme,
   });
 
-  const setupCtx = ensureWorktree(args, ctx, run);
+  const setupCtx = ensureWorktree(args, ctx, run, config.worktreeDirName);
   const branch = getCurrentBranch(setupCtx.currentWorktree);
   const { port: slot, owner } = resolveAndRegisterSlot({
     slot: args.slot,
@@ -299,6 +307,7 @@ async function runSetup(
 
   teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   teeLog(`Setup continuing in background. Tail: ${logPath}`);
+  teeLog(`Block until ready: setup-worktree --wait --slot ${slot}`);
 
   const child = spawn(process.execPath, [config.scriptPath, "--__finalize", String(slot)], {
     detached: true,
@@ -575,9 +584,14 @@ function handleSetOwnerMode(
   console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
 }
 
-function ensureWorktree(args: SetupArgs, ctx: WorktreeContext, run: RunCtx): WorktreeContext {
-  if (args.use) return useExistingBranch(args.use, ctx, run);
-  if (args.create) return createBranch(args.create, ctx, run);
+function ensureWorktree(
+  args: SetupArgs,
+  ctx: WorktreeContext,
+  run: RunCtx,
+  dirNameFn: WorktreeDirNameFn | undefined,
+): WorktreeContext {
+  if (args.use) return useExistingBranch(args.use, ctx, run, dirNameFn);
+  if (args.create) return createBranch(args.create, ctx, run, dirNameFn);
   return ctx;
 }
 

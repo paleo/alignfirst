@@ -3,16 +3,16 @@ import { ConfigError } from "./errors.js";
 
 const SETUP_OPTIONS: Record<string, OptionDef> = {
   help: { type: "boolean", short: "h", description: "Show this help message" },
-  use: {
-    type: "string",
-    arg: "branch",
-    description: "Create a worktree for an existing branch, then set up the local environment",
-  },
   create: {
     type: "string",
     arg: "branch",
     description:
       "Create a new branch + worktree, then set up the local environment. If the branch already exists, appends a numeric suffix (-2, -3, ...)",
+  },
+  use: {
+    type: "string",
+    arg: "branch",
+    description: "Create a worktree for an existing branch, then set up the local environment",
   },
   here: {
     type: "boolean",

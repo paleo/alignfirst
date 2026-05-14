@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.2"
+  version: "0.6.3"
   repository: https://github.com/paleo/skills
 ---
 
@@ -107,7 +107,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 
 **Lifecycle for setup (with `--use` or `--create`):**
 
-1. **Creates the worktree.** Path computed automatically (`../<reponame>-<sanitized-branch>`). With `--create`, branch-name dedup (appends `-2`, `-3`...) when the name is taken.
+1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `--create`, branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
 4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
@@ -146,6 +146,7 @@ Running the script with no mode flag shows help.
 **Config fields to populate:**
 
 - `scriptPath: string` — required. Absolute path to your wrapper script. Pass `fileURLToPath(import.meta.url)`. The package re-spawns this script for the detached finalize phase.
+- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `--remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
@@ -154,9 +155,9 @@ Running the script with no mode flag shows help.
 - `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
 - `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `--here` retry can't import `@paleo/worktree-env`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
-- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `--remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
 - `purgeInfrastructure(ctx)` — optional. Called by `--remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
+- `worktreeDirName?({ branch, repoName })` — optional. Returns the worktree directory basename (e.g. `myrepo-feat-ABC-123`). Defaults to `defaultWorktreeDirName`, which strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. The kernel handles dedup (`-2`, `-3`…) when the resulting directory already exists, so the override should stay pure.
 
 ### Database provisioning
 

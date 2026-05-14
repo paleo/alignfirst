@@ -1,4 +1,6 @@
 export { runSetupWorktree } from "./setup-worktree.js";
+export { defaultWorktreeDirName } from "./worktree.js";
+export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   SetupWorktreeConfig,
   SetupContext,

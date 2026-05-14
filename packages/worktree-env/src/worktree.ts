@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 export interface WorktreeContext {
@@ -48,12 +49,13 @@ export function useExistingBranch(
   branch: string,
   ctx: WorktreeContext,
   run: RunCtx,
+  dirNameFn: WorktreeDirNameFn = defaultWorktreeDirName,
 ): WorktreeContext {
   if (!branchExists(branch)) {
     console.error(`Error: Branch "${branch}" does not exist locally or on the remote.`);
     process.exit(1);
   }
-  const worktreePath = computeWorktreePath(ctx.mainWorktree, branch);
+  const worktreePath = dedupeWorktreePath(computeWorktreePath(ctx.mainWorktree, branch, dirNameFn));
   execFileSync("git", ["worktree", "add", worktreePath, branch], { stdio: stdioFor(run) });
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
@@ -62,6 +64,7 @@ export function createBranch(
   requestedBranch: string,
   ctx: WorktreeContext,
   run: RunCtx,
+  dirNameFn: WorktreeDirNameFn = defaultWorktreeDirName,
 ): WorktreeContext {
   let finalBranch = requestedBranch;
   if (branchExists(finalBranch)) {
@@ -74,7 +77,9 @@ export function createBranch(
       `Warning: Branch "${requestedBranch}" already exists; using "${finalBranch}" instead.`,
     );
   }
-  const worktreePath = computeWorktreePath(ctx.mainWorktree, finalBranch);
+  const worktreePath = dedupeWorktreePath(
+    computeWorktreePath(ctx.mainWorktree, finalBranch, dirNameFn),
+  );
   execFileSync("git", ["worktree", "add", "-b", finalBranch, worktreePath], {
     stdio: stdioFor(run),
   });
@@ -105,10 +110,48 @@ export function removeWorktree(worktreePath: string, run: RunCtx): void {
   execFileSync("git", ["worktree", "remove", "--force", worktreePath], { stdio: stdioFor(run) });
 }
 
-export function computeWorktreePath(mainWorktree: string, branch: string): string {
+/** Pure function that produces the basename of a worktree directory from a branch. */
+export type WorktreeDirNameFn = (opts: { branch: string; repoName: string }) => string;
+
+/**
+ * Default {@link WorktreeDirNameFn}. Strips a recognizable ticket suffix from the last branch
+ * segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps the result at 22 chars, and strips
+ * trailing dashes. Falls back to the full sanitized branch when no ticket pattern is found.
+ */
+export const defaultWorktreeDirName: WorktreeDirNameFn = ({ branch, repoName }) => {
+  return `${repoName}-${shortenBranchSegment(branch)}`;
+};
+
+function shortenBranchSegment(branch: string): string {
+  const parts = branch.split("/");
+  const last = parts[parts.length - 1] ?? "";
+  const match = last.match(/^([A-Za-z]+-\d+|\d+)/);
+  if (match) {
+    parts[parts.length - 1] = match[1];
+  }
+  let result = parts.join("-");
+  if (result.length > 22) {
+    result = result.slice(0, 22);
+  }
+  return result.replace(/-+$/, "");
+}
+
+export function computeWorktreePath(
+  mainWorktree: string,
+  branch: string,
+  dirNameFn: WorktreeDirNameFn = defaultWorktreeDirName,
+): string {
   const repoName = basename(mainWorktree);
-  const sanitized = branch.replaceAll("/", "-");
-  return join(dirname(mainWorktree), `${repoName}-${sanitized}`);
+  return join(dirname(mainWorktree), dirNameFn({ branch, repoName }));
+}
+
+function dedupeWorktreePath(candidate: string): string {
+  if (!existsSync(candidate)) return candidate;
+  let suffix = 2;
+  while (existsSync(`${candidate}-${suffix}`)) {
+    ++suffix;
+  }
+  return `${candidate}-${suffix}`;
 }
 
 function branchExists(branch: string): boolean {

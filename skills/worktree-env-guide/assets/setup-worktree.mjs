@@ -31,6 +31,11 @@ await runSetupWorktree({
   // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
   scriptPath: fileURLToPath(import.meta.url),
 
+  // Required. Absolute path to your dev-server script. On `--remove`, the
+  // kernel shells out to `node <devServerScript> --stop` with cwd set to the
+  // target worktree. Leave this line as-is.
+  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
+
   // ADAPT: anchor port for the slot range. 8100 is the safe default.
   basePort: 8100,
 
@@ -113,11 +118,6 @@ await runSetupWorktree({
     execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
     execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
   },
-
-  // Required. Absolute path to your dev-server script. On `--remove`, the
-  // kernel shells out to `node <devServerScript> --stop` with cwd set to the
-  // target worktree. Leave this line as-is.
-  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
 
   // ADAPT: destructive infrastructure teardown — typically `docker compose
   // down -v` to wipe volumes. Runs after the dev-server stop. Drop on a
