@@ -282,6 +282,7 @@ async function runSetup(
   });
 
   const setupCtx = ensureWorktree(args, ctx, run, config.worktreeDirName);
+  refuseIfFinalizePending(setupCtx, config.registryDir, args.force ?? false);
   const branch = getCurrentBranch(setupCtx.currentWorktree);
   const { port: slot, owner } = resolveAndRegisterSlot({
     slot: args.slot,
@@ -291,6 +292,7 @@ async function runSetup(
     scheme,
     branch,
     requestedOwner: args.owner,
+    isMainWorktree: setupCtx.isMainWorktree,
   });
   const ports = portsFn(slot);
 
@@ -353,6 +355,27 @@ async function runSetup(
   child.unref();
   closeSync(logFd);
   return { slot };
+}
+
+function refuseIfFinalizePending(
+  ctx: WorktreeContext,
+  registryDir: string,
+  force: boolean,
+): void {
+  if (force) return;
+  const registry = readSlots(ctx.mainWorktree, registryDir);
+  const resolvedCurrent = resolve(ctx.currentWorktree);
+  const found = Object.entries(registry.slots).find(
+    ([, e]) => resolve(e.worktree) === resolvedCurrent && e.status === "pending",
+  );
+  if (!found) return;
+  const [slotPort] = found;
+  console.error(
+    `Error: Setup is already in progress for slot ${slotPort}. ` +
+      `Run 'setup-worktree --wait --slot ${slotPort}' to wait for it to finish (or fail), ` +
+      "then retry. Use --force to bypass.",
+  );
+  process.exit(1);
 }
 
 async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
@@ -435,8 +458,7 @@ function printWorktreeInfo(
 
   const branch = entry?.branch ?? fallback.branch;
   const owner = entry?.owner ?? fallback.owner;
-  // Main worktree has no slot entry by design — treat it as ready when the registry has no row.
-  const slotStatus = entry?.status ?? (ctx.isMainWorktree ? "ready" : "pending");
+  const slotStatus = entry?.status ?? "pending";
   const logHint = ` (tail ${join(worktreeForLog, config.runtimeDir, "wt-setup.log")})`;
   const display =
     slotStatus === "ready"

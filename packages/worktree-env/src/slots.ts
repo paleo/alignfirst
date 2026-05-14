@@ -52,6 +52,8 @@ export interface RegisterSlotInput {
   scheme: PortScheme;
   branch: string;
   requestedOwner?: string;
+  /** When `true`, the slot is forced to `scheme.basePort` regardless of `slot` arg. */
+  isMainWorktree: boolean;
 }
 
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
@@ -178,10 +180,13 @@ interface PickSlotArgs {
   currentWorktree: string;
   mainWorktree: string;
   scheme: PortScheme;
+  isMainWorktree: boolean;
 }
 
 function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
   const resolvedCurrent = resolve(args.currentWorktree);
+
+  if (args.isMainWorktree) return args.scheme.basePort;
 
   if (args.slot !== undefined) {
     const port = Number(args.slot);

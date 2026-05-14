@@ -35,14 +35,8 @@ export function enforceWorktreeMode(
       console.error("Error: --use and --create must be run from the main worktree.");
       process.exit(1);
     }
-  } else if (args.here) {
-    if (ctx.isMainWorktree) {
-      console.error(
-        "Error: --here must be run from a linked worktree, not from the main worktree.",
-      );
-      process.exit(1);
-    }
   }
+  // --here runs in any worktree: linked worktree (retry path) or main (initial bootstrap).
 }
 
 export function useExistingBranch(
