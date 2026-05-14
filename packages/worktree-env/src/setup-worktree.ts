@@ -357,11 +357,7 @@ async function runSetup(
   return { slot };
 }
 
-function refuseIfFinalizePending(
-  ctx: WorktreeContext,
-  registryDir: string,
-  force: boolean,
-): void {
+function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, force: boolean): void {
   if (force) return;
   const registry = readSlots(ctx.mainWorktree, registryDir);
   const resolvedCurrent = resolve(ctx.currentWorktree);
