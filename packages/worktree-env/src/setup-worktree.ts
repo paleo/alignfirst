@@ -261,7 +261,7 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
   const { slot } = await runSetup(args, ctx, run, config);
 
   if (isWaitMode(args)) {
-    await waitForSlot(slot, config);
+    await waitForSlot(slot, config, { printSummary: false });
   }
 }
 
@@ -492,11 +492,17 @@ function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
 }
 
 async function runWait(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
+  // standalone --wait (no prior setup in this invocation) → print the full summary on success.
   const slot = resolveTargetSlot(args, config);
   await waitForSlot(slot, config);
 }
 
-async function waitForSlot(slot: number, config: SetupWorktreeConfig): Promise<void> {
+async function waitForSlot(
+  slot: number,
+  config: SetupWorktreeConfig,
+  options: { printSummary?: boolean } = {},
+): Promise<void> {
+  const printSummary = options.printSummary ?? true;
   const ctx = detectWorktree();
   const initial = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
   if (!initial) {
@@ -514,7 +520,14 @@ async function waitForSlot(slot: number, config: SetupWorktreeConfig): Promise<v
       process.exit(1);
     }
     if (entry.status === "ready") {
-      printWorktreeInfo(config, slot, entry.worktree, { branch: entry.branch, owner: entry.owner });
+      if (printSummary) {
+        printWorktreeInfo(config, slot, entry.worktree, {
+          branch: entry.branch,
+          owner: entry.owner,
+        });
+      } else {
+        console.log("Status: ready");
+      }
       return;
     }
     if (entry.status === "failed") {
