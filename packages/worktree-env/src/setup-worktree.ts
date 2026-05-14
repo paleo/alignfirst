@@ -139,6 +139,8 @@ export interface PreSetupContext {
 export interface SetupContext {
   currentWorktree: string;
   mainWorktree: string;
+  /** `true` when finalizing the main worktree. Gate "copy from main" steps with `!isMainWorktree`. */
+  isMainWorktree: boolean;
   slot: number;
   branch: string;
   owner?: string;
@@ -402,6 +404,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
   const setupContext: SetupContext = {
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
+    isMainWorktree: ctx.isMainWorktree,
     slot,
     branch: entry.branch,
     owner: entry.owner,
@@ -520,13 +523,12 @@ async function waitForSlot(
       process.exit(1);
     }
     if (entry.status === "ready") {
+      console.log("\n… ready");
       if (printSummary) {
         printWorktreeInfo(config, slot, entry.worktree, {
           branch: entry.branch,
           owner: entry.owner,
         });
-      } else {
-        console.log("\nStatus: ready");
       }
       return;
     }
