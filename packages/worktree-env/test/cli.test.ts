@@ -70,4 +70,14 @@ describe("validateDevServerFlags", () => {
     const args = parseDevServerArgs(["--stop", "--all"]);
     expect(() => validateDevServerFlags(args)).not.toThrow();
   });
+
+  it("rejects --restart with --stop", () => {
+    const args = parseDevServerArgs(["--restart", "--stop"]);
+    expect(() => validateDevServerFlags(args)).toThrow(/--restart cannot be combined with --stop/);
+  });
+
+  it("accepts --restart alone", () => {
+    const args = parseDevServerArgs(["--restart"]);
+    expect(() => validateDevServerFlags(args)).not.toThrow();
+  });
 });

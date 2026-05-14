@@ -72,6 +72,10 @@ const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
   list: { type: "boolean", description: "List active dev-servers across all worktrees" },
   all: { type: "boolean", description: "Apply --stop to every active dev-server" },
   evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
+  restart: {
+    type: "boolean",
+    description: "If a dev-server is already running in this worktree, stop it first, then start",
+  },
 };
 
 export interface SetupArgs {
@@ -99,6 +103,7 @@ export interface DevServerArgs {
   list?: boolean;
   all?: boolean;
   evict?: boolean;
+  restart?: boolean;
 }
 
 interface OptionDef {
@@ -186,6 +191,10 @@ export function validateDevServerFlags(args: DevServerArgs): void {
   if (args.evict && (args.stop || args.list || args.all)) {
     const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
     throw new ConfigError(`Error: --evict cannot be combined with ${conflict}.`);
+  }
+  if (args.restart && (args.stop || args.list || args.all)) {
+    const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
+    throw new ConfigError(`Error: --restart cannot be combined with ${conflict}.`);
   }
 }
 

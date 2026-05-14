@@ -111,7 +111,10 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     return;
   }
 
-  await start(config, mainWorktree, { evict: Boolean(args.evict) });
+  await start(config, mainWorktree, {
+    evict: Boolean(args.evict),
+    restart: Boolean(args.restart),
+  });
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
@@ -121,10 +124,11 @@ function callbackServersOf(config: DevServerConfig): CallbackServer[] {
 async function start(
   config: DevServerConfig,
   mainWorktree: string,
-  { evict }: { evict: boolean },
+  { evict, restart }: { evict: boolean; restart: boolean },
 ): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
 
+  if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return;
   await enforceCap(config, mainWorktree, evict);
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
   await checkPortsFree(config.servers);
@@ -206,6 +210,36 @@ async function rollbackStart(
       console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
     }
   }
+}
+
+/**
+ * If a dev-server is already running in this worktree, either stop it (when `restart`) so the
+ * normal start path can proceed, or print a friendly notice and return `true` to short-circuit.
+ * Returns `true` when the caller should exit cleanly without starting.
+ */
+async function handleAlreadyRunning(
+  config: DevServerConfig,
+  mainWorktree: string,
+  ctx: ServerContext,
+  restart: boolean,
+): Promise<boolean> {
+  const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
+  if (!entry) return false;
+  const livePids = Object.entries(entry.pids).filter(([, pid]) => isProcessAlive(pid));
+  if (livePids.length === 0) return false;
+
+  if (restart) {
+    console.log("Restarting dev-server in this worktree...");
+    await stopLocal(config, mainWorktree);
+    return false;
+  }
+
+  const pidList = livePids.map(([name, pid]) => `${name}=${pid}`).join(", ");
+  console.log(
+    `dev-server already running for this worktree (slot ${entry.slot}, pids: ${pidList}).`,
+  );
+  console.log("Run `dev:down` to stop it, or re-run with --restart to restart.");
+  return true;
 }
 
 // TOCTOU: the cap check and the subsequent register are not atomic. Two concurrent `dev:up --evict`

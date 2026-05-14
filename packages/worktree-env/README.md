@@ -27,7 +27,8 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 
 ```sh
 npm run setup-worktree -- --create feat/42   # new branch + worktree + isolated env
-npm run dev:up                               # start dev server in the background
+npm run dev:up                               # start dev server in the background (no-op if already running here)
+npm run dev:up -- --restart                  # stop the dev-server in this worktree if running, then start fresh
 npm run dev:up -- --evict                    # if devLimit is reached, evict the oldest dev-server and start
 npm run dev:list                             # active dev-servers across all worktrees
 npm run dev:down                             # stop dev server (infrastructure stays up)
