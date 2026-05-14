@@ -1,12 +1,12 @@
 ---
-title: Local Environment Management for Agents
-summary: Agent procedures for creating/removing worktrees, starting/stopping the dev server.
+title: Local Environment Management
+summary: Procedures for creating/removing worktrees and starting/stopping the dev server.
 read_when:
   - setting up or removing a worktree
   - starting or stopping the dev server
 ---
 
-# Local Environment Management for Agents
+# Local Environment Management
 
 Examples below use `npm` syntax. Adapt for your package manager — flag-forwarding rules (e.g. the `--` separator) vary.
 

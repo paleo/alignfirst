@@ -102,6 +102,9 @@ export interface SetupWorktreeConfig {
    * the worktree — this callback will be invoked again with the same context. Re-runs must not
    * error on pre-existing state (created directories, started containers, ran migrations,
    * installed deps, etc.).
+   *
+   * Runs in a detached child whose stdout/stderr are already redirected to
+   * `<runtimeDir>/wt-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
    */
   finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
   /**

@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.4"
+  version: "0.6.5"
   repository: https://github.com/paleo/skills
 ---
 
@@ -18,7 +18,7 @@ This skill helps you implement a system for running multiple local development e
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
-The `assets/` directory contains reference scripts ([setup-worktree.mjs](assets/setup-worktree.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/agent-local-env.md). The scripts are annotated with `ADAPT` comments to highlight what needs changing.
+The `assets/` directory contains reference scripts ([setup-worktree.mjs](assets/setup-worktree.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/local-env.md). The scripts are annotated with `ADAPT` comments to highlight what needs changing.
 
 ## The Problem
 
@@ -331,14 +331,14 @@ This is the file the agent reads on every task. It must contain:
 
   ```markdown
   Read when relevant:
-  - `docs/agent-local-env.md` — Starting/stopping the dev server, creating/removing worktrees.
+  - `docs/local-env.md` — Starting/stopping the dev server, creating/removing worktrees.
   ```
 
 Without the pointer, the agent won't discover the procedures. Without the conventions, it will create branches and commits with inconsistent naming.
 
-### 2. Detailed local-env documentation (`docs/agent-local-env.md`)
+### 2. Detailed local-env documentation (`docs/local-env.md`)
 
-This is the file referenced above. It contains the step-by-step procedures: how to create a worktree, how to start the dev server, how to tear things down. See [assets/agent-local-env.md](assets/agent-local-env.md) for a starting point.
+This is the file referenced above. It contains the step-by-step procedures: how to create a worktree, how to start the dev server, how to tear things down. See [assets/local-env.md](assets/local-env.md) for a starting point.
 
 The agents need to know:
 
@@ -362,5 +362,5 @@ The agents need to know:
 - [ ] **Add npm scripts** (or Makefile targets, etc.) for `setup-worktree`, `dev:up`, `dev:down`.
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/wt-registry/` is covered (slot registry and dev-server registry live there).
-- [ ] **Write agent documentation** if applicable (see [assets/agent-local-env.md](assets/agent-local-env.md)).
+- [ ] **Write agent documentation** if applicable (see [assets/local-env.md](assets/local-env.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
