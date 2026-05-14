@@ -71,7 +71,9 @@ describe("detectCommonJsError", () => {
   });
 
   it("matches UnhandledPromiseRejection", () => {
-    expect(detectCommonJsError("UnhandledPromiseRejection: blah")).toBe("UnhandledPromiseRejection");
+    expect(detectCommonJsError("UnhandledPromiseRejection: blah")).toBe(
+      "UnhandledPromiseRejection",
+    );
   });
 
   it("returns false on clean startup log", () => {
