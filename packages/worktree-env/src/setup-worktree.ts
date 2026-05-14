@@ -526,7 +526,7 @@ async function waitForSlot(
           owner: entry.owner,
         });
       } else {
-        console.log("Status: ready");
+        console.log("\nStatus: ready");
       }
       return;
     }
