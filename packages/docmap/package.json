@@ -28,7 +28,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",

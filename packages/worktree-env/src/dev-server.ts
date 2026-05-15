@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 
 import {
@@ -24,7 +23,13 @@ import {
 import { ConfigError, StartupError } from "./errors.js";
 import { detectCommonJsError } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
-import { canonicalCwd, findPortHolder, isPidOurs, sweepStalePorts } from "./port-holder.js";
+import {
+  canonicalCwd,
+  detectPortConflicts,
+  type PortConflict,
+  sweepStalePorts,
+  waitForPortsFree,
+} from "./port-holder.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import type {
   CallbackServer,
@@ -284,35 +289,45 @@ async function enforceCap(
 }
 
 async function checkPortsFree(servers: ServerDescriptor[], cwd: string): Promise<void> {
-  const spawnServers = servers.filter((s): s is SpawnServer => s.kind === "spawn");
-  const ourCwd = canonicalCwd(cwd);
-  let cleaned = false;
-  for (const server of spawnServers) {
-    if (!(await isPortBusy(server.port))) continue;
-    const holder = findPortHolder(server.port);
-    if (holder && isPidOurs(holder, ourCwd)) {
-      console.warn(
-        `Stale ${server.name} dev-server detected on port ${server.port} (PID ${holder.pid}: ${holder.cmd}). Cleaning up...`,
-      );
-      await stopProcessGroup(holder.pgid);
-      cleaned = true;
-    } else {
-      const info = holder
-        ? ` (PID ${holder.pid}: ${holder.cmd}${holder.cwd ? `, cwd ${holder.cwd}` : ""})`
+  const conflicts = await detectPortConflicts(servers, canonicalCwd(cwd));
+  const foreign = conflicts.filter(
+    (c): c is Extract<PortConflict, { kind: "foreign" }> => c.kind === "foreign",
+  );
+  if (foreign.length > 0) {
+    for (const c of foreign) {
+      const info = c.holder
+        ? ` (PID ${c.holder.pid}: ${c.holder.cmd}${c.holder.cwd ? `, cwd ${c.holder.cwd}` : ""})`
         : "";
-      console.error(`Error: Port ${server.port} (${server.name}) is already in use${info}.`);
-      process.exit(1);
+      console.error(`Error: Port ${c.server.port} (${c.server.name}) is already in use${info}.`);
     }
+    process.exit(1);
   }
-  if (!cleaned) return;
-  await new Promise((r) => setTimeout(r, 500));
-  for (const server of spawnServers) {
-    if (await isPortBusy(server.port)) {
-      console.error(
-        `Error: Port ${server.port} (${server.name}) still in use after cleanup attempt.`,
-      );
+  const ours = conflicts.filter(
+    (c): c is Extract<PortConflict, { kind: "ours" }> => c.kind === "ours",
+  );
+  if (ours.length === 0) return;
+  for (const c of ours) {
+    console.warn(
+      `Stale ${c.server.name} dev-server detected on port ${c.server.port} (PID ${c.holder.pid}: ${c.holder.cmd}). Cleaning up...`,
+    );
+    if (c.holder.pgid === undefined) {
+      console.error(`  Cannot kill: pgid unknown for PID ${c.holder.pid}.`);
       process.exit(1);
     }
+    await stopProcessGroup(c.holder.pgid);
+  }
+  const stillBusy = await waitForPortsFree(
+    ours.map((c) => c.server.port),
+    2000,
+  );
+  if (stillBusy.length > 0) {
+    for (const port of stillBusy) {
+      const server = ours.find((c) => c.server.port === port)?.server;
+      console.error(
+        `Error: Port ${port}${server ? ` (${server.name})` : ""} still in use after cleanup attempt.`,
+      );
+    }
+    process.exit(1);
   }
 }
 
@@ -397,22 +412,4 @@ function spawnServer(server: SpawnServer, runtimeDir: string, cwd: string): numb
   child.unref();
   closeSync(logFd);
   return child.pid;
-}
-
-function isPortBusy(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
-    socket.setTimeout(500);
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", () => {
-      resolve(false);
-    });
-  });
 }

@@ -1,6 +1,6 @@
 {
   "name": "@paleo/worktree-env",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Worktree-based concurrent local environment kernel.",
   "keywords": [
     "worktree",
@@ -31,7 +31,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
