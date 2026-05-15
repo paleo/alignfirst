@@ -52,7 +52,7 @@ node <main-worktree>/scripts/local-env/setup-worktree.mjs --here
 ### Listing Registered Worktrees
 
 ```sh
-npm run setup-worktree -- --list  # print all registered worktrees (slot, type, status, branch, path, owner, created).
+npm run setup-worktree -- --list  # print all registered worktrees (slot, type, status, branch, path, owner, created)
 ```
 
 ### Take over an Existing Worktree
@@ -129,5 +129,8 @@ npm run dev:down                     # 4. stop when done (same directory)
 
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
-- **`.local/`** — Shared across worktrees (symlinked). Lightweight files: personal notes, `wt-registry/slots.json` (slot registry; up to 19 linked-worktree slots + the implicit main worktree), `wt-registry/dev-servers.json` (live dev-server registry).
+- **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
+  - `wt-registry/slots.json` — Slot registry; main worktree at `basePort` plus linked-worktree slots.
+  - `wt-registry/dev-servers.json` — Live dev-server registry.
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
+- **`.plans/`** — Shared across worktrees (symlinked). Task planning files.
