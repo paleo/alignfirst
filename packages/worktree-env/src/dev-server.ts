@@ -24,6 +24,7 @@ import {
 import { ConfigError, StartupError } from "./errors.js";
 import { detectCommonJsError } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
+import { canonicalCwd, findPortHolder, isPidOurs, sweepStalePorts } from "./port-holder.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import type {
   CallbackServer,
@@ -132,7 +133,7 @@ async function start(
   if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return;
   await enforceCap(config, mainWorktree, evict);
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
-  await checkPortsFree(config.servers);
+  await checkPortsFree(config.servers, ctx.cwd);
 
   const spawnPids: Record<string, number> = {};
   const startedCallbacks: CallbackServer[] = [];
@@ -282,19 +283,37 @@ async function enforceCap(
   }
 }
 
-async function checkPortsFree(servers: ServerDescriptor[]): Promise<void> {
+async function checkPortsFree(servers: ServerDescriptor[], cwd: string): Promise<void> {
   const spawnServers = servers.filter((s): s is SpawnServer => s.kind === "spawn");
-  const busy = await Promise.all(spawnServers.map((s) => isPortBusy(s.port)));
-  let anyBusy = false;
-  busy.forEach((b, i) => {
-    if (b) {
-      console.error(
-        `Error: Port ${spawnServers[i].port} (${spawnServers[i].name}) is already in use.`,
+  const ourCwd = canonicalCwd(cwd);
+  let cleaned = false;
+  for (const server of spawnServers) {
+    if (!(await isPortBusy(server.port))) continue;
+    const holder = findPortHolder(server.port);
+    if (holder && isPidOurs(holder, ourCwd)) {
+      console.warn(
+        `Stale ${server.name} dev-server detected on port ${server.port} (PID ${holder.pid}: ${holder.cmd}). Cleaning up...`,
       );
-      anyBusy = true;
+      await stopProcessGroup(holder.pgid);
+      cleaned = true;
+    } else {
+      const info = holder
+        ? ` (PID ${holder.pid}: ${holder.cmd}${holder.cwd ? `, cwd ${holder.cwd}` : ""})`
+        : "";
+      console.error(`Error: Port ${server.port} (${server.name}) is already in use${info}.`);
+      process.exit(1);
     }
-  });
-  if (anyBusy) process.exit(1);
+  }
+  if (!cleaned) return;
+  await new Promise((r) => setTimeout(r, 500));
+  for (const server of spawnServers) {
+    if (await isPortBusy(server.port)) {
+      console.error(
+        `Error: Port ${server.port} (${server.name}) still in use after cleanup attempt.`,
+      );
+      process.exit(1);
+    }
+  }
 }
 
 function checkNoLocalRegistryConflict(
@@ -319,6 +338,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
   const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
   if (!entry) {
     console.log("No dev-server running in this worktree.");
+    await sweepStalePorts(config.servers, ctx.cwd);
     return;
   }
   for (const [name, pid] of Object.entries(entry.pids)) {
@@ -336,6 +356,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
     }
   }
   unregisterDevServer(mainWorktree, config.registryDir, ctx.cwd);
+  await sweepStalePorts(config.servers, ctx.cwd);
 }
 
 function defaultPrintSummary(
