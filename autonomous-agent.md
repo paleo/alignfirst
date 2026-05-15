@@ -13,8 +13,8 @@ export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
 export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 ```
 
-## Coaching by OpenClaw (experimental)
+### OpenClaw Playbook (experimental)
 
-The `alignfirst-coaching` skill ships a reference that teaches OpenClaw how to drive AlignFirst from chat (Slack, Discord): interpreting user messages as project work, delegating to the coding agent, managing worktrees, branches, commits, and PRs. Still in development.
+The `alignfirst-coaching` skill ships a reference that teaches OpenClaw how to handle branches, worktrees, commits, PRs/MRs etc. on the project side, and organize the chat with the user through Discord/Slack threads on the user side. Still in development.
 
-See [skills/alignfirst-coaching/references/coaching-by-openclaw.md](skills/alignfirst-coaching/references/coaching-by-openclaw.md).
+See [skills/alignfirst-coaching/references/openclaw-playbook.md](skills/alignfirst-coaching/references/openclaw-playbook.md).

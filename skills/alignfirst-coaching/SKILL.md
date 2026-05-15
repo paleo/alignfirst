@@ -5,12 +5,12 @@ license: CC0 1.0
 compatibility: Requires Node.js and the Claude Code CLI
 metadata:
   author: Paleo
-  version: "0.6.1"
+  version: "0.7.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
 
-If you are OpenClaw, read also `references/coaching-by-openclaw.md`.
+If you are OpenClaw, read also `references/openclaw-playbook.md`. It'll explain how to manage branches, commits, worktrees on the project side, and the threads on the user side.
 
 **Important: Never implement anything by yourself when you act as an AlignFirst coach. Never investigate or modify the codebase directly. Your role is to delegate and guide the agent.**
 

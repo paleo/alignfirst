@@ -63,6 +63,11 @@ const SETUP_OPTIONS: Record<string, OptionDef> = {
     type: "boolean",
     description: "Print the worktree summary (ports, branch, readiness) for the current worktree.",
   },
+  list: {
+    type: "boolean",
+    short: "l",
+    description: "List all registered worktrees (slot, status, branch, path, owner, created).",
+  },
   __finalize: { type: "string", arg: "slot", description: "" },
 };
 
@@ -93,6 +98,7 @@ export interface SetupArgs {
   verbose?: boolean;
   wait?: boolean;
   info?: boolean;
+  list?: boolean;
   /** @internal Set by `runSetupWorktree` when it re-spawns itself to run the finalize phase. */
   __finalize?: string;
 }
@@ -142,7 +148,7 @@ export function printDevServerHelp(): void {
 }
 
 export function validateSetupFlags(args: SetupArgs): void {
-  // --wait may chain after --use/--create/--here; --info is standalone.
+  // --wait may chain after --use/--create/--here; --info and --list are standalone.
   const modeFlags = [
     args.use,
     args.create,
@@ -151,13 +157,17 @@ export function validateSetupFlags(args: SetupArgs): void {
     isSetOwnerMode(args),
     isFinalizeMode(args),
     isInfoMode(args),
+    isListMode(args),
   ].filter(Boolean);
   if (modeFlags.length > 1) {
     throw new ConfigError(
-      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, and --info are mutually exclusive.",
+      "Error: --use, --create, --here, --remove, --remove-here, --set-owner, --info, and --list are mutually exclusive.",
     );
   }
-  if (isWaitMode(args) && (isRemoveMode(args) || isSetOwnerMode(args) || isInfoMode(args))) {
+  if (
+    isWaitMode(args) &&
+    (isRemoveMode(args) || isSetOwnerMode(args) || isInfoMode(args) || isListMode(args))
+  ) {
     throw new ConfigError(
       "Error: --wait can only be combined with --use, --create, or --here (or used standalone).",
     );
@@ -220,6 +230,10 @@ export function isWaitMode(args: SetupArgs): boolean {
 
 export function isInfoMode(args: SetupArgs): boolean {
   return Boolean(args.info);
+}
+
+export function isListMode(args: SetupArgs): boolean {
+  return Boolean(args.list);
 }
 
 function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {

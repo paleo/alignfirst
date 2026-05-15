@@ -14,6 +14,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import {
   isFinalizeMode,
   isInfoMode,
+  isListMode,
   isRemoveMode,
   isSetOwnerMode,
   isSetupMode,
@@ -238,6 +239,11 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
 
   if (isInfoMode(args)) {
     runInfo(args, config);
+    return;
+  }
+
+  if (isListMode(args)) {
+    runList(config);
     return;
   }
 
@@ -492,6 +498,44 @@ function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
   }
   const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
   printWorktreeInfo(config, resolved.slot, ".", { branch: resolved.branch, owner: resolved.owner });
+}
+
+function runList(config: SetupWorktreeConfig): void {
+  const ctx = detectWorktree();
+  const entries = Object.entries(readSlots(ctx.mainWorktree, config.registryDir).slots).sort(
+    ([a], [b]) => Number(a) - Number(b),
+  );
+  if (entries.length === 0) {
+    console.log("No worktrees registered.");
+    return;
+  }
+  const rows = entries.map(([port, e]) => ({
+    slot: port,
+    status: e.status,
+    branch: e.branch,
+    worktree: e.worktree,
+    owner: e.owner ?? "-",
+    created: e.createdAt,
+  }));
+  const headers = {
+    slot: "SLOT",
+    status: "STATUS",
+    branch: "BRANCH",
+    worktree: "WORKTREE",
+    owner: "OWNER",
+    created: "CREATED",
+  };
+  const widths = {
+    slot: Math.max(headers.slot.length, ...rows.map((r) => r.slot.length)),
+    status: Math.max(headers.status.length, ...rows.map((r) => r.status.length)),
+    branch: Math.max(headers.branch.length, ...rows.map((r) => r.branch.length)),
+    worktree: Math.max(headers.worktree.length, ...rows.map((r) => r.worktree.length)),
+    owner: Math.max(headers.owner.length, ...rows.map((r) => r.owner.length)),
+  };
+  const fmt = (r: typeof headers): string =>
+    `${r.slot.padEnd(widths.slot)}  ${r.status.padEnd(widths.status)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
+  console.log(fmt(headers));
+  for (const r of rows) console.log(fmt(r));
 }
 
 async function runWait(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {

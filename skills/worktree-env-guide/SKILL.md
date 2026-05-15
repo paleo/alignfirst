@@ -139,6 +139,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | `--force` | Overwrite existing config files and re-provision the database |
 | `--wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `--info` | Print the summary (ports, branch, readiness) for the current worktree |
+| `--list` | Print all registered linked worktrees (slot, status, branch, path, owner, created) |
 | `--verbose` | Show intermediate output |
 
 Running the script with no mode flag shows help.

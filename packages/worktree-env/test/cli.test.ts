@@ -48,6 +48,21 @@ describe("validateSetupFlags", () => {
     const args = parseSetupArgs(["--use", "a", "--owner", "alice", "--slot", "8110", "--force"]);
     expect(() => validateSetupFlags(args)).not.toThrow();
   });
+
+  it("rejects --list combined with --here", () => {
+    const args = parseSetupArgs(["--list", "--here"]);
+    expect(() => validateSetupFlags(args)).toThrow(/mutually exclusive/);
+  });
+
+  it("rejects --list combined with --wait", () => {
+    const args = parseSetupArgs(["--list", "--wait"]);
+    expect(() => validateSetupFlags(args)).toThrow(/--wait/);
+  });
+
+  it("accepts --list alone", () => {
+    const args = parseSetupArgs(["--list"]);
+    expect(() => validateSetupFlags(args)).not.toThrow();
+  });
 });
 
 describe("validateDevServerFlags", () => {
