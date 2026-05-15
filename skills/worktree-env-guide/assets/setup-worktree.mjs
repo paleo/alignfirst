@@ -132,8 +132,8 @@ await runSetupWorktree({
 
   // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
   // at this point. The worktree path is the useful pointer.
-  printSummary: ({ slot, branch, owner, currentWorktree }) => `
-Worktree setup complete!
+  printSummary: ({ slot, branch, owner, currentWorktree, isMainWorktree }) => `
+${isMainWorktree ? "Main" : "Linked"} worktree setup complete!
   Slot:     ${slot}
   Branch:   ${branch}${owner ? `\n  Owner:    ${owner}` : ""}
   Path:     ${currentWorktree}

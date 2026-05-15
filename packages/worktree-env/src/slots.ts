@@ -11,6 +11,8 @@ export interface ResolvedSlot {
   worktree: string;
   branch: string;
   owner?: string;
+  /** `true` when this slot is the main worktree. */
+  main?: boolean;
 }
 
 export type SlotStatus = "pending" | "ready" | "failed";
@@ -22,6 +24,8 @@ export interface SlotEntry {
   createdAt: string;
   status: SlotStatus;
   failure?: { at: string; message: string };
+  /** `true` for the main-worktree entry. Absent on linked entries. */
+  main?: boolean;
 }
 
 export interface SlotsRegistry {
@@ -73,6 +77,7 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
     createdAt,
     status,
   };
+  if (input.isMainWorktree) entry.main = true;
   if (owner !== undefined) entry.owner = owner;
   registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, input.registryDir, registry);
@@ -224,12 +229,14 @@ function lookupSlotForCwd(registryDir: string): ResolvedSlot | undefined {
   const registry = JSON.parse(readFileSync(filePath, "utf-8")) as SlotsRegistry;
   for (const [port, entry] of Object.entries(registry.slots)) {
     if (resolve(entry.worktree) === cwd) {
-      return {
+      const resolved: ResolvedSlot = {
         slot: Number(port),
         worktree: entry.worktree,
         branch: entry.branch,
         owner: entry.owner,
       };
+      if (entry.main) resolved.main = true;
+      return resolved;
     }
   }
   return undefined;
@@ -245,5 +252,5 @@ function synthesizeMainSlot(basePort: number): ResolvedSlot | undefined {
   const cwd = resolve(process.cwd());
   if (resolve(mainWorktree) !== cwd) return undefined;
   const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
-  return { slot: basePort, worktree: cwd, branch };
+  return { slot: basePort, worktree: cwd, branch, main: true };
 }

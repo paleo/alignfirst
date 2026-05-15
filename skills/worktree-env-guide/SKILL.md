@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.5"
+  version: "0.6.7"
   repository: https://github.com/paleo/skills
 ---
 
@@ -76,7 +76,7 @@ The slot is identified by the primary port number itself (e.g., `--slot 8120`).
 }
 ```
 
-The main worktree's port is implicit and never stored in the registry.
+The main worktree is registered at `basePort` (the first slot); linked worktrees occupy `basePort + portStep × k` for k≥1.
 
 ### Concurrent dev-server cap
 
@@ -216,7 +216,7 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 
 `dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
 
-**Main worktree synthesis:** the main worktree never has a row in `slots.json`. When `dev:up` (or `dev:list` / `dev:down --all`) runs there, it synthesizes an in-memory slot using `BASE_PORT`, the current branch, and no owner so the entry still flows through `dev-servers.json` and counts toward the cap.
+**Main worktree:** the main worktree owns the slot at `basePort` in `slots.json`. `dev:up` / `dev:list` / `dev:down --all` treat it like any other slot, so it counts toward the cap. `dev:list` marks it `type=main`.
 
 A single-process dev server uses a `SERVERS` array with one entry; the script's structure stays the same.
 

@@ -13,6 +13,8 @@ export interface DevServerEntry {
   owner?: string;
   pids: Record<string, number>;
   startedAt: string;
+  /** `true` for the main-worktree entry. */
+  main?: boolean;
 }
 
 export interface DevServersData {
@@ -206,5 +208,6 @@ function formatEntry(entry: DevServerEntry): string {
     .map(([name, pid]) => `${name}=${pid}`)
     .join(",");
   const ownerPart = entry.owner ? `  owner=${entry.owner}` : "";
-  return `  slot ${entry.slot}  branch=${entry.branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
+  const type = entry.main ? "main" : "linked";
+  return `  slot ${entry.slot}  type=${type}  branch=${entry.branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
 }

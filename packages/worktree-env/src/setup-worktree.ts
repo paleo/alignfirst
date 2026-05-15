@@ -35,6 +35,7 @@ import {
   readSlots,
   resolveAndRegisterSlot,
   resolveCurrentSlot,
+  type SlotEntry,
   validateSlotAvailability,
   writeSlots,
 } from "./slots.js";
@@ -162,6 +163,8 @@ export interface SummaryContext {
   ports: Record<string, number>;
   currentWorktree: string;
   mainWorktree: string;
+  /** `true` when the summary describes the main worktree (slot = `basePort`). */
+  isMainWorktree: boolean;
 }
 
 /** Context passed to {@link SetupWorktreeConfig.purgeInfrastructure}. */
@@ -348,6 +351,7 @@ async function runSetup(
       ports,
       currentWorktree: setupCtx.currentWorktree,
       mainWorktree: setupCtx.mainWorktree,
+      isMainWorktree: setupCtx.isMainWorktree,
     }),
   );
 
@@ -458,7 +462,7 @@ function printWorktreeInfo(
 ): void {
   const ctx = detectWorktree();
   const registry = readSlots(ctx.mainWorktree, config.registryDir);
-  const entry = registry.slots[String(slot)];
+  const entry: SlotEntry | undefined = registry.slots[String(slot)];
   const ports = resolvePortsFn(config)(slot);
 
   const branch = entry?.branch ?? fallback.branch;
@@ -471,6 +475,8 @@ function printWorktreeInfo(
       : slotStatus === "failed"
         ? `failed: ${entry?.failure?.message ?? "(no message)"}${logHint}`
         : `pending${logHint}`;
+  const isMainWorktree = entry?.main ?? false;
+  console.log(`Type:   ${isMainWorktree ? "main" : "linked"}`);
   console.log(`Status: ${display}`);
   console.log(
     config.printSummary({
@@ -480,6 +486,7 @@ function printWorktreeInfo(
       ports,
       currentWorktree: entry?.worktree ?? ctx.currentWorktree,
       mainWorktree: ctx.mainWorktree,
+      isMainWorktree,
     }),
   );
 }
@@ -511,6 +518,7 @@ function runList(config: SetupWorktreeConfig): void {
   }
   const rows = entries.map(([port, e]) => ({
     slot: port,
+    type: e.main ? "main" : "linked",
     status: e.status,
     branch: e.branch,
     worktree: e.worktree,
@@ -519,6 +527,7 @@ function runList(config: SetupWorktreeConfig): void {
   }));
   const headers = {
     slot: "SLOT",
+    type: "TYPE",
     status: "STATUS",
     branch: "BRANCH",
     worktree: "WORKTREE",
@@ -527,13 +536,14 @@ function runList(config: SetupWorktreeConfig): void {
   };
   const widths = {
     slot: Math.max(headers.slot.length, ...rows.map((r) => r.slot.length)),
+    type: Math.max(headers.type.length, ...rows.map((r) => r.type.length)),
     status: Math.max(headers.status.length, ...rows.map((r) => r.status.length)),
     branch: Math.max(headers.branch.length, ...rows.map((r) => r.branch.length)),
     worktree: Math.max(headers.worktree.length, ...rows.map((r) => r.worktree.length)),
     owner: Math.max(headers.owner.length, ...rows.map((r) => r.owner.length)),
   };
   const fmt = (r: typeof headers): string =>
-    `${r.slot.padEnd(widths.slot)}  ${r.status.padEnd(widths.status)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
+    `${r.slot.padEnd(widths.slot)}  ${r.type.padEnd(widths.type)}  ${r.status.padEnd(widths.status)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
   console.log(fmt(headers));
   for (const r of rows) console.log(fmt(r));
 }

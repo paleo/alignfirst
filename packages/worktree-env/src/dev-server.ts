@@ -10,6 +10,7 @@ import {
   type DevServerArgs,
 } from "./cli.js";
 import {
+  type DevServerEntry,
   evictOldest,
   findOwnEntry,
   listDevServers,
@@ -166,14 +167,16 @@ async function start(
   }
 
   const slot = resolveCurrentSlot(config.basePort, config.registryDir);
-  registerDevServer(mainWorktree, config.registryDir, {
+  const devEntry: DevServerEntry = {
     slot: slot.slot,
     worktree: slot.worktree,
     branch: slot.branch,
     owner: slot.owner,
     pids: spawnPids,
     startedAt: new Date().toISOString(),
-  });
+  };
+  if (slot.main) devEntry.main = true;
+  registerDevServer(mainWorktree, config.registryDir, devEntry);
 
   const summaryServers = config.servers.map((server) => {
     if (server.kind === "spawn") {

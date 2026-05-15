@@ -52,7 +52,7 @@ node <main-worktree>/scripts/local-env/setup-worktree.mjs --here
 ### Listing Registered Worktrees
 
 ```sh
-npm run setup-worktree -- --list  # print all registered linked worktrees (slot, status, branch, path, owner, created)
+npm run setup-worktree -- --list  # print all registered worktrees (slot, type, status, branch, path, owner, created).
 ```
 
 ### Take over an Existing Worktree
