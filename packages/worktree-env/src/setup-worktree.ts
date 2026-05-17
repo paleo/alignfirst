@@ -44,7 +44,7 @@ import {
   createBranch,
   detectWorktree,
   enforceWorktreeMode,
-  getCurrentBranch,
+  getWorktreeBranch,
   removeWorktree,
   type RunCtx,
   useExistingBranch,
@@ -145,7 +145,6 @@ export interface SetupContext {
   /** `true` when finalizing the main worktree. Gate "copy from main" steps with `!isMainWorktree`. */
   isMainWorktree: boolean;
   slot: number;
-  branch: string;
   owner?: string;
   ports: Record<string, number>;
   force: boolean;
@@ -159,7 +158,6 @@ export interface SetupContext {
  */
 export interface SummaryContext {
   slot: number;
-  branch: string;
   owner?: string;
   ports: Record<string, number>;
   currentWorktree: string;
@@ -295,14 +293,13 @@ async function runSetup(
 
   const setupCtx = ensureWorktree(args, ctx, run, config.worktreeDirName);
   refuseIfFinalizePending(setupCtx, config.registryDir, args.force ?? false);
-  const branch = getCurrentBranch(setupCtx.currentWorktree);
+  const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
   const { port: slot, owner } = resolveAndRegisterSlot({
     slot: args.slot,
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
     registryDir: config.registryDir,
     scheme,
-    branch,
     requestedOwner: args.owner,
     isMainWorktree: setupCtx.isMainWorktree,
     force: args.force ?? false,
@@ -348,7 +345,6 @@ async function runSetup(
   teeLog(
     config.printSummary({
       slot,
-      branch,
       owner,
       ports,
       currentWorktree: setupCtx.currentWorktree,
@@ -405,8 +401,10 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     process.exit(1);
   }
 
+  const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
+
   if (entry.status === "ready" && !args.force) {
-    appendLog(`READY: branch ${entry.branch} (slot ${slot}) already finalized; skipping.`);
+    appendLog(`READY: branch ${branch} (slot ${slot}) already finalized; skipping.`);
     return;
   }
 
@@ -420,7 +418,6 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     mainWorktree: ctx.mainWorktree,
     isMainWorktree: ctx.isMainWorktree,
     slot,
-    branch: entry.branch,
     owner: entry.owner,
     ports,
     force: args.force ?? false,
@@ -431,7 +428,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     await config.finalizeWorktree(setupContext);
     markSlotReady(ctx.mainWorktree, config.registryDir, slot);
     appendLog("============================================================");
-    appendLog(`READY: branch ${entry.branch} (slot ${slot})`);
+    appendLog(`READY: branch ${branch} (slot ${slot})`);
     appendLog("============================================================");
   } catch (err) {
     const message = (err as Error).message;
@@ -462,14 +459,13 @@ function printWorktreeInfo(
   config: SetupWorktreeConfig,
   slot: number,
   worktreeForLog: string,
-  fallback: { branch: string; owner?: string },
+  fallback: { owner?: string },
 ): void {
   const ctx = detectWorktree();
   const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const entry: SlotEntry | undefined = registry.slots[String(slot)];
   const ports = resolvePortsFn(config)(slot);
 
-  const branch = entry?.branch ?? fallback.branch;
   const owner = entry?.owner ?? fallback.owner;
   const slotStatus = entry?.status ?? "pending";
   const setupLogPath = join(worktreeForLog, config.runtimeDir, "wt-setup.log");
@@ -492,7 +488,6 @@ function printWorktreeInfo(
   console.log(
     config.printSummary({
       slot,
-      branch,
       owner,
       ports,
       currentWorktree: targetWorktree,
@@ -536,12 +531,11 @@ function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
       console.error(`Error: No slot ${slot} in registry.`);
       process.exit(1);
     }
-    printWorktreeInfo(config, slot, entry.worktree, { branch: entry.branch, owner: entry.owner });
+    printWorktreeInfo(config, slot, entry.worktree, { owner: entry.owner });
     return;
   }
   const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
   printWorktreeInfo(config, resolved.slot, resolved.worktree, {
-    branch: resolved.branch,
     owner: resolved.owner,
   });
 }
@@ -559,7 +553,7 @@ function runList(config: SetupWorktreeConfig): void {
     slot: port,
     type: e.main ? "main" : "linked",
     status: e.status,
-    branch: e.branch,
+    branch: getWorktreeBranch(e.worktree) ?? "(detached)",
     worktree: e.worktree,
     owner: e.owner ?? "-",
     created: e.createdAt,
@@ -619,7 +613,6 @@ async function waitForSlot(
       console.log("\n… ready");
       if (printSummary) {
         printWorktreeInfo(config, slot, entry.worktree, {
-          branch: entry.branch,
           owner: entry.owner,
         });
       }
@@ -829,16 +822,19 @@ function resolveRemoveTarget(
       console.error("Error: No slot found for this worktree in the registry.");
       process.exit(1);
     }
+    const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
     return {
       slotPort: entry[0],
-      branch: entry[1].branch,
+      branch,
       worktreePath: ctx.currentWorktree,
       owner: entry[1].owner,
     };
   }
 
   const branch = args.remove ?? "";
-  const entry = Object.entries(registry.slots).find(([, v]) => v.branch === branch);
+  const entry = Object.entries(registry.slots).find(
+    ([, v]) => getWorktreeBranch(v.worktree) === branch,
+  );
   if (!entry) {
     console.error(`Error: No worktree found for branch "${branch}" in the slot registry.`);
     process.exit(1);

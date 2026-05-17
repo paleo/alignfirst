@@ -21,7 +21,6 @@ function entry(
   return {
     slot,
     worktree: `/tmp/wt-${slot}`,
-    branch: `feat/${slot}`,
     owner: "alice",
     pids,
     startedAt,

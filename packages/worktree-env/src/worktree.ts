@@ -93,11 +93,18 @@ export function verifyBranchAbsentFromRemote(branch: string, run: RunCtx): void 
   }
 }
 
-export function getCurrentBranch(worktreePath: string): string {
-  return execFileSync("git", ["branch", "--show-current"], {
-    encoding: "utf-8",
-    cwd: worktreePath,
-  }).trim();
+export function getWorktreeBranch(worktreePath: string): string | undefined {
+  try {
+    const out = execFileSync("git", ["branch", "--show-current"], {
+      stdio: "pipe",
+      cwd: worktreePath,
+    })
+      .toString("utf-8")
+      .trim();
+    return out.length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function removeWorktree(worktreePath: string, run: RunCtx): void {

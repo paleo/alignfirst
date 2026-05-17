@@ -3,13 +3,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { allPorts, isValidPort, type PortScheme } from "./ports.js";
+import { getWorktreeBranch } from "./worktree.js";
 
 const SLOTS_FILENAME = "slots.json";
 
 export interface ResolvedSlot {
   slot: number;
   worktree: string;
-  branch: string;
   owner?: string;
   /** `true` when this slot is the main worktree. */
   main?: boolean;
@@ -19,7 +19,6 @@ export type SlotStatus = "pending" | "ready" | "failed";
 
 export interface SlotEntry {
   worktree: string;
-  branch: string;
   owner?: string;
   createdAt: string;
   status: SlotStatus;
@@ -54,7 +53,6 @@ export interface RegisterSlotInput {
   mainWorktree: string;
   registryDir: string;
   scheme: PortScheme;
-  branch: string;
   requestedOwner?: string;
   /** When `true`, the slot is forced to `scheme.basePort` regardless of `slot` arg. */
   isMainWorktree: boolean;
@@ -76,7 +74,6 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const status: SlotStatus = existing?.status === "ready" && !input.force ? "ready" : "pending";
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
-    branch: input.branch,
     createdAt,
     status,
   };
@@ -128,8 +125,9 @@ export function validateSlotAvailability(
   const registry = readSlots(ctx.mainWorktree, ctx.registryDir);
   const existing = registry.slots[String(port)];
   if (existing && resolve(existing.worktree) !== resolve(ctx.currentWorktree)) {
+    const existingBranch = getWorktreeBranch(existing.worktree);
     console.error(
-      `Error: Slot ${port} is already taken by ${existing.worktree} (branch: ${existing.branch}).`,
+      `Error: Slot ${port} is already taken by ${existing.worktree} (branch: ${existingBranch ?? "(detached)"}).`,
     );
     process.exit(1);
   }
@@ -172,7 +170,6 @@ export function handleSetOwner(input: SetOwnerInput): {
   const [slotPort, slotData] = entry;
   const updated: SlotEntry = {
     worktree: slotData.worktree,
-    branch: slotData.branch,
     createdAt: slotData.createdAt,
     status: slotData.status,
   };
@@ -204,8 +201,9 @@ function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
     }
     const existing = registry.slots[String(port)];
     if (existing && resolve(existing.worktree) !== resolvedCurrent) {
+      const existingBranch = getWorktreeBranch(existing.worktree);
       console.error(
-        `Error: Slot ${port} is already taken by ${existing.worktree} (branch: ${existing.branch}).`,
+        `Error: Slot ${port} is already taken by ${existing.worktree} (branch: ${existingBranch ?? "(detached)"}).`,
       );
       process.exit(1);
     }
@@ -235,7 +233,6 @@ function lookupSlotForCwd(registryDir: string): ResolvedSlot | undefined {
       const resolved: ResolvedSlot = {
         slot: Number(port),
         worktree: entry.worktree,
-        branch: entry.branch,
         owner: entry.owner,
       };
       if (entry.main) resolved.main = true;
@@ -254,6 +251,5 @@ function synthesizeMainSlot(basePort: number): ResolvedSlot | undefined {
   const mainWorktree = dirname(gitCommonDir);
   const cwd = resolve(process.cwd());
   if (resolve(mainWorktree) !== cwd) return undefined;
-  const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
-  return { slot: basePort, worktree: cwd, branch, main: true };
+  return { slot: basePort, worktree: cwd, main: true };
 }

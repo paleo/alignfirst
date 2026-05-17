@@ -23,7 +23,6 @@ describe("buildWorktreeReadyMessage", () => {
   it("returns ok when status is ready", () => {
     const entry: SlotEntry = {
       worktree: "/tmp/wt",
-      branch: "feat/x",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "ready",
     };
@@ -33,7 +32,6 @@ describe("buildWorktreeReadyMessage", () => {
   it("reports a pending message with slot and elapsed time", () => {
     const entry: SlotEntry = {
       worktree: "/tmp/wt",
-      branch: "feat/x",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "pending",
     };
@@ -49,7 +47,6 @@ describe("buildWorktreeReadyMessage", () => {
   it("reports a failed message with failure reason and elapsed", () => {
     const entry: SlotEntry = {
       worktree: "/tmp/wt",
-      branch: "feat/x",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
       failure: { at: "2026-05-16T23:30:00.000Z", message: "boom" },
@@ -66,7 +63,6 @@ describe("buildWorktreeReadyMessage", () => {
   it("uses (no message) when failure.message is absent", () => {
     const entry: SlotEntry = {
       worktree: "/tmp/wt",
-      branch: "feat/x",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
     };

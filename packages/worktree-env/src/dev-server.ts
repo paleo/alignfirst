@@ -38,7 +38,7 @@ import type {
   SpawnServer,
 } from "./server-descriptor.js";
 import { readSlots, resolveCurrentSlot, type ResolvedSlot, type SlotEntry } from "./slots.js";
-import { detectWorktree } from "./worktree.js";
+import { detectWorktree, getWorktreeBranch } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
@@ -177,7 +177,6 @@ async function start(
   const devEntry: DevServerEntry = {
     slot: slot.slot,
     worktree: slot.worktree,
-    branch: slot.branch,
     owner: slot.owner,
     pids: spawnPids,
     startedAt: new Date().toISOString(),
@@ -336,8 +335,9 @@ async function enforceCap(
   });
   for (const entry of evicted) {
     const ownerPart = entry.owner ? `, owner=${entry.owner}` : "";
+    const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
     console.log(
-      `Evicted slot ${entry.slot} (branch=${entry.branch}${ownerPart}, startedAt=${entry.startedAt}).`,
+      `Evicted slot ${entry.slot} (branch=${branch}${ownerPart}, startedAt=${entry.startedAt}).`,
     );
   }
 }
