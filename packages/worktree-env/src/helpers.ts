@@ -111,6 +111,33 @@ export function copyAndPatchFile(
  * for spawn servers that don't supply one. A custom `detectError` can compose with this:
  * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
  */
+/**
+ * Formats a millisecond duration as the two largest units among `d`/`h`/`m`/`s`.
+ * Drops the smaller unit when zero (`5d` instead of `5d 0h`). Sub-second values
+ * round up to `1s` (zero stays `0s`). Negative input returns `0s`.
+ */
+export function formatDuration(ms: number): string {
+  if (ms <= 0) return "0s";
+  if (ms < 1000) return "1s";
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const units: [string, number][] = [
+    ["d", d],
+    ["h", h],
+    ["m", m],
+    ["s", s],
+  ];
+  const topIdx = units.findIndex(([, v]) => v > 0);
+  if (topIdx === -1) return "0s";
+  const [topLabel, topVal] = units[topIdx];
+  const next = units[topIdx + 1];
+  if (!next || next[1] === 0) return `${topVal}${topLabel}`;
+  return `${topVal}${topLabel} ${next[1]}${next[0]}`;
+}
+
 export function detectCommonJsError(log: string): string | false {
   if (log.includes("[nodemon] app crashed")) return "[nodemon] app crashed";
   if (/^Node\.js v/m.test(log)) return "Node.js v";

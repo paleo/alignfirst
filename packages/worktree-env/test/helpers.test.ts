@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { detectCommonJsError, extractHost, patchEnvFile } from "../src/helpers.js";
+import { detectCommonJsError, extractHost, formatDuration, patchEnvFile } from "../src/helpers.js";
 
 describe("patchEnvFile", () => {
   it("replaces an existing line in place", () => {
@@ -78,5 +78,39 @@ describe("detectCommonJsError", () => {
 
   it("returns false on clean startup log", () => {
     expect(detectCommonJsError("Server ready on port 3000\n")).toBe(false);
+  });
+});
+
+describe("formatDuration", () => {
+  it("returns 0s for zero", () => {
+    expect(formatDuration(0)).toBe("0s");
+  });
+
+  it("returns 0s for negative input", () => {
+    expect(formatDuration(-123)).toBe("0s");
+  });
+
+  it("rounds sub-second up to 1s", () => {
+    expect(formatDuration(999)).toBe("1s");
+  });
+
+  it("formats single seconds unit", () => {
+    expect(formatDuration(12_000)).toBe("12s");
+  });
+
+  it("formats minutes + seconds", () => {
+    expect(formatDuration(252_000)).toBe("4m 12s");
+  });
+
+  it("formats hours + minutes", () => {
+    expect(formatDuration(11_100_000)).toBe("3h 5m");
+  });
+
+  it("formats days + hours", () => {
+    expect(formatDuration((2 * 86400 + 7 * 3600) * 1000)).toBe("2d 7h");
+  });
+
+  it("drops the zero smaller unit", () => {
+    expect(formatDuration(5 * 86400 * 1000)).toBe("5d");
   });
 });

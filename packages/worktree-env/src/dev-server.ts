@@ -21,7 +21,7 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError } from "./helpers.js";
+import { detectCommonJsError, formatDuration } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
 import {
   canonicalCwd,
@@ -37,7 +37,7 @@ import type {
   ServerDescriptor,
   SpawnServer,
 } from "./server-descriptor.js";
-import { resolveCurrentSlot, type ResolvedSlot } from "./slots.js";
+import { readSlots, resolveCurrentSlot, type ResolvedSlot, type SlotEntry } from "./slots.js";
 import { detectWorktree } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
@@ -135,6 +135,7 @@ async function start(
 ): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
 
+  checkWorktreeReady(config, mainWorktree, ctx.cwd);
   if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return;
   await enforceCap(config, mainWorktree, evict);
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
@@ -219,6 +220,59 @@ async function rollbackStart(
       console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
     }
   }
+}
+
+export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
+
+/**
+ * Pure builder for the `dev:up` worktree-readiness gate. Returns `ok` when the slot is `ready`
+ * or absent (synthesized main); otherwise returns the user-facing error message.
+ */
+export function buildWorktreeReadyMessage(input: {
+  slotPort: number;
+  worktreePath: string;
+  runtimeDir: string;
+  entry: SlotEntry | undefined;
+  now: number;
+}): WorktreeReadyCheck {
+  const { slotPort, worktreePath, runtimeDir, entry, now } = input;
+  if (!entry || entry.status === "ready") return { ok: true };
+  const logPath = join(worktreePath, runtimeDir, "wt-setup.log");
+  if (entry.status === "pending") {
+    const elapsed = formatDuration(now - Date.parse(entry.createdAt));
+    return {
+      ok: false,
+      message:
+        `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
+        `Tail: ${logPath}\n` +
+        "Run `setup-worktree --wait` to block until it finishes, or retry `dev:up` once ready.",
+    };
+  }
+  const failureAt = entry.failure?.at ?? entry.createdAt;
+  const elapsed = formatDuration(now - Date.parse(failureAt));
+  const reason = entry.failure?.message ?? "(no message)";
+  return {
+    ok: false,
+    message:
+      `Error: Worktree setup failed (slot ${slotPort}, ${elapsed} ago): ${reason}\n` +
+      `Tail: ${logPath}\n` +
+      "Re-run `setup-worktree --here` to retry the finalize.",
+  };
+}
+
+function checkWorktreeReady(config: DevServerConfig, mainWorktree: string, cwd: string): void {
+  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
+  const entry = readSlots(mainWorktree, config.registryDir).slots[String(slot.slot)];
+  const result = buildWorktreeReadyMessage({
+    slotPort: slot.slot,
+    worktreePath: cwd,
+    runtimeDir: config.runtimeDir,
+    entry,
+    now: Date.now(),
+  });
+  if (result.ok) return;
+  console.error(result.message);
+  process.exit(1);
 }
 
 /**
