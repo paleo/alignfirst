@@ -26,6 +26,7 @@ function spawnServer(name: string, port: number): SpawnServer {
 }
 
 const isUnix = platform() !== "win32";
+const dirSymlinkType = platform() === "win32" ? "junction" : "dir";
 
 describe("isPidOurs", () => {
   it("matches exact cwd", () => {
@@ -51,7 +52,7 @@ describe("isPidOurs", () => {
   it("resolves holder symlink before comparing", () => {
     const real = mkdtempSync(join(tmpdir(), "wt-real-"));
     const link = `${real}-link`;
-    symlinkSync(real, link);
+    symlinkSync(real, link, dirSymlinkType);
     try {
       expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: link }, real)).toBe(true);
     } finally {
@@ -65,7 +66,7 @@ describe("canonicalCwd", () => {
   it("resolves a symlink", () => {
     const real = mkdtempSync(join(tmpdir(), "wt-real-"));
     const link = `${real}-link`;
-    symlinkSync(real, link);
+    symlinkSync(real, link, dirSymlinkType);
     try {
       expect(canonicalCwd(link)).toBe(realpathSync(real));
     } finally {

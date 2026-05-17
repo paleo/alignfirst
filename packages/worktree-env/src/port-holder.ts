@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { createConnection } from "node:net";
 import { platform } from "node:os";
@@ -54,6 +54,7 @@ export function isPortBusy(port: number): Promise<boolean> {
       resolve(false);
     });
     socket.once("error", () => {
+      socket.destroy();
       resolve(false);
     });
   });
@@ -125,7 +126,8 @@ async function sweepOnePort(server: SpawnServer, ourCanonicalCwd: string): Promi
 }
 
 function listenerPid(port: number): number | undefined {
-  const out = tryExec(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
+  if (!Number.isInteger(port) || port <= 0) return;
+  const out = tryExec("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"]);
   if (out === undefined) return;
   const trimmed = out.trim();
   if (trimmed === "") return;
@@ -134,7 +136,8 @@ function listenerPid(port: number): number | undefined {
 }
 
 function pidPgidAndCommand(pid: number): { pgid: number; cmd: string } | undefined {
-  const out = tryExec(`ps -p ${pid} -o pgid=,command=`);
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  const out = tryExec("ps", ["-p", String(pid), "-o", "pgid=,command="]);
   if (out === undefined) return;
   const match = out.trim().match(/^(\d+)\s+(.+)$/);
   if (match === null) return;
@@ -144,15 +147,16 @@ function pidPgidAndCommand(pid: number): { pgid: number; cmd: string } | undefin
 }
 
 function pidCwd(pid: number): string | undefined {
-  const out = tryExec(`lsof -p ${pid} -a -d cwd -Fn`);
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  const out = tryExec("lsof", ["-p", String(pid), "-a", "-d", "cwd", "-Fn"]);
   if (out === undefined) return;
   const match = out.match(/^n(.+)$/m);
   return match === null ? undefined : match[1];
 }
 
-function tryExec(command: string): string | undefined {
+function tryExec(file: string, args: string[]): string | undefined {
   try {
-    return execSync(command, { stdio: ["ignore", "pipe", "ignore"] }).toString();
+    return execFileSync(file, args, { stdio: ["ignore", "pipe", "ignore"] }).toString();
   } catch {
     return;
   }
