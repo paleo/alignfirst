@@ -58,6 +58,8 @@ export interface RegisterSlotInput {
   requestedOwner?: string;
   /** When `true`, the slot is forced to `scheme.basePort` regardless of `slot` arg. */
   isMainWorktree: boolean;
+  /** When `true`, an existing `ready` slot is reset to `pending` so the re-finalize is observable. */
+  force?: boolean;
 }
 
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
@@ -69,8 +71,9 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const existing = registry.slots[String(port)];
   const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
-  // Re-runs of `--here` keep a previously finalized slot ready; otherwise reset to pending.
-  const status: SlotStatus = existing?.status === "ready" ? "ready" : "pending";
+  // Re-runs of `--here` keep a previously finalized slot ready, unless `--force` is set —
+  // then we reset to pending so `--wait` blocks and `dev:up` refuses during the re-finalize.
+  const status: SlotStatus = existing?.status === "ready" && !input.force ? "ready" : "pending";
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
     branch: input.branch,

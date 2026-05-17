@@ -305,6 +305,7 @@ async function runSetup(
     branch,
     requestedOwner: args.owner,
     isMainWorktree: setupCtx.isMainWorktree,
+    force: args.force ?? false,
   });
   const ports = portsFn(slot);
 
