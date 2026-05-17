@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.7"
+  version: "0.7.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -138,7 +138,7 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 | `--slot PORT` | Use a specific slot instead of auto-assigning |
 | `--force` | Overwrite existing config files and re-provision the database |
 | `--wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
-| `--info` | Print the summary (ports, branch, readiness) for the current worktree |
+| `--info` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether `dev:up` is running for the worktree, with PIDs and log paths |
 | `--list` | Print all registered linked worktrees (slot, status, branch, path, owner, created) |
 | `--verbose` | Show intermediate output |
 
@@ -206,13 +206,14 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 
 **Lifecycle:**
 
-1. Verifies that each spawn server's `port` is not already in use.
-2. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit). Pass `--evict` to stop the oldest live dev-server across all worktrees and proceed instead of aborting.
-3. Aborts if this worktree already has an entry in `dev-servers.json` whose spawn PIDs are alive. A stale entry (all PIDs dead) is dropped so the start can proceed.
-4. Iterates `config.servers` in array order. For `kind: "spawn"`: spawns a detached process group with stdout/stderr to `<runtimeDir>/logs/<name>.log` and records the PID in-memory. For `kind: "callback"`: `await server.start({ cwd: process.cwd() })`.
-5. Polls each spawn server's log in parallel and asks `detectSuccess(logContent)` whether it's ready. Fails fast when `detectError(logContent)` returns a label (e.g. matching `"[ExceptionHandler]"` or Node's `"Node.js v"` exit footer) or when the process dies, instead of waiting for the timeout.
-6. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero.
-7. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, spawn pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
+1. Refuses to start when the current worktree's slot in `slots.json` is `pending` or `failed`; prints the elapsed time since creation/failure and the log path.
+2. Verifies that each spawn server's `port` is not already in use.
+3. Reads `dev-servers.json`, prunes dead entries, and refuses to start when the live count meets `config.devLimit` (omitted = no limit). Pass `--evict` to stop the oldest live dev-server across all worktrees and proceed instead of aborting.
+4. Aborts if this worktree already has an entry in `dev-servers.json` whose spawn PIDs are alive. A stale entry (all PIDs dead) is dropped so the start can proceed.
+5. Iterates `config.servers` in array order. For `kind: "spawn"`: spawns a detached process group with stdout/stderr to `<runtimeDir>/logs/<name>.log` and records the PID in-memory. For `kind: "callback"`: `await server.start({ cwd: process.cwd() })`.
+6. Polls each spawn server's log in parallel and asks `detectSuccess(logContent)` whether it's ready. Fails fast when `detectError(logContent)` returns a label (e.g. matching `"[ExceptionHandler]"` or Node's `"Node.js v"` exit footer) or when the process dies, instead of waiting for the timeout.
+7. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero.
+8. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, spawn pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
 
 `dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
 

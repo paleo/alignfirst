@@ -26,7 +26,8 @@ import {
 } from "./cli.js";
 import { findOwnEntry, removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
-import { copyAndPatchFile } from "./helpers.js";
+import { copyAndPatchFile, formatDuration } from "./helpers.js";
+import { isProcessAlive } from "./process-control.js";
 import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
 import {
   handleSetOwner,
@@ -468,14 +469,21 @@ function printWorktreeInfo(
   const branch = entry?.branch ?? fallback.branch;
   const owner = entry?.owner ?? fallback.owner;
   const slotStatus = entry?.status ?? "pending";
-  const logHint = ` (tail ${join(worktreeForLog, config.runtimeDir, "wt-setup.log")})`;
-  const display =
-    slotStatus === "ready"
-      ? "ready"
-      : slotStatus === "failed"
-        ? `failed: ${entry?.failure?.message ?? "(no message)"}${logHint}`
-        : `pending${logHint}`;
+  const setupLogPath = join(worktreeForLog, config.runtimeDir, "wt-setup.log");
+  const now = Date.now();
+  const display = ((): string => {
+    if (slotStatus === "ready") return "ready";
+    if (slotStatus === "failed") {
+      const at = entry?.failure?.at ?? entry?.createdAt;
+      const elapsed = at ? formatDuration(now - Date.parse(at)) : "?";
+      const reason = entry?.failure?.message ?? "(no message)";
+      return `failed ${elapsed} ago: ${reason} (tail ${setupLogPath})`;
+    }
+    const elapsed = entry ? formatDuration(now - Date.parse(entry.createdAt)) : "?";
+    return `pending, started ${elapsed} ago (tail ${setupLogPath})`;
+  })();
   const isMainWorktree = entry?.main ?? false;
+  const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
   console.log(`Type:   ${isMainWorktree ? "main" : "linked"}`);
   console.log(`Status: ${display}`);
   console.log(
@@ -484,11 +492,38 @@ function printWorktreeInfo(
       branch,
       owner,
       ports,
-      currentWorktree: entry?.worktree ?? ctx.currentWorktree,
+      currentWorktree: targetWorktree,
       mainWorktree: ctx.mainWorktree,
       isMainWorktree,
     }),
   );
+  printDevServerBlock(config, ctx.mainWorktree, targetWorktree, now);
+}
+
+function printDevServerBlock(
+  config: SetupWorktreeConfig,
+  mainWorktree: string,
+  targetWorktree: string,
+  now: number,
+): void {
+  const entry = findOwnEntry(mainWorktree, config.registryDir, targetWorktree);
+  if (!entry) {
+    console.log("Dev-server: not running (no prior run recorded)");
+    return;
+  }
+  const liveEntries = Object.entries(entry.pids)
+    .filter(([, pid]) => isProcessAlive(pid))
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (liveEntries.length === 0) {
+    console.log("Dev-server: not running");
+    return;
+  }
+  const elapsed = formatDuration(now - Date.parse(entry.startedAt));
+  console.log(`Dev-server: running, started ${elapsed} ago`);
+  for (const [name, pid] of liveEntries) {
+    console.log(`  ${name}: PID ${pid}`);
+    console.log(`    log: ${join(targetWorktree, config.runtimeDir, "logs", `${name}.log`)}`);
+  }
 }
 
 function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
@@ -504,7 +539,10 @@ function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
     return;
   }
   const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
-  printWorktreeInfo(config, resolved.slot, ".", { branch: resolved.branch, owner: resolved.owner });
+  printWorktreeInfo(config, resolved.slot, resolved.worktree, {
+    branch: resolved.branch,
+    owner: resolved.owner,
+  });
 }
 
 function runList(config: SetupWorktreeConfig): void {

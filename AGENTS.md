@@ -2,6 +2,8 @@
 
 **Important:** Every text in this repository must be sharp, concise, straight to the point. Each word must be carefully weighted and chosen.
 
+**Writing Markdown**: Do not wrap text to 80 chars; let it run freely.
+
 ## AlignFirst - Ticket ID, Commit Message, Branch Name
 
 _Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.

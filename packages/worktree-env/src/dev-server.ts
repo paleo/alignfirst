@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 
 import {
@@ -22,8 +21,15 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError } from "./helpers.js";
+import { detectCommonJsError, formatDuration } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
+import {
+  canonicalCwd,
+  detectPortConflicts,
+  type PortConflict,
+  sweepStalePorts,
+  waitForPortsFree,
+} from "./port-holder.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import type {
   CallbackServer,
@@ -31,7 +37,7 @@ import type {
   ServerDescriptor,
   SpawnServer,
 } from "./server-descriptor.js";
-import { resolveCurrentSlot, type ResolvedSlot } from "./slots.js";
+import { readSlots, resolveCurrentSlot, type ResolvedSlot, type SlotEntry } from "./slots.js";
 import { detectWorktree } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
@@ -129,10 +135,11 @@ async function start(
 ): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
 
+  checkWorktreeReady(config, mainWorktree, ctx.cwd);
   if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return;
   await enforceCap(config, mainWorktree, evict);
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
-  await checkPortsFree(config.servers);
+  await checkPortsFree(config.servers, ctx.cwd);
 
   const spawnPids: Record<string, number> = {};
   const startedCallbacks: CallbackServer[] = [];
@@ -215,6 +222,59 @@ async function rollbackStart(
   }
 }
 
+export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
+
+/**
+ * Pure builder for the `dev:up` worktree-readiness gate. Returns `ok` when the slot is `ready`
+ * or absent (synthesized main); otherwise returns the user-facing error message.
+ */
+export function buildWorktreeReadyMessage(input: {
+  slotPort: number;
+  worktreePath: string;
+  runtimeDir: string;
+  entry: SlotEntry | undefined;
+  now: number;
+}): WorktreeReadyCheck {
+  const { slotPort, worktreePath, runtimeDir, entry, now } = input;
+  if (!entry || entry.status === "ready") return { ok: true };
+  const logPath = join(worktreePath, runtimeDir, "wt-setup.log");
+  if (entry.status === "pending") {
+    const elapsed = formatDuration(now - Date.parse(entry.createdAt));
+    return {
+      ok: false,
+      message:
+        `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
+        `Tail: ${logPath}\n` +
+        "Run `setup-worktree --wait` to block until it finishes, or retry `dev:up` once ready.",
+    };
+  }
+  const failureAt = entry.failure?.at ?? entry.createdAt;
+  const elapsed = formatDuration(now - Date.parse(failureAt));
+  const reason = entry.failure?.message ?? "(no message)";
+  return {
+    ok: false,
+    message:
+      `Error: Worktree setup failed (slot ${slotPort}, ${elapsed} ago): ${reason}\n` +
+      `Tail: ${logPath}\n` +
+      "Re-run `setup-worktree --here` to retry the finalize.",
+  };
+}
+
+function checkWorktreeReady(config: DevServerConfig, mainWorktree: string, cwd: string): void {
+  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
+  const entry = readSlots(mainWorktree, config.registryDir).slots[String(slot.slot)];
+  const result = buildWorktreeReadyMessage({
+    slotPort: slot.slot,
+    worktreePath: cwd,
+    runtimeDir: config.runtimeDir,
+    entry,
+    now: Date.now(),
+  });
+  if (result.ok) return;
+  console.error(result.message);
+  process.exit(1);
+}
+
 /**
  * If a dev-server is already running in this worktree, either stop it (when `restart`) so the
  * normal start path can proceed, or print a friendly notice and return `true` to short-circuit.
@@ -282,19 +342,47 @@ async function enforceCap(
   }
 }
 
-async function checkPortsFree(servers: ServerDescriptor[]): Promise<void> {
-  const spawnServers = servers.filter((s): s is SpawnServer => s.kind === "spawn");
-  const busy = await Promise.all(spawnServers.map((s) => isPortBusy(s.port)));
-  let anyBusy = false;
-  busy.forEach((b, i) => {
-    if (b) {
-      console.error(
-        `Error: Port ${spawnServers[i].port} (${spawnServers[i].name}) is already in use.`,
-      );
-      anyBusy = true;
+async function checkPortsFree(servers: ServerDescriptor[], cwd: string): Promise<void> {
+  const conflicts = await detectPortConflicts(servers, canonicalCwd(cwd));
+  const foreign = conflicts.filter(
+    (c): c is Extract<PortConflict, { kind: "foreign" }> => c.kind === "foreign",
+  );
+  if (foreign.length > 0) {
+    for (const c of foreign) {
+      const info = c.holder
+        ? ` (PID ${c.holder.pid}: ${c.holder.cmd}${c.holder.cwd ? `, cwd ${c.holder.cwd}` : ""})`
+        : "";
+      console.error(`Error: Port ${c.server.port} (${c.server.name}) is already in use${info}.`);
     }
-  });
-  if (anyBusy) process.exit(1);
+    process.exit(1);
+  }
+  const ours = conflicts.filter(
+    (c): c is Extract<PortConflict, { kind: "ours" }> => c.kind === "ours",
+  );
+  if (ours.length === 0) return;
+  for (const c of ours) {
+    console.warn(
+      `Stale ${c.server.name} dev-server detected on port ${c.server.port} (PID ${c.holder.pid}: ${c.holder.cmd}). Cleaning up...`,
+    );
+    if (c.holder.pgid === undefined) {
+      console.error(`  Cannot kill: pgid unknown for PID ${c.holder.pid}.`);
+      process.exit(1);
+    }
+    await stopProcessGroup(c.holder.pgid);
+  }
+  const stillBusy = await waitForPortsFree(
+    ours.map((c) => c.server.port),
+    2000,
+  );
+  if (stillBusy.length > 0) {
+    for (const port of stillBusy) {
+      const server = ours.find((c) => c.server.port === port)?.server;
+      console.error(
+        `Error: Port ${port}${server ? ` (${server.name})` : ""} still in use after cleanup attempt.`,
+      );
+    }
+    process.exit(1);
+  }
 }
 
 function checkNoLocalRegistryConflict(
@@ -319,6 +407,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
   const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
   if (!entry) {
     console.log("No dev-server running in this worktree.");
+    await sweepStalePorts(config.servers, ctx.cwd);
     return;
   }
   for (const [name, pid] of Object.entries(entry.pids)) {
@@ -336,6 +425,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
     }
   }
   unregisterDevServer(mainWorktree, config.registryDir, ctx.cwd);
+  await sweepStalePorts(config.servers, ctx.cwd);
 }
 
 function defaultPrintSummary(
@@ -376,22 +466,4 @@ function spawnServer(server: SpawnServer, runtimeDir: string, cwd: string): numb
   child.unref();
   closeSync(logFd);
   return child.pid;
-}
-
-function isPortBusy(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
-    socket.setTimeout(500);
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", () => {
-      resolve(false);
-    });
-  });
 }

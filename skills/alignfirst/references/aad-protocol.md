@@ -34,7 +34,9 @@ Engage in a thorough collaborative discussion covering:
 - **Approach evaluation**: Discuss potential solutions and their trade-offs
 - **Edge cases and implications**: Explore potential issues and broader system impacts
 
-**This phase is mandatory.** You're new to this project, the user can guide you.
+You're new to this project, the user can guide you.
+
+**This phase is mandatory.** If there is nothing to discuss, ask the user for an explicit validation.
 
 ## 3. Act
 
