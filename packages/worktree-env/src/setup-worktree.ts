@@ -37,6 +37,7 @@ import {
   resolveAndRegisterSlot,
   resolveCurrentSlot,
   type SlotEntry,
+  type SlotStatus,
   validateSlotAvailability,
   writeSlots,
 } from "./slots.js";
@@ -145,6 +146,8 @@ export interface SetupContext {
   /** `true` when finalizing the main worktree. Gate "copy from main" steps with `!isMainWorktree`. */
   isMainWorktree: boolean;
   slot: number;
+  /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
+  branch: string;
   owner?: string;
   ports: Record<string, number>;
   force: boolean;
@@ -158,12 +161,16 @@ export interface SetupContext {
  */
 export interface SummaryContext {
   slot: number;
+  /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
+  branch: string;
   owner?: string;
   ports: Record<string, number>;
   currentWorktree: string;
   mainWorktree: string;
   /** `true` when the summary describes the main worktree (slot = `basePort`). */
   isMainWorktree: boolean;
+  /** Slot finalize status. `"pending"` until `finalizeWorktree` succeeds, then `"ready"`. */
+  status: SlotStatus;
 }
 
 /** Context passed to {@link SetupWorktreeConfig.purgeInfrastructure}. */
@@ -294,7 +301,11 @@ async function runSetup(
   const setupCtx = ensureWorktree(args, ctx, run, config.worktreeDirName);
   refuseIfFinalizePending(setupCtx, config.registryDir, args.force ?? false);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
-  const { port: slot, owner } = resolveAndRegisterSlot({
+  const {
+    port: slot,
+    owner,
+    status,
+  } = resolveAndRegisterSlot({
     slot: args.slot,
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
@@ -345,17 +356,21 @@ async function runSetup(
   teeLog(
     config.printSummary({
       slot,
+      branch,
       owner,
       ports,
       currentWorktree: setupCtx.currentWorktree,
       mainWorktree: setupCtx.mainWorktree,
       isMainWorktree: setupCtx.isMainWorktree,
+      status,
     }),
   );
 
   teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
-  teeLog(`Setup continuing in background. Tail: ${logPath}`);
-  teeLog(`Block until ready: setup-worktree --wait --slot ${slot}`);
+  if (status !== "ready") {
+    teeLog(`Setup continuing in background. Tail: ${logPath}`);
+    teeLog(`Block until ready: setup-worktree --wait --slot ${slot}`);
+  }
 
   const finalizeArgs = [config.scriptPath, "--__finalize", String(slot)];
   if (args.force) finalizeArgs.push("--force");
@@ -418,6 +433,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     mainWorktree: ctx.mainWorktree,
     isMainWorktree: ctx.isMainWorktree,
     slot,
+    branch,
     owner: entry.owner,
     ports,
     force: args.force ?? false,
@@ -467,34 +483,33 @@ function printWorktreeInfo(
   const ports = resolvePortsFn(config)(slot);
 
   const owner = entry?.owner ?? fallback.owner;
-  const slotStatus = entry?.status ?? "pending";
+  const status: SlotStatus = entry?.status ?? "pending";
   const setupLogPath = join(worktreeForLog, config.runtimeDir, "wt-setup.log");
   const now = Date.now();
-  const display = ((): string => {
-    if (slotStatus === "ready") return "ready";
-    if (slotStatus === "failed") {
-      const at = entry?.failure?.at ?? entry?.createdAt;
-      const elapsed = at ? formatDuration(now - Date.parse(at)) : "?";
-      const reason = entry?.failure?.message ?? "(no message)";
-      return `failed ${elapsed} ago: ${reason} (tail ${setupLogPath})`;
-    }
-    const elapsed = entry ? formatDuration(now - Date.parse(entry.createdAt)) : "?";
-    return `pending, started ${elapsed} ago (tail ${setupLogPath})`;
-  })();
   const isMainWorktree = entry?.main ?? false;
   const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
-  console.log(`Type:   ${isMainWorktree ? "main" : "linked"}`);
-  console.log(`Status: ${display}`);
+  const branch = getWorktreeBranch(targetWorktree) ?? "(detached)";
   console.log(
     config.printSummary({
       slot,
+      branch,
       owner,
       ports,
       currentWorktree: targetWorktree,
       mainWorktree: ctx.mainWorktree,
       isMainWorktree,
+      status,
     }),
   );
+  if (status === "failed") {
+    const at = entry?.failure?.at ?? entry?.createdAt;
+    const elapsed = at ? formatDuration(now - Date.parse(at)) : "?";
+    const reason = entry?.failure?.message ?? "(no message)";
+    console.log(`Failure: ${reason} (${elapsed} ago, tail ${setupLogPath})`);
+  } else if (status === "pending" && entry) {
+    const elapsed = formatDuration(now - Date.parse(entry.createdAt));
+    console.log(`Pending since ${elapsed} ago (tail ${setupLogPath})`);
+  }
   printDevServerBlock(config, ctx.mainWorktree, targetWorktree, now);
 }
 

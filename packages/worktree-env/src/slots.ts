@@ -63,6 +63,7 @@ export interface RegisterSlotInput {
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   port: number;
   owner: string | undefined;
+  status: SlotStatus;
 } {
   const registry = readSlots(input.mainWorktree, input.registryDir);
   const port = pickSlotPort(input, registry);
@@ -81,7 +82,7 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   if (owner !== undefined) entry.owner = owner;
   registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, input.registryDir, registry);
-  return { port, owner };
+  return { port, owner, status };
 }
 
 export function markSlotReady(mainWorktree: string, registryDir: string, slotPort: number): void {

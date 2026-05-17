@@ -67,12 +67,12 @@ await runSetupWorktree({
   finalizeWorktree: async ({ currentWorktree }) => {
     // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
-  printSummary: ({ slot, owner, ports }) =>
-    `Slot ${slot}${owner ? ` (${owner})` : ""} — server :${ports.server}`,
+  printSummary: ({ slot, branch, owner, ports, isMainWorktree, status }) =>
+    `Type:   ${isMainWorktree ? "main" : "linked"}\nStatus: ${status}\nSlot:   ${slot}\nBranch: ${branch}${owner ? `\nOwner:  ${owner}` : ""}\nServer: :${ports.server}`,
 });
 ```
 
-The current branch is not persisted in the registry — worktrees can be checked out to a different branch at any time, so any stored value would go stale. Callbacks that need the live branch should call `git branch --show-current` (with `cwd` set to the worktree) themselves.
+`branch` is resolved live from the worktree on each call (not persisted in the registry — `git checkout` makes any stored value stale). For detached HEAD or missing directory, it falls back to `"(detached)"`. `status` is the slot's finalize status: `"pending"` until `finalizeWorktree` succeeds, then `"ready"` (or `"failed"`).
 
 Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait` from inside the worktree (or `setup-worktree --wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
 
