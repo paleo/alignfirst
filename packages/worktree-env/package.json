@@ -1,6 +1,6 @@
 {
   "name": "@paleo/worktree-env",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Worktree-based concurrent local environment kernel.",
   "keywords": [
     "worktree",
@@ -36,7 +36,7 @@
     "lint": "biome check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+    "prepublishOnly": "npm i && npm run clear && npm run build && npm run lint && npm run test"
   },
   "devDependencies": {
     "@types/node": "~24.12.3",
