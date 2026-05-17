@@ -360,7 +360,9 @@ async function runSetup(
   teeLog(`Setup continuing in background. Tail: ${logPath}`);
   teeLog(`Block until ready: setup-worktree --wait --slot ${slot}`);
 
-  const child = spawn(process.execPath, [config.scriptPath, "--__finalize", String(slot)], {
+  const finalizeArgs = [config.scriptPath, "--__finalize", String(slot)];
+  if (args.force) finalizeArgs.push("--force");
+  const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     cwd: setupCtx.currentWorktree,
@@ -507,14 +509,12 @@ function printDevServerBlock(
   now: number,
 ): void {
   const entry = findOwnEntry(mainWorktree, config.registryDir, targetWorktree);
-  if (!entry) {
-    console.log("Dev-server: not running (no prior run recorded)");
-    return;
-  }
-  const liveEntries = Object.entries(entry.pids)
-    .filter(([, pid]) => isProcessAlive(pid))
-    .sort(([a], [b]) => a.localeCompare(b));
-  if (liveEntries.length === 0) {
+  const liveEntries = entry
+    ? Object.entries(entry.pids)
+        .filter(([, pid]) => isProcessAlive(pid))
+        .sort(([a], [b]) => a.localeCompare(b))
+    : [];
+  if (liveEntries.length === 0 || !entry) {
     console.log("Dev-server: not running");
     return;
   }
