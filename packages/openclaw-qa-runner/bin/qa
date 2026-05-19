@@ -1,0 +1,98 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  cat >&2 <<EOF
+usage: qa/bin/qa --channel <discord-mock|slack-mock|all> [<scenario> ...] [--all] [--concurrency N]
+
+  Scenario selection is required: either a positional list or --all (mutually exclusive).
+  Run 'npm run env:up' first.
+EOF
+  exit 1
+}
+
+channel=""
+all=0
+concurrency=""
+positional=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --channel)
+      [ "$#" -ge 2 ] || usage
+      channel=$2
+      shift 2
+      ;;
+    --channel=*)
+      channel=${1#--channel=}
+      shift
+      ;;
+    --all)
+      all=1
+      shift
+      ;;
+    --concurrency)
+      [ "$#" -ge 2 ] || usage
+      concurrency=$2
+      shift 2
+      ;;
+    --concurrency=*)
+      concurrency=${1#--concurrency=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      ;;
+    --*)
+      echo "unknown flag: $1" >&2
+      usage
+      ;;
+    *)
+      positional="$positional $1"
+      shift
+      ;;
+  esac
+done
+
+case "$channel" in
+  discord-mock|slack-mock|all) ;;
+  *) usage ;;
+esac
+
+# trim leading space
+positional=$(printf %s "$positional" | sed 's/^ //')
+
+if [ "$all" -eq 1 ] && [ -n "$positional" ]; then
+  echo "error: pass either --all or a positional scenario list, not both" >&2
+  usage
+fi
+if [ "$all" -eq 0 ] && [ -z "$positional" ]; then
+  echo "error: must pass --all or one or more scenario names" >&2
+  usage
+fi
+
+qa_dir="${QA_PROJECT_DIR:-$PWD}"
+compose_file="$qa_dir/docker-compose.yml"
+env_file="$qa_dir/.env.local"
+
+export KCLAW_UID="${KCLAW_UID:-$(id -u)}"
+export KCLAW_GID="${KCLAW_GID:-$(id -g)}"
+export QA_PROJECT_DIR="$qa_dir"
+
+gateway_running=$(docker compose --env-file "$env_file" -f "$compose_file" ps --status running --services 2>/dev/null | grep -Fx gateway || true)
+if [ -z "$gateway_running" ]; then
+  echo "gateway is not running — run 'npm run env:up' first" >&2
+  exit 1
+fi
+
+set -- --channel "$channel"
+if [ "$all" -eq 1 ]; then
+  set -- "$@" --all
+else
+  # shellcheck disable=SC2086
+  set -- "$@" $positional
+fi
+if [ -n "$concurrency" ]; then
+  set -- "$@" --concurrency "$concurrency"
+fi
+
+docker compose --env-file "$env_file" -f "$compose_file" run --rm runner "$@"

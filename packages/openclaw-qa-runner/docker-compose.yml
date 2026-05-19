@@ -1,0 +1,64 @@
+x-common-build: &common-build
+  context: ${QA_PROJECT_DIR}
+  dockerfile: ${QA_RUNNER_PACKAGE_DIR}/Dockerfile
+  args:
+    KCLAW_UID: ${KCLAW_UID:-1000}
+    KCLAW_GID: ${KCLAW_GID:-1000}
+
+x-common-volumes: &common-volumes
+  - ${OPENCLAW_WORKSPACE_DIR}:/home/kclaw/.openclaw/workspace
+  - ${QA_RUNNER_PACKAGE_DIR}/workspace-judge/:/home/kclaw/.openclaw/workspace-judge
+  - ${OPENCLAW_CONFIG_PATH}:/home/kclaw/.openclaw/openclaw.json
+  - ${PROJECTS_DIR}:/home/kclaw/projects/
+  - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
+  - ${SCENARIOS_DIR}:/opt/qa-src/scenarios
+  - ${ARTIFACTS_DIR}:/opt/qa-artifacts
+  - ${GATEWAY_LOGS_DIR}:/home/kclaw/.openclaw/logs
+
+services:
+  bus:
+    build: *common-build
+    user: kclaw
+    working_dir: /opt/qa-src
+    command: ["node", "/opt/qa-src/dist/bus.js"]
+    volumes: *common-volumes
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:43123/v1/state"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  gateway:
+    build: *common-build
+    user: kclaw
+    working_dir: /opt/qa-src
+    environment:
+      OPENCLAW_CONFIG_PATH: /home/kclaw/.openclaw/openclaw.json
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENCLAW_ANTHROPIC_PAYLOAD_LOG: ${OPENCLAW_ANTHROPIC_PAYLOAD_LOG:-}
+      OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}
+    command: ["npx", "openclaw", "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none"]
+    volumes: *common-volumes
+    depends_on:
+      bus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').connect(18789, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  runner:
+    build: *common-build
+    user: kclaw
+    working_dir: /opt/qa-src
+    environment:
+      QA_BUS_URL: http://bus:43123
+      OPENCLAW_CONFIG_PATH: /home/kclaw/.openclaw/openclaw.json
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    entrypoint: ["node", "/opt/qa-src/dist/runner.js"]
+    volumes: *common-volumes
+    depends_on:
+      gateway:
+        condition: service_healthy

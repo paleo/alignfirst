@@ -2,7 +2,7 @@
 
 A lightweight documentation system for AI agents and humans. Keep project docs in a `docs/` folder with YAML frontmatter, browse and read them from the terminal.
 
-Docmap is both a **npm package** (this CLI — lists, reads, and validates docs) and an **agent skill** `docmap` (conventions and workflows that teach AI agents how to write, organize, and migrate documentation). You need both: the package provides the tooling, the skill provides the knowledge.
+Docmap is both a **npm package** (this CLI; it lists, reads, and validates docs) and an **agent skill** `docmap` (conventions and workflows that teach AI agents how to write, organize, and migrate documentation). You need both: the package provides the tooling, the skill provides the knowledge.
 
 _Inspired by the [OpenClaw](https://github.com/openclaw/openclaw/) docs system, which uses [Mintlify](https://www.mintlify.com/). This project doesn't depend on Mintlify._
 

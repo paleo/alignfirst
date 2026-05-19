@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -gt 0 ]; then
+  echo "usage: qa/bin/env-up (no arguments)" >&2
+  exit 1
+fi
+
+qa_dir="${QA_PROJECT_DIR:-$PWD}"
+compose_file="$qa_dir/docker-compose.yml"
+env_file="$qa_dir/.env.local"
+
+export KCLAW_UID="${KCLAW_UID:-$(id -u)}"
+export KCLAW_GID="${KCLAW_GID:-$(id -g)}"
+export QA_PROJECT_DIR="$qa_dir"
+
+docker compose --env-file "$env_file" -f "$compose_file" up -d --wait --remove-orphans bus gateway
