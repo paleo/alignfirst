@@ -1,14 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readJudgeConfig } from "./openclaw-config.js";
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
-if (!apiKey) {
-  throw new Error("ANTHROPIC_API_KEY is not set — fill in qa/.env.local");
-}
+let cached: { client: Anthropic; model: string } | null = null;
 
-const judge = readJudgeConfig();
-const judgeModel = judge.model.replace(/^anthropic\//, "");
-const client = new Anthropic({ apiKey });
+function getJudge(): { client: Anthropic; model: string } {
+  if (cached) return cached;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set — fill in qa/.env.local");
+  }
+  const judge = readJudgeConfig();
+  const model = judge.model.replace(/^anthropic\//, "");
+  cached = { client: new Anthropic({ apiKey }), model };
+  return cached;
+}
 
 export type JudgeUsage = {
   model: string;
@@ -49,8 +54,9 @@ function parseVerdictBody(raw: string): { verdict: "pass" | "fail"; reasoning: s
 }
 
 export async function judgeLLM(params: { message: string; rubric: string }): Promise<JudgeVerdict> {
+  const { client, model } = getJudge();
   const resp = await client.messages.create({
-    model: judgeModel,
+    model,
     max_tokens: 512,
     messages: [
       {
@@ -65,7 +71,7 @@ export async function judgeLLM(params: { message: string; rubric: string }): Pro
     throw new Error("judge response missing usage");
   }
   const usage: JudgeUsage = {
-    model: judgeModel,
+    model,
     inputTokens: resp.usage.input_tokens,
     outputTokens: resp.usage.output_tokens,
   };

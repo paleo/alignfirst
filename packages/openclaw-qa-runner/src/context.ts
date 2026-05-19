@@ -1,26 +1,19 @@
+import {
+  getQaBusState,
+  injectQaBusInboundMessage,
+  pollQaBus,
+  type QaBusConversation,
+  type QaBusMessage,
+  type QaBusPollResult,
+} from "@paleo/openclaw-channel-mock-core";
 import { judgeLLM, type JudgeUsage, type JudgeVerdict } from "./judge.js";
 
 const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
 
 export type ChannelId = "discord-mock" | "slack-mock";
 
-export type Conversation = { kind: "direct" | "group" | "channel"; id: string; title?: string };
-
-export type BusMessage = {
-  id: string;
-  accountId: string;
-  direction: "inbound" | "outbound";
-  conversation: Conversation;
-  senderId: string;
-  senderName?: string;
-  text: string;
-  timestamp: number;
-  threadId?: string;
-  threadTitle?: string;
-  replyToId?: string;
-};
-
-type BusEvent = { cursor: number; kind: string; accountId: string; message?: BusMessage };
+export type Conversation = QaBusConversation;
+export type BusMessage = QaBusMessage;
 
 export type PollResult = { messages: BusMessage[]; nextCursor: number };
 
@@ -34,19 +27,6 @@ export class AssertionError extends Error {
     super(msg);
     this.name = "AssertionError";
   }
-}
-
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const resp = await fetch(`${BUS_URL}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`POST ${path} -> ${resp.status}: ${text}`);
-  }
-  return (await resp.json()) as T;
 }
 
 export type ScenarioContext = ReturnType<typeof createContext>;
@@ -77,28 +57,31 @@ export function createContext(params: { channel: ChannelId; conversationId: stri
       id: conversationId,
       title: conversationId,
     };
-    const payload = {
-      accountId,
-      conversation,
-      senderId: input.senderId,
-      senderName: input.senderName,
-      text: input.text,
-      threadId: input.threadId,
-    };
-    const r = await postJson<{ message: BusMessage }>("/v1/inbound/message", payload);
+    const r = await injectQaBusInboundMessage({
+      baseUrl: BUS_URL,
+      input: {
+        accountId,
+        conversation,
+        senderId: input.senderId,
+        senderName: input.senderName,
+        text: input.text,
+        threadId: input.threadId,
+      },
+    });
     log(`inbound sent: ${JSON.stringify({ id: r.message.id, text: input.text })}`);
     return r.message;
   }
 
   async function poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult> {
-    const r = await postJson<{ cursor: number; events: BusEvent[] }>("/v1/poll", {
+    const r: QaBusPollResult = await pollQaBus({
+      baseUrl: BUS_URL,
+      accountId,
       cursor: opts.sinceCursor,
       timeoutMs: opts.timeoutMs ?? 1000,
-      accountId,
     });
     const messages = r.events
-      .filter((e) => (e.kind === "outbound-message" || e.kind === "message-edited") && e.message)
-      .map((e) => e.message as BusMessage);
+      .filter((e) => e.kind === "outbound-message" || e.kind === "message-edited")
+      .map((e) => (e as { message: BusMessage }).message);
     return { messages, nextCursor: r.cursor };
   }
 
@@ -200,8 +183,7 @@ export function createContext(params: { channel: ChannelId; conversationId: stri
   }
 
   async function getCursor(): Promise<number> {
-    const r = await fetch(`${BUS_URL}/v1/state`);
-    const snap = (await r.json()) as { cursor: number };
+    const snap = await getQaBusState(BUS_URL);
     return snap.cursor;
   }
 

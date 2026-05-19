@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ChannelId, createContext } from "./context.js";
 import type { JudgeUsage } from "./judge.js";
@@ -18,6 +18,23 @@ const CHANNELS: ChannelId[] = ["discord-mock", "slack-mock"];
 
 type ChannelArg = ChannelId | "all";
 
+function parseChannel(raw: string | undefined): ChannelArg {
+  if (raw !== "discord-mock" && raw !== "slack-mock" && raw !== "all") {
+    throw new Error(
+      `runner: --channel expects discord-mock|slack-mock|all, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return raw;
+}
+
+function parseConcurrency(raw: string | undefined): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+    throw new Error(`runner: --concurrency expects a positive integer, got ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
 function parseArgs(argv: string[]): {
   channel: ChannelArg;
   scenarios: string[];
@@ -26,27 +43,27 @@ function parseArgs(argv: string[]): {
 } {
   let channel: ChannelArg | null = null;
   let all = false;
-  let concurrency = Number(process.env.QA_CONCURRENCY ?? "4");
+  let concurrency = parseConcurrency(process.env.QA_CONCURRENCY ?? "4");
   const scenarios: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
     if (a === "--channel") {
-      channel = argv[++i] as ChannelArg;
+      channel = parseChannel(argv[++i]);
     } else if (a.startsWith("--channel=")) {
-      channel = a.slice("--channel=".length) as ChannelArg;
+      channel = parseChannel(a.slice("--channel=".length));
     } else if (a === "--all") {
       all = true;
     } else if (a === "--concurrency") {
-      concurrency = Number(argv[++i]);
+      concurrency = parseConcurrency(argv[++i]);
     } else if (a.startsWith("--concurrency=")) {
-      concurrency = Number(a.slice("--concurrency=".length));
+      concurrency = parseConcurrency(a.slice("--concurrency=".length));
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag: ${a}`);
     } else {
       scenarios.push(a);
     }
   }
-  if (channel !== "discord-mock" && channel !== "slack-mock" && channel !== "all") {
+  if (channel === null) {
     throw new Error("runner: --channel discord-mock|slack-mock|all is required");
   }
   if (all && scenarios.length > 0) {
@@ -54,9 +71,6 @@ function parseArgs(argv: string[]): {
   }
   if (!all && scenarios.length === 0) {
     throw new Error("runner: must pass --all or one or more scenario names");
-  }
-  if (!Number.isFinite(concurrency) || concurrency < 1) {
-    concurrency = 4;
   }
   return { channel, scenarios, all, concurrency };
 }
@@ -107,6 +121,41 @@ function judgeCostUsd(usage: JudgeUsage): number {
   return (
     (usage.inputTokens * price.input) / 1_000_000 + (usage.outputTokens * price.output) / 1_000_000
   );
+}
+
+async function waitForGatewayLogQuiescence(opts?: {
+  stableMs?: number;
+  maxWaitMs?: number;
+  pollMs?: number;
+}): Promise<void> {
+  const stableMs = opts?.stableMs ?? 500;
+  const maxWaitMs = opts?.maxWaitMs ?? 10_000;
+  const pollMs = opts?.pollMs ?? 250;
+  const deadline = Date.now() + maxWaitMs;
+  let lastSize = -1;
+  let lastMtime = -1;
+  let stableSince = 0;
+  while (Date.now() < deadline) {
+    let size = 0;
+    let mtime = 0;
+    try {
+      const s = statSync(GATEWAY_LOG_PATH);
+      size = s.size;
+      mtime = s.mtimeMs;
+    } catch {
+      // file absent — treat as stable immediately
+      return;
+    }
+    if (size === lastSize && mtime === lastMtime) {
+      if (stableSince === 0) stableSince = Date.now();
+      if (Date.now() - stableSince >= stableMs) return;
+    } else {
+      lastSize = size;
+      lastMtime = mtime;
+      stableSince = 0;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
 }
 
 function readGatewayCostSince(startTsIso: string): { cost: number; turns: number } {
@@ -236,9 +285,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
   const judgeCost = results
     .flatMap((r) => r.judgeUsages)
     .reduce((sum, u) => sum + judgeCostUsd(u), 0);
-  // openclaw flushes its `stage:"usage"` log line a couple of seconds after the
-  // outbound message hits the bus — wait so it lands before we read.
-  await new Promise((r) => setTimeout(r, 5_000));
+  await waitForGatewayLogQuiescence();
   const { cost: gatewayCost, turns: gatewayTurns } = readGatewayCostSince(runStartIso);
   const totalCost = gatewayCost + judgeCost;
   console.log("");

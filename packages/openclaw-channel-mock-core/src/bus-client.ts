@@ -1,5 +1,3 @@
-import http from "node:http";
-import https from "node:https";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import type {
   QaBusInboundMessageInput,
@@ -46,69 +44,35 @@ async function postJson<T>(
   body: unknown,
   signal?: AbortSignal,
 ): JsonResult<T> {
-  const url = buildQaBusUrl(baseUrl, path);
-  const payload = JSON.stringify(body);
-  const client = url.protocol === "https:" ? https : http;
-
-  return await new Promise<T>((resolve, reject) => {
-    const abortError = () =>
-      Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
-    if (signal?.aborted) {
-      reject(abortError());
-      return;
-    }
-
-    const request = client.request(
-      url,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(payload),
-          connection: "close",
-        },
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk) => {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        });
-        response.on("end", () => {
-          const text = Buffer.concat(chunks).toString("utf8");
-          let parsed: T | { error?: string };
-          try {
-            parsed = text ? (JSON.parse(text) as T | { error?: string }) : ({} as T);
-          } catch (error) {
-            reject(error);
-            return;
-          }
-          if ((response.statusCode ?? 500) < 200 || (response.statusCode ?? 500) >= 300) {
-            const error =
-              typeof parsed === "object" && parsed && "error" in parsed ? parsed.error : undefined;
-            reject(new Error(error || `qa-bus request failed: ${response.statusCode ?? 500}`));
-            return;
-          }
-          resolve(parsed as T);
-        });
-        response.on("error", reject);
-      },
-    );
-
-    const onAbort = () => {
-      const error = abortError();
-      request.destroy(error);
-      reject(error);
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-    request.on("error", (error) => {
-      signal?.removeEventListener("abort", onAbort);
-      reject(error);
-    });
-    request.on("close", () => {
-      signal?.removeEventListener("abort", onAbort);
-    });
-    request.end(payload);
+  const url = buildQaBusUrl(baseUrl, path).toString();
+  const { response, release } = await fetchWithSsrFGuard({
+    url,
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    signal,
+    policy: { allowPrivateNetwork: true },
+    auditContext: "channel-mock.bus-post",
   });
+  try {
+    const text = await response.text();
+    let parsed: T | { error?: string };
+    try {
+      parsed = text ? (JSON.parse(text) as T | { error?: string }) : ({} as T);
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    if (!response.ok) {
+      const error =
+        typeof parsed === "object" && parsed && "error" in parsed ? parsed.error : undefined;
+      throw new Error(error || `qa-bus request failed: ${response.status}`);
+    }
+    return parsed as T;
+  } finally {
+    await release();
+  }
 }
 
 export function normalizeQaTarget(raw: string): string | undefined {

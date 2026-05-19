@@ -106,8 +106,7 @@ export function createChannelMockPlugin(params: {
         },
         inferTargetChatType: ({ to }) => parseQaTarget(to).chatType,
         targetResolver: {
-          looksLikeId: (raw) =>
-            /^((dm|channel|group):|thread:[^/]+\/)/i.test(raw.trim()) || raw.trim().length > 0,
+          looksLikeId: (raw) => raw.trim().length > 0,
           hint: "<dm:user|channel:room|group:room|thread:room/thread>",
         },
         resolveOutboundSessionRoute: ({
