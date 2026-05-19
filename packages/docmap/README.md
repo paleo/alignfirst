@@ -14,7 +14,7 @@ Start by installing the skill:
 npx skills add https://github.com/paleo/alignfirst --skill docmap
 ```
 
-> **Note:** We recommend installing the docmap skill locally in each project. When you run the next step, the agent will also install the npm package as a dev dependency for faster execution.
+> **Note:** We recommend installing the docmap skill locally in each project.
 
 Start a new session, then ask your agent to do its magic:
 
