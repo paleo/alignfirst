@@ -39,7 +39,7 @@
     "lint": "biome check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm i && npm run clear && npm run build && npm run lint && npm run test"
+    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.2.1
+
+### Patch Changes
+
+- Hardenized openclaw qa toolkit
+
 ## 0.2.0
 
 ### Minor Changes

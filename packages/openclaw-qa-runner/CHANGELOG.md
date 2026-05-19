@@ -1,5 +1,15 @@
 # @paleo/openclaw-qa-runner
 
+## 0.2.1
+
+### Patch Changes
+
+- Hardenized openclaw qa toolkit
+- Updated dependencies
+  - @paleo/openclaw-channel-mock-core@0.2.1
+  - @paleo/openclaw-discord-mock@0.2.1
+  - @paleo/openclaw-slack-mock@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

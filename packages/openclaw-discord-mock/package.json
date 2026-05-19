@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-discord-mock",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Synthetic Discord-shaped OpenClaw channel plugin for automated QA scenarios.",
   "keywords": [
     "openclaw",
@@ -58,13 +58,13 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
-    "prepublishOnly": "npm i && npm run clear && npm run build && npm run lint && npm run test"
+    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
   },
   "peerDependencies": {
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.2.0"
+    "@paleo/openclaw-channel-mock-core": "0.2.1"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
