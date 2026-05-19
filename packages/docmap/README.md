@@ -52,26 +52,26 @@ read_when:
 
 ```bash
 # List root-level documents
-npx docmap
+npx @paleo/docmap
 
 # List a subdirectory
-npx docmap --dir topic-a
+npx @paleo/docmap --dir topic-a
 
 # List multiple subdirectories
-npx docmap --dir topic-a --dir topic-b
+npx @paleo/docmap --dir topic-a --dir topic-b
 
 # List everything recursively
-npx docmap --recursive
+npx @paleo/docmap --recursive
 
 # Read one or more documents (frontmatter stripped)
-npx docmap --read docs/topic-a/doc-1.md
-npx docmap --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md
+npx @paleo/docmap --read docs/topic-a/doc-1.md
+npx @paleo/docmap --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md
 
 # Validate all files (names, frontmatter)
-npx docmap --check
+npx @paleo/docmap --check
 
 # Use a custom docs root instead of docs/
-npx docmap --root path/to/docs
+npx @paleo/docmap --root path/to/docs
 ```
 
 ### Options
