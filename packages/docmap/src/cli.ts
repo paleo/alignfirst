@@ -71,7 +71,7 @@ export function main(options?: MainOptions): number {
     }
     if (anyFiles) {
       stdout.write(
-        `Tip: Use \`${pm} --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md\` to read the specified files (repeat \`--read\` for each file).\n`,
+        `Tip: Use \`${pm} --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md\` to read the specified files.\n`,
       );
     }
   }
