@@ -1,0 +1,76 @@
+{
+  "name": "@paleo/openclaw-slack-mock",
+  "version": "0.2.1",
+  "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated QA scenarios.",
+  "keywords": [
+    "openclaw",
+    "qa",
+    "testing",
+    "slack",
+    "channel",
+    "mock"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/openclaw-slack-mock"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.11.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "files": [
+    "dist/",
+    "openclaw.plugin.json",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "setupEntry": "./dist/setup-entry.js",
+    "channel": {
+      "id": "slack-mock",
+      "label": "Slack Mock",
+      "selectionLabel": "Slack Mock (Synthetic)",
+      "detailLabel": "Slack Mock",
+      "docsPath": "/channels/slack-mock",
+      "docsLabel": "slack-mock",
+      "blurb": "Synthetic Slack-shaped transport for automated OpenClaw QA scenarios.",
+      "systemImage": "checklist",
+      "order": 997,
+      "exposure": {
+        "configured": false,
+        "setup": false,
+        "docs": false
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run",
+    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "dependencies": {
+    "@paleo/openclaw-channel-mock-core": "0.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.4",
+    "openclaw": "2026.5.18",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.6"
+  }
+}

@@ -1,34 +1,31 @@
 {
-  "name": "@paleo/worktree-env",
-  "version": "0.10.2",
-  "description": "Worktree-based concurrent local environment kernel.",
+  "name": "@paleo/openclaw-channel-mock-core",
+  "version": "0.2.1",
+  "description": "Shared library for synthetic OpenClaw channel plugins used in QA harnesses (bus client, action handlers, factories).",
   "keywords": [
-    "worktree",
-    "environment",
-    "concurrent",
-    "local"
+    "openclaw",
+    "qa",
+    "testing",
+    "channel",
+    "mock"
   ],
-  "license": "CC0-1.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
-    "directory": "packages/worktree-env"
+    "directory": "packages/openclaw-channel-mock-core"
   },
   "engines": {
     "node": ">=22.11.0"
   },
   "packageManager": "npm@11.11.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
   "files": [
-    "dist"
+    "dist/",
+    "LICENSE",
+    "NOTICE.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -38,11 +35,17 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
-    "test:watch": "vitest",
     "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "dependencies": {
+    "typebox": "1.1.38"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
+    "openclaw": "2026.5.18",
     "rimraf": "~6.1.3",
     "typescript": "~6.0.3",
     "vitest": "~4.1.6"
