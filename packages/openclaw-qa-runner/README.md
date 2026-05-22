@@ -21,7 +21,7 @@ npx openclaw-qa-runner init .
 Drops three files into the target directory:
 
 - `openclaw.json` — gateway config (mode `local`, both channel plugins enabled, main agent).
-- `.env.local.example` — copy to `.env.local`, set `ANTHROPIC_API_KEY`.
+- `.env.local.example` — copy to `.env.local`, set `ANTHROPIC_API_KEY` and `OPENCLAW_WORKSPACE_DIR` (host path to your OpenClaw workspace).
 - `docker-compose.yml` — thin overlay that `include:`s this package's base stack from `node_modules/`.
 
 Then wire `package.json` scripts:

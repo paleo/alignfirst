@@ -61,6 +61,25 @@ function setupHostEnv(packageDir: string): void {
   if (!process.env.CLAW_UID) process.env.CLAW_UID = String(process.getuid?.() ?? 1000);
   if (!process.env.CLAW_GID) process.env.CLAW_GID = String(process.getgid?.() ?? 1000);
   absolutizePathVarsFromEnvFile(qaDir);
+  applyPathDefaults(qaDir);
+}
+
+// Defaults relative to the consumer's qa dir, applied after `.env.local` so
+// explicit values win. Doing this in the CLI (not via `${VAR:-default}` in
+// docker-compose.yml) avoids nested Compose interpolation, which is fragile
+// across versions and not portable across Compose implementations.
+const PATH_DEFAULTS: Record<string, string> = {
+  OPENCLAW_CONFIG_PATH: "openclaw.json",
+  QA_PROJECTS_DIR: "projects-fixture",
+  QA_SCENARIOS_DIR: "scenarios",
+  QA_ARTIFACTS_DIR: "artifacts",
+  QA_GATEWAY_LOGS_DIR: ".gateway-logs",
+};
+
+function applyPathDefaults(qaDir: string): void {
+  for (const [key, rel] of Object.entries(PATH_DEFAULTS)) {
+    if (!process.env[key]) process.env[key] = resolve(qaDir, rel);
+  }
 }
 
 /**

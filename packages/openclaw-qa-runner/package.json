@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-qa-runner",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Dockerised regression-test harness for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
   "keywords": [
     "openclaw",

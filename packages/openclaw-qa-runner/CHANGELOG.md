@@ -1,5 +1,11 @@
 # @paleo/openclaw-qa-runner
 
+## 0.3.2
+
+### Patch Changes
+
+- Addressed CLI-side path defaults, doc fixes
+
 ## 0.3.1
 
 ### Patch Changes

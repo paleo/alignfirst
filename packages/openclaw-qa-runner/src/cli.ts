@@ -5,7 +5,7 @@ import { startBus } from "./bus.js";
 import { envCommand, qaCommand } from "./env-cli.js";
 import { main as runnerMain } from "./runner.js";
 
-// `dist/cli.js` ships under `<package>/dist/`; walk up two to reach the package root.
+// `dist/cli.js` ships under `<package>/dist/`; one level up from its dir is the package root.
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function dispatch(argv: string[]): Promise<void> {
