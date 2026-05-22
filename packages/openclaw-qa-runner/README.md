@@ -67,7 +67,7 @@ npm run qa -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pai
 npm run env:down
 ```
 
-`--concurrency N` (default 4, env `QA_CONCURRENCY`) caps fanout. Artifacts land under `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`: `<NN>` is the iteration index (omitted when `--iterations 1`), `<VERDICT>` is `PASS` / `FAIL`, applied by renaming the dir after `report.json` is written — its absence means the run is still pending or crashed before rename. Exit 0 iff every pair passes.
+Artifacts land under `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`: `<NN>` is the iteration index (omitted when `--iterations 1`), `<VERDICT>` is `PASS` / `FAIL`, applied by renaming the dir after `report.json` is written — its absence means the run is still pending or crashed before rename. Exit 0 iff every pair passes.
 
 ## Scenario primitives
 
