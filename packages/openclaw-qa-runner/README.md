@@ -15,14 +15,15 @@ Requires Docker Compose v2.20+ (consumer overlay uses Compose `include:`).
 ## Init
 
 ```sh
-npx openclaw-qa-runner init .
+npx @paleo/openclaw-qa-runner init .
 ```
 
-Drops three files into the target directory:
+Drops four files into the target directory:
 
 - `openclaw.json` — gateway config (mode `local`, both channel plugins enabled, main agent).
 - `.env.local.example` — copy to `.env.local`, set `ANTHROPIC_API_KEY` and `OPENCLAW_WORKSPACE_DIR` (host path to your OpenClaw workspace).
 - `docker-compose.yml` — thin overlay that `include:`s this package's base stack from `node_modules/`.
+- `Dockerfile` — consumer-owned image. Inherits the package's base via `FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}` (the tag is injected by the CLI from the installed package version). Add `RUN`/`COPY`/`ENV` directives for any consumer-specific setup (skill installs, extra system packages, etc.).
 
 Then wire `package.json` scripts:
 
@@ -52,6 +53,8 @@ Drop scenarios under `scenarios/<id>.ts`, default-export `async (ctx: ScenarioCo
 Scenarios are loaded at runtime by Node's built-in TypeScript stripping (Node 24, which the image uses). Stick to the strip-compatible subset: type annotations, `as`, `satisfies`, generics, interfaces. Avoid `enum`, `namespace`, constructor parameter properties, decorators, and `import =`.
 
 ## Build / up / run
+
+`env:build` first builds the consumer-agnostic base image (`paleo/openclaw-qa-runner-base:<pkg-version>`, locally tagged) from this package's `Dockerfile.base`, then runs `docker compose build` against the consumer's `Dockerfile`. Docker layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
 
 ```sh
 npm run env:build                                                  # build the gateway / bus / runner image

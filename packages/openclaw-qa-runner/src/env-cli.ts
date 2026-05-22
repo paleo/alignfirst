@@ -33,6 +33,7 @@ export function envCommand(packageDir: string, argv: string[]): never {
     process.exit(1);
   }
   setupHostEnv(packageDir);
+  if (sub !== "down") ensureBaseImage(packageDir, { force: sub === "build" });
   const composeArgs = composeBaseArgs();
   const subArgs =
     sub === "build"
@@ -46,12 +47,58 @@ export function envCommand(packageDir: string, argv: string[]): never {
 export function qaCommand(packageDir: string, argv: string[]): never {
   const { channel, iterations, maxFailures, all, positionals } = parseQaArgs(argv);
   setupHostEnv(packageDir);
+  ensureBaseImage(packageDir, { force: false });
   const runnerArgs = ["--channel", channel];
   if (iterations) runnerArgs.push("--iterations", iterations);
   if (maxFailures) runnerArgs.push("--max-failures", maxFailures);
   if (all) runnerArgs.push("--all");
   else runnerArgs.push(...positionals);
   execCompose([...composeBaseArgs(), "run", "--rm", "--use-aliases", "runner", ...runnerArgs]);
+}
+
+const BASE_IMAGE_NAME = "paleo/openclaw-qa-runner-base";
+
+// Build (or reuse) the consumer-agnostic base image. Tagged with the qa-runner
+// package version so consumer Dockerfiles can pin via the QA_RUNNER_BASE_TAG
+// build arg. `force` always rebuilds — Docker's layer cache makes no-op
+// rebuilds near-free, so we skip the inspect dance on `env build`.
+function ensureBaseImage(packageDir: string, opts: { force: boolean }): void {
+  const version = readPackageVersion(packageDir);
+  const tag = `${BASE_IMAGE_NAME}:${version}`;
+  process.env.QA_RUNNER_BASE_TAG = version;
+  if (!opts.force) {
+    const inspect = spawnSync("docker", ["image", "inspect", tag], { stdio: "ignore" });
+    if (inspect.status === 0) return;
+  }
+  const dockerfile = resolve(packageDir, "Dockerfile.base");
+  const args = [
+    "build",
+    "-f",
+    dockerfile,
+    "-t",
+    tag,
+    "--build-arg",
+    `CLAW_UID=${process.env.CLAW_UID}`,
+    "--build-arg",
+    `CLAW_GID=${process.env.CLAW_GID}`,
+    packageDir,
+  ];
+  const r = spawnSync("docker", args, { stdio: "inherit" });
+  if (r.status !== 0) {
+    console.error(`base image build failed (tag ${tag})`);
+    process.exit(r.status ?? 1);
+  }
+}
+
+function readPackageVersion(packageDir: string): string {
+  const pkg = JSON.parse(readFileSync(resolve(packageDir, "package.json"), "utf8")) as {
+    version?: string;
+  };
+  if (!pkg.version) {
+    console.error("openclaw-qa-runner: package.json is missing 'version'");
+    process.exit(1);
+  }
+  return pkg.version;
 }
 
 function setupHostEnv(packageDir: string): void {

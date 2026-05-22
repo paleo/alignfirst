@@ -1,9 +1,8 @@
 x-common-build: &common-build
   context: ${QA_PROJECT_DIR}
-  dockerfile: ${QA_RUNNER_PACKAGE_DIR}/Dockerfile
+  dockerfile: Dockerfile
   args:
-    CLAW_UID: ${CLAW_UID:-1000}
-    CLAW_GID: ${CLAW_GID:-1000}
+    QA_RUNNER_BASE_TAG: ${QA_RUNNER_BASE_TAG}
 
 x-common-volumes: &common-volumes
   - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace

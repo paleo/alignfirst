@@ -1,5 +1,11 @@
 # @paleo/openclaw-qa-runner
 
+## 0.4.0
+
+### Minor Changes
+
+- 08e6d7a: Ships a consumer-agnostic `Dockerfile.base` and a consumer `templates/Dockerfile` that `FROM`s it.
+
 ## 0.3.2
 
 ### Patch Changes
