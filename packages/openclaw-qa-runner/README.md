@@ -93,10 +93,10 @@ The CLI sets `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` a
 - `ANTHROPIC_API_KEY` — required.
 - `OPENCLAW_WORKSPACE_DIR` — required (host path mounted at `/home/claw/.openclaw/workspace`).
 - `OPENCLAW_CONFIG_PATH` — default `<qa>/openclaw.json` → `/home/claw/.openclaw/openclaw.json`.
-- `PROJECTS_DIR` — default `<qa>/projects-fixture` → `/home/claw/projects/`.
-- `SCENARIOS_DIR` — default `<qa>/scenarios` → `/opt/qa-src/scenarios`.
-- `ARTIFACTS_DIR` — default `<qa>/artifacts` → `/opt/qa-artifacts`.
-- `GATEWAY_LOGS_DIR` — default `<qa>/.gateway-logs` → `/home/claw/.openclaw/logs`.
+- `QA_PROJECTS_DIR` — default `<qa>/projects-fixture` → `/home/claw/projects/`.
+- `QA_SCENARIOS_DIR` — default `<qa>/scenarios` → `/opt/qa-src/scenarios`.
+- `QA_ARTIFACTS_DIR` — default `<qa>/artifacts` → `/opt/qa-artifacts`.
+- `QA_GATEWAY_LOGS_DIR` — default `<qa>/.gateway-logs` → `/home/claw/.openclaw/logs`.
 
 `<qa>` is the consumer's qa dir (the wrapper's `cwd`). Rebuild this package's `dist/` with `npm run build` to refresh the mount.
 

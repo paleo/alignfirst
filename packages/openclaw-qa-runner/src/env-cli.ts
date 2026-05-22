@@ -8,10 +8,10 @@ import { isAbsolute, resolve } from "node:path";
 const PATH_VARS = [
   "OPENCLAW_WORKSPACE_DIR",
   "OPENCLAW_CONFIG_PATH",
-  "PROJECTS_DIR",
-  "SCENARIOS_DIR",
-  "ARTIFACTS_DIR",
-  "GATEWAY_LOGS_DIR",
+  "QA_PROJECTS_DIR",
+  "QA_SCENARIOS_DIR",
+  "QA_ARTIFACTS_DIR",
+  "QA_GATEWAY_LOGS_DIR",
 ] as const;
 
 type EnvSubcommand = "build" | "up" | "down";

@@ -1,5 +1,11 @@
 # @paleo/openclaw-qa-runner
 
+## 0.3.1
+
+### Patch Changes
+
+- Fixed env variable names
+
 ## 0.3.0
 
 ### Minor Changes

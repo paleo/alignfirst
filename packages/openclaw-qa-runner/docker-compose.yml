@@ -8,11 +8,11 @@ x-common-build: &common-build
 x-common-volumes: &common-volumes
   - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
   - ${OPENCLAW_CONFIG_PATH:-${QA_PROJECT_DIR}/openclaw.json}:/home/claw/.openclaw/openclaw.json
-  - ${PROJECTS_DIR:-${QA_PROJECT_DIR}/projects-fixture}:/home/claw/projects/
+  - ${QA_PROJECTS_DIR:-${QA_PROJECT_DIR}/projects-fixture}:/home/claw/projects/
   - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
-  - ${SCENARIOS_DIR:-${QA_PROJECT_DIR}/scenarios}:/opt/qa-src/scenarios
-  - ${ARTIFACTS_DIR:-${QA_PROJECT_DIR}/artifacts}:/opt/qa-artifacts
-  - ${GATEWAY_LOGS_DIR:-${QA_PROJECT_DIR}/.gateway-logs}:/home/claw/.openclaw/logs
+  - ${QA_SCENARIOS_DIR:-${QA_PROJECT_DIR}/scenarios}:/opt/qa-src/scenarios
+  - ${QA_ARTIFACTS_DIR:-${QA_PROJECT_DIR}/artifacts}:/opt/qa-artifacts
+  - ${QA_GATEWAY_LOGS_DIR:-${QA_PROJECT_DIR}/.gateway-logs}:/home/claw/.openclaw/logs
 
 services:
   bus:
