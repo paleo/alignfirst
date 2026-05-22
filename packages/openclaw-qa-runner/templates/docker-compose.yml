@@ -1,11 +1,10 @@
 # Thin consumer overlay. Pulls in the parameterized base from
 # @paleo/openclaw-qa-runner. Requires Docker Compose v2.20+.
 #
-# Provide these env vars (export them or list them in .env.local):
-#   OPENCLAW_WORKSPACE_DIR, OPENCLAW_CONFIG_PATH, PROJECTS_DIR,
-#   SCENARIOS_DIR, ARTIFACTS_DIR, GATEWAY_LOGS_DIR,
-#   QA_RUNNER_PACKAGE_DIR (resolved by the consumer's `qa` / `env-up` scripts),
-#   QA_PROJECT_DIR (build context), CLAW_UID, CLAW_GID, ANTHROPIC_API_KEY.
+# `.env.local` only needs ANTHROPIC_API_KEY and OPENCLAW_WORKSPACE_DIR.
+# All other paths default to subdirs of the consumer's qa/ dir; override in
+# .env.local if you need a different layout. QA_PROJECT_DIR, QA_RUNNER_PACKAGE_DIR,
+# CLAW_UID, CLAW_GID are set automatically by `openclaw-qa-runner env|qa`.
 
 include:
   - ./node_modules/@paleo/openclaw-qa-runner/docker-compose.yml

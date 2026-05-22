@@ -12,7 +12,7 @@
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
-    "changeset:bump": "changeset version",
+    "changeset:bump": "changeset version && npm i",
     "changeset:publish": "npm i && npm run clear && npm run build && npm run lint && npm run test && changeset publish"
   },
   "devDependencies": {

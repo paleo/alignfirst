@@ -15,16 +15,28 @@ Requires Docker Compose v2.20+ (consumer overlay uses Compose `include:`).
 ## Init
 
 ```sh
-npx openclaw-qa-runner init .
+npx @paleo/openclaw-qa-runner init .
 ```
 
-Drops three files into the target directory:
+Drops four files into the target directory:
 
 - `openclaw.json` — gateway config (mode `local`, both channel plugins enabled, main agent).
-- `.env.local.example` — copy to `.env.local`, set `ANTHROPIC_API_KEY`.
+- `.env.local.example` — copy to `.env.local`, set `ANTHROPIC_API_KEY` and `OPENCLAW_WORKSPACE_DIR` (host path to your OpenClaw workspace).
 - `docker-compose.yml` — thin overlay that `include:`s this package's base stack from `node_modules/`.
+- `Dockerfile` — consumer-owned image. Inherits the package's base via `FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}` (the tag is injected by the CLI from the installed package version). Add `RUN`/`COPY`/`ENV` directives for any consumer-specific setup (skill installs, extra system packages, etc.).
 
-Then wire `package.json` scripts (`env:build`, `env:up`, `env:down`, `qa`) — see the templates and the consumer guide below.
+Then wire `package.json` scripts:
+
+```json
+"scripts": {
+  "env:build": "openclaw-qa-runner env build",
+  "env:up":    "openclaw-qa-runner env up",
+  "env:down":  "openclaw-qa-runner env down",
+  "qa":       "openclaw-qa-runner qa"
+}
+```
+
+Each command derives `QA_PROJECT_DIR` from `cwd`, `QA_RUNNER_PACKAGE_DIR` from its own install location, and `CLAW_UID`/`CLAW_GID` from the host user — no boilerplate in `package.json`.
 
 ## Configure
 
@@ -41,6 +53,8 @@ Drop scenarios under `scenarios/<id>.ts`, default-export `async (ctx: ScenarioCo
 Scenarios are loaded at runtime by Node's built-in TypeScript stripping (Node 24, which the image uses). Stick to the strip-compatible subset: type annotations, `as`, `satisfies`, generics, interfaces. Avoid `enum`, `namespace`, constructor parameter properties, decorators, and `import =`.
 
 ## Build / up / run
+
+`env:build` first builds the consumer-agnostic base image (`paleo/openclaw-qa-runner-base:<pkg-version>`, locally tagged) from this package's `Dockerfile.base`, then runs `docker compose build` against the consumer's `Dockerfile`. Docker layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
 
 ```sh
 npm run env:build                                                  # build the gateway / bus / runner image
@@ -77,17 +91,17 @@ Both plugins register together. Pick which to drive per scenario via `--channel 
 
 ## Compose stack
 
-`docker-compose.yml` is parameterized via env vars (the consumer-side `bin/qa.mjs` and `bin/env-up` set them):
+The CLI sets `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` automatically. Everything else comes from `.env.local`:
 
-- `QA_PROJECT_DIR` — consumer's `qa/` (build context, working dir).
-- `QA_RUNNER_PACKAGE_DIR` — host path to this package (mounts `dist/`; rebuild with `npm run build` to refresh).
-- `OPENCLAW_WORKSPACE_DIR` — mounted at `/home/claw/.openclaw/workspace`.
-- `OPENCLAW_CONFIG_PATH` — mounted at `/home/claw/.openclaw/openclaw.json`.
-- `PROJECTS_DIR` — mounted at `/home/claw/projects/`.
-- `SCENARIOS_DIR` — mounted at `/opt/qa-src/scenarios`.
-- `ARTIFACTS_DIR` — mounted at `/opt/qa-artifacts`.
-- `GATEWAY_LOGS_DIR` — mounted at `/home/claw/.openclaw/logs`.
-- `CLAW_UID` / `CLAW_GID` — propagated to the image so artifacts land owned by the host user.
+- `ANTHROPIC_API_KEY` — required.
+- `OPENCLAW_WORKSPACE_DIR` — required (host path mounted at `/home/claw/.openclaw/workspace`).
+- `OPENCLAW_CONFIG_PATH` — default `<qa>/openclaw.json` → `/home/claw/.openclaw/openclaw.json`.
+- `QA_PROJECTS_DIR` — default `<qa>/projects-fixture` → `/home/claw/projects/`.
+- `QA_SCENARIOS_DIR` — default `<qa>/scenarios` → `/opt/qa-src/scenarios`.
+- `QA_ARTIFACTS_DIR` — default `<qa>/artifacts` → `/opt/qa-artifacts`.
+- `QA_GATEWAY_LOGS_DIR` — default `<qa>/.gateway-logs` → `/home/claw/.openclaw/logs`.
+
+`<qa>` is the consumer's qa dir (the wrapper's `cwd`). Rebuild this package's `dist/` with `npm run build` to refresh the mount.
 
 Healthchecks: `gateway` waits on `bus`, `runner` waits on `gateway`.
 
