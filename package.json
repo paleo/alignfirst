@@ -2,15 +2,21 @@
   "name": "alignfirst-monorepo",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "build": "npm run build --workspaces --if-present",
     "clear": "npm run clear --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "changeset": "changeset",
+    "changeset:bump": "changeset version",
+    "changeset:publish": "npm i && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.4.15"
+    "@biomejs/biome": "~2.4.15",
+    "@changesets/cli": "~2.31.0"
   }
 }

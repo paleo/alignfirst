@@ -1,0 +1,6 @@
+{
+  "id": "discord-mock",
+  "activation": { "onStartup": false },
+  "channels": ["discord-mock"],
+  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} }
+}

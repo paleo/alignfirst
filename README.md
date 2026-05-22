@@ -17,7 +17,3 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 ## Autonomous agent (experimental)
 
 We're currently working on building an AI developer with _OpenClaw_. See [autonomous-agent.md](autonomous-agent.md).
-
-----
-
-**License:** CC0 1.0 Universal.
