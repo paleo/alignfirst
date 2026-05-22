@@ -2,8 +2,10 @@ import { copyFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startBus } from "./bus.js";
+import { envCommand, qaCommand } from "./env-cli.js";
 import { main as runnerMain } from "./runner.js";
 
+// `dist/cli.js` ships under `<package>/dist/`; walk up two to reach the package root.
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function dispatch(argv: string[]): Promise<void> {
@@ -11,6 +13,12 @@ export async function dispatch(argv: string[]): Promise<void> {
   switch (cmd) {
     case "init":
       await initCommand(rest[0]);
+      return;
+    case "env":
+      envCommand(PACKAGE_DIR, rest);
+      return;
+    case "qa":
+      qaCommand(PACKAGE_DIR, rest);
       return;
     case "bus":
       startBus();
@@ -37,10 +45,12 @@ async function initCommand(targetDirRaw: string | undefined): Promise<void> {
 
 function usage(): never {
   console.error(
-    "usage: openclaw-qa-runner <init|bus|run> [args]\n\n" +
-      "  init <target-dir>   copy templates into target dir\n" +
-      "  bus                 start the bus HTTP server\n" +
-      "  run [flags] [...]   execute scenarios (see runner.ts)\n",
+    "usage: openclaw-qa-runner <init|env|qa|bus|run> [args]\n\n" +
+      "  init <target-dir>      copy templates into target dir\n" +
+      "  env <build|up|down>    drive the Compose stack (host-side)\n" +
+      "  qa [flags] [...]       run scenarios against the stack (host-side)\n" +
+      "  bus                    start the bus HTTP server (inside container)\n" +
+      "  run [flags] [...]      execute scenarios (inside container)\n",
   );
   process.exit(1);
 }
