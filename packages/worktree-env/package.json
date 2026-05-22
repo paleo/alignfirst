@@ -38,8 +38,7 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

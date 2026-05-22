@@ -35,8 +35,7 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
-    "docmap": "node bin/docmap.mjs",
-    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+    "docmap": "node bin/docmap.mjs"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

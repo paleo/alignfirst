@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-slack-mock",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated QA scenarios.",
   "keywords": [
     "openclaw",
@@ -57,14 +57,13 @@
     "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
     "lint": "biome check",
-    "test": "vitest run",
-    "prepublishOnly": "npm run clear && npm run build && npm run lint && npm run test"
+    "test": "vitest run"
   },
   "peerDependencies": {
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.2.1"
+    "@paleo/openclaw-channel-mock-core": "0.2.2"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

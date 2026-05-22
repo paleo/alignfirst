@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-qa-runner",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Dockerised regression-test harness for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
   "keywords": [
     "openclaw",
@@ -40,17 +40,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
-    "lint": "biome check",
-    "prepublishOnly": "npm run clear && npm run build && npm run lint"
+    "lint": "biome check"
   },
   "peerDependencies": {
     "openclaw": "*"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "~0.97.1",
-    "@paleo/openclaw-channel-mock-core": "0.2.1",
-    "@paleo/openclaw-discord-mock": "0.2.1",
-    "@paleo/openclaw-slack-mock": "0.2.1"
+    "@paleo/openclaw-channel-mock-core": "0.2.2",
+    "@paleo/openclaw-discord-mock": "0.2.2",
+    "@paleo/openclaw-slack-mock": "0.2.2"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
