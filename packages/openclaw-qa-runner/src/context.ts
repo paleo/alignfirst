@@ -7,7 +7,15 @@ import {
   type QaBusPollResult,
 } from "@paleo/openclaw-channel-mock-core";
 import { judgeCostUsd } from "./cost.js";
-import { judgeLLM, type JudgeUsage, type JudgeVerdict } from "./judge.js";
+import {
+  judgeLLM,
+  judgeLLMJson,
+  judgeLLMRaw,
+  type JudgeUsage,
+  type JudgeVerdict,
+  type JudgeVerdictJson,
+  type JudgeVerdictRaw,
+} from "./judge.js";
 import type {
   AssertionRecord,
   ChannelId,
@@ -51,7 +59,20 @@ export interface ScenarioContext {
     expected: number,
     label: string,
   ): void;
-  judgeLLM(p: { message: string; rubric: string; label: string }): Promise<JudgeVerdict>;
+  judgeLLM(p: {
+    message: string;
+    rubric: string;
+    label: string;
+    maxTokens?: number;
+  }): Promise<JudgeVerdict>;
+  judgeLLMJson<T>(p: {
+    message: string;
+    prompt: string;
+    returnType: string;
+    label: string;
+    maxTokens?: number;
+  }): Promise<JudgeVerdictJson<T>>;
+  judgeLLMRaw(p: { prompt: string; label: string; maxTokens?: number }): Promise<JudgeVerdictRaw>;
   getCursor(): Promise<number>;
   mockCli(name: string, handler: CliMockHandler): void;
 }
@@ -113,7 +134,9 @@ export function createContext(params: {
     assertRegex: (actual, pattern, label) => assertRegex(emit, actual, pattern, label),
     assertEqual: (actual, expected, label) => assertEqual(emit, actual, expected, label),
     assertLength: (value, expected, label) => assertLength(emit, value, expected, label),
-    judgeLLM: (p) => callJudge(emit, judgeUsages, p),
+    judgeLLM: (p) => callJudgeVerdict(emit, judgeUsages, p),
+    judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
+    judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
     mockCli: (name, handler) => registerMockCli(mockHandlers, name, handler),
   };
@@ -284,19 +307,19 @@ function recordAssertion(emit: EmitFn, ok: boolean, label: string, detail: strin
   throw new AssertionError(`${label}: ${detail}`);
 }
 
-async function callJudge(
+async function callJudgeVerdict(
   emit: EmitFn,
   judgeUsages: JudgeUsage[],
-  p: { message: string; rubric: string; label: string },
+  p: { message: string; rubric: string; label: string; maxTokens?: number },
 ): Promise<JudgeVerdict> {
-  const verdict = await judgeLLM({ message: p.message, rubric: p.rubric });
+  const verdict = await judgeLLM({
+    message: p.message,
+    rubric: p.rubric,
+    maxTokens: p.maxTokens,
+  });
   judgeUsages.push(verdict.usage);
-  emit({
-    kind: "judge",
-    record: {
-      label: p.label,
-      verdict: verdict.verdict,
-      reasoning: verdict.reasoning,
+  const extra = {
+    judge: {
       model: verdict.usage.model,
       usage: {
         inputTokens: verdict.usage.inputTokens,
@@ -304,11 +327,39 @@ async function callJudge(
       },
       costUsd: judgeCostUsd(verdict.usage),
     },
-  });
-  if (verdict.verdict !== "pass") {
-    throw new AssertionError(`judge[${p.label}] failed: ${verdict.reasoning}`);
+  };
+  if (verdict.verdict === "pass") {
+    emit({ kind: "assertion", record: { label: p.label, ok: true, extra } });
+    return verdict;
   }
-  return verdict;
+  emit({
+    kind: "assertion",
+    record: { label: p.label, ok: false, detail: verdict.reasoning, extra },
+  });
+  throw new AssertionError(`${p.label}: ${verdict.reasoning}`);
+}
+
+async function callJudgeJson<T>(
+  judgeUsages: JudgeUsage[],
+  p: { message: string; prompt: string; returnType: string; label: string; maxTokens?: number },
+): Promise<JudgeVerdictJson<T>> {
+  const result = await judgeLLMJson<T>({
+    message: p.message,
+    prompt: p.prompt,
+    returnType: p.returnType,
+    maxTokens: p.maxTokens,
+  });
+  judgeUsages.push(result.usage);
+  return result;
+}
+
+async function callJudgeRaw(
+  judgeUsages: JudgeUsage[],
+  p: { prompt: string; label: string; maxTokens?: number },
+): Promise<JudgeVerdictRaw> {
+  const result = await judgeLLMRaw(p.prompt, { maxTokens: p.maxTokens });
+  judgeUsages.push(result.usage);
+  return result;
 }
 
 async function getCursor(): Promise<number> {

@@ -43,7 +43,6 @@ export type ReportEvent =
   | InboundSentEvent
   | OutboundReceivedEvent
   | AssertionEvent
-  | JudgeEvent
   | CliMockEvent
   | AgentToolCallEvent
   | FailureEvent;
@@ -79,11 +78,6 @@ export interface AssertionEvent extends ReportEventBase {
   record: AssertionRecord;
 }
 
-export interface JudgeEvent extends ReportEventBase {
-  kind: "judge";
-  record: JudgeCallRecord;
-}
-
 export interface CliMockEvent extends ReportEventBase {
   kind: "cliMock";
   call: CliMockCall;
@@ -102,17 +96,8 @@ export interface FailureEvent extends ReportEventBase {
 // ─── Sub-records ──────────────────────────────────────────────────────────────
 
 export type AssertionRecord =
-  | { label: string; ok: true }
-  | { label: string; ok: false; detail: string };
-
-export interface JudgeCallRecord {
-  label: string;
-  verdict: "pass" | "fail";
-  reasoning: string;
-  model: string;
-  usage: { inputTokens: number; outputTokens: number };
-  costUsd: number;
-}
+  | { label: string; ok: true; extra?: unknown }
+  | { label: string; ok: false; detail: string; extra?: unknown };
 
 /**
  * One mocked-CLI invocation: the agent shelled out, our shim routed the call to the

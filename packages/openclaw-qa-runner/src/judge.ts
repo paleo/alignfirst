@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { extractTaggedBlock } from "./parse-tagged-json.js";
 
 const DEFAULT_JUDGE_MODEL = "anthropic/claude-haiku-4-5";
+const DEFAULT_MAX_TOKENS = 1024;
+const RESULT_TAG = "result-json";
 
 let cached: { client: Anthropic; model: string; bareModel: string } | undefined;
 
@@ -17,27 +20,139 @@ export interface JudgeVerdict {
   usage: JudgeUsage;
 }
 
-export async function judgeLLM(params: { message: string; rubric: string }): Promise<JudgeVerdict> {
+export interface JudgeVerdictJson<T> {
+  parsed: T;
+  raw: string;
+  usage: JudgeUsage;
+}
+
+export interface JudgeVerdictRaw {
+  raw: string;
+  usage: JudgeUsage;
+}
+
+export async function judgeLLM(params: {
+  message: string;
+  rubric: string;
+  maxTokens?: number;
+}): Promise<JudgeVerdict> {
+  const prompt = buildVerdictPrompt({ message: params.message, rubric: params.rubric });
+  const { raw, usage } = await callAnthropic(prompt, params.maxTokens ?? DEFAULT_MAX_TOKENS);
+  const body = extractTaggedBlock(raw, RESULT_TAG);
+  const parsed = parseJson(body, raw);
+  const obj = parsed as { verdict?: unknown; reasoning?: unknown };
+  if (obj.verdict !== "pass" && obj.verdict !== "fail") {
+    throw new Error(
+      `judge verdict invalid: ${JSON.stringify(obj.verdict)}. raw=${JSON.stringify(raw)}`,
+    );
+  }
+  if (typeof obj.reasoning !== "string") {
+    throw new Error(
+      `judge reasoning not a string: ${JSON.stringify(obj.reasoning)}. raw=${JSON.stringify(raw)}`,
+    );
+  }
+  return { verdict: obj.verdict, reasoning: obj.reasoning, raw, usage };
+}
+
+export async function judgeLLMJson<T>(params: {
+  message: string;
+  prompt: string;
+  returnType: string;
+  maxTokens?: number;
+}): Promise<JudgeVerdictJson<T>> {
+  const prompt = buildJsonPrompt({
+    message: params.message,
+    prompt: params.prompt,
+    returnType: params.returnType,
+  });
+  const { raw, usage } = await callAnthropic(prompt, params.maxTokens ?? DEFAULT_MAX_TOKENS);
+  const body = extractTaggedBlock(raw, RESULT_TAG);
+  const parsed = parseJson(body, raw) as T;
+  return { parsed, raw, usage };
+}
+
+export async function judgeLLMRaw(
+  prompt: string,
+  opts?: { maxTokens?: number },
+): Promise<JudgeVerdictRaw> {
+  return await callAnthropic(prompt, opts?.maxTokens ?? DEFAULT_MAX_TOKENS);
+}
+
+export function buildVerdictPrompt(params: { message: string; rubric: string }): string {
+  return `You are a strict QA judge. Evaluate the message below against the rubric. Return "pass" only when the message satisfies the rubric without violations; otherwise return "fail".
+
+<rubric>
+${params.rubric}
+</rubric>
+
+<message-to-evaluate>
+${params.message}
+</message-to-evaluate>
+
+Here is the return type we expect:
+
+<return-type>
+interface JudgeResult {
+  verdict: "pass" | "fail";
+  reasoning?: string; // concise, <=20 words
+}
+</return-type>
+
+You may write free-form prose first if useful. Then, emit the result JSON value in a \`<${RESULT_TAG}>\` tag.
+`;
+}
+
+export function buildJsonPrompt(params: {
+  message: string;
+  prompt: string;
+  returnType: string;
+}): string {
+  return `${params.prompt}
+
+Message under evaluation:
+
+<message-to-evaluate>
+${params.message}
+</message-to-evaluate>
+
+Here is the return type we expect:
+
+<return-type>
+${params.returnType};
+</return-type>
+
+You may write free-form prose first if useful. Then, emit the result JSON value in a \`<${RESULT_TAG}>\` tag.
+`;
+}
+
+async function callAnthropic(
+  prompt: string,
+  maxTokens: number,
+): Promise<{ raw: string; usage: JudgeUsage }> {
   const { client, model, bareModel } = getJudge();
   const resp = await client.messages.create({
     model: bareModel,
-    max_tokens: 512,
-    messages: [
-      {
-        role: "user",
-        content: `${params.rubric}\n\n---\nMessage under evaluation:\n${params.message}`,
-      },
-    ],
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
   });
   const raw = resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const body = parseVerdictBody(raw);
   if (!resp.usage) throw new Error("judge response missing usage");
   const usage: JudgeUsage = {
     model,
     inputTokens: resp.usage.input_tokens,
     outputTokens: resp.usage.output_tokens,
   };
-  return { ...body, raw, usage };
+  return { raw, usage };
+}
+
+function parseJson(body: string, raw: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch (err) {
+    throw new Error(
+      `judge JSON parse failed: ${(err as Error).message}. body=${JSON.stringify(body)} raw=${JSON.stringify(raw)}`,
+    );
+  }
 }
 
 function getJudge(): { client: Anthropic; model: string; bareModel: string } {
@@ -66,29 +181,4 @@ function parseAnthropicModelRef(ref: string): string {
   }
   if (!name) throw new Error(`QA_JUDGE_MODEL model name is empty after the "${provider}/" prefix`);
   return name;
-}
-
-function parseVerdictBody(raw: string): { verdict: "pass" | "fail"; reasoning: string } {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end < 0 || end < start) {
-    throw new Error(`judge response did not contain a JSON object. raw=${JSON.stringify(raw)}`);
-  }
-  const slice = raw.slice(start, end + 1);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(slice);
-  } catch (err) {
-    throw new Error(
-      `judge JSON parse failed: ${(err as Error).message}. raw=${JSON.stringify(raw)}`,
-    );
-  }
-  const obj = parsed as { verdict?: unknown; reasoning?: unknown };
-  if (obj.verdict !== "pass" && obj.verdict !== "fail") {
-    throw new Error(`judge verdict invalid: ${JSON.stringify(obj.verdict)}`);
-  }
-  if (typeof obj.reasoning !== "string") {
-    throw new Error(`judge reasoning not a string: ${JSON.stringify(obj.reasoning)}`);
-  }
-  return { verdict: obj.verdict, reasoning: obj.reasoning };
 }

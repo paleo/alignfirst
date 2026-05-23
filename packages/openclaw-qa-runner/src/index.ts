@@ -1,5 +1,11 @@
 export type { ChannelId, ScenarioContext } from "./context.js";
 export type {
+  JudgeUsage,
+  JudgeVerdict,
+  JudgeVerdictJson,
+  JudgeVerdictRaw,
+} from "./judge.js";
+export type {
   AgentToolCall,
   AgentToolCallEvent,
   AssertionEvent,
@@ -12,8 +18,6 @@ export type {
   EmitSink,
   FailureEvent,
   InboundSentEvent,
-  JudgeCallRecord,
-  JudgeEvent,
   LogEvent,
   OutboundReceivedEvent,
   ReportEvent,
