@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "paleo-typescript-style": {
+      "source": "paleo/skills",
+      "sourceType": "github",
+      "skillPath": "skills/paleo-typescript-style/SKILL.md",
+      "computedHash": "9d1a68f8b6bedfda634e3835b6afb79ba61cf416816b4cde1964392b30db9b65"
+    }
+  }
+}

@@ -38,3 +38,11 @@ Add `docs/code-style.md` and `docs/code-quality.md` to every plan.
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for QA scenarios
 - `@paleo/openclaw-qa-runner` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
 - `@paleo/worktree-env` — worktree-based concurrent local environment kernel
+
+## Coding rules
+
+Apply the `paleo-typescript-style` skill.
+
+- Use UTF-8 encoding with 2-space indentation, 100-char line width.
+- Use the semicolon syntax.
+- Prefer double quotes `"`.
