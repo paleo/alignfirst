@@ -1,5 +1,15 @@
 # @paleo/openclaw-qa-runner
 
+## 0.4.1
+
+### Patch Changes
+
+- Improved documentation
+- Updated dependencies
+  - @paleo/openclaw-channel-mock-core@0.2.3
+  - @paleo/openclaw-discord-mock@0.2.3
+  - @paleo/openclaw-slack-mock@0.2.3
+
 ## 0.4.0
 
 ### Minor Changes

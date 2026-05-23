@@ -1,6 +1,6 @@
 {
   "name": "@paleo/docmap",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "license": "CC0-1.0",
   "description": "A lightweight documentation system for AI agents and humans.",
   "keywords": [

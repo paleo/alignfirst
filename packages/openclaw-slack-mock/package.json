@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-slack-mock",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated QA scenarios.",
   "keywords": [
     "openclaw",
@@ -63,7 +63,7 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.2.2"
+    "@paleo/openclaw-channel-mock-core": "0.2.3"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

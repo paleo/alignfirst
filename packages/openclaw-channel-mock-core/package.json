@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-channel-mock-core",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Shared library for synthetic OpenClaw channel plugins used in QA harnesses (bus client, action handlers, factories).",
   "keywords": [
     "openclaw",
