@@ -84,4 +84,4 @@ npx @paleo/docmap --root path/to/docs
 | `--check` | Validate all files and directories. Reports name and frontmatter issues. |
 | `--root <path>` | Use a custom directory as the docs root instead of `docs/`. |
 
-For internals, see [docs/docmap-architecture.md](../../docs/docmap-architecture.md).
+For internals, see [docs/docmap-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/docmap-architecture.md).

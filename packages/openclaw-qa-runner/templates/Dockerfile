@@ -7,22 +7,10 @@
 ARG QA_RUNNER_BASE_TAG
 FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}
 
-# Stage the host-resolved @paleo/openclaw-* packages into an in-image staging dir,
-# then rewrite the consumer `package.json`'s absolute host `file:` URIs to point
-# at the staged copies before `npm install`. Host install must use `--install-links`
-# so `node_modules/@paleo/*` are materialized copies (not symlinks).
-COPY --chown=claw:claw package.json package-lock.json* /opt/qa-src/
-COPY --chown=claw:claw node_modules/@paleo/openclaw-channel-mock-core/ /opt/qa-staging/openclaw-channel-mock-core/
-COPY --chown=claw:claw node_modules/@paleo/openclaw-discord-mock/ /opt/qa-staging/openclaw-discord-mock/
-COPY --chown=claw:claw node_modules/@paleo/openclaw-slack-mock/ /opt/qa-staging/openclaw-slack-mock/
-COPY --chown=claw:claw node_modules/@paleo/openclaw-qa-runner/ /opt/qa-staging/openclaw-qa-runner/
+COPY --chown=claw:claw package.json package-lock.json /opt/qa-src/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
-# The host lockfile pins integrity against the original host paths; it cannot
-# survive the URI rewrite, so drop it and let npm regenerate.
-RUN node -e "const fs=require('fs');const p='./package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));for(const k of Object.keys(j.dependencies||{})){if(k.startsWith('@paleo/openclaw-')){const n=k.slice('@paleo/'.length);j.dependencies[k]='file:/opt/qa-staging/'+n;}}fs.writeFileSync(p,JSON.stringify(j,null,2));" && \
-    rm -f package-lock.json && \
-    npm install --include=dev --install-links && \
+RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
 
 # Consumer customizations below. Add RUN/COPY/ENV as needed.
