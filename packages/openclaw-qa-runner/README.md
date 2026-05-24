@@ -72,14 +72,16 @@ Optional (defaults relative to the consumer's `qa/` dir):
 
 ```sh
 npm run env:build                                                  # build base + consumer image
-npm run env:up                                                     # bring up bus + gateway (both channels register)
 npm run qa -- --channel all <scenario>                             # one scenario, both channels
 npm run qa -- --channel all --all                                  # every scenario, both channels
 npm run qa -- --channel discord-mock <scenario>                    # restrict to one channel
 npm run qa -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run qa -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
-npm run env:down
+npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
+npm run env:down                                                   # tear down a warm stack
 ```
+
+`qa` auto-starts `bus` + `gateway` via Docker Compose if they aren't running, and auto-`down`s them after the run completes. If you've explicitly run `env:up` beforehand, `qa` leaves the stack up so subsequent runs are fast. Ctrl-C is forwarded to the running container; auto-`down` still runs.
 
 `env:build` first builds the base image (`paleo/openclaw-qa-runner-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
 
@@ -102,6 +104,8 @@ From `@paleo/openclaw-qa-runner` (`src/context.ts`):
 - `getCursor`.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
+
+**Rule of thumb**: when in doubt, pass `attachTo` explicitly. Use the entry returned by `waitForOutbound` / `sendInbound`, or snapshot `ctx.currentEntry` synchronously after the relevant `await` resolves and hand that snapshot to the judge call.
 
 ## Judge model
 

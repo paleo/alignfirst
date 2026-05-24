@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
@@ -22,7 +22,10 @@ const QA_USAGE = `usage: openclaw-qa-runner qa --channel <discord-mock|slack-moc
   Scenario selection is required: either a positional list or --all (mutually exclusive).
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1).
-  Run 'openclaw-qa-runner env up' first.`;
+
+  bus + gateway are auto-started via Docker Compose if not already running.
+  When auto-started, they are torn down after qa exits. Run 'openclaw-qa-runner env up'
+  beforehand to keep them warm across iterative runs.`;
 
 const ENV_USAGE = "usage: openclaw-qa-runner env <build|up|down>";
 
@@ -33,6 +36,7 @@ export function envCommand(packageDir: string, argv: string[]): never {
     process.exit(1);
   }
   setupHostEnv(packageDir);
+  setBaseTag(packageDir);
   if (sub !== "down") ensureBaseImage(packageDir, { force: sub === "build" });
   const composeArgs = composeBaseArgs();
   const subArgs =
@@ -41,31 +45,42 @@ export function envCommand(packageDir: string, argv: string[]): never {
       : sub === "up"
         ? ["up", "-d", "--wait", "--remove-orphans", "bus", "gateway"]
         : ["down"];
-  execCompose([...composeArgs, ...subArgs]);
+  process.exit(execComposeSync([...composeArgs, ...subArgs]));
 }
 
-export function qaCommand(packageDir: string, argv: string[]): never {
+export async function qaCommand(packageDir: string, argv: string[]): Promise<never> {
   const { channel, iterations, maxFailures, all, positionals } = parseQaArgs(argv);
   setupHostEnv(packageDir);
+  setBaseTag(packageDir);
   ensureBaseImage(packageDir, { force: false });
   const runnerArgs = ["--channel", channel];
   if (iterations) runnerArgs.push("--iterations", iterations);
   if (maxFailures) runnerArgs.push("--max-failures", maxFailures);
   if (all) runnerArgs.push("--all");
   else runnerArgs.push(...positionals);
-  execCompose([...composeBaseArgs(), "run", "--rm", "--use-aliases", "runner", ...runnerArgs]);
+
+  const compose = composeBaseArgs();
+  const wereUpBefore = areBusAndGatewayRunning(compose);
+  const runArgs = [...compose, "run", "--rm", "--use-aliases", "runner", ...runnerArgs];
+  const exitCode = await execComposeWithSigint(runArgs);
+  if (!wereUpBefore) {
+    execComposeSync([...compose, "down"]);
+  }
+  process.exit(exitCode);
 }
 
 const BASE_IMAGE_NAME = "paleo/openclaw-qa-runner-base";
+
+function setBaseTag(packageDir: string): void {
+  process.env.QA_RUNNER_BASE_TAG = readPackageVersion(packageDir);
+}
 
 // Build (or reuse) the consumer-agnostic base image. Tagged with the qa-runner
 // package version so consumer Dockerfiles can pin via the QA_RUNNER_BASE_TAG
 // build arg. `force` always rebuilds — Docker's layer cache makes no-op
 // rebuilds near-free, so we skip the inspect dance on `env build`.
 function ensureBaseImage(packageDir: string, opts: { force: boolean }): void {
-  const version = readPackageVersion(packageDir);
-  const tag = `${BASE_IMAGE_NAME}:${version}`;
-  process.env.QA_RUNNER_BASE_TAG = version;
+  const tag = `${BASE_IMAGE_NAME}:${process.env.QA_RUNNER_BASE_TAG}`;
   if (!opts.force) {
     const inspect = spawnSync("docker", ["image", "inspect", tag], { stdio: "ignore" });
     if (inspect.status === 0) return;
@@ -176,13 +191,60 @@ function composeBaseArgs(): string[] {
   return args;
 }
 
-function execCompose(args: string[]): never {
+function areBusAndGatewayRunning(composeArgs: string[]): boolean {
+  const r = spawnSync(
+    "docker",
+    [...composeArgs, "ps", "--services", "--filter", "status=running"],
+    {
+      encoding: "utf8",
+    },
+  );
+  if (r.status !== 0) return false;
+  const services = new Set(
+    r.stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  return services.has("bus") && services.has("gateway");
+}
+
+function execComposeSync(args: string[]): number {
   const result = spawnSync("docker", args, { stdio: "inherit" });
   if (result.error) {
     console.error(result.error.message);
-    process.exit(1);
+    return 1;
   }
-  process.exit(result.status ?? 1);
+  return result.status ?? 1;
+}
+
+// Spawn `docker` async so we can forward SIGINT to it (allowing graceful
+// teardown) instead of letting Node tear down the parent and orphan the child.
+function execComposeWithSigint(args: string[]): Promise<number> {
+  return new Promise((resolve) => {
+    const child: ChildProcess = spawn("docker", args, { stdio: "inherit" });
+    const forward = (sig: NodeJS.Signals) => child.kill(sig);
+    process.on("SIGINT", forward);
+    process.on("SIGTERM", forward);
+    child.on("exit", (code, signal) => {
+      process.off("SIGINT", forward);
+      process.off("SIGTERM", forward);
+      if (signal) resolve(128 + signalNumber(signal));
+      else resolve(code ?? 1);
+    });
+    child.on("error", (err) => {
+      process.off("SIGINT", forward);
+      process.off("SIGTERM", forward);
+      console.error(err.message);
+      resolve(1);
+    });
+  });
+}
+
+function signalNumber(signal: NodeJS.Signals): number {
+  if (signal === "SIGINT") return 2;
+  if (signal === "SIGTERM") return 15;
+  return 1;
 }
 
 interface QaArgs {

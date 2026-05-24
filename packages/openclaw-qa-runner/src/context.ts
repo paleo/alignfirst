@@ -56,6 +56,13 @@ export interface ScenarioContext {
   channel: ChannelId;
   conversationId: string;
   accountId: ChannelId;
+  /**
+   * The most recent agent-action entry (`outboundReceived` / `cliMock` /
+   * `agentToolCall`). Capture this synchronously after `await` resolves to
+   * pin a handle to the action before any further awaits could overwrite it.
+   * `inboundSent` is scenario-emitted and does not update this property.
+   */
+  readonly currentEntry: ActionEntry | undefined;
   log(message: string): void;
   log(opts: { attachTo: ActionEntry; prefix: string; message: string }): void;
   sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
@@ -75,6 +82,17 @@ export interface ScenarioContext {
     expected: number,
     label: string,
   ): void;
+  /**
+   * Anthropic-direct judgement. The verdict is recorded as an `AssertionRecord`
+   * on an action entry: `attachTo` if provided, otherwise the **current entry**
+   * (the most recent `outboundReceived` / `cliMock` / `agentToolCall`).
+   *
+   * Rule of thumb: when in doubt, capture the target action's entry (either
+   * the one returned by `waitForOutbound` / `sendInbound`, or `ctx.currentEntry`
+   * snapshotted right after the relevant `await` resolves) and pass it as
+   * `attachTo`. The fallback is convenient but binds to whatever the current
+   * entry is at the moment the judge call runs.
+   */
   judgeLLM(p: {
     attachTo?: ActionEntry;
     message: string;
@@ -182,6 +200,9 @@ export function createContext(params: {
     channel,
     conversationId,
     accountId,
+    get currentEntry() {
+      return currentEntry;
+    },
     log: ((arg: string | { attachTo: ActionEntry; prefix: string; message: string }) => {
       if (typeof arg === "string") {
         emit({ ...nextSeqTs(), kind: "scenarioLog", message: arg });

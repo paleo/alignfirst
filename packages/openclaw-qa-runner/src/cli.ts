@@ -18,7 +18,7 @@ export async function dispatch(argv: string[]): Promise<void> {
       envCommand(PACKAGE_DIR, rest);
       return;
     case "qa":
-      qaCommand(PACKAGE_DIR, rest);
+      await qaCommand(PACKAGE_DIR, rest);
       return;
     case "bus":
       startBus();
