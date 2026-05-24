@@ -17,13 +17,17 @@ import {
   type JudgeVerdictRaw,
 } from "./judge.js";
 import type {
+  ActionEntry,
   AssertionRecord,
   ChannelId,
   CliMockCall,
   CliMockHandler,
   EmitSink,
-  ReportEvent,
+  InboundSentEntry,
+  OutboundReceivedEntry,
+  ReportEntry,
   ScenarioFailure,
+  ScenarioLogNote,
 } from "./report.js";
 
 const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
@@ -37,17 +41,29 @@ export interface PollResult {
   nextCursor: number;
 }
 
+export interface SendInboundResult {
+  message: BusMessage;
+  entry: InboundSentEntry;
+}
+
+export interface WaitForOutboundResult {
+  match: BusMessage;
+  entry: OutboundReceivedEntry;
+  nextCursor: number;
+}
+
 export interface ScenarioContext {
   channel: ChannelId;
   conversationId: string;
   accountId: ChannelId;
   log(message: string): void;
-  sendInbound(input: SendInboundInput): Promise<BusMessage>;
+  log(opts: { attachTo: ActionEntry; prefix: string; message: string }): void;
+  sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
   poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult>;
   waitForOutbound(
     predicate: (m: BusMessage) => boolean,
     opts: { timeoutMs?: number; sinceCursor: number },
-  ): Promise<{ match: BusMessage; nextCursor: number }>;
+  ): Promise<WaitForOutboundResult>;
   expectNoOutbound(
     predicate: (m: BusMessage) => boolean,
     opts: { withinMs: number; sinceCursor: number },
@@ -60,6 +76,7 @@ export interface ScenarioContext {
     label: string,
   ): void;
   judgeLLM(p: {
+    attachTo?: ActionEntry;
     message: string;
     rubric: string;
     label: string;
@@ -79,13 +96,13 @@ export interface ScenarioContext {
 
 export interface ScenarioInternals {
   finalize(opts?: { failure?: ScenarioFailure }): {
-    events: ReportEvent[];
+    entries: ReportEntry[];
     judgeUsages: JudgeUsage[];
   };
   emitOutboundReceived(m: BusMessage): void;
   emitCliMock(call: CliMockCall): void;
   getMockHandlers(): Map<string, CliMockHandler>;
-  peekEvents(): { events: ReportEvent[] };
+  peekEntries(): { entries: ReportEntry[] };
 }
 
 export interface SendInboundInput {
@@ -110,31 +127,87 @@ export function createContext(params: {
 }): { ctx: ScenarioContext; internals: ScenarioInternals } {
   const { channel, conversationId, emitSink } = params;
   const accountId: ChannelId = channel;
-  const events: ReportEvent[] = [];
+  const entries: ReportEntry[] = [];
   const judgeUsages: JudgeUsage[] = [];
   const mockHandlers = new Map<string, CliMockHandler>();
+  const outboundWaiters = new Map<string, (entry: OutboundReceivedEntry) => void>();
+  const outboundByMessageId = new Map<string, OutboundReceivedEntry>();
   let seq = 0;
+  let lastAction: ActionEntry | undefined;
 
-  const emit = (partial: EmitInput): ReportEvent => {
-    const sealed = { seq: seq++, ts: new Date().toISOString(), ...partial } as ReportEvent;
-    events.push(sealed);
-    if (emitSink) emitSink(sealed);
-    return sealed;
+  const nextSeqTs = (): { seq: number; ts: string } => ({
+    seq: seq++,
+    ts: new Date().toISOString(),
+  });
+
+  const emit = <T extends ReportEntry>(entry: T): T => {
+    entries.push(entry);
+    emitSink?.(entry);
+    return entry;
+  };
+
+  const reemit = (entry: ReportEntry): void => {
+    emitSink?.(entry);
+  };
+
+  const trackAction = <T extends ActionEntry>(entry: T): T => {
+    lastAction = entry;
+    return entry;
+  };
+
+  const emitOutboundReceived = (m: BusMessage): void => {
+    const entry: OutboundReceivedEntry = {
+      ...nextSeqTs(),
+      kind: "outboundReceived",
+      messageId: m.id,
+      text: m.text,
+      ...(m.threadId !== undefined ? { threadId: m.threadId } : {}),
+    };
+    emit(entry);
+    trackAction(entry);
+    outboundByMessageId.set(m.id, entry);
+    const waiter = outboundWaiters.get(m.id);
+    if (waiter) {
+      outboundWaiters.delete(m.id);
+      waiter(entry);
+    }
+  };
+
+  const emitCliMock = (call: CliMockCall): void => {
+    const entry = emit({ ...nextSeqTs(), kind: "cliMock" as const, call });
+    trackAction(entry);
   };
 
   const ctx: ScenarioContext = {
     channel,
     conversationId,
     accountId,
-    log: (message) => void emit({ kind: "log", message }),
-    sendInbound: (input) => sendInbound(emit, accountId, conversationId, input),
+    log: ((arg: string | { attachTo: ActionEntry; prefix: string; message: string }) => {
+      if (typeof arg === "string") {
+        emit({ ...nextSeqTs(), kind: "scenarioLog", message: arg });
+        return;
+      }
+      const note: ScenarioLogNote = {
+        prefix: arg.prefix,
+        ts: new Date().toISOString(),
+        message: arg.message,
+      };
+      arg.attachTo.scenarioLog = note;
+      reemit(arg.attachTo);
+    }) as ScenarioContext["log"],
+    sendInbound: (input) =>
+      sendInbound({ emit, trackAction, nextSeqTs }, accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
-    waitForOutbound: (predicate, opts) => waitForOutbound(accountId, predicate, opts),
+    waitForOutbound: (predicate, opts) =>
+      waitForOutbound({ accountId, awaitEntry: (id) => awaitOutboundEntry(id) }, predicate, opts),
     expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
-    assertRegex: (actual, pattern, label) => assertRegex(emit, actual, pattern, label),
-    assertEqual: (actual, expected, label) => assertEqual(emit, actual, expected, label),
-    assertLength: (value, expected, label) => assertLength(emit, value, expected, label),
-    judgeLLM: (p) => callJudgeVerdict(emit, judgeUsages, p),
+    assertRegex: (actual, pattern, label) =>
+      assertRegex({ getLastAction: () => lastAction, reemit }, actual, pattern, label),
+    assertEqual: (actual, expected, label) =>
+      assertEqual({ getLastAction: () => lastAction, reemit }, actual, expected, label),
+    assertLength: (value, expected, label) =>
+      assertLength({ getLastAction: () => lastAction, reemit }, value, expected, label),
+    judgeLLM: (p) => callJudgeVerdict({ getLastAction: () => lastAction, reemit, judgeUsages }, p),
     judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
@@ -143,22 +216,57 @@ export function createContext(params: {
 
   const internals: ScenarioInternals = {
     finalize: (opts) => {
-      if (opts?.failure) emit({ kind: "failure", failure: opts.failure });
-      return { events, judgeUsages };
+      if (opts?.failure) attachFailureToLast(lastAction, reemit, opts.failure);
+      return { entries, judgeUsages };
     },
-    emitOutboundReceived: (m) =>
-      void emit({ kind: "outboundReceived", messageId: m.id, text: m.text, threadId: m.threadId }),
-    emitCliMock: (call) => void emit({ kind: "cliMock", call }),
+    emitOutboundReceived,
+    emitCliMock,
     getMockHandlers: () => mockHandlers,
-    peekEvents: () => ({ events }),
+    peekEntries: () => ({ entries }),
   };
+
+  function awaitOutboundEntry(messageId: string): Promise<OutboundReceivedEntry> {
+    const existing = outboundByMessageId.get(messageId);
+    if (existing) return Promise.resolve(existing);
+    return new Promise((resolve) => {
+      outboundWaiters.set(messageId, resolve);
+    });
+  }
 
   return { ctx, internals };
 }
 
-type EmitInput = DistributedOmit<ReportEvent, "seq" | "ts">;
-type DistributedOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
-type EmitFn = (partial: EmitInput) => ReportEvent;
+interface EmitDeps {
+  emit: <T extends ReportEntry>(entry: T) => T;
+  trackAction: <T extends ActionEntry>(entry: T) => T;
+  nextSeqTs: () => { seq: number; ts: string };
+}
+
+interface AttachDeps {
+  getLastAction: () => ActionEntry | undefined;
+  reemit: (entry: ReportEntry) => void;
+}
+
+function attachFailureToLast(
+  target: ActionEntry | undefined,
+  reemit: (entry: ReportEntry) => void,
+  failure: ScenarioFailure,
+): void {
+  if (!target || target.failure) return;
+  target.failure = failure;
+  reemit(target);
+}
+
+function pushAssertion(
+  deps: AttachDeps,
+  target: ActionEntry | undefined,
+  record: AssertionRecord,
+): void {
+  if (!target) return;
+  if (!target.assertions) target.assertions = [];
+  target.assertions.push(record);
+  deps.reemit(target);
+}
 
 function registerMockCli(
   handlers: Map<string, CliMockHandler>,
@@ -172,11 +280,11 @@ function registerMockCli(
 }
 
 async function sendInbound(
-  emit: EmitFn,
+  deps: EmitDeps,
   accountId: ChannelId,
   conversationId: string,
   input: SendInboundInput,
-): Promise<BusMessage> {
+): Promise<SendInboundResult> {
   const conversation: Conversation = input.conversation ?? {
     kind: "channel",
     id: conversationId,
@@ -193,15 +301,18 @@ async function sendInbound(
       threadId: input.threadId,
     },
   });
-  emit({
+  const entry: InboundSentEntry = {
+    ...deps.nextSeqTs(),
     kind: "inboundSent",
     messageId: r.message.id,
     text: input.text,
     senderId: input.senderId,
-    senderName: input.senderName,
-    threadId: input.threadId,
-  });
-  return r.message;
+    ...(input.senderName !== undefined ? { senderName: input.senderName } : {}),
+    ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
+  };
+  deps.emit(entry);
+  deps.trackAction(entry);
+  return { message: r.message, entry };
 }
 
 async function poll(
@@ -221,22 +332,25 @@ async function poll(
 }
 
 async function waitForOutbound(
-  accountId: ChannelId,
+  deps: { accountId: ChannelId; awaitEntry: (id: string) => Promise<OutboundReceivedEntry> },
   predicate: (m: BusMessage) => boolean,
   opts: { timeoutMs?: number; sinceCursor: number },
-): Promise<{ match: BusMessage; nextCursor: number }> {
+): Promise<WaitForOutboundResult> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const deadline = Date.now() + timeoutMs;
   let cursor = opts.sinceCursor;
   while (Date.now() < deadline) {
     const remaining = Math.max(0, deadline - Date.now());
-    const { messages, nextCursor } = await poll(accountId, {
+    const { messages, nextCursor } = await poll(deps.accountId, {
       sinceCursor: cursor,
       timeoutMs: Math.min(5000, remaining),
     });
     cursor = nextCursor;
     const match = messages.find(predicate);
-    if (match) return { match, nextCursor };
+    if (match) {
+      const entry = await deps.awaitEntry(match.id);
+      return { match, entry, nextCursor };
+    }
   }
   throw new AssertionError(`waitForOutbound timed out after ${timeoutMs}ms`);
 }
@@ -269,18 +383,18 @@ async function expectNoOutbound(
   return { nextCursor: cursor };
 }
 
-function assertRegex(emit: EmitFn, actual: string, pattern: RegExp, label: string): void {
-  recordAssertion(
-    emit,
+function assertRegex(deps: AttachDeps, actual: string, pattern: RegExp, label: string): void {
+  failingAssert(
+    deps,
     pattern.test(actual),
     label,
     `value=${JSON.stringify(actual)} pattern=${pattern.source}`,
   );
 }
 
-function assertEqual<T>(emit: EmitFn, actual: T, expected: T, label: string): void {
-  recordAssertion(
-    emit,
+function assertEqual<T>(deps: AttachDeps, actual: T, expected: T, label: string): void {
+  failingAssert(
+    deps,
     actual === expected,
     label,
     `expected=${JSON.stringify(expected)} actual=${JSON.stringify(actual)}`,
@@ -288,36 +402,41 @@ function assertEqual<T>(emit: EmitFn, actual: T, expected: T, label: string): vo
 }
 
 function assertLength(
-  emit: EmitFn,
+  deps: AttachDeps,
   value: { length: number } | string | unknown[],
   expected: number,
   label: string,
 ): void {
-  const len = value.length;
-  recordAssertion(emit, len === expected, label, `expected length=${expected} actual=${len}`);
+  failingAssert(
+    deps,
+    value.length === expected,
+    label,
+    `expected length=${expected} actual=${value.length}`,
+  );
 }
 
-function recordAssertion(emit: EmitFn, ok: boolean, label: string, detail: string): void {
-  if (ok) {
-    emit({ kind: "assertion", record: { label, ok: true } });
-    return;
-  }
-  const record: AssertionRecord = { label, ok: false, detail };
-  emit({ kind: "assertion", record });
+function failingAssert(deps: AttachDeps, ok: boolean, label: string, detail: string): void {
+  if (ok) return;
+  pushAssertion(deps, deps.getLastAction(), { label, ok: false, detail });
   throw new AssertionError(`${label}: ${detail}`);
 }
 
 async function callJudgeVerdict(
-  emit: EmitFn,
-  judgeUsages: JudgeUsage[],
-  p: { message: string; rubric: string; label: string; maxTokens?: number },
+  deps: AttachDeps & { judgeUsages: JudgeUsage[] },
+  p: {
+    attachTo?: ActionEntry;
+    message: string;
+    rubric: string;
+    label: string;
+    maxTokens?: number;
+  },
 ): Promise<JudgeVerdict> {
   const verdict = await judgeLLM({
     message: p.message,
     rubric: p.rubric,
     maxTokens: p.maxTokens,
   });
-  judgeUsages.push(verdict.usage);
+  deps.judgeUsages.push(verdict.usage);
   const extra = {
     judge: {
       model: verdict.usage.model,
@@ -328,14 +447,12 @@ async function callJudgeVerdict(
       costUsd: judgeCostUsd(verdict.usage),
     },
   };
+  const target = p.attachTo ?? deps.getLastAction();
   if (verdict.verdict === "pass") {
-    emit({ kind: "assertion", record: { label: p.label, ok: true, extra } });
+    pushAssertion(deps, target, { label: p.label, ok: true, extra });
     return verdict;
   }
-  emit({
-    kind: "assertion",
-    record: { label: p.label, ok: false, detail: verdict.reasoning, extra },
-  });
+  pushAssertion(deps, target, { label: p.label, ok: false, detail: verdict.reasoning, extra });
   throw new AssertionError(`${p.label}: ${verdict.reasoning}`);
 }
 

@@ -92,12 +92,14 @@ Scenarios run **serially** through one gateway. Exit 0 iff every pair passes.
 From `@paleo/openclaw-qa-runner` (`src/context.ts`):
 
 - `channel`, `conversationId`, `accountId` — per-task isolation. Use `ctx.conversationId` everywhere; never hard-code a value.
-- `sendInbound(input)` — push an inbound on the bus.
-- `poll`, `waitForOutbound`, `expectNoOutbound` — bus consumers.
-- `assertRegex`, `assertEqual`, `assertLength` — structural assertions.
-- `judgeLLM({ message, rubric, label })` — Anthropic-direct judgement (no bus traffic, no gateway).
+- `sendInbound(input)` → `{ message, entry }`. Push an inbound on the bus; `entry` is the `inboundSent` `ActionEntry` to which assertions/logs can be attached.
+- `poll`, `expectNoOutbound` — bus consumers.
+- `waitForOutbound(predicate, opts)` → `{ match, entry, nextCursor }`. `entry` is the `outboundReceived` `ActionEntry`; pass it as `attachTo` to bind judges and attached logs to that specific outbound.
+- `assertRegex`, `assertEqual`, `assertLength` — structural assertions. Silent on success; on failure, the assertion record and a `failure` field land on the most recent action entry.
+- `judgeLLM({ attachTo?, message, rubric, label })` — Anthropic-direct judgement. Pass `attachTo: entry` to bind the result to a specific action; otherwise it attaches to the last action entry.
 - `mockCli(name, handler)` — intercepts the gateway's calls to `git` / `npm` / `pnpm` / `yarn` / `claude`. Unregistered calls fail the scenario with `failure.source = "cliMock"`.
-- `log`, `getCursor`.
+- `log(message)` or `log({ attachTo, prefix, message })` — free-standing `scenarioLog` entry, or a `scenarioLog` note attached to an action entry.
+- `getCursor`.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
 
@@ -109,8 +111,8 @@ Defaults to `anthropic/claude-haiku-4-5`. Override via `QA_JUDGE_MODEL` on the `
 
 `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`:
 
-- `events.jsonl` — appended live, survives a runner crash.
-- `report.json` — final `ScenarioReport`. Merges `events.jsonl` with `agentToolCall` entries from the gateway payload log; adds per-scenario `cost`.
+- `scenario-log.jsonl` — appended live (one `ReportEntry` per line), survives a runner crash. Re-emits an entry every time a nested field is added; last write wins per `seq`.
+- `report.json` — final `ScenarioReport`. Merges `scenario-log.jsonl` with `agentToolCall` entries from the gateway payload log; adds per-scenario `cost`.
 
 `<NN>` is the iteration index (omitted when `--iterations 1`). `<VERDICT>` is `PASS` / `FAIL`, applied by **renaming the directory** after `report.json` is written. A directory with no verdict suffix means the run is pending or crashed before rename.
 

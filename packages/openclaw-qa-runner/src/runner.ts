@@ -20,8 +20,8 @@ import type { JudgeUsage } from "./judge.js";
 import { startMockCliServer } from "./mock-cli-server.js";
 import type {
   AgentToolCall,
-  AgentToolCallEvent,
-  ReportEvent,
+  AgentToolCallEntry,
+  ReportEntry,
   ScenarioFailure,
   ScenarioReport,
 } from "./report.js";
@@ -163,7 +163,7 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     accountId,
     startedAtIso,
     startedAtMs,
-    eventsStream,
+    logStream,
   } = setup;
 
   params.mockCliServer.bind({
@@ -197,8 +197,8 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
   const durationMs = finishedAtMs - startedAtMs;
   const finishedAtIso = new Date(finishedAtMs).toISOString();
 
-  const { events, judgeUsages } = internals.finalize({ failure });
-  await closeStream(eventsStream);
+  const { entries, judgeUsages } = internals.finalize({ failure });
+  await closeStream(logStream);
 
   await waitForGatewayUsage({ conversationId, startedAtIso });
   const { cost: gatewayCostUsd, turns: gatewayTurns } = readGatewayCostFor({
@@ -208,17 +208,17 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
   const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
 
   const agentCalls = parseAgentToolCalls({ conversationId, startedAtIso });
-  pairAgentCallsWithCliMocks(agentCalls, events);
+  pairAgentCallsWithCliMocks(agentCalls, entries);
   if (agentCalls.length === 0 && !gatewayLogExists()) {
-    events.push({
-      seq: events.length,
+    entries.push({
+      seq: entries.length,
       ts: finishedAtIso,
-      kind: "log",
+      kind: "scenarioLog",
       message: `agentToolCall parsing skipped: ${GATEWAY_LOG_PATH} not found`,
     });
   }
 
-  const merged = mergeTimeline(events, agentCalls);
+  const merged = mergeTimeline(entries, agentCalls);
   const report: ScenarioReport = {
     schemaVersion: 1,
     scenario: params.scenarioId,
@@ -229,7 +229,7 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     startedAt: startedAtIso,
     finishedAt: finishedAtIso,
     durationMs,
-    events: merged,
+    entries: merged,
     ...(failure ? { failure } : {}),
     cost: {
       gatewayUsd: gatewayCostUsd,
@@ -264,7 +264,7 @@ interface RunSetup {
   accountId: ChannelId;
   startedAtIso: string;
   startedAtMs: number;
-  eventsStream: ReturnType<typeof createWriteStream>;
+  logStream: ReturnType<typeof createWriteStream>;
 }
 
 function setupRun(params: RunOneParams): RunSetup {
@@ -280,9 +280,9 @@ function setupRun(params: RunOneParams): RunSetup {
 
   const startedAtIso = new Date().toISOString();
   const startedAtMs = Date.now();
-  const eventsStream = createWriteStream(join(outDir, "events.jsonl"), { flags: "a" });
-  const emitSink = (event: ReportEvent) => {
-    eventsStream.write(`${JSON.stringify(event)}\n`);
+  const logStream = createWriteStream(join(outDir, "scenario-log.jsonl"), { flags: "a" });
+  const emitSink = (entry: ReportEntry) => {
+    logStream.write(`${JSON.stringify(entry)}\n`);
   };
   const { ctx, internals } = createContext({ channel: params.channel, conversationId, emitSink });
   return {
@@ -293,7 +293,7 @@ function setupRun(params: RunOneParams): RunSetup {
     accountId,
     startedAtIso,
     startedAtMs,
-    eventsStream,
+    logStream,
   };
 }
 
@@ -375,8 +375,8 @@ async function executeScenario(
 }
 
 function promoteCliMockFailure(internals: ScenarioInternals): ScenarioFailure | undefined {
-  const { events } = internals.peekEvents();
-  for (const e of events) {
+  const { entries } = internals.peekEntries();
+  for (const e of entries) {
     if (e.kind !== "cliMock") continue;
     const err = e.call.handlerError;
     if (!err) continue;
@@ -387,13 +387,12 @@ function promoteCliMockFailure(internals: ScenarioInternals): ScenarioFailure | 
 
 /**
  * Best-effort: pair each agent tool call that shelled out to a mocked CLI
- * with the corresponding cliMock event (matched in order of occurrence) and
- * attach the real ts as `inferredStartedAt`. Does NOT change the call's
- * `startedAt` or the event's `ts` — purely informational.
+ * with the corresponding cliMock entry (matched in order of occurrence) and
+ * attach the real ts as `inferredStartedAt`.
  */
-function pairAgentCallsWithCliMocks(agentCalls: AgentToolCall[], events: ReportEvent[]): void {
+function pairAgentCallsWithCliMocks(agentCalls: AgentToolCall[], entries: ReportEntry[]): void {
   const cliMockQueues = new Map<string, string[]>();
-  for (const e of events) {
+  for (const e of entries) {
     if (e.kind !== "cliMock") continue;
     const q = cliMockQueues.get(e.call.cli) ?? [];
     q.push(e.ts);
@@ -419,19 +418,19 @@ function leadingCli(input: unknown): string | undefined {
 }
 
 /**
- * Merge live events with parsed agent tool calls, sort by ts, re-assign seq.
+ * Merge live entries with parsed agent tool calls, sort by ts, re-assign seq.
  * agentToolCall entries carry a synthetic end-of-turn ts (gateway log has no
- * per-tool ts); tie-break them before sibling live events so the tool call
+ * per-tool ts); tie-break them before sibling live entries so the tool call
  * appears before its observed side effects.
  */
-function mergeTimeline(events: ReportEvent[], agentCalls: AgentToolCall[]): ReportEvent[] {
-  const agentEvents: AgentToolCallEvent[] = agentCalls.map((call) => ({
+function mergeTimeline(entries: ReportEntry[], agentCalls: AgentToolCall[]): ReportEntry[] {
+  const agentEntries: AgentToolCallEntry[] = agentCalls.map((call) => ({
     seq: -1,
     ts: call.startedAt,
     kind: "agentToolCall",
     call,
   }));
-  const merged: ReportEvent[] = [...events, ...agentEvents].sort((a, b) => {
+  const merged: ReportEntry[] = [...entries, ...agentEntries].sort((a, b) => {
     if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;
     return kindOrder(a.kind) - kindOrder(b.kind);
   });
@@ -439,7 +438,7 @@ function mergeTimeline(events: ReportEvent[], agentCalls: AgentToolCall[]): Repo
   return merged;
 }
 
-function kindOrder(k: ReportEvent["kind"]): number {
+function kindOrder(k: ReportEntry["kind"]): number {
   return k === "agentToolCall" ? 0 : 1;
 }
 

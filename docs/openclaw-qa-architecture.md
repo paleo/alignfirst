@@ -145,10 +145,20 @@ Layout: `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`.
 
 Two files per task:
 
-- `events.jsonl` — appended live as the scenario runs, one `ReportEvent` per line. Survives a runner crash. Original write-order `seq`s preserved.
-- `report.json` — final `ScenarioReport`, written once at end. Re-merges the live events with `agentToolCall` entries parsed from the gateway's `anthropic-payload.jsonl` (filtered by `conversationId`), re-assigns `seq` by `ts`, and adds per-scenario `cost = { gatewayUsd, judgeUsd, totalUsd, gatewayTurns }`.
+- `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line. Survives a runner crash. Re-emitted whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry, so the file may contain successive snapshots of the same `seq` — the last write wins.
+- `report.json` — final `ScenarioReport`, written once at end. Re-merges the live entries with `agentToolCall` entries parsed from the gateway's `anthropic-payload.jsonl` (filtered by `conversationId`), re-assigns `seq` by `ts`, and adds per-scenario `cost = { gatewayUsd, judgeUsd, totalUsd, gatewayTurns }`.
 
-Event kinds: `log` · `inboundSent` · `outboundReceived` · `assertion` · `judge` · `cliMock` · `agentToolCall` · `failure`. `outboundReceived` captures every bus outbound for the conversation, not only the ones the scenario explicitly awaits. `agentToolCall` lives only in `report.json`.
+Entry kinds: `scenarioLog` · `inboundSent` · `outboundReceived` · `cliMock` · `agentToolCall`. Each entry is one action; assertions, scenario-log notes, and failures live as nested fields (`assertions: AssertionRecord[]`, `scenarioLog: ScenarioLogNote`, `failure: ScenarioFailure`) on the action entry they describe. `outboundReceived` captures every bus outbound for the conversation, not only the ones the scenario explicitly awaits. `agentToolCall` lives only in `report.json`.
+
+Scenarios bind judges and attached logs to a specific action entry via `attachTo`:
+
+```ts
+const wait = await ctx.waitForOutbound(predicate, opts);
+ctx.log({ attachTo: wait.entry, prefix: "follow-up received", message: wait.match.text });
+await ctx.judgeLLM({ attachTo: wait.entry, message: wait.match.text, rubric, label });
+```
+
+Without `attachTo`, judges attach to the most recently emitted action entry. Internal asserts (`assertRegex` / `assertEqual` / `assertLength`) are silent on success and only surface on failure — their `failure` lands on the last action entry.
 
 Authoritative types: `packages/openclaw-qa-runner/src/report.ts`.
 

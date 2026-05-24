@@ -3,18 +3,21 @@
  *
  * Two artifacts per scenario run, under `qa/artifacts/<baseStamp>-<scenario>-<channel>/`:
  *
- *   - `events.jsonl`  — live append, one `ReportEvent` per line, written as things happen.
- *                       Survives runner crash / hang.
- *   - `report.json`   — final `ScenarioReport`, written once at end. Supersedes the old
- *                       `report.md` + `summary.json` pair (both removed).
+ *   - `scenario-log.jsonl` — live append, one `ReportEntry` per line, written as
+ *                            things happen. Survives runner crash / hang.
+ *   - `report.json`        — final `ScenarioReport`, written once at end.
  *
- * `report.json` carries the same events as `events.jsonl`, plus terminal data only
- * computable at the end (status, durationMs, finishedAt, parsed agentToolCalls, cost).
+ * `report.json` carries the same entries as `scenario-log.jsonl`, plus terminal
+ * data only computable at the end (status, durationMs, finishedAt, parsed
+ * agentToolCalls, cost).
+ *
+ * Each agent or scenario action is one entry. Assertions, scenario-log notes,
+ * and failures about that action live as nested fields on the entry, not as
+ * separate entries. Free-standing `scenarioLog` entries are the fallback for
+ * `ctx.log(...)` calls that are not bound to an action.
  */
 
 import type { Readable, Writable } from "node:stream";
-
-// ─── Top-level report ─────────────────────────────────────────────────────────
 
 export interface ScenarioReport {
   schemaVersion: 1;
@@ -24,11 +27,11 @@ export interface ScenarioReport {
   accountId: string;
 
   status: "pass" | "fail";
-  startedAt: string; // ISO-8601
-  finishedAt: string; // ISO-8601
+  startedAt: string;
+  finishedAt: string;
   durationMs: number;
 
-  events: ReportEvent[];
+  entries: ReportEntry[];
 
   failure?: ScenarioFailure;
   cost: CostBreakdown;
@@ -36,28 +39,38 @@ export interface ScenarioReport {
 
 export type ChannelId = "discord-mock" | "slack-mock";
 
-// ─── Event timeline (also the `events.jsonl` line type) ───────────────────────
+export type ReportEntry = ScenarioLogEntry | ActionEntry;
 
-export type ReportEvent =
-  | LogEvent
-  | InboundSentEvent
-  | OutboundReceivedEvent
-  | AssertionEvent
-  | CliMockEvent
-  | AgentToolCallEvent
-  | FailureEvent;
+export type ActionEntry =
+  | InboundSentEntry
+  | OutboundReceivedEntry
+  | CliMockEntry
+  | AgentToolCallEntry;
 
-export interface ReportEventBase {
-  ts: string; // ISO-8601
-  seq: number; // monotonic per scenario, starting at 0
+export interface ReportEntryBase {
+  ts: string;
+  seq: number;
 }
 
-export interface LogEvent extends ReportEventBase {
-  kind: "log";
+export interface ActionEntryBase extends ReportEntryBase {
+  scenarioLog?: ScenarioLogNote;
+  assertions?: AssertionRecord[];
+  failure?: ScenarioFailure;
+}
+
+export interface ScenarioLogNote {
+  prefix?: string;
+  ts: string;
   message: string;
 }
 
-export interface InboundSentEvent extends ReportEventBase {
+export interface ScenarioLogEntry extends ReportEntryBase {
+  kind: "scenarioLog";
+  prefix?: string;
+  message: string;
+}
+
+export interface InboundSentEntry extends ActionEntryBase {
   kind: "inboundSent";
   messageId: string;
   text: string;
@@ -66,48 +79,32 @@ export interface InboundSentEvent extends ReportEventBase {
   threadId?: string;
 }
 
-export interface OutboundReceivedEvent extends ReportEventBase {
+export interface OutboundReceivedEntry extends ActionEntryBase {
   kind: "outboundReceived";
   messageId: string;
   text: string;
   threadId?: string;
 }
 
-export interface AssertionEvent extends ReportEventBase {
-  kind: "assertion";
-  record: AssertionRecord;
-}
-
-export interface CliMockEvent extends ReportEventBase {
+export interface CliMockEntry extends ActionEntryBase {
   kind: "cliMock";
   call: CliMockCall;
 }
 
-export interface AgentToolCallEvent extends ReportEventBase {
+export interface AgentToolCallEntry extends ActionEntryBase {
   kind: "agentToolCall";
   call: AgentToolCall;
 }
-
-export interface FailureEvent extends ReportEventBase {
-  kind: "failure";
-  failure: ScenarioFailure;
-}
-
-// ─── Sub-records ──────────────────────────────────────────────────────────────
 
 export type AssertionRecord =
   | { label: string; ok: true; extra?: unknown }
   | { label: string; ok: false; detail: string; extra?: unknown };
 
-/**
- * One mocked-CLI invocation: the agent shelled out, our shim routed the call to the
- * scenario's registered handler, and we captured the round-trip. Emitted by plan A5.
- */
 export interface CliMockCall {
   cli: "git" | "npm" | "pnpm" | "yarn" | "claude" | (string & {});
-  argv: string[]; // does not include argv[0]
+  argv: string[];
   cwd: string;
-  stdin: string; // captured if the agent piped input; "" otherwise
+  stdin: string;
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -116,13 +113,6 @@ export interface CliMockCall {
   handlerError?: { name: string; message: string; stack?: string };
 }
 
-/**
- * One tool call made by the OpenClaw agent during the scenario, parsed from the
- * gateway's `anthropic-payload.jsonl` (filtered by `conversationId`).
- *
- * Best-effort: depends on `OPENCLAW_ANTHROPIC_PAYLOAD_LOG=1` (QA runs force it on).
- * If the log is absent, this list is empty and a note lands in `events`.
- */
 export interface AgentToolCall {
   toolName: string;
   toolUseId: string;
@@ -131,11 +121,11 @@ export interface AgentToolCall {
   startedAt: string;
   /**
    * Best-effort estimate of when the tool call actually started, inferred by
-   * matching the call's leading CLI against an in-order `cliMock` event from
+   * matching the call's leading CLI against an in-order `cliMock` entry from
    * the same scenario. `startedAt` carries the synthetic end-of-turn ts
    * because the gateway log has no per-tool timestamp; this field, when
    * present, lets readers see roughly when the call happened. Not used for
-   * `events` ordering.
+   * `entries` ordering.
    */
   inferredStartedAt?: string;
   turn?: number;
@@ -155,20 +145,6 @@ export interface CostBreakdown {
   gatewayTurns: number;
 }
 
-// ─── Scenario-side mock-CLI registration API (used by plan A5) ────────────────
-
-/**
- * Handler a scenario registers for a mocked CLI. Implemented by plan A5.
- *
- *   ctx.mockCli("git", async ({ argv, cwd, stdin, stdout, stderr }) => {
- *     stdout.write("ok\n");
- *     if (argv[0] === "push") return 1;
- *     // returning undefined ⇒ exit code 0
- *   });
- *
- * If the agent invokes a CLI for which no handler is registered, the scenario fails
- * with `source: "cliMock"` and `message: "unexpected call to <cli>"`.
- */
 export interface CliMockHandlerArgs {
   argv: string[];
   cwd: string;
@@ -181,11 +157,10 @@ export type CliMockHandler = (
   args: CliMockHandlerArgs,
 ) => number | undefined | Promise<number | undefined>;
 
-// ─── Runtime helpers (shared between context.ts and runner.ts) ────────────────
-
 /**
- * The callback `runner.ts` passes into `createContext` so live events can be
- * appended to `events.jsonl` as they happen. Receives the already-sealed event
- * (`seq` + `ts` set).
+ * Callback the runner passes into `createContext` so live entries can be
+ * appended to `scenario-log.jsonl` as they happen. Receives the already-sealed
+ * entry (`seq` + `ts` set). Re-emitted when a nested field (assertions,
+ * failure, scenarioLog) is added to an existing entry.
  */
-export type EmitSink = (event: ReportEvent) => void;
+export type EmitSink = (entry: ReportEntry) => void;
