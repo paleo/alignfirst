@@ -66,6 +66,7 @@
   "files": {
     "includes": [
       "**",
+      "!**/.agents",
       "!**/.local",
       "!**/.local-wt",
       "!**/.plans",

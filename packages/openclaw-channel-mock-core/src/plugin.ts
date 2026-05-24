@@ -174,10 +174,24 @@ export function createChannelMockPlugin(params: {
       },
       actions: messageActions,
       message: messageAdapter,
+      // Mirrors real Slack: coalesce intermediate block-stream chunks so each
+      // user-facing text emitted by the agent becomes its own bus message
+      // instead of accumulating into the final reply.
+      streaming: {
+        blockStreamingCoalesceDefaults: { minChars: 1, idleMs: 100 },
+      },
     },
     outbound: {
       base: {
         deliveryMode: "direct",
+        deliveryCapabilities: {
+          durableFinal: {
+            text: true,
+            replyTo: true,
+            thread: true,
+            messageSendingHooks: true,
+          },
+        },
       },
       attachedResults: {
         channel: channelId,

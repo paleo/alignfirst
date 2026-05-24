@@ -170,6 +170,7 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     conversationId,
     handlers: internals.getMockHandlers(),
     emitCliMock: internals.emitCliMock,
+    isScenarioEnded: () => internals.isScenarioEnded(),
   });
 
   const initialCursor = await ctx.getCursor();

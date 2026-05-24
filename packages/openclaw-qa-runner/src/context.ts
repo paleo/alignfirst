@@ -55,6 +55,17 @@ export interface WaitForOutboundResult {
   nextCursor: number;
 }
 
+export type MockCliRegisterMode = "register" | "replace" | "ifAbsent";
+
+export interface MockCliRegisterOptions {
+  /**
+   * - `"register"` (default): throws if a handler is already registered for `name`.
+   * - `"replace"`: overwrites the existing handler; throws if none was registered.
+   * - `"ifAbsent"`: no-op if a handler is already registered.
+   */
+  mode?: MockCliRegisterMode;
+}
+
 export interface ScenarioContext {
   channel: ChannelId;
   conversationId: string;
@@ -66,6 +77,20 @@ export interface ScenarioContext {
    * `inboundSent` is scenario-emitted and does not update this property.
    */
   readonly currentEntry: ActionEntry | undefined;
+  /**
+   * `true` once the scenario has called `markScenarioAsEnded`. After that, the
+   * mock-cli server stops dispatching to registered handlers — any incoming
+   * call (typically a lingering agent action firing after the verdict is in)
+   * is answered with a "scenario ended" stub message and recorded as a
+   * post-end cliMock entry that does **not** affect the result.
+   */
+  readonly isScenarioEnded: boolean;
+  /**
+   * Declare the scenario's verdict signals are all in. From this point on
+   * the runner stops attributing tool-call failures to this scenario.
+   * Optional `reason` is recorded in the scenarioLog (e.g. `"PASS"`).
+   */
+  markScenarioAsEnded(reason?: string): void;
   log(message: string): void;
   log(opts: { attachTo: ActionEntry; prefix: string; message: string }): void;
   sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
@@ -112,7 +137,7 @@ export interface ScenarioContext {
   }): Promise<JudgeVerdictJson<T>>;
   judgeLLMRaw(p: { prompt: string; label: string; maxTokens?: number }): Promise<JudgeVerdictRaw>;
   getCursor(): Promise<number>;
-  mockCli(name: string, handler: CliMockHandler): void;
+  mockCli(name: string, handler: CliMockHandler, opts?: MockCliRegisterOptions): void;
 }
 
 export interface ScenarioInternals {
@@ -125,6 +150,7 @@ export interface ScenarioInternals {
   emitCliMock(call: CliMockCall): void;
   getMockHandlers(): Map<string, CliMockHandler>;
   peekEntries(): { entries: ReportEntry[] };
+  isScenarioEnded(): boolean;
 }
 
 export interface SendInboundInput {
@@ -156,6 +182,7 @@ export function createContext(params: {
   const outboundByMessageId = new Map<string, OutboundReceivedEntry>();
   let seq = 0;
   let currentEntry: ActionEntry | undefined;
+  let scenarioEnded = false;
 
   const nextSeqTs = (): { seq: number; ts: string } => ({
     seq: seq++,
@@ -217,6 +244,16 @@ export function createContext(params: {
     get currentEntry() {
       return currentEntry;
     },
+    get isScenarioEnded() {
+      return scenarioEnded;
+    },
+    markScenarioAsEnded: (reason) => {
+      if (scenarioEnded) return;
+      scenarioEnded = true;
+      const message =
+        reason !== undefined && reason.length > 0 ? `scenario ended: ${reason}` : "scenario ended";
+      emit({ ...nextSeqTs(), kind: "scenarioLog", message });
+    },
     log: ((arg: string | { attachTo: ActionEntry; prefix: string; message: string }) => {
       if (typeof arg === "string") {
         emit({ ...nextSeqTs(), kind: "scenarioLog", message: arg });
@@ -246,7 +283,7 @@ export function createContext(params: {
     judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
-    mockCli: (name, handler) => registerMockCli(mockHandlers, name, handler),
+    mockCli: (name, handler, opts) => registerMockCli(mockHandlers, name, handler, opts),
   };
 
   const internals: ScenarioInternals = {
@@ -258,6 +295,7 @@ export function createContext(params: {
     emitCliMock,
     getMockHandlers: () => mockHandlers,
     peekEntries: () => ({ entries }),
+    isScenarioEnded: () => scenarioEnded,
   };
 
   function awaitOutboundEntry(messageId: string): Promise<OutboundReceivedEntry> {
@@ -338,11 +376,22 @@ function registerMockCli(
   handlers: Map<string, CliMockHandler>,
   name: string,
   handler: CliMockHandler,
+  opts: MockCliRegisterOptions | undefined,
 ): void {
-  if (handlers.has(name)) {
-    throw new Error(`mockCli: handler for "${name}" already registered`);
+  const mode: MockCliRegisterMode = opts?.mode ?? "register";
+  const exists = handlers.has(name);
+  if (mode === "register") {
+    if (exists) throw new Error(`mockCli: handler for "${name}" already registered`);
+    handlers.set(name, handler);
+    return;
   }
-  handlers.set(name, handler);
+  if (mode === "replace") {
+    if (!exists) throw new Error(`mockCli: no handler for "${name}" to replace`);
+    handlers.set(name, handler);
+    return;
+  }
+  // "ifAbsent"
+  if (!exists) handlers.set(name, handler);
 }
 
 async function sendInbound(

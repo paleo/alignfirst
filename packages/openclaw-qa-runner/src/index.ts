@@ -1,5 +1,7 @@
 export type {
   ChannelId,
+  MockCliRegisterMode,
+  MockCliRegisterOptions,
   ScenarioContext,
   SendInboundResult,
   WaitForOutboundResult,

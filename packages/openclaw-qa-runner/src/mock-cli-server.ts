@@ -20,7 +20,17 @@ export interface ConversationRegistry {
   handlers: Map<string, CliMockHandler>;
   /** Emit a `cliMock` event into the scenario's event stream. */
   emitCliMock: (call: CliMockCall) => void;
+  /**
+   * `true` once the scenario has called `ctx.markScenarioAsEnded`. After that,
+   * the server bypasses handler dispatch: every incoming call is answered with
+   * the scenario-ended stub message so a lingering agent — still running while
+   * we move on — can read it and stop.
+   */
+  isScenarioEnded: () => boolean;
 }
+
+const SCENARIO_ENDED_STUB_MESSAGE =
+  "Stubbed call. If you see this, it means that you are in a QA scenario. You should stop and acknowledge to the user.\n";
 
 export interface MockCliServer {
   /** Bind the in-flight conversation registry for the lifetime of one scenario. */
@@ -107,6 +117,21 @@ async function handleInvoke(
 
   const startedAt = new Date().toISOString();
   const startedAtMs = Date.now();
+
+  if (reg.isScenarioEnded()) {
+    // Verdict is already decided. Don't dispatch to handlers and don't surface
+    // failures — just give the (still-running) agent a clear stop signal.
+    emitCallEvent(
+      reg,
+      invoke,
+      { stdout: SCENARIO_ENDED_STUB_MESSAGE, stderr: "", exitCode: 0 },
+      startedAt,
+      startedAtMs,
+    );
+    respondJson(res, { stdout: SCENARIO_ENDED_STUB_MESSAGE, stderr: "", exitCode: 0 });
+    return;
+  }
+
   const handler = reg.handlers.get(invoke.cli);
   if (!handler) {
     const stderr = `mock-cli: unexpected call to ${invoke.cli}\n`;
