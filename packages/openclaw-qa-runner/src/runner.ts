@@ -180,15 +180,10 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     onMessage: internals.emitOutboundReceived,
   });
 
-  let failure = (await executeScenario(params.scenarioId, ctx)).failure;
+  const { failure } = await executeScenario(params.scenarioId, ctx);
 
   await subscription.stop();
   params.mockCliServer.release();
-
-  if (!failure) {
-    const promoted = promoteCliMockFailure(internals);
-    if (promoted) failure = promoted;
-  }
 
   const finishedAtMs = Date.now();
   const durationMs = finishedAtMs - startedAtMs;
@@ -367,17 +362,6 @@ async function executeScenario(
       },
     };
   }
-}
-
-function promoteCliMockFailure(internals: ScenarioInternals): ScenarioFailure | undefined {
-  const { entries } = internals.peekEntries();
-  for (const e of entries) {
-    if (e.kind !== "cliMock") continue;
-    const err = e.call.handlerError;
-    if (!err) continue;
-    return { name: err.name, message: err.message, stack: err.stack, source: "cliMock" };
-  }
-  return;
 }
 
 /**

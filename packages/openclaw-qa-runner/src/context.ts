@@ -21,6 +21,7 @@ import type {
   AssertionRecord,
   ChannelId,
   CliMockCall,
+  CliMockEntry,
   CliMockHandler,
   EmitSink,
   ErrorScenarioResult,
@@ -195,8 +196,18 @@ export function createContext(params: {
   };
 
   const emitCliMock = (call: CliMockCall): void => {
-    const entry = emit({ ...nextSeqTs(), kind: "cliMock" as const, call });
+    const entry: CliMockEntry = { ...nextSeqTs(), kind: "cliMock", call };
+    emit(entry);
     setCurrentEntry(entry);
+    if (call.handlerError) {
+      entry.failure = {
+        name: call.handlerError.name,
+        message: call.handlerError.message,
+        ...(call.handlerError.stack ? { stack: call.handlerError.stack } : {}),
+        source: "cliMock",
+      };
+      reemit(entry);
+    }
   };
 
   const ctx: ScenarioContext = {
@@ -240,7 +251,7 @@ export function createContext(params: {
 
   const internals: ScenarioInternals = {
     finalize: (opts) => {
-      const result = computeResult(currentEntry, reemit, opts?.failure);
+      const result = computeResult(entries, currentEntry, reemit, opts?.failure);
       return { entries, judgeUsages, result };
     },
     emitOutboundReceived,
@@ -271,32 +282,45 @@ interface AttachDeps {
 }
 
 function computeResult(
-  target: ActionEntry | undefined,
+  entries: ReportEntry[],
+  currentEntry: ActionEntry | undefined,
   reemit: (entry: ReportEntry) => void,
-  failure: ScenarioFailure | undefined,
+  scenarioFailure: ScenarioFailure | undefined,
 ): ScenarioResult {
-  if (!failure) return { verdict: "pass" };
-  if (target) {
-    if (!target.failure) {
-      target.failure = failure;
-      reemit(target);
-    }
+  if (scenarioFailure && currentEntry && !currentEntry.failure) {
+    currentEntry.failure = scenarioFailure;
+    reemit(currentEntry);
+  }
+
+  const failedEntry = findFailedEntry(entries);
+  if (failedEntry) {
     return {
       verdict: "fail",
       cause: "failedEntry",
-      entrySeq: target.seq,
-      message: `[entry #${target.seq}] ${failure.message}`,
+      entrySeq: failedEntry.seq,
+      message: `[entry #${failedEntry.seq}] ${failedEntry.failure?.message ?? ""}`,
     };
   }
+
+  if (!scenarioFailure) return { verdict: "pass" };
+
   const result: ErrorScenarioResult = {
     verdict: "fail",
     cause: "error",
-    source: failure.source,
-    errorName: failure.name,
-    message: failure.message,
+    source: scenarioFailure.source,
+    errorName: scenarioFailure.name,
+    message: scenarioFailure.message,
   };
-  if (failure.stack) result.stack = failure.stack;
+  if (scenarioFailure.stack) result.stack = scenarioFailure.stack;
   return result;
+}
+
+function findFailedEntry(entries: ReportEntry[]): ActionEntry | undefined {
+  for (const e of entries) {
+    if (e.kind === "scenarioLog") continue;
+    if (e.failure) return e;
+  }
+  return;
 }
 
 function pushAssertion(
