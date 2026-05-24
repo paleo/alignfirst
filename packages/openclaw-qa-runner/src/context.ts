@@ -133,7 +133,7 @@ export function createContext(params: {
   const outboundWaiters = new Map<string, (entry: OutboundReceivedEntry) => void>();
   const outboundByMessageId = new Map<string, OutboundReceivedEntry>();
   let seq = 0;
-  let lastAction: ActionEntry | undefined;
+  let currentEntry: ActionEntry | undefined;
 
   const nextSeqTs = (): { seq: number; ts: string } => ({
     seq: seq++,
@@ -150,8 +150,8 @@ export function createContext(params: {
     emitSink?.(entry);
   };
 
-  const trackAction = <T extends ActionEntry>(entry: T): T => {
-    lastAction = entry;
+  const setCurrentEntry = <T extends ActionEntry>(entry: T): T => {
+    currentEntry = entry;
     return entry;
   };
 
@@ -164,7 +164,7 @@ export function createContext(params: {
       ...(m.threadId !== undefined ? { threadId: m.threadId } : {}),
     };
     emit(entry);
-    trackAction(entry);
+    setCurrentEntry(entry);
     outboundByMessageId.set(m.id, entry);
     const waiter = outboundWaiters.get(m.id);
     if (waiter) {
@@ -175,7 +175,7 @@ export function createContext(params: {
 
   const emitCliMock = (call: CliMockCall): void => {
     const entry = emit({ ...nextSeqTs(), kind: "cliMock" as const, call });
-    trackAction(entry);
+    setCurrentEntry(entry);
   };
 
   const ctx: ScenarioContext = {
@@ -195,19 +195,19 @@ export function createContext(params: {
       arg.attachTo.scenarioLog = note;
       reemit(arg.attachTo);
     }) as ScenarioContext["log"],
-    sendInbound: (input) =>
-      sendInbound({ emit, trackAction, nextSeqTs }, accountId, conversationId, input),
+    sendInbound: (input) => sendInbound({ emit, nextSeqTs }, accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
     waitForOutbound: (predicate, opts) =>
       waitForOutbound({ accountId, awaitEntry: (id) => awaitOutboundEntry(id) }, predicate, opts),
     expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
     assertRegex: (actual, pattern, label) =>
-      assertRegex({ getLastAction: () => lastAction, reemit }, actual, pattern, label),
+      assertRegex({ getCurrentEntry: () => currentEntry, reemit }, actual, pattern, label),
     assertEqual: (actual, expected, label) =>
-      assertEqual({ getLastAction: () => lastAction, reemit }, actual, expected, label),
+      assertEqual({ getCurrentEntry: () => currentEntry, reemit }, actual, expected, label),
     assertLength: (value, expected, label) =>
-      assertLength({ getLastAction: () => lastAction, reemit }, value, expected, label),
-    judgeLLM: (p) => callJudgeVerdict({ getLastAction: () => lastAction, reemit, judgeUsages }, p),
+      assertLength({ getCurrentEntry: () => currentEntry, reemit }, value, expected, label),
+    judgeLLM: (p) =>
+      callJudgeVerdict({ getCurrentEntry: () => currentEntry, reemit, judgeUsages }, p),
     judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
@@ -216,7 +216,7 @@ export function createContext(params: {
 
   const internals: ScenarioInternals = {
     finalize: (opts) => {
-      if (opts?.failure) attachFailureToLast(lastAction, reemit, opts.failure);
+      if (opts?.failure) attachFailureToCurrent(currentEntry, reemit, opts.failure);
       return { entries, judgeUsages };
     },
     emitOutboundReceived,
@@ -238,16 +238,15 @@ export function createContext(params: {
 
 interface EmitDeps {
   emit: <T extends ReportEntry>(entry: T) => T;
-  trackAction: <T extends ActionEntry>(entry: T) => T;
   nextSeqTs: () => { seq: number; ts: string };
 }
 
 interface AttachDeps {
-  getLastAction: () => ActionEntry | undefined;
+  getCurrentEntry: () => ActionEntry | undefined;
   reemit: (entry: ReportEntry) => void;
 }
 
-function attachFailureToLast(
+function attachFailureToCurrent(
   target: ActionEntry | undefined,
   reemit: (entry: ReportEntry) => void,
   failure: ScenarioFailure,
@@ -311,7 +310,6 @@ async function sendInbound(
     ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
   };
   deps.emit(entry);
-  deps.trackAction(entry);
   return { message: r.message, entry };
 }
 
@@ -417,7 +415,7 @@ function assertLength(
 
 function failingAssert(deps: AttachDeps, ok: boolean, label: string, detail: string): void {
   if (ok) return;
-  pushAssertion(deps, deps.getLastAction(), { label, ok: false, detail });
+  pushAssertion(deps, deps.getCurrentEntry(), { label, ok: false, detail });
   throw new AssertionError(`${label}: ${detail}`);
 }
 
@@ -447,7 +445,7 @@ async function callJudgeVerdict(
       costUsd: judgeCostUsd(verdict.usage),
     },
   };
-  const target = p.attachTo ?? deps.getLastAction();
+  const target = p.attachTo ?? deps.getCurrentEntry();
   if (verdict.verdict === "pass") {
     pushAssertion(deps, target, { label: p.label, ok: true, extra });
     return verdict;

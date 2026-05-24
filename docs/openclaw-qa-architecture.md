@@ -158,7 +158,7 @@ ctx.log({ attachTo: wait.entry, prefix: "follow-up received", message: wait.matc
 await ctx.judgeLLM({ attachTo: wait.entry, message: wait.match.text, rubric, label });
 ```
 
-Without `attachTo`, judges attach to the most recently emitted action entry. Internal asserts (`assertRegex` / `assertEqual` / `assertLength`) are silent on success and only surface on failure — their `failure` lands on the last action entry.
+Without `attachTo`, judges and other attachments fall back to the **current entry** — the most recently emitted agent-action entry (`outboundReceived` or `cliMock` / `agentToolCall`). `inboundSent` is scenario-emitted and does not update the current entry, so a `judgeLLM` call after `ctx.sendInbound(...)` still binds to whatever agent action preceded the inbound. Internal asserts (`assertRegex` / `assertEqual` / `assertLength`) are silent on success and only surface on failure — their `failure` lands on the current entry.
 
 Authoritative types: `packages/openclaw-qa-runner/src/report.ts`.
 
