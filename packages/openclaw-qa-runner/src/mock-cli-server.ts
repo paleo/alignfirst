@@ -35,14 +35,25 @@ const SCENARIO_ENDED_STUB_MESSAGE =
 export interface MockCliServer {
   /** Bind the in-flight conversation registry for the lifetime of one scenario. */
   bind(reg: ConversationRegistry): void;
-  /** Release the binding. Subsequent calls will 1-fail. */
-  release(): void;
+  /**
+   * Release the binding. Waits for the gateway side to go quiet (no incoming
+   * call for `RELEASE_QUIET_MS`) before clearing, so any straggler from the
+   * just-ended scenario lands on its own registry and gets the scenario-ended
+   * stub — instead of leaking into the next scenario's bind window as a
+   * spurious `UnexpectedCall`. Bounded by `RELEASE_HARD_TIMEOUT_MS`.
+   */
+  release(): Promise<void>;
   /** Stop the HTTP listener. */
   close(): Promise<void>;
 }
 
+const RELEASE_QUIET_MS = 500;
+const RELEASE_HARD_TIMEOUT_MS = 5_000;
+const RELEASE_POLL_MS = 100;
+
 export function startMockCliServer(): MockCliServer {
   let current: ConversationRegistry | undefined;
+  let lastCallAtMs = 0;
 
   const server = createServer(async (req, res) => {
     if (req.method !== "POST" || req.url !== "/mock-cli/invoke") {
@@ -50,6 +61,7 @@ export function startMockCliServer(): MockCliServer {
       res.end("not found");
       return;
     }
+    lastCallAtMs = Date.now();
     await handleInvoke(req, res, current);
   });
 
@@ -61,8 +73,14 @@ export function startMockCliServer(): MockCliServer {
     bind: (reg) => {
       current = reg;
     },
-    release: () => {
+    release: async () => {
+      const deadline = Date.now() + RELEASE_HARD_TIMEOUT_MS;
+      while (lastCallAtMs > 0 && Date.now() - lastCallAtMs < RELEASE_QUIET_MS) {
+        if (Date.now() >= deadline) break;
+        await new Promise((r) => setTimeout(r, RELEASE_POLL_MS));
+      }
       current = undefined;
+      lastCallAtMs = 0;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

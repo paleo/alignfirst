@@ -196,7 +196,7 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
   const { failure } = await executeScenario(params.scenarioId, ctx);
 
   await subscription.stop();
-  params.mockCliServer.release();
+  await params.mockCliServer.release();
 
   const finishedAtMs = Date.now();
   const durationMs = finishedAtMs - startedAtMs;
