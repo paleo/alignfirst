@@ -32,6 +32,7 @@
     "templates/",
     "docker-compose.yml",
     "Dockerfile.base",
+    "qa-exec-watcher.mjs",
     "LICENSE"
   ],
   "publishConfig": {

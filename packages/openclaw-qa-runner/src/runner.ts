@@ -1,5 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { createWriteStream, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { pollQaBus } from "@paleo/openclaw-channel-mock-core";
 import {
@@ -30,13 +37,18 @@ import { parseArgs } from "./runner-args.js";
 const ARTIFACTS_ROOT = process.env.QA_ARTIFACTS_ROOT ?? "/opt/qa-artifacts";
 const SCENARIOS_ROOT = process.env.QA_SCENARIOS_ROOT ?? "/opt/qa-src/scenarios";
 const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
-const CHANNELS: ChannelId[] = ["discord-mock", "slack-mock"];
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const opts = parseArgs(argv);
   const scenarios = opts.all ? discoverScenarios() : opts.scenarios;
   if (scenarios.length === 0) throw new Error("no scenarios discovered");
-  const channels: ChannelId[] = opts.channel === "all" ? CHANNELS : [opts.channel];
+  const allowed = discoverAllowedChannels();
+  const channels: ChannelId[] =
+    opts.channelSelection.kind === "all" ? allowed : opts.channelSelection.ids;
+  const unknown = channels.filter((c) => !allowed.includes(c));
+  if (unknown.length > 0) {
+    throw new Error(`unknown channel(s): ${unknown.join(", ")} — allowed: ${allowed.join(", ")}`);
+  }
   const { iterations, maxFailures } = opts;
 
   console.log(
@@ -453,6 +465,15 @@ function discoverScenarios(): string[] {
 
 function shortRand(): string {
   return randomBytes(3).toString("hex");
+}
+
+function discoverAllowedChannels(): ChannelId[] {
+  const configPath = process.env.OPENCLAW_CONFIG_PATH ?? "/home/claw/.openclaw/openclaw.json";
+  const raw = readFileSync(configPath, "utf8");
+  const cfg = JSON.parse(raw) as { channels?: Record<string, unknown> };
+  const ids = Object.keys(cfg.channels ?? {});
+  if (ids.length === 0) throw new Error(`no channels declared in ${configPath}`);
+  return ids;
 }
 
 function printSummary(aggregates: PairAggregate[], baseStamp: string): void {

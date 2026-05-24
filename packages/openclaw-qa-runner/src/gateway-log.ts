@@ -1,8 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import type { AgentToolCall } from "./report.js";
 
-const GATEWAY_LOG_PATH =
-  process.env.QA_GATEWAY_ANTHROPIC_LOG ?? "/home/claw/.openclaw/logs/anthropic-payload.jsonl";
+const GATEWAY_LOG_PATH = "/home/claw/.openclaw/logs/anthropic-payload.jsonl";
 
 export { GATEWAY_LOG_PATH };
 

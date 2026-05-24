@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import {
   getQaBusState,
   injectQaBusInboundMessage,
@@ -138,6 +140,27 @@ export interface ScenarioContext {
   judgeLLMRaw(p: { prompt: string; label: string; maxTokens?: number }): Promise<JudgeVerdictRaw>;
   getCursor(): Promise<number>;
   mockCli(name: string, handler: CliMockHandler, opts?: MockCliRegisterOptions): void;
+  /**
+   * Execute an arbitrary command inside the gateway container via the exec
+   * watcher RPC. Always resolves once the wrapped command finishes (with its
+   * exit code, stdout, and stderr — non-zero exits do NOT throw). Throws only
+   * on transport failure or hard timeout (`timeoutMs + 5s` headroom for the
+   * watcher to record a kill before this side gives up).
+   */
+  execInGateway(argv: string[], opts?: ExecInGatewayOptions): Promise<ExecInGatewayResult>;
+}
+
+export interface ExecInGatewayOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  stdin?: string;
+  timeoutMs?: number;
+}
+
+export interface ExecInGatewayResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
 }
 
 export interface ScenarioInternals {
@@ -284,6 +307,7 @@ export function createContext(params: {
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
     mockCli: (name, handler, opts) => registerMockCli(mockHandlers, name, handler, opts),
+    execInGateway: (argv, opts) => execInGateway(argv, opts),
   };
 
   const internals: ScenarioInternals = {
@@ -596,4 +620,36 @@ async function callJudgeRaw(
 async function getCursor(): Promise<number> {
   const snap = await getQaBusState(BUS_URL);
   return snap.cursor;
+}
+
+const IPC_DIR = "/var/run/qa-ipc";
+
+async function execInGateway(
+  argv: string[],
+  opts: ExecInGatewayOptions = {},
+): Promise<ExecInGatewayResult> {
+  const id = randomUUID();
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const payload: Record<string, unknown> = { id, argv, timeoutMs };
+  if (opts.cwd !== undefined) payload.cwd = opts.cwd;
+  if (opts.env !== undefined) payload.env = opts.env;
+  if (opts.stdin !== undefined) payload.stdin = opts.stdin;
+  const reqPath = `${IPC_DIR}/${id}.req.json`;
+  const reqTmp = `${reqPath}.tmp`;
+  const resPath = `${IPC_DIR}/${id}.res.json`;
+  writeFileSync(reqTmp, JSON.stringify(payload));
+  renameSync(reqTmp, reqPath);
+  const deadline = Date.now() + timeoutMs + 5_000;
+  while (Date.now() < deadline) {
+    if (existsSync(resPath)) {
+      const raw = readFileSync(resPath, "utf8");
+      rmSync(resPath, { force: true });
+      rmSync(reqPath, { force: true });
+      const parsed = JSON.parse(raw) as ExecInGatewayResult;
+      return parsed;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  rmSync(reqPath, { force: true });
+  throw new Error(`execInGateway timed out waiting for response (request id ${id})`);
 }

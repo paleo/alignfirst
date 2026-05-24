@@ -48,7 +48,7 @@ Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `g
 
 ## Two-Dockerfile pattern
 
-`openclaw-qa-runner` ships `Dockerfile.base` (consumer-agnostic): Node 24 Alpine, `claw` user with host-matched UID/GID, mock-CLI shim at `/opt/qa-mocks/`, `/etc/profile` rewritten to keep `/opt/qa-mocks/bin` first in PATH.
+`openclaw-qa-runner` ships `Dockerfile.base` (consumer-agnostic): Node 24 Alpine, `claw` user with host-matched UID/GID, the mock-CLI **shim binary** at `/opt/qa-mocks/bin/mock-cli-shim` (no per-command symlinks — consumers add their own), `/etc/profile` rewritten to keep `/opt/qa-mocks/bin` first in PATH, and the exec watcher binary at `/usr/local/bin/qa-exec-watcher`. Anything else the fixture needs at runtime (`git`, `pnpm` via Corepack, reset scripts, per-command shim symlinks) is the consumer's responsibility.
 
 The CLI's `env build` builds the base locally as `paleo/openclaw-qa-runner-base:<pkg-version>` and injects the tag into the consumer image via the `QA_RUNNER_BASE_TAG` build arg.
 
@@ -75,13 +75,13 @@ include:
 
 Compose v2.20+ required. The overlay's job is to add consumer-specific service overrides (e.g. extra env vars on `runner`); the base file owns the build context, volumes, healthchecks, and entrypoints.
 
-Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `QA_PROJECTS_DIR`, `QA_SCENARIOS_DIR`, `QA_ARTIFACTS_DIR`, `QA_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
+Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `QA_SCENARIOS_DIR`, `QA_ARTIFACTS_DIR`, `QA_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 
 The CLI injects `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` automatically.
 
 ## Mocked-CLI shim
 
-The gateway's PATH is prepended at runtime with `/opt/qa-mocks/bin/`, where symlinks `git`, `npm`, `pnpm`, `yarn`, `claude` all point at one Node shim. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays the JSON response (`{ stdout, stderr, exitCode }`).
+The gateway's PATH is prepended at runtime with `/opt/qa-mocks/bin/`, where consumer-created symlinks (e.g. `claude`, `gh`) point at one Node shim. The base image ships only the shim binary; each consumer adds the per-command symlinks it wants intercepted (typical line in the consumer Dockerfile: `RUN for name in claude gh; do ln -sf mock-cli-shim "/opt/qa-mocks/bin/$name"; done`). The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays the JSON response (`{ stdout, stderr, exitCode }`).
 
 The sh wrapper at `/opt/qa-mocks/bin/mock-cli-shim` invokes the shim as `node mock-cli-shim.js "$0" "$@"`. The JS reads the symlink name from `argv[2]` (`/opt/qa-mocks/bin/git` → `git`). Without `"$0"`, the shim would see only the script path and reject every call as `unexpected call to mock-cli-shim.js`.
 
@@ -97,6 +97,20 @@ The bus accumulates state across runs. The only isolation between tasks is the `
 
 Scenarios run serially — the base stack ships one `gateway` container; the mocked-CLI shim and runner-side registry are single in-flight.
 
+The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. a project tree under `/home/claw/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. The harness owns only the transport.
+
+## Exec RPC
+
+`ctx.execInGateway(argv, opts)` is the only way to run code inside the gateway container's PID namespace from a scenario. Implementation:
+
+- A shared named volume `qa-ipc` is mounted at `/var/run/qa-ipc` on both `gateway` and `runner`.
+- The gateway boots `/usr/local/bin/qa-exec-watcher` (Node, stdlib only) in the background. The watcher polls `/var/run/qa-ipc/*.req.json` every 100 ms, atomically claims each request via `rename` to `<id>.req.json.processing`, spawns the wrapped command, and writes `<id>.res.json` atomically (`*.tmp` → `rename`).
+- The runner writes the request (`{ id, argv, cwd?, env?, stdin?, timeoutMs }`) atomically and polls for the response, bounded by `timeoutMs + 5_000 ms`.
+- stdout/stderr are buffered separately, capped at 1 MiB each, with a `\n…[truncated NN bytes]` marker on overflow.
+- The watcher enforces `timeoutMs` (default 30 s) and on expiry SIGKILLs the child, recording `exitCode: 124`.
+- Non-zero exits do **not** throw on the caller side. The caller decides how to interpret them.
+- Internal watcher failure still emits a response (`exitCode: 255`) so the runner never hangs.
+
 ## Channel plugin internals
 
 Each wrapper exposes two entries in its `package.json`:
@@ -108,7 +122,7 @@ Both are required. Without `openclaw.setupEntry`, the loader registers the plugi
 
 Discovery is wired through `plugins.load.paths` in `openclaw.json`, pointing at the package directory inside the image (`/opt/qa-src/node_modules/@paleo/openclaw-{discord,slack}-mock`). Both plugins must be statically enabled via `plugins.entries["<id>"].enabled = true` — auto-enable for non-bundled (`origin: "config"`) plugins is timing-sensitive against `canStartConfiguredChannelPlugin`: the auto-enable mutation can fire after plan resolution checks `explicitlyEnabled`. Static `enabled: true` makes the check deterministic.
 
-Both channels register together on every gateway boot. The runner selects which to drive per scenario.
+Both channels register together on every gateway boot. The runner selects which to drive per scenario. The runner accepts any channel id declared in `openclaw.json`'s `channels` block — pass `--channel <id>`, a comma-separated list `--channel id1,id2`, or `--channel all` to fan out across every declared channel.
 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 

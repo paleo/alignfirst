@@ -8,7 +8,6 @@ import { isAbsolute, resolve } from "node:path";
 const PATH_VARS = [
   "OPENCLAW_WORKSPACE_DIR",
   "OPENCLAW_CONFIG_PATH",
-  "QA_PROJECTS_DIR",
   "QA_SCENARIOS_DIR",
   "QA_ARTIFACTS_DIR",
   "QA_GATEWAY_LOGS_DIR",
@@ -16,7 +15,7 @@ const PATH_VARS = [
 
 type EnvSubcommand = "build" | "up" | "down";
 
-const QA_USAGE = `usage: openclaw-qa-runner qa --channel <discord-mock|slack-mock|all> [<scenario> ...] [--all]
+const QA_USAGE = `usage: openclaw-qa-runner qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
                                   [--iterations N] [--max-failures N]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
@@ -132,7 +131,6 @@ function setupHostEnv(packageDir: string): void {
 // across versions and not portable across Compose implementations.
 const PATH_DEFAULTS: Record<string, string> = {
   OPENCLAW_CONFIG_PATH: "openclaw.json",
-  QA_PROJECTS_DIR: "projects-fixture",
   QA_SCENARIOS_DIR: "scenarios",
   QA_ARTIFACTS_DIR: "artifacts",
   QA_GATEWAY_LOGS_DIR: ".gateway-logs",
@@ -276,9 +274,7 @@ function parseQaArgs(argv: string[]): QaArgs {
     else if (a) positionals.push(a);
   }
 
-  if (channel !== "discord-mock" && channel !== "slack-mock" && channel !== "all") {
-    failQa("error: --channel must be discord-mock, slack-mock, or all");
-  }
+  if (!channel || channel.length === 0) failQa("error: --channel is required");
   if (all && positionals.length > 0)
     failQa("error: pass either --all or a positional scenario list, not both");
   if (!all && positionals.length === 0)

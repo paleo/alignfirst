@@ -1,9 +1,7 @@
-import type { ChannelId } from "./report.js";
-
-export type ChannelArg = ChannelId | "all";
+export type ChannelSelection = { kind: "all" } | { kind: "list"; ids: string[] };
 
 export interface RunnerArgs {
-  channel: ChannelArg;
+  channelSelection: ChannelSelection;
   scenarios: string[];
   all: boolean;
   iterations: number;
@@ -11,7 +9,7 @@ export interface RunnerArgs {
 }
 
 export function parseArgs(argv: string[]): RunnerArgs {
-  let channel: ChannelArg | undefined;
+  let channelSelection: ChannelSelection | undefined;
   let all = false;
   const scenarios: string[] = [];
   let iterations = 1;
@@ -19,9 +17,9 @@ export function parseArgs(argv: string[]): RunnerArgs {
   for (let i = 0; i < argv.length; ++i) {
     const a = argv[i] as string;
     if (a === "--channel") {
-      channel = parseChannel(argv[++i]);
+      channelSelection = parseChannel(argv[++i]);
     } else if (a.startsWith("--channel=")) {
-      channel = parseChannel(a.slice("--channel=".length));
+      channelSelection = parseChannel(a.slice("--channel=".length));
     } else if (a === "--iterations") {
       iterations = parseNonNegativeInt(argv[++i], "--iterations", 1);
     } else if (a.startsWith("--iterations=")) {
@@ -38,8 +36,8 @@ export function parseArgs(argv: string[]): RunnerArgs {
       scenarios.push(a);
     }
   }
-  if (channel === undefined) {
-    throw new Error("runner: --channel discord-mock|slack-mock|all is required");
+  if (channelSelection === undefined) {
+    throw new Error("runner: --channel <id|id,id,…|all> is required");
   }
   if (all && scenarios.length > 0) {
     throw new Error("runner: pass either --all or a scenario list, not both");
@@ -47,16 +45,22 @@ export function parseArgs(argv: string[]): RunnerArgs {
   if (!all && scenarios.length === 0) {
     throw new Error("runner: must pass --all or one or more scenario names");
   }
-  return { channel, scenarios, all, iterations, maxFailures: maxFailures ?? 1 };
+  return { channelSelection, scenarios, all, iterations, maxFailures: maxFailures ?? 1 };
 }
 
-function parseChannel(raw: string | undefined): ChannelArg {
-  if (raw !== "discord-mock" && raw !== "slack-mock" && raw !== "all") {
-    throw new Error(
-      `runner: --channel expects discord-mock|slack-mock|all, got ${JSON.stringify(raw)}`,
-    );
+function parseChannel(raw: string | undefined): ChannelSelection {
+  if (raw === undefined || raw === "") {
+    throw new Error("runner: --channel expects a non-empty value");
   }
-  return raw;
+  if (raw === "all") return { kind: "all" };
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (ids.length === 0) {
+    throw new Error(`runner: --channel expects a non-empty list, got ${JSON.stringify(raw)}`);
+  }
+  return { kind: "list", ids };
 }
 
 function parseNonNegativeInt(raw: string | undefined, flag: string, min: number): number {

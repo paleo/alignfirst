@@ -7,11 +7,13 @@ x-common-build: &common-build
 x-common-volumes: &common-volumes
   - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
   - ${OPENCLAW_CONFIG_PATH}:/home/claw/.openclaw/openclaw.json
-  - ${QA_PROJECTS_DIR}:/home/claw/projects/
   - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
   - ${QA_SCENARIOS_DIR}:/opt/qa-src/scenarios
   - ${QA_ARTIFACTS_DIR}:/opt/qa-artifacts
   - ${QA_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
+
+volumes:
+  qa-ipc:
 
 services:
   bus:
@@ -37,8 +39,18 @@ services:
       OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}
       QA_RUNNER_URL: "http://runner:43124"
       PATH: "/opt/qa-mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    command: ["npx", "openclaw", "gateway", "run", "--port", "18789", "--bind", "loopback", "--auth", "none"]
-    volumes: *common-volumes
+    # Watcher in the background, then exec openclaw as PID 1's foreground process.
+    command:
+      ["sh", "-c",
+       "/usr/local/bin/qa-exec-watcher & exec npx openclaw gateway run --port 18789 --bind loopback --auth none"]
+    volumes:
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
+      - ${OPENCLAW_CONFIG_PATH}:/home/claw/.openclaw/openclaw.json
+      - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
+      - ${QA_SCENARIOS_DIR}:/opt/qa-src/scenarios
+      - ${QA_ARTIFACTS_DIR}:/opt/qa-artifacts
+      - ${QA_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
+      - qa-ipc:/var/run/qa-ipc
     depends_on:
       bus:
         condition: service_healthy
@@ -58,7 +70,14 @@ services:
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     entrypoint: ["node", "/opt/qa-src/dist/runner.js"]
-    volumes: *common-volumes
+    volumes:
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
+      - ${OPENCLAW_CONFIG_PATH}:/home/claw/.openclaw/openclaw.json
+      - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
+      - ${QA_SCENARIOS_DIR}:/opt/qa-src/scenarios
+      - ${QA_ARTIFACTS_DIR}:/opt/qa-artifacts
+      - ${QA_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
+      - qa-ipc:/var/run/qa-ipc
     depends_on:
       bus:
         condition: service_healthy

@@ -58,7 +58,7 @@ export interface ErrorScenarioResult {
   stack?: string;
 }
 
-export type ChannelId = "discord-mock" | "slack-mock";
+export type ChannelId = string;
 
 export type ReportEntry = ScenarioLogEntry | ActionEntry;
 

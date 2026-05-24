@@ -46,7 +46,7 @@ Edit `openclaw.json`:
 - `agents.list[id=main].workspace` — host path to your OpenClaw workspace, bind-mounted into the gateway. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.*` — both `discord-mock` and `slack-mock` blocks point at the same bus.
 
-Drop scenarios under `scenarios/<id>.ts`. Project fixtures under `projects-fixture/` (bind-mounted to `~/projects/` in the gateway).
+Drop scenarios under `scenarios/<id>.ts`. Project fixtures and their reset logic are consumer concerns — ship a reset script in your consumer image and invoke it from scenarios via `ctx.execInGateway(...)`. See [openclaw-qa-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-qa-architecture.md) for the exec RPC contract.
 
 Scenarios are loaded by Node 24's built-in TypeScript stripping. Stick to the strip-compatible subset (no `enum`, `namespace`, decorators, ctor parameter properties, `import =`). Shared helpers go under `scenarios/_lib/` — `discoverScenarios()` skips directories.
 
@@ -60,13 +60,21 @@ Required:
 Optional (defaults relative to the consumer's `qa/` dir):
 
 - `OPENCLAW_CONFIG_PATH` → `./openclaw.json`
-- `QA_PROJECTS_DIR` → `./projects-fixture`
 - `QA_SCENARIOS_DIR` → `./scenarios`
 - `QA_ARTIFACTS_DIR` → `./artifacts`
 - `QA_GATEWAY_LOGS_DIR` → `./.gateway-logs`
 - `OPENCLAW_RAW_STREAM=1` — also write `raw-stream.jsonl` alongside the always-on `anthropic-payload.jsonl`.
 
 `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` are injected by the CLI.
+
+## Consumer Dockerfile responsibilities
+
+The base image ships only Node, the mock-cli shim binary, and the exec watcher. Your consumer `Dockerfile` adds whatever the fixture needs:
+
+- Install runtime tools your scripts/agents shell out to (e.g. `RUN apk add --no-cache git`, `RUN corepack enable && corepack prepare pnpm@latest --activate`).
+- Create the per-command mock-cli symlinks you want intercepted, e.g. `RUN for name in claude gh; do ln -sf mock-cli-shim "/opt/qa-mocks/bin/$name"; done`.
+- Ship any reset/seed scripts you'll invoke via `ctx.execInGateway(...)` (e.g. `COPY qa-scripts/ /opt/qa-scripts/`).
+- Declare per-fixture named volumes in your compose overlay (e.g. a `qa-projects` volume mounted at `/home/claw/projects`).
 
 ## Run
 
@@ -100,6 +108,7 @@ From `@paleo/openclaw-qa-runner` (`src/context.ts`):
 - `assertRegex`, `assertEqual`, `assertLength` — structural assertions. Silent on success; on failure, the assertion record and a `failure` field land on the **current entry** (most recent agent-action entry).
 - `judgeLLM({ attachTo?, message, rubric, label })` — Anthropic-direct judgement. Pass `attachTo: entry` to bind the result to a specific action; otherwise it attaches to the **current entry**. `inboundSent` (scenario-emitted) never becomes the current entry — only agent-action entries (`outboundReceived`, `cliMock`, `agentToolCall`) do.
 - `mockCli(name, handler)` — intercepts the gateway's calls to `git` / `npm` / `pnpm` / `yarn` / `claude`. Unregistered calls fail the scenario with `failure.source = "cliMock"`.
+- `execInGateway(argv, { cwd?, env?, stdin?, timeoutMs? })` → `{ exitCode, stdout, stderr }`. Runs a command inside the gateway container via the exec watcher. Always resolves on completion (non-zero exits do not throw); throws only on transport failure or hard timeout. Typical use: invoke a consumer-shipped reset script (`/opt/qa-scripts/reset-fixture.mjs`) at the top of a scenario.
 - `log(message)` or `log({ attachTo, prefix, message })` — free-standing `scenarioLog` entry, or a `scenarioLog` note attached to an action entry.
 - `getCursor`.
 
