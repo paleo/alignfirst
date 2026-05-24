@@ -118,7 +118,7 @@ async function runPair(params: RunPairParams): Promise<PairAggregate> {
     results.push(r);
     agg.runCount += 1;
     agg.durationSumMs += r.durationMs;
-    if (r.status === "pass") {
+    if (r.verdict === "pass") {
       agg.passCount += 1;
     } else {
       failures += 1;
@@ -145,7 +145,7 @@ interface TaskResult {
   scenarioId: string;
   channel: ChannelId;
   conversationId: string;
-  status: "pass" | "fail";
+  verdict: "pass" | "fail";
   durationMs: number;
   outDir: string;
   judgeUsages: JudgeUsage[];
@@ -180,24 +180,21 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     onMessage: internals.emitOutboundReceived,
   });
 
-  let { status, failure } = await executeScenario(params.scenarioId, ctx);
+  let failure = (await executeScenario(params.scenarioId, ctx)).failure;
 
   await subscription.stop();
   params.mockCliServer.release();
 
-  if (status === "pass") {
+  if (!failure) {
     const promoted = promoteCliMockFailure(internals);
-    if (promoted) {
-      status = "fail";
-      failure = promoted;
-    }
+    if (promoted) failure = promoted;
   }
 
   const finishedAtMs = Date.now();
   const durationMs = finishedAtMs - startedAtMs;
   const finishedAtIso = new Date(finishedAtMs).toISOString();
 
-  const { entries, judgeUsages } = internals.finalize({ failure });
+  const { entries, judgeUsages, result } = internals.finalize({ failure });
   await closeStream(logStream);
 
   await waitForGatewayUsage({ conversationId, startedAtIso });
@@ -225,12 +222,11 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
     channel: params.channel,
     conversationId,
     accountId,
-    status,
     startedAt: startedAtIso,
     finishedAt: finishedAtIso,
     durationMs,
+    result,
     entries: merged,
-    ...(failure ? { failure } : {}),
     cost: {
       gatewayUsd: gatewayCostUsd,
       judgeUsd,
@@ -238,16 +234,16 @@ async function runOne(params: RunOneParams): Promise<TaskResult> {
       gatewayTurns,
     },
   };
-  const finalOutDir = writeReportArtifacts(outDir, status, report);
+  const finalOutDir = writeReportArtifacts(outDir, result.verdict, report);
 
   console.log(
-    `[${params.channel}] ${params.scenarioId} ${status} in ${durationMs}ms — ${finalOutDir}`,
+    `[${params.channel}] ${params.scenarioId} ${result.verdict} in ${durationMs}ms — ${finalOutDir}`,
   );
   return {
     scenarioId: params.scenarioId,
     channel: params.channel,
     conversationId,
-    status,
+    verdict: result.verdict,
     durationMs,
     outDir: finalOutDir,
     judgeUsages,
@@ -350,7 +346,7 @@ function startOutboundSubscription(params: {
 async function executeScenario(
   scenarioId: string,
   ctx: ScenarioContext,
-): Promise<{ status: "pass" | "fail"; failure: ScenarioFailure | undefined }> {
+): Promise<{ failure: ScenarioFailure | undefined }> {
   try {
     const mod = await import(`${SCENARIOS_ROOT}/${scenarioId}.ts`);
     const fn = mod.default;
@@ -358,12 +354,11 @@ async function executeScenario(
       throw new Error(`scenario ${scenarioId} has no default export function`);
     }
     await fn(ctx);
-    return { status: "pass", failure: undefined };
+    return { failure: undefined };
   } catch (err) {
     const e = err as Error;
     const isAssertion = e?.name === "AssertionError";
     return {
-      status: "fail",
       failure: {
         name: e?.name ?? "Error",
         message: e?.message ?? String(err),

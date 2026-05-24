@@ -26,15 +26,36 @@ export interface ScenarioReport {
   conversationId: string;
   accountId: string;
 
-  status: "pass" | "fail";
   startedAt: string;
   finishedAt: string;
   durationMs: number;
 
+  result: ScenarioResult;
   entries: ReportEntry[];
-
-  failure?: ScenarioFailure;
   cost: CostBreakdown;
+}
+
+export type ScenarioResult = PassScenarioResult | FailScenarioResult;
+export type FailScenarioResult = FailedEntryScenarioResult | ErrorScenarioResult;
+
+export interface PassScenarioResult {
+  verdict: "pass";
+}
+
+export interface FailedEntryScenarioResult {
+  verdict: "fail";
+  cause: "failedEntry";
+  entrySeq: number;
+  message: string;
+}
+
+export interface ErrorScenarioResult {
+  verdict: "fail";
+  cause: "error";
+  source: "assertion" | "judge" | "cliMock" | "timeout" | "scenarioThrow" | "runner";
+  errorName: string;
+  message: string;
+  stack?: string;
 }
 
 export type ChannelId = "discord-mock" | "slack-mock";

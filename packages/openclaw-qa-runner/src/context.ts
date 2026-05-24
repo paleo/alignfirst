@@ -23,11 +23,13 @@ import type {
   CliMockCall,
   CliMockHandler,
   EmitSink,
+  ErrorScenarioResult,
   InboundSentEntry,
   OutboundReceivedEntry,
   ReportEntry,
   ScenarioFailure,
   ScenarioLogNote,
+  ScenarioResult,
 } from "./report.js";
 
 const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
@@ -116,6 +118,7 @@ export interface ScenarioInternals {
   finalize(opts?: { failure?: ScenarioFailure }): {
     entries: ReportEntry[];
     judgeUsages: JudgeUsage[];
+    result: ScenarioResult;
   };
   emitOutboundReceived(m: BusMessage): void;
   emitCliMock(call: CliMockCall): void;
@@ -237,8 +240,8 @@ export function createContext(params: {
 
   const internals: ScenarioInternals = {
     finalize: (opts) => {
-      if (opts?.failure) attachFailureToCurrent(currentEntry, reemit, opts.failure);
-      return { entries, judgeUsages };
+      const result = computeResult(currentEntry, reemit, opts?.failure);
+      return { entries, judgeUsages, result };
     },
     emitOutboundReceived,
     emitCliMock,
@@ -267,14 +270,33 @@ interface AttachDeps {
   reemit: (entry: ReportEntry) => void;
 }
 
-function attachFailureToCurrent(
+function computeResult(
   target: ActionEntry | undefined,
   reemit: (entry: ReportEntry) => void,
-  failure: ScenarioFailure,
-): void {
-  if (!target || target.failure) return;
-  target.failure = failure;
-  reemit(target);
+  failure: ScenarioFailure | undefined,
+): ScenarioResult {
+  if (!failure) return { verdict: "pass" };
+  if (target) {
+    if (!target.failure) {
+      target.failure = failure;
+      reemit(target);
+    }
+    return {
+      verdict: "fail",
+      cause: "failedEntry",
+      entrySeq: target.seq,
+      message: `[entry #${target.seq}] ${failure.message}`,
+    };
+  }
+  const result: ErrorScenarioResult = {
+    verdict: "fail",
+    cause: "error",
+    source: failure.source,
+    errorName: failure.name,
+    message: failure.message,
+  };
+  if (failure.stack) result.stack = failure.stack;
+  return result;
 }
 
 function pushAssertion(
