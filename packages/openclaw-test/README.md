@@ -1,15 +1,15 @@
-# @paleo/openclaw-qa-runner
+# @paleo/openclaw-test
 
 Dockerised regression-test harness for OpenClaw workspaces. Drives the agent through two synthetic channels (`discord-mock`, `slack-mock`) and asserts the results.
 
 Pair with [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core), [`@paleo/openclaw-discord-mock`](https://www.npmjs.com/package/@paleo/openclaw-discord-mock), [`@paleo/openclaw-slack-mock`](https://www.npmjs.com/package/@paleo/openclaw-slack-mock).
 
-For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechanics, OpenClaw quirks), see [openclaw-qa-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-qa-architecture.md).
+For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechanics, OpenClaw quirks), see [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
 
 ## Install
 
 ```sh
-npm i -D @paleo/openclaw-qa-runner @paleo/openclaw-channel-mock-core @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock openclaw
+npm i -D @paleo/openclaw-test @paleo/openclaw-channel-mock-core @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock openclaw
 ```
 
 Requires Docker Compose v2.20+ (overlay uses Compose `include:`).
@@ -18,17 +18,17 @@ Wire `package.json` scripts:
 
 ```json
 "scripts": {
-  "env:build": "openclaw-qa-runner env build",
-  "env:up":    "openclaw-qa-runner env up",
-  "env:down":  "openclaw-qa-runner env down",
-  "qa":       "openclaw-qa-runner qa"
+  "env:build": "openclaw-test env build",
+  "env:up":    "openclaw-test env up",
+  "env:down":  "openclaw-test env down",
+  "qa":       "openclaw-test qa"
 }
 ```
 
 ## Init
 
 ```sh
-npx @paleo/openclaw-qa-runner init <qa-dir>
+npx @paleo/openclaw-test init <qa-dir>
 ```
 
 Drops four files:
@@ -36,7 +36,7 @@ Drops four files:
 - `openclaw.json` — gateway config (mode `local`, both channel plugins enabled, main agent placeholder).
 - `.env.local.example` — copy to `.env.local`, fill `ANTHROPIC_API_KEY` + `OPENCLAW_WORKSPACE_DIR`.
 - `docker-compose.yml` — thin overlay that `include:`s the base from `node_modules/`.
-- `Dockerfile` — consumer-owned. Inherits the base via `FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}`. Add `RUN`/`COPY`/`ENV` for consumer-specific setup (extra system packages, skills install, etc.).
+- `Dockerfile` — consumer-owned. Inherits the base via `FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}`. Add `RUN`/`COPY`/`ENV` for consumer-specific setup (extra system packages, skills install, etc.).
 
 ## Configure
 
@@ -46,7 +46,7 @@ Edit `openclaw.json`:
 - `agents.list[id=main].workspace` — host path to your OpenClaw workspace, bind-mounted into the gateway. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.*` — both `discord-mock` and `slack-mock` blocks point at the same bus.
 
-Drop scenarios under `scenarios/<id>.ts`. Project fixtures and their reset logic are consumer concerns — ship a reset script in your consumer image and invoke it from scenarios via `ctx.execInGateway(...)`. See [openclaw-qa-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-qa-architecture.md) for the exec RPC contract.
+Drop scenarios under `scenarios/<id>.ts`. Project fixtures and their reset logic are consumer concerns — ship a reset script in your consumer image and invoke it from scenarios via `ctx.execInGateway(...)`. See [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md) for the exec RPC contract.
 
 Scenarios are loaded by Node 24's built-in TypeScript stripping. Stick to the strip-compatible subset (no `enum`, `namespace`, decorators, ctor parameter properties, `import =`). Shared helpers go under `scenarios/_lib/` — `discoverScenarios()` skips directories.
 
@@ -94,7 +94,7 @@ npm run env:down                                                   # tear down a
 
 **Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `qa` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
 
-`env:build` first builds the base image (`paleo/openclaw-qa-runner-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
+`env:build` first builds the base image (`paleo/openclaw-test-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
 
 Rebuild required after: bumping any `@paleo/openclaw-*` dependency, edits to `openclaw.json`, or any change to the consumer `Dockerfile`.
 
@@ -102,7 +102,7 @@ Scenarios run **serially** through one gateway. Exit 0 iff every pair passes.
 
 ## Scenario primitives
 
-From `@paleo/openclaw-qa-runner` (`src/context.ts`):
+From `@paleo/openclaw-test` (`src/context.ts`):
 
 - `channel`, `conversationId`, `accountId` — per-task isolation. Use `ctx.conversationId` everywhere; never hard-code a value.
 - `sendInbound(input)` → `{ message, entry }`. Push an inbound on the bus; `entry` is the `inboundSent` `ActionEntry` to which assertions/logs can be attached.

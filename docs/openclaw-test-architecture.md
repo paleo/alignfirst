@@ -10,11 +10,11 @@ read_when:
 
 # OpenClaw QA Harness Architecture
 
-Four packages drive automated regression tests against an OpenClaw workspace. Consumers depend on all four; only `openclaw-qa-runner` is the entry point.
+Four packages drive automated regression tests against an OpenClaw workspace. Consumers depend on all four; only `openclaw-test` is the entry point.
 
 | Package | Role |
 | --- | --- |
-| `@paleo/openclaw-qa-runner` | Bus, scenario driver, judge, Compose stack, two-Dockerfile pair, CLI (`init` / `env` / `qa`). |
+| `@paleo/openclaw-test` | Bus, scenario driver, judge, Compose stack, two-Dockerfile pair, CLI (`init` / `env` / `qa`). |
 | `@paleo/openclaw-channel-mock-core` | Shared channel library — bus client, action handlers, plugin/setup factories, account helpers. Not consumed directly. |
 | `@paleo/openclaw-discord-mock` | Thin wrapper. Registers as channel `discord-mock`, `surface: "discord"`, `autoThread: false`. |
 | `@paleo/openclaw-slack-mock` | Thin wrapper. Registers as channel `slack-mock`, `surface: "slack"`, `autoThread: true`. |
@@ -48,13 +48,13 @@ Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `g
 
 ## Two-Dockerfile pattern
 
-`openclaw-qa-runner` ships `Dockerfile.base` (consumer-agnostic): Node 24 Alpine, `claw` user with host-matched UID/GID, the mock-CLI **shim binary** at `/opt/qa-mocks/bin/mock-cli-shim` (no per-command symlinks — consumers add their own), `/etc/profile` rewritten to keep `/opt/qa-mocks/bin` first in PATH, and the exec watcher binary at `/usr/local/bin/qa-exec-watcher`. Anything else the fixture needs at runtime (`git`, `pnpm` via Corepack, reset scripts, per-command shim symlinks) is the consumer's responsibility.
+`openclaw-test` ships `Dockerfile.base` (consumer-agnostic): Node 24 Alpine, `claw` user with host-matched UID/GID, the mock-CLI **shim binary** at `/opt/qa-mocks/bin/mock-cli-shim` (no per-command symlinks — consumers add their own), `/etc/profile` rewritten to keep `/opt/qa-mocks/bin` first in PATH, and the exec watcher binary at `/usr/local/bin/qa-exec-watcher`. Anything else the fixture needs at runtime (`git`, `pnpm` via Corepack, reset scripts, per-command shim symlinks) is the consumer's responsibility.
 
-The CLI's `env build` builds the base locally as `paleo/openclaw-qa-runner-base:<pkg-version>` and injects the tag into the consumer image via the `QA_RUNNER_BASE_TAG` build arg.
+The CLI's `env build` builds the base locally as `paleo/openclaw-test-base:<pkg-version>` and injects the tag into the consumer image via the `QA_RUNNER_BASE_TAG` build arg.
 
 The consumer-owned `Dockerfile` (dropped by `init`) does:
 
-1. `FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}`
+1. `FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}`
 2. `COPY` the consumer's `package.json` + `package-lock.json` and `openclaw.json` into the image.
 3. `npm ci --include=dev` — pulls the four `@paleo/openclaw-*` packages from the registry.
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
@@ -70,7 +70,7 @@ The consumer ships a thin overlay that pulls in the package's base stack:
 
 ```yaml
 include:
-  - ./node_modules/@paleo/openclaw-qa-runner/docker-compose.yml
+  - ./node_modules/@paleo/openclaw-test/docker-compose.yml
 ```
 
 Compose v2.20+ required. The overlay's job is to add consumer-specific service overrides (e.g. extra env vars on `runner`); the base file owns the build context, volumes, healthchecks, and entrypoints.
@@ -186,7 +186,7 @@ await ctx.judgeLLM({ attachTo: wait.entry, message: wait.match.text, rubric, lab
 
 Without `attachTo`, judges and other attachments fall back to the **current entry** — the most recently emitted agent-action entry (`outboundReceived` or `cliMock` / `agentToolCall`). `inboundSent` is scenario-emitted and does not update the current entry, so a `judgeLLM` call after `ctx.sendInbound(...)` still binds to whatever agent action preceded the inbound. Internal asserts (`assertRegex` / `assertEqual` / `assertLength`) are silent on success and only surface on failure — their `failure` lands on the current entry.
 
-Authoritative types: `packages/openclaw-qa-runner/src/report.ts`.
+Authoritative types: `packages/openclaw-test/src/report.ts`.
 
 Cost: the runner sums the gateway's `stage:"usage"` entries from `anthropic-payload.jsonl` for any entry with `ts >= runStart`, plus the judge's inline `usage` priced via an in-runner table. A 5s grace wait after the last task lets OpenClaw flush its usage record (it lands ~2s after the outbound hits the bus). Failing runs that time out before the agent completes report `$0.0000` — the gateway never wrote a usage record for the unfinished turn.
 
@@ -212,5 +212,5 @@ Scenarios are `.ts` files under `scenarios/`, default-export `async (ctx: Scenar
 ## See also
 
 - Each package's `README.md` — actionable usage.
-- `packages/openclaw-qa-runner/src/context.ts` — `ScenarioContext` definition.
-- `packages/openclaw-qa-runner/src/report.ts` — authoritative event/report types.
+- `packages/openclaw-test/src/context.ts` — `ScenarioContext` definition.
+- `packages/openclaw-test/src/report.ts` — authoritative event/report types.

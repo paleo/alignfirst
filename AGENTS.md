@@ -44,5 +44,5 @@ Apply the `paleo-typescript-style` skill.
 - `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for QA scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for QA scenarios
-- `@paleo/openclaw-qa-runner` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
+- `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
 - `@paleo/worktree-env` — worktree-based concurrent local environment kernel

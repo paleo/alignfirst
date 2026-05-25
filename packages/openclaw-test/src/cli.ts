@@ -45,7 +45,7 @@ async function initCommand(targetDirRaw: string | undefined): Promise<void> {
 
 function usage(): never {
   console.error(
-    "usage: openclaw-qa-runner <init|env|qa|bus|run> [args]\n\n" +
+    "usage: openclaw-test <init|env|qa|bus|run> [args]\n\n" +
       "  init <target-dir>      copy templates into target dir\n" +
       "  env <build|up|down>    drive the Compose stack (host-side)\n" +
       "  qa [flags] [...]       run scenarios against the stack (host-side)\n" +
@@ -57,7 +57,7 @@ function usage(): never {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   dispatch(process.argv.slice(2)).catch((err) => {
-    console.error("openclaw-qa-runner crash:", err);
+    console.error("openclaw-test crash:", err);
     process.exit(1);
   });
 }

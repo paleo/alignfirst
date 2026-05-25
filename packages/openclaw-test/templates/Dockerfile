@@ -1,11 +1,11 @@
 # Consumer-side QA runner image. Extends the consumer-agnostic base built locally
-# by `openclaw-qa-runner env build` and tagged `paleo/openclaw-qa-runner-base:<pkg-version>`.
+# by `openclaw-test env build` and tagged `paleo/openclaw-test-base:<pkg-version>`.
 # The CLI passes the matching tag via the QA_RUNNER_BASE_TAG build arg.
 #
 # Build context is this `qa/` directory.
 
 ARG QA_RUNNER_BASE_TAG
-FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}
+FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}
 
 COPY --chown=claw:claw package.json package-lock.json /opt/qa-src/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json

@@ -1,8 +1,8 @@
 # Consumer-agnostic base for the QA runner stack. Built locally by the CLI
-# (`openclaw-qa-runner env build`) and tagged `paleo/openclaw-qa-runner-base:<pkg-version>`.
+# (`openclaw-test env build`) and tagged `paleo/openclaw-test-base:<pkg-version>`.
 # Ships: Node + `shadow` (for the UID/GID dance), the mock-cli shim binary (no
 # per-command symlinks — consumers add their own), and the exec RPC watcher.
-# The consumer's `qa/Dockerfile` does `FROM paleo/openclaw-qa-runner-base:${QA_RUNNER_BASE_TAG}`
+# The consumer's `qa/Dockerfile` does `FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}`
 # and adds whatever else the fixture needs (e.g. git, pnpm via corepack, mock symlinks).
 # Build context: this package's directory (so `dist/mock-cli-shim.js` is COPY-able).
 

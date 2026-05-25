@@ -1,4 +1,4 @@
-# @paleo/openclaw-qa-runner
+# @paleo/openclaw-test
 
 ## 0.4.1
 
@@ -33,9 +33,9 @@
 ### Minor Changes
 
 - Improved CLI
-- Add host-side `openclaw-qa-runner env build|up|down` and `openclaw-qa-runner qa` subcommands. The CLI auto-derives `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID`, and resolves relative paths from `.env.local` against the consumer's qa dir. All other path env vars default to subdirs of `QA_PROJECT_DIR`. Consumer `package.json` scripts collapse to one-liners.
+- Add host-side `openclaw-test env build|up|down` and `openclaw-test qa` subcommands. The CLI auto-derives `QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID`, and resolves relative paths from `.env.local` against the consumer's qa dir. All other path env vars default to subdirs of `QA_PROJECT_DIR`. Consumer `package.json` scripts collapse to one-liners.
 
-  Breaking: `bin/qa.mjs` removed. Migrate scripts to `openclaw-qa-runner env build|up|down` / `openclaw-qa-runner qa`. Move project-specific paths from inline env preludes into `.env.local`.
+  Breaking: `bin/qa.mjs` removed. Migrate scripts to `openclaw-test env build|up|down` / `openclaw-test qa`. Move project-specific paths from inline env preludes into `.env.local`.
 
 ## 0.2.2
 

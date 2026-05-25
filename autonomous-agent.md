@@ -15,7 +15,7 @@ export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permi
 
 ## OpenClaw QA toolkit
 
-`@paleo/openclaw-qa-runner` and three companion channel packages — a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-qa-runner/README.md](packages/openclaw-qa-runner/README.md).
+`@paleo/openclaw-test` and three companion channel packages — a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
 ### OpenClaw Playbook (experimental)
 

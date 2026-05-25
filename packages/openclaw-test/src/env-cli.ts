@@ -16,7 +16,7 @@ const PATH_VARS = [
 
 type EnvSubcommand = "build" | "up" | "down";
 
-const QA_USAGE = `usage: openclaw-qa-runner qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
+const QA_USAGE = `usage: openclaw-test qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
                                   [--iterations N] [--max-failures N] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
@@ -32,10 +32,10 @@ const QA_USAGE = `usage: openclaw-qa-runner qa --channel <id|id,id,…|all> [<sc
   state. Each cell is one 'docker compose run --rm runner' invocation.
 
   bus + gateway are auto-started via Docker Compose if not already running.
-  When auto-started, they are torn down after qa exits. Run 'openclaw-qa-runner env up'
+  When auto-started, they are torn down after qa exits. Run 'openclaw-test env up'
   beforehand to keep them warm across iterative runs.`;
 
-const ENV_USAGE = "usage: openclaw-qa-runner env <build|up|down>";
+const ENV_USAGE = "usage: openclaw-test env <build|up|down>";
 
 export function envCommand(packageDir: string, argv: string[]): never {
   const sub = argv[0] as EnvSubcommand | undefined;
@@ -113,13 +113,13 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
   process.exit(matrixExit);
 }
 
-const BASE_IMAGE_NAME = "paleo/openclaw-qa-runner-base";
+const BASE_IMAGE_NAME = "paleo/openclaw-test-base";
 
 function setBaseTag(packageDir: string): void {
   process.env.QA_RUNNER_BASE_TAG = readPackageVersion(packageDir);
 }
 
-// Build (or reuse) the consumer-agnostic base image. Tagged with the qa-runner
+// Build (or reuse) the consumer-agnostic base image. Tagged with the openclaw-test
 // package version so consumer Dockerfiles can pin via the QA_RUNNER_BASE_TAG
 // build arg. `force` always rebuilds — Docker's layer cache makes no-op
 // rebuilds near-free, so we skip the inspect dance on `env build`.
@@ -154,7 +154,7 @@ function readPackageVersion(packageDir: string): string {
     version?: string;
   };
   if (!pkg.version) {
-    console.error("openclaw-qa-runner: package.json is missing 'version'");
+    console.error("openclaw-test: package.json is missing 'version'");
     process.exit(1);
   }
   return pkg.version;
@@ -191,7 +191,7 @@ function applyPathDefaults(qaDir: string): void {
  * Absolutize path vars from `.env.local` against the consumer's qa dir.
  *
  * Compose `include:` resolves relative bind-mount paths against the declaring
- * file (here, `node_modules/@paleo/openclaw-qa-runner/`), not the consumer's
+ * file (here, `node_modules/@paleo/openclaw-test/`), not the consumer's
  * qa dir. Exporting absolute paths via `process.env` sidesteps that.
  */
 function absolutizePathVarsFromEnvFile(qaDir: string): void {
