@@ -120,17 +120,12 @@ export interface ScenarioContext {
   ): void;
   /**
    * Anthropic-direct judgement. The verdict is recorded as an `AssertionRecord`
-   * on an action entry: `attachTo` if provided, otherwise the **current entry**
-   * (the most recent `outboundReceived` / `cliMock` / `agentToolCall`).
-   *
-   * Rule of thumb: when in doubt, capture the target action's entry (either
-   * the one returned by `waitForOutbound` / `sendInbound`, or `ctx.currentEntry`
-   * snapshotted right after the relevant `await` resolves) and pass it as
-   * `attachTo`. The fallback is convenient but binds to whatever the current
-   * entry is at the moment the judge call runs.
+   * on the `attachTo` action entry — usually the entry returned by
+   * `waitForOutbound` / `sendInbound`, or a snapshot of `ctx.currentEntry`
+   * taken right after the relevant `await` resolves.
    */
   judgeLLM(p: {
-    attachTo?: ActionEntry;
+    attachTo: ActionEntry;
     message: string;
     rubric: string;
     label: string;
@@ -320,8 +315,7 @@ export function createContext(params: {
       assertEqual({ getCurrentEntry: () => currentEntry, emitAugment }, actual, expected, label),
     assertLength: (value, expected, label) =>
       assertLength({ getCurrentEntry: () => currentEntry, emitAugment }, value, expected, label),
-    judgeLLM: (p) =>
-      callJudgeVerdict({ getCurrentEntry: () => currentEntry, emitAugment, judgeUsages }, p),
+    judgeLLM: (p) => callJudgeVerdict({ emitAugment, judgeUsages }, p),
     judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
@@ -379,6 +373,7 @@ function computeResult(
       verdict: "fail",
       cause: "failedEntry",
       entrySeq: failedEntry.seq,
+      scenarioLogEntrySeq: failedEntry.seq,
       message: `[entry #${failedEntry.seq}] ${failedEntry.failure?.message ?? ""}`,
     };
   }
@@ -405,7 +400,7 @@ function findFailedEntry(entries: ReportEntry[]): ActionEntry | undefined {
 }
 
 function pushAssertion(
-  deps: AttachDeps,
+  deps: Pick<AttachDeps, "emitAugment">,
   target: ActionEntry | undefined,
   record: AssertionRecord,
 ): void {
@@ -657,9 +652,9 @@ function failingAssert(deps: AttachDeps, ok: boolean, label: string, detail: str
 }
 
 async function callJudgeVerdict(
-  deps: AttachDeps & { judgeUsages: JudgeUsage[] },
+  deps: Pick<AttachDeps, "emitAugment"> & { judgeUsages: JudgeUsage[] },
   p: {
-    attachTo?: ActionEntry;
+    attachTo: ActionEntry;
     message: string;
     rubric: string;
     label: string;
@@ -682,12 +677,11 @@ async function callJudgeVerdict(
       costUsd: judgeCostUsd(verdict.usage),
     },
   };
-  const target = p.attachTo ?? deps.getCurrentEntry();
   if (verdict.verdict === "pass") {
-    pushAssertion(deps, target, { label: p.label, ok: true, extra });
+    pushAssertion(deps, p.attachTo, { label: p.label, ok: true, extra });
     return verdict;
   }
-  pushAssertion(deps, target, { label: p.label, ok: false, detail: verdict.reasoning, extra });
+  pushAssertion(deps, p.attachTo, { label: p.label, ok: false, detail: verdict.reasoning, extra });
   throw new AssertionError(`${p.label}: ${verdict.reasoning}`);
 }
 
@@ -720,6 +714,12 @@ async function getCursor(): Promise<number> {
 }
 
 const IPC_DIR = "/var/run/qa-ipc";
+// Wait this much longer than the requested timeout before declaring the
+// host-side poll dead. Gives the watcher time to kill the child on its own
+// timeout (exitCode 124) and write the truncated response file.
+const WATCHER_DEADLINE_HEADROOM_MS = 5_000;
+const EXEC_POLL_INTERVAL_MS = 100;
+const WATCHER_TIMEOUT_EXIT_CODE = 124;
 
 async function execInGateway(
   argv: string[],
@@ -736,16 +736,21 @@ async function execInGateway(
   const resPath = `${IPC_DIR}/${id}.res.json`;
   writeFileSync(reqTmp, JSON.stringify(payload));
   renameSync(reqTmp, reqPath);
-  const deadline = Date.now() + timeoutMs + 5_000;
+  const deadline = Date.now() + timeoutMs + WATCHER_DEADLINE_HEADROOM_MS;
   while (Date.now() < deadline) {
     if (existsSync(resPath)) {
       const raw = readFileSync(resPath, "utf8");
       rmSync(resPath, { force: true });
       rmSync(reqPath, { force: true });
       const parsed = JSON.parse(raw) as ExecInGatewayResult;
+      if (parsed.exitCode === WATCHER_TIMEOUT_EXIT_CODE) {
+        console.warn(
+          `execInGateway: watcher killed child after ${timeoutMs}ms (id ${id}, argv ${JSON.stringify(argv)})`,
+        );
+      }
       return parsed;
     }
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, EXEC_POLL_INTERVAL_MS));
   }
   rmSync(reqPath, { force: true });
   throw new Error(`execInGateway timed out waiting for response (request id ${id})`);

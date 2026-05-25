@@ -45,7 +45,10 @@ export interface PassScenarioResult {
 export interface FailedEntryScenarioResult {
   verdict: "fail";
   cause: "failedEntry";
+  /** Index into `report.json`'s `entries` (merged-by-ts ordering). */
   entrySeq: number;
+  /** Index of the same entry in the streaming `scenario-log.jsonl`. */
+  scenarioLogEntrySeq: number;
   message: string;
 }
 

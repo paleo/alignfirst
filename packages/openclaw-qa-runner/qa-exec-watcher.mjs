@@ -15,10 +15,14 @@ try {
     if (f.endsWith(".req.json") || f.endsWith(".req.json.processing") || f.endsWith(".res.json")) {
       try {
         rmSync(`${IPC_DIR}/${f}`, { force: true });
-      } catch {}
+      } catch (err) {
+        console.error(`qa-exec-watcher: failed to clean stale IPC file ${f}:`, err);
+      }
     }
   }
-} catch {}
+} catch (err) {
+  console.error(`qa-exec-watcher: failed to scan IPC dir ${IPC_DIR}:`, err);
+}
 
 async function main() {
   for (;;) {

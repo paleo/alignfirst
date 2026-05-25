@@ -100,7 +100,18 @@ async function runCell(args: RunnerArgs): Promise<number> {
       });
     }
 
+    // Snapshot live-entry seqs (= their position in `scenario-log.jsonl`)
+    // before mergeTimeline mutates them to the merged-by-ts ordering used in
+    // `report.json`.
+    const liveSeqByRef = new Map<ReportEntry, number>();
+    for (const e of entries) liveSeqByRef.set(e, e.seq);
     const merged = mergeTimeline(entries, agentCalls);
+    const liveSeqToMerged = new Map<number, number>();
+    for (const e of merged) {
+      const oldSeq = liveSeqByRef.get(e);
+      if (oldSeq !== undefined) liveSeqToMerged.set(oldSeq, e.seq);
+    }
+    attachResultMergedSeq(result, liveSeqToMerged);
     appendAgentCallsToLog(logStream, merged, entries);
     await closeStream(logStream);
     const report: ScenarioReport = {
@@ -291,22 +302,24 @@ function pairAgentCallsWithCliMocks(agentCalls: AgentToolCall[], entries: Report
   }
 }
 
-function leadingCli(input: unknown): string | undefined {
+export function leadingCli(input: unknown): string | undefined {
   if (!input || typeof input !== "object") return;
   const cmd = (input as { command?: unknown }).command;
   if (typeof cmd !== "string") return;
   const stripped = cmd.replace(/^(?:\s*cd\s+[^&;|]+(?:&&|;|\|\|)\s*)+/, "");
   const m = stripped.match(/^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*([A-Za-z0-9_./-]+)/);
   if (!m) return;
+  // Reject bare env-assignments (e.g. `FOO=bar` alone): the capture class
+  // stops at `=`, so we'd otherwise return "FOO" as if it were a command.
+  if (stripped[m[0].length] === "=") return;
   return m[1].split("/").pop();
 }
 
 /**
- * Append parsed agentToolCall entries to `scenario-log.jsonl` after the live
- * scenario has finished. They show up at the tail of the file with continuing
- * seq numbers; the `ts` (and `call.inferredStartedAt`) reflect their actual
- * chronological position. `report.json` carries the same calls re-indexed in
- * the merged timeline.
+ * Append parsed agentToolCall entries to the tail of `scenario-log.jsonl`
+ * with seqs continuing after the live entries. `scenario-log.jsonl` stays
+ * append-only and reflects the streaming order; `report.json` re-interleaves
+ * the same entries by `ts` with its own seqs.
  */
 function appendAgentCallsToLog(
   logStream: ReturnType<typeof createWriteStream>,
@@ -322,6 +335,26 @@ function appendAgentCallsToLog(
     logStream.write(`${JSON.stringify(out)}\n`);
     seq += 1;
   }
+}
+
+/**
+ * After `mergeTimeline`, the failed entry has been mutated to its merged
+ * `seq`. Promote that as `entrySeq` (the canonical `report.json` index) and
+ * keep the original live-entry seq as `scenarioLogEntrySeq` so consumers can
+ * still locate the entry in `scenario-log.jsonl`.
+ */
+function attachResultMergedSeq(
+  result: ScenarioReport["result"],
+  liveSeqToMerged: Map<number, number>,
+): void {
+  if (result.verdict !== "fail" || result.cause !== "failedEntry") return;
+  const mapped = liveSeqToMerged.get(result.entrySeq);
+  if (mapped === undefined) return;
+  const prefix = `[entry #${result.entrySeq}]`;
+  if (result.message.startsWith(prefix)) {
+    result.message = `[entry #${mapped}]${result.message.slice(prefix.length)}`;
+  }
+  result.entrySeq = mapped;
 }
 
 function mergeTimeline(entries: ReportEntry[], agentCalls: AgentToolCall[]): ReportEntry[] {
