@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import {
   getQaBusState,
   injectQaBusInboundMessage,
@@ -8,6 +6,8 @@ import {
   type QaBusMessage,
   type QaBusPollResult,
 } from "@paleo/openclaw-channel-mock-core";
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { judgeCostUsd } from "./cost.js";
 import {
   judgeLLM,
@@ -100,12 +100,7 @@ export interface ScenarioContext {
   poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult>;
   waitForOutbound(
     predicate: (m: BusMessage) => boolean,
-    opts: {
-      sinceCursor: number;
-      timeoutMs?: number;
-      failFastUnmatchedOutbounds?: number | false;
-      failFastCliMockGraceMs?: number | false;
-    },
+    opts: WaitForOutboundOptions,
   ): Promise<WaitForOutboundResult>;
   expectNoOutbound(
     predicate: (m: BusMessage) => boolean,
@@ -149,6 +144,13 @@ export interface ScenarioContext {
    * watcher to record a kill before this side gives up).
    */
   execInGateway(argv: string[], opts?: ExecInGatewayOptions): Promise<ExecInGatewayResult>;
+}
+
+export interface WaitForOutboundOptions {
+  sinceCursor: number;
+  timeoutMs?: number;
+  failFastUnmatchedOutbounds?: number | false;
+  failFastCliMockGraceMs?: number | false;
 }
 
 export interface ExecInGatewayOptions {

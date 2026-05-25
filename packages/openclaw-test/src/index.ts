@@ -4,6 +4,7 @@ export type {
   MockCliRegisterOptions,
   ScenarioContext,
   SendInboundResult,
+  WaitForOutboundOptions,
   WaitForOutboundResult,
 } from "./context.js";
 export type {
@@ -24,11 +25,11 @@ export type {
   CliMockHandlerArgs,
   CostBreakdown,
   EmitSink,
-  InboundSentEntry,
-  OutboundReceivedEntry,
   ErrorScenarioResult,
   FailedEntryScenarioResult,
   FailScenarioResult,
+  InboundSentEntry,
+  OutboundReceivedEntry,
   PassScenarioResult,
   ReportEntry,
   ReportEntryBase,
