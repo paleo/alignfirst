@@ -42,6 +42,8 @@ export interface MatrixOptions {
   channels: string[];
   iterations: number;
   maxFailures: number;
+  /** Stop the whole matrix at the first failing cell (across all pairs). */
+  stopOnFail: boolean;
   reuseStack: boolean;
   skipFirstRestart: boolean;
   composeArgs: string[];
@@ -191,6 +193,9 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
           results.push(r);
 
           if (r.verdict === "fail") {
+            if (opts.stopOnFail) {
+              break outer;
+            }
             pairFailures += 1;
             if (pairFailures > opts.maxFailures) {
               break;

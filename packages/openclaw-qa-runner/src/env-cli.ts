@@ -17,13 +17,15 @@ const PATH_VARS = [
 type EnvSubcommand = "build" | "up" | "down";
 
 const QA_USAGE = `usage: openclaw-qa-runner qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
-                                  [--iterations N] [--max-failures N] [--reuse-stack]
+                                  [--iterations N] [--max-failures N] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1).
-  --reuse-stack       skip the per-cell bus+gateway recreation (fastest path; only
-                      safe when you vouch for no cross-cell state leak).
+  --stop-on-fail      stop the whole matrix at the first failing cell — pairs with
+                      --iterations to triage one bug at a time before retrying.
+  --reuse-stack       skip the per-cell bus+gateway recreation (fastest path; but
+                      scenarios leak state into each other with this option).
 
   The host owns the matrix loop: between cells it recreates the bus and gateway
   containers (docker compose up -d --force-recreate --wait bus gateway) for fresh
@@ -55,7 +57,8 @@ export function envCommand(packageDir: string, argv: string[]): never {
 }
 
 export async function qaCommand(packageDir: string, argv: string[]): Promise<never> {
-  const { channel, iterations, maxFailures, reuseStack, all, positionals } = parseQaArgs(argv);
+  const { channel, iterations, maxFailures, stopOnFail, reuseStack, all, positionals } =
+    parseQaArgs(argv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
   ensureBaseImage(packageDir, { force: false });
@@ -93,6 +96,7 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
     channels,
     iterations: iterations ? Number(iterations) : 1,
     maxFailures: maxFailures ? Number(maxFailures) : 1,
+    stopOnFail,
     reuseStack,
     skipFirstRestart: !wereUpBefore && !reuseStack,
     composeArgs: compose,
@@ -260,6 +264,7 @@ interface QaArgs {
   channel: string;
   iterations?: string;
   maxFailures?: string;
+  stopOnFail: boolean;
   reuseStack: boolean;
   all: boolean;
   positionals: string[];
@@ -269,6 +274,7 @@ function parseQaArgs(argv: string[]): QaArgs {
   let channel: string | undefined;
   let iterations: string | undefined;
   let maxFailures: string | undefined;
+  let stopOnFail = false;
   let reuseStack = false;
   let all = false;
   const positionals: string[] = [];
@@ -278,6 +284,7 @@ function parseQaArgs(argv: string[]): QaArgs {
     if (a === "-h" || a === "--help") failQa();
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
+    else if (a === "--stop-on-fail") stopOnFail = true;
     else if (a === "--channel") channel = argv[++i];
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
     else if (a === "--iterations") iterations = argv[++i];
@@ -294,7 +301,15 @@ function parseQaArgs(argv: string[]): QaArgs {
   if (!all && positionals.length === 0)
     failQa("error: must pass --all or one or more scenario names");
 
-  return { channel: channel as string, iterations, maxFailures, reuseStack, all, positionals };
+  return {
+    channel: channel as string,
+    iterations,
+    maxFailures,
+    stopOnFail,
+    reuseStack,
+    all,
+    positionals,
+  };
 }
 
 function failQa(msg?: string): never {
