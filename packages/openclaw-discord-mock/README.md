@@ -2,7 +2,7 @@
 
 Synthetic Discord-shaped OpenClaw channel plugin. Registers as channel `discord-mock`. Full Discord-shaped action surface: `send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`. `thread-create` posts an optional `text` / `message` / `content` atomically with the new thread; free-form agent text without a tool call lands in the parent channel.
 
-Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the QA harness.
+Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
 
 ## Install
 
@@ -26,7 +26,7 @@ In your `openclaw.json`:
     "discord-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "OpenClaw QA",
+      "botDisplayName": "OpenClaw Test",
       "allowFrom": ["*"]
     }
   }

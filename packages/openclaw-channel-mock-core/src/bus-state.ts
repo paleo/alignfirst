@@ -31,7 +31,7 @@ import type {
 } from "./protocol.js";
 
 const DEFAULT_BOT_ID = "openclaw";
-const DEFAULT_BOT_NAME = "OpenClaw QA";
+const DEFAULT_BOT_NAME = "OpenClaw Test";
 
 type QaBusEventSeed =
   | { kind: "inbound-message"; accountId: string; message: QaBusMessage }

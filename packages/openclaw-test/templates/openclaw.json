@@ -28,13 +28,13 @@
     "discord-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "OpenClaw QA",
+      "botDisplayName": "OpenClaw Test",
       "allowFrom": ["*"]
     },
     "slack-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "OpenClaw QA",
+      "botDisplayName": "OpenClaw Test",
       "allowFrom": ["*"]
     }
   }

@@ -1,6 +1,6 @@
 # @paleo/openclaw-channel-mock-core
 
-Shared library powering the synthetic OpenClaw channel plugins used in QA harnesses. Provides the bus client, action handlers, account / inbound / outbound primitives, plugin and setup factories, and the typebox-based config schema.
+Shared library powering the synthetic OpenClaw channel plugins used in test harnesses. Provides the bus client, action handlers, account / inbound / outbound primitives, plugin and setup factories, and the typebox-based config schema.
 
 Not meant to be consumed directly. Use the surface wrappers:
 

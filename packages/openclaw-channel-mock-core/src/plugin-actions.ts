@@ -190,7 +190,7 @@ export function createChannelMockMessageActions(params: {
             );
           }
           const { conversationId } = parseQaTarget(destination);
-          const title = readStringParam(actionParams, "title") ?? "QA thread";
+          const title = readStringParam(actionParams, "title") ?? "Test thread";
           const { thread } = await createQaBusThread({
             baseUrl,
             accountId: account.accountId,

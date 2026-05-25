@@ -1,7 +1,7 @@
 {
   "name": "@paleo/openclaw-discord-mock",
   "version": "0.2.3",
-  "description": "Synthetic Discord-shaped OpenClaw channel plugin for automated QA scenarios.",
+  "description": "Synthetic Discord-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
     "qa",
@@ -43,7 +43,7 @@
       "detailLabel": "Discord Mock",
       "docsPath": "/channels/discord-mock",
       "docsLabel": "discord-mock",
-      "blurb": "Synthetic Discord-shaped transport for automated OpenClaw QA scenarios.",
+      "blurb": "Synthetic Discord-shaped transport for automated OpenClaw test scenarios.",
       "systemImage": "checklist",
       "order": 998,
       "exposure": {

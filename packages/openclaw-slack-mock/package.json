@@ -1,7 +1,7 @@
 {
   "name": "@paleo/openclaw-slack-mock",
   "version": "0.2.3",
-  "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated QA scenarios.",
+  "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
     "qa",
@@ -43,7 +43,7 @@
       "detailLabel": "Slack Mock",
       "docsPath": "/channels/slack-mock",
       "docsLabel": "slack-mock",
-      "blurb": "Synthetic Slack-shaped transport for automated OpenClaw QA scenarios.",
+      "blurb": "Synthetic Slack-shaped transport for automated OpenClaw test scenarios.",
       "systemImage": "checklist",
       "order": 997,
       "exposure": {

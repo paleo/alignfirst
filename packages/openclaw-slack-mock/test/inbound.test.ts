@@ -38,12 +38,12 @@ function makeAccount(baseUrl: string): ResolvedChannelMockAccount {
     configured: true,
     baseUrl,
     botUserId: "openclaw",
-    botDisplayName: "OpenClaw QA",
+    botDisplayName: "OpenClaw Test",
     pollTimeoutMs: 1000,
     config: {
       baseUrl,
       botUserId: "openclaw",
-      botDisplayName: "OpenClaw QA",
+      botDisplayName: "OpenClaw Test",
       allowFrom: ["*"],
     },
   };

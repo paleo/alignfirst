@@ -20,14 +20,14 @@ import type {
   QaBusWaitForInput,
 } from "./protocol.js";
 
-const QA_HTTP_JSON_MAX_BODY_BYTES = 1024 * 1024;
-const QA_HTTP_JSON_BODY_TIMEOUT_MS = 5_000;
+const HTTP_JSON_MAX_BODY_BYTES = 1024 * 1024;
+const HTTP_JSON_BODY_TIMEOUT_MS = 5_000;
 
 export async function readQaJsonBody(req: IncomingMessage): Promise<unknown> {
   const text = (
     await readRequestBodyWithLimit(req, {
-      maxBytes: QA_HTTP_JSON_MAX_BODY_BYTES,
-      timeoutMs: QA_HTTP_JSON_BODY_TIMEOUT_MS,
+      maxBytes: HTTP_JSON_MAX_BODY_BYTES,
+      timeoutMs: HTTP_JSON_BODY_TIMEOUT_MS,
     })
   ).trim();
   return text ? (JSON.parse(text) as unknown) : {};

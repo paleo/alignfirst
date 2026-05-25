@@ -77,7 +77,7 @@ export function createChannelMockAccountHelpers(params: {
     const enabled = baseEnabled && merged.enabled !== false;
     const baseUrl = merged.baseUrl?.trim() ?? "";
     const botUserId = merged.botUserId?.trim() || "openclaw";
-    const botDisplayName = merged.botDisplayName?.trim() || "OpenClaw QA";
+    const botDisplayName = merged.botDisplayName?.trim() || "OpenClaw Test";
     return {
       accountId,
       enabled,

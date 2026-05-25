@@ -2,7 +2,7 @@
 
 Synthetic Slack-shaped OpenClaw channel plugin. Registers as channel `slack-mock`. Restricted Slack-shaped action surface: `read`, `edit`, `delete`, `react`, `reactions`, `search`. No `send` / `thread-create` / `thread-reply`. Bare-channel inbounds auto-thread: the first agent outbound creates a thread anchored on the inbound message id; every subsequent outbound from the same turn lands in that thread.
 
-Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the QA harness.
+Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
 
 ## Install
 
@@ -26,7 +26,7 @@ In your `openclaw.json`:
     "slack-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "OpenClaw QA",
+      "botDisplayName": "OpenClaw Test",
       "allowFrom": ["*"]
     }
   }

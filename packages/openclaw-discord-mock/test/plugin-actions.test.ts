@@ -52,7 +52,7 @@ function makeCfg(baseUrl: string) {
       [CHANNEL_ID]: {
         baseUrl,
         botUserId: "openclaw",
-        botDisplayName: "OpenClaw QA",
+        botDisplayName: "OpenClaw Test",
         allowFrom: ["*"],
       },
     },

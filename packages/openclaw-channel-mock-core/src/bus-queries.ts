@@ -87,7 +87,7 @@ export function cloneEvent(event: QaBusEvent): QaBusEvent {
     case "thread-created":
       return { ...event, thread: { ...event.thread } };
   }
-  throw new Error("Unsupported QA bus event kind");
+  throw new Error("Unsupported test bus event kind");
 }
 
 export function buildQaBusSnapshot(params: {

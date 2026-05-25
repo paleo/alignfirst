@@ -1,14 +1,14 @@
 ---
-title: OpenClaw QA Harness Architecture
+title: OpenClaw Test Harness Architecture
 summary: How the four `@paleo/openclaw-*` packages fit together — bus, gateway, runner, channel plugins, mocked CLIs, artifact layout, and the OpenClaw quirks the harness papers over.
 read_when:
-  - onboarding to the QA-runner codebase
+  - onboarding to the test-runner codebase
   - debugging a scenario that misbehaves at the harness layer
   - touching the Compose stack, the Dockerfile pair, or the mocked-CLI shim
   - extending a channel plugin or adding a new one
 ---
 
-# OpenClaw QA Harness Architecture
+# OpenClaw Test Harness Architecture
 
 Four packages drive automated regression tests against an OpenClaw workspace. Consumers depend on all four; only `openclaw-test` is the entry point.
 
@@ -190,7 +190,7 @@ Authoritative types: `packages/openclaw-test/src/report.ts`.
 
 Cost: the runner sums the gateway's `stage:"usage"` entries from `anthropic-payload.jsonl` for any entry with `ts >= runStart`, plus the judge's inline `usage` priced via an in-runner table. A 5s grace wait after the last task lets OpenClaw flush its usage record (it lands ~2s after the outbound hits the bus). Failing runs that time out before the agent completes report `$0.0000` — the gateway never wrote a usage record for the unfinished turn.
 
-`OPENCLAW_ANTHROPIC_PAYLOAD_LOG=1` is forced on by the Compose stack — QA needs the file. `OPENCLAW_RAW_STREAM=1` is opt-in for `raw-stream.jsonl`. Both land under `.gateway-logs/` (bind-mounted from `~/.openclaw/logs/`).
+`OPENCLAW_ANTHROPIC_PAYLOAD_LOG=1` is forced on by the Compose stack — tests need the file. `OPENCLAW_RAW_STREAM=1` is opt-in for `raw-stream.jsonl`. Both land under `.gateway-logs/` (bind-mounted from `~/.openclaw/logs/`).
 
 ## Judge
 

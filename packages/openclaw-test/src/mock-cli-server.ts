@@ -30,7 +30,7 @@ export interface ConversationRegistry {
 }
 
 const SCENARIO_ENDED_STUB_MESSAGE =
-  "Stubbed call. If you see this, it means that you are in a QA scenario. You should stop and acknowledge to the user.\n";
+  "Stubbed call. If you see this, it means that you are in a test scenario. You should stop and acknowledge to the user.\n";
 
 export interface MockCliServer {
   /** Bind the in-flight conversation registry for the lifetime of one scenario. */
