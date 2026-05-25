@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CellResult } from "../src/cell-result.js";
-import { expandChannelSelection, runMatrix, type SpawnRequest } from "../src/qa-loop.js";
+import { expandChannelSelection, runMatrix, type SpawnRequest } from "../src/loop.js";
 
 function makeConfig(channels: string[]): string {
-  const dir = mkdtempSync(join(tmpdir(), "qa-loop-"));
+  const dir = mkdtempSync(join(tmpdir(), "openclaw-test-loop-"));
   const path = join(dir, "openclaw.json");
   const cfg: Record<string, Record<string, unknown>> = { channels: {} };
   for (const c of channels) cfg.channels[c] = {};

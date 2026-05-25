@@ -19,7 +19,7 @@ In your `openclaw.json`:
 ```json
 {
   "plugins": {
-    "load": { "paths": ["/opt/qa-src/node_modules/@paleo/openclaw-slack-mock"] },
+    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"] },
     "entries": { "slack-mock": { "enabled": true } }
   },
   "channels": {

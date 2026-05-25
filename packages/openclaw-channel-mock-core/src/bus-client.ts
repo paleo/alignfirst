@@ -67,7 +67,7 @@ async function postJson<T>(
     if (!response.ok) {
       const error =
         typeof parsed === "object" && parsed && "error" in parsed ? parsed.error : undefined;
-      throw new Error(error || `qa-bus request failed: ${response.status}`);
+      throw new Error(error || `test bus request failed: ${response.status}`);
     }
     return parsed as T;
   } finally {
@@ -252,7 +252,7 @@ export async function getQaBusState(baseUrl: string): Promise<QaBusStateSnapshot
   });
   try {
     if (!response.ok) {
-      throw new Error(`qa-bus request failed: ${response.status}`);
+      throw new Error(`test bus request failed: ${response.status}`);
     }
     return (await response.json()) as QaBusStateSnapshot;
   } finally {

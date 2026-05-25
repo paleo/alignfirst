@@ -1,13 +1,13 @@
-# Consumer-side QA runner image. Extends the consumer-agnostic base built locally
+# Consumer-side test runner image. Extends the consumer-agnostic base built locally
 # by `openclaw-test env build` and tagged `paleo/openclaw-test-base:<pkg-version>`.
-# The CLI passes the matching tag via the QA_RUNNER_BASE_TAG build arg.
+# The CLI passes the matching tag via the OPENCLAW_TEST_BASE_TAG build arg.
 #
-# Build context is this `qa/` directory.
+# Build context is the project dir.
 
-ARG QA_RUNNER_BASE_TAG
-FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}
+ARG OPENCLAW_TEST_BASE_TAG
+FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}
 
-COPY --chown=claw:claw package.json package-lock.json /opt/qa-src/
+COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \

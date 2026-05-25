@@ -1,30 +1,30 @@
 x-common-build: &common-build
-  context: ${QA_PROJECT_DIR}
+  context: ${OPENCLAW_TEST_PROJECT_DIR}
   dockerfile: Dockerfile
   args:
-    QA_RUNNER_BASE_TAG: ${QA_RUNNER_BASE_TAG}
+    OPENCLAW_TEST_BASE_TAG: ${OPENCLAW_TEST_BASE_TAG}
 
-# Single source of truth for service mounts. `qa-ipc` is only used by gateway
+# Single source of truth for service mounts. `openclaw-test-ipc` is only used by gateway
 # (writer) and runner (reader), but mounting it on `bus` too is harmless and
 # lets all three services share one anchor.
 x-common-volumes: &common-volumes
   - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
   - ${OPENCLAW_CONFIG_PATH}:/home/claw/.openclaw/openclaw.json
-  - ${QA_RUNNER_PACKAGE_DIR}/dist/:/opt/qa-src/dist
-  - ${QA_SCENARIOS_DIR}:/opt/qa-src/scenarios
-  - ${QA_ARTIFACTS_DIR}:/opt/qa-artifacts
-  - ${QA_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
-  - qa-ipc:/var/run/qa-ipc
+  - ${OPENCLAW_TEST_PACKAGE_DIR}/dist/:/opt/openclaw-test/src/dist
+  - ${OPENCLAW_TEST_SCENARIOS_DIR}:/opt/openclaw-test/src/scenarios
+  - ${OPENCLAW_TEST_ARTIFACTS_DIR}:/opt/openclaw-test/artifacts
+  - ${OPENCLAW_TEST_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
+  - openclaw-test-ipc:/var/run/openclaw-test-ipc
 
 volumes:
-  qa-ipc:
+  openclaw-test-ipc:
 
 services:
   bus:
     build: *common-build
     user: claw
-    working_dir: /opt/qa-src
-    command: ["node", "/opt/qa-src/dist/bus.js"]
+    working_dir: /opt/openclaw-test/src
+    command: ["node", "/opt/openclaw-test/src/dist/bus.js"]
     volumes: *common-volumes
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:43123/v1/state"]
@@ -35,18 +35,18 @@ services:
   gateway:
     build: *common-build
     user: claw
-    working_dir: /opt/qa-src
+    working_dir: /opt/openclaw-test/src
     environment:
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENCLAW_ANTHROPIC_PAYLOAD_LOG: "1"
       OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}
-      QA_RUNNER_URL: "http://runner:43124"
-      PATH: "/opt/qa-mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      OPENCLAW_TEST_RUNNER_URL: "http://runner:43124"
+      PATH: "/opt/openclaw-test/mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     # Watcher in the background, then exec openclaw as PID 1's foreground process.
     command:
       ["sh", "-c",
-       "/usr/local/bin/qa-exec-watcher & exec npx openclaw gateway run --port 18789 --bind loopback --auth none"]
+       "/usr/local/bin/exec-watcher & exec npx openclaw gateway run --port 18789 --bind loopback --auth none"]
     volumes: *common-volumes
     depends_on:
       bus:
@@ -61,12 +61,12 @@ services:
   runner:
     build: *common-build
     user: claw
-    working_dir: /opt/qa-src
+    working_dir: /opt/openclaw-test/src
     environment:
-      QA_BUS_URL: http://bus:43123
+      OPENCLAW_TEST_BUS_URL: http://bus:43123
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    entrypoint: ["node", "/opt/qa-src/dist/runner.js"]
+    entrypoint: ["node", "/opt/openclaw-test/src/dist/runner.js"]
     volumes: *common-volumes
     depends_on:
       bus:

@@ -21,14 +21,14 @@ Wire `package.json` scripts:
   "env:build": "openclaw-test env build",
   "env:up":    "openclaw-test env up",
   "env:down":  "openclaw-test env down",
-  "qa":       "openclaw-test qa"
+  "e2e":      "openclaw-test run"
 }
 ```
 
 ## Init
 
 ```sh
-npx @paleo/openclaw-test init <qa-dir>
+npx @paleo/openclaw-test init <project-dir>
 ```
 
 Drops four files:
@@ -36,7 +36,7 @@ Drops four files:
 - `openclaw.json` — gateway config (mode `local`, both channel plugins enabled, main agent placeholder).
 - `.env.local.example` — copy to `.env.local`, fill `ANTHROPIC_API_KEY` + `OPENCLAW_WORKSPACE_DIR`.
 - `docker-compose.yml` — thin overlay that `include:`s the base from `node_modules/`.
-- `Dockerfile` — consumer-owned. Inherits the base via `FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}`. Add `RUN`/`COPY`/`ENV` for consumer-specific setup (extra system packages, skills install, etc.).
+- `Dockerfile` — consumer-owned. Inherits the base via `FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}`. Add `RUN`/`COPY`/`ENV` for consumer-specific setup (extra system packages, skills install, etc.).
 
 ## Configure
 
@@ -57,44 +57,44 @@ Required:
 - `ANTHROPIC_API_KEY`
 - `OPENCLAW_WORKSPACE_DIR` — host path mounted at `/home/claw/.openclaw/workspace`.
 
-Optional (defaults relative to the consumer's `qa/` dir):
+Optional (defaults relative to the consumer's project dir):
 
 - `OPENCLAW_CONFIG_PATH` → `./openclaw.json`
-- `QA_SCENARIOS_DIR` → `./scenarios`
-- `QA_ARTIFACTS_DIR` → `./artifacts`
-- `QA_GATEWAY_LOGS_DIR` → `./.gateway-logs`
+- `OPENCLAW_TEST_SCENARIOS_DIR` → `./scenarios`
+- `OPENCLAW_TEST_ARTIFACTS_DIR` → `./artifacts`
+- `OPENCLAW_TEST_GATEWAY_LOGS_DIR` → `./.gateway-logs`
 - `OPENCLAW_RAW_STREAM=1` — also write `raw-stream.jsonl` alongside the always-on `anthropic-payload.jsonl`.
 
-`QA_PROJECT_DIR`, `QA_RUNNER_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` are injected by the CLI.
+`OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` are injected by the CLI.
 
 ## Consumer Dockerfile responsibilities
 
 The base image ships only Node, the mock-cli shim binary, and the exec watcher. Your consumer `Dockerfile` adds whatever the fixture needs:
 
 - Install runtime tools your scripts/agents shell out to (e.g. `RUN apk add --no-cache git`, `RUN corepack enable && corepack prepare pnpm@latest --activate`).
-- Create the per-command mock-cli symlinks you want intercepted, e.g. `RUN for name in claude gh; do ln -sf mock-cli-shim "/opt/qa-mocks/bin/$name"; done`.
-- Ship any reset/seed scripts you'll invoke via `ctx.execInGateway(...)` (e.g. `COPY qa-scripts/ /opt/qa-scripts/`).
-- Declare per-fixture named volumes in your compose overlay (e.g. a `qa-projects` volume mounted at `/home/claw/projects`).
+- Create the per-command mock-cli symlinks you want intercepted, e.g. `RUN for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`.
+- Ship any reset/seed scripts you'll invoke via `ctx.execInGateway(...)` (e.g. `COPY scripts/ /opt/openclaw-test/scripts/`).
+- Declare per-fixture named volumes in your compose overlay (e.g. a `fixture-projects` volume mounted at `/home/claw/projects`).
 
 ## Run
 
 ```sh
 npm run env:build                                                  # build base + consumer image
-npm run qa -- --channel all <scenario>                             # one scenario, both channels
-npm run qa -- --channel all --all                                  # every scenario, both channels
-npm run qa -- --channel discord-mock <scenario>                    # restrict to one channel
-npm run qa -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
-npm run qa -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
-npm run qa -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
+npm run e2e -- --channel all <scenario>                             # one scenario, both channels
+npm run e2e -- --channel all --all                                  # every scenario, both channels
+npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
+npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
+npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
+npm run e2e -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
 npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
 npm run env:down                                                   # tear down a warm stack
 ```
 
-`qa` auto-starts `bus` + `gateway` via Docker Compose if they aren't running, and auto-`down`s them after the run completes. If you've explicitly run `env:up` beforehand, `qa` leaves the stack up so subsequent runs are fast. Ctrl-C is forwarded to the running container; auto-`down` still runs.
+`run` auto-starts `bus` + `gateway` via Docker Compose if they aren't running, and auto-`down`s them after the run completes. If you've explicitly run `env:up` beforehand, `run` leaves the stack up so subsequent runs are fast. Ctrl-C is forwarded to the running container; auto-`down` still runs. If the base image needs (re)building, any already-running bus+gateway are torn down first so the new image is picked up.
 
-**Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `qa` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
+**Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `run` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
 
-`env:build` first builds the base image (`paleo/openclaw-test-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
+`env:build` first builds the base image (`paleo/openclaw-test-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `run` skip the base build when the tag already exists.
 
 Rebuild required after: bumping any `@paleo/openclaw-*` dependency, edits to `openclaw.json`, or any change to the consumer `Dockerfile`.
 
@@ -113,7 +113,7 @@ From `@paleo/openclaw-test` (`src/context.ts`):
 - `assertRegex`, `assertEqual`, `assertLength` — structural assertions. Silent on success; on failure, the assertion record and a `failure` field land on the **current entry** (most recent agent-action entry).
 - `judgeLLM({ attachTo?, message, rubric, label })` — Anthropic-direct judgement. Pass `attachTo: entry` to bind the result to a specific action; otherwise it attaches to the **current entry**. `inboundSent` (scenario-emitted) never becomes the current entry — only agent-action entries (`outboundReceived`, `cliMock`, `agentToolCall`) do.
 - `mockCli(name, handler)` — intercepts the gateway's calls to `git` / `npm` / `pnpm` / `yarn` / `claude`. Unregistered calls fail the scenario with `failure.source = "cliMock"`.
-- `execInGateway(argv, { cwd?, env?, stdin?, timeoutMs? })` → `{ exitCode, stdout, stderr }`. Runs a command inside the gateway container via the exec watcher. Always resolves on completion (non-zero exits do not throw); throws only on transport failure or hard timeout. Typical use: invoke a consumer-shipped reset script (`/opt/qa-scripts/reset-fixture.mjs`) at the top of a scenario.
+- `execInGateway(argv, { cwd?, env?, stdin?, timeoutMs? })` → `{ exitCode, stdout, stderr }`. Runs a command inside the gateway container via the exec watcher. Always resolves on completion (non-zero exits do not throw); throws only on transport failure or hard timeout. Typical use: invoke a consumer-shipped reset script (`/opt/openclaw-test/scripts/reset-fixture.mjs`) at the top of a scenario.
 - `log(message)` or `log({ attachTo, prefix, message })` — free-standing `scenarioLog` entry, or a `scenarioLog` note attached to an action entry.
 - `getCursor`.
 
@@ -123,7 +123,7 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 
 ## Judge model
 
-Defaults to `anthropic/claude-haiku-4-5`. Override via `QA_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). The ref must be LiteLLM-style; only the `anthropic/` provider is wired up today. The judge is **not** an OpenClaw agent — don't configure it in `openclaw.json`.
+Defaults to `anthropic/claude-haiku-4-5`. Override via `OPENCLAW_TEST_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). The ref must be LiteLLM-style; only the `anthropic/` provider is wired up today. The judge is **not** an OpenClaw agent — don't configure it in `openclaw.json`.
 
 ## Artifacts
 

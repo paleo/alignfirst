@@ -3,7 +3,7 @@ import type { CellResult } from "./cell-result.js";
 import { judgeCostUsd } from "./cost.js";
 
 function artifactsRoot(): string {
-  return process.env.QA_ARTIFACTS_DIR ?? process.env.QA_ARTIFACTS_ROOT ?? "/opt/qa-artifacts";
+  return process.env.OPENCLAW_TEST_ARTIFACTS_DIR ?? "/opt/openclaw-test/artifacts";
 }
 
 interface PairAggregate {

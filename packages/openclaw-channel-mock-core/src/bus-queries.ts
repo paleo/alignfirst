@@ -114,7 +114,7 @@ export function readQaBusMessage(params: {
 }) {
   const message = params.messages.get(params.input.messageId);
   if (!message) {
-    throw new Error(`qa-bus message not found: ${params.input.messageId}`);
+    throw new Error(`test bus message not found: ${params.input.messageId}`);
   }
   return cloneMessage(message);
 }

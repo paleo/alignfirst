@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 
-const IPC_DIR = "/var/run/qa-ipc";
+const IPC_DIR = "/var/run/openclaw-test-ipc";
 const MAX_OUTPUT_BYTES = 1_048_576;
 const POLL_INTERVAL_MS = 100;
 
@@ -16,12 +16,12 @@ try {
       try {
         rmSync(`${IPC_DIR}/${f}`, { force: true });
       } catch (err) {
-        console.error(`qa-exec-watcher: failed to clean stale IPC file ${f}:`, err);
+        console.error(`exec-watcher: failed to clean stale IPC file ${f}:`, err);
       }
     }
   }
 } catch (err) {
-  console.error(`qa-exec-watcher: failed to scan IPC dir ${IPC_DIR}:`, err);
+  console.error(`exec-watcher: failed to scan IPC dir ${IPC_DIR}:`, err);
 }
 
 async function main() {
@@ -42,7 +42,7 @@ async function main() {
         continue;
       }
       processRequest(claimed).catch((err) => {
-        console.error("qa-exec-watcher: internal error", err);
+        console.error("exec-watcher: internal error", err);
       });
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

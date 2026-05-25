@@ -1,23 +1,23 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { discoverScenarios, expandChannelSelection, runMatrix } from "./qa-loop.js";
+import { discoverScenarios, expandChannelSelection, runMatrix } from "./loop.js";
 
-// Path-shaped vars from .env.local: resolved against the consumer's qa/ dir so users
+// Path-shaped vars from .env.local: resolved against the consumer's project dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
 // against the package's compose file in node_modules/.
 const PATH_VARS = [
   "OPENCLAW_WORKSPACE_DIR",
   "OPENCLAW_CONFIG_PATH",
-  "QA_SCENARIOS_DIR",
-  "QA_ARTIFACTS_DIR",
-  "QA_GATEWAY_LOGS_DIR",
+  "OPENCLAW_TEST_SCENARIOS_DIR",
+  "OPENCLAW_TEST_ARTIFACTS_DIR",
+  "OPENCLAW_TEST_GATEWAY_LOGS_DIR",
 ] as const;
 
 type EnvSubcommand = "build" | "up" | "down";
 
-const QA_USAGE = `usage: openclaw-test qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
-                                  [--iterations N] [--max-failures N] [--stop-on-fail] [--reuse-stack]
+const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scenario> ...] [--all]
+                                   [--iterations N] [--max-failures N] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
   --iterations N      run each (scenario, channel) pair N times (default 1).
@@ -32,8 +32,11 @@ const QA_USAGE = `usage: openclaw-test qa --channel <id|id,id,…|all> [<scenari
   state. Each cell is one 'docker compose run --rm runner' invocation.
 
   bus + gateway are auto-started via Docker Compose if not already running.
-  When auto-started, they are torn down after qa exits. Run 'openclaw-test env up'
-  beforehand to keep them warm across iterative runs.`;
+  When auto-started, they are torn down after the run exits. Run 'openclaw-test env up'
+  beforehand to keep them warm across iterative runs.
+
+  If the base image needs (re)building, any already-running bus+gateway are
+  torn down first so the new image is picked up.`;
 
 const ENV_USAGE = "usage: openclaw-test env <build|up|down>";
 
@@ -56,14 +59,21 @@ export function envCommand(packageDir: string, argv: string[]): never {
   process.exit(execComposeSync([...composeArgs, ...subArgs]));
 }
 
-export async function qaCommand(packageDir: string, argv: string[]): Promise<never> {
+export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
   const { channel, iterations, maxFailures, stopOnFail, reuseStack, all, positionals } =
-    parseQaArgs(argv);
+    parseRunArgs(argv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
-  ensureBaseImage(packageDir, { force: false });
+  const didBuild = ensureBaseImage(packageDir, { force: false });
 
   const compose = composeBaseArgs();
+  // A fresh base image means any running bus+gateway are on a stale image. Tear
+  // them down so the up below recreates them — and so the auto-down at the end
+  // fires (wereUpBefore is recomputed after the teardown).
+  if (didBuild && areBusAndGatewayRunning(compose)) {
+    const downCode = execComposeSync([...compose, "down"]);
+    if (downCode !== 0) process.exit(downCode);
+  }
   const wereUpBefore = areBusAndGatewayRunning(compose);
   if (!wereUpBefore) {
     const upCode = execComposeSync([
@@ -78,17 +88,17 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
     if (upCode !== 0) process.exit(upCode);
   }
 
-  const scenariosDir = process.env.QA_SCENARIOS_DIR as string;
+  const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
   const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH as string;
-  const artifactsDir = process.env.QA_ARTIFACTS_DIR as string;
+  const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
 
   const scenarios = all ? discoverScenarios(scenariosDir) : positionals;
   const channels = expandChannelSelection(channel, openclawConfigPath);
 
   const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
   const resultsDir = resolve(artifactsDir, baseStamp, "cells");
-  // The runner sees the artifacts dir bind-mounted at /opt/qa-artifacts (see docker-compose.yml).
-  const runnerResultsDir = `/opt/qa-artifacts/${baseStamp}/cells`;
+  // The runner sees the artifacts dir bind-mounted at /opt/openclaw-test/artifacts (see docker-compose.yml).
+  const runnerResultsDir = `/opt/openclaw-test/artifacts/${baseStamp}/cells`;
   mkdirSync(resultsDir, { recursive: true });
 
   const matrixExit = await runMatrix({
@@ -101,7 +111,7 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
     skipFirstRestart: !wereUpBefore && !reuseStack,
     composeArgs: compose,
     artifactsDir: resolve(artifactsDir, baseStamp),
-    gatewayLogsDir: process.env.QA_GATEWAY_LOGS_DIR as string,
+    gatewayLogsDir: process.env.OPENCLAW_TEST_GATEWAY_LOGS_DIR as string,
     resultsDir,
     runnerResultsDir,
     baseStamp,
@@ -116,18 +126,18 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
 const BASE_IMAGE_NAME = "paleo/openclaw-test-base";
 
 function setBaseTag(packageDir: string): void {
-  process.env.QA_RUNNER_BASE_TAG = readPackageVersion(packageDir);
+  process.env.OPENCLAW_TEST_BASE_TAG = readPackageVersion(packageDir);
 }
 
 // Build (or reuse) the consumer-agnostic base image. Tagged with the openclaw-test
-// package version so consumer Dockerfiles can pin via the QA_RUNNER_BASE_TAG
+// package version so consumer Dockerfiles can pin via the OPENCLAW_TEST_BASE_TAG
 // build arg. `force` always rebuilds — Docker's layer cache makes no-op
 // rebuilds near-free, so we skip the inspect dance on `env build`.
-function ensureBaseImage(packageDir: string, opts: { force: boolean }): void {
-  const tag = `${BASE_IMAGE_NAME}:${process.env.QA_RUNNER_BASE_TAG}`;
+function ensureBaseImage(packageDir: string, opts: { force: boolean }): boolean {
+  const tag = `${BASE_IMAGE_NAME}:${process.env.OPENCLAW_TEST_BASE_TAG}`;
   if (!opts.force) {
     const inspect = spawnSync("docker", ["image", "inspect", tag], { stdio: "ignore" });
-    if (inspect.status === 0) return;
+    if (inspect.status === 0) return false;
   }
   const dockerfile = resolve(packageDir, "Dockerfile.base");
   const args = [
@@ -147,6 +157,7 @@ function ensureBaseImage(packageDir: string, opts: { force: boolean }): void {
     console.error(`base image build failed (tag ${tag})`);
     process.exit(r.status ?? 1);
   }
+  return true;
 }
 
 function readPackageVersion(packageDir: string): string {
@@ -161,41 +172,41 @@ function readPackageVersion(packageDir: string): string {
 }
 
 function setupHostEnv(packageDir: string): void {
-  const qaDir = process.env.QA_PROJECT_DIR ?? process.cwd();
-  process.env.QA_PROJECT_DIR = qaDir;
-  process.env.QA_RUNNER_PACKAGE_DIR ??= packageDir;
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  process.env.OPENCLAW_TEST_PROJECT_DIR = projectDir;
+  process.env.OPENCLAW_TEST_PACKAGE_DIR ??= packageDir;
   if (!process.env.CLAW_UID) process.env.CLAW_UID = String(process.getuid?.() ?? 1000);
   if (!process.env.CLAW_GID) process.env.CLAW_GID = String(process.getgid?.() ?? 1000);
-  absolutizePathVarsFromEnvFile(qaDir);
-  applyPathDefaults(qaDir);
+  absolutizePathVarsFromEnvFile(projectDir);
+  applyPathDefaults(projectDir);
 }
 
-// Defaults relative to the consumer's qa dir, applied after `.env.local` so
+// Defaults relative to the consumer's project dir, applied after `.env.local` so
 // explicit values win. Doing this in the CLI (not via `${VAR:-default}` in
 // docker-compose.yml) avoids nested Compose interpolation, which is fragile
 // across versions and not portable across Compose implementations.
 const PATH_DEFAULTS: Record<string, string> = {
   OPENCLAW_CONFIG_PATH: "openclaw.json",
-  QA_SCENARIOS_DIR: "scenarios",
-  QA_ARTIFACTS_DIR: "artifacts",
-  QA_GATEWAY_LOGS_DIR: ".gateway-logs",
+  OPENCLAW_TEST_SCENARIOS_DIR: "scenarios",
+  OPENCLAW_TEST_ARTIFACTS_DIR: "artifacts",
+  OPENCLAW_TEST_GATEWAY_LOGS_DIR: ".gateway-logs",
 };
 
-function applyPathDefaults(qaDir: string): void {
+function applyPathDefaults(projectDir: string): void {
   for (const [key, rel] of Object.entries(PATH_DEFAULTS)) {
-    if (!process.env[key]) process.env[key] = resolve(qaDir, rel);
+    if (!process.env[key]) process.env[key] = resolve(projectDir, rel);
   }
 }
 
 /**
- * Absolutize path vars from `.env.local` against the consumer's qa dir.
+ * Absolutize path vars from `.env.local` against the consumer's project dir.
  *
  * Compose `include:` resolves relative bind-mount paths against the declaring
  * file (here, `node_modules/@paleo/openclaw-test/`), not the consumer's
- * qa dir. Exporting absolute paths via `process.env` sidesteps that.
+ * project dir. Exporting absolute paths via `process.env` sidesteps that.
  */
-function absolutizePathVarsFromEnvFile(qaDir: string): void {
-  const envFile = resolve(qaDir, ".env.local");
+function absolutizePathVarsFromEnvFile(projectDir: string): void {
+  const envFile = resolve(projectDir, ".env.local");
   if (!existsSync(envFile)) return;
   const parsed = parseDotenv(readFileSync(envFile, "utf8"));
   for (const key of PATH_VARS) {
@@ -203,7 +214,7 @@ function absolutizePathVarsFromEnvFile(qaDir: string): void {
     if (process.env[key]) continue;
     const raw = parsed[key];
     if (!raw) continue;
-    process.env[key] = isAbsolute(raw) ? raw : resolve(qaDir, raw);
+    process.env[key] = isAbsolute(raw) ? raw : resolve(projectDir, raw);
   }
 }
 
@@ -225,9 +236,9 @@ function parseDotenv(text: string): Record<string, string> {
 }
 
 function composeBaseArgs(): string[] {
-  const qaDir = process.env.QA_PROJECT_DIR ?? process.cwd();
-  const composeFile = resolve(qaDir, "docker-compose.yml");
-  const envFile = resolve(qaDir, ".env.local");
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  const composeFile = resolve(projectDir, "docker-compose.yml");
+  const envFile = resolve(projectDir, ".env.local");
   const args = ["compose"];
   if (existsSync(envFile)) args.push("--env-file", envFile);
   args.push("-f", composeFile);
@@ -261,7 +272,7 @@ function execComposeSync(args: string[]): number {
   return result.status ?? 1;
 }
 
-interface QaArgs {
+interface RunArgs {
   channel: string;
   iterations?: string;
   maxFailures?: string;
@@ -271,7 +282,7 @@ interface QaArgs {
   positionals: string[];
 }
 
-function parseQaArgs(argv: string[]): QaArgs {
+function parseRunArgs(argv: string[]): RunArgs {
   let channel: string | undefined;
   let iterations: string | undefined;
   let maxFailures: string | undefined;
@@ -282,7 +293,7 @@ function parseQaArgs(argv: string[]): QaArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "-h" || a === "--help") failQa();
+    if (a === "-h" || a === "--help") failRun();
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--stop-on-fail") stopOnFail = true;
@@ -292,15 +303,15 @@ function parseQaArgs(argv: string[]): QaArgs {
     else if (a?.startsWith("--iterations=")) iterations = a.slice("--iterations=".length);
     else if (a === "--max-failures") maxFailures = argv[++i];
     else if (a?.startsWith("--max-failures=")) maxFailures = a.slice("--max-failures=".length);
-    else if (a?.startsWith("--")) failQa(`error: unknown flag ${a}`);
+    else if (a?.startsWith("--")) failRun(`error: unknown flag ${a}`);
     else if (a) positionals.push(a);
   }
 
-  if (!channel || channel.length === 0) failQa("error: --channel is required");
+  if (!channel || channel.length === 0) failRun("error: --channel is required");
   if (all && positionals.length > 0)
-    failQa("error: pass either --all or a positional scenario list, not both");
+    failRun("error: pass either --all or a positional scenario list, not both");
   if (!all && positionals.length === 0)
-    failQa("error: must pass --all or one or more scenario names");
+    failRun("error: must pass --all or one or more scenario names");
 
   return {
     channel: channel as string,
@@ -313,8 +324,8 @@ function parseQaArgs(argv: string[]): QaArgs {
   };
 }
 
-function failQa(msg?: string): never {
+function failRun(msg?: string): never {
   if (msg) console.error(msg);
-  console.error(QA_USAGE);
+  console.error(RUN_USAGE);
   process.exit(1);
 }

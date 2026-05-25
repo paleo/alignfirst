@@ -2,14 +2,14 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, readCellResult } from "./cell-result.js";
-import { printSummary, printTotalCost } from "./qa-summary.js";
+import { printSummary, printTotalCost } from "./summary.js";
 
 export interface ChannelSelection {
   raw: string;
 }
 
 export function expandChannelSelection(raw: string, openclawConfigPath: string): string[] {
-  if (!raw) throw new Error("qa: --channel expects a non-empty value");
+  if (!raw) throw new Error("run: --channel expects a non-empty value");
   const cfg = JSON.parse(readFileSync(openclawConfigPath, "utf8")) as {
     channels?: Record<string, unknown>;
   };
@@ -21,7 +21,7 @@ export function expandChannelSelection(raw: string, openclawConfigPath: string):
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   if (ids.length === 0) {
-    throw new Error(`qa: --channel expects a non-empty list, got ${JSON.stringify(raw)}`);
+    throw new Error(`run: --channel expects a non-empty list, got ${JSON.stringify(raw)}`);
   }
   const unknown = ids.filter((c) => !allowed.includes(c));
   if (unknown.length > 0) {
@@ -247,7 +247,7 @@ function rotateGatewayLog(params: {
   try {
     renameSync(params.liveLogPath, dest);
   } catch (err) {
-    console.warn(`qa: failed to rotate gateway log to ${dest}:`, (err as Error).message);
+    console.warn(`run: failed to rotate gateway log to ${dest}:`, (err as Error).message);
   }
 }
 
@@ -266,7 +266,7 @@ function archiveLeftoverGatewayLog(liveLogPath: string, artifactsDir: string): v
   try {
     renameSync(liveLogPath, dest);
   } catch (err) {
-    console.warn(`qa: failed to archive leftover gateway log to ${dest}:`, (err as Error).message);
+    console.warn(`run: failed to archive leftover gateway log to ${dest}:`, (err as Error).message);
   }
 }
 
@@ -278,7 +278,7 @@ function synthesizeFailedResult(params: {
   childExit: number;
 }): CellResult {
   console.warn(
-    `qa: missing or invalid cell record at ${params.resultsPath} (runner exit ${params.childExit}) — counting as fail`,
+    `run: missing or invalid cell record at ${params.resultsPath} (runner exit ${params.childExit}) — counting as fail`,
   );
   return {
     schemaVersion: 1,

@@ -5,8 +5,8 @@
   "plugins": {
     "load": {
       "paths": [
-        "/opt/qa-src/node_modules/@paleo/openclaw-discord-mock",
-        "/opt/qa-src/node_modules/@paleo/openclaw-slack-mock"
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock",
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"
       ]
     },
     "entries": {

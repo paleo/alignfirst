@@ -36,7 +36,7 @@ import type {
   ScenarioResult,
 } from "./report.js";
 
-const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
+const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
 export type { ChannelId } from "./report.js";
 export type Conversation = QaBusConversation;
@@ -715,7 +715,7 @@ async function getCursor(): Promise<number> {
   return snap.cursor;
 }
 
-const IPC_DIR = "/var/run/qa-ipc";
+const IPC_DIR = "/var/run/openclaw-test-ipc";
 // Wait this much longer than the requested timeout before declaring the
 // host-side poll dead. Gives the watcher time to kill the child on its own
 // timeout (exitCode 124) and write the truncated response file.

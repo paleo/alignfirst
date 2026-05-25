@@ -158,8 +158,8 @@ function parseJson(body: string, raw: string): unknown {
 function getJudge(): { client: Anthropic; model: string; bareModel: string } {
   if (cached) return cached;
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set — fill in qa/.env.local");
-  const model = process.env.QA_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set — fill in your project's .env.local");
+  const model = process.env.OPENCLAW_TEST_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL;
   const bareModel = parseAnthropicModelRef(model);
   cached = { client: new Anthropic({ apiKey }), model, bareModel };
   return cached;
@@ -169,16 +169,19 @@ function parseAnthropicModelRef(ref: string): string {
   const slash = ref.indexOf("/");
   if (slash < 0) {
     throw new Error(
-      `QA_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (e.g. "anthropic/claude-haiku-4-5"); got ${JSON.stringify(ref)}`,
+      `OPENCLAW_TEST_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (e.g. "anthropic/claude-haiku-4-5"); got ${JSON.stringify(ref)}`,
     );
   }
   const provider = ref.slice(0, slash);
   const name = ref.slice(slash + 1);
   if (provider !== "anthropic") {
     throw new Error(
-      `QA_JUDGE_MODEL provider ${JSON.stringify(provider)} is not supported; only "anthropic/" is currently wired up`,
+      `OPENCLAW_TEST_JUDGE_MODEL provider ${JSON.stringify(provider)} is not supported; only "anthropic/" is currently wired up`,
     );
   }
-  if (!name) throw new Error(`QA_JUDGE_MODEL model name is empty after the "${provider}/" prefix`);
+  if (!name)
+    throw new Error(
+      `OPENCLAW_TEST_JUDGE_MODEL model name is empty after the "${provider}/" prefix`,
+    );
   return name;
 }

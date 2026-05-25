@@ -28,9 +28,10 @@ import type {
 } from "./report.js";
 import { parseArgs, type RunnerArgs } from "./runner-args.js";
 
-const ARTIFACTS_ROOT = process.env.QA_ARTIFACTS_ROOT ?? "/opt/qa-artifacts";
-const SCENARIOS_ROOT = process.env.QA_SCENARIOS_ROOT ?? "/opt/qa-src/scenarios";
-const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
+const ARTIFACTS_ROOT = process.env.OPENCLAW_TEST_ARTIFACTS_DIR ?? "/opt/openclaw-test/artifacts";
+const SCENARIOS_ROOT =
+  process.env.OPENCLAW_TEST_SCENARIOS_DIR ?? "/opt/openclaw-test/src/scenarios";
+const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);

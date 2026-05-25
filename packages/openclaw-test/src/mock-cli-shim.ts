@@ -1,5 +1,5 @@
 /**
- * Mock-CLI shim. Symlinked from `/opt/qa-mocks/bin/{git,npm,pnpm,yarn,claude}`.
+ * Mock-CLI shim. Symlinked from `/opt/openclaw-test/mocks/bin/{git,npm,pnpm,yarn,claude}`.
  * Determines its invoked name from argv[1] basename, POSTs the call to the
  * runner's /mock-cli/invoke endpoint, and replays the response locally.
  */
@@ -67,15 +67,15 @@ function post(urlStr: string, body: string): Promise<ShimResponse> {
 }
 
 async function main(): Promise<void> {
-  // The sh wrapper at /opt/qa-mocks/bin/mock-cli-shim invokes us as
+  // The sh wrapper at /opt/openclaw-test/mocks/bin/mock-cli-shim invokes us as
   //   exec node mock-cli-shim.js "$0" "$@"
-  // so argv[2] is the symlink path used to call us (e.g. /opt/qa-mocks/bin/git)
+  // so argv[2] is the symlink path used to call us (e.g. /opt/openclaw-test/mocks/bin/git)
   // and argv.slice(3) is the original argv tail.
   const invokedAs = basename(process.argv[2] ?? "");
   if (!invokedAs) die("could not determine invoked binary name from argv[2]");
 
-  const runnerUrl = process.env.QA_RUNNER_URL;
-  if (!runnerUrl) die("QA_RUNNER_URL is not set");
+  const runnerUrl = process.env.OPENCLAW_TEST_RUNNER_URL;
+  if (!runnerUrl) die("OPENCLAW_TEST_RUNNER_URL is not set");
 
   const stdin = await readStdin();
   const body = JSON.stringify({

@@ -1,8 +1,8 @@
-# Consumer-agnostic base for the QA runner stack. Built locally by the CLI
+# Consumer-agnostic base for the openclaw-test runner stack. Built locally by the CLI
 # (`openclaw-test env build`) and tagged `paleo/openclaw-test-base:<pkg-version>`.
 # Ships: Node + `shadow` (for the UID/GID dance), the mock-cli shim binary (no
 # per-command symlinks — consumers add their own), and the exec RPC watcher.
-# The consumer's `qa/Dockerfile` does `FROM paleo/openclaw-test-base:${QA_RUNNER_BASE_TAG}`
+# The consumer's project `Dockerfile` does `FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}`
 # and adds whatever else the fixture needs (e.g. git, pnpm via corepack, mock symlinks).
 # Build context: this package's directory (so `dist/mock-cli-shim.js` is COPY-able).
 
@@ -16,30 +16,30 @@ RUN (getent passwd ${CLAW_UID} && userdel -r "$(getent passwd ${CLAW_UID} | cut 
     (getent group ${CLAW_GID} && groupdel "$(getent group ${CLAW_GID} | cut -d: -f1)" || true) && \
     groupadd --gid ${CLAW_GID} claw && \
     useradd --create-home --shell /bin/sh --uid ${CLAW_UID} --gid ${CLAW_GID} claw && \
-    mkdir -p /home/claw/.openclaw /opt/qa-src /opt/qa-artifacts && \
-    chown -R claw:claw /home/claw /opt/qa-src /opt/qa-artifacts
+    mkdir -p /home/claw/.openclaw /opt/openclaw-test/src /opt/openclaw-test/artifacts && \
+    chown -R claw:claw /home/claw /opt/openclaw-test/src /opt/openclaw-test/artifacts
 
-# Mock-CLI shim under /opt/qa-mocks. OpenClaw's exec tool runs commands via
+# Mock-CLI shim under /opt/openclaw-test/mocks. OpenClaw's exec tool runs commands via
 # `/bin/sh -lc`, which sources /etc/profile; Alpine's default resets PATH to a
-# "safe" set that excludes /opt/qa-mocks/bin, so we override it. Consumers
+# "safe" set that excludes /opt/openclaw-test/mocks/bin, so we override it. Consumers
 # create the per-command symlinks (e.g. claude, gh) in their own Dockerfile.
-COPY --chown=claw:claw dist/mock-cli-shim.js /opt/qa-mocks/dist/mock-cli-shim.js
-RUN mkdir -p /opt/qa-mocks/bin && \
-    printf '#!/bin/sh\nexec node /opt/qa-mocks/dist/mock-cli-shim.js "$0" "$@"\n' > /opt/qa-mocks/bin/mock-cli-shim && \
-    chmod +x /opt/qa-mocks/bin/mock-cli-shim && \
-    chown -R claw:claw /opt/qa-mocks && \
-    printf 'export PATH="/opt/qa-mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' > /etc/profile
+COPY --chown=claw:claw dist/mock-cli-shim.js /opt/openclaw-test/mocks/dist/mock-cli-shim.js
+RUN mkdir -p /opt/openclaw-test/mocks/bin && \
+    printf '#!/bin/sh\nexec node /opt/openclaw-test/mocks/dist/mock-cli-shim.js "$0" "$@"\n' > /opt/openclaw-test/mocks/bin/mock-cli-shim && \
+    chmod +x /opt/openclaw-test/mocks/bin/mock-cli-shim && \
+    chown -R claw:claw /opt/openclaw-test/mocks && \
+    printf 'export PATH="/opt/openclaw-test/mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' > /etc/profile
 
 # Exec RPC watcher. The gateway service spawns it in the background; the runner
-# pokes requests onto the shared `qa-ipc` volume via `ctx.execInGateway(...)`.
+# pokes requests onto the shared `openclaw-test-ipc` volume via `ctx.execInGateway(...)`.
 # Pre-create the mountpoint with `claw` ownership so a fresh named volume
 # inherits it — otherwise Docker creates it as root:root and the claw-uid
 # processes get EACCES on the first write.
-COPY --chown=root:root qa-exec-watcher.mjs /usr/local/bin/qa-exec-watcher
-RUN chmod +x /usr/local/bin/qa-exec-watcher && \
-    mkdir -p /var/run/qa-ipc && chown claw:claw /var/run/qa-ipc
+COPY --chown=root:root exec-watcher.mjs /usr/local/bin/exec-watcher
+RUN chmod +x /usr/local/bin/exec-watcher && \
+    mkdir -p /var/run/openclaw-test-ipc && chown claw:claw /var/run/openclaw-test-ipc
 
 USER claw
-WORKDIR /opt/qa-src
+WORKDIR /opt/openclaw-test/src
 
 CMD ["sleep", "infinity"]
