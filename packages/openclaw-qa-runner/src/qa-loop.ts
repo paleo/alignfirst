@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, readCellResult } from "./cell-result.js";
 import { printSummary, printTotalCost } from "./qa-summary.js";
@@ -48,6 +48,8 @@ export interface MatrixOptions {
   skipFirstRestart: boolean;
   composeArgs: string[];
   artifactsDir: string;
+  /** Host-side path to the gateway logs dir (bind-mounted into the gateway). */
+  gatewayLogsDir: string;
   /** Host-side path to the results dir; the host reads `*.json` from here. */
   resultsDir: string;
   /** Container-side path passed to the runner via `--results-dir`. */
@@ -112,6 +114,9 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   const iterationWidth = opts.iterations > 1 ? String(opts.iterations).length : 0;
   let isFirstCell = true;
   let exitCode = 0;
+
+  const liveGatewayLogPath = join(opts.gatewayLogsDir, "anthropic-payload.jsonl");
+  archiveLeftoverGatewayLog(liveGatewayLogPath, opts.artifactsDir);
 
   try {
     outer: for (const scenario of opts.scenarios) {
@@ -192,6 +197,13 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
             });
           results.push(r);
 
+          rotateGatewayLog({
+            liveLogPath: liveGatewayLogPath,
+            artifactsDir: opts.artifactsDir,
+            cellDirName: r.artifactDirName,
+            fallbackPath: join(opts.resultsDir, `${leaf}.anthropic-payload.jsonl`),
+          });
+
           if (r.verdict === "fail") {
             if (opts.stopOnFail) {
               break outer;
@@ -215,6 +227,47 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   if (exitCode !== 0) return exitCode;
   const anyFail = results.some((r) => r.verdict === "fail");
   return anyFail ? 1 : 0;
+}
+
+/**
+ * Move the live gateway payload log into the just-finished cell's artifact dir.
+ * Rename is atomic and O(1); the gateway's writer reopens by path per write, so
+ * the next write recreates a fresh file at the live path.
+ */
+function rotateGatewayLog(params: {
+  liveLogPath: string;
+  artifactsDir: string;
+  cellDirName: string;
+  fallbackPath: string;
+}): void {
+  if (!existsSync(params.liveLogPath)) return;
+  const dest = params.cellDirName
+    ? join(params.artifactsDir, params.cellDirName, "anthropic-payload.jsonl")
+    : params.fallbackPath;
+  try {
+    renameSync(params.liveLogPath, dest);
+  } catch (err) {
+    console.warn(`qa: failed to rotate gateway log to ${dest}:`, (err as Error).message);
+  }
+}
+
+/**
+ * Archive any pre-existing live gateway log left behind by a prior session, so
+ * this matrix's first cell starts with a clean file.
+ */
+function archiveLeftoverGatewayLog(liveLogPath: string, artifactsDir: string): void {
+  if (!existsSync(liveLogPath)) return;
+  try {
+    if (statSync(liveLogPath).size === 0) return;
+  } catch {
+    return;
+  }
+  const dest = join(artifactsDir, "anthropic-payload.leftover.jsonl");
+  try {
+    renameSync(liveLogPath, dest);
+  } catch (err) {
+    console.warn(`qa: failed to archive leftover gateway log to ${dest}:`, (err as Error).message);
+  }
 }
 
 function synthesizeFailedResult(params: {

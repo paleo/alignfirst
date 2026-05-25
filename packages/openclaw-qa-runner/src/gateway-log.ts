@@ -65,7 +65,11 @@ export function readGatewayCostFor(opts: { startTsIso: string; conversationId?: 
   let turns = 0;
   for (const entry of readGatewayLog()) {
     if (entry.stage !== "usage" || !entry.ts || entry.ts < opts.startTsIso) continue;
-    if (opts.conversationId && !entry.sessionKey?.toLowerCase().includes(opts.conversationId.toLowerCase())) continue;
+    if (
+      opts.conversationId &&
+      !entry.sessionKey?.toLowerCase().includes(opts.conversationId.toLowerCase())
+    )
+      continue;
     const total = entry.usage?.cost?.total;
     if (typeof total === "number") {
       cost += total;

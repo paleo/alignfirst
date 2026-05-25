@@ -1,8 +1,4 @@
-import {
-  jsonResult,
-  readNumberParam,
-  readStringParam,
-} from "openclaw/plugin-sdk/channel-actions";
+import { jsonResult, readNumberParam, readStringParam } from "openclaw/plugin-sdk/channel-actions";
 import { extractToolSend } from "openclaw/plugin-sdk/tool-send";
 import { Type } from "typebox";
 import type { ChannelMockAccountHelpers } from "./accounts.js";

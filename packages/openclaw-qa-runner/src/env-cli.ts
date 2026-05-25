@@ -101,6 +101,7 @@ export async function qaCommand(packageDir: string, argv: string[]): Promise<nev
     skipFirstRestart: !wereUpBefore && !reuseStack,
     composeArgs: compose,
     artifactsDir: resolve(artifactsDir, baseStamp),
+    gatewayLogsDir: process.env.QA_GATEWAY_LOGS_DIR as string,
     resultsDir,
     runnerResultsDir,
     baseStamp,
