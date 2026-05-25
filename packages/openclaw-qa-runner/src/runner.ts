@@ -1,14 +1,8 @@
-import { randomBytes } from "node:crypto";
-import {
-  createWriteStream,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
-import { join } from "node:path";
 import { pollQaBus } from "@paleo/openclaw-channel-mock-core";
+import { randomBytes } from "node:crypto";
+import { createWriteStream, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { writeCellResult } from "./cell-result.js";
 import {
   type ChannelId,
   createContext,
@@ -23,7 +17,6 @@ import {
   readGatewayCostFor,
   waitForGatewayUsage,
 } from "./gateway-log.js";
-import type { JudgeUsage } from "./judge.js";
 import { startMockCliServer } from "./mock-cli-server.js";
 import type {
   AgentToolCall,
@@ -32,232 +25,130 @@ import type {
   ScenarioFailure,
   ScenarioReport,
 } from "./report.js";
-import { parseArgs } from "./runner-args.js";
+import { parseArgs, type RunnerArgs } from "./runner-args.js";
 
 const ARTIFACTS_ROOT = process.env.QA_ARTIFACTS_ROOT ?? "/opt/qa-artifacts";
 const SCENARIOS_ROOT = process.env.QA_SCENARIOS_ROOT ?? "/opt/qa-src/scenarios";
 const BUS_URL = process.env.QA_BUS_URL ?? "http://bus:43123";
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
-  const opts = parseArgs(argv);
-  const scenarios = opts.all ? discoverScenarios() : opts.scenarios;
-  if (scenarios.length === 0) throw new Error("no scenarios discovered");
-  const allowed = discoverAllowedChannels();
-  const channels: ChannelId[] =
-    opts.channelSelection.kind === "all" ? allowed : opts.channelSelection.ids;
-  const unknown = channels.filter((c) => !allowed.includes(c));
-  if (unknown.length > 0) {
-    throw new Error(`unknown channel(s): ${unknown.join(", ")} — allowed: ${allowed.join(", ")}`);
-  }
-  const { iterations, maxFailures } = opts;
-
+  const args = parseArgs(argv);
   console.log(
-    `runner: channels=[${channels.join(",")}] scenarios=[${scenarios.join(",")}] iterations=${iterations} maxFailures=${maxFailures}`,
+    `runner: scenario=${args.scenario} channel=${args.channel} iter=${args.iterationIndex}/${args.iterationWidth}`,
   );
+  const exitCode = await runCell(args);
+  process.exit(exitCode);
+}
 
+async function runCell(args: RunnerArgs): Promise<number> {
   const mockCliServer = startMockCliServer();
-  const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const iterationWidth = String(iterations).length;
-  const results: TaskResult[] = [];
-  const aggregates: PairAggregate[] = [];
-
   try {
-    for (const scenarioId of scenarios) {
-      for (const channel of channels) {
-        const agg = await runPair({
-          scenarioId,
-          channel,
-          baseStamp,
-          iterations,
-          iterationWidth,
-          maxFailures,
-          mockCliServer,
-          results,
-        });
-        aggregates.push(agg);
-      }
+    const setup = setupRun(args);
+    const {
+      ctx,
+      internals,
+      outDir,
+      conversationId,
+      accountId,
+      startedAtIso,
+      startedAtMs,
+      logStream,
+    } = setup;
+
+    mockCliServer.bind({
+      conversationId,
+      handlers: internals.getMockHandlers(),
+      emitCliMock: internals.emitCliMock,
+      isScenarioEnded: () => internals.isScenarioEnded(),
+    });
+
+    const initialCursor = await ctx.getCursor();
+    const subscription = startOutboundSubscription({
+      accountId,
+      conversationId,
+      initialCursor,
+      onMessage: internals.emitOutboundReceived,
+    });
+
+    const { failure } = await executeScenario(args.scenario, ctx);
+
+    await subscription.stop();
+    await mockCliServer.release();
+
+    const finishedAtMs = Date.now();
+    const durationMs = finishedAtMs - startedAtMs;
+    const finishedAtIso = new Date(finishedAtMs).toISOString();
+
+    const { entries, judgeUsages, result } = internals.finalize({ failure });
+    await closeStream(logStream);
+
+    await waitForGatewayUsage({ conversationId, startedAtIso });
+    const { cost: gatewayCostUsd, turns: gatewayTurns } = readGatewayCostFor({
+      startTsIso: startedAtIso,
+      conversationId,
+    });
+    const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
+
+    const agentCalls = parseAgentToolCalls({ conversationId, startedAtIso });
+    pairAgentCallsWithCliMocks(agentCalls, entries);
+    if (agentCalls.length === 0 && !gatewayLogExists()) {
+      entries.push({
+        seq: entries.length,
+        ts: finishedAtIso,
+        kind: "scenarioLog",
+        message: `agentToolCall parsing skipped: ${GATEWAY_LOG_PATH} not found`,
+      });
     }
+
+    const merged = mergeTimeline(entries, agentCalls);
+    const report: ScenarioReport = {
+      schemaVersion: 1,
+      scenario: args.scenario,
+      channel: args.channel,
+      conversationId,
+      accountId,
+      startedAt: startedAtIso,
+      finishedAt: finishedAtIso,
+      durationMs,
+      result,
+      entries: merged,
+      cost: {
+        gatewayUsd: gatewayCostUsd,
+        judgeUsd,
+        totalUsd: gatewayCostUsd + judgeUsd,
+        gatewayTurns,
+      },
+    };
+
+    // Write the cell record BEFORE the artifact-dir rename, to a stable sibling path.
+    const leafBase = basename(outDir);
+    const resultsPath = join(args.resultsDir, `${leafBase}.json`);
+    mkdirSync(args.resultsDir, { recursive: true });
+
+    const finalOutDir = writeReportArtifacts(outDir, result.verdict, report);
+
+    writeCellResult(resultsPath, {
+      schemaVersion: 1,
+      scenarioId: args.scenario,
+      channel: args.channel,
+      iterationIndex: args.iterationIndex,
+      verdict: result.verdict,
+      durationMs,
+      conversationId,
+      artifactDirName: basename(finalOutDir),
+      gatewayCostUsd,
+      gatewayTurns,
+      judgeUsd,
+      judgeUsages,
+    });
+
+    console.log(
+      `[${args.channel}] ${args.scenario} ${result.verdict} in ${durationMs}ms — ${finalOutDir}`,
+    );
+    return result.verdict === "pass" ? 0 : 1;
   } finally {
     await mockCliServer.close();
   }
-
-  printSummary(aggregates, baseStamp);
-  printTotalCost(results);
-  process.exit(anyPairFailed(aggregates) ? 1 : 0);
-}
-
-interface RunPairParams {
-  scenarioId: string;
-  channel: ChannelId;
-  baseStamp: string;
-  iterations: number;
-  iterationWidth: number;
-  maxFailures: number;
-  mockCliServer: ReturnType<typeof startMockCliServer>;
-  results: TaskResult[];
-}
-
-interface PairAggregate {
-  scenarioId: string;
-  channel: ChannelId;
-  runCount: number;
-  passCount: number;
-  durationSumMs: number;
-  stoppedAfter: number | undefined;
-}
-
-async function runPair(params: RunPairParams): Promise<PairAggregate> {
-  const { scenarioId, channel, iterations, maxFailures, results } = params;
-  const agg: PairAggregate = {
-    scenarioId,
-    channel,
-    runCount: 0,
-    passCount: 0,
-    durationSumMs: 0,
-    stoppedAfter: undefined,
-  };
-  let failures = 0;
-  for (let iter = 1; iter <= iterations; ++iter) {
-    const r = await runOne({
-      baseStamp: params.baseStamp,
-      scenarioId,
-      channel,
-      iteration: iter,
-      iterationWidth: params.iterationWidth,
-      iterations,
-      mockCliServer: params.mockCliServer,
-    });
-    results.push(r);
-    agg.runCount += 1;
-    agg.durationSumMs += r.durationMs;
-    if (r.verdict === "pass") {
-      agg.passCount += 1;
-    } else {
-      failures += 1;
-      if (failures > maxFailures) {
-        agg.stoppedAfter = failures;
-        break;
-      }
-    }
-  }
-  return agg;
-}
-
-interface RunOneParams {
-  baseStamp: string;
-  scenarioId: string;
-  channel: ChannelId;
-  iteration: number;
-  iterationWidth: number;
-  iterations: number;
-  mockCliServer: ReturnType<typeof startMockCliServer>;
-}
-
-interface TaskResult {
-  scenarioId: string;
-  channel: ChannelId;
-  conversationId: string;
-  verdict: "pass" | "fail";
-  durationMs: number;
-  outDir: string;
-  judgeUsages: JudgeUsage[];
-  gatewayCostUsd: number;
-  gatewayTurns: number;
-}
-
-async function runOne(params: RunOneParams): Promise<TaskResult> {
-  const setup = setupRun(params);
-  const {
-    ctx,
-    internals,
-    outDir,
-    conversationId,
-    accountId,
-    startedAtIso,
-    startedAtMs,
-    logStream,
-  } = setup;
-
-  params.mockCliServer.bind({
-    conversationId,
-    handlers: internals.getMockHandlers(),
-    emitCliMock: internals.emitCliMock,
-    isScenarioEnded: () => internals.isScenarioEnded(),
-  });
-
-  const initialCursor = await ctx.getCursor();
-  const subscription = startOutboundSubscription({
-    accountId,
-    conversationId,
-    initialCursor,
-    onMessage: internals.emitOutboundReceived,
-  });
-
-  const { failure } = await executeScenario(params.scenarioId, ctx);
-
-  await subscription.stop();
-  await params.mockCliServer.release();
-
-  const finishedAtMs = Date.now();
-  const durationMs = finishedAtMs - startedAtMs;
-  const finishedAtIso = new Date(finishedAtMs).toISOString();
-
-  const { entries, judgeUsages, result } = internals.finalize({ failure });
-  await closeStream(logStream);
-
-  await waitForGatewayUsage({ conversationId, startedAtIso });
-  const { cost: gatewayCostUsd, turns: gatewayTurns } = readGatewayCostFor({
-    startTsIso: startedAtIso,
-    conversationId,
-  });
-  const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
-
-  const agentCalls = parseAgentToolCalls({ conversationId, startedAtIso });
-  pairAgentCallsWithCliMocks(agentCalls, entries);
-  if (agentCalls.length === 0 && !gatewayLogExists()) {
-    entries.push({
-      seq: entries.length,
-      ts: finishedAtIso,
-      kind: "scenarioLog",
-      message: `agentToolCall parsing skipped: ${GATEWAY_LOG_PATH} not found`,
-    });
-  }
-
-  const merged = mergeTimeline(entries, agentCalls);
-  const report: ScenarioReport = {
-    schemaVersion: 1,
-    scenario: params.scenarioId,
-    channel: params.channel,
-    conversationId,
-    accountId,
-    startedAt: startedAtIso,
-    finishedAt: finishedAtIso,
-    durationMs,
-    result,
-    entries: merged,
-    cost: {
-      gatewayUsd: gatewayCostUsd,
-      judgeUsd,
-      totalUsd: gatewayCostUsd + judgeUsd,
-      gatewayTurns,
-    },
-  };
-  const finalOutDir = writeReportArtifacts(outDir, result.verdict, report);
-
-  console.log(
-    `[${params.channel}] ${params.scenarioId} ${result.verdict} in ${durationMs}ms — ${finalOutDir}`,
-  );
-  return {
-    scenarioId: params.scenarioId,
-    channel: params.channel,
-    conversationId,
-    verdict: result.verdict,
-    durationMs,
-    outDir: finalOutDir,
-    judgeUsages,
-    gatewayCostUsd,
-    gatewayTurns,
-  };
 }
 
 interface RunSetup {
@@ -271,15 +162,15 @@ interface RunSetup {
   logStream: ReturnType<typeof createWriteStream>;
 }
 
-function setupRun(params: RunOneParams): RunSetup {
-  const conversationId = `${params.scenarioId}-${params.channel}-${shortRand()}`;
-  const accountId: ChannelId = params.channel;
+function setupRun(args: RunnerArgs): RunSetup {
+  const conversationId = `${args.scenario}-${args.channel}-${shortRand()}`;
+  const accountId: ChannelId = args.channel;
   const iterSuffix =
-    params.iterations > 1
-      ? `-${String(params.iteration).padStart(params.iterationWidth, "0")}`
+    args.iterationWidth > 0
+      ? `-${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
       : "";
-  const leaf = `${params.scenarioId}-${params.channel}${iterSuffix}`;
-  const outDir = join(ARTIFACTS_ROOT, params.baseStamp, leaf);
+  const leaf = `${args.scenario}-${args.channel}${iterSuffix}`;
+  const outDir = join(ARTIFACTS_ROOT, args.baseStamp, leaf);
   mkdirSync(outDir, { recursive: true });
 
   const startedAtIso = new Date().toISOString();
@@ -288,7 +179,7 @@ function setupRun(params: RunOneParams): RunSetup {
   const emitSink = (entry: ReportEntry) => {
     logStream.write(`${JSON.stringify(entry)}\n`);
   };
-  const { ctx, internals } = createContext({ channel: params.channel, conversationId, emitSink });
+  const { ctx, internals } = createContext({ channel: args.channel, conversationId, emitSink });
   return {
     ctx,
     internals,
@@ -377,11 +268,6 @@ async function executeScenario(
   }
 }
 
-/**
- * Best-effort: pair each agent tool call that shelled out to a mocked CLI
- * with the corresponding cliMock entry (matched in order of occurrence) and
- * attach the real ts as `inferredStartedAt`.
- */
 function pairAgentCallsWithCliMocks(agentCalls: AgentToolCall[], entries: ReportEntry[]): void {
   const cliMockQueues = new Map<string, string[]>();
   for (const e of entries) {
@@ -409,12 +295,6 @@ function leadingCli(input: unknown): string | undefined {
   return m[1].split("/").pop();
 }
 
-/**
- * Merge live entries with parsed agent tool calls, sort by ts, re-assign seq.
- * agentToolCall entries carry a synthetic end-of-turn ts (gateway log has no
- * per-tool ts); tie-break them before sibling live entries so the tool call
- * appears before its observed side effects.
- */
 function mergeTimeline(entries: ReportEntry[], agentCalls: AgentToolCall[]): ReportEntry[] {
   const agentEntries: AgentToolCallEntry[] = agentCalls.map((call) => ({
     seq: -1,
@@ -456,59 +336,8 @@ function closeStream(stream: ReturnType<typeof createWriteStream>): Promise<void
   });
 }
 
-function discoverScenarios(): string[] {
-  return readdirSync(SCENARIOS_ROOT)
-    .filter((f) => f.endsWith(".ts"))
-    .map((f) => f.slice(0, -".ts".length))
-    .sort();
-}
-
 function shortRand(): string {
   return randomBytes(3).toString("hex");
-}
-
-function discoverAllowedChannels(): ChannelId[] {
-  const configPath = process.env.OPENCLAW_CONFIG_PATH ?? "/home/claw/.openclaw/openclaw.json";
-  const raw = readFileSync(configPath, "utf8");
-  const cfg = JSON.parse(raw) as { channels?: Record<string, unknown> };
-  const ids = Object.keys(cfg.channels ?? {});
-  if (ids.length === 0) throw new Error(`no channels declared in ${configPath}`);
-  return ids;
-}
-
-function printSummary(aggregates: PairAggregate[], baseStamp: string): void {
-  console.log("");
-  console.log("Summary:");
-  for (const a of aggregates) {
-    const passed = a.passCount === a.runCount && a.stoppedAfter === undefined;
-    const verdict = (passed ? "PASS" : "FAIL").padEnd(4, " ");
-    const counts = `${a.passCount}/${a.runCount}`.padStart(7, " ");
-    const trailer =
-      a.stoppedAfter !== undefined ? `  (stopped after ${a.stoppedAfter} failures)` : "";
-    console.log(
-      `  ${verdict}  ${a.channel.padEnd(12, " ")}  ${a.scenarioId.padEnd(40, " ")}  ${counts}  in ${a.durationSumMs}ms${trailer}`,
-    );
-  }
-  console.log("");
-  console.log("Artifacts:");
-  console.log(`  ${join(ARTIFACTS_ROOT, baseStamp)}`);
-}
-
-function printTotalCost(results: TaskResult[]): void {
-  const judgeCost = results
-    .flatMap((r) => r.judgeUsages)
-    .reduce((sum, u) => sum + judgeCostUsd(u), 0);
-  const gatewayCost = results.reduce((sum, r) => sum + r.gatewayCostUsd, 0);
-  const gatewayTurns = results.reduce((sum, r) => sum + r.gatewayTurns, 0);
-  const totalCost = gatewayCost + judgeCost;
-  console.log("");
-  console.log(
-    `Total LLM cost: $${totalCost.toFixed(4)} (gateway: $${gatewayCost.toFixed(4)} over ${gatewayTurns} turns, judge: $${judgeCost.toFixed(4)})`,
-  );
-}
-
-function anyPairFailed(aggregates: PairAggregate[]): boolean {
-  return aggregates.some((a) => a.passCount !== a.runCount || a.stoppedAfter !== undefined);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

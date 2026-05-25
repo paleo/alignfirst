@@ -99,7 +99,12 @@ export interface ScenarioContext {
   poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult>;
   waitForOutbound(
     predicate: (m: BusMessage) => boolean,
-    opts: { timeoutMs?: number; sinceCursor: number },
+    opts: {
+      sinceCursor: number;
+      timeoutMs?: number;
+      failFastUnmatchedOutbounds?: number | false;
+      failFastCliMockGraceMs?: number | false;
+    },
   ): Promise<WaitForOutboundResult>;
   expectNoOutbound(
     predicate: (m: BusMessage) => boolean,
@@ -205,6 +210,7 @@ export function createContext(params: {
   const outboundByMessageId = new Map<string, OutboundReceivedEntry>();
   let seq = 0;
   let currentEntry: ActionEntry | undefined;
+  let lastCliMock: { atMs: number; entry: CliMockEntry } | undefined;
   let scenarioEnded = false;
 
   const nextSeqTs = (): { seq: number; ts: string } => ({
@@ -224,6 +230,9 @@ export function createContext(params: {
 
   const setCurrentEntry = <T extends ActionEntry>(entry: T): T => {
     currentEntry = entry;
+    if (entry.kind === "cliMock") {
+      lastCliMock = { atMs: Date.now(), entry: entry as CliMockEntry };
+    }
     return entry;
   };
 
@@ -293,7 +302,15 @@ export function createContext(params: {
     sendInbound: (input) => sendInbound({ emit, nextSeqTs }, accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
     waitForOutbound: (predicate, opts) =>
-      waitForOutbound({ accountId, awaitEntry: (id) => awaitOutboundEntry(id) }, predicate, opts),
+      waitForOutbound(
+        {
+          accountId,
+          awaitEntry: (id) => awaitOutboundEntry(id),
+          getLastCliMock: () => lastCliMock,
+        },
+        predicate,
+        opts,
+      ),
     expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
     assertRegex: (actual, pattern, label) =>
       assertRegex({ getCurrentEntry: () => currentEntry, reemit }, actual, pattern, label),
@@ -469,28 +486,106 @@ async function poll(
   return { messages, nextCursor: r.cursor };
 }
 
-async function waitForOutbound(
-  deps: { accountId: ChannelId; awaitEntry: (id: string) => Promise<OutboundReceivedEntry> },
+export interface WaitForOutboundDeps {
+  accountId: ChannelId;
+  awaitEntry: (id: string) => Promise<OutboundReceivedEntry>;
+  getLastCliMock: () => { atMs: number; entry: CliMockEntry } | undefined;
+}
+
+export interface WaitForOutboundOpts {
+  sinceCursor: number;
+  timeoutMs?: number;
+  failFastUnmatchedOutbounds?: number | false;
+  failFastCliMockGraceMs?: number | false;
+  pollImpl?: (
+    accountId: ChannelId,
+    opts: { sinceCursor: number; timeoutMs?: number },
+  ) => Promise<PollResult>;
+  nowImpl?: () => number;
+}
+
+export async function waitForOutbound(
+  deps: WaitForOutboundDeps,
   predicate: (m: BusMessage) => boolean,
-  opts: { timeoutMs?: number; sinceCursor: number },
+  opts: WaitForOutboundOpts,
 ): Promise<WaitForOutboundResult> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
-  const deadline = Date.now() + timeoutMs;
+  const maxUnmatched = opts.failFastUnmatchedOutbounds ?? 3;
+  const cliMockGraceMs = opts.failFastCliMockGraceMs ?? 10_000;
+  const pollFn = opts.pollImpl ?? poll;
+  const now = opts.nowImpl ?? Date.now;
+  const deadline = now() + timeoutMs;
   let cursor = opts.sinceCursor;
-  while (Date.now() < deadline) {
-    const remaining = Math.max(0, deadline - Date.now());
-    const { messages, nextCursor } = await poll(deps.accountId, {
+  let unmatched = 0;
+  let lastUnmatched: BusMessage | undefined;
+
+  while (now() < deadline) {
+    const remaining = Math.max(0, deadline - now());
+    const { messages, nextCursor } = await pollFn(deps.accountId, {
       sinceCursor: cursor,
       timeoutMs: Math.min(5000, remaining),
     });
     cursor = nextCursor;
+
     const match = messages.find(predicate);
     if (match) {
       const entry = await deps.awaitEntry(match.id);
       return { match, entry, nextCursor };
     }
+
+    if (messages.length > 0) {
+      unmatched += messages.length;
+      lastUnmatched = messages[messages.length - 1];
+      if (maxUnmatched !== false && unmatched >= maxUnmatched) {
+        throw await unmatchedFastFailError(deps, unmatched, lastUnmatched);
+      }
+    }
+
+    if (cliMockGraceMs !== false) {
+      const last = deps.getLastCliMock();
+      if (last && now() - last.atMs >= cliMockGraceMs) {
+        throw cliMockGraceFastFailError(cliMockGraceMs, last.entry);
+      }
+    }
   }
   throw new AssertionError(`waitForOutbound timed out after ${timeoutMs}ms`);
+}
+
+function truncate(text: string, max = 80): string {
+  const flat = text.replace(/\s+/g, " ");
+  if (flat.length <= max) return flat;
+  return `${flat.slice(0, max - 1)}…`;
+}
+
+async function unmatchedFastFailError(
+  deps: WaitForOutboundDeps,
+  count: number,
+  msg: BusMessage,
+): Promise<AssertionError> {
+  const entry = await raceTimeout(deps.awaitEntry(msg.id), 50);
+  const seqOrId = entry ? `seq=${entry.seq}` : `msg=${msg.id}`;
+  const thread = msg.threadId !== undefined ? `threadId=${msg.threadId}` : "no threadId";
+  const text = truncate(msg.text);
+  return new AssertionError(
+    `waitForOutbound: agent posted ${count} outbounds but none matched the predicate\n` +
+      `  observed: outbound ${seqOrId} (${thread}, text=${JSON.stringify(text)})`,
+  );
+}
+
+function cliMockGraceFastFailError(graceMs: number, entry: CliMockEntry): AssertionError {
+  const cli = entry.call.cli;
+  const argvHead = truncate(entry.call.argv.join(" "));
+  return new AssertionError(
+    `waitForOutbound: agent invoked a mocked CLI and did not produce a matching outbound within ${graceMs}ms\n` +
+      `  observed: cliMock ${cli} (argv head: ${JSON.stringify(argvHead)}), no outbound followed`,
+  );
+}
+
+function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race<T | undefined>([
+    p,
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms)),
+  ]);
 }
 
 async function expectNoOutbound(

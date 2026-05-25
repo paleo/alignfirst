@@ -85,11 +85,14 @@ npm run qa -- --channel all --all                                  # every scena
 npm run qa -- --channel discord-mock <scenario>                    # restrict to one channel
 npm run qa -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run qa -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
+npm run qa -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
 npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
 npm run env:down                                                   # tear down a warm stack
 ```
 
 `qa` auto-starts `bus` + `gateway` via Docker Compose if they aren't running, and auto-`down`s them after the run completes. If you've explicitly run `env:up` beforehand, `qa` leaves the stack up so subsequent runs are fast. Ctrl-C is forwarded to the running container; auto-`down` still runs.
+
+**Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `qa` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
 
 `env:build` first builds the base image (`paleo/openclaw-qa-runner-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `qa` skip the base build when the tag already exists.
 
@@ -104,7 +107,9 @@ From `@paleo/openclaw-qa-runner` (`src/context.ts`):
 - `channel`, `conversationId`, `accountId` — per-task isolation. Use `ctx.conversationId` everywhere; never hard-code a value.
 - `sendInbound(input)` → `{ message, entry }`. Push an inbound on the bus; `entry` is the `inboundSent` `ActionEntry` to which assertions/logs can be attached.
 - `poll`, `expectNoOutbound` — bus consumers.
-- `waitForOutbound(predicate, opts)` → `{ match, entry, nextCursor }`. `entry` is the `outboundReceived` `ActionEntry`; pass it as `attachTo` to bind judges and attached logs to that specific outbound.
+- `waitForOutbound(predicate, opts)` → `{ match, entry, nextCursor }`. `entry` is the `outboundReceived` `ActionEntry`; pass it as `attachTo` to bind judges and attached logs to that specific outbound. Two fail-fast signals are on by default; pass `false` per option to disable:
+  - `failFastUnmatchedOutbounds` (default `3`) — fail when this many outbounds arrive without satisfying the predicate.
+  - `failFastCliMockGraceMs` (default `10_000`) — fail when this long elapses after the most recent `cliMock` with no matching outbound. Each new `cliMock` resets the timer.
 - `assertRegex`, `assertEqual`, `assertLength` — structural assertions. Silent on success; on failure, the assertion record and a `failure` field land on the **current entry** (most recent agent-action entry).
 - `judgeLLM({ attachTo?, message, rubric, label })` — Anthropic-direct judgement. Pass `attachTo: entry` to bind the result to a specific action; otherwise it attaches to the **current entry**. `inboundSent` (scenario-emitted) never becomes the current entry — only agent-action entries (`outboundReceived`, `cliMock`, `agentToolCall`) do.
 - `mockCli(name, handler)` — intercepts the gateway's calls to `git` / `npm` / `pnpm` / `yarn` / `claude`. Unregistered calls fail the scenario with `failure.source = "cliMock"`.
@@ -128,6 +133,8 @@ Defaults to `anthropic/claude-haiku-4-5`. Override via `QA_JUDGE_MODEL` on the `
 - `report.json` — final `ScenarioReport`. Merges `scenario-log.jsonl` with `agentToolCall` entries from the gateway payload log; adds per-scenario `cost`.
 
 `<NN>` is the iteration index (omitted when `--iterations 1`). `<VERDICT>` is `PASS` / `FAIL`, applied by **renaming the directory** after `report.json` is written. A directory with no verdict suffix means the run is pending or crashed before rename.
+
+Each cell also writes `artifacts/<runStamp>/cells/<scenario>-<channel>[-<NN>].json` (the `CellResult` host-aggregation contract — `schemaVersion: 1`, verdict, cost, durations, judge usages). The host loop reads these to produce the summary and total-cost lines independently of the artifact-dir rename. A missing or invalid file counts the cell as a failure with a logged warning.
 
 Authoritative types: `src/report.ts`.
 

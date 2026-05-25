@@ -1,66 +1,51 @@
-export type ChannelSelection = { kind: "all" } | { kind: "list"; ids: string[] };
-
 export interface RunnerArgs {
-  channelSelection: ChannelSelection;
-  scenarios: string[];
-  all: boolean;
-  iterations: number;
-  maxFailures: number;
+  scenario: string;
+  channel: string;
+  iterationIndex: number;
+  iterationWidth: number;
+  baseStamp: string;
+  resultsDir: string;
 }
 
 export function parseArgs(argv: string[]): RunnerArgs {
-  let channelSelection: ChannelSelection | undefined;
-  let all = false;
-  const scenarios: string[] = [];
-  let iterations = 1;
-  let maxFailures: number | undefined;
+  let scenario: string | undefined;
+  let channel: string | undefined;
+  let iterationIndex: number | undefined;
+  let iterationWidth: number | undefined;
+  let baseStamp: string | undefined;
+  let resultsDir: string | undefined;
+
   for (let i = 0; i < argv.length; ++i) {
     const a = argv[i] as string;
-    if (a === "--channel") {
-      channelSelection = parseChannel(argv[++i]);
-    } else if (a.startsWith("--channel=")) {
-      channelSelection = parseChannel(a.slice("--channel=".length));
-    } else if (a === "--iterations") {
-      iterations = parseNonNegativeInt(argv[++i], "--iterations", 1);
-    } else if (a.startsWith("--iterations=")) {
-      iterations = parseNonNegativeInt(a.slice("--iterations=".length), "--iterations", 1);
-    } else if (a === "--max-failures") {
-      maxFailures = parseNonNegativeInt(argv[++i], "--max-failures", 0);
-    } else if (a.startsWith("--max-failures=")) {
-      maxFailures = parseNonNegativeInt(a.slice("--max-failures=".length), "--max-failures", 0);
-    } else if (a === "--all") {
-      all = true;
-    } else if (a.startsWith("--")) {
-      throw new Error(`unknown flag: ${a}`);
+    const eat = (flag: string): string => {
+      if (a === flag) return argv[++i] ?? "";
+      return a.slice(`${flag}=`.length);
+    };
+    if (a === "--scenario" || a.startsWith("--scenario=")) {
+      scenario = eat("--scenario");
+    } else if (a === "--channel" || a.startsWith("--channel=")) {
+      channel = eat("--channel");
+    } else if (a === "--iteration-index" || a.startsWith("--iteration-index=")) {
+      iterationIndex = parseNonNegativeInt(eat("--iteration-index"), "--iteration-index", 1);
+    } else if (a === "--iteration-width" || a.startsWith("--iteration-width=")) {
+      iterationWidth = parseNonNegativeInt(eat("--iteration-width"), "--iteration-width", 0);
+    } else if (a === "--base-stamp" || a.startsWith("--base-stamp=")) {
+      baseStamp = eat("--base-stamp");
+    } else if (a === "--results-dir" || a.startsWith("--results-dir=")) {
+      resultsDir = eat("--results-dir");
     } else {
-      scenarios.push(a);
+      throw new Error(`runner: unknown argument: ${a}`);
     }
   }
-  if (channelSelection === undefined) {
-    throw new Error("runner: --channel <id|id,id,…|all> is required");
-  }
-  if (all && scenarios.length > 0) {
-    throw new Error("runner: pass either --all or a scenario list, not both");
-  }
-  if (!all && scenarios.length === 0) {
-    throw new Error("runner: must pass --all or one or more scenario names");
-  }
-  return { channelSelection, scenarios, all, iterations, maxFailures: maxFailures ?? 1 };
-}
 
-function parseChannel(raw: string | undefined): ChannelSelection {
-  if (raw === undefined || raw === "") {
-    throw new Error("runner: --channel expects a non-empty value");
-  }
-  if (raw === "all") return { kind: "all" };
-  const ids = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  if (ids.length === 0) {
-    throw new Error(`runner: --channel expects a non-empty list, got ${JSON.stringify(raw)}`);
-  }
-  return { kind: "list", ids };
+  if (!scenario) throw new Error("runner: --scenario <id> is required");
+  if (!channel) throw new Error("runner: --channel <id> is required");
+  if (iterationIndex === undefined) throw new Error("runner: --iteration-index <n> is required");
+  if (iterationWidth === undefined) throw new Error("runner: --iteration-width <w> is required");
+  if (!baseStamp) throw new Error("runner: --base-stamp <iso> is required");
+  if (!resultsDir) throw new Error("runner: --results-dir <path> is required");
+
+  return { scenario, channel, iterationIndex, iterationWidth, baseStamp, resultsDir };
 }
 
 function parseNonNegativeInt(raw: string | undefined, flag: string, min: number): number {

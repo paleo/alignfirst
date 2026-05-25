@@ -8,6 +8,18 @@ const POLL_INTERVAL_MS = 100;
 
 mkdirSync(IPC_DIR, { recursive: true });
 
+// Sweep stale IPC artifacts left by a killed predecessor in the (named-volume,
+// persistent) IPC dir, so the next runner cycle starts clean.
+try {
+  for (const f of readdirSync(IPC_DIR)) {
+    if (f.endsWith(".req.json") || f.endsWith(".req.json.processing") || f.endsWith(".res.json")) {
+      try {
+        rmSync(`${IPC_DIR}/${f}`, { force: true });
+      } catch {}
+    }
+  }
+} catch {}
+
 async function main() {
   for (;;) {
     let entries;

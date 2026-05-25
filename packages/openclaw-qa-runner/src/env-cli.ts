@@ -1,6 +1,7 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { discoverScenarios, expandChannelSelection, runMatrix } from "./qa-loop.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's qa/ dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
@@ -16,11 +17,17 @@ const PATH_VARS = [
 type EnvSubcommand = "build" | "up" | "down";
 
 const QA_USAGE = `usage: openclaw-qa-runner qa --channel <id|id,id,…|all> [<scenario> ...] [--all]
-                                  [--iterations N] [--max-failures N]
+                                  [--iterations N] [--max-failures N] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1).
+  --reuse-stack       skip the per-cell bus+gateway recreation (fastest path; only
+                      safe when you vouch for no cross-cell state leak).
+
+  The host owns the matrix loop: between cells it recreates the bus and gateway
+  containers (docker compose up -d --force-recreate --wait bus gateway) for fresh
+  state. Each cell is one 'docker compose run --rm runner' invocation.
 
   bus + gateway are auto-started via Docker Compose if not already running.
   When auto-started, they are torn down after qa exits. Run 'openclaw-qa-runner env up'
@@ -48,24 +55,57 @@ export function envCommand(packageDir: string, argv: string[]): never {
 }
 
 export async function qaCommand(packageDir: string, argv: string[]): Promise<never> {
-  const { channel, iterations, maxFailures, all, positionals } = parseQaArgs(argv);
+  const { channel, iterations, maxFailures, reuseStack, all, positionals } = parseQaArgs(argv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
   ensureBaseImage(packageDir, { force: false });
-  const runnerArgs = ["--channel", channel];
-  if (iterations) runnerArgs.push("--iterations", iterations);
-  if (maxFailures) runnerArgs.push("--max-failures", maxFailures);
-  if (all) runnerArgs.push("--all");
-  else runnerArgs.push(...positionals);
 
   const compose = composeBaseArgs();
   const wereUpBefore = areBusAndGatewayRunning(compose);
-  const runArgs = [...compose, "run", "--rm", "--use-aliases", "runner", ...runnerArgs];
-  const exitCode = await execComposeWithSigint(runArgs);
+  if (!wereUpBefore) {
+    const upCode = execComposeSync([
+      ...compose,
+      "up",
+      "-d",
+      "--wait",
+      "--remove-orphans",
+      "bus",
+      "gateway",
+    ]);
+    if (upCode !== 0) process.exit(upCode);
+  }
+
+  const scenariosDir = process.env.QA_SCENARIOS_DIR as string;
+  const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH as string;
+  const artifactsDir = process.env.QA_ARTIFACTS_DIR as string;
+
+  const scenarios = all ? discoverScenarios(scenariosDir) : positionals;
+  const channels = expandChannelSelection(channel, openclawConfigPath);
+
+  const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const resultsDir = resolve(artifactsDir, baseStamp, "cells");
+  // The runner sees the artifacts dir bind-mounted at /opt/qa-artifacts (see docker-compose.yml).
+  const runnerResultsDir = `/opt/qa-artifacts/${baseStamp}/cells`;
+  mkdirSync(resultsDir, { recursive: true });
+
+  const matrixExit = await runMatrix({
+    scenarios,
+    channels,
+    iterations: iterations ? Number(iterations) : 1,
+    maxFailures: maxFailures ? Number(maxFailures) : 1,
+    reuseStack,
+    skipFirstRestart: !wereUpBefore && !reuseStack,
+    composeArgs: compose,
+    artifactsDir: resolve(artifactsDir, baseStamp),
+    resultsDir,
+    runnerResultsDir,
+    baseStamp,
+  });
+
   if (!wereUpBefore) {
     execComposeSync([...compose, "down"]);
   }
-  process.exit(exitCode);
+  process.exit(matrixExit);
 }
 
 const BASE_IMAGE_NAME = "paleo/openclaw-qa-runner-base";
@@ -216,39 +256,11 @@ function execComposeSync(args: string[]): number {
   return result.status ?? 1;
 }
 
-// Spawn `docker` async so we can forward SIGINT to it (allowing graceful
-// teardown) instead of letting Node tear down the parent and orphan the child.
-function execComposeWithSigint(args: string[]): Promise<number> {
-  return new Promise((resolve) => {
-    const child: ChildProcess = spawn("docker", args, { stdio: "inherit" });
-    const forward = (sig: NodeJS.Signals) => child.kill(sig);
-    process.on("SIGINT", forward);
-    process.on("SIGTERM", forward);
-    child.on("exit", (code, signal) => {
-      process.off("SIGINT", forward);
-      process.off("SIGTERM", forward);
-      if (signal) resolve(128 + signalNumber(signal));
-      else resolve(code ?? 1);
-    });
-    child.on("error", (err) => {
-      process.off("SIGINT", forward);
-      process.off("SIGTERM", forward);
-      console.error(err.message);
-      resolve(1);
-    });
-  });
-}
-
-function signalNumber(signal: NodeJS.Signals): number {
-  if (signal === "SIGINT") return 2;
-  if (signal === "SIGTERM") return 15;
-  return 1;
-}
-
 interface QaArgs {
   channel: string;
   iterations?: string;
   maxFailures?: string;
+  reuseStack: boolean;
   all: boolean;
   positionals: string[];
 }
@@ -257,6 +269,7 @@ function parseQaArgs(argv: string[]): QaArgs {
   let channel: string | undefined;
   let iterations: string | undefined;
   let maxFailures: string | undefined;
+  let reuseStack = false;
   let all = false;
   const positionals: string[] = [];
 
@@ -264,6 +277,7 @@ function parseQaArgs(argv: string[]): QaArgs {
     const a = argv[i];
     if (a === "-h" || a === "--help") failQa();
     else if (a === "--all") all = true;
+    else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--channel") channel = argv[++i];
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
     else if (a === "--iterations") iterations = argv[++i];
@@ -280,7 +294,7 @@ function parseQaArgs(argv: string[]): QaArgs {
   if (!all && positionals.length === 0)
     failQa("error: must pass --all or one or more scenario names");
 
-  return { channel: channel as string, iterations, maxFailures, all, positionals };
+  return { channel: channel as string, iterations, maxFailures, reuseStack, all, positionals };
 }
 
 function failQa(msg?: string): never {

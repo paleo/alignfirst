@@ -93,11 +93,17 @@ The runner binds a single in-flight `ConversationRegistry` per scenario; scenari
 
 ## Per-scenario isolation
 
-The bus accumulates state across runs. The only isolation between tasks is the `conversationId` — minted fresh per task as `${scenarioId}-${channel}-${shortRand}` and exposed as `ctx.conversationId`. Scenarios must use `ctx.conversationId` everywhere they currently hard-code a value; metadata that needs to identify the project (e.g. a workspace playbook keying off project name) belongs in the inbound *text*, not in the conversation id.
+Cross-cell hygiene is enforced at the container level (see "Per-cell hygiene" below); within one cell, the only isolation between tasks is the `conversationId` — minted fresh per task as `${scenarioId}-${channel}-${shortRand}` and exposed as `ctx.conversationId`. Scenarios must use `ctx.conversationId` everywhere they currently hard-code a value; metadata that needs to identify the project (e.g. a workspace playbook keying off project name) belongs in the inbound *text*, not in the conversation id.
 
-Scenarios run serially — the base stack ships one `gateway` container; the mocked-CLI shim and runner-side registry are single in-flight.
+The mock-cli `release()` quiet-drain is no longer load-bearing across cells (the host destroys the gateway container between them); it remains as a small belt-and-braces for the post-`markScenarioAsEnded` window inside one cell.
 
 The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. a project tree under `/home/claw/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. The harness owns only the transport.
+
+## Per-cell hygiene
+
+The host CLI owns the matrix loop: each `(scenario, channel, iterationIndex)` cell is one `docker compose run --rm runner --scenario … --channel … --iteration-index …` invocation. Between cells the host issues `docker compose up -d --force-recreate --wait bus gateway`, recreating both containers in a single Compose call (`--wait` blocks on healthchecks). Recreation drops in-process gateway state, the bus's in-memory event log, transient container `/tmp` files, and on-process caches that survive a SIGTERM-only restart. The first cell skips recreation when `qa` itself just brought the stack up; subsequent cells always recreate. `--reuse-stack` opts out entirely.
+
+The `qa-ipc` named volume survives container recreation, so `qa-exec-watcher` sweeps stale `*.req.json` / `*.req.json.processing` / `*.res.json` on startup. The runner writes a `CellResult` JSON to `<artifacts>/<baseStamp>/cells/<scenario>-<channel>[-<iter>].json` before renaming its artifact dir; the host reads these to drive the matrix-level summary and total-cost lines. Missing/invalid file → cell counted as fail, warning logged, loop continues. Per-pair `--max-failures` bail is enforced host-side.
 
 ## Exec RPC
 
