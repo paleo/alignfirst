@@ -15,7 +15,20 @@ interface GatewayLogEntry {
 
 interface ToolResultBlock {
   isError: boolean;
-  content: unknown;
+  content?: unknown;
+  truncatedContent?: string;
+}
+
+const CONTENT_TRUNCATE_AT = 60;
+
+function buildResultBlock(isError: boolean, content: unknown): ToolResultBlock {
+  if (typeof content === "string" && content.length > CONTENT_TRUNCATE_AT) {
+    return {
+      isError,
+      truncatedContent: `${content.slice(0, CONTENT_TRUNCATE_AT).replace(/\s+$/, "")}…`,
+    };
+  }
+  return { isError, content: content ?? null };
 }
 
 /**
@@ -52,7 +65,7 @@ export function readGatewayCostFor(opts: { startTsIso: string; conversationId?: 
   let turns = 0;
   for (const entry of readGatewayLog()) {
     if (entry.stage !== "usage" || !entry.ts || entry.ts < opts.startTsIso) continue;
-    if (opts.conversationId && !entry.sessionKey?.includes(opts.conversationId)) continue;
+    if (opts.conversationId && !entry.sessionKey?.toLowerCase().includes(opts.conversationId.toLowerCase())) continue;
     const total = entry.usage?.cost?.total;
     if (typeof total === "number") {
       cost += total;
@@ -113,7 +126,7 @@ function isUsageEntryFor(
   startedAtIso: string,
 ): boolean {
   if (entry.stage !== "usage" || !entry.ts || entry.ts < startedAtIso) return false;
-  return entry.sessionKey?.includes(conversationId) === true;
+  return entry.sessionKey?.toLowerCase().includes(conversationId.toLowerCase()) === true;
 }
 
 function findLastRequestEntry(opts: {
@@ -124,7 +137,7 @@ function findLastRequestEntry(opts: {
     (e) =>
       e.ts !== undefined &&
       e.ts >= opts.startedAtIso &&
-      e.sessionKey?.includes(opts.conversationId) === true &&
+      e.sessionKey?.toLowerCase().includes(opts.conversationId.toLowerCase()) === true &&
       e.stage === "request" &&
       e.payload?.messages !== undefined,
   );
@@ -141,10 +154,7 @@ function collectToolResults(
     if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
     for (const block of msg.content as Array<Record<string, unknown>>) {
       if (block?.type === "tool_result" && typeof block.tool_use_id === "string") {
-        results.set(block.tool_use_id, {
-          isError: block.is_error === true,
-          content: block.content ?? null,
-        });
+        results.set(block.tool_use_id, buildResultBlock(block.is_error === true, block.content));
       }
     }
   }

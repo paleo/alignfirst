@@ -21,6 +21,7 @@ import { startMockCliServer } from "./mock-cli-server.js";
 import type {
   AgentToolCall,
   AgentToolCallEntry,
+  EmitSink,
   ReportEntry,
   ScenarioFailure,
   ScenarioReport,
@@ -80,7 +81,6 @@ async function runCell(args: RunnerArgs): Promise<number> {
     const finishedAtIso = new Date(finishedAtMs).toISOString();
 
     const { entries, judgeUsages, result } = internals.finalize({ failure });
-    await closeStream(logStream);
 
     await waitForGatewayUsage({ conversationId, startedAtIso });
     const { cost: gatewayCostUsd, turns: gatewayTurns } = readGatewayCostFor({
@@ -101,6 +101,8 @@ async function runCell(args: RunnerArgs): Promise<number> {
     }
 
     const merged = mergeTimeline(entries, agentCalls);
+    appendAgentCallsToLog(logStream, merged, entries);
+    await closeStream(logStream);
     const report: ScenarioReport = {
       schemaVersion: 1,
       scenario: args.scenario,
@@ -176,8 +178,12 @@ function setupRun(args: RunnerArgs): RunSetup {
   const startedAtIso = new Date().toISOString();
   const startedAtMs = Date.now();
   const logStream = createWriteStream(join(outDir, "scenario-log.jsonl"), { flags: "a" });
-  const emitSink = (entry: ReportEntry) => {
-    logStream.write(`${JSON.stringify(entry)}\n`);
+  const emitSink: EmitSink = (event) => {
+    if (event.type === "entry") {
+      logStream.write(`${JSON.stringify(event.entry)}\n`);
+    } else {
+      logStream.write(`${JSON.stringify({ seq: event.seq, augment: event.patch })}\n`);
+    }
   };
   const { ctx, internals } = createContext({ channel: args.channel, conversationId, emitSink });
   return {
@@ -293,6 +299,29 @@ function leadingCli(input: unknown): string | undefined {
   const m = stripped.match(/^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*([A-Za-z0-9_./-]+)/);
   if (!m) return;
   return m[1].split("/").pop();
+}
+
+/**
+ * Append parsed agentToolCall entries to `scenario-log.jsonl` after the live
+ * scenario has finished. They show up at the tail of the file with continuing
+ * seq numbers; the `ts` (and `call.inferredStartedAt`) reflect their actual
+ * chronological position. `report.json` carries the same calls re-indexed in
+ * the merged timeline.
+ */
+function appendAgentCallsToLog(
+  logStream: ReturnType<typeof createWriteStream>,
+  merged: ReportEntry[],
+  liveEntries: ReportEntry[],
+): void {
+  const tail = merged
+    .filter((e): e is AgentToolCallEntry => e.kind === "agentToolCall")
+    .sort((a, b) => (a.ts < b.ts ? -1 : 1));
+  let seq = liveEntries.length;
+  for (const entry of tail) {
+    const out: AgentToolCallEntry = { ...entry, seq };
+    logStream.write(`${JSON.stringify(out)}\n`);
+    seq += 1;
+  }
 }
 
 function mergeTimeline(entries: ReportEntry[], agentCalls: AgentToolCall[]): ReportEntry[] {

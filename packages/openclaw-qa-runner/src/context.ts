@@ -21,6 +21,7 @@ import {
 import type {
   ActionEntry,
   AssertionRecord,
+  AugmentPatch,
   ChannelId,
   CliMockCall,
   CliMockEntry,
@@ -220,12 +221,12 @@ export function createContext(params: {
 
   const emit = <T extends ReportEntry>(entry: T): T => {
     entries.push(entry);
-    emitSink?.(entry);
+    emitSink?.({ type: "entry", entry });
     return entry;
   };
 
-  const reemit = (entry: ReportEntry): void => {
-    emitSink?.(entry);
+  const emitAugment = (seq: number, patch: AugmentPatch): void => {
+    emitSink?.({ type: "augment", seq, patch });
   };
 
   const setCurrentEntry = <T extends ActionEntry>(entry: T): T => {
@@ -259,13 +260,14 @@ export function createContext(params: {
     emit(entry);
     setCurrentEntry(entry);
     if (call.handlerError) {
-      entry.failure = {
+      const failure: ScenarioFailure = {
         name: call.handlerError.name,
         message: call.handlerError.message,
         ...(call.handlerError.stack ? { stack: call.handlerError.stack } : {}),
         source: "cliMock",
       };
-      reemit(entry);
+      entry.failure = failure;
+      emitAugment(entry.seq, { kind: "failure", failure });
     }
   };
 
@@ -297,7 +299,7 @@ export function createContext(params: {
         message: arg.message,
       };
       arg.attachTo.scenarioLog = note;
-      reemit(arg.attachTo);
+      emitAugment(arg.attachTo.seq, { kind: "scenarioLog", scenarioLog: note });
     }) as ScenarioContext["log"],
     sendInbound: (input) => sendInbound({ emit, nextSeqTs }, accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
@@ -313,13 +315,13 @@ export function createContext(params: {
       ),
     expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
     assertRegex: (actual, pattern, label) =>
-      assertRegex({ getCurrentEntry: () => currentEntry, reemit }, actual, pattern, label),
+      assertRegex({ getCurrentEntry: () => currentEntry, emitAugment }, actual, pattern, label),
     assertEqual: (actual, expected, label) =>
-      assertEqual({ getCurrentEntry: () => currentEntry, reemit }, actual, expected, label),
+      assertEqual({ getCurrentEntry: () => currentEntry, emitAugment }, actual, expected, label),
     assertLength: (value, expected, label) =>
-      assertLength({ getCurrentEntry: () => currentEntry, reemit }, value, expected, label),
+      assertLength({ getCurrentEntry: () => currentEntry, emitAugment }, value, expected, label),
     judgeLLM: (p) =>
-      callJudgeVerdict({ getCurrentEntry: () => currentEntry, reemit, judgeUsages }, p),
+      callJudgeVerdict({ getCurrentEntry: () => currentEntry, emitAugment, judgeUsages }, p),
     judgeLLMJson: (p) => callJudgeJson(judgeUsages, p),
     judgeLLMRaw: (p) => callJudgeRaw(judgeUsages, p),
     getCursor,
@@ -329,7 +331,7 @@ export function createContext(params: {
 
   const internals: ScenarioInternals = {
     finalize: (opts) => {
-      const result = computeResult(entries, currentEntry, reemit, opts?.failure);
+      const result = computeResult(entries, currentEntry, emitAugment, opts?.failure);
       return { entries, judgeUsages, result };
     },
     emitOutboundReceived,
@@ -357,18 +359,18 @@ interface EmitDeps {
 
 interface AttachDeps {
   getCurrentEntry: () => ActionEntry | undefined;
-  reemit: (entry: ReportEntry) => void;
+  emitAugment: (seq: number, patch: AugmentPatch) => void;
 }
 
 function computeResult(
   entries: ReportEntry[],
   currentEntry: ActionEntry | undefined,
-  reemit: (entry: ReportEntry) => void,
+  emitAugment: (seq: number, patch: AugmentPatch) => void,
   scenarioFailure: ScenarioFailure | undefined,
 ): ScenarioResult {
   if (scenarioFailure && currentEntry && !currentEntry.failure) {
     currentEntry.failure = scenarioFailure;
-    reemit(currentEntry);
+    emitAugment(currentEntry.seq, { kind: "failure", failure: scenarioFailure });
   }
 
   const failedEntry = findFailedEntry(entries);
@@ -410,7 +412,7 @@ function pushAssertion(
   if (!target) return;
   if (!target.assertions) target.assertions = [];
   target.assertions.push(record);
-  deps.reemit(target);
+  deps.emitAugment(target.seq, { kind: "assertion", assertion: record });
 }
 
 function registerMockCli(

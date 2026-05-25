@@ -138,7 +138,13 @@ export interface AgentToolCall {
   toolName: string;
   toolUseId: string;
   input: unknown;
-  result?: { isError: boolean; content: unknown };
+  result?: {
+    isError: boolean;
+    /** Full content when ≤60 chars (or non-string). Omitted when truncated. */
+    content?: unknown;
+    /** Set when `content` was a string longer than 60 chars: rtrimmed first 60 + `…`. */
+    truncatedContent?: string;
+  };
   startedAt: string;
   /**
    * Best-effort estimate of when the tool call actually started, inferred by
@@ -179,9 +185,24 @@ export type CliMockHandler = (
 ) => number | undefined | Promise<number | undefined>;
 
 /**
- * Callback the runner passes into `createContext` so live entries can be
- * appended to `scenario-log.jsonl` as they happen. Receives the already-sealed
- * entry (`seq` + `ts` set). Re-emitted when a nested field (assertions,
- * failure, scenarioLog) is added to an existing entry.
+ * Patch describing the augmentation of an already-emitted entry. Carries only
+ * the new nested field so the live `scenario-log.jsonl` need not re-serialize
+ * the entry's full text/metadata on every assertion or annotation.
  */
-export type EmitSink = (entry: ReportEntry) => void;
+export type AugmentPatch =
+  | { kind: "scenarioLog"; scenarioLog: ScenarioLogNote }
+  | { kind: "assertion"; assertion: AssertionRecord }
+  | { kind: "failure"; failure: ScenarioFailure };
+
+export type SinkEvent =
+  | { type: "entry"; entry: ReportEntry }
+  | { type: "augment"; seq: number; patch: AugmentPatch };
+
+/**
+ * Callback the runner passes into `createContext` so live records can be
+ * appended to `scenario-log.jsonl` as they happen. First emission of an entry
+ * is `type: "entry"`. Subsequent nested-field additions (assertions, failure,
+ * scenarioLog) are `type: "augment"` with only the patch — readers reconstruct
+ * full state by folding augments onto entries by `seq`.
+ */
+export type EmitSink = (event: SinkEvent) => void;
