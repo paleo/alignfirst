@@ -67,7 +67,9 @@ After the user approves your proposal, write the specification in a markdown fil
 - Usually a specification is around 70~120 lines
 - **Do not specify backward compatibility** unless explicitly requested. Prefer clean break by default. Unused code must be removed.
 - A specification is not always immediately executed, and you have to assume that the code can change before it is executed. You can mention a function by name, but NEVER mention specific line numbers as they will become obsolete.
-- Do not include any detailed code in the specification. Instead, refer to the relevant source files by their paths or function names.
+- Spell out every change to code contracts: database schema and migrations, API shapes, critical type definitions.
+- Do not include other detailed code. Refer to source files by path or function name.
+- Cover the full scope of the task. Never drop parts to shrink the spec — splitting work across plans is handled later by the *plan* protocol. If you anticipate a section should land in a separate plan, flag it inline (e.g. "candidate for a specialized plan").
 - Do not include sections like "Benefits", "Code Style Compliance" or anything that adds no new information. Focus on the problem and the solution.
 
 _Important Note:_ There will be lint errors in the markdown file you write. Ignore them. NEVER FIX LINT ERRORS (FORMATTING ISSUES) IN THE SPEC.
