@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-channel-mock-core",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Shared library for synthetic OpenClaw channel plugins used in test harnesses (bus client, action handlers, factories).",
   "keywords": [
     "openclaw",
@@ -45,9 +45,9 @@
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
-    "openclaw": "2026.5.18",
+    "openclaw": "2026.5.22",
     "rimraf": "~6.1.3",
     "typescript": "~6.0.3",
-    "vitest": "~4.1.6"
+    "vitest": "~4.1.7"
   }
 }

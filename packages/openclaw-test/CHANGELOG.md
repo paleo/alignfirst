@@ -1,5 +1,18 @@
 # @paleo/openclaw-test
 
+## 0.5.0
+
+### Minor Changes
+
+- Enhanced OpenClaw test packages
+
+### Patch Changes
+
+- Updated dependencies
+  - @paleo/openclaw-channel-mock-core@0.3.0
+  - @paleo/openclaw-discord-mock@0.3.0
+  - @paleo/openclaw-slack-mock@0.3.0
+
 ## 0.4.1
 
 ### Patch Changes

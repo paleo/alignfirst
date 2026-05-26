@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-slack-mock",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
@@ -64,13 +64,13 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.2.3"
+    "@paleo/openclaw-channel-mock-core": "0.3.0"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
-    "openclaw": "2026.5.18",
+    "openclaw": "2026.5.22",
     "rimraf": "~6.1.3",
     "typescript": "~6.0.3",
-    "vitest": "~4.1.6"
+    "vitest": "~4.1.7"
   }
 }

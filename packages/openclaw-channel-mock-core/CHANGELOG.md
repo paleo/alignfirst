@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.3.0
+
+### Minor Changes
+
+- Enhanced OpenClaw test packages
+
 ## 0.2.3
 
 ### Patch Changes
