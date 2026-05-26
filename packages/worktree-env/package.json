@@ -1,6 +1,6 @@
 {
   "name": "@paleo/worktree-env",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Worktree-based concurrent local environment kernel.",
   "keywords": [
     "worktree",
@@ -9,6 +9,7 @@
     "local"
   ],
   "license": "CC0-1.0",
+  "author": "Thomas MUR",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
@@ -44,6 +45,6 @@
     "@types/node": "~24.12.4",
     "rimraf": "~6.1.3",
     "typescript": "~6.0.3",
-    "vitest": "~4.1.6"
+    "vitest": "~4.1.7"
   }
 }

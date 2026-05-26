@@ -4,7 +4,7 @@ description: "Conventions for writing, organizing, and browsing documentation in
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.5.0"
+  version: "0.5.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -14,7 +14,7 @@ All project documentation lives in the `docs/` directory. The `docmap` CLI lets 
 
 ## Browsing with CLI
 
-> Run commands via the project's package manager (e.g. `npm run docmap --`, `pnpm docmap`).
+> Run commands via the project's package manager (e.g. `npm run docmap --`, `pnpm docmap`, `yarn docmap`).
 
 ```bash
 docmap                                          # list root docs

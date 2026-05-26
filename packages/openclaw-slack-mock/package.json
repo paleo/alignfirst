@@ -1,7 +1,7 @@
 {
   "name": "@paleo/openclaw-slack-mock",
-  "version": "0.2.3",
-  "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated QA scenarios.",
+  "version": "0.3.1",
+  "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
     "qa",
@@ -11,6 +11,7 @@
     "mock"
   ],
   "license": "MIT",
+  "author": "Thomas MUR",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
@@ -43,7 +44,7 @@
       "detailLabel": "Slack Mock",
       "docsPath": "/channels/slack-mock",
       "docsLabel": "slack-mock",
-      "blurb": "Synthetic Slack-shaped transport for automated OpenClaw QA scenarios.",
+      "blurb": "Synthetic Slack-shaped transport for automated OpenClaw test scenarios.",
       "systemImage": "checklist",
       "order": 997,
       "exposure": {
@@ -63,13 +64,13 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.2.3"
+    "@paleo/openclaw-channel-mock-core": "0.3.1"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
-    "openclaw": "2026.5.18",
+    "openclaw": "2026.5.22",
     "rimraf": "~6.1.3",
     "typescript": "~6.0.3",
-    "vitest": "~4.1.6"
+    "vitest": "~4.1.7"
   }
 }

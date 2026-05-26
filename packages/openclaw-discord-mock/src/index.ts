@@ -3,7 +3,7 @@ import { defineBundledChannelEntry } from "openclaw/plugin-sdk/channel-entry-con
 export default defineBundledChannelEntry({
   id: "discord-mock",
   name: "Discord Mock",
-  description: "Synthetic Discord-shaped QA channel plugin",
+  description: "Synthetic Discord-shaped test channel plugin",
   importMetaUrl: import.meta.url,
   plugin: {
     specifier: "./channel-plugin-api.js",

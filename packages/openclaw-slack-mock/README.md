@@ -2,7 +2,7 @@
 
 Synthetic Slack-shaped OpenClaw channel plugin. Registers as channel `slack-mock`. Restricted Slack-shaped action surface: `read`, `edit`, `delete`, `react`, `reactions`, `search`. No `send` / `thread-create` / `thread-reply`. Bare-channel inbounds auto-thread: the first agent outbound creates a thread anchored on the inbound message id; every subsequent outbound from the same turn lands in that thread.
 
-Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-qa-runner`](https://www.npmjs.com/package/@paleo/openclaw-qa-runner) for the QA harness.
+Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
 
 ## Install
 
@@ -10,7 +10,7 @@ Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@p
 npm i -D @paleo/openclaw-slack-mock
 ```
 
-The runner depends on this package transitively — installing `@paleo/openclaw-qa-runner` already pulls it in.
+The runner depends on this package transitively — installing `@paleo/openclaw-test` already pulls it in.
 
 ## Enable
 
@@ -19,14 +19,14 @@ In your `openclaw.json`:
 ```json
 {
   "plugins": {
-    "load": { "paths": ["/opt/qa-src/node_modules/@paleo/openclaw-slack-mock"] },
+    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"] },
     "entries": { "slack-mock": { "enabled": true } }
   },
   "channels": {
     "slack-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "OpenClaw QA",
+      "botDisplayName": "OpenClaw Test",
       "allowFrom": ["*"]
     }
   }

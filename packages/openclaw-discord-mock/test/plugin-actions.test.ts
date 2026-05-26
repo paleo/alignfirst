@@ -52,7 +52,7 @@ function makeCfg(baseUrl: string) {
       [CHANNEL_ID]: {
         baseUrl,
         botUserId: "openclaw",
-        botDisplayName: "OpenClaw QA",
+        botDisplayName: "OpenClaw Test",
         allowFrom: ["*"],
       },
     },
@@ -137,7 +137,7 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
       .message.id as string;
     await runHandler(fixture, "react", { messageId, emoji: "👍" });
     await runHandler(fixture, "edit", { messageId, text: "edited" });
-    const read = (await runHandler(fixture, "read", { messageId })) as {
+    const read = (await runHandler(fixture, "reactions", { messageId })) as {
       content: Array<{ text: string }>;
     };
     const readMsg = JSON.parse(read.content[0].text).message;

@@ -24,7 +24,7 @@ const cfg = {
     [CHANNEL_ID]: {
       baseUrl: "http://bus",
       botUserId: "openclaw",
-      botDisplayName: "OpenClaw QA",
+      botDisplayName: "OpenClaw Test",
       allowFrom: ["*"],
     },
   },

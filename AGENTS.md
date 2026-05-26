@@ -28,16 +28,7 @@ Commit message convention: we use conventional commit, e.g., `feat: [#123] add n
 
 Branch naming convention: `<type>/<ticket-id>` (with type from conventional commit, e.g., `feat/123`, `fix/123`, `refactor/123`, `chore/123`).
 
-Add `docs/code-style.md` and `docs/code-quality.md` to every plan.
-
-## Packages
-
-- `@paleo/docmap` — lightweight documentation system for AI agents and humans
-- `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
-- `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for QA scenarios
-- `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for QA scenarios
-- `@paleo/openclaw-qa-runner` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/worktree-env` — worktree-based concurrent local environment kernel
+Add `paleo-typescript-style` skill to every plan.
 
 ## Coding rules
 
@@ -46,3 +37,12 @@ Apply the `paleo-typescript-style` skill.
 - Use UTF-8 encoding with 2-space indentation, 100-char line width.
 - Use the semicolon syntax.
 - Prefer double quotes `"`.
+
+## Packages
+
+- `@paleo/docmap` — lightweight documentation system for AI agents and humans
+- `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
+- `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
+- `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
+- `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
+- `@paleo/worktree-env` — worktree-based concurrent local environment kernel

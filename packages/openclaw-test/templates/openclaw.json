@@ -1,0 +1,41 @@
+{
+  "gateway": {
+    "mode": "local"
+  },
+  "plugins": {
+    "load": {
+      "paths": [
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock",
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"
+      ]
+    },
+    "entries": {
+      "discord-mock": { "enabled": true },
+      "slack-mock": { "enabled": true }
+    }
+  },
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "name": "OpenClaw Main",
+        "model": "<set-your-litellm-model-ref>",
+        "workspace": "/home/claw/.openclaw/workspace"
+      }
+    ]
+  },
+  "channels": {
+    "discord-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "OpenClaw Test",
+      "allowFrom": ["*"]
+    },
+    "slack-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "OpenClaw Test",
+      "allowFrom": ["*"]
+    }
+  }
+}

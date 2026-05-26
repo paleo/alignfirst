@@ -31,7 +31,7 @@ import type {
 } from "./protocol.js";
 
 const DEFAULT_BOT_ID = "openclaw";
-const DEFAULT_BOT_NAME = "OpenClaw QA";
+const DEFAULT_BOT_NAME = "OpenClaw Test";
 
 type QaBusEventSeed =
   | { kind: "inbound-message"; accountId: string; message: QaBusMessage }
@@ -185,7 +185,7 @@ export function createQaBusState() {
       const accountId = normalizeAccountId(input.accountId);
       const message = messages.get(input.messageId);
       if (!message) {
-        throw new Error(`qa-bus message not found: ${input.messageId}`);
+        throw new Error(`test bus message not found: ${input.messageId}`);
       }
       const reaction = {
         emoji: input.emoji,
@@ -206,7 +206,7 @@ export function createQaBusState() {
       const accountId = normalizeAccountId(input.accountId);
       const message = messages.get(input.messageId);
       if (!message) {
-        throw new Error(`qa-bus message not found: ${input.messageId}`);
+        throw new Error(`test bus message not found: ${input.messageId}`);
       }
       message.text = input.text;
       message.editedAt = input.timestamp ?? Date.now();
@@ -217,7 +217,7 @@ export function createQaBusState() {
       const accountId = normalizeAccountId(input.accountId);
       const message = messages.get(input.messageId);
       if (!message) {
-        throw new Error(`qa-bus message not found: ${input.messageId}`);
+        throw new Error(`test bus message not found: ${input.messageId}`);
       }
       message.deleted = true;
       pushEvent({ kind: "message-deleted", accountId, message: cloneMessage(message) });

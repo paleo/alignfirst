@@ -1,0 +1,64 @@
+{
+  "name": "@paleo/openclaw-test",
+  "version": "0.5.1",
+  "description": "Dockerised regression-test framework for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
+  "keywords": [
+    "openclaw",
+    "test",
+    "testing",
+    "harness",
+    "scenario",
+    "docker"
+  ],
+  "license": "MIT",
+  "author": "Thomas MUR",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/openclaw-test"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.11.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "openclaw-test": "./bin/cli.mjs"
+  },
+  "exports": "./dist/index.js",
+  "files": [
+    "dist/",
+    "bin/",
+    "templates/",
+    "docker-compose.yml",
+    "Dockerfile.base",
+    "exec-watcher.mjs",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "~0.98.0",
+    "@paleo/openclaw-channel-mock-core": "0.3.1",
+    "@paleo/openclaw-discord-mock": "0.3.1",
+    "@paleo/openclaw-slack-mock": "0.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.4",
+    "openclaw": "2026.5.22",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.7"
+  }
+}

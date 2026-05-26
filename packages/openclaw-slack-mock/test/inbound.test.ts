@@ -1,10 +1,10 @@
-import { createServer, type Server } from "node:http";
 import {
   buildDeliveryCallback,
   createBus,
   type QaBusMessage,
   type ResolvedChannelMockAccount,
 } from "@paleo/openclaw-channel-mock-core";
+import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 type BusFixture = { server: Server; baseUrl: string; bus: ReturnType<typeof createBus> };
@@ -38,12 +38,12 @@ function makeAccount(baseUrl: string): ResolvedChannelMockAccount {
     configured: true,
     baseUrl,
     botUserId: "openclaw",
-    botDisplayName: "OpenClaw QA",
+    botDisplayName: "OpenClaw Test",
     pollTimeoutMs: 1000,
     config: {
       baseUrl,
       botUserId: "openclaw",
-      botDisplayName: "OpenClaw QA",
+      botDisplayName: "OpenClaw Test",
       allowFrom: ["*"],
     },
   };
@@ -56,8 +56,8 @@ function makeInbound(opts: { threadId?: string }): QaBusMessage {
     direction: "inbound",
     conversation: { kind: "channel", id: "sample-project", title: "sample-project" },
     threadId: opts.threadId,
-    senderId: "paleo6571",
-    senderName: "paleo6571",
+    senderId: "MYUSERID1",
+    senderName: "My User",
     text: "We have some work to do on sample-project.",
     timestamp: Date.now(),
     reactions: [],

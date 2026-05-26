@@ -50,7 +50,7 @@ export function createQaBusWaiterStore(getSnapshot: () => QaBusStateSnapshot) {
   const cursorWaiters = new Set<CursorWaiter>();
 
   return {
-    reset(reason = "qa-bus reset") {
+    reset(reason = "test bus reset") {
       for (const waiter of waiters) {
         clearTimeout(waiter.timer);
         waiter.reject(new Error(reason));
@@ -102,7 +102,7 @@ export function createQaBusWaiterStore(getSnapshot: () => QaBusStateSnapshot) {
           matcher,
           timer: setTimeout(() => {
             waiters.delete(waiter);
-            reject(new Error(`qa-bus wait timeout after ${timeoutMs}ms`));
+            reject(new Error(`test bus wait timeout after ${timeoutMs}ms`));
           }, timeoutMs),
         };
         waiters.add(waiter);
@@ -125,7 +125,7 @@ export function createQaBusWaiterStore(getSnapshot: () => QaBusStateSnapshot) {
           shouldResolve,
           timer: setTimeout(() => {
             cursorWaiters.delete(waiter);
-            reject(new Error(`qa-bus wait timeout after ${timeoutMs}ms`));
+            reject(new Error(`test bus wait timeout after ${timeoutMs}ms`));
           }, timeoutMs),
         };
         cursorWaiters.add(waiter);

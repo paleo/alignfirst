@@ -1,0 +1,37 @@
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "editor.detectIndentation": false,
+  "editor.formatOnSave": true,
+  "editor.formatOnType": true,
+  "editor.insertSpaces": true,
+  "editor.rulers": [100],
+  "editor.tabSize": 2,
+  "html.format.wrapLineLength": 100,
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/package-lock.json": true,
+    "**/dist": true,
+    "**/CHANGELOG.md": true,
+    "**/.turbo": true,
+    "**/.plans": true,
+    "**/.local": true
+  },
+  "js/ts.preferences.importModuleSpecifier": "relative",
+  "js/ts.preferences.importModuleSpecifierEnding": "js",
+  "js/ts.preferences.preferTypeOnlyAutoImports": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
+}

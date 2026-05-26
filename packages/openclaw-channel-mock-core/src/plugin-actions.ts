@@ -1,4 +1,4 @@
-import { jsonResult, readStringParam } from "openclaw/plugin-sdk/channel-actions";
+import { jsonResult, readNumberParam, readStringParam } from "openclaw/plugin-sdk/channel-actions";
 import { extractToolSend } from "openclaw/plugin-sdk/tool-send";
 import { Type } from "typebox";
 import type { ChannelMockAccountHelpers } from "./accounts.js";
@@ -121,6 +121,7 @@ export function createChannelMockMessageActions(params: {
           content: Type.Optional(Type.String()),
           replyTo: Type.Optional(Type.String()),
           replyToId: Type.Optional(Type.String()),
+          limit: Type.Optional(Type.Integer()),
         },
       },
     }),
@@ -190,7 +191,7 @@ export function createChannelMockMessageActions(params: {
             );
           }
           const { conversationId } = parseQaTarget(destination);
-          const title = readStringParam(actionParams, "title") ?? "QA thread";
+          const title = readStringParam(actionParams, "title") ?? "Test thread";
           const { thread } = await createQaBusThread({
             baseUrl,
             accountId: account.accountId,
@@ -256,8 +257,7 @@ export function createChannelMockMessageActions(params: {
           });
           return jsonResult({ message });
         }
-        case "reactions":
-        case "read": {
+        case "reactions": {
           const messageId = readStringParam(actionParams, "messageId");
           if (!messageId) {
             throw new Error(`${channelId} ${action} requires messageId`);
@@ -268,6 +268,34 @@ export function createChannelMockMessageActions(params: {
             messageId,
           });
           return jsonResult({ message });
+        }
+        case "read": {
+          // Bulk read prior messages — matches real Discord's `read` action
+          // (a list-channel-messages call on a channelId, which can be a
+          // thread). Single-message fetch lives under `reactions`. Without a
+          // threadId/conversationId scope we'd dump the whole account log,
+          // so require at least one.
+          const destination = resolveDestination(actionParams);
+          const conversationId = destination
+            ? parseQaTarget(destination).conversationId
+            : undefined;
+          const threadId = readStringParam(actionParams, "threadId");
+          if (!conversationId && !threadId) {
+            throw new Error(
+              `${channelId} read requires threadId or a destination (to/target/channelId)`,
+            );
+          }
+          const limit = readNumberParam(actionParams, "limit", { integer: true });
+          const { messages } = await searchQaBusMessages({
+            baseUrl,
+            input: {
+              accountId: account.accountId,
+              conversationId,
+              threadId,
+              limit,
+            },
+          });
+          return jsonResult({ messages });
         }
         case "edit": {
           const messageId = readStringParam(actionParams, "messageId");
