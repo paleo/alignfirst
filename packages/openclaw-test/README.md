@@ -45,6 +45,7 @@ Edit `openclaw.json`:
 - `agents.list[id=main].model` — LiteLLM-style `provider/model` ref. The template ships a placeholder; OpenClaw fails loudly until you pick one.
 - `agents.list[id=main].workspace` — host path to your OpenClaw workspace, bind-mounted into the gateway. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.*` — both `discord-mock` and `slack-mock` blocks point at the same bus.
+- `channels.slack-mock.blockStreaming: true` — set this when running Slack scenarios under auto-thread (`replyToMode: "all"`), otherwise the agent's reply dribbles into the thread token-by-token. Discord-mock works fine without it.
 
 Drop scenarios under `scenarios/<id>.ts`. Project fixtures and their reset logic are consumer concerns — ship a reset script in your consumer image and invoke it from scenarios via `ctx.execInGateway(...)`. See [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md) for the exec RPC contract.
 
