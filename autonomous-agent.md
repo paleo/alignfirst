@@ -1,9 +1,9 @@
 # Autonomous agent
 
-## AlignFirst Coaching
+## AlignFirst Agent Skill
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-coaching
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-agent
 ```
 
 Optional environment variables:
@@ -19,6 +19,6 @@ export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permi
 
 ### OpenClaw Playbook (experimental)
 
-The `alignfirst-coaching` skill ships a reference that teaches OpenClaw how to handle branches, worktrees, commits, PRs/MRs etc. on the project side, and organize the chat with the user through Discord/Slack threads on the user side. Still in development.
+The `alignfirst-agent` skill ships a reference that teaches OpenClaw how to handle branches, worktrees, commits, PRs/MRs etc. on the project side, and organize the chat with the user through Discord/Slack threads on the user side. Still in development.
 
-See [skills/alignfirst-coaching/references/openclaw-playbook.md](skills/alignfirst-coaching/references/openclaw-playbook.md).
+See [skills/alignfirst-agent/references/openclaw-playbook.md](skills/alignfirst-agent/references/openclaw-playbook.md).

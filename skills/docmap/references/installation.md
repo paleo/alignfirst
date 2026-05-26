@@ -6,7 +6,7 @@ If you already know the package manager, skip this step.
 
 Otherwise, check in order:
 
-1. **`packageManager` field in `package.json`** — e.g. `"packageManager": "pnpm@9.15.4"` → pnpm.
+1. **`packageManager` field in `package.json`**.
 2. **Lockfile in the repo root:**
 
 | Lockfile | Package Manager |

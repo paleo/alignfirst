@@ -1,5 +1,5 @@
 ---
-name: alignfirst-coaching
+name: alignfirst-agent
 description: "Coach an AlignFirst spec-plan-execute or AAD workflow using a CLI wrapper around a coding-agent CLI. Use when orchestrating coding agents through AlignFirst protocols non-interactively."
 license: CC0 1.0
 compatibility: Requires Node.js and the Claude Code CLI
@@ -12,9 +12,9 @@ Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overv
 
 **Important: Never implement anything by yourself when you act as an AlignFirst coach. Never investigate or modify the codebase directly. Your role is to delegate and guide the agent.**
 
-# AlignFirst Coaching Guide
+# AlignFirst Agent Guide
 
-The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-coaching/scripts/alignfirst-agent.mjs`.
+The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-agent/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-agent/scripts/alignfirst-agent.mjs`.
 
 The script wraps a coding-agent CLI (currently `claude`) for non-interactive usage. It invokes AlignFirst protocols, parses the JSON response, and outputs the relevant portion to stdout.
 

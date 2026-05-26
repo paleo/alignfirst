@@ -20,4 +20,4 @@ RUN npm ci --include=dev && \
 #       --agent universal --agent claude-code \
 #       --skill alignfirst --skill al --skill alplan --skill alspec \
 #       --skill aldescription --skill alreview --skill alread \
-#       --skill almerge --skill alignfirst-coaching
+#       --skill almerge --skill alignfirst-agent
