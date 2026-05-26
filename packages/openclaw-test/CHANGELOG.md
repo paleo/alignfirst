@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.6.0
+
+### Minor Changes
+
+- `ScenarioReport` schema bumped to `schemaVersion: 2`. Cleaner separation of concerns between the two artifact files.
+
 ## 0.5.2
 
 ### Patch Changes

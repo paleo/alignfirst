@@ -16,18 +16,9 @@ interface GatewayLogEntry {
 interface ToolResultBlock {
   isError: boolean;
   content?: unknown;
-  truncatedContent?: string;
 }
 
-const CONTENT_TRUNCATE_AT = 60;
-
 function buildResultBlock(isError: boolean, content: unknown): ToolResultBlock {
-  if (typeof content === "string" && content.length > CONTENT_TRUNCATE_AT) {
-    return {
-      isError,
-      truncatedContent: `${content.slice(0, CONTENT_TRUNCATE_AT).replace(/\s+$/, "")}…`,
-    };
-  }
   return { isError, content: content ?? null };
 }
 

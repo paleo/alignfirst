@@ -94,29 +94,19 @@ async function runCell(args: RunnerArgs): Promise<number> {
     pairAgentCallsWithCliMocks(agentCalls, entries);
     if (agentCalls.length === 0 && !gatewayLogExists()) {
       entries.push({
-        seq: entries.length,
+        entrySeq: entries.length,
         ts: finishedAtIso,
         kind: "scenarioLog",
         message: `agentToolCall parsing skipped: ${GATEWAY_LOG_PATH} not found`,
       });
     }
 
-    // Snapshot live-entry seqs (= their position in `scenario-log.jsonl`)
-    // before mergeTimeline mutates them to the merged-by-ts ordering used in
-    // `report.json`.
-    const liveSeqByRef = new Map<ReportEntry, number>();
-    for (const e of entries) liveSeqByRef.set(e, e.seq);
-    const merged = mergeTimeline(entries, agentCalls);
-    const liveSeqToMerged = new Map<number, number>();
-    for (const e of merged) {
-      const oldSeq = liveSeqByRef.get(e);
-      if (oldSeq !== undefined) liveSeqToMerged.set(oldSeq, e.seq);
-    }
-    attachResultMergedSeq(result, liveSeqToMerged);
-    appendAgentCallsToLog(logStream, merged, entries);
+    const agentEntries = buildAgentToolCallEntries(agentCalls, entries.length);
+    appendAgentCallsToLog(logStream, agentEntries);
     await closeStream(logStream);
+    const merged = mergeTimeline(entries, agentEntries);
     const report: ScenarioReport = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       scenario: args.scenario,
       channel: args.channel,
       conversationId,
@@ -125,7 +115,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
       finishedAt: finishedAtIso,
       durationMs,
       result,
-      entries: merged,
+      entries: merged.map(prepareEntryForReport),
       cost: {
         gatewayUsd: gatewayCostUsd,
         judgeUsd,
@@ -194,7 +184,7 @@ function setupRun(args: RunnerArgs): RunSetup {
     if (event.type === "entry") {
       logStream.write(`${JSON.stringify(event.entry)}\n`);
     } else {
-      logStream.write(`${JSON.stringify({ seq: event.seq, augment: event.patch })}\n`);
+      logStream.write(`${JSON.stringify({ entrySeq: event.entrySeq, augment: event.patch })}\n`);
     }
   };
   const { ctx, internals } = createContext({ channel: args.channel, conversationId, emitSink });
@@ -317,64 +307,74 @@ export function leadingCli(input: unknown): string | undefined {
 }
 
 /**
- * Append parsed agentToolCall entries to the tail of `scenario-log.jsonl`
- * with seqs continuing after the live entries. `scenario-log.jsonl` stays
- * append-only and reflects the streaming order; `report.json` re-interleaves
- * the same entries by `ts` with its own seqs.
+ * Build agentToolCall entries with stable `entrySeq` values continuing the live
+ * jsonl emission order. These values are shared by both artifact files —
+ * `scenario-log.jsonl` (appended at the tail in ts order) and `report.json`
+ * (interleaved with live entries by ts).
  */
-function appendAgentCallsToLog(
-  logStream: ReturnType<typeof createWriteStream>,
-  merged: ReportEntry[],
-  liveEntries: ReportEntry[],
-): void {
-  const tail = merged
-    .filter((e): e is AgentToolCallEntry => e.kind === "agentToolCall")
-    .sort((a, b) => (a.ts < b.ts ? -1 : 1));
-  let seq = liveEntries.length;
-  for (const entry of tail) {
-    const out: AgentToolCallEntry = { ...entry, seq };
-    logStream.write(`${JSON.stringify(out)}\n`);
-    seq += 1;
-  }
-}
-
-/**
- * After `mergeTimeline`, the failed entry has been mutated to its merged
- * `seq`. Promote that as `entrySeq` (the canonical `report.json` index) and
- * keep the original live-entry seq as `scenarioLogEntrySeq` so consumers can
- * still locate the entry in `scenario-log.jsonl`.
- */
-function attachResultMergedSeq(
-  result: ScenarioReport["result"],
-  liveSeqToMerged: Map<number, number>,
-): void {
-  if (result.verdict !== "fail" || result.cause !== "failedEntry") return;
-  const mapped = liveSeqToMerged.get(result.entrySeq);
-  if (mapped === undefined) return;
-  const prefix = `[entry #${result.entrySeq}]`;
-  if (result.message.startsWith(prefix)) {
-    result.message = `[entry #${mapped}]${result.message.slice(prefix.length)}`;
-  }
-  result.entrySeq = mapped;
-}
-
-function mergeTimeline(entries: ReportEntry[], agentCalls: AgentToolCall[]): ReportEntry[] {
-  const agentEntries: AgentToolCallEntry[] = agentCalls.map((call) => ({
-    seq: -1,
+function buildAgentToolCallEntries(
+  agentCalls: AgentToolCall[],
+  liveEntryCount: number,
+): AgentToolCallEntry[] {
+  const sorted = [...agentCalls].sort((a, b) => (a.startedAt < b.startedAt ? -1 : 1));
+  return sorted.map((call, i) => ({
+    entrySeq: liveEntryCount + i,
     ts: call.startedAt,
     kind: "agentToolCall",
     call,
   }));
-  const merged: ReportEntry[] = [...entries, ...agentEntries].sort((a, b) => {
+}
+
+/**
+ * Append parsed agentToolCall entries to the tail of `scenario-log.jsonl` in
+ * ts order. Their `entrySeq` values continue past the live entries' and are the
+ * same values used in `report.json` — readers can cross-reference by `entrySeq`.
+ */
+function appendAgentCallsToLog(
+  logStream: ReturnType<typeof createWriteStream>,
+  agentEntries: AgentToolCallEntry[],
+): void {
+  for (const entry of agentEntries) {
+    logStream.write(`${JSON.stringify(entry)}\n`);
+  }
+}
+
+/**
+ * Interleave live entries with agentToolCall entries by `ts` for `report.json`.
+ * Entries keep their original `entrySeq`; the array order is ts, so iterating
+ * gives the unified timeline while `entrySeq` remains a cross-file identifier.
+ */
+function mergeTimeline(entries: ReportEntry[], agentEntries: AgentToolCallEntry[]): ReportEntry[] {
+  return [...entries, ...agentEntries].sort((a, b) => {
     if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;
     return kindOrder(a.kind) - kindOrder(b.kind);
   });
-  for (let i = 0; i < merged.length; ++i) merged[i].seq = i;
-  return merged;
 }
 
 function kindOrder(k: ReportEntry["kind"]): number {
   return k === "agentToolCall" ? 0 : 1;
+}
+
+const REPORT_CONTENT_TRUNCATE_AT = 60;
+
+/**
+ * Replace long string `content` with `truncatedContent` for `report.json` only.
+ * The original entry (already streamed to `scenario-log.jsonl`) keeps the full
+ * content; this returns a shallow-cloned `agentToolCall` entry with the
+ * truncated `result`.
+ */
+function prepareEntryForReport(entry: ReportEntry): ReportEntry {
+  if (entry.kind !== "agentToolCall" || !entry.call.result) return entry;
+  const { content } = entry.call.result;
+  if (typeof content !== "string" || content.length <= REPORT_CONTENT_TRUNCATE_AT) return entry;
+  const truncated = `${content.slice(0, REPORT_CONTENT_TRUNCATE_AT).replace(/\s+$/, "")}…`;
+  return {
+    ...entry,
+    call: {
+      ...entry.call,
+      result: { isError: entry.call.result.isError, truncatedContent: truncated },
+    },
+  };
 }
 
 function writeReportArtifacts(

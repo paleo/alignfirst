@@ -20,7 +20,7 @@
 import type { Readable, Writable } from "node:stream";
 
 export interface ScenarioReport {
-  schemaVersion: 1;
+  schemaVersion: 2;
   scenario: string;
   channel: ChannelId;
   conversationId: string;
@@ -45,10 +45,8 @@ export interface PassScenarioResult {
 export interface FailedEntryScenarioResult {
   verdict: "fail";
   cause: "failedEntry";
-  /** Index into `report.json`'s `entries` (merged-by-ts ordering). */
+  /** Stable entry identifier shared by `scenario-log.jsonl` and `report.json`. */
   entrySeq: number;
-  /** Index of the same entry in the streaming `scenario-log.jsonl`. */
-  scenarioLogEntrySeq: number;
   message: string;
 }
 
@@ -73,7 +71,13 @@ export type ActionEntry =
 
 export interface ReportEntryBase {
   ts: string;
-  seq: number;
+  /**
+   * Stable entry id shared across `scenario-log.jsonl` and `report.json`. In the
+   * jsonl it matches the line's emission order; in `report.json` entries are
+   * sorted by `ts` so `entrySeq` is not array position — it stays a cross-file
+   * reference.
+   */
+  entrySeq: number;
 }
 
 export interface ActionEntryBase extends ReportEntryBase {
@@ -143,9 +147,12 @@ export interface AgentToolCall {
   input: unknown;
   result?: {
     isError: boolean;
-    /** Full content when ≤60 chars (or non-string). Omitted when truncated. */
+    /**
+     * Full tool result. Always present in `scenario-log.jsonl`. In `report.json`,
+     * replaced by `truncatedContent` when this was a string longer than 60 chars.
+     */
     content?: unknown;
-    /** Set when `content` was a string longer than 60 chars: rtrimmed first 60 + `…`. */
+    /** Only in `report.json`: rtrimmed first 60 chars + `…`, when `content` was a long string. */
     truncatedContent?: string;
   };
   startedAt: string;
@@ -199,7 +206,7 @@ export type AugmentPatch =
 
 export type SinkEvent =
   | { type: "entry"; entry: ReportEntry }
-  | { type: "augment"; seq: number; patch: AugmentPatch };
+  | { type: "augment"; entrySeq: number; patch: AugmentPatch };
 
 /**
  * Callback the runner passes into `createContext` so live records can be

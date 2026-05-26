@@ -18,9 +18,9 @@ function makeMessage(id: string, text: string, threadId?: string): BusMessage {
   } as unknown as BusMessage;
 }
 
-function makeOutboundEntry(id: string, seq: number, text: string): OutboundReceivedEntry {
+function makeOutboundEntry(id: string, entrySeq: number, text: string): OutboundReceivedEntry {
   return {
-    seq,
+    entrySeq,
     ts: new Date().toISOString(),
     kind: "outboundReceived",
     messageId: id,
@@ -30,7 +30,7 @@ function makeOutboundEntry(id: string, seq: number, text: string): OutboundRecei
 
 function makeCliMockEntry(cli: string, argv: string[]): CliMockEntry {
   return {
-    seq: 0,
+    entrySeq: 0,
     ts: new Date().toISOString(),
     kind: "cliMock",
     call: {

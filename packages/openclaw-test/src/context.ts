@@ -206,13 +206,13 @@ export function createContext(params: {
   const mockHandlers = new Map<string, CliMockHandler>();
   const outboundWaiters = new Map<string, (entry: OutboundReceivedEntry) => void>();
   const outboundByMessageId = new Map<string, OutboundReceivedEntry>();
-  let seq = 0;
+  let nextEntrySeq = 0;
   let currentEntry: ActionEntry | undefined;
   let lastCliMock: { atMs: number; entry: CliMockEntry } | undefined;
   let scenarioEnded = false;
 
-  const nextSeqTs = (): { seq: number; ts: string } => ({
-    seq: seq++,
+  const nextEntrySeqTs = (): { entrySeq: number; ts: string } => ({
+    entrySeq: nextEntrySeq++,
     ts: new Date().toISOString(),
   });
 
@@ -222,8 +222,8 @@ export function createContext(params: {
     return entry;
   };
 
-  const emitAugment = (seq: number, patch: AugmentPatch): void => {
-    emitSink?.({ type: "augment", seq, patch });
+  const emitAugment = (entrySeq: number, patch: AugmentPatch): void => {
+    emitSink?.({ type: "augment", entrySeq, patch });
   };
 
   const setCurrentEntry = <T extends ActionEntry>(entry: T): T => {
@@ -236,7 +236,7 @@ export function createContext(params: {
 
   const emitOutboundReceived = (m: BusMessage): void => {
     const entry: OutboundReceivedEntry = {
-      ...nextSeqTs(),
+      ...nextEntrySeqTs(),
       kind: "outboundReceived",
       messageId: m.id,
       text: m.text,
@@ -253,7 +253,7 @@ export function createContext(params: {
   };
 
   const emitCliMock = (call: CliMockCall): void => {
-    const entry: CliMockEntry = { ...nextSeqTs(), kind: "cliMock", call };
+    const entry: CliMockEntry = { ...nextEntrySeqTs(), kind: "cliMock", call };
     emit(entry);
     setCurrentEntry(entry);
     if (call.handlerError) {
@@ -264,7 +264,7 @@ export function createContext(params: {
         source: "cliMock",
       };
       entry.failure = failure;
-      emitAugment(entry.seq, { kind: "failure", failure });
+      emitAugment(entry.entrySeq, { kind: "failure", failure });
     }
   };
 
@@ -283,11 +283,11 @@ export function createContext(params: {
       scenarioEnded = true;
       const message =
         reason !== undefined && reason.length > 0 ? `scenario ended: ${reason}` : "scenario ended";
-      emit({ ...nextSeqTs(), kind: "scenarioLog", message });
+      emit({ ...nextEntrySeqTs(), kind: "scenarioLog", message });
     },
     log: ((arg: string | { attachTo: ActionEntry; prefix: string; message: string }) => {
       if (typeof arg === "string") {
-        emit({ ...nextSeqTs(), kind: "scenarioLog", message: arg });
+        emit({ ...nextEntrySeqTs(), kind: "scenarioLog", message: arg });
         return;
       }
       const note: ScenarioLogNote = {
@@ -296,9 +296,9 @@ export function createContext(params: {
         message: arg.message,
       };
       arg.attachTo.scenarioLog = note;
-      emitAugment(arg.attachTo.seq, { kind: "scenarioLog", scenarioLog: note });
+      emitAugment(arg.attachTo.entrySeq, { kind: "scenarioLog", scenarioLog: note });
     }) as ScenarioContext["log"],
-    sendInbound: (input) => sendInbound({ emit, nextSeqTs }, accountId, conversationId, input),
+    sendInbound: (input) => sendInbound({ emit, nextEntrySeqTs }, accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
     waitForOutbound: (predicate, opts) =>
       waitForOutbound(
@@ -350,23 +350,23 @@ export function createContext(params: {
 
 interface EmitDeps {
   emit: <T extends ReportEntry>(entry: T) => T;
-  nextSeqTs: () => { seq: number; ts: string };
+  nextEntrySeqTs: () => { entrySeq: number; ts: string };
 }
 
 interface AttachDeps {
   getCurrentEntry: () => ActionEntry | undefined;
-  emitAugment: (seq: number, patch: AugmentPatch) => void;
+  emitAugment: (entrySeq: number, patch: AugmentPatch) => void;
 }
 
 function computeResult(
   entries: ReportEntry[],
   currentEntry: ActionEntry | undefined,
-  emitAugment: (seq: number, patch: AugmentPatch) => void,
+  emitAugment: (entrySeq: number, patch: AugmentPatch) => void,
   scenarioFailure: ScenarioFailure | undefined,
 ): ScenarioResult {
   if (scenarioFailure && currentEntry && !currentEntry.failure) {
     currentEntry.failure = scenarioFailure;
-    emitAugment(currentEntry.seq, { kind: "failure", failure: scenarioFailure });
+    emitAugment(currentEntry.entrySeq, { kind: "failure", failure: scenarioFailure });
   }
 
   const failedEntry = findFailedEntry(entries);
@@ -374,9 +374,8 @@ function computeResult(
     return {
       verdict: "fail",
       cause: "failedEntry",
-      entrySeq: failedEntry.seq,
-      scenarioLogEntrySeq: failedEntry.seq,
-      message: `[entry #${failedEntry.seq}] ${failedEntry.failure?.message ?? ""}`,
+      entrySeq: failedEntry.entrySeq,
+      message: `[entry #${failedEntry.entrySeq}] ${failedEntry.failure?.message ?? ""}`,
     };
   }
 
@@ -409,7 +408,7 @@ function pushAssertion(
   if (!target) return;
   if (!target.assertions) target.assertions = [];
   target.assertions.push(record);
-  deps.emitAugment(target.seq, { kind: "assertion", assertion: record });
+  deps.emitAugment(target.entrySeq, { kind: "assertion", assertion: record });
 }
 
 function registerMockCli(
@@ -457,7 +456,7 @@ async function sendInbound(
     },
   });
   const entry: InboundSentEntry = {
-    ...deps.nextSeqTs(),
+    ...deps.nextEntrySeqTs(),
     kind: "inboundSent",
     messageId: r.message.id,
     text: input.text,
@@ -562,7 +561,7 @@ async function unmatchedFastFailError(
   msg: BusMessage,
 ): Promise<AssertionError> {
   const entry = await raceTimeout(deps.awaitEntry(msg.id), 50);
-  const seqOrId = entry ? `seq=${entry.seq}` : `msg=${msg.id}`;
+  const seqOrId = entry ? `entrySeq=${entry.entrySeq}` : `msg=${msg.id}`;
   const thread = msg.threadId !== undefined ? `threadId=${msg.threadId}` : "no threadId";
   const text = truncate(msg.text);
   return new AssertionError(

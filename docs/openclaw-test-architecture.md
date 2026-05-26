@@ -165,13 +165,13 @@ Layout: `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`.
 
 Two files per task:
 
-- `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line. Survives a runner crash. Re-emitted whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry, so the file may contain successive snapshots of the same `seq` — the last write wins.
-- `report.json` — final `ScenarioReport`, written once at end. Re-merges the live entries with `agentToolCall` entries parsed from the gateway's `anthropic-payload.jsonl` (filtered by `conversationId`), re-assigns `seq` by `ts`, and adds per-scenario `cost = { gatewayUsd, judgeUsd, totalUsd, gatewayTurns }`.
+- `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
+- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. Long string `content` on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { gatewayUsd, judgeUsd, totalUsd, gatewayTurns }`.
 
 Scenario verdict is reported as `result: ScenarioResult` (a discriminated union):
 
 - `{ verdict: "pass" }` — clean run.
-- `{ verdict: "fail", cause: "failedEntry", entrySeq, message }` — failure landed on an action entry; details live on `entries[entrySeq].failure`.
+- `{ verdict: "fail", cause: "failedEntry", entrySeq, message }` — failure landed on an action entry; details live on the entry with the matching `entrySeq` (find it via `entries.find(e => e.entrySeq === N)`, not by array index).
 - `{ verdict: "fail", cause: "error", source, errorName, message, stack? }` — failure with no associated entry (timeout before any agent action, runner error, etc.).
 
 Entry kinds: `scenarioLog` · `inboundSent` · `outboundReceived` · `cliMock` · `agentToolCall`. Each entry is one action; assertions, scenario-log notes, and failures live as nested fields (`assertions: AssertionRecord[]`, `scenarioLog: ScenarioLogNote`, `failure: ScenarioFailure`) on the action entry they describe. `outboundReceived` captures every bus outbound for the conversation, not only the ones the scenario explicitly awaits. `agentToolCall` lives only in `report.json`.
