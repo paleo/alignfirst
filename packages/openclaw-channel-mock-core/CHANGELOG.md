@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.3.1
+
+### Patch Changes
+
+- Improved CLI argument handling
+
 ## 0.3.0
 
 ### Minor Changes

@@ -46,9 +46,9 @@ Three sub-paths, in order. Pick exactly one. The setup command always runs *befo
 The path that does create (sub-paths 2 and 3) spawns background bootstrap — don't add your own `background` option. As soon as the setup command returns, post a status-only message with these three labelled fields (translated to the user's language):
 
 ```text
-Worktree : {full-path}
-Branche : {ticket-id}/{work-type}
-Bootstrap : {running | ready | failed}
+Worktree: {dirname}
+Branch: {TICKET_ID}/{WORK_TYPE}
+Bootstrap: {running | ready | failed}
 ```
 
 ## Step 5 — User's turn

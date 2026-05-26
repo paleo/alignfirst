@@ -4,7 +4,7 @@ description: "Conventions for writing, organizing, and browsing documentation in
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.5.0"
+  version: "0.5.1"
   repository: https://github.com/paleo/alignfirst
 ---
 

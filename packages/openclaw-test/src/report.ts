@@ -1,7 +1,7 @@
 /**
  * Scenario report typing for openclaw-test.
  *
- * Two artifacts per scenario run, under `<OPENCLAW_TEST_ARTIFACTS_DIR>/<baseStamp>-<scenario>-<channel>/`:
+ * Two artifacts per scenario run, under `<OPENCLAW_TEST_ARTIFACTS_DIR>/<baseStamp>/<scenario>-<channel>[-iter<n>]/`:
  *
  *   - `scenario-log.jsonl` — live append, one `ReportEntry` per line, written as
  *                            things happen. Survives runner crash / hang.

@@ -1,5 +1,15 @@
 # @paleo/openclaw-test
 
+## 0.5.1
+
+### Patch Changes
+
+- Improved CLI argument handling
+- Updated dependencies
+  - @paleo/openclaw-channel-mock-core@0.3.1
+  - @paleo/openclaw-discord-mock@0.3.1
+  - @paleo/openclaw-slack-mock@0.3.1
+
 ## 0.5.0
 
 ### Minor Changes

@@ -104,8 +104,8 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const matrixExit = await runMatrix({
     scenarios,
     channels,
-    iterations: iterations ? Number(iterations) : 1,
-    maxFailures: maxFailures ? Number(maxFailures) : 1,
+    iterations,
+    maxFailures,
     stopOnFail,
     reuseStack,
     skipFirstRestart: !wereUpBefore && !reuseStack,
@@ -274,18 +274,26 @@ function execComposeSync(args: string[]): number {
 
 interface RunArgs {
   channel: string;
-  iterations?: string;
-  maxFailures?: string;
+  iterations: number;
+  maxFailures: number;
   stopOnFail: boolean;
   reuseStack: boolean;
   all: boolean;
   positionals: string[];
 }
 
+function parseIntFlag(flag: string, raw: string, min: number): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) {
+    failRun(`error: ${flag} expects an integer >= ${min}, got ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
 function parseRunArgs(argv: string[]): RunArgs {
   let channel: string | undefined;
-  let iterations: string | undefined;
-  let maxFailures: string | undefined;
+  let iterations = 1;
+  let maxFailures = 1;
   let stopOnFail = false;
   let reuseStack = false;
   let all = false;
@@ -299,10 +307,13 @@ function parseRunArgs(argv: string[]): RunArgs {
     else if (a === "--stop-on-fail") stopOnFail = true;
     else if (a === "--channel") channel = argv[++i];
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
-    else if (a === "--iterations") iterations = argv[++i];
-    else if (a?.startsWith("--iterations=")) iterations = a.slice("--iterations=".length);
-    else if (a === "--max-failures") maxFailures = argv[++i];
-    else if (a?.startsWith("--max-failures=")) maxFailures = a.slice("--max-failures=".length);
+    else if (a === "--iterations") iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1);
+    else if (a?.startsWith("--iterations="))
+      iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1);
+    else if (a === "--max-failures")
+      maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0);
+    else if (a?.startsWith("--max-failures="))
+      maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0);
     else if (a?.startsWith("--")) failRun(`error: unknown flag ${a}`);
     else if (a) positionals.push(a);
   }

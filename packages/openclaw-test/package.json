@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-test",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Dockerised regression-test framework for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
   "keywords": [
     "openclaw",
@@ -50,9 +50,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "~0.98.0",
-    "@paleo/openclaw-channel-mock-core": "0.3.0",
-    "@paleo/openclaw-discord-mock": "0.3.0",
-    "@paleo/openclaw-slack-mock": "0.3.0"
+    "@paleo/openclaw-channel-mock-core": "0.3.1",
+    "@paleo/openclaw-discord-mock": "0.3.1",
+    "@paleo/openclaw-slack-mock": "0.3.1"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",

@@ -1,11 +1,12 @@
 /**
- * Mock-CLI shim. Symlinked from `/opt/openclaw-test/mocks/bin/{git,npm,pnpm,yarn,claude}`.
- * Determines its invoked name from argv[1] basename, POSTs the call to the
- * runner's /mock-cli/invoke endpoint, and replays the response locally.
+ * Mock-CLI shim. Consumers symlink it under `/opt/openclaw-test/mocks/bin/` for
+ * whichever commands they want to intercept (typically `claude`, `gh`, `glab`,
+ * etc.). Determines its invoked name from argv[1] basename, POSTs the call to
+ * the runner's /mock-cli/invoke endpoint, and replays the response locally.
  */
 
-import { basename } from "node:path";
 import { request as httpRequest } from "node:http";
+import { basename } from "node:path";
 import { URL } from "node:url";
 
 function die(msg: string, code = 127): never {

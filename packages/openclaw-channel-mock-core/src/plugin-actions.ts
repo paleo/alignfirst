@@ -121,6 +121,7 @@ export function createChannelMockMessageActions(params: {
           content: Type.Optional(Type.String()),
           replyTo: Type.Optional(Type.String()),
           replyToId: Type.Optional(Type.String()),
+          limit: Type.Optional(Type.Integer()),
         },
       },
     }),
