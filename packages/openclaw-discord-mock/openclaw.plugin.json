@@ -2,5 +2,10 @@
   "id": "discord-mock",
   "activation": { "onStartup": false },
   "channels": ["discord-mock"],
-  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} }
+  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+  "channelConfigs": {
+    "discord-mock": {
+      "schema": { "type": "object", "additionalProperties": true, "properties": {} }
+    }
+  }
 }

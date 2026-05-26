@@ -137,7 +137,7 @@ Both channels register together on every gateway boot. The runner selects which 
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. `chat_id` envelope shape is **not** rewritten — scenarios assert on `conversation.id` / `threadId`, not envelope formatting.
 
-`openclaw.plugin.json` without `channelConfigs` warns at startup (`channel plugin manifest declares <id> without channelConfigs metadata`); the gateway fills missing `label` / `selectionLabel` / `docsPath` / `blurb` from the runtime plugin. Cosmetic.
+Each `openclaw.plugin.json` declares a minimal `channelConfigs.<id>.schema` (`type: "object"`, `additionalProperties: true`) to silence the gateway's `channel plugin manifest declares <id> without channelConfigs metadata` warning. The static schema is intentionally permissive — the runtime plugin owns the real config schema via `buildChannelMockConfigSchema`. `label` / `selectionLabel` / `docsPath` / `blurb` still come from the runtime plugin.
 
 ## Target normalizer + plugin-action vs send
 

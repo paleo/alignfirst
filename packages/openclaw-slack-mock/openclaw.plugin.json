@@ -2,5 +2,10 @@
   "id": "slack-mock",
   "activation": { "onStartup": false },
   "channels": ["slack-mock"],
-  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} }
+  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+  "channelConfigs": {
+    "slack-mock": {
+      "schema": { "type": "object", "additionalProperties": true, "properties": {} }
+    }
+  }
 }

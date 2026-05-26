@@ -1,5 +1,14 @@
 # @paleo/openclaw-test
 
+## 0.5.2
+
+### Patch Changes
+
+- Silence two cosmetic warnings on a fresh consumer `env:build`.
+- Updated dependencies
+  - @paleo/openclaw-discord-mock@0.3.2
+  - @paleo/openclaw-slack-mock@0.3.2
+
 ## 0.5.1
 
 ### Patch Changes

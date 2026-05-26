@@ -4,7 +4,7 @@
 #
 # Build context is the project dir.
 
-ARG OPENCLAW_TEST_BASE_TAG
+ARG OPENCLAW_TEST_BASE_TAG=__SET_VIA_OPENCLAW_TEST_CLI__
 FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}
 
 COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/

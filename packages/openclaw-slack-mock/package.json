@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-slack-mock",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Synthetic Slack-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
