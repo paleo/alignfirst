@@ -2,6 +2,7 @@
   "name": "@paleo/docmap",
   "version": "0.4.3",
   "license": "CC0-1.0",
+  "author": "Thomas MUR",
   "description": "A lightweight documentation system for AI agents and humans.",
   "keywords": [
     "documentation",

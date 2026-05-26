@@ -9,6 +9,7 @@
     "local"
   ],
   "license": "CC0-1.0",
+  "author": "Thomas MUR",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

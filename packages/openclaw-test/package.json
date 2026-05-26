@@ -11,6 +11,7 @@
     "docker"
   ],
   "license": "MIT",
+  "author": "Thomas MUR",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
