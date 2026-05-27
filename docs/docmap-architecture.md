@@ -19,7 +19,7 @@ Three TypeScript modules in `packages/docmap/src/`, compiled to `packages/docmap
 | Module | Responsibility |
 | --- | --- |
 | `src/parser.ts` | YAML frontmatter extraction (`extractMetadata`) and stripping (`stripFrontmatter`). |
-| `src/formatter.ts` | Directory reading, listing/formatting, name validation, `--check`, and `--read` file resolution. |
+| `src/formatter.ts` | Directory reading, listing/formatting, name validation, `--check`, and file resolution (`readDocFile`, direct path then fuzzy basename search; returns `undefined` when nothing resolves). |
 | `src/cli.ts` | Argument parsing, flow orchestration, package-manager detection for tips. |
 
 Entry point: `packages/docmap/bin/docmap.mjs` → imports `packages/docmap/dist/cli.js` → calls `main()` → returns an exit code.
@@ -28,15 +28,13 @@ Entry point: `packages/docmap/bin/docmap.mjs` → imports `packages/docmap/dist/
 
 `main()` in `src/cli.ts` drives everything:
 
-1. **Parse args** — `parseArgs()` extracts `--dir`, `--recursive`, `--read`, `--root`, `--check` from `argv`. The `--dir` values are normalized (trailing slashes stripped, `docs/` prefix removed).
-2. **Resolve base directory** — `--root` or default `docs/` relative to `cwd`.
-3. **Branch by mode:**
-   - `--check` → `checkAll()` validates every file and directory name (shell-safe regex) and every `.md` frontmatter. Returns exit code 1 if any issues.
-   - Listing (default, `--dir`, `--recursive`) → `listDirectory()` or `formatRecursive()` produce markdown output with headings, bullets, summaries, and `read_when` hints.
-   - `--read` → `readDocFile()` resolves the file (direct path or fuzzy recursive search), strips frontmatter via `stripFrontmatter()`, wraps in `<document_file>` XML tags.
-4. **Tips** — After listing, contextual tips are appended (e.g. "Use `--dir`…" if subdirs exist, "Use `--read`…" if files exist). The package manager is auto-detected from lockfiles.
-
-`--read` can be combined with listing flags; both outputs appear.
+1. **Parse args** — `parseArgs()` extracts `--recursive`, `--root`, `--check`, collects positional **paths**, and collects unknown `--flags`. Tokens starting with `--` are never paths; an unknown one is recorded and later warned about on stderr (so a stale `docmap --dir topic-a` still works — `--dir` is skipped, `topic-a` is a positional). `parseArgs` is pure (no writes).
+2. **Resolve base directory** — `--root` or default `docs/` relative to `cwd`. The **display prefix** is `relative(cwd, baseDir)` — `docs` by default, or the root's path for a custom `--root` (e.g. `config/docs`, or `../shared` outside cwd). All displayed paths carry this prefix, so they stay real and openable; the empty prefix (root === cwd) yields bare paths.
+3. **`--check`** → `checkAll()` validates every file and directory name (shell-safe regex) and every `.md` frontmatter. Returns exit code 1 if any issues. (Only `--check` returns non-zero.)
+4. **Classify positionals** — each path is normalized (trailing slashes stripped, leading display prefix removed; the bare prefix → root), resolved under the base dir, then `statSync`-tested. Existing directory → listing bucket; everything else (existing file, or missing) → read bucket. `statSync` throwing on a missing path is caught and treated as "not a directory". The filesystem is the source of truth — no extension heuristic.
+5. **Listings** — produced for each directory-classified path via `listDirectory()`/`formatDirectory()` or `formatRecursive()`. With no positionals at all, or with `--recursive` and no directory positionals, the root is listed. Files-only with `--recursive` off produces no listing.
+6. **Reads** — each read-bucket path goes through `readDocFile()` (direct path, then fuzzy basename search). A resolved result is wrapped in `<document_file>` tags; an unresolved one becomes a single generic `⚠ Not found: <path>` line (same wording for a mistyped file or directory — classification can't read intent, and a not-found read keeps exit code 0). Reads follow listings, separated by a blank line.
+7. **Tip** — After a listing, one contextual tip (`formatTip`) is appended explaining that several paths can be passed at once; the example shows directory args only when subdirs exist and file args (carrying the display prefix) only when files exist. The package manager is auto-detected from lockfiles.
 
 ## Frontmatter Contract
 

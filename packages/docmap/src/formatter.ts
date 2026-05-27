@@ -30,7 +30,7 @@ export interface CheckIssue {
   message: string;
 }
 
-export function checkAll(dirPath: string, relDir: string): CheckIssue[] {
+export function checkAll(dirPath: string, relDir: string, prefix: string): CheckIssue[] {
   const issues: CheckIssue[] = [];
   let entries: Dirent<string>[];
   try {
@@ -40,13 +40,13 @@ export function checkAll(dirPath: string, relDir: string): CheckIssue[] {
   }
 
   for (const entry of entries) {
-    const rel = relDir ? `docs/${relDir}/${entry.name}` : `docs/${entry.name}`;
+    const rel = displayPath(prefix, relDir, entry.name);
     const nameWarning = validateName(entry.name);
 
     if (entry.isDirectory()) {
       if (nameWarning) issues.push({ path: rel, message: nameWarning });
       const subRel = relDir ? `${relDir}/${entry.name}` : entry.name;
-      issues.push(...checkAll(join(dirPath, entry.name), subRel));
+      issues.push(...checkAll(join(dirPath, entry.name), subRel, prefix));
     } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
       if (nameWarning) issues.push({ path: rel, message: nameWarning });
       const content = readFileSync(join(dirPath, entry.name), "utf-8");
@@ -111,6 +111,7 @@ export function formatDirectory(
   title: string,
   result: DirectoryListing,
   relDir: string,
+  prefix: string,
 ): FormatResult {
   const lines: string[] = [];
   const titleDisplay = title.includes("/") ? `\`${title}\`` : title;
@@ -126,7 +127,7 @@ export function formatDirectory(
   }
 
   if (result.files.length > 0) {
-    lines.push(...formatFileBullets(result.files, relDir));
+    lines.push(...formatFileBullets(result.files, relDir, prefix));
     lines.push("");
   }
 
@@ -138,6 +139,7 @@ export function formatRecursive(
   title: string,
   level: number,
   relDir: string,
+  prefix: string,
 ): FormatResult {
   const lines: string[] = [];
   const result = listDirectory(dirPath);
@@ -149,7 +151,7 @@ export function formatRecursive(
   lines.push("");
 
   if (result.files.length > 0) {
-    lines.push(...formatFileBullets(result.files, relDir));
+    lines.push(...formatFileBullets(result.files, relDir, prefix));
     lines.push("");
   }
 
@@ -157,7 +159,7 @@ export function formatRecursive(
     const subRelDir = relDir ? `${relDir}/${sub}` : sub;
     const warning = result.subdirWarnings.get(sub);
     if (warning) lines.push(`⚠ ${warning}: ${sub}/`);
-    const subResult = formatRecursive(join(dirPath, sub), `${sub}/`, level + 1, subRelDir);
+    const subResult = formatRecursive(join(dirPath, sub), `${sub}/`, level + 1, subRelDir, prefix);
     lines.push(...subResult.lines);
     if (subResult.hasFiles) hasFiles = true;
   }
@@ -165,11 +167,11 @@ export function formatRecursive(
   return { lines, hasSubdirList: false, hasFiles };
 }
 
-export function formatFileBullets(files: FileEntry[], relDir: string): string[] {
+export function formatFileBullets(files: FileEntry[], relDir: string, prefix: string): string[] {
   const lines: string[] = [];
 
   for (const file of files) {
-    const docPath = relDir ? `docs/${relDir}/${file.name}` : `docs/${file.name}`;
+    const docPath = displayPath(prefix, relDir, file.name);
     let line = `- \`${docPath}\``;
     if (file.title) line += ` — ${file.title}`;
     if (file.summary) line += ` — ${file.summary}`;
@@ -214,19 +216,16 @@ export function formatSubdirTree(
 
 export function readDocFile(
   baseDir: string,
-  fileArg: string,
+  normalized: string,
+  prefix: string,
   getAllFiles: () => string[] = () => collectAllFiles(baseDir, ""),
-): { path: string; content: string } {
-  let normalized = fileArg.replace(/\/+$/, "");
-  if (normalized === "docs" || normalized.startsWith("docs/"))
-    normalized = normalized.slice("docs".length).replace(/^\/+/, "");
-
+): { path: string; content: string } | undefined {
   const resolvedBase = resolve(baseDir);
   const resolvedTarget = resolve(resolvedBase, normalized);
   if (isUnder(resolvedBase, resolvedTarget)) {
     try {
       const content = readFileSync(resolvedTarget, "utf-8");
-      return { path: `docs/${normalized}`, content: stripFrontmatter(content) };
+      return { path: displayPath(prefix, normalized), content: stripFrontmatter(content) };
     } catch {
       // fall through to recursive search
     }
@@ -234,10 +233,10 @@ export function readDocFile(
 
   const allFiles = getAllFiles();
   const found = allFiles.find((rel) => rel === normalized || rel.endsWith(`/${normalized}`));
-  if (!found) return { path: fileArg, content: `⚠ File not found: ${fileArg}` };
+  if (!found) return;
 
   const content = readFileSync(join(baseDir, found), "utf-8");
-  return { path: `docs/${found}`, content: stripFrontmatter(content) };
+  return { path: displayPath(prefix, found), content: stripFrontmatter(content) };
 }
 
 export function collectAllFiles(dirPath: string, prefix: string): string[] {
@@ -257,6 +256,10 @@ export function collectAllFiles(dirPath: string, prefix: string): string[] {
     }
   }
   return result;
+}
+
+function displayPath(...parts: string[]): string {
+  return parts.filter((part) => part.length > 0).join("/");
 }
 
 function validateName(name: string): string | undefined {

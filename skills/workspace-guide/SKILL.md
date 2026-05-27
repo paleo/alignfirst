@@ -1,7 +1,7 @@
 ---
-name: worktree-env-guide
+name: workspace-guide
 description: >-
-  Blueprint for implementing a worktree-based concurrent local environment system in a repository.
+  Blueprint for implementing a workspace system — multiple git-worktree dev environments side by side — in a repository.
 compatibility: Requires git. Template scripts are in Node.js but the approach works with any runtime.
 license: CC0 1.0
 metadata:
@@ -14,11 +14,11 @@ metadata:
 
 This skill helps you implement a system for running multiple local development environments simultaneously using git worktrees. It is meant to be adapted to any repository, regardless of tech stack or database engine.
 
-**Node consumers** install the `@paleo/worktree-env` package and write two custom scripts that build a config object and call `runSetupWorktree(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`finalizeWorktree`, `printSummary`, optional `purgeInfrastructure`, optional `devServerScript`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
+**Node consumers** install the `@paleo/workspace` package and write two custom scripts that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`finalizeWorktree`, `printSummary`, optional `purgeInfrastructure`, optional `devServerScript`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
-The `assets/` directory contains reference scripts ([setup-worktree.mjs](assets/setup-worktree.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/local-env.md). The scripts are annotated with `ADAPT` comments to highlight what needs changing.
+The `assets/` directory contains reference scripts ([workspace.mjs](assets/workspace.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/workspace.md). The scripts are annotated with `ADAPT` comments to highlight what needs changing.
 
 ## The Problem
 
@@ -99,23 +99,23 @@ Trade-off: mistakes in the main worktree's config also propagate. Keep it clean.
 
 ## The Two Scripts
 
-### 1. `setup-worktree` — Worktree lifecycle management
+### 1. `workspace` — Worktree lifecycle management
 
 This is the central piece. It handles the full worktree lifecycle: creation, setup, and removal. It can create a worktree for an existing branch, create a new branch with automatic deduplication, set up the local environment, and tear everything down.
 
-The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifecycle below. See [assets/setup-worktree.mjs](assets/setup-worktree.mjs) for a populated reference config.
+The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle below. See [assets/workspace.mjs](assets/workspace.mjs) for a populated reference config.
 
-**Lifecycle for setup (with `--use` or `--create`):**
+**Lifecycle for setup (with `workspace setup <branch>`):**
 
-1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `--create`, branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
+1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `-c`, branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
 4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
 5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, patch(content, ctx), required? }`; the file is copied from the main worktree and run through `patch`. `required: true` upgrades the "missing source" warning to an error.
-6. **Runs `await config.finalizeWorktree(ctx)`** in a detached background process. This callback owns infrastructure startup, dependency install / build, database provisioning, migrations, and seeding (see "Database provisioning" below). It MUST be idempotent — `setup-worktree --here` re-runs it as the documented retry path.
+6. **Runs `await config.finalizeWorktree(ctx)`** in a detached background process. This callback owns infrastructure startup, dependency install / build, database provisioning, migrations, and seeding (see "Database provisioning" below). It MUST be idempotent — `workspace setup` re-runs it as the documented retry path.
 7. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
 
-**Lifecycle for removal (with `--remove` / `--remove-here`):**
+**Lifecycle for removal (with `workspace remove [<branch>]`):**
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
@@ -123,31 +123,25 @@ The package's `runSetupWorktree(config: SetupWorktreeConfig)` performs the lifec
 4. Calls optional `config.purgeInfrastructure(ctx)` — destructive teardown (typically `docker compose down -v` to wipe volumes). Runs after the dev-server stop.
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
 
-**CLI flags:**
+**CLI subcommands:**
 
-| Flag | Purpose |
+| Command | Purpose |
 | --- | --- |
-| `--use BRANCH` | Create a worktree for an existing branch, then set up the local environment |
-| `--create BRANCH` | Create a new branch (with suffix dedup) + worktree, then set up the local environment |
-| `--here` | Set up the local environment in the current linked worktree |
-| `--owner NAME` | Owner of the slot (free-form label, optional) |
-| `--set-owner NAME` | Update the owner of the current linked worktree's slot — no rebuild |
-| `--remove BRANCH` | Stop dev server + free slot + remove worktree by branch name |
-| `--remove-here` | Remove the current linked worktree (same as `--remove`, but for the worktree you are in) |
-| `--no-remote-check` | Skip remote branch verification when removing (use with `--remove` or `--remove-here`) |
-| `--slot PORT` | Use a specific slot instead of auto-assigning |
-| `--force` | Overwrite existing config files and re-provision the database |
-| `--wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
-| `--info` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether `dev:up` is running for the worktree, with PIDs and log paths |
-| `--list` | Print all registered linked worktrees (slot, status, branch, path, owner, created) |
-| `--verbose` | Show intermediate output |
+| `workspace setup` | Set up the local environment in the current worktree (idempotent; bootstrap/retry path) |
+| `workspace setup <branch>` | Create a worktree for an existing branch, then set up the local environment |
+| `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c` |
+| `workspace remove [<branch>]` | Stop dev server + free slot + remove worktree by branch, or the current worktree when omitted |
+| `workspace list` | Print all registered worktrees (slot, status, branch, path, owner, created) |
+| `workspace info` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether `dev:up` is running, with PIDs and log paths |
+| `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
+| `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 
-Running the script with no mode flag shows help.
+Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `info`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. Running `workspace` with no command (or `--help`) shows help.
 
 **Config fields to populate:**
 
 - `scriptPath: string` — required. Absolute path to your wrapper script. Pass `fileURLToPath(import.meta.url)`. The package re-spawns this script for the detached finalize phase.
-- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `--remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
+- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `workspace remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
@@ -155,8 +149,8 @@ Running the script with no mode flag shows help.
 - `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs.
 - `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
-- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `setup-worktree --here` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `--here` retry can't import `@paleo/worktree-env`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
-- `purgeInfrastructure(ctx)` — optional. Called by `--remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
+- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `workspace setup` retry can't import `@paleo/workspace`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
+- `purgeInfrastructure(ctx)` — optional. Called by `workspace remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 - `worktreeDirName?({ branch, repoName })` — optional. Returns the worktree directory basename (e.g. `myrepo-feat-ABC-123`). Defaults to `defaultWorktreeDirName`, which strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. The kernel handles dedup (`-2`, `-3`…) when the resulting directory already exists, so the override should stay pure.
 
@@ -224,7 +218,7 @@ A single-process dev server uses a `SERVERS` array with one entry; the script's 
 **Two-tier shutdown:**
 
 - **`--stop` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast.
-- **`--remove` (setup-worktree)**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> --stop` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. The re-exec is structural: `setup-worktree` doesn't import your dev-server config, so it cannot dispatch callbacks in-process; delegating to the target's `dev-server.mjs` is how the kernel reaches them.
+- **`workspace remove`**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> --stop` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. The re-exec is structural: `workspace` doesn't import your dev-server config, so it cannot dispatch callbacks in-process; delegating to the target's `dev-server.mjs` is how the kernel reaches them.
 
 Decide what each callback's `stop()` does based on the soft-stop intent: containers down, data kept. The destructive part (volumes, container removal) lives in `purgeInfrastructure`. Data initialization is the expensive part; the dev server itself starts in seconds.
 
@@ -240,13 +234,13 @@ Decide what each callback's `stop()` does based on the soft-stop intent: contain
 ### Setting up a new local environment
 
 ```sh
-npm run setup-worktree -- --create feat/42       # new branch + worktree (dedup: appends -2, -3… if taken)
-npm run setup-worktree -- --use feat/42          # new worktree on an existing branch
-npm run setup-worktree -- --here                 # set up the current worktree
+npm run workspace -- setup feat/42 -c       # new branch + worktree (dedup: appends -2, -3… if taken)
+npm run workspace -- setup feat/42          # new worktree on an existing branch
+npm run workspace -- setup                  # set up the current worktree
 
 # Tag a slot's owner (free-form label; useful for AI bots passing a Discord username)
-npm run setup-worktree -- --use feat/42 --owner alice
-npm run setup-worktree -- --set-owner bob        # update later, no rebuild
+npm run workspace -- setup feat/42 --owner alice
+npm run workspace -- set-owner bob          # update later, no rebuild
 
 # Start developing
 npm run dev
@@ -257,12 +251,12 @@ npm run dev:up
 ### Removing a local environment
 
 ```sh
-npm run setup-worktree -- --remove feat/42       # remove by branch name
-npm run setup-worktree -- --remove-here          # remove the current worktree
-npm run setup-worktree -- --remove feat/42 --no-remote-check # skip remote branch check
+npm run workspace -- remove feat/42       # remove by branch name
+npm run workspace -- remove               # remove the current worktree
+npm run workspace -- remove feat/42 --no-remote-check # skip remote branch check
 ```
 
-`--remove-here` prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.
+`workspace remove` (no branch, from inside the worktree) prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.
 
 ### Stopping the dev server
 
@@ -287,10 +281,10 @@ When you only need a worktree (no slot, no config, no install), use `git worktre
 
 ```json
 {
-  "setup-worktree": "node scripts/local-env/setup-worktree.mjs",
-  "dev:up": "node scripts/local-env/dev-server.mjs",
-  "dev:down": "node scripts/local-env/dev-server.mjs --stop",
-  "dev:list": "node scripts/local-env/dev-server.mjs --list"
+  "workspace": "node scripts/workspace/workspace.mjs",
+  "dev:up": "node scripts/workspace/dev-server.mjs",
+  "dev:down": "node scripts/workspace/dev-server.mjs --stop",
+  "dev:list": "node scripts/workspace/dev-server.mjs --list"
 }
 ```
 
@@ -322,25 +316,31 @@ If you use AI coding agents, the worktree system only works if agents know about
 
 This is the file the agent reads on every task. It must contain:
 
-- **Conventions that affect worktrees** — branch naming and commit message conventions, because the agent creates branches when setting up worktrees. For example:
+- **A short definition of a workspace** — so the agent shares your vocabulary. For example:
+
+  ```markdown
+  A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
+  ```
+
+- **Conventions that affect workspaces** — branch naming and commit message conventions, because the agent creates branches when setting up workspaces. For example:
 
   ```markdown
   Branch naming convention: `<type>/<ticket-id>` (e.g., `feat/123`, `fix/123`).
   Commit message convention: conventional commits, e.g., `feat: [#123] add new feature`.
   ```
 
-- **A pointer to the local-env documentation** — so the agent knows to read it when dealing with worktrees or the dev server. For example:
+- **A pointer to the workspace documentation** — so the agent knows to read it when dealing with workspaces or the dev server. For example:
 
   ```markdown
   Read when relevant:
-  - `docs/local-env.md` — Starting/stopping the dev server, creating/removing worktrees.
+  - `docs/workspace.md` — Creating/removing workspaces, starting/stopping the dev server.
   ```
 
 Without the pointer, the agent won't discover the procedures. Without the conventions, it will create branches and commits with inconsistent naming.
 
-### 2. Detailed local-env documentation (`docs/local-env.md`)
+### 2. Detailed workspace documentation (`docs/workspace.md`)
 
-This is the file referenced above. It contains the step-by-step procedures: how to create a worktree, how to start the dev server, how to tear things down. See [assets/local-env.md](assets/local-env.md) for a starting point.
+This is the file referenced above. It contains the step-by-step procedures: how to create a workspace, how to start the dev server, how to tear things down. See [assets/workspace.md](assets/workspace.md) for a starting point.
 
 The agents need to know:
 
@@ -358,11 +358,11 @@ The agents need to know:
 - [ ] **Decide on a success marker.** What does your dev server print when it's ready? This is needed for `dev-server`.
 - [ ] **Decide on fatal log markers for `dev-server`** (or leave the array empty). Substrings that mean "unrecoverable startup failure" let the script fail fast instead of waiting for the timeout.
 - [ ] **Bootstrap the main worktree's config files manually once** (from `.example` files), since sibling worktrees inherit from the main worktree.
-- [ ] **Install `@paleo/worktree-env`** as a dev-dependency (Node consumers).
-- [ ] **Write `setup-worktree`** using [assets/setup-worktree.mjs](assets/setup-worktree.mjs) as a starting point. Search for `ADAPT` comments.
+- [ ] **Install `@paleo/workspace`** as a dev-dependency (Node consumers).
+- [ ] **Write `workspace`** using [assets/workspace.mjs](assets/workspace.mjs) as a starting point. Search for `ADAPT` comments.
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
-- [ ] **Add npm scripts** (or Makefile targets, etc.) for `setup-worktree`, `dev:up`, `dev:down`.
+- [ ] **Add npm scripts** (or Makefile targets, etc.) for `workspace`, `dev:up`, `dev:down`.
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/wt-registry/` is covered (slot registry and dev-server registry live there).
-- [ ] **Write agent documentation** if applicable (see [assets/local-env.md](assets/local-env.md)).
+- [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

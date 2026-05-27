@@ -1,47 +1,47 @@
-# @paleo/worktree-env
+# @paleo/workspace
 
 Run multiple local dev environments side by side, one per git worktree, with isolated ports, databases, and config files. Built for branches worked in parallel, by humans or AI agents.
 
 Each project writes two custom scripts on top, using these entry points:
 
-- `runSetupWorktree(config)` — worktree lifecycle (create / setup / remove / set-owner).
+- `runWorkspace(config)` — worktree lifecycle (setup / remove / set-owner).
 - `runDevServer(config)` — background dev-server start / stop / list.
 
 ## Setup
 
-The `worktree-env-guide` skill is a setup-time companion. Install the skill (globally or locally):
+The `workspace-guide` skill is a setup-time companion. Install the skill (globally or locally):
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill worktree-env-guide
+npx skills add https://github.com/paleo/alignfirst --skill workspace-guide
 ```
 
 Then, in your project, ask your agent:
 
 ```text
-Use your worktree-env-guide skill. Set up worktree-based local environments in this project.
+Use your workspace-guide skill. Set up worktree-based local environments in this project.
 ```
 
-The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/worktree-env` as a dev dependency, and wires the npm scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
+The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
 
 ## Workflow
 
 ```sh
-npm run setup-worktree -- --create feat/42   # new branch + worktree + isolated env
-npm run dev:up                               # start dev server in the background (no-op if already running here)
-npm run dev:up -- --restart                  # stop the dev-server in this worktree if running, then start fresh
-npm run dev:up -- --evict                    # if devLimit is reached, evict the oldest dev-server and start
-npm run dev:list                             # active dev-servers across all worktrees
-npm run dev:down                             # stop dev server (infrastructure stays up)
-npm run setup-worktree -- --remove feat/42   # full teardown
+npm run workspace -- setup feat/42 -c   # new branch + worktree + isolated env
+npm run dev:up                          # start dev server in the background (no-op if already running here)
+npm run dev:up -- --restart             # stop the dev-server in this worktree if running, then start fresh
+npm run dev:up -- --evict               # if devLimit is reached, evict the oldest dev-server and start
+npm run dev:list                        # active dev-servers across all worktrees
+npm run dev:down                        # stop dev server (infrastructure stays up)
+npm run workspace -- remove feat/42     # full teardown
 ```
 
 ## API
 
 ```ts
 import { fileURLToPath } from "node:url";
-import { runSetupWorktree, helpers } from "@paleo/worktree-env";
+import { runWorkspace, helpers } from "@paleo/workspace";
 
-await runSetupWorktree({
+await runWorkspace({
   scriptPath: fileURLToPath(import.meta.url),
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
   basePort: 8100,
@@ -62,7 +62,7 @@ await runSetupWorktree({
   preSetup: ({ currentWorktree, isMainWorktree, log }) => {
     // Idempotent. Bootstrap source files the kernel expects to find (e.g. seed `.env` from
     // `.env.example` on the main worktree). MUST NOT mutate the main worktree from a linked
-    // worktree setup — bootstrap the main first via `setup-worktree --here`.
+    // worktree setup — bootstrap the main first via `workspace setup`.
   },
   finalizeWorktree: async ({ currentWorktree }) => {
     // MUST be idempotent. Install deps, start containers, seed a database, etc.
@@ -74,14 +74,14 @@ await runSetupWorktree({
 
 `branch` is resolved live from the worktree on each call (not persisted in the registry — `git checkout` makes any stored value stale). For detached HEAD or missing directory, it falls back to `"(detached)"`. `status` is the slot's finalize status: `"pending"` until `finalizeWorktree` succeeds, then `"ready"` (or `"failed"`).
 
-Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `setup-worktree --here` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `setup-worktree --wait` from inside the worktree (or `setup-worktree --wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
+Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `workspace setup` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `workspace wait` from inside the worktree (or `workspace wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
 
-**Bootstrap the main worktree first.** Linked-worktree setup copies config sources from the main worktree, so the main must already have those files. Run `setup-worktree --here` once on the main checkout. Use `preSetup` (with `isMainWorktree === true`) to seed sources from examples or templates. `configFiles` entries are required by default; mark `optional: true` for sources that may legitimately be missing.
+**Bootstrap the main worktree first.** Linked-worktree setup copies config sources from the main worktree, so the main must already have those files. Run `workspace setup` once on the main checkout. Use `preSetup` (with `isMainWorktree === true`) to seed sources from examples or templates. `configFiles` entries are required by default; mark `optional: true` for sources that may legitimately be missing.
 
 `--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev:up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev:list` + `dev:down` deterministically.
 
 ```ts
-import { runDevServer, helpers } from "@paleo/worktree-env";
+import { runDevServer, helpers } from "@paleo/workspace";
 
 await runDevServer({
   basePort: 8100,

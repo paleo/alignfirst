@@ -1,14 +1,14 @@
-export { runSetupWorktree } from "./setup-worktree.js";
+export { runWorkspace } from "./workspace.js";
 export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
-  SetupWorktreeConfig,
+  WorkspaceConfig,
   SetupContext,
   SummaryContext,
   PatchContext,
   ConfigFileEntry,
   PurgeContext,
-} from "./setup-worktree.js";
+} from "./workspace.js";
 
 export { runDevServer } from "./dev-server.js";
 export type {

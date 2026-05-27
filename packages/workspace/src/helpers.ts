@@ -26,7 +26,7 @@ export function extractHost(content: string, key: string, fallback = "localhost"
  */
 export function readPortFromEnvFile(file: string, varName: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run setup-worktree first.`);
+    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
     process.exit(1);
   }
   const content = readFileSync(file, "utf-8");
@@ -44,7 +44,7 @@ export function readPortFromEnvFile(file: string, varName: string): number {
  */
 export function readPortFromJsonFile(file: string, jsonPath: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run setup-worktree first.`);
+    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
     process.exit(1);
   }
   const data = JSON.parse(readFileSync(file, "utf-8"));
@@ -90,7 +90,7 @@ export function copyAndPatchFile(
     if (!optional) {
       console.error(
         `Error: ${relPath} not found in main worktree. Bootstrap the main worktree first ` +
-          "(setup-worktree --here), or mark the entry as optional.",
+          "(`workspace setup`), or mark the entry as optional.",
       );
       process.exit(1);
     }

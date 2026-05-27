@@ -45,4 +45,4 @@ Apply the `paleo-typescript-style` skill.
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
 - `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/worktree-env` — worktree-based concurrent local environment kernel
+- `@paleo/workspace` — run multiple git-worktree dev environments side by side

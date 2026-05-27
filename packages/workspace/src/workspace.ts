@@ -11,19 +11,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
-import {
-  isFinalizeMode,
-  isInfoMode,
-  isListMode,
-  isRemoveMode,
-  isSetOwnerMode,
-  isSetupMode,
-  isWaitMode,
-  parseSetupArgs,
-  printSetupHelp,
-  type SetupArgs,
-  validateSetupFlags,
-} from "./cli.js";
+import { parseWorkspaceArgs, printWorkspaceHelp, type WorkspaceCommand } from "./cli.js";
 import { findOwnEntry, removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import { copyAndPatchFile, formatDuration } from "./helpers.js";
@@ -54,19 +42,19 @@ import {
   type WorktreeDirNameFn,
 } from "./worktree.js";
 
-/** Configuration accepted by {@link runSetupWorktree}. */
-export interface SetupWorktreeConfig {
+/** Configuration accepted by {@link runWorkspace}. */
+export interface WorkspaceConfig {
   /**
-   * Absolute path to the wrapper script that calls `runSetupWorktree`. The package re-spawns this
+   * Absolute path to the wrapper script that calls `runWorkspace`. The package re-spawns this
    * file as a detached child for the finalize phase, so it must point at a runnable Node entrypoint
-   * — typically `fileURLToPath(import.meta.url)` from your `setup-worktree.mjs`.
+   * — typically `fileURLToPath(import.meta.url)` from your `workspace.mjs`.
    */
   scriptPath: string;
   /**
-   * Absolute path to your dev-server script (the file that calls `runDevServer`). On `--remove`,
-   * the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
-   * Typically `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your
-   * `setup-worktree.mjs`.
+   * Absolute path to your dev-server script (the file that calls `runDevServer`). On
+   * `workspace remove`, the kernel shells out to `node <devServerScript> --stop` with
+   * `cwd: <target worktree>`. Typically
+   * `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your `workspace.mjs`.
    */
   devServerScript: string;
   /** Anchor port for the slot range. Slots are derived from this value. */
@@ -98,11 +86,11 @@ export interface SetupWorktreeConfig {
    * Runs before `configFiles` are copied. Use this to bootstrap source files the kernel expects
    * to find (e.g. seed `config.json` from `config.example.json` on the main worktree, decrypt
    * an env file). MUST be idempotent. On a linked-worktree setup, MUST NOT mutate the main
-   * worktree — bootstrap the main worktree first via `setup-worktree --here`.
+   * worktree — bootstrap the main worktree first via `workspace setup`.
    */
   preSetup?: (ctx: PreSetupContext) => Promise<void> | void;
   /**
-   * MUST be idempotent. After a failure, the user re-runs `setup-worktree --here` from inside
+   * MUST be idempotent. After a failure, the user re-runs `workspace setup` from inside
    * the worktree — this callback will be invoked again with the same context. Re-runs must not
    * error on pre-existing state (created directories, started containers, ran migrations,
    * installed deps, etc.).
@@ -112,8 +100,8 @@ export interface SetupWorktreeConfig {
    */
   finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
   /**
-   * Destructive infrastructure teardown on `--remove` (e.g. `docker compose down -v` to wipe
-   * volumes). Runs after the dev-server stop. Best-effort; errors should be swallowed.
+   * Destructive infrastructure teardown on `workspace remove` (e.g. `docker compose down -v` to
+   * wipe volumes). Runs after the dev-server stop. Best-effort; errors should be swallowed.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
@@ -127,11 +115,11 @@ export interface SetupWorktreeConfig {
   worktreeDirName?: WorktreeDirNameFn;
 }
 
-/** Context passed to {@link SetupWorktreeConfig.preSetup}. */
+/** Context passed to {@link WorkspaceConfig.preSetup}. */
 export interface PreSetupContext {
   currentWorktree: string;
   mainWorktree: string;
-  /** `true` when running on the main worktree (i.e. `--here` from the main checkout). */
+  /** `true` when running on the main worktree (i.e. `workspace setup` from the main checkout). */
   isMainWorktree: boolean;
   /** Mirrors `--force`. Hooks may use it to overwrite previously bootstrapped files. */
   force: boolean;
@@ -139,7 +127,7 @@ export interface PreSetupContext {
   log: (msg: string) => void;
 }
 
-/** Context passed to {@link SetupWorktreeConfig.finalizeWorktree}. */
+/** Context passed to {@link WorkspaceConfig.finalizeWorktree}. */
 export interface SetupContext {
   currentWorktree: string;
   mainWorktree: string;
@@ -155,7 +143,7 @@ export interface SetupContext {
 }
 
 /**
- * Context passed to {@link SetupWorktreeConfig.printSummary}.
+ * Context passed to {@link WorkspaceConfig.printSummary}.
  *
  * Called after worktree creation; the dev-server is not running yet.
  */
@@ -173,7 +161,7 @@ export interface SummaryContext {
   status: SlotStatus;
 }
 
-/** Context passed to {@link SetupWorktreeConfig.purgeInfrastructure}. */
+/** Context passed to {@link WorkspaceConfig.purgeInfrastructure}. */
 export interface PurgeContext {
   worktree: string;
   mainWorktree: string;
@@ -189,7 +177,7 @@ export interface ConfigFileEntry {
   /**
    * When `true`, a missing source on the main worktree logs a warning and skips the entry.
    * Default: required (missing source aborts setup). Bootstrap the main worktree first via
-   * `setup-worktree --here`, or seed sources in `preSetup`.
+   * `workspace setup`, or seed sources in `preSetup`.
    */
   optional?: boolean;
 }
@@ -202,19 +190,21 @@ export interface PatchContext {
   currentWorktree: string;
 }
 
-export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<void> {
-  let args: SetupArgs;
+export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
+  let command: WorkspaceCommand;
+  let verbose: boolean;
   try {
-    args = parseSetupArgs();
+    ({ command, verbose } = parseWorkspaceArgs());
   } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
+    if (err instanceof ConfigError) {
+      console.error(err.message);
+      process.exit(err.exitCode);
+    }
+    throw err;
   }
 
-  const verbose = args.verbose ?? false;
-
-  if (args.help) {
-    printSetupHelp();
+  if (command.kind === "help") {
+    printWorkspaceHelp();
     return;
   }
 
@@ -226,101 +216,81 @@ export async function runSetupWorktree(config: SetupWorktreeConfig): Promise<voi
     process.exit(1);
   }
 
-  try {
-    validateSetupFlags(args);
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(err.message);
-      process.exit(err.exitCode);
-    }
-    throw err;
-  }
-
-  if (isFinalizeMode(args)) {
-    await runFinalize(args, config);
-    return;
-  }
-
-  if (isWaitMode(args) && !isSetupMode(args)) {
-    await runWait(args, config);
-    return;
-  }
-
-  if (isInfoMode(args)) {
-    runInfo(args, config);
-    return;
-  }
-
-  if (isListMode(args)) {
-    runList(config);
-    return;
-  }
-
-  if (!isSetupMode(args) && !isRemoveMode(args) && !isSetOwnerMode(args)) {
-    printSetupHelp();
-    return;
+  switch (command.kind) {
+    case "finalize":
+      await runFinalize(command, config);
+      return;
+    case "wait":
+      await runWait(command, config);
+      return;
+    case "info":
+      runInfo(command, config);
+      return;
+    case "list":
+      runList(config);
+      return;
   }
 
   const ctx = detectWorktree();
-  enforceWorktreeMode(args, ctx);
+  enforceWorktreeMode(command, ctx);
   const run: RunCtx = { verbose };
 
-  if (isRemoveMode(args)) {
-    await handleRemove(args, ctx, run, config);
-    return;
-  }
-
-  if (isSetOwnerMode(args)) {
-    handleSetOwnerMode(args, ctx, config);
-    return;
-  }
-
-  const { slot } = await runSetup(args, ctx, run, config);
-
-  if (isWaitMode(args)) {
-    await waitForSlot(slot, config, { printSummary: false });
+  switch (command.kind) {
+    case "remove":
+      await handleRemove(command, ctx, run, config);
+      return;
+    case "set-owner":
+      handleSetOwnerMode(command, ctx, config);
+      return;
+    case "setup": {
+      const { slot } = await runSetup(command, ctx, run, config);
+      if (command.wait) await waitForSlot(slot, config, { printSummary: false });
+      return;
+    }
   }
 }
 
+type SetupCommand = Extract<WorkspaceCommand, { kind: "setup" }>;
+
 async function runSetup(
-  args: SetupArgs,
+  command: SetupCommand,
   ctx: WorktreeContext,
   run: RunCtx,
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
 ): Promise<{ slot: number }> {
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
 
-  validateSlotAvailability(args.slot, {
+  validateSlotAvailability(command.slot, {
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
     registryDir: config.registryDir,
     scheme,
   });
 
-  const setupCtx = ensureWorktree(args, ctx, run, config.worktreeDirName);
-  refuseIfFinalizePending(setupCtx, config.registryDir, args.force ?? false);
+  const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
+  refuseIfFinalizePending(setupCtx, config.registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
   const {
     port: slot,
     owner,
     status,
   } = resolveAndRegisterSlot({
-    slot: args.slot,
+    slot: command.slot,
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
     registryDir: config.registryDir,
     scheme,
-    requestedOwner: args.owner,
+    requestedOwner: command.owner,
     isMainWorktree: setupCtx.isMainWorktree,
-    force: args.force ?? false,
+    force: command.force,
   });
   const ports = portsFn(slot);
 
   const runtimeDir = join(setupCtx.currentWorktree, config.runtimeDir);
   mkdirSync(runtimeDir, { recursive: true });
   const logPath = join(runtimeDir, "wt-setup.log");
-  // Truncate any prior log so `--here` retries start with a clean record (the previous run's
+  // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
   // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
   writeFileSync(logPath, "");
   // Opened "a" so the same fd can be inherited by the detached finalize child below.
@@ -345,13 +315,13 @@ async function runSetup(
       currentWorktree: setupCtx.currentWorktree,
       mainWorktree: setupCtx.mainWorktree,
       isMainWorktree: setupCtx.isMainWorktree,
-      force: args.force ?? false,
+      force: command.force,
       log: teeLog,
     });
   }
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
-  generateConfigFiles(setupCtx, config.configFiles, slot, ports, args.force ?? false, verboseLog);
+  generateConfigFiles(setupCtx, config.configFiles, slot, ports, command.force, verboseLog);
 
   teeLog(
     config.printSummary({
@@ -369,11 +339,11 @@ async function runSetup(
   teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    teeLog(`Block until ready: setup-worktree --wait --slot ${slot}`);
+    teeLog(`Block until ready: workspace wait --slot ${slot}`);
   }
 
-  const finalizeArgs = [config.scriptPath, "--__finalize", String(slot)];
-  if (args.force) finalizeArgs.push("--force");
+  const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];
+  if (command.force) finalizeArgs.push("--force");
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -395,14 +365,16 @@ function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, forc
   const [slotPort] = found;
   console.error(
     `Error: Setup is already in progress for slot ${slotPort}. ` +
-      `Run 'setup-worktree --wait --slot ${slotPort}' to wait for it to finish (or fail), ` +
+      `Run 'workspace wait --slot ${slotPort}' to wait for it to finish (or fail), ` +
       "then retry. Use --force to bypass.",
   );
   process.exit(1);
 }
 
-async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
-  const slot = Number(args.__finalize);
+type FinalizeCommand = Extract<WorkspaceCommand, { kind: "finalize" }>;
+
+async function runFinalize(command: FinalizeCommand, config: WorkspaceConfig): Promise<void> {
+  const slot = Number(command.slot);
   const ctx = detectWorktree();
   const logPath = join(ctx.currentWorktree, config.runtimeDir, "wt-setup.log");
   const appendLog = (message: string): void => {
@@ -418,7 +390,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
 
   const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
 
-  if (entry.status === "ready" && !args.force) {
+  if (entry.status === "ready" && !command.force) {
     appendLog(`READY: branch ${branch} (slot ${slot}) already finalized; skipping.`);
     return;
   }
@@ -436,7 +408,7 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
     branch,
     owner: entry.owner,
     ports,
-    force: args.force ?? false,
+    force: command.force,
     verbose: false,
   };
 
@@ -456,13 +428,13 @@ async function runFinalize(args: SetupArgs, config: SetupWorktreeConfig): Promis
   }
 }
 
-function resolveTargetSlot(args: SetupArgs, config: SetupWorktreeConfig): number {
-  if (args.slot !== undefined) {
-    const slot = Number(args.slot);
+function resolveTargetSlot(slotArg: string | undefined, config: WorkspaceConfig): number {
+  if (slotArg !== undefined) {
+    const slot = Number(slotArg);
     const scheme = resolvePortScheme(config);
     if (!isValidPort(slot, scheme)) {
       console.error(
-        `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${args.slot}".`,
+        `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
       );
       process.exit(1);
     }
@@ -472,7 +444,7 @@ function resolveTargetSlot(args: SetupArgs, config: SetupWorktreeConfig): number
 }
 
 function printWorktreeInfo(
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
   slot: number,
   worktreeForLog: string,
   fallback: { owner?: string },
@@ -514,7 +486,7 @@ function printWorktreeInfo(
 }
 
 function printDevServerBlock(
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
   mainWorktree: string,
   targetWorktree: string,
   now: number,
@@ -537,9 +509,11 @@ function printDevServerBlock(
   }
 }
 
-function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
-  if (args.slot !== undefined) {
-    const slot = resolveTargetSlot(args, config);
+type InfoCommand = Extract<WorkspaceCommand, { kind: "info" }>;
+
+function runInfo(command: InfoCommand, config: WorkspaceConfig): void {
+  if (command.slot !== undefined) {
+    const slot = resolveTargetSlot(command.slot, config);
     const ctx = detectWorktree();
     const entry = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
     if (!entry) {
@@ -555,7 +529,7 @@ function runInfo(args: SetupArgs, config: SetupWorktreeConfig): void {
   });
 }
 
-function runList(config: SetupWorktreeConfig): void {
+function runList(config: WorkspaceConfig): void {
   const ctx = detectWorktree();
   const entries = Object.entries(readSlots(ctx.mainWorktree, config.registryDir).slots).sort(
     ([a], [b]) => Number(a) - Number(b),
@@ -596,15 +570,17 @@ function runList(config: SetupWorktreeConfig): void {
   for (const r of rows) console.log(fmt(r));
 }
 
-async function runWait(args: SetupArgs, config: SetupWorktreeConfig): Promise<void> {
-  // standalone --wait (no prior setup in this invocation) → print the full summary on success.
-  const slot = resolveTargetSlot(args, config);
+type WaitCommand = Extract<WorkspaceCommand, { kind: "wait" }>;
+
+async function runWait(command: WaitCommand, config: WorkspaceConfig): Promise<void> {
+  // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
+  const slot = resolveTargetSlot(command.slot, config);
   await waitForSlot(slot, config);
 }
 
 async function waitForSlot(
   slot: number,
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
   options: { printSummary?: boolean } = {},
 ): Promise<void> {
   const printSummary = options.printSummary ?? true;
@@ -643,28 +619,30 @@ async function waitForSlot(
   }
 }
 
+type RemoveCommand = Extract<WorkspaceCommand, { kind: "remove" }>;
+
 async function handleRemove(
-  args: SetupArgs,
+  command: RemoveCommand,
   ctx: WorktreeContext,
   run: RunCtx,
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
 ): Promise<void> {
   const verboseLog = makeVerboseLog(run.verbose);
-  const removeHere = Boolean(args["remove-here"]);
+  const removeHere = command.branch === undefined;
   const registry = readSlots(ctx.mainWorktree, config.registryDir);
-  const target = resolveRemoveTarget(args, ctx, registry, removeHere);
+  const target = resolveRemoveTarget(command, ctx, registry);
 
   // Refuse to remove while the detached finalize is still writing to slots.json / wt-setup.log:
   // racing the two corrupts the registry and leaves the worktree directory orphaned.
   if (registry.slots[target.slotPort]?.status === "pending") {
     console.error(
       `Error: Setup is still in progress for slot ${target.slotPort}. ` +
-        `Run 'setup-worktree --wait --slot ${target.slotPort}' to wait for it to finish (or fail), then retry --remove.`,
+        `Run 'workspace wait --slot ${target.slotPort}' to wait for it to finish (or fail), then retry the removal.`,
     );
     process.exit(1);
   }
 
-  if (!args["no-remote-check"]) {
+  if (!command.noRemoteCheck) {
     verifyBranchAbsentFromRemote(target.branch, run);
   }
 
@@ -716,12 +694,14 @@ async function handleRemove(
   }
 }
 
+type SetOwnerCommand = Extract<WorkspaceCommand, { kind: "set-owner" }>;
+
 function handleSetOwnerMode(
-  args: SetupArgs,
+  command: SetOwnerCommand,
   ctx: WorktreeContext,
-  config: SetupWorktreeConfig,
+  config: WorkspaceConfig,
 ): void {
-  const newOwner = args["set-owner"];
+  const newOwner = command.name;
   const { slotPort } = handleSetOwner({
     newOwner,
     currentWorktree: ctx.currentWorktree,
@@ -755,14 +735,14 @@ function handleSetOwnerMode(
 }
 
 function ensureWorktree(
-  args: SetupArgs,
+  command: SetupCommand,
   ctx: WorktreeContext,
   run: RunCtx,
   dirNameFn: WorktreeDirNameFn | undefined,
 ): WorktreeContext {
-  if (args.use) return useExistingBranch(args.use, ctx, run, dirNameFn);
-  if (args.create) return createBranch(args.create, ctx, run, dirNameFn);
-  return ctx;
+  if (command.branch === undefined) return ctx;
+  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn);
+  return useExistingBranch(command.branch, ctx, run, dirNameFn);
 }
 
 function linkSharedDirectories(
@@ -819,12 +799,11 @@ interface RemoveTarget {
 }
 
 function resolveRemoveTarget(
-  args: SetupArgs,
+  command: RemoveCommand,
   ctx: WorktreeContext,
   registry: ReturnType<typeof readSlots>,
-  removeHere: boolean,
 ): RemoveTarget {
-  if (removeHere) {
+  if (command.branch === undefined) {
     if (ctx.isMainWorktree) {
       console.error("Error: Cannot remove the main worktree.");
       process.exit(1);
@@ -846,7 +825,7 @@ function resolveRemoveTarget(
     };
   }
 
-  const branch = args.remove ?? "";
+  const branch = command.branch;
   const entry = Object.entries(registry.slots).find(
     ([, v]) => getWorktreeBranch(v.worktree) === branch,
   );
@@ -856,7 +835,9 @@ function resolveRemoveTarget(
   }
   const worktreePath = entry[1].worktree;
   if (resolve(ctx.currentWorktree) === resolve(worktreePath)) {
-    console.error("Error: You are currently in this worktree. Use --remove-here instead.");
+    console.error(
+      "Error: You are currently in this worktree. Run `workspace remove` (no branch) instead.",
+    );
     process.exit(1);
   }
   return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
@@ -885,7 +866,7 @@ function stopTargetDevServer(
   }
 }
 
-function resolvePortsFn(config: SetupWorktreeConfig): (slot: number) => Record<string, number> {
+function resolvePortsFn(config: WorkspaceConfig): (slot: number) => Record<string, number> {
   if (config.ports) return config.ports;
   if (config.portNames && config.portNames.length > 0) {
     return defaultComputePorts(config.portNames);
