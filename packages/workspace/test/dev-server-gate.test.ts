@@ -57,7 +57,7 @@ describe("buildWorktreeReadyMessage", () => {
     expect(result.message).toContain("failed");
     expect(result.message).toContain("boom");
     expect(result.message).toContain("30m");
-    expect(result.message).toContain("setup-worktree --here");
+    expect(result.message).toContain("workspace setup");
   });
 
   it("uses (no message) when failure.message is absent", () => {

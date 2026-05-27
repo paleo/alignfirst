@@ -1,0 +1,3 @@
+# Plain Notes
+
+A non-markdown file read by exact path.

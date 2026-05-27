@@ -1,8 +1,9 @@
 {
-  "name": "@paleo/worktree-env",
-  "version": "0.10.3",
-  "description": "Worktree-based concurrent local environment kernel.",
+  "name": "@paleo/workspace",
+  "version": "0.11.1",
+  "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [
+    "workspace",
     "worktree",
     "environment",
     "concurrent",
@@ -13,7 +14,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
-    "directory": "packages/worktree-env"
+    "directory": "packages/workspace"
   },
   "engines": {
     "node": ">=22.11.0"

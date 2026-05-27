@@ -244,7 +244,7 @@ export function buildWorktreeReadyMessage(input: {
       message:
         `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
         `Tail: ${logPath}\n` +
-        "Run `setup-worktree --wait` to block until it finishes, or retry `dev:up` once ready.",
+        "Run `workspace wait` to block until it finishes, or retry `dev:up` once ready.",
     };
   }
   const failureAt = entry.failure?.at ?? entry.createdAt;
@@ -255,7 +255,7 @@ export function buildWorktreeReadyMessage(input: {
     message:
       `Error: Worktree setup failed (slot ${slotPort}, ${elapsed} ago): ${reason}\n` +
       `Tail: ${logPath}\n` +
-      "Re-run `setup-worktree --here` to retry the finalize.",
+      "Re-run `workspace setup` to retry the finalize.",
   };
 }
 

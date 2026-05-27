@@ -50,22 +50,25 @@ read_when:
 
 ## CLI
 
+Targets are **positional arguments**. The CLI inspects the filesystem and classifies each one itself — a directory is listed, a file is read — so you never have to pre-declare which is which.
+
 ```bash
 # List root-level documents
 npx @paleo/docmap
 
-# List a subdirectory
-npx @paleo/docmap --dir topic-a
-
-# List multiple subdirectories
-npx @paleo/docmap --dir topic-a --dir topic-b
+# List one or more subdirectories
+npx @paleo/docmap topic-a
+npx @paleo/docmap topic-a topic-b
 
 # List everything recursively
 npx @paleo/docmap --recursive
 
 # Read one or more documents (frontmatter stripped)
-npx @paleo/docmap --read docs/topic-a/doc-1.md
-npx @paleo/docmap --read docs/topic-a/doc-1.md --read docs/topic-b/doc-2.md
+npx @paleo/docmap docs/topic-a/doc-1.md
+npx @paleo/docmap docs/topic-a/doc-1.md docs/topic-b/doc-2.md
+
+# Mix directories and files in one call
+npx @paleo/docmap topic-a docs/topic-b/doc-2.md
 
 # Validate all files (names, frontmatter)
 npx @paleo/docmap --check
@@ -74,14 +77,24 @@ npx @paleo/docmap --check
 npx @paleo/docmap --root path/to/docs
 ```
 
+### Classification
+
+Each positional path is resolved against the docs root:
+
+- **Existing directory** → listed (honoring `--recursive`).
+- **Existing file** → read, frontmatter stripped. Any extension is accepted; an extensionless file works too.
+- **Neither** → a fuzzy basename search over `.md` files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
+
+Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/topic-a/`, `docs/topic-a`, and `topic-a` resolve identically — so listing output can be pasted straight back as arguments.
+
 ### Options
 
 | Option | Description |
 | --- | --- |
-| `--dir <subdir>` | List documents in a subdirectory. Repeatable. |
-| `--recursive` | Walk the entire tree. Combinable with `--dir`. |
-| `--read <file>` | Print document contents (frontmatter stripped). Repeatable. |
+| `--recursive` | Walk the entire tree. Applies to directory listings (root or positional). |
 | `--check` | Validate all files and directories. Reports name and frontmatter issues. |
 | `--root <path>` | Use a custom directory as the docs root instead of `docs/`. |
+
+Unknown `--flags` are warned about on stderr and skipped; stdout stays clean. A leftover `docmap --dir topic-a` therefore still works — `--dir` is skipped and `topic-a` is treated as a positional directory.
 
 For internals, see [docs/docmap-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/docmap-architecture.md).

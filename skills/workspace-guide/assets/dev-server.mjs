@@ -1,14 +1,14 @@
 // =============================================================================
 // Reference: dev-server.mjs
 //
-// Thin wrapper around `@paleo/worktree-env`. Search for "ADAPT" to find every
+// Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
 // project-specific field. Two-tier shutdown: --stop kills dev processes and
-// runs callback stop() (e.g. `docker compose down`); --remove (in
-// setup-worktree) re-execs this script's --stop in the target worktree and
-// then runs `purgeInfrastructure` to drop volumes.
+// runs callback stop() (e.g. `docker compose down`); `workspace remove`
+// re-execs this script's --stop in the target worktree and then runs
+// `purgeInfrastructure` to drop volumes.
 // =============================================================================
 
-import { runDevServer, helpers } from "@paleo/worktree-env";
+import { runDevServer, helpers } from "@paleo/workspace";
 
 await runDevServer({
   basePort: 8100, // ADAPT

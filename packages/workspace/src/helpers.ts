@@ -26,7 +26,7 @@ export function extractHost(content: string, key: string, fallback = "localhost"
  */
 export function readPortFromEnvFile(file: string, varName: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run setup-worktree first.`);
+    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
     process.exit(1);
   }
   const content = readFileSync(file, "utf-8");
@@ -44,7 +44,7 @@ export function readPortFromEnvFile(file: string, varName: string): number {
  */
 export function readPortFromJsonFile(file: string, jsonPath: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run setup-worktree first.`);
+    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
     process.exit(1);
   }
   const data = JSON.parse(readFileSync(file, "utf-8"));
@@ -90,7 +90,7 @@ export function copyAndPatchFile(
     if (!optional) {
       console.error(
         `Error: ${relPath} not found in main worktree. Bootstrap the main worktree first ` +
-          "(setup-worktree --here), or mark the entry as optional.",
+          "(`workspace setup`), or mark the entry as optional.",
       );
       process.exit(1);
     }
@@ -105,12 +105,6 @@ export function copyAndPatchFile(
   ctx.log(`${alreadyExists ? "Overwritten" : "Created"} ${label}.`);
 }
 
-/**
- * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
- * naming the matched pattern, or `false` when none match. Used as the default `detectError`
- * for spawn servers that don't supply one. A custom `detectError` can compose with this:
- * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
- */
 /**
  * Formats a millisecond duration as the two largest units among `d`/`h`/`m`/`s`.
  * Drops the smaller unit when zero (`5d` instead of `5d 0h`). Sub-second values
@@ -138,6 +132,12 @@ export function formatDuration(ms: number): string {
   return `${topVal}${topLabel} ${next[1]}${next[0]}`;
 }
 
+/**
+ * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
+ * naming the matched pattern, or `false` when none match. Used as the default `detectError`
+ * for spawn servers that don't supply one. A custom `detectError` can compose with this:
+ * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
+ */
 export function detectCommonJsError(log: string): string | false {
   if (log.includes("[nodemon] app crashed")) return "[nodemon] app crashed";
   if (/^Node\.js v/m.test(log)) return "Node.js v";

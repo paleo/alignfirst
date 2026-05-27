@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
+import type { WorkspaceCommand } from "./cli.js";
+
 export interface WorktreeContext {
   currentWorktree: string;
   mainWorktree: string;
@@ -26,17 +28,13 @@ export function detectWorktree(): WorktreeContext {
   return { currentWorktree, mainWorktree, isMainWorktree };
 }
 
-export function enforceWorktreeMode(
-  args: { use?: string; create?: string; here?: boolean },
-  ctx: WorktreeContext,
-): void {
-  if (args.use || args.create) {
-    if (!ctx.isMainWorktree) {
-      console.error("Error: --use and --create must be run from the main worktree.");
-      process.exit(1);
-    }
+export function enforceWorktreeMode(command: WorkspaceCommand, ctx: WorktreeContext): void {
+  // Adding a worktree for a branch must happen from the main worktree. A branch-less
+  // `workspace setup` runs anywhere: linked worktree (retry path) or main (initial bootstrap).
+  if (command.kind === "setup" && command.branch !== undefined && !ctx.isMainWorktree) {
+    console.error("Error: Adding a workspace for a branch must be run from the main worktree.");
+    process.exit(1);
   }
-  // --here runs in any worktree: linked worktree (retry path) or main (initial bootstrap).
 }
 
 export function useExistingBranch(

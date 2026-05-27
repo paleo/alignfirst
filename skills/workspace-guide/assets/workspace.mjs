@@ -1,7 +1,7 @@
 // =============================================================================
-// Reference: setup-worktree.mjs
+// Reference: workspace.mjs
 //
-// Thin wrapper around `@paleo/worktree-env`. Search for "ADAPT" to find every
+// Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
 // project-specific field. The kernel (slot registry, port math, branch
 // lifecycle, removal flow, CLI) lives in the package; this file only carries
 // project knowledge.
@@ -10,7 +10,7 @@
 import { execSync } from "node:child_process";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runSetupWorktree, helpers } from "@paleo/worktree-env";
+import { runWorkspace, helpers } from "@paleo/workspace";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
 // `finalizeWorktree` and the `docker-compose.yml` configFile entry with a
@@ -26,12 +26,12 @@ import { runSetupWorktree, helpers } from "@paleo/worktree-env";
 //     cpSync(mainData, localData, { recursive: true, force: true });
 //   }
 
-await runSetupWorktree({
+await runWorkspace({
   // Required. The package re-spawns this script for the detached finalize phase, so it must know
   // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
   scriptPath: fileURLToPath(import.meta.url),
 
-  // Required. Absolute path to your dev-server script. On `--remove`, the
+  // Required. Absolute path to your dev-server script. On `workspace remove`, the
   // kernel shells out to `node <devServerScript> --stop` with cwd set to the
   // target worktree. Leave this line as-is.
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
@@ -88,11 +88,11 @@ await runSetupWorktree({
   // ADAPT: Detached finalization step. Runs in the background after the
   // worktree is created and the foreground command has returned.
   //
-  // MUST BE IDEMPOTENT — `setup-worktree --here` is the documented retry
+  // MUST BE IDEMPOTENT — `workspace setup` is the documented retry
   // path. Guard each block against pre-existing state so re-runs are no-ops.
   //
   // Run `npm install` first: any later failure then leaves a worktree with
-  // usable node_modules, so `--here` can re-import @paleo/worktree-env.
+  // usable node_modules, so `workspace setup` can re-import @paleo/workspace.
   finalizeWorktree: async ({ currentWorktree }) => {
     // `npm install` and `npm run build` are idempotent.
     execSync("npm install", { stdio: "inherit", cwd: currentWorktree });

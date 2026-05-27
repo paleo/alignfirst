@@ -16,12 +16,15 @@ All project documentation lives in the `docs/` directory. The `docmap` CLI lets 
 
 > Run commands via the project's package manager (e.g. `npm run docmap --`, `pnpm docmap`, `yarn docmap`).
 
+Targets are positional paths; the CLI classifies each by inspecting the filesystem (directory → list, file → read). Pass several at once. The root prefix shown in listings (`docs/` by default) is optional on input.
+
 ```bash
-docmap                                          # list root docs
-docmap --dir topic-a --dir topic-b/sub-topic-c  # list subdirectories
-docmap --recursive                              # list everything
-docmap --read doc-1.md --read topic-a/doc-2.md  # read documents (frontmatter stripped)
-docmap --check                                  # validate all files
+docmap                                       # list root docs
+docmap topic-a topic-b/sub-topic-c           # list subdirectories
+docmap --recursive                           # list everything
+docmap doc-1.md docs/topic-a/doc-2.md        # read documents (frontmatter stripped)
+docmap topic-a docs/topic-a/doc-1.md         # mix listing and reading
+docmap --check                               # validate all files
 ```
 
 ## Workflow

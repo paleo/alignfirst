@@ -12,7 +12,7 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 ## Local environments with worktrees
 
-`@paleo/worktree-env` — run multiple dev environments side by side using git worktrees. See [packages/worktree-env/README.md](packages/worktree-env/README.md).
+`@paleo/workspace` — run multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
 ## Autonomous agent (experimental)
 

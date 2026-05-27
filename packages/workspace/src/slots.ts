@@ -70,8 +70,8 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const existing = registry.slots[String(port)];
   const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
-  // Re-runs of `--here` keep a previously finalized slot ready, unless `--force` is set —
-  // then we reset to pending so `--wait` blocks and `dev:up` refuses during the re-finalize.
+  // Re-runs of `workspace setup` keep a previously finalized slot ready, unless `--force` is set —
+  // then we reset to pending so `workspace wait` blocks and `dev:up` refuses during the re-finalize.
   const status: SlotStatus = existing?.status === "ready" && !input.force ? "ready" : "pending";
   const entry: SlotEntry = {
     worktree: input.currentWorktree,
@@ -137,7 +137,7 @@ export function validateSlotAvailability(
 export function resolveCurrentSlot(basePort: number, registryDir: string): ResolvedSlot {
   const slot = lookupSlotForCwd(registryDir) ?? synthesizeMainSlot(basePort);
   if (!slot) {
-    console.error("Error: No slot found for this worktree. Run setup-worktree first.");
+    console.error("Error: No slot found for this worktree. Run `workspace setup` first.");
     process.exit(1);
   }
   return slot;
@@ -156,7 +156,7 @@ export function handleSetOwner(input: SetOwnerInput): {
   owner: string | undefined;
 } {
   if (input.isMainWorktree) {
-    console.error("Error: --set-owner must be run from a linked worktree.");
+    console.error("Error: `workspace set-owner` must be run from a linked worktree.");
     process.exit(1);
   }
   const registry = readSlots(input.mainWorktree, input.registryDir);
@@ -219,7 +219,7 @@ function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
   for (const port of allPorts(args.scheme)) {
     if (!registry.slots[String(port)]) return port;
   }
-  console.error("Error: All slots are taken. Remove a worktree with --remove first.");
+  console.error("Error: All slots are taken. Remove a workspace with `workspace remove` first.");
   process.exit(1);
 }
 
