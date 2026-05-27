@@ -103,7 +103,11 @@ await runWorkspace({
     let ready = false;
     while (Date.now() < deadline) {
       try {
-        execSync("docker compose exec database pg_isready", {
+        // Force a TCP check (-h 127.0.0.1). On a fresh volume, Postgres first runs a
+        // throwaway Unix-socket-only server for initdb that answers a plain pg_isready,
+        // then restarts the real server. A socket-side probe passes too early, so the
+        // next step connects to that init server and loses the connection on handoff.
+        execSync("docker compose exec -T database pg_isready -h 127.0.0.1 -q", {
           stdio: "pipe",
           cwd: currentWorktree,
         });

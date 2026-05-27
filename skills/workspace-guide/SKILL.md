@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.8.0"
+  version: "0.8.1"
   repository: https://github.com/paleo/skills
 ---
 
@@ -164,7 +164,7 @@ Each worktree needs its own database instance. The setup script must produce a w
 
 1. Copy `docker-compose.yml` from the main worktree into the new worktree, patching the host port (e.g. `5432`) to the slot's DB port and rewriting `container_name` to include the slot (e.g. `myrepo-database-slot-8110`) so containers don't collide.
 2. Start the container with `docker compose up -d`.
-3. Wait for the DB to be ready by polling `docker compose exec database pg_isready` with a 30-second deadline.
+3. Wait for the DB to accept **TCP** connections: poll `docker compose exec -T database pg_isready -h 127.0.0.1` with a 30-second deadline. The `-h 127.0.0.1` is essential — on a fresh volume Postgres first runs a throwaway Unix-socket-only server for `initdb` (which a plain `pg_isready` reports as ready), then restarts the real server. Gating on TCP, which that init server doesn't listen on, stops the next step from running against it and losing the connection on handoff.
 4. Run migrations to set up the schema.
 5. Run a seed script to populate initial data.
 
@@ -331,6 +331,7 @@ This is the file the agent reads on every task. It must contain:
   A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
 
   Read when relevant:
+
   - `docs/workspace.md` — Creating/removing workspaces, starting/stopping the dev server.
   ```
 
