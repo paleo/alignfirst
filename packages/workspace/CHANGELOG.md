@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.11.1
+
+### Patch Changes
+
+- Improved the CLI help.
+
 ## 0.11.0
 
 ### Minor Changes

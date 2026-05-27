@@ -215,6 +215,7 @@ export function printWorkspaceHelp(): void {
       "      Set up the local environment. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
+      "      Finalize runs in the background; add --wait to block until it reaches READY.",
       "  remove [<branch>] [--no-remote-check]",
       "      Remove a worktree by branch, or the current one when omitted.",
       "  list",

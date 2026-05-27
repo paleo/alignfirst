@@ -106,12 +106,6 @@ export function copyAndPatchFile(
 }
 
 /**
- * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
- * naming the matched pattern, or `false` when none match. Used as the default `detectError`
- * for spawn servers that don't supply one. A custom `detectError` can compose with this:
- * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
- */
-/**
  * Formats a millisecond duration as the two largest units among `d`/`h`/`m`/`s`.
  * Drops the smaller unit when zero (`5d` instead of `5d 0h`). Sub-second values
  * round up to `1s` (zero stays `0s`). Negative input returns `0s`.
@@ -138,6 +132,12 @@ export function formatDuration(ms: number): string {
   return `${topVal}${topLabel} ${next[1]}${next[0]}`;
 }
 
+/**
+ * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
+ * naming the matched pattern, or `false` when none match. Used as the default `detectError`
+ * for spawn servers that don't supply one. A custom `detectError` can compose with this:
+ * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
+ */
 export function detectCommonJsError(log: string): string | false {
   if (log.includes("[nodemon] app crashed")) return "[nodemon] app crashed";
   if (/^Node\.js v/m.test(log)) return "Node.js v";

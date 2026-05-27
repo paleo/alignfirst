@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.5.1
+
+### Patch Changes
+
+- Fixed escaping directory.
+
 ## 0.5.0
 
 ### Minor Changes

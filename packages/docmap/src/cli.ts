@@ -5,6 +5,7 @@ import {
   collectAllFiles,
   formatDirectory,
   formatRecursive,
+  isUnder,
   listDirectory,
   readDocFile,
   type FormatResult,
@@ -25,6 +26,8 @@ export function main(options?: MainOptions): number {
 
   const { paths, unknownFlags, recursive, root, check } = parseArgs(argv);
   const baseDir = root ? resolve(cwd, root) : resolve(cwd, "docs");
+  // cwd-relative form of baseDir, prepended to every displayed path so output is copy-pasteable.
+  // A `--root` outside cwd yields a `..`-leading prefix; paths still strip and resolve correctly.
   const prefix = relative(cwd, baseDir);
 
   for (const flag of unknownFlags) stderr.write(`Unknown option: ${flag} (ignored)\n`);
@@ -98,7 +101,10 @@ function classifyTargets(baseDir: string, paths: string[], prefix: string): Clas
   const files: FileTarget[] = [];
   for (const original of paths) {
     const normalized = normalizeTarget(original, prefix);
-    if (isDirectory(resolve(baseDir, normalized))) dirs.push(normalized);
+    const resolved = resolve(baseDir, normalized);
+    // Only list a target as a directory when it stays under baseDir. Traversal (`..`) or absolute
+    // paths fall through to files, where readDocFile rejects them with the "⚠ Not found" message.
+    if (isUnder(baseDir, resolved) && isDirectory(resolved)) dirs.push(normalized);
     else files.push({ original, normalized });
   }
   return { dirs, files };

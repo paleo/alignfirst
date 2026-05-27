@@ -222,6 +222,24 @@ describe("not-found classification (basic fixture)", () => {
   });
 });
 
+describe("path traversal (basic fixture)", () => {
+  it("refuses to list a directory reached via `..` outside the root", () => {
+    const { code, stdout } = run(["../.."], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("⚠ Not found: ../..");
+    expect(stdout).not.toContain("# `");
+    expect(stdout).not.toContain("<document_file");
+  });
+
+  it("refuses to list an absolute directory outside the root", () => {
+    const outside = resolve(fixtures.basic, "..");
+    const { code, stdout } = run([outside], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain(`⚠ Not found: ${outside}`);
+    expect(stdout).not.toContain("<document_file");
+  });
+});
+
 describe("unknown flags", () => {
   it("warns on stderr, skips the flag, and processes the rest", () => {
     const { code, stdout, stderr } = run(["--dir", "backend"], fixtures.basic);

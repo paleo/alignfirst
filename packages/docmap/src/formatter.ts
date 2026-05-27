@@ -270,7 +270,7 @@ function shouldSkipFile(name: string): boolean {
   return name.startsWith("CHANGELOG");
 }
 
-function isUnder(base: string, target: string): boolean {
+export function isUnder(base: string, target: string): boolean {
   if (target === base) return true;
   const rel = relative(base, target);
   return rel.length > 0 && rel !== ".." && !rel.startsWith(`..${sep}`);
