@@ -1,6 +1,6 @@
-# Work environment setup
+# Project workspace setup
 
-Do NOT try to handle the user's request here. We need to set up the environment first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
+Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
 
 ## Prerequisites
 
@@ -33,14 +33,14 @@ Translate to the user's language. Vary the setup signal — e.g. "Setting up the
 
 If the thread name is missing the TICKET_ID or the PROJECT_NAME, rename it. Format: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`.
 
-## Step 4 — Set up a local environment (worktree, branch, dev server)
+## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-Before creating anything, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. The project's `docs/local-env.md` (linked from `docs/welcome.md`) lists the commands to **enumerate registered worktrees** and to **attach a worktree to an existing branch**. Use them — never assume the branch is new.
+Before creating anything, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. The project's `docs/workspace.md` (linked from `docs/welcome.md`) lists the commands to **list registered workspaces** and to **attach a workspace to an existing branch**. Use them — never assume the branch is new.
 
 Three sub-paths, in order. Pick exactly one. The setup command always runs *before* any per-ticket inspection (`git log`, `git diff`, `git status`, …) — the worktree is what you inspect.
 
-1. **Branch + worktree already registered** → attach to the existing worktree (no creation). Post the status report below.
-2. **Branch exists (locally or remote) but no registered worktree** → run the project's *attach-existing-branch* command from its local-env doc. This sets up a worktree on the existing branch and is mandatory before any further inspection — `git log <branch>` from the main project dir is not a substitute. Post the status report.
+1. **Branch + worktree already registered** → attach to the existing workspace (no creation). Post the status report below.
+2. **Branch exists (locally or remote) but no registered worktree** → run the project's *attach-existing-branch* command from its workspace doc. This sets up a worktree on the existing branch and is mandatory before any further inspection — `git log <branch>` from the main project dir is not a substitute. Post the status report.
 3. **Neither exists** → if the user signalled a *new* work intent, create both. If the user asked for a *status update* and there's no branch yet, do not create anything — tell the user there's no work for that ticket and end turn.
 
 The path that does create (sub-paths 2 and 3) spawns background bootstrap — don't add your own `background` option. As soon as the setup command returns, post a status-only message with these three labelled fields (translated to the user's language):

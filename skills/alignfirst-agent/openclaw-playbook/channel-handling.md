@@ -63,7 +63,7 @@ On Slack your reply auto-opens a thread (`replyToMode: "all"`). The reply itself
 
 **Do not end your turn after creating the thread.** The thread session won't activate until the next user message, so anything actionable must happen now. Branch on what's known:
 
-- **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`work-environment-setup.md`](./work-environment-setup.md) first**, then follow its procedure. It tells you how to detect an existing branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
+- **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure. It tells you how to detect an existing branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
 - **PROJECT known, TICKET_ID unknown** — **TALK mode**. No worktree. Branch on the request:
   - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via `alignfirst-agent` without a protocol header. Trust the project; do not pre-screen. Post the agent's reply back in the thread as a summary.
   - User signaled work intent without enough info (`on a un truc à faire sur X`, `we need to work on X`) → ask in-thread for the ticket id and the scope/type. End turn.
@@ -71,7 +71,7 @@ On Slack your reply auto-opens a thread (`replyToMode: "all"`). The reply itself
 - **TICKET_ID known, PROJECT unknown** — Ask in-thread which project the ticket belongs to. Restate the ticket id in the question (e.g. `Pour le ticket ABC-123, sur quel projet travaille-t-on ?`). End turn.
 - **PROJECT FS-check fails** — the named project is not a directory under `~/projects/`. Acknowledge the missing project; ask the user to confirm or correct. End turn.
 - **PROJECT unclear / generic chatter** — Ask the user to clarify. End turn.
-- **Multiple projects + TICKET_ID + code change** — WORK per project. FS-check each. For every project that exists, follow [`work-environment-setup.md`](./work-environment-setup.md) in this same turn (one worktree per project, same ticket id). Report status at the end. If any project's FS-check fails, acknowledge that one and continue with the others.
+- **Multiple projects + TICKET_ID + code change** — WORK per project. FS-check each. For every project that exists, follow [`project-workspace-setup.md`](./project-workspace-setup.md) in this same turn (one worktree per project, same ticket id). Report status at the end. If any project's FS-check fails, acknowledge that one and continue with the others.
 
 Subsequent user messages in the thread route to a **fresh thread session**.
 

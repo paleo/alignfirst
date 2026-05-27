@@ -15,7 +15,7 @@ Before any other tool call or reply, call `message` `action: "read"` with `chann
 
 ### Step 2 — Determine the mode: WORK or TALK?
 
-- **WORK** — PROJECT and TICKET_ID are both known. Open [`work-environment-setup.md`](./work-environment-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
 - **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK.
 
 ### Step 3 — Handle the actual request
@@ -51,8 +51,8 @@ Prefer delegating almost everything to the coding agent. But also feel free to d
 
 ### Vocabulary
 
-- **work environment** — the whole setup on your side: branch, worktree, dev server.
-  - The user might refer to it as _work env_, _local environment_, _worktree_, _branch_
+- **project workspace** — the whole setup on your side: branch, worktree, dev server.
+  - The user might refer to it as _workspace_, _work env_, _local environment_, _worktree_, _branch_
 - **dev server** — the local instance of the project running in the worktree, with hot reload, etc.
   - The user might refer to it as _server_, _local server_ etc., or even the _env URL_.
 
@@ -66,7 +66,7 @@ But you can run the dev-server from the main worktree.
 
 ### Linked worktrees and other branches
 
-Editing the codebase must always happen on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`work-environment-setup.md`](./work-environment-setup.md) instructions to set it up.
+Editing the codebase must always happen on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
 
 ### Updating a branch with the base branch
 
@@ -102,7 +102,7 @@ After creating the MR/PR (via `alignfirst-agent`):
 
 ### Cleanup requests
 
-When the user asks to tear down a work environment from inside a thread:
+When the user asks to tear down a project workspace from inside a thread:
 
 1. Have your coding agent remove the worktree. It stops the dev server, tears down Docker, frees the port slot.
 2. Confirm the teardown to the user.
@@ -110,6 +110,6 @@ When the user asks to tear down a work environment from inside a thread:
 
 ### Resetting a thread session
 
-After tearing down the work environment, reset the thread session so the next message starts fresh: `gateway.call("sessions.reset", { key: ctx.sessionKey })`. Note: the method is plural, it's not a typo. From a shell: `openclaw gateway call sessions.reset --params '{"key":"<sessionKey>"}'`.
+After tearing down the project workspace, reset the thread session so the next message starts fresh: `gateway.call("sessions.reset", { key: ctx.sessionKey })`. Note: the method is plural, it's not a typo. From a shell: `openclaw gateway call sessions.reset --params '{"key":"<sessionKey>"}'`.
 
 Run the reset **after** the final reply — it clears the session you're in.
