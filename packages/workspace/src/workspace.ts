@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseWorkspaceArgs, printWorkspaceHelp, type WorkspaceCommand } from "./cli.js";
 import { findOwnEntry, removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
-import { copyAndPatchFile, formatDuration } from "./helpers.js";
+import { copyAndPatchFile, formatDuration, setupLogPath } from "./helpers.js";
 import { isProcessAlive } from "./process-control.js";
 import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
 import {
@@ -75,7 +75,7 @@ export interface WorkspaceConfig {
    */
   runtimeDir: string;
   /**
-   * Shared registry directory, relative to a worktree root (e.g. `.local/wt-registry`).
+   * Shared registry directory, relative to a worktree root (e.g. `.local/_workspace-registry`).
    * Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory
    * across linked worktrees — typically via a symlink listed in `sharedDirs` (e.g. `.local`).
    */
@@ -96,7 +96,7 @@ export interface WorkspaceConfig {
    * installed deps, etc.).
    *
    * Runs in a detached child whose stdout/stderr are already redirected to
-   * `<runtimeDir>/wt-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
+   * `<runtimeDir>/logs/workspace-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
    */
   finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
   /**
@@ -287,9 +287,8 @@ async function runSetup(
   });
   const ports = portsFn(slot);
 
-  const runtimeDir = join(setupCtx.currentWorktree, config.runtimeDir);
-  mkdirSync(runtimeDir, { recursive: true });
-  const logPath = join(runtimeDir, "wt-setup.log");
+  const logPath = setupLogPath(setupCtx.currentWorktree, config.runtimeDir);
+  mkdirSync(dirname(logPath), { recursive: true });
   // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
   // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
   writeFileSync(logPath, "");
@@ -336,7 +335,7 @@ async function runSetup(
     }),
   );
 
-  teeLog(`WORKTREE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
+  teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
     teeLog(`Block until ready: workspace wait --slot ${slot}`);
@@ -376,7 +375,7 @@ type FinalizeCommand = Extract<WorkspaceCommand, { kind: "finalize" }>;
 async function runFinalize(command: FinalizeCommand, config: WorkspaceConfig): Promise<void> {
   const slot = Number(command.slot);
   const ctx = detectWorktree();
-  const logPath = join(ctx.currentWorktree, config.runtimeDir, "wt-setup.log");
+  const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
   const appendLog = (message: string): void => {
     appendFileSync(logPath, `${message}\n`);
   };
@@ -456,7 +455,7 @@ function printWorktreeInfo(
 
   const owner = entry?.owner ?? fallback.owner;
   const status: SlotStatus = entry?.status ?? "pending";
-  const setupLogPath = join(worktreeForLog, config.runtimeDir, "wt-setup.log");
+  const setupLog = setupLogPath(worktreeForLog, config.runtimeDir);
   const now = Date.now();
   const isMainWorktree = entry?.main ?? false;
   const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
@@ -477,7 +476,7 @@ function printWorktreeInfo(
     const at = entry?.failure?.at ?? entry?.createdAt;
     const elapsed = at ? formatDuration(now - Date.parse(at)) : "?";
     const reason = entry?.failure?.message ?? "(no message)";
-    console.log(`Failure: ${reason} (${elapsed} ago, tail ${setupLogPath})`);
+    console.log(`Failure: ${reason} (${elapsed} ago, tail ${setupLog})`);
   } else if (status === "pending" && entry) {
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
     console.log(`Pending since ${elapsed} ago (tail ${setupLogPath})`);
@@ -535,7 +534,7 @@ function runList(config: WorkspaceConfig): void {
     ([a], [b]) => Number(a) - Number(b),
   );
   if (entries.length === 0) {
-    console.log("No worktrees registered.");
+    console.log("No workspaces registered.");
     return;
   }
   const rows = entries.map(([port, e]) => ({
@@ -552,7 +551,7 @@ function runList(config: WorkspaceConfig): void {
     type: "TYPE",
     status: "STATUS",
     branch: "BRANCH",
-    worktree: "WORKTREE",
+    worktree: "PATH",
     owner: "OWNER",
     created: "CREATED",
   };
@@ -610,7 +609,7 @@ async function waitForSlot(
       return;
     }
     if (entry.status === "failed") {
-      const logPath = join(entry.worktree, config.runtimeDir, "wt-setup.log");
+      const logPath = setupLogPath(entry.worktree, config.runtimeDir);
       console.error(`FAILED: ${entry.failure?.message ?? "(no message)"}`);
       console.error(`Full log: ${logPath}`);
       process.exit(1);
@@ -632,7 +631,7 @@ async function handleRemove(
   const registry = readSlots(ctx.mainWorktree, config.registryDir);
   const target = resolveRemoveTarget(command, ctx, registry);
 
-  // Refuse to remove while the detached finalize is still writing to slots.json / wt-setup.log:
+  // Refuse to remove while the detached finalize is still writing to slots.json / workspace-setup.log:
   // racing the two corrupts the registry and leaves the worktree directory orphaned.
   if (registry.slots[target.slotPort]?.status === "pending") {
     console.error(
@@ -686,7 +685,7 @@ async function handleRemove(
   removeWorktree(target.worktreePath, run);
 
   console.log(
-    `Removed worktree for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}). ` +
+    `Removed workspace for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}). ` +
       `Branch "${target.branch}" kept.`,
   );
   if (removeHere) {
@@ -830,7 +829,7 @@ function resolveRemoveTarget(
     ([, v]) => getWorktreeBranch(v.worktree) === branch,
   );
   if (!entry) {
-    console.error(`Error: No worktree found for branch "${branch}" in the slot registry.`);
+    console.error(`Error: No workspace found for branch "${branch}" in the registry.`);
     process.exit(1);
   }
   const worktreePath = entry[1].worktree;

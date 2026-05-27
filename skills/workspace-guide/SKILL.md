@@ -65,7 +65,7 @@ Each worktree gets a unique "slot" that determines its port(s). A central **slot
 
 The slot is identified by the primary port number itself (e.g., `--slot 8120`).
 
-**Registry format** (stored in a shared directory, e.g. `.local/wt-registry/slots.json`):
+**Registry format** (stored in a shared directory, e.g. `.local/_workspace-registry/slots.json`):
 
 ```json
 {
@@ -82,7 +82,7 @@ The main worktree is registered at `basePort` (the first slot); linked worktrees
 
 Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
-A second registry, `.local/wt-registry/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `dev:up --evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
+A second registry, `.local/_workspace-registry/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `dev:up --evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
 
 ### Config files must be gitignored
 
@@ -147,9 +147,9 @@ Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
 - `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
 - `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs.
-- `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/wt-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
+- `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/_workspace-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
 - `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
-- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `workspace setup` retry can't import `@paleo/workspace`. Failures are logged to `<runtimeDir>/wt-setup.log` with a `FAILED:` banner.
+- `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `workspace setup` retry can't import `@paleo/workspace`. Failures are logged to `<runtimeDir>/logs/workspace-setup.log` with a `FAILED:` banner.
 - `purgeInfrastructure(ctx)` — optional. Called by `workspace remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
 - `worktreeDirName?({ branch, repoName })` — optional. Returns the worktree directory basename (e.g. `myrepo-feat-ABC-123`). Defaults to `defaultWorktreeDirName`, which strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. The kernel handles dedup (`-2`, `-3`…) when the resulting directory already exists, so the override should stay pure.
@@ -316,12 +316,6 @@ If you use AI coding agents, the worktree system only works if agents know about
 
 This is the file the agent reads on every task. It must contain:
 
-- **A short definition of a workspace** — so the agent shares your vocabulary. For example:
-
-  ```markdown
-  A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
-  ```
-
 - **Conventions that affect workspaces** — branch naming and commit message conventions, because the agent creates branches when setting up workspaces. For example:
 
   ```markdown
@@ -329,14 +323,18 @@ This is the file the agent reads on every task. It must contain:
   Commit message convention: conventional commits, e.g., `feat: [#123] add new feature`.
   ```
 
-- **A pointer to the workspace documentation** — so the agent knows to read it when dealing with workspaces or the dev server. For example:
+- **A section about workspaces**. For example:
 
   ```markdown
+  ## Workspaces
+
+  A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
+
   Read when relevant:
   - `docs/workspace.md` — Creating/removing workspaces, starting/stopping the dev server.
   ```
 
-Without the pointer, the agent won't discover the procedures. Without the conventions, it will create branches and commits with inconsistent naming.
+Without the conventions, the agent creates branches and commits with inconsistent naming; without the workspaces section, it won't share your vocabulary or discover the procedures.
 
 ### 2. Detailed workspace documentation (`docs/workspace.md`)
 
@@ -363,6 +361,6 @@ The agents need to know:
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
 - [ ] **Add npm scripts** (or Makefile targets, etc.) for `workspace`, `dev:up`, `dev:down`.
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
-- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/wt-registry/` is covered (slot registry and dev-server registry live there).
+- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/_workspace-registry/` is covered (slot registry and dev-server registry live there).
 - [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

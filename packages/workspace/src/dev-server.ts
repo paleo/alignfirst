@@ -21,7 +21,7 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError, formatDuration } from "./helpers.js";
+import { detectCommonJsError, formatDuration, setupLogPath } from "./helpers.js";
 import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
 import {
   canonicalCwd,
@@ -49,7 +49,7 @@ export interface DevServerConfig {
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
   /**
-   * Shared registry directory, relative to a worktree root (e.g. `.local/wt-registry`).
+   * Shared registry directory, relative to a worktree root (e.g. `.local/_workspace-registry`).
    * Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory
    * across linked worktrees — typically via a symlink (e.g. `.local`).
    */
@@ -236,7 +236,7 @@ export function buildWorktreeReadyMessage(input: {
 }): WorktreeReadyCheck {
   const { slotPort, worktreePath, runtimeDir, entry, now } = input;
   if (!entry || entry.status === "ready") return { ok: true };
-  const logPath = join(worktreePath, runtimeDir, "wt-setup.log");
+  const logPath = setupLogPath(worktreePath, runtimeDir);
   if (entry.status === "pending") {
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
     return {
@@ -435,7 +435,7 @@ function defaultPrintSummary(
 ): void {
   console.log("\nDev servers started!");
   const ownerSuffix = slot.owner ? `, owner ${slot.owner}` : "";
-  console.log(`  Worktree: slot ${slot.slot}${ownerSuffix}`);
+  console.log(`  Workspace: slot ${slot.slot}${ownerSuffix}`);
   for (const { server, port, pid } of servers) {
     if (server.kind === "spawn") {
       const url = `http://localhost:${port}/`;

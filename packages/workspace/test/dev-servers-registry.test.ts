@@ -61,7 +61,7 @@ describe("pruneDeadServers", () => {
 
 describe("evictOldest", () => {
   let mainWorktree: string;
-  const registryDir = ".local/wt-registry";
+  const registryDir = ".local/_workspace-registry";
   const isAlive = () => true;
   const stop = async () => {};
   const callbackServers: never[] = [];

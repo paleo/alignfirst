@@ -48,7 +48,7 @@ await runWorkspace({
   portNames: ["server", "frontend", "db"],
   sharedDirs: [".local", ".plans"],
   runtimeDir: ".local-wt",
-  registryDir: ".local/wt-registry",
+  registryDir: ".local/_workspace-registry",
   configFiles: [
     {
       path: ".env",
@@ -74,7 +74,7 @@ await runWorkspace({
 
 `branch` is resolved live from the worktree on each call (not persisted in the registry — `git checkout` makes any stored value stale). For detached HEAD or missing directory, it falls back to `"(detached)"`. `status` is the slot's finalize status: `"pending"` until `finalizeWorktree` succeeds, then `"ready"` (or `"failed"`).
 
-Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/wt-setup.log`. If Part 2 fails, `cd` into the worktree and run `workspace setup` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `workspace wait` from inside the worktree (or `workspace wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
+Setup runs in two phases: a fast foreground Part 1 creates the worktree and config, then a detached Part 2 runs `finalizeWorktree` and writes progress to `<runtimeDir>/logs/workspace-setup.log`. If Part 2 fails, `cd` into the worktree and run `workspace setup` — it is idempotent and retries the finalize step. To block until Part 2 finishes (CI, agent orchestration), run `workspace wait` from inside the worktree (or `workspace wait --slot 8110` from anywhere) — exits 0 on `READY`, 1 on `FAILED`.
 
 **Bootstrap the main worktree first.** Linked-worktree setup copies config sources from the main worktree, so the main must already have those files. Run `workspace setup` once on the main checkout. Use `preSetup` (with `isMainWorktree === true`) to seed sources from examples or templates. `configFiles` entries are required by default; mark `optional: true` for sources that may legitimately be missing.
 
@@ -86,7 +86,7 @@ import { runDevServer, helpers } from "@paleo/workspace";
 await runDevServer({
   basePort: 8100,
   runtimeDir: ".local-wt",
-  registryDir: ".local/wt-registry",
+  registryDir: ".local/_workspace-registry",
   devLimit: 5,
   servers: [
     {

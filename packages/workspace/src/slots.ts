@@ -137,7 +137,7 @@ export function validateSlotAvailability(
 export function resolveCurrentSlot(basePort: number, registryDir: string): ResolvedSlot {
   const slot = lookupSlotForCwd(registryDir) ?? synthesizeMainSlot(basePort);
   if (!slot) {
-    console.error("Error: No slot found for this worktree. Run `workspace setup` first.");
+    console.error("Error: No workspace here. Run `workspace setup` first.");
     process.exit(1);
   }
   return slot;

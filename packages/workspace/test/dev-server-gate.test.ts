@@ -41,7 +41,7 @@ describe("buildWorktreeReadyMessage", () => {
     expect(result.message).toContain("still in progress");
     expect(result.message).toContain("slot 8110");
     expect(result.message).toContain("1h");
-    expect(result.message).toContain("/tmp/wt/.local-wt/wt-setup.log");
+    expect(result.message).toContain("/tmp/wt/.local-wt/logs/workspace-setup.log");
   });
 
   it("reports a failed message with failure reason and elapsed", () => {

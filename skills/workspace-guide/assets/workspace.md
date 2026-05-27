@@ -25,7 +25,7 @@ npm run workspace -- setup               # set up the current worktree (idempote
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
      Document any project-specific ports or URLs the developer should know about. -->
 
-The foreground command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream progress to `<runtimeDir>/wt-setup.log`, ending with a `READY:` or `FAILED:` banner.
+The foreground command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream progress to `<runtimeDir>/logs/workspace-setup.log`, ending with a `READY:` or `FAILED:` banner.
 
 ```sh
 npm run workspace -- wait --slot 8110  # block until ready (exit 0) or failed (exit 1)
@@ -35,7 +35,7 @@ npm run workspace -- wait --slot 8110  # block until ready (exit 0) or failed (e
 
 ### Recovery from a Failed Setup
 
-If the background finalize fails (check `<runtimeDir>/wt-setup.log`), do **not** delete the worktree. From inside it:
+If the background finalize fails (check `<runtimeDir>/logs/workspace-setup.log`), do **not** delete the worktree. From inside it:
 
 ```sh
 npm run workspace -- setup --wait    # retry the finalize step
@@ -132,7 +132,7 @@ npm run dev:down                     # 4. stop when done (same directory)
 <!-- ADAPT: List your shared and per-worktree directories. -->
 
 - **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
-  - `wt-registry/slots.json` — Slot registry; main worktree at `basePort` plus linked-worktree slots.
-  - `wt-registry/dev-servers.json` — Live dev-server registry.
+  - `_workspace-registry/slots.json` — Slot registry; main worktree at `basePort` plus linked-worktree slots.
+  - `_workspace-registry/dev-servers.json` — Live dev-server registry.
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
 - **`.plans/`** — Shared across worktrees (symlinked). Task planning files.

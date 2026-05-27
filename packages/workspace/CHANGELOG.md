@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.12.0
+
+### Minor Changes
+
+- Align user-facing vocabulary on "workspace" and tidy generated names.
+
 ## 0.11.1
 
 ### Patch Changes

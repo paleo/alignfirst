@@ -54,7 +54,7 @@ await runWorkspace({
   // Shared registry directory holding `slots.json` and `dev-servers.json`.
   // Must resolve to the same physical directory across linked worktrees —
   // typically via a symlink listed in `sharedDirs` (e.g. `.local`).
-  registryDir: ".local/wt-registry",
+  registryDir: ".local/_workspace-registry",
 
   // ADAPT: gitignored config files copied from the main worktree and patched
   // per slot. The source is the same path in the main worktree.
@@ -133,9 +133,10 @@ await runWorkspace({
   // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
   // at this point. The worktree path is the useful pointer.
   printSummary: ({ slot, branch, owner, currentWorktree, isMainWorktree }) => `
-${isMainWorktree ? "Main" : "Linked"} worktree setup complete!
-  Slot:     ${slot}
-  Branch:   ${branch}${owner ? `\n  Owner:    ${owner}` : ""}
-  Path:     ${currentWorktree}
+Workspace setup complete!
+  Worktree type: ${isMainWorktree ? "main" : "linked"}
+  Slot:          ${slot}
+  Branch:        ${branch}${owner ? `\n  Owner:         ${owner}` : ""}
+  Path:          ${currentWorktree}
 `,
 });
