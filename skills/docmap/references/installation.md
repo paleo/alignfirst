@@ -65,7 +65,7 @@ Section to add:
 ```markdown
 ## Docmap - Seek Documentation
 
-**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse relevant subdirectories (`npm run docmap -- --dir topic-a --dir topic-b/sub-topic-c`) or list everything (`npm run docmap -- --recursive`).
+**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
 ```
 
 When done, output the following block **verbatim** as your final message to the user — do not paraphrase or omit it:
