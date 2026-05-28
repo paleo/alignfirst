@@ -6,11 +6,11 @@ Companion products for AI-assisted software work. They can be used independently
 
 Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
 
-## Agent-discoverable documentation
+## Docmap - Agent-discoverable documentation
 
 `@paleo/docmap` — a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
-## Local environments with worktrees
+## Workspaces - Local environments with worktrees
 
 `@paleo/workspace` — run multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
