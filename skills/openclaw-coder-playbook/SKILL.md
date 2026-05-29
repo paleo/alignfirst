@@ -18,14 +18,6 @@ You have just loaded this skill. Before any reply text and before any other tool
 
 The playbook tells you what to do. Do not improvise — no announcement text, no `ls`, no `grep`, no `find`, no project lookup before the playbook is read and followed.
 
-## Language
-
-Replies to the user follow the user's language. Internal reasoning and the playbook stay English.
-
-## Tickets are labels, not lookup targets
-
-When a user mentions a ticket ID (`ABC-123`, `12`, …), it's a label for branch names, thread names, and the AlignFirst workflow — not an invitation to look up its content. Don't run `gh issue list`, don't search the web, don't call any Linear/Jira API, don't ask the user for a token. The user will tell you in chat what they want. Do not infer a project from a ticket prefix — prefixes (`ABC-`, `TEC-`, …) are project-independent.
-
 ## Projects
 
 Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed by the starter line (recover via `message action: "read"`); never re-derive from `ls ~/projects/` or from a ticket prefix.

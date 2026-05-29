@@ -1,10 +1,10 @@
 # OpenClaw Coder
 
-Maintainer's map of the [`openclaw-coder/`](../openclaw-coder/) subproject: a neutral, shareable packaging of OpenClaw as an autonomous AI programmer. This doc is the entry point for working *on* the subproject in this repo. For using it, see its own [`README.md`](../openclaw-coder/README.md).
+Maintainer's map of the [`openclaw-coder/`](../openclaw-coder/) subproject: a shareable packaging of OpenClaw as an autonomous AI programmer. This doc is the entry point for working *on* the subproject in this repo. For using it, see its own [`README.md`](../openclaw-coder/README.md).
 
 ## Three layers
 
-1. **Reference workspace** — [`openclaw-coder/workspace/`](../openclaw-coder/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`). These are auto-loaded into the system prompt every turn. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `openclaw-coder-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
+1. **Reference workspace** — [`openclaw-coder/playbook-test/workspace/`](../openclaw-coder/playbook-test/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`), auto-loaded into the system prompt every turn. It lives inside the harness (its only consumer) as the test fixture, and doubles as the worked example the consumer [`README`](../openclaw-coder/README.md) points at. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `openclaw-coder-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
 2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules (language, "tickets are labels", projects, `chat_id`). The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the separate `alignfirst-coaching` coaching skill. Nothing here is auto-loaded — files are read on demand (see context engineering below).
 3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts both the workspace dir and the `alignfirst-coaching` skill into the gateway, so edits to layers 1 and 2 iterate live without rebuilding the image.
 
@@ -35,15 +35,17 @@ From [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/):
 ```sh
 cp .env.local.example .env.local   # fill ANTHROPIC_API_KEY
 npm install
-rm -rf artifacts .gateway-logs && mkdir -p artifacts .gateway-logs   # avoid root-owned bind-mount dirs
+mkdir -p artifacts .gateway-logs   # create as your user so Docker doesn't make them root-owned
 npm run env:build                  # only after image-affecting changes
 npm run env:up
 npm run e2e -- --channel discord-mock A1-new-work-to-be-done
 npm run env:down
 ```
 
+> ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Runs are written to **timestamped** subdirs, so they accumulate without colliding — wiping the directory destroys prior runs for no reason. `mkdir -p` is enough to avoid root-owned dirs.
+
 Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-workspace-files.md`](./writing-workspace-files.md#doc-obedience-is-per-iteration).
 
 ## Deployment
 
-Running `myclaw` against real Discord/Slack workspaces (not the mock channels) needs provider-side bot setup — see [`openclaw-coder/bot-setup.md`](../openclaw-coder/bot-setup.md).
+Running a coder against real Discord/Slack (not the mock channels) is documented for consumers in [`openclaw-coder/README.md`](../openclaw-coder/README.md) — the `openclaw.json` knobs and the `AGENTS.md` template. Creating the bot itself (tokens, scopes, Socket Mode) is standard OpenClaw; defer to OpenClaw's channel docs.

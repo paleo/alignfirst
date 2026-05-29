@@ -14,5 +14,5 @@ openclaw-coder/playbook-test/.gateway-logs/
 
 # OpenClaw runtime state — recreated per-instance, not team-curated (a test
 # instance snapshots these into the workspace; we don't track them)
-openclaw-coder/workspace/HEARTBEAT.md
-openclaw-coder/workspace/.openclaw/
+openclaw-coder/playbook-test/workspace/HEARTBEAT.md
+openclaw-coder/playbook-test/workspace/.openclaw/

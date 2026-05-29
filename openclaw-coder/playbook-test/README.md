@@ -1,6 +1,6 @@
 # playbook-test
 
-Dockerised regression-test harness for the `myclaw` reference workspace at [`../workspace/`](../workspace/). Local-only. Manually run.
+Dockerised regression-test harness for the `myclaw` reference workspace at [`workspace/`](workspace/). Local-only. Manually run.
 
 Standalone consumer of the published `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
 
@@ -24,9 +24,11 @@ npm run env:down
 
 See the upstream README for all flags.
 
+> ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
+
 ## Configuration
 
-- `OPENCLAW_WORKSPACE_DIR=../workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
+- `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `ALIGNFIRST_COACHING_SKILL_DIR` — host path to the `alignfirst-coaching` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
 - [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
@@ -39,7 +41,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A9`.
 
-**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `QAUSER01` (a `tech` user in [`../workspace/USER.md`](../workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `QAUSER01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
 ## Editable upstream packages (optional fall-back)
 
