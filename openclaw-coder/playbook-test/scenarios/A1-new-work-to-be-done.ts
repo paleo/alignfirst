@@ -7,6 +7,7 @@ import {
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
+import { requireThreadId } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import type { Step } from "./_lib/types.ts";
@@ -60,7 +61,7 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const starter = wait.match;
-  const threadId = starter.threadId!;
+  const threadId = requireThreadId(wait);
   ctx.log({
     attachTo: wait.entry,
     prefix: `starter received in thread ${threadId}`,

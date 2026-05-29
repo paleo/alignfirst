@@ -3,6 +3,7 @@ import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-tes
 import { INVESTIGATION_SUMMARY_RUBRIC } from "./_lib/common-constants.ts";
 import { expectNoProtocolDelegation, setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
+import { requireThreadId } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECTS_DIR = "/home/claw/projects";
@@ -32,7 +33,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
       m.threadId !== undefined,
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
-  const threadId = starterWait.match.threadId!;
+  const threadId = requireThreadId(starterWait);
   ctx.log({
     attachTo: starterWait.entry,
     prefix: `starter received in thread ${threadId}`,

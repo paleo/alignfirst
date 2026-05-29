@@ -62,7 +62,8 @@ export async function waitForAnyWorktreeDir(
   while (Date.now() < deadline) {
     const entries = await readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => []);
     const match = entries.find((e) => e.isDirectory() && e.name.startsWith(prefix));
-    if (match) return { dir: `${PROJECTS_DIR}/${match.name}`, type: match.name.slice(prefix.length) };
+    if (match)
+      return { dir: `${PROJECTS_DIR}/${match.name}`, type: match.name.slice(prefix.length) };
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`no worktree dir ${prefix}<type> appeared within ${timeoutMs}ms`);

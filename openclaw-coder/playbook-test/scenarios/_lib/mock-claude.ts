@@ -176,19 +176,19 @@ export function setupClaudeMock(
   function finalizeCall(call: ClaudeCall): void {
     if (ctx.currentEntry?.kind === "cliMock") call.entry = ctx.currentEntry;
     finalizedCalls.add(call);
-    for (let i = watchers.length - 1; i >= 0; --i) {
-      const w = watchers[i]!;
+    const pending = watchers.splice(0, watchers.length);
+    for (const w of pending) {
       if (w.options.rejectOn?.(call)) {
         const msg =
           w.options.rejectMessage?.(call) ?? `unexpected claude call: ${JSON.stringify(call.argv)}`;
         w.reject(new Error(msg));
-        watchers.splice(i, 1);
         continue;
       }
       if (w.options.predicate(call)) {
         w.resolve(call);
-        watchers.splice(i, 1);
+        continue;
       }
+      watchers.push(w);
     }
   }
 
@@ -263,8 +263,8 @@ const CODING_PROTOCOL_RE =
   /^Run the _(spec|AAD|plan|description|read|review|merge)_ protocol from the \*alignfirst\* skill\./;
 
 /** True iff `prompt` opens with an alignfirst coding-protocol header. */
-export function isCodingProtocolPrompt(prompt: string): boolean {
-  return CODING_PROTOCOL_RE.test(prompt);
+export function isCodingProtocolPrompt(prompt: string | undefined): boolean {
+  return prompt !== undefined && CODING_PROTOCOL_RE.test(prompt);
 }
 
 /** Render a captured claude invocation as a single text blob for the judge. */
@@ -284,7 +284,7 @@ export async function expectNoProtocolDelegation(
   { rubric, label, timeoutMs = 90_000 }: ExpectNoProtocolDelegationOptions,
 ): Promise<ClaudeCall> {
   const claudeCall = await handle.waitForCall({
-    predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]!),
+    predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]),
     rejectOn: (call) => !isAlignfirstWrapperCall(call),
     rejectMessage: (call) =>
       `unexpected non-wrapper claude call: argv=${JSON.stringify(call.argv)}`,
@@ -328,7 +328,7 @@ export async function expectCodingDelegation(
   const claudeCall = await handle.waitForCall({
     predicate: (call) =>
       isAlignfirstWrapperCall(call) &&
-      isCodingProtocolPrompt(call.argv[0]!) &&
+      isCodingProtocolPrompt(call.argv[0]) &&
       (matches?.(call) ?? true),
     rejectOn: (call) => !isAlignfirstWrapperCall(call),
     rejectMessage: (call) =>
