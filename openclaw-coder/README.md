@@ -2,7 +2,7 @@
 
 Turn an [OpenClaw](https://openclaw.ai/) agent into an autonomous AI programmer. Two use cases:
 
-1. **For developers** — a programming partner, not a programming tool.
+1. **For developers** — a programming partner instead of a programming tool.
 2. **For non-developers** — a teammate who handles simple coding tasks.
 
 ## Architecture
