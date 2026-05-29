@@ -1,0 +1,27 @@
+{
+  "name": "playbook-test",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.15.0 <25",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "env:build": "openclaw-test env build",
+    "env:up": "openclaw-test env up",
+    "env:down": "openclaw-test env down",
+    "e2e": "openclaw-test run"
+  },
+  "dependencies": {
+    "@paleo/openclaw-channel-mock-core": "^0.3.1",
+    "@paleo/openclaw-discord-mock": "^0.3.2",
+    "@paleo/openclaw-slack-mock": "^0.3.2",
+    "@paleo/openclaw-test": "^0.6.0",
+    "openclaw": "2026.5.18"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "^6.0.3"
+  }
+}

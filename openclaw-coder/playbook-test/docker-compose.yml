@@ -1,0 +1,28 @@
+# Thin consumer overlay. Pulls in the parameterized base from
+# @paleo/openclaw-test. Requires Docker Compose v2.20+.
+#
+# `.env.local` only needs ANTHROPIC_API_KEY and OPENCLAW_WORKSPACE_DIR.
+# All other paths default to subdirs of the project dir; override in
+# .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
+# CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
+
+include:
+  - ./node_modules/@paleo/openclaw-test/docker-compose.yml
+
+volumes:
+  fixture-projects:
+
+services:
+  gateway:
+    volumes:
+      - fixture-projects:/home/claw/projects
+      # Live-mount the alignfirst-agent skill over its baked copy so playbook
+      # edits iterate without an image rebuild. Default resolves from this dir:
+      # ../../skills/alignfirst-agent = repo-root skills/alignfirst-agent.
+      - ${ALIGNFIRST_AGENT_SKILL_DIR:-../../skills/alignfirst-agent}:/home/claw/.agents/skills/alignfirst-agent
+
+  runner:
+    environment:
+      OPENCLAW_TEST_JUDGE_MODEL: anthropic/claude-haiku-4-5
+    volumes:
+      - fixture-projects:/home/claw/projects
