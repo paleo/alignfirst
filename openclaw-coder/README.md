@@ -107,7 +107,7 @@ Do not improvise — no announcement, no `ls`, `grep`, `find`, or project lookup
 
 ## Language
 
-Replies to the user follow the user's language. Internal reasoning and the playbook stay English.
+Replies to the user follow the user's language. Internal reasoning stays English.
 
 ## Tickets are labels, not lookup targets
 
