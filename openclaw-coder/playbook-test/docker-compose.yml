@@ -20,6 +20,10 @@ services:
       # edits iterate without an image rebuild. Default resolves from this dir:
       # ../../skills/alignfirst-agent = repo-root skills/alignfirst-agent.
       - ${ALIGNFIRST_AGENT_SKILL_DIR:-../../skills/alignfirst-agent}:/home/claw/.agents/skills/alignfirst-agent
+      # Experiment (ticket 13): procedural dispatcher skill loaded first by the
+      # workspace AGENTS.md, so the coaching alignfirst-agent SKILL.md is no
+      # longer the agent's first body read on a turn.
+      - ${OPENCLAW_CODER_PLAYBOOK_SKILL_DIR:-../../skills/openclaw-coder-playbook}:/home/claw/.agents/skills/openclaw-coder-playbook
 
   runner:
     environment:
