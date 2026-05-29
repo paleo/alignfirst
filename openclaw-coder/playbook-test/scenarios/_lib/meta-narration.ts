@@ -50,7 +50,8 @@ export async function waitForOutboundSkippingNarration(
   opts: WaitForOutboundOptions,
 ): Promise<WaitForOutboundResult> {
   let cursor = opts.sinceCursor;
-  const deadline = Date.now() + (opts.timeoutMs ?? 1000);
+  const effectiveTimeoutMs = opts.timeoutMs ?? 1000;
+  const deadline = Date.now() + effectiveTimeoutMs;
   for (;;) {
     const remaining = Math.max(1000, deadline - Date.now());
     const wait = await ctx.waitForOutbound(predicate, {
@@ -70,7 +71,7 @@ export async function waitForOutboundSkippingNarration(
     cursor = wait.nextCursor;
     if (Date.now() >= deadline) {
       throw new Error(
-        `waitForOutboundSkippingNarration: only narration matched within ${opts.timeoutMs}ms`,
+        `waitForOutboundSkippingNarration: only narration matched within ${effectiveTimeoutMs}ms`,
       );
     }
   }

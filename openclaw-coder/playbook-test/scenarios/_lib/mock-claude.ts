@@ -7,8 +7,9 @@ const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|ne
 const WORKTREE_LIST_INTENT_RE =
   /\b(list (the )?(registered )?(workspace|worktree)|enumerate (workspace|worktree)|workspace list)\b/i;
 const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing branch)\b/i;
-const BRANCH_TOKEN_RE = /\b([A-Z]+-\d+)\/(feat|fix|refactor|chore|docs|test|perf)\b/;
+const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/(feat|fix|refactor|chore|docs|test|perf)\b/;
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
+const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 
 function buildClaudeResponse(result: string): string {
   return JSON.stringify({
@@ -61,6 +62,7 @@ export function setupClaudeMock(
     reject: (err: Error) => void;
   };
   const watchers: Watcher[] = [];
+  const finalizedCalls = new WeakSet<ClaudeCall>();
 
   ctx.mockCli("claude", async ({ argv, cwd, stdout, stderr }) => {
     const call: ClaudeCall = { argv, cwd };
@@ -163,36 +165,35 @@ export function setupClaudeMock(
     } else {
       resultText = defaultResult;
     }
-    // The mock-cli server only emits the cliMock entry AFTER this handler
-    // returns, so `ctx.currentEntry` here still points at the previous entry.
-    // Defer watcher dispatch one tick so the cliMock entry is current when
-    // expectCodingDelegation resumes and reads it.
-    setImmediate(() => {
-      if (ctx.currentEntry?.kind === "cliMock") {
-        call.entry = ctx.currentEntry;
-      }
-      for (let i = watchers.length - 1; i >= 0; i--) {
-        const w = watchers[i]!;
-        if (w.options.rejectOn?.(call)) {
-          const msg =
-            w.options.rejectMessage?.(call) ??
-            `unexpected claude call: ${JSON.stringify(call.argv)}`;
-          w.reject(new Error(msg));
-          watchers.splice(i, 1);
-          continue;
-        }
-        if (w.options.predicate(call)) {
-          w.resolve(call);
-          watchers.splice(i, 1);
-        }
-      }
-    });
+    // The mock-cli server emits this call's cliMock entry only AFTER the
+    // handler returns. Defer one macrotask: by then `ctx.currentEntry` is this
+    // call's entry, so we snapshot it onto the call before notifying watchers.
+    setImmediate(() => finalizeCall(call));
     stdout.write(buildClaudeResponse(resultText));
     return 0;
   });
 
+  function finalizeCall(call: ClaudeCall): void {
+    if (ctx.currentEntry?.kind === "cliMock") call.entry = ctx.currentEntry;
+    finalizedCalls.add(call);
+    for (let i = watchers.length - 1; i >= 0; --i) {
+      const w = watchers[i]!;
+      if (w.options.rejectOn?.(call)) {
+        const msg =
+          w.options.rejectMessage?.(call) ?? `unexpected claude call: ${JSON.stringify(call.argv)}`;
+        w.reject(new Error(msg));
+        watchers.splice(i, 1);
+        continue;
+      }
+      if (w.options.predicate(call)) {
+        w.resolve(call);
+        watchers.splice(i, 1);
+      }
+    }
+  }
+
   const waitForCall = (options: WaitForCallOptions): Promise<ClaudeCall> => {
-    const existing = claudeCalls.find(options.predicate);
+    const existing = claudeCalls.find((c) => finalizedCalls.has(c) && options.predicate(c));
     if (existing) return Promise.resolve(existing);
     return new Promise<ClaudeCall>((resolve, reject) => {
       const watcher: Watcher = { options, resolve, reject };
@@ -242,8 +243,8 @@ function looksLikeWorktreeCreation(prompt: string): boolean {
 function resolveProject(prompt: string, cwd: string): string | undefined {
   const cwdMatch = cwd.match(PROJECT_CWD_RE);
   if (cwdMatch?.[1]) return cwdMatch[1];
-  const promptProject = prompt.match(/\b(?:nimbus|lumen)\b/);
-  return promptProject?.[0];
+  const promptProject = prompt.match(FIXTURE_PROJECT_RE);
+  return promptProject?.[0].toLowerCase();
 }
 
 function parseWorktreeRequest(
@@ -266,15 +267,6 @@ export function isCodingProtocolPrompt(prompt: string): boolean {
   return CODING_PROTOCOL_RE.test(prompt);
 }
 
-/**
- * True iff `prompt` is the no-protocol shape — a raw message sent through the
- * `alignfirst-coaching.mjs` wrapper without an `--protocol` flag (used for
- * investigation / question delegations).
- */
-export function isNoProtocolPrompt(prompt: string): boolean {
-  return !CODING_PROTOCOL_RE.test(prompt);
-}
-
 /** Render a captured claude invocation as a single text blob for the judge. */
 export function renderClaudeCall(call: ClaudeCall): string {
   return [`cwd: ${call.cwd}`, `argv: ${JSON.stringify(call.argv)}`].join("\n");
@@ -292,15 +284,14 @@ export async function expectNoProtocolDelegation(
   { rubric, label, timeoutMs = 90_000 }: ExpectNoProtocolDelegationOptions,
 ): Promise<ClaudeCall> {
   const claudeCall = await handle.waitForCall({
-    predicate: (call) => isAlignfirstWrapperCall(call) && isNoProtocolPrompt(call.argv[0]!),
+    predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]!),
     rejectOn: (call) => !isAlignfirstWrapperCall(call),
     rejectMessage: (call) =>
       `unexpected non-wrapper claude call: argv=${JSON.stringify(call.argv)}`,
     timeoutMs,
   });
 
-  const target =
-    claudeCall.entry ?? (ctx.currentEntry?.kind === "cliMock" ? ctx.currentEntry : undefined);
+  const target = claudeCall.entry;
   if (!target) {
     throw new Error("could not locate cliMock entry for claude no-protocol delegation");
   }
@@ -345,8 +336,7 @@ export async function expectCodingDelegation(
     timeoutMs,
   });
 
-  const target =
-    claudeCall.entry ?? (ctx.currentEntry?.kind === "cliMock" ? ctx.currentEntry : undefined);
+  const target = claudeCall.entry;
   if (!target) {
     throw new Error("could not locate cliMock entry for claude coding-delegation");
   }
