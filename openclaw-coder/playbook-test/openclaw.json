@@ -1,0 +1,52 @@
+{
+  "gateway": {
+    "mode": "local"
+  },
+  "plugins": {
+    "load": {
+      "paths": [
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock",
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"
+      ]
+    },
+    "entries": {
+      "discord-mock": { "enabled": true },
+      "slack-mock": { "enabled": true }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "alsoAllow": ["message"]
+  },
+  "agents": {
+    "defaults": {
+      "skills": ["alignfirst", "alignfirst-coaching", "openclaw-coder-playbook"],
+      "blockStreamingDefault": "on",
+      "blockStreamingBreak": "text_end",
+      "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
+    },
+    "list": [
+      {
+        "id": "main",
+        "name": "OpenClaw Main",
+        "model": "anthropic/claude-sonnet-4-6",
+        "workspace": "/home/claw/.openclaw/workspace"
+      }
+    ]
+  },
+  "channels": {
+    "discord-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "myclaw",
+      "allowFrom": ["*"]
+    },
+    "slack-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "myclaw",
+      "allowFrom": ["*"],
+      "blockStreaming": true
+    }
+  }
+}

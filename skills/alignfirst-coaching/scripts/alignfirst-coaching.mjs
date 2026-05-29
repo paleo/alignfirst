@@ -88,7 +88,7 @@ if (!protocol) {
 
 // --- Log file (inputs) ---
 
-const logDir = process.env.ALIGNFIRST_AGENT_LOG_DIR;
+const logDir = process.env.ALIGNFIRST_COACHING_LOG_DIR;
 let logPath;
 if (logDir) {
   const now = new Date();
@@ -133,7 +133,7 @@ function logErrorAndExit(msg, logMsg = msg) {
 
 const args = [prompt, "-p", "--output-format", "json"];
 
-if (process.env.ALIGNFIRST_AGENT_SKIP_PERMISSIONS === "1") {
+if (process.env.ALIGNFIRST_COACHING_SKIP_PERMISSIONS === "1") {
   args.push("--dangerously-skip-permissions");
 } else {
   args.push("--permission-mode", "auto");

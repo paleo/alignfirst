@@ -1,0 +1,33 @@
+# Thin consumer overlay. Pulls in the parameterized base from
+# @paleo/openclaw-test. Requires Docker Compose v2.20+.
+#
+# `.env.local` only needs ANTHROPIC_API_KEY, OPENCLAW_WORKSPACE_DIR and
+# ALIGNFIRST_COACHING_SKILL_DIR.
+# All other paths default to subdirs of the project dir; override in
+# .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
+# CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
+
+include:
+  - ./node_modules/@paleo/openclaw-test/docker-compose.yml
+
+volumes:
+  fixture-projects:
+
+services:
+  gateway:
+    volumes:
+      - fixture-projects:/home/claw/projects
+      # Live-mount the alignfirst-coaching skill over its baked copy so playbook
+      # edits iterate without an image rebuild. Set in .env.local (relative to
+      # this dir, e.g. ../../skills/alignfirst-coaching = repo-root skills/alignfirst-coaching).
+      - ${ALIGNFIRST_COACHING_SKILL_DIR}:/home/claw/.agents/skills/alignfirst-coaching
+      # Experiment (ticket 13): procedural dispatcher skill loaded first by the
+      # workspace AGENTS.md, so the coaching alignfirst-coaching SKILL.md is no
+      # longer the agent's first body read on a turn.
+      - ${OPENCLAW_CODER_PLAYBOOK_SKILL_DIR:-../../skills/openclaw-coder-playbook}:/home/claw/.agents/skills/openclaw-coder-playbook
+
+  runner:
+    environment:
+      OPENCLAW_TEST_JUDGE_MODEL: anthropic/claude-haiku-4-5
+    volumes:
+      - fixture-projects:/home/claw/projects

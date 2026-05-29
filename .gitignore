@@ -7,3 +7,12 @@ dist/
 
 .vscode/*
 !.vscode/settings.example.json
+
+openclaw-coder/playbook-test/.env.local
+openclaw-coder/playbook-test/artifacts/
+openclaw-coder/playbook-test/.gateway-logs/
+
+# OpenClaw runtime state — recreated per-instance, not team-curated (a test
+# instance snapshots these into the workspace; we don't track them)
+openclaw-coder/playbook-test/workspace/HEARTBEAT.md
+openclaw-coder/playbook-test/workspace/.openclaw/

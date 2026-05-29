@@ -40,9 +40,7 @@ RUN npm ci --include=dev && \
 #     COPY --chown=claw:claw projects-fixture/<name>/ /opt/<consumer>/fixtures/<name>/
 #     RUN cd /opt/<consumer>/fixtures/<name> && pnpm install --frozen-lockfile --prod=false
 #
-# * AlignFirst skills under /home/claw/.agents/skills/ for the agent to discover:
-#     RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-#           --agent universal --agent claude-code \
-#           --skill alignfirst --skill al --skill alplan --skill alspec \
-#           --skill aldescription --skill alreview --skill alread \
-#           --skill almerge --skill alignfirst-agent
+# * Skills under /home/claw/.agents/skills/ for the agent to discover
+#   (e.g. installed with the `skills` CLI from any repo or registry):
+#     RUN npx -y skills add <skills-source> --global --yes \
+#           --agent claude-code --skill <name> [--skill <name> …]

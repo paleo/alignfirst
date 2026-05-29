@@ -4,7 +4,7 @@ Do NOT try to handle the user's request here. We need to set up the project work
 
 ## Prerequisites
 
-- load the `alignfirst-agent` skill — how to delegate to the coding agent.
+- load the `alignfirst-coaching` skill — how to delegate to the coding agent.
 - read `~/projects/{PROJECT_NAME}/docs/welcome.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements

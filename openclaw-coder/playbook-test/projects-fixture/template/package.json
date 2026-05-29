@@ -1,0 +1,23 @@
+{
+  "name": "@playbook-test/fixture-template",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "docmap": "docmap",
+    "workspace": "node scripts/workspace/workspace.mjs",
+    "dev:up": "node scripts/workspace/dev-server.mjs",
+    "dev:down": "node scripts/workspace/dev-server.mjs --stop",
+    "dev:list": "node scripts/workspace/dev-server.mjs --list"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  },
+  "devDependencies": {
+    "@paleo/docmap": "^0.5.1",
+    "@paleo/workspace": "^0.12.0"
+  }
+}

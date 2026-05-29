@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.6.1
+
+### Patch Changes
+
+- 9cbaaff: Run the LLM judge at `temperature: 0` for deterministic verdicts.
+
 ## 0.6.0
 
 ### Minor Changes

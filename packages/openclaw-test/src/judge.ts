@@ -93,8 +93,8 @@ Here is the return type we expect:
 
 <return-type>
 interface JudgeResult {
-  verdict: "pass" | "fail";
   reasoning?: string; // concise, <=20 words
+  verdict: "pass" | "fail";
 }
 </return-type>
 
@@ -133,6 +133,7 @@ async function callAnthropic(
   const resp = await client.messages.create({
     model: bareModel,
     max_tokens: maxTokens,
+    temperature: 0,
     messages: [{ role: "user", content: prompt }],
   });
   const raw = resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");

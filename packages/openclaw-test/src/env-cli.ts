@@ -48,7 +48,10 @@ export function envCommand(packageDir: string, argv: string[]): never {
   }
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
-  if (sub !== "down") ensureBaseImage(packageDir, { force: sub === "build" });
+  if (sub !== "down") {
+    ensureHostOutputDirs();
+    ensureBaseImage(packageDir, { force: sub === "build" });
+  }
   const composeArgs = composeBaseArgs();
   const subArgs =
     sub === "build"
@@ -64,6 +67,7 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     parseRunArgs(argv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
+  ensureHostOutputDirs();
   const didBuild = ensureBaseImage(packageDir, { force: false });
 
   const compose = composeBaseArgs();
@@ -195,6 +199,18 @@ const PATH_DEFAULTS: Record<string, string> = {
 function applyPathDefaults(projectDir: string): void {
   for (const [key, rel] of Object.entries(PATH_DEFAULTS)) {
     if (!process.env[key]) process.env[key] = resolve(projectDir, rel);
+  }
+}
+
+// Pre-create the host-side output dirs as the current user, before any
+// `docker compose up`. Otherwise the Docker daemon auto-creates a missing
+// bind-mount source (notably `.gateway-logs`) as root, which the container —
+// running as the host UID — can then neither write nor let the user delete
+// without sudo. Idempotent; safe to call on every command that brings the stack up.
+function ensureHostOutputDirs(): void {
+  for (const key of ["OPENCLAW_TEST_ARTIFACTS_DIR", "OPENCLAW_TEST_GATEWAY_LOGS_DIR"] as const) {
+    const dir = process.env[key];
+    if (dir) mkdirSync(dir, { recursive: true });
   }
 }
 
