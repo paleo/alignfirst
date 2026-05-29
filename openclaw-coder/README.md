@@ -12,7 +12,7 @@ Install OpenClaw on a VPS.
 ```mermaid
 flowchart TD
   U([User]) -->|"asks via Discord / Slack"| O[OpenClaw]
-  O -->|"delegates the task<br/>(openclaw-coder-playbook + alignfirst-coaching skill)"| CC[Claude Code]
+  O -->|"delegates the task<br/>(openclaw-coder-playbook + alignfirst-coaching skills)"| CC[Claude Code]
   CC -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
@@ -20,13 +20,15 @@ OpenClaw runs the conversation and, when there's code to write, hands the task t
 
 ### Supported OpenClaw channels
 
-The playbook is designed for using **Slack** and **Discord**.
+The playbook is designed for **Slack** and **Discord**.
 
 ## Configuring the VPS
 
 ### Your projects
 
-Put your repositories in `~/projects/`.
+Put your git repositories in `~/projects/`.
+
+If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
 ### Claude Code
 
@@ -56,7 +58,7 @@ Skills:
 
 - **`openclaw-coder-playbook`** — operating instructions for an OpenClaw AI coder.
 - **`alignfirst-coaching`** — teaches the agent to delegate coding tasks to Claude Code.
-- **`alignfirst`** — not needed strictly speaking, but it can help for your bot to understand its coding tool.
+- **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
 
 Optional `alignfirst-coaching` environment variables:
 
@@ -92,7 +94,7 @@ OpenClaw needs a coding tool profile that can still post to chat, and the three 
 }
 ```
 
-The playbook expects that each task runs in its **own thread session**. With Slack we use `replyToMode: "all"` and every user message will be replied in a new thread. On Discord the agent opens the thread itself, so `autoThread` stays off; `alsoAllow: ["message"]` is what lets it do so.
+The playbook expects each task to run in its **own thread session**. With Slack, `replyToMode: "all"` answers every user message in a new thread. On Discord the agent opens the thread itself, so `autoThread` stays off; `alsoAllow: ["message"]` is what lets it do so.
 
 ### `workspace/AGENTS.md`
 
@@ -107,7 +109,7 @@ Do not improvise — no announcement, no `ls`, `grep`, `find`, or project lookup
 
 ## Language
 
-Replies to the user follow the user's language. Internal reasoning stays English.
+Replies to the user follow the user's language. Internal reasoning stays in English.
 
 ## Tickets are labels, not lookup targets
 
@@ -116,7 +118,7 @@ When a user mentions a ticket ID (`ABC-123`, `12`, …), it's a label for branch
 
 The only required part is the first paragraph.
 
-About tickets: feel free to replace by your instructions on how access your Linear, Jira, or GitHub/Gitlab issues.
+About tickets: feel free to replace this with your own instructions on how to access your Linear, Jira, or GitHub/GitLab issues.
 
 ## Contribute
 
