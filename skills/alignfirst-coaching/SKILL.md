@@ -1,20 +1,20 @@
 ---
-name: alignfirst-agent
+name: alignfirst-coaching
 description: "Coach an AlignFirst spec-plan-execute or AAD workflow using a CLI wrapper around a coding-agent CLI. Use when orchestrating coding agents through AlignFirst protocols non-interactively."
 license: CC0 1.0
 compatibility: Requires Node.js and the Claude Code CLI
 metadata:
   author: Paleo
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
 
 **Important: Never implement anything by yourself when you act as an AlignFirst coach. Never investigate or modify the codebase directly. Your role is to delegate and guide the agent.**
 
-# AlignFirst Agent Guide
+# AlignFirst Coaching Guide
 
-The CLI script is at `scripts/alignfirst-agent.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-agent/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-agent/scripts/alignfirst-agent.mjs`.
+The CLI script is at `scripts/alignfirst-coaching.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-coaching/scripts/alignfirst-coaching.mjs`.
 
 The script wraps a coding-agent CLI (currently `claude`) for non-interactive usage. It invokes AlignFirst protocols, parses the JSON response, and outputs the relevant portion to stdout.
 
@@ -23,9 +23,9 @@ For `--new` modes, the output starts with a `Session ID:` line — save it to re
 ## CLI Reference
 
 ```
-node scripts/alignfirst-agent.mjs --new --protocol <protocol> --ticket <id> [--message "..."]
-node scripts/alignfirst-agent.mjs --new --message "..."
-node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [--message "..."]
+node scripts/alignfirst-coaching.mjs --new --protocol <protocol> --ticket <id> [--message "..."]
+node scripts/alignfirst-coaching.mjs --new --message "..."
+node scripts/alignfirst-coaching.mjs --resume <sessionId> [--protocol <protocol>] [--message "..."]
 ```
 
 **Flags:**
@@ -45,9 +45,9 @@ node scripts/alignfirst-agent.mjs --resume <sessionId> [--protocol <protocol>] [
 - Ask the agent a question in a new session
 
 ```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer"
-node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
-node scripts/alignfirst-agent.mjs --new --message "Explain how ... works in this project. Do not implement anything. We need to talk first."
+node scripts/alignfirst-coaching.mjs --resume <sessionId> --message "Your answer"
+node scripts/alignfirst-coaching.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+node scripts/alignfirst-coaching.mjs --new --message "Explain how ... works in this project. Do not implement anything. We need to talk first."
 ```
 
 **Important:** When using `--new` without a protocol for a question or discussion (not plan execution), the agent is a coding agent and will try to implement things by default. End your message with a clear constraint, e.g.: *"Do not implement anything. We need to talk first."*
@@ -59,7 +59,7 @@ The default workflow. Always start with it, except for very insignificant tasks.
 ### Step 1 — Create a spec
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol spec --ticket AB-123 --message "Description of the feature or task"
+node scripts/alignfirst-coaching.mjs --new --protocol spec --ticket AB-123 --message "Description of the feature or task"
 ```
 
 The agent investigates the codebase and responds with its findings and questions. Save the session ID from the output. There may be several back-and-forths before the agent is satisfied and writes the spec file — see [Answering agent questions](#answering-agent-questions).
@@ -69,7 +69,7 @@ The agent investigates the codebase and responds with its findings and questions
 Once the spec is written, request a plan in the same session:
 
 ```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --protocol plan
+node scripts/alignfirst-coaching.mjs --resume <sessionId> --protocol plan
 ```
 
 The agent writes a plan file (e.g. `.plans/AB-123/A2-plan.md`) and provides its path in the output. The agent rarely asks questions at this stage.
@@ -79,7 +79,7 @@ The agent writes a plan file (e.g. `.plans/AB-123/A2-plan.md`) and provides its 
 Start a **new** session to execute the plan:
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+node scripts/alignfirst-coaching.mjs --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
 ```
 
 The agent implements the plan and writes a summary file (e.g. `.plans/AB-123/A2-plan.summary.md`), providing its path in the output.
@@ -95,7 +95,7 @@ For straightforward changes that can be done in one shot — like moving a butto
 ### Step 1 — Start an AAD session
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol aad --ticket AB-123 --message "Description of the task"
+node scripts/alignfirst-coaching.mjs --new --protocol aad --ticket AB-123 --message "Description of the task"
 ```
 
 Like the spec workflow, the agent investigates the codebase and asks questions. Save the session ID. Answer questions the same way — see [Answering agent questions](#answering-agent-questions).
@@ -111,7 +111,7 @@ The summary file contains a suggested commit message. Commit locally as in the s
 Generates a PR/MR description for work already committed. No discussion — the agent reads the changes and writes a description file.
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol description --ticket AB-123
+node scripts/alignfirst-coaching.mjs --new --protocol description --ticket AB-123
 ```
 
 The agent writes a markdown file with the description and provides its path in the output.
@@ -121,8 +121,8 @@ The agent writes a markdown file with the description and provides its path in t
 Loads the spec and summary files for a ticket into the agent's context. Without `--message`, the agent describes what was done for the ticket. With `--message`, it loads context then processes the message in a single call — useful to ask questions about prior work.
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123
-node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123 --message "Did we propagate the changes in ...? Do not implement anything. We need to talk first."
+node scripts/alignfirst-coaching.mjs --new --protocol read --ticket AB-123
+node scripts/alignfirst-coaching.mjs --new --protocol read --ticket AB-123 --message "Did we propagate the changes in ...? Do not implement anything. We need to talk first."
 ```
 
 ## Review (Code Review)
@@ -130,7 +130,7 @@ node scripts/alignfirst-agent.mjs --new --protocol read --ticket AB-123 --messag
 Reviews the current branch against the base branch and writes a review report.
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol review --ticket AB-123
+node scripts/alignfirst-coaching.mjs --new --protocol review --ticket AB-123
 ```
 
 The agent writes a review file (e.g. `.plans/AB-123/A3-review.md`) and provides its path in the output.
@@ -142,13 +142,13 @@ Resolves merge or rebase conflicts and summarizes the tricky resolutions. Can al
 When conflicts are already present:
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol merge --ticket AB-123
+node scripts/alignfirst-coaching.mjs --new --protocol merge --ticket AB-123
 ```
 
 When the merge has not started, pass the incoming branch via `--message`:
 
 ```bash
-node scripts/alignfirst-agent.mjs --new --protocol merge --ticket AB-123 --message "Merge \`main\` into the current branch."
+node scripts/alignfirst-coaching.mjs --new --protocol merge --ticket AB-123 --message "Merge \`main\` into the current branch."
 ```
 
 On conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summary.md`) and provides its path. On a clean merge, no summary is written.
@@ -158,7 +158,7 @@ On conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summ
 During spec and AAD sessions, the agent asks questions before proceeding. Resume the session **without a protocol** to answer:
 
 ```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --message "Your answer here"
+node scripts/alignfirst-coaching.mjs --resume <sessionId> --message "Your answer here"
 ```
 
 There may be several back-and-forths before the agent is satisfied.
@@ -166,7 +166,7 @@ There may be several back-and-forths before the agent is satisfied.
 The agent often asks multiple questions at once. Answer them all in a single message, numbered to match:
 
 ```bash
-node scripts/alignfirst-agent.mjs --resume <sessionId> --message \
+node scripts/alignfirst-coaching.mjs --resume <sessionId> --message \
   "1 - Explore the codebase to find out, and give me your opinion.
 2 - Is that a good design? We need the cleanest code possible.
 3 - We checked with the team: yes, it should be optional."

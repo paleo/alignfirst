@@ -13,22 +13,22 @@ Two skills, with distinct roles — install both:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global \
-  --skill openclaw-coder-playbook --skill alignfirst-agent
+  --skill openclaw-coder-playbook --skill alignfirst-coaching
 ```
 
 - **`openclaw-coder-playbook`** — the operating-instructions dispatcher. Its `SKILL.md` routes each user message by surface (thread → working session, channel/DM → channel handling); the procedures live in its [`references/`](../skills/openclaw-coder-playbook/references/). The workspace `AGENTS.md` loads this skill first, so the agent's first read each turn is procedural — not coaching vocabulary (this read-order matters; see [../docs/writing-workspace-files.md](../docs/writing-workspace-files.md)).
-- **`alignfirst-agent`** — the coaching/CLI skill the playbook delegates *coding* to (spec / plan / AAD protocols via a CLI wrapper). Read only at delegation time, after the workspace is set up.
+- **`alignfirst-coaching`** — the coaching/CLI skill the playbook delegates *coding* to (spec / plan / AAD protocols via a CLI wrapper). Read only at delegation time, after the workspace is set up.
 
-Optional `alignfirst-agent` environment variables:
+Optional `alignfirst-coaching` environment variables:
 
 ```bash
-export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
-export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_COACHING_LOG_DIR=path/to/directory # Write input/output logs
+export ALIGNFIRST_COACHING_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 ```
 
 ## Test harness
 
-[`playbook-test/`](playbook-test/) builds on the four `@paleo/openclaw-*` packages. It bind-mounts both the `openclaw-coder-playbook` and `alignfirst-agent` skills into the gateway, so playbook edits iterate without rebuilding the image. See [playbook-test/README.md](playbook-test/README.md) and the upstream [packages/openclaw-test/README.md](../packages/openclaw-test/README.md).
+[`playbook-test/`](playbook-test/) builds on the four `@paleo/openclaw-*` packages. It bind-mounts both the `openclaw-coder-playbook` and `alignfirst-coaching` skills into the gateway, so playbook edits iterate without rebuilding the image. See [playbook-test/README.md](playbook-test/README.md) and the upstream [packages/openclaw-test/README.md](../packages/openclaw-test/README.md).
 
 ## Real deployment
 

@@ -4,9 +4,9 @@ Maintainer's map of the [`openclaw-coder/`](../openclaw-coder/) subproject: a ne
 
 ## Three layers
 
-1. **Reference workspace** — [`openclaw-coder/workspace/`](../openclaw-coder/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`). These are auto-loaded into the system prompt every turn. `AGENTS.md` is a thin pointer: on the first user message it sends the agent into the `alignfirst-agent` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
-2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules (language, "tickets are labels", projects, `chat_id`). The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the separate `alignfirst-agent` coaching skill. Nothing here is auto-loaded — files are read on demand (see context engineering below).
-3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts both the workspace dir and the `alignfirst-agent` skill into the gateway, so edits to layers 1 and 2 iterate live without rebuilding the image.
+1. **Reference workspace** — [`openclaw-coder/workspace/`](../openclaw-coder/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`). These are auto-loaded into the system prompt every turn. `AGENTS.md` is a thin pointer: on the first user message it sends the agent into the `alignfirst-coaching` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
+2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules (language, "tickets are labels", projects, `chat_id`). The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the separate `alignfirst-coaching` coaching skill. Nothing here is auto-loaded — files are read on demand (see context engineering below).
+3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts both the workspace dir and the `alignfirst-coaching` skill into the gateway, so edits to layers 1 and 2 iterate live without rebuilding the image.
 
 ## How a turn flows
 
@@ -16,10 +16,10 @@ user message
   → openclaw-coder-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
   → references/project-workspace-setup.md (if WORK)       layer 2
-  → delegate coding to the alignfirst-agent skill (coaching/CLI, read last)
+  → delegate coding to the alignfirst-coaching skill (coaching/CLI, read last)
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the coaching `alignfirst-agent/SKILL.md` is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-workspace-files.md](./writing-workspace-files.md)).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the coaching `alignfirst-coaching/SKILL.md` is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-workspace-files.md](./writing-workspace-files.md)).
 
 ## Reading order for maintainers
 

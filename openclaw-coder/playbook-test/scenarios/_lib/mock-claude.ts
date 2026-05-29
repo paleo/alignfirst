@@ -211,8 +211,8 @@ export function setupClaudeMock(
 }
 
 /**
- * True iff the call has the argv shape produced by alignfirst-agent's
- * `scripts/alignfirst-agent.mjs` wrapper:
+ * True iff the call has the argv shape produced by alignfirst-coaching's
+ * `scripts/alignfirst-coaching.mjs` wrapper:
  * `claude "<prompt>" -p --output-format json … (--permission-mode|--dangerously-skip-permissions)`.
  */
 export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
@@ -268,7 +268,7 @@ export function isCodingProtocolPrompt(prompt: string): boolean {
 
 /**
  * True iff `prompt` is the no-protocol shape — a raw message sent through the
- * `alignfirst-agent.mjs` wrapper without an `--protocol` flag (used for
+ * `alignfirst-coaching.mjs` wrapper without an `--protocol` flag (used for
  * investigation / question delegations).
  */
 export function isNoProtocolPrompt(prompt: string): boolean {
@@ -359,7 +359,7 @@ export async function expectCodingDelegation(
   await ctx.judgeLLM({
     attachTo: target,
     message: renderClaudeCall(claudeCall),
-    rubric: `The message is a prompt sent to a coding agent (Claude) via the alignfirst-agent skill's \`alignfirst-agent.mjs\` wrapper. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
+    rubric: `The message is a prompt sent to a coding agent (Claude) via the alignfirst-coaching skill's \`alignfirst-coaching.mjs\` wrapper. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
     label,
   });
 

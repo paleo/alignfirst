@@ -20,7 +20,7 @@
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "alignfirst-agent", "openclaw-coder-playbook"],
+      "skills": ["alignfirst", "alignfirst-coaching", "openclaw-coder-playbook"],
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
