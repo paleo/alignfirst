@@ -13,8 +13,8 @@ metadata:
 
 You have just loaded this skill. Before any reply text and before any other tool call, your next action must be a file read of the playbook for your surface:
 
-- Conversation metadata has `thread_label`, `topic_id` (Discord), or `thread_ts` (Slack) → thread session → read [`./working-session.md`](./working-session.md). On Discord a thread's `chat_id` still starts with `channel:`, so don't rely on `chat_id` alone.
-- None of those fields set → channel / DM session → read [`./channel-handling.md`](./channel-handling.md).
+- Conversation metadata has `thread_label`, `topic_id` (Discord), or `thread_ts` (Slack) → thread session → read [`references/working-session.md`](references/working-session.md). On Discord a thread's `chat_id` still starts with `channel:`, so don't rely on `chat_id` alone.
+- None of those fields set → channel / DM session → read [`references/channel-handling.md`](references/channel-handling.md).
 
 The playbook tells you what to do. Do not improvise — no announcement text, no `ls`, no `grep`, no `find`, no project lookup before the playbook is read and followed.
 

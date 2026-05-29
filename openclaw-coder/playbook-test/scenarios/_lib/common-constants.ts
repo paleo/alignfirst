@@ -5,8 +5,6 @@
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const NEW_THREAD_ACK_RUBRIC = `A **short** (1-2 sentences) message that **states the project name and the ticket id**, then announces the agent is creating or setting up the workspace now — worktree, branch, "env local", "environnement de travail", "Mise en place de l'environnement…", "Je prépare la branche…", "Je crée le worktree…", or similar. The message can announce the intent or include a commitment message.`;
-
 export const STARTER_ANNOUNCEMENT_RUBRIC = `A short announcement that a new thread is being opened (e.g. "Nouveau thread.", "Opening a thread."). A brief filler or commitment phrase ("Je regarde ça", "On y va") is fine. No questions, no prompts for input, no narration of the user's request.`;
 
 export const NEW_WORK_QUESTION_RUBRIC =

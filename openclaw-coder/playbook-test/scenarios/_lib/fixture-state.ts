@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 
 const PROJECTS_DIR = "/home/claw/projects";
@@ -39,6 +39,33 @@ export async function waitForWorktreeDir(
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`worktree dir ${target} did not appear within ${timeoutMs}ms`);
+}
+
+export interface WorktreeMatch {
+  dir: string;
+  type: string;
+}
+
+/**
+ * Like `waitForWorktreeDir`, but work-type-agnostic: polls for any worktree
+ * `<project>-<ticket>-<type>` and returns the actual `<type>` the agent chose.
+ * "Make the export button bold" is legitimately a `feat` or a `fix`, so the
+ * scenario must not pin the type — only that a worktree for the ticket appears.
+ */
+export async function waitForAnyWorktreeDir(
+  project: string,
+  ticket: string,
+  { timeoutMs }: WaitForWorktreeDirOptions,
+): Promise<WorktreeMatch> {
+  const prefix = `${project}-${ticket}-`;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const entries = await readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => []);
+    const match = entries.find((e) => e.isDirectory() && e.name.startsWith(prefix));
+    if (match) return { dir: `${PROJECTS_DIR}/${match.name}`, type: match.name.slice(prefix.length) };
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`no worktree dir ${prefix}<type> appeared within ${timeoutMs}ms`);
 }
 
 export function assertBranch(worktreeDir: string, expectedBranch: string): void {

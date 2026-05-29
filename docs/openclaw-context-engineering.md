@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `alignfirst-agent` playbook relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to read `openclaw-playbook/dispatcher.md`; the dispatcher in turn reads the surface-specific playbook (`working-session.md` or `channel-handling.md`). None of those playbook files is auto-loaded — they cost tokens only when a turn actually needs them.
+This is the mechanism the `openclaw-coder-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill, not the coaching `alignfirst-agent`.
 
 ## Character budgets
 
@@ -106,7 +106,7 @@ Without `alsoAllow`, the channel session falls back to raw Discord REST via `exe
 
 When a fresh thread session activates on Discord on the user's follow-up, its transcript starts **empty** — Slack injects a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100) prior messages, but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-Workaround: the thread playbook ([`working-session.md`](../skills/alignfirst-agent/openclaw-playbook/working-session.md)) instructs the agent to call `message` `action: "read"` with its bound `threadId` whenever its transcript is empty. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) is written for this case.
+Workaround: the thread playbook ([`working-session.md`](../skills/openclaw-coder-playbook/references/working-session.md)) instructs the agent to call `message` `action: "read"` with its bound `threadId` whenever its transcript is empty. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) is written for this case.
 
 ## `expectsCompletionMessage` — let a thread subagent speak for itself
 

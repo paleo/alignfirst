@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the Claude Code CLI
 metadata:
   author: Paleo
-  version: "0.9.0"
+  version: "0.10.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.

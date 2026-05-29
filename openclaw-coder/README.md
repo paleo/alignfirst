@@ -4,33 +4,31 @@ A neutral, shareable setup that packages OpenClaw as an autonomous AI programmer
 
 ## Layout
 
-- [`workspace/`](workspace/) — the `myclaw` reference OpenClaw workspace (personality files: `AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`). `AGENTS.md` points at the `alignfirst-agent` skill for its operating instructions; the playbook itself lives in the skill, not here.
+- [`workspace/`](workspace/) — the `myclaw` reference OpenClaw workspace (personality files: `AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`). `AGENTS.md` loads the `openclaw-coder-playbook` skill first on every message; the playbook lives in that skill, not here.
 - [`playbook-test/`](playbook-test/) — a Dockerised regression-test harness that drives this workspace through synthetic Discord and Slack channels.
 
-## AlignFirst Agent skill
+## Skills
 
-The operating-instructions playbook lives in the `alignfirst-agent` skill. Install it:
+Two skills, with distinct roles — install both:
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-agent
+npx skills add https://github.com/paleo/alignfirst --global \
+  --skill openclaw-coder-playbook --skill alignfirst-agent
 ```
 
-Optional environment variables:
+- **`openclaw-coder-playbook`** — the operating-instructions dispatcher. Its `SKILL.md` routes each user message by surface (thread → working session, channel/DM → channel handling); the procedures live in its [`references/`](../skills/openclaw-coder-playbook/references/). The workspace `AGENTS.md` loads this skill first, so the agent's first read each turn is procedural — not coaching vocabulary (this read-order matters; see [../docs/writing-workspace-files.md](../docs/writing-workspace-files.md)).
+- **`alignfirst-agent`** — the coaching/CLI skill the playbook delegates *coding* to (spec / plan / AAD protocols via a CLI wrapper). Read only at delegation time, after the workspace is set up.
+
+Optional `alignfirst-agent` environment variables:
 
 ```bash
 export ALIGNFIRST_AGENT_LOG_DIR=path/to/directory # Write input/output logs
 export ALIGNFIRST_AGENT_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 ```
 
-### OpenClaw Playbook (experimental)
-
-The `alignfirst-agent` skill ships a reference playbook that teaches OpenClaw how to handle branches, worktrees, commits, PRs/MRs etc. on the project side, and organize the chat with the user through Discord/Slack threads on the user side. Still in development.
-
-See [../skills/alignfirst-agent/openclaw-playbook/](../skills/alignfirst-agent/openclaw-playbook/).
-
 ## Test harness
 
-[`playbook-test/`](playbook-test/) builds on the four `@paleo/openclaw-*` packages. It bind-mounts the `alignfirst-agent` skill into the gateway, so playbook edits iterate without rebuilding the image. See [playbook-test/README.md](playbook-test/README.md) and the upstream [packages/openclaw-test/README.md](../packages/openclaw-test/README.md).
+[`playbook-test/`](playbook-test/) builds on the four `@paleo/openclaw-*` packages. It bind-mounts both the `openclaw-coder-playbook` and `alignfirst-agent` skills into the gateway, so playbook edits iterate without rebuilding the image. See [playbook-test/README.md](playbook-test/README.md) and the upstream [packages/openclaw-test/README.md](../packages/openclaw-test/README.md).
 
 ## Real deployment
 

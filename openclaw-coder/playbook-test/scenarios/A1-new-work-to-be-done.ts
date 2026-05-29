@@ -1,6 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import {
-  NEW_THREAD_ACK_RUBRIC,
   NEW_WORK_QUESTION_RUBRIC,
   STARTER_ANNOUNCEMENT_RUBRIC,
   starterLineRegexNoTicket,
@@ -9,12 +8,12 @@ import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import type { Step } from "./_lib/types.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
 const TICKET_ID = "ABC-010";
 const PROJECT = "nimbus";
-const WORK_TYPE = "feat";
 
 interface StarterStep extends Step {
   questionAlreadyAsked: boolean;
@@ -34,7 +33,6 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
   await runWorkspaceFlow(ctx, claude, {
     project: PROJECT,
     ticketId: TICKET_ID,
-    workType: WORK_TYPE,
     prevStep: ack,
   });
 
@@ -172,27 +170,11 @@ async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise
     threadId: prev.threadId,
   });
 
-  const wait = await waitForOutboundSkippingNarration(
-    ctx,
-    (m) => m.direction === "outbound" && m.threadId === prev.threadId && m.id !== prev.match.id,
-    { timeoutMs: 90_000, sinceCursor: prev.nextCursor },
-  );
-  ctx.log({ attachTo: wait.entry, prefix: "ack received", message: wait.match.text });
-
-  ctx.assertRegex(wait.match.text, new RegExp(`\\b${TICKET_ID}\\b`), "ack mentions the ticket");
-  ctx.assertRegex(wait.match.text, new RegExp(`\\b${PROJECT}\\b`, "i"), "ack mentions the project");
-
-  await ctx.judgeLLM({
-    attachTo: wait.entry,
-    message: wait.match.text,
-    rubric: NEW_THREAD_ACK_RUBRIC,
-    label: "setup-acknowledgement",
-  });
-
-  return {
-    match: wait.match,
-    entry: wait.entry,
+  return await waitForSetupAck(ctx, {
     threadId: prev.threadId,
-    nextCursor: wait.nextCursor,
-  };
+    prevId: prev.match.id,
+    sinceCursor: prev.nextCursor,
+    ticketId: TICKET_ID,
+    project: PROJECT,
+  });
 }

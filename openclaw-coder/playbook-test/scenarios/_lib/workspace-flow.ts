@@ -1,15 +1,20 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { assertBranch, waitForWorktreeDir } from "./fixture-state.ts";
+import { assertBranch, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
 import type { Step } from "./types.ts";
 
-const WORKSPACE_REPORT_RUBRIC = `A short progress report after the worktree was created. It mentions ALL three: (a) a worktree locator — the directory/path (\`/home/claw/projects/<project>-<ticket>-<type>\` or its tail) OR a slot number (e.g. \`slot 6510\`) is acceptable, since either pinpoints the worktree, (b) the branch name (e.g. \`<ticket>/<type>\`), and (c) the actual current status of the background bootstrap (e.g. "ready", "running", "in progress", "not yet ready"). The message may also include a follow-up announcement of the planned next step or a request for the user's validation — that's fine, but the three required pieces must all be present. Reject if any of (a), (b), or (c) is missing.`;
+// The worktree report is a fixed labelled template (`Worktree: … / Branch: …
+// / Bootstrap: …`, translated to the user's language). Its three required
+// pieces are language-invariant tokens — the worktree dir name (or a slot
+// number), the branch, and a bootstrap-status keyword — so assert them
+// deterministically. A cheap LLM judge proved unreliable here, returning false
+// negatives on a report that plainly carried all three fields.
+const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|prêt|prête|en cours|échou)/i;
 
 export interface WorkspaceFlowOptions {
   project: string;
   ticketId: string;
-  workType: string;
   prevStep: Step;
   worktreeTimeoutMs?: number;
   reportTimeoutMs?: number;
@@ -31,30 +36,32 @@ export async function runWorkspaceFlow(
   const {
     project,
     ticketId,
-    workType,
     prevStep,
     worktreeTimeoutMs = 120_000,
     reportTimeoutMs = 90_000,
     delegationTimeoutMs = 90_000,
   } = options;
 
-  const worktreeDir = await waitForWorktreeDir(project, ticketId, workType, {
+  // The agent chooses the work type (feat/fix/refactor…); don't pin it. Discover
+  // the worktree the agent actually created and derive the type from its name.
+  const { dir: worktreeDir, type: workType } = await waitForAnyWorktreeDir(project, ticketId, {
     timeoutMs: worktreeTimeoutMs,
   });
   assertBranch(worktreeDir, `${ticketId}/${workType}`);
 
-  // Skip "preparing…" filler messages: wait for the first outbound that
-  // actually references the branch — that's the report we want to judge.
-  // The narration-skipping wrapper also discards "Now I'll post the status…"
-  // chatter that happens to include the branch.
+  // The settled report carries the worktree LOCATOR (dir name or slot); a
+  // pre-creation announcement ("Je crée la branche ABC-010/fix et le worktree")
+  // carries only the branch. Select on the locator so we judge the settled
+  // report, not the announcement that precedes it.
   const branchRe = new RegExp(`\\b${ticketId}\\/${workType}\\b`, "i");
+  const locatorRe = new RegExp(`${project}-${ticketId}-${workType}|slot\\s*\\d{3,5}`, "i");
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
     (m) =>
       m.direction === "outbound" &&
       m.threadId === prevStep.threadId &&
       m.id !== prevStep.match.id &&
-      branchRe.test(m.text),
+      locatorRe.test(m.text),
     { timeoutMs: reportTimeoutMs, sinceCursor: prevStep.nextCursor },
   );
   ctx.log({
@@ -62,12 +69,11 @@ export async function runWorkspaceFlow(
     prefix: "workspace report received",
     message: reportWait.match.text,
   });
-  await ctx.judgeLLM({
-    attachTo: reportWait.entry,
-    message: reportWait.match.text,
-    rubric: WORKSPACE_REPORT_RUBRIC,
-    label: "workspace-report",
-  });
+  // (a) worktree locator — selected on above; (b) branch; (c) bootstrap status.
+  const reportText = reportWait.match.text;
+  ctx.assertRegex(reportText, locatorRe, "workspace-report: worktree locator (dir or slot)");
+  ctx.assertRegex(reportText, branchRe, "workspace-report: branch name");
+  ctx.assertRegex(reportText, bootstrapStatusRe, "workspace-report: bootstrap status");
 
   // Per project-workspace-setup.md Step 5, the agent may pause to ask
   // for validation before delegating coding work. Unblock it unconditionally.
