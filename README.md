@@ -18,6 +18,6 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 `@paleo/openclaw-test` and three companion channel packages — a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
-## Autonomous agent (experimental)
+## Autonomous AI programmer (experimental)
 
-We're currently working on building an AI developer with _OpenClaw_. See [openclaw-coder/README.md](openclaw-coder/README.md).
+We're building an autonomous AI developer with _OpenClaw_. See [openclaw-coder/README.md](openclaw-coder/README.md).
