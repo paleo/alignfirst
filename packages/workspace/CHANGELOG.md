@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.13.0
+
+### Minor Changes
+
+- 31c3668: `dev` subcommands + foreground mode; `workspace list` DEV column
+
 ## 0.12.0
 
 ### Minor Changes
