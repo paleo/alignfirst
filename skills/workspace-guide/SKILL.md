@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.9.1"
+  version: "0.10.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -192,7 +192,7 @@ The rules below are not enforceable by the type system. Read them carefully:
 - `start(ctx)` MUST resolve only once the resource is ready (no log polling on the runner's side).
 - Always thread `ctx.cwd` into every child-process call (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve any paths against `ctx.cwd`. Never call bare `execSync("docker compose ...")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Do not capture paths or env values at module load. Resolve everything inside the callback from `ctx.cwd`.
-- Cross-worktree stop (`dev down --all`, eviction) re-uses the **current process's** loaded callbacks with `ctx.cwd = <victim worktree>`. This works because git-worktrees of the same repo run the same dev-server script. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev down` from inside that worktree finishes the cleanup. Same caveat applies to eviction.
+- Cross-worktree stop (`dev down --all`, eviction) invokes your callbacks with `ctx.cwd = <victim worktree>`, not the worktree the process started in. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev down` from inside that worktree finishes the cleanup.
 - Each worktree gets its own Docker stack on slot-scoped ports (host port remap; container port unchanged). `stop()` is local — no reference counting, no shared infra.
 - Registry liveness pruning is PID-based on spawn servers. If a user kills the spawn processes manually instead of running `dev down`, the entry is pruned and callback `stop()` never fires (e.g. Docker is orphaned). Always use `dev down`.
 
@@ -211,7 +211,9 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 
 **Foreground vs background:** bare `dev` starts in the foreground — it runs the same start pipeline, registers in `dev-servers.json` (so it counts toward the cap and shows in `dev list`), then holds the terminal and tails each spawn server's log to stdout. CTRL+C runs the local stop (kill spawn PIDs + callback `stop()` reverse + unregister) and exits. `dev up` is the same start without holding the terminal — it returns once ready. Children are spawned detached either way, so a hard-killed foreground parent leaves the children as registered orphans, cleanable via `dev down` / `dev list`.
 
-`dev list` prints the active dev-servers (sorted by slot). `dev down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
+Stopping the servers from elsewhere — `dev down` / `down --all` from another terminal, eviction, or a manual kill — makes a foreground `dev` exit cleanly instead of hanging on dead servers.
+
+`dev list` prints the active dev-servers (sorted by slot). `dev down --all` stops every spawn process in every entry (graceful, then forced), invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
 
 `dev restart` stops this worktree's dev-server (if running), then starts it in the background — equivalent to `dev up --restart`. `dev status` reports `Dev-server status: UP.` (followed by the start summary) or `Dev-server status: DOWN.` for the current worktree, without changing anything.
 
@@ -222,7 +224,7 @@ A single-process dev server uses a `SERVERS` array with one entry; the script's 
 **Two-tier shutdown:**
 
 - **`dev down` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast. Foreground CTRL+C runs the same sequence.
-- **`workspace remove`**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> down` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. The re-exec is structural: `workspace` doesn't import your dev-server config, so it cannot dispatch callbacks in-process; delegating to the target's `dev-server.mjs` is how the kernel reaches them.
+- **`workspace remove`**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> down` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory.
 
 Decide what each callback's `stop()` does based on the soft-stop intent: containers down, data kept. The destructive part (volumes, container removal) lives in `purgeInfrastructure`. Data initialization is the expensive part; the dev server itself starts in seconds.
 

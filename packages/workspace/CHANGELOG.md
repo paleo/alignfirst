@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.14.1
+
+### Patch Changes
+
+- Foreground `dev` now exits on its own when its servers are stopped externally (`dev down`, `down --all`, eviction, or a manual kill) instead of hanging on dead servers and holding the terminal.
+
 ## 0.14.0
 
 ### Minor Changes

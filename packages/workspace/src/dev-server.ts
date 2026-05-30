@@ -218,6 +218,12 @@ async function runForeground(
   started = true;
   printStartSummary(config, slot, state.spawnPids);
   tailLogs(config, state.spawnPids);
+  watchForExternalStop(Object.values(state.spawnPids), () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log("\nDev-server stopped externally (e.g. `dev down`). Exiting.");
+    process.exit(0);
+  });
   await new Promise<never>(() => {});
 }
 
@@ -305,6 +311,7 @@ function printStartSummary(
 }
 
 const TAIL_INTERVAL_MS = 300;
+const LIVENESS_POLL_MS = 1000;
 
 function tailLogs(config: DevServerConfig, spawnPids: Record<string, number>): void {
   const names = Object.keys(spawnPids);
@@ -331,6 +338,26 @@ function followLogFile(path: string, prefix: string): void {
     const text = buffer.subarray(0, bytesRead).toString("utf8");
     process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
   }, TAIL_INTERVAL_MS);
+}
+
+/**
+ * Poll the foreground's own spawn PIDs; when none remain alive, the servers were stopped from
+ * outside this process (`dev down`, `down --all`, eviction, or a manual kill). Fires `onStopped`
+ * once so the foreground can exit instead of hanging on dead servers.
+ */
+export function watchForExternalStop(
+  pids: number[],
+  onStopped: () => void,
+  isAlive: (pid: number) => boolean = isProcessAlive,
+  intervalMs: number = LIVENESS_POLL_MS,
+): NodeJS.Timeout | undefined {
+  if (pids.length === 0) return;
+  const timer = setInterval(() => {
+    if (pids.some(isAlive)) return;
+    clearInterval(timer);
+    onStopped();
+  }, intervalMs);
+  return timer;
 }
 
 async function rollbackStart(
