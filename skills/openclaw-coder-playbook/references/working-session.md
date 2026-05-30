@@ -81,6 +81,10 @@ Before non-trivial code changes, like executing a plan, always stop the dev-serv
 
 After non-trivial code changes, always ensure the application still runs. Start the dev-server if it's not already running. Then take a look at the application yourself (using Playwright). Test the new behavior you just implemented, and any related behavior that could have been affected. If there is nothing to see, then at least test that you can still load the main screen. Don't ask the user to test before you check it yourself.
 
+### Improving project docs
+
+When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `welcome.md`. Propose the improvement to the user, ask for confirmation, then have the coding agent make the edit.
+
 ### Commit & push cadence
 
 Have the coding agent commit and push whenever a meaningful step is reached — and whenever the user asks. Frequent small commits beat long-lived dirty trees; WIP and non-compiling commits are acceptable.
@@ -109,3 +113,7 @@ When the user asks to tear down a project workspace from inside a thread:
 After tearing down the project workspace, reset the thread session so the next message starts fresh: `gateway.call("sessions.reset", { key: ctx.sessionKey })`. Note: the method is plural, it's not a typo. From a shell: `openclaw gateway call sessions.reset --params '{"key":"<sessionKey>"}'`.
 
 Run the reset **after** the final reply — it clears the session you're in.
+
+### Creating a new project
+
+New projects live in `~/projects/`. Don't rush into scaffolding — discuss with the user first; they could know which stack they want. Settle the stack and shape together before creating anything.

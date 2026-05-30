@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.14.0
+
+### Minor Changes
+
+- b05c1fc: Add `dev status` (report UP/DOWN) and `dev restart` (stop then background-start) subcommands. Rename `workspace info` to `workspace status` (breaking).
+
 ## 0.13.0
 
 ### Minor Changes

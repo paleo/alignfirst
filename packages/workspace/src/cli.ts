@@ -13,7 +13,7 @@ export type WorkspaceCommand =
     }
   | { kind: "remove"; branch?: string; noRemoteCheck: boolean }
   | { kind: "list" }
-  | { kind: "info"; slot?: string }
+  | { kind: "status"; slot?: string }
   | { kind: "wait"; slot?: string }
   | { kind: "set-owner"; name: string }
   | { kind: "finalize"; slot: string; force: boolean }
@@ -46,8 +46,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseRemove(tokens);
     case "list":
       return parseList(tokens);
-    case "info":
-      return parseInfo(tokens);
+    case "status":
+      return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
     case "set-owner":
@@ -120,7 +120,7 @@ function parseList(tokens: string[]): ParsedWorkspaceArgs {
   return { command: { kind: "list" }, verbose: values.verbose ?? false };
 }
 
-function parseInfo(tokens: string[]): ParsedWorkspaceArgs {
+function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
@@ -130,8 +130,8 @@ function parseInfo(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  rejectPositionals(positionals, "info");
-  return { command: { kind: "info", slot: values.slot }, verbose: values.verbose ?? false };
+  rejectPositionals(positionals, "status");
+  return { command: { kind: "status", slot: values.slot }, verbose: values.verbose ?? false };
 }
 
 function parseWait(tokens: string[]): ParsedWorkspaceArgs {
@@ -207,8 +207,8 @@ export function printWorkspaceHelp(): void {
       "      Remove a workspace by branch, or the current one when omitted.",
       "  list",
       "      List all registered workspaces (slot, status, branch, path, owner, created).",
-      "  info [-s|--slot <port>]",
-      "      Print a workspace summary (ports, branch, readiness).",
+      "  status [-s|--slot <port>]",
+      "      Print a workspace summary (ports, branch, readiness, dev-server).",
       "  wait [-s|--slot <port>]",
       "      Block until the background finalize reaches READY (exit 0) or FAILED (exit 1).",
       "  set-owner <name>",
@@ -223,8 +223,10 @@ export function printWorkspaceHelp(): void {
 export type DevCommand =
   | { kind: "foreground"; evict: boolean; restart: boolean }
   | { kind: "up"; evict: boolean; restart: boolean }
+  | { kind: "restart"; evict: boolean }
   | { kind: "down"; all: boolean }
   | { kind: "list" }
+  | { kind: "status" }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
@@ -243,10 +245,14 @@ function parseDevSubcommand(subcommand: string, tokens: string[]): DevCommand {
   switch (subcommand) {
     case "up":
       return parseUp(tokens);
+    case "restart":
+      return parseRestart(tokens);
     case "down":
       return parseDown(tokens);
     case "list":
       return parseDevList(tokens);
+    case "status":
+      return parseDevStatus(tokens);
     default:
       throw new ConfigError(`Unknown command "${subcommand}". Run \`dev --help\`.`);
   }
@@ -276,6 +282,17 @@ function parseEvictRestart(
   return { evict: values.evict ?? false, restart: values.restart ?? false };
 }
 
+function parseRestart(tokens: string[]): DevCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { evict: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev restart");
+  return { kind: "restart", evict: values.evict ?? false };
+}
+
 function parseDown(tokens: string[]): DevCommand {
   const { values, positionals } = parseArgs({
     args: tokens,
@@ -298,6 +315,17 @@ function parseDevList(tokens: string[]): DevCommand {
   return { kind: "list" };
 }
 
+function parseDevStatus(tokens: string[]): DevCommand {
+  const { positionals } = parseArgs({
+    args: tokens,
+    options: {},
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev status");
+  return { kind: "status" };
+}
+
 function rejectDevPositionals(positionals: string[], command: string): void {
   if (positionals.length > 0) {
     throw new ConfigError(`\`${command}\` takes no positional arguments.`);
@@ -314,12 +342,15 @@ export function printDevHelp(): void {
       "Commands:",
       "  dev               Start in the foreground; holds the terminal, stops on CTRL+C.",
       "  dev up            Start in the background and return once ready.",
+      "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
       "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
       "  dev list          List active dev-servers across all worktrees.",
+      "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
       "  dev --help        Show this help message.",
       "",
-      "Options (dev, dev up):",
+      "Options (dev, dev up, dev restart):",
       "  --evict     Evict the oldest dev-server when the cap is reached.",
+      "Options (dev, dev up):",
       "  --restart   If a dev-server is already running here, stop it first, then start.",
     ].join("\n"),
   );

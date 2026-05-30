@@ -31,6 +31,8 @@ npm run dev                             # start in the foreground; holds the ter
 npm run dev -- up                       # start in the background (no-op if already running here)
 npm run dev -- up --restart             # stop the dev-server in this worktree if running, then start fresh
 npm run dev -- up --evict               # if devLimit is reached, evict the oldest dev-server and start
+npm run dev -- restart                  # stop the dev-server in this worktree if running, then start in the background
+npm run dev -- status                   # report whether this worktree's dev-server is UP or DOWN
 npm run dev -- list                     # active dev-servers across all worktrees
 npm run dev -- down                     # stop dev server (infrastructure stays up)
 npm run workspace -- remove feat/42     # full teardown

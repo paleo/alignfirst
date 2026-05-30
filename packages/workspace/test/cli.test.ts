@@ -79,10 +79,10 @@ describe("parseWorkspaceArgs", () => {
     expect(command).toEqual({ kind: "list" });
   });
 
-  it("parses `info` and `info --slot`", () => {
-    expect(parseWorkspaceArgs(["info"]).command).toEqual({ kind: "info", slot: undefined });
-    expect(parseWorkspaceArgs(["info", "--slot", "8110"]).command).toEqual({
-      kind: "info",
+  it("parses `status` and `status --slot`", () => {
+    expect(parseWorkspaceArgs(["status"]).command).toEqual({ kind: "status", slot: undefined });
+    expect(parseWorkspaceArgs(["status", "--slot", "8110"]).command).toEqual({
+      kind: "status",
       slot: "8110",
     });
   });
@@ -125,6 +125,15 @@ describe("parseDevArgs", () => {
     });
   });
 
+  it("parses `restart` with `--evict`", () => {
+    expect(parseDevArgs(["restart"])).toEqual({ kind: "restart", evict: false });
+    expect(parseDevArgs(["restart", "--evict"])).toEqual({ kind: "restart", evict: true });
+  });
+
+  it("rejects `--restart` on `restart`", () => {
+    expect(() => parseDevArgs(["restart", "--restart"])).toThrow(ConfigError);
+  });
+
   it("parses `down` and `down --all`", () => {
     expect(parseDevArgs(["down"])).toEqual({ kind: "down", all: false });
     expect(parseDevArgs(["down", "--all"])).toEqual({ kind: "down", all: true });
@@ -132,6 +141,14 @@ describe("parseDevArgs", () => {
 
   it("parses `list`", () => {
     expect(parseDevArgs(["list"])).toEqual({ kind: "list" });
+  });
+
+  it("parses `status`", () => {
+    expect(parseDevArgs(["status"])).toEqual({ kind: "status" });
+  });
+
+  it("rejects positionals on `status`", () => {
+    expect(() => parseDevArgs(["status", "x"])).toThrow(ConfigError);
   });
 
   it("parses `--help` / `-h`", () => {

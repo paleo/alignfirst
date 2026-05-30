@@ -229,8 +229,8 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     case "wait":
       await runWait(command, config);
       return;
-    case "info":
-      runInfo(command, config);
+    case "status":
+      runStatus(command, config);
       return;
     case "list":
       runList(config);
@@ -514,9 +514,9 @@ function printDevServerBlock(
   }
 }
 
-type InfoCommand = Extract<WorkspaceCommand, { kind: "info" }>;
+type StatusCommand = Extract<WorkspaceCommand, { kind: "status" }>;
 
-function runInfo(command: InfoCommand, config: WorkspaceConfig): void {
+function runStatus(command: StatusCommand, config: WorkspaceConfig): void {
   if (command.slot !== undefined) {
     const slot = resolveTargetSlot(command.slot, config);
     const ctx = detectWorktree();

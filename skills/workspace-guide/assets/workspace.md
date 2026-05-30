@@ -60,8 +60,8 @@ npm run workspace -- list  # print all registered worktrees (slot, type, status,
 ### Take over an Existing Worktree
 
 ```sh
-npm run workspace -- info  # print the current worktree's summary (ports, branch, readiness)
-npm run workspace -- info --slot 8110  # same, for another worktree
+npm run workspace -- status  # print the current worktree's summary (ports, branch, readiness)
+npm run workspace -- status --slot 8110  # same, for another worktree
 ```
 
 ### Slot Owner
@@ -100,6 +100,8 @@ When the user only wants a worktree (no ports, no build, no config), use `git wo
 ```sh
 npm run dev                # Start in the foreground (holds the terminal, stops on CTRL+C)
 npm run dev -- up          # Start in the background (this worktree)
+npm run dev -- restart     # Stop this worktree's dev-server if running, then start in the background
+npm run dev -- status      # Report whether this worktree's dev-server is UP or DOWN
 npm run dev -- down        # Stop the dev-server (this worktree only)
 npm run dev -- list        # List active dev-servers across all worktrees
 npm run dev -- down --all  # Stop every active dev-server

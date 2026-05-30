@@ -108,6 +108,12 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     case "up":
       await start(config, mainWorktree, { evict: command.evict, restart: command.restart });
       return;
+    case "restart":
+      await start(config, mainWorktree, { evict: command.evict, restart: true });
+      return;
+    case "status":
+      printStatus(config, mainWorktree);
+      return;
     case "foreground":
       await runForeground(config, mainWorktree, {
         evict: command.evict,
@@ -115,6 +121,17 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
       });
       return;
   }
+}
+
+function printStatus(config: DevServerConfig, mainWorktree: string): void {
+  const entry = findOwnEntry(mainWorktree, config.registryDir, process.cwd());
+  if (!entry || !Object.values(entry.pids).some(isProcessAlive)) {
+    console.log("Dev-server status: DOWN.");
+    return;
+  }
+  console.log("Dev-server status: UP.");
+  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
+  printStartSummary(config, slot, entry.pids);
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {

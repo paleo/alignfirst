@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.9.0"
+  version: "0.9.1"
   repository: https://github.com/paleo/skills
 ---
 
@@ -132,11 +132,11 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c` |
 | `workspace remove [<branch>]` | Stop dev server + free slot + remove worktree by branch, or the current worktree when omitted |
 | `workspace list` | Print all registered worktrees (slot, type, status, dev, branch, path, owner, created). The `DEV` column shows `up` when a live dev-server is registered for that slot's worktree, `-` otherwise |
-| `workspace info` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
+| `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 
-Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `info`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. Running `workspace` with no command (or `--help`) shows help.
+Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. Running `workspace` with no command (or `--help`) shows help.
 
 **Config fields to populate:**
 
@@ -212,6 +212,8 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 **Foreground vs background:** bare `dev` starts in the foreground — it runs the same start pipeline, registers in `dev-servers.json` (so it counts toward the cap and shows in `dev list`), then holds the terminal and tails each spawn server's log to stdout. CTRL+C runs the local stop (kill spawn PIDs + callback `stop()` reverse + unregister) and exits. `dev up` is the same start without holding the terminal — it returns once ready. Children are spawned detached either way, so a hard-killed foreground parent leaves the children as registered orphans, cleanable via `dev down` / `dev list`.
 
 `dev list` prints the active dev-servers (sorted by slot). `dev down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
+
+`dev restart` stops this worktree's dev-server (if running), then starts it in the background — equivalent to `dev up --restart`. `dev status` reports `Dev-server status: UP.` (followed by the start summary) or `Dev-server status: DOWN.` for the current worktree, without changing anything.
 
 **Main worktree:** the main worktree owns the slot at `basePort` in `slots.json`. `dev` / `dev up` / `dev list` / `dev down --all` treat it like any other slot, so it counts toward the cap. `dev list` marks it `type=main`.
 
@@ -290,7 +292,7 @@ When you only need a worktree (no slot, no config, no install), use `git worktre
 }
 ```
 
-The single `dev` script carries every subcommand (`dev`, `dev up`, `dev down`, `dev list`). Don't name it after the app's own dev command — a spawn server running `npm run dev` would recurse; use a distinct name (e.g. `dev:app`).
+The single `dev` script carries every subcommand (`dev`, `dev up`, `dev restart`, `dev down`, `dev list`, `dev status`). Don't name it after the app's own dev command — a spawn server running `npm run dev` would recurse; use a distinct name (e.g. `dev:app`).
 
 ## Key Design Decisions and Rationale
 
