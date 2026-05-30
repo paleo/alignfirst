@@ -32,7 +32,7 @@ await runWorkspace({
   scriptPath: fileURLToPath(import.meta.url),
 
   // Required. Absolute path to your dev-server script. On `workspace remove`, the
-  // kernel shells out to `node <devServerScript> --stop` with cwd set to the
+  // kernel shells out to `node <devServerScript> down` with cwd set to the
   // target worktree. Leave this line as-is.
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
 

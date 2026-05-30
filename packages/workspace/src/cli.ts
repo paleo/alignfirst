@@ -1,17 +1,5 @@
-import { parseArgs, type ParseArgsConfig } from "node:util";
+import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
-
-const DEV_SERVER_OPTIONS: Record<string, OptionDef> = {
-  help: { type: "boolean", short: "h", description: "Show this help message" },
-  stop: { type: "boolean", description: "Stop dev servers in the current worktree" },
-  list: { type: "boolean", description: "List active dev-servers across all worktrees" },
-  all: { type: "boolean", description: "Apply --stop to every active dev-server" },
-  evict: { type: "boolean", description: "Evict the oldest dev-server when the cap is reached" },
-  restart: {
-    type: "boolean",
-    description: "If a dev-server is already running in this worktree, stop it first, then start",
-  },
-};
 
 export type WorkspaceCommand =
   | {
@@ -25,7 +13,7 @@ export type WorkspaceCommand =
     }
   | { kind: "remove"; branch?: string; noRemoteCheck: boolean }
   | { kind: "list" }
-  | { kind: "info"; slot?: string }
+  | { kind: "status"; slot?: string }
   | { kind: "wait"; slot?: string }
   | { kind: "set-owner"; name: string }
   | { kind: "finalize"; slot: string; force: boolean }
@@ -38,14 +26,15 @@ export interface ParsedWorkspaceArgs {
 
 export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): ParsedWorkspaceArgs {
   const [subcommand, ...tokens] = argv;
-  if (subcommand === undefined || subcommand === "--help" || subcommand === "-h") {
+  if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
   }
+  if (subcommand === undefined) throw new ConfigError("No command given.");
   try {
     return parseSubcommand(subcommand, tokens);
   } catch (err) {
     if (err instanceof ConfigError) throw err;
-    throw new ConfigError(`Error: ${(err as Error).message}`);
+    throw new ConfigError((err as Error).message);
   }
 }
 
@@ -57,8 +46,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseRemove(tokens);
     case "list":
       return parseList(tokens);
-    case "info":
-      return parseInfo(tokens);
+    case "status":
+      return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
     case "set-owner":
@@ -66,7 +55,7 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
     case "__finalize":
       return parseFinalize(tokens);
     default:
-      throw new ConfigError(`Error: Unknown command "${subcommand}". Run \`workspace --help\`.`);
+      throw new ConfigError(`Unknown command "${subcommand}". Run \`workspace --help\`.`);
   }
 }
 
@@ -87,7 +76,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
   if (newBranch && branch === undefined) {
-    throw new ConfigError("Error: `workspace setup <branch> -c` requires a branch name.");
+    throw new ConfigError("`workspace setup <branch> -c` requires a branch name.");
   }
   return {
     command: {
@@ -131,7 +120,7 @@ function parseList(tokens: string[]): ParsedWorkspaceArgs {
   return { command: { kind: "list" }, verbose: values.verbose ?? false };
 }
 
-function parseInfo(tokens: string[]): ParsedWorkspaceArgs {
+function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
@@ -141,8 +130,8 @@ function parseInfo(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  rejectPositionals(positionals, "info");
-  return { command: { kind: "info", slot: values.slot }, verbose: values.verbose ?? false };
+  rejectPositionals(positionals, "status");
+  return { command: { kind: "status", slot: values.slot }, verbose: values.verbose ?? false };
 }
 
 function parseWait(tokens: string[]): ParsedWorkspaceArgs {
@@ -183,23 +172,21 @@ function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
 
 function takeOptionalPositional(positionals: string[], command: string): string | undefined {
   if (positionals.length > 1) {
-    throw new ConfigError(
-      `Error: \`workspace ${command}\` accepts at most one positional argument.`,
-    );
+    throw new ConfigError(`\`workspace ${command}\` accepts at most one positional argument.`);
   }
   return positionals[0];
 }
 
 function takeRequiredPositional(positionals: string[], command: string, label: string): string {
   if (positionals.length !== 1) {
-    throw new ConfigError(`Error: \`workspace ${command}\` requires exactly one ${label}.`);
+    throw new ConfigError(`\`workspace ${command}\` requires exactly one ${label}.`);
   }
   return positionals[0];
 }
 
 function rejectPositionals(positionals: string[], command: string): void {
   if (positionals.length > 0) {
-    throw new ConfigError(`Error: \`workspace ${command}\` takes no positional arguments.`);
+    throw new ConfigError(`\`workspace ${command}\` takes no positional arguments.`);
   }
 }
 
@@ -220,8 +207,8 @@ export function printWorkspaceHelp(): void {
       "      Remove a workspace by branch, or the current one when omitted.",
       "  list",
       "      List all registered workspaces (slot, status, branch, path, owner, created).",
-      "  info [-s|--slot <port>]",
-      "      Print a workspace summary (ports, branch, readiness).",
+      "  status [-s|--slot <port>]",
+      "      Print a workspace summary (ports, branch, readiness, dev-server).",
       "  wait [-s|--slot <port>]",
       "      Block until the background finalize reaches READY (exit 0) or FAILED (exit 1).",
       "  set-owner <name>",
@@ -233,68 +220,138 @@ export function printWorkspaceHelp(): void {
   );
 }
 
-export interface DevServerArgs {
-  help?: boolean;
-  stop?: boolean;
-  list?: boolean;
-  all?: boolean;
-  evict?: boolean;
-  restart?: boolean;
+export type DevCommand =
+  | { kind: "foreground"; evict: boolean; restart: boolean }
+  | { kind: "up"; evict: boolean; restart: boolean }
+  | { kind: "restart"; evict: boolean }
+  | { kind: "down"; all: boolean }
+  | { kind: "list" }
+  | { kind: "status" }
+  | { kind: "help" };
+
+export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
+  const [first] = argv;
+  if (first === "--help" || first === "-h") return { kind: "help" };
+  try {
+    if (first === undefined || first.startsWith("-")) return parseForeground(argv);
+    return parseDevSubcommand(first, argv.slice(1));
+  } catch (err) {
+    if (err instanceof ConfigError) throw err;
+    throw new ConfigError((err as Error).message);
+  }
 }
 
-export function parseDevServerArgs(argv?: string[]): DevServerArgs {
-  return parseOptions<DevServerArgs>(argv, DEV_SERVER_OPTIONS);
+function parseDevSubcommand(subcommand: string, tokens: string[]): DevCommand {
+  switch (subcommand) {
+    case "up":
+      return parseUp(tokens);
+    case "restart":
+      return parseRestart(tokens);
+    case "down":
+      return parseDown(tokens);
+    case "list":
+      return parseDevList(tokens);
+    case "status":
+      return parseDevStatus(tokens);
+    default:
+      throw new ConfigError(`Unknown command "${subcommand}". Run \`dev --help\`.`);
+  }
 }
 
-export function printDevServerHelp(): void {
+function parseForeground(tokens: string[]): DevCommand {
+  const { evict, restart } = parseEvictRestart(tokens, "dev");
+  return { kind: "foreground", evict, restart };
+}
+
+function parseUp(tokens: string[]): DevCommand {
+  const { evict, restart } = parseEvictRestart(tokens, "dev up");
+  return { kind: "up", evict, restart };
+}
+
+function parseEvictRestart(
+  tokens: string[],
+  command: string,
+): { evict: boolean; restart: boolean } {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { evict: { type: "boolean" }, restart: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, command);
+  return { evict: values.evict ?? false, restart: values.restart ?? false };
+}
+
+function parseRestart(tokens: string[]): DevCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { evict: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev restart");
+  return { kind: "restart", evict: values.evict ?? false };
+}
+
+function parseDown(tokens: string[]): DevCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { all: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev down");
+  return { kind: "down", all: values.all ?? false };
+}
+
+function parseDevList(tokens: string[]): DevCommand {
+  const { positionals } = parseArgs({
+    args: tokens,
+    options: {},
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev list");
+  return { kind: "list" };
+}
+
+function parseDevStatus(tokens: string[]): DevCommand {
+  const { positionals } = parseArgs({
+    args: tokens,
+    options: {},
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev status");
+  return { kind: "status" };
+}
+
+function rejectDevPositionals(positionals: string[], command: string): void {
+  if (positionals.length > 0) {
+    throw new ConfigError(`\`${command}\` takes no positional arguments.`);
+  }
+}
+
+export function printDevHelp(): void {
   console.log(
-    formatHelp(
-      "dev-server [options]",
-      "Start, stop, or list background dev-server processes.",
-      DEV_SERVER_OPTIONS,
-    ),
+    [
+      "Usage: dev [command] [options]",
+      "",
+      "Start, stop, or list dev-server processes for worktree-based environments.",
+      "",
+      "Commands:",
+      "  dev               Start in the foreground; holds the terminal, stops on CTRL+C.",
+      "  dev up            Start in the background and return once ready.",
+      "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
+      "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
+      "  dev list          List active dev-servers across all worktrees.",
+      "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
+      "  dev --help        Show this help message.",
+      "",
+      "Options (dev, dev up, dev restart):",
+      "  --evict     Evict the oldest dev-server when the cap is reached.",
+      "Options (dev, dev up):",
+      "  --restart   If a dev-server is already running here, stop it first, then start.",
+    ].join("\n"),
   );
-}
-
-export function validateDevServerFlags(args: DevServerArgs): void {
-  if (args.all && !args.stop) {
-    throw new ConfigError("Error: --all requires --stop.");
-  }
-  if (args.list && (args.stop || args.all)) {
-    throw new ConfigError("Error: --list is mutually exclusive with --stop and --all.");
-  }
-  if (args.evict && (args.stop || args.list || args.all)) {
-    const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
-    throw new ConfigError(`Error: --evict cannot be combined with ${conflict}.`);
-  }
-  if (args.restart && (args.stop || args.list || args.all)) {
-    const conflict = args.stop ? "--stop" : args.list ? "--list" : "--all";
-    throw new ConfigError(`Error: --restart cannot be combined with ${conflict}.`);
-  }
-}
-
-interface OptionDef {
-  type: "boolean" | "string";
-  short?: string;
-  arg?: string;
-  description: string;
-}
-
-function parseOptions<T>(argv: string[] | undefined, options: Record<string, OptionDef>): T {
-  const cfg: ParseArgsConfig = { options: options as ParseArgsConfig["options"], strict: true };
-  if (argv) cfg.args = argv;
-  const { values } = parseArgs(cfg);
-  return values as T;
-}
-
-function formatHelp(usage: string, intro: string, options: Record<string, OptionDef>): string {
-  const lines = [`Usage: ${usage}`, "", intro, ""];
-  for (const [name, opt] of Object.entries(options)) {
-    if (opt.description === "") continue;
-    const shortFlag = opt.short ? `-${opt.short}, ` : "";
-    const argSuffix = opt.arg ? ` <${opt.arg}>` : "";
-    const flag = `${shortFlag}--${name}${argSuffix}`;
-    lines.push(`  ${flag.padEnd(28)} ${opt.description}`);
-  }
-  return lines.join("\n");
 }

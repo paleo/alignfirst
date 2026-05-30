@@ -19,12 +19,12 @@ user message
   → delegate coding to the alignfirst-coaching skill (coaching/CLI, read last)
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the coaching `alignfirst-coaching/SKILL.md` is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-workspace-files.md](./writing-workspace-files.md)).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the coaching `alignfirst-coaching/SKILL.md` is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)).
 
 ## Reading order for maintainers
 
 - [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) — what OpenClaw auto-loads, the surface/session/subagent model, Discord thread routing, debug env vars. Read this first before touching layer 1 or 2.
-- [`writing-workspace-files.md`](./writing-workspace-files.md) — heuristics for authoring layer 1 / layer 2 files so they survive a hot model and the test suite.
+- [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics for authoring layer 1 / layer 2 files so they survive a hot model and the test suite.
 - [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) — the harness internals (topology, Dockerfiles, mocked CLIs, scenarios, artifacts, judge).
 - [`openclaw-coder/playbook-test/README.md`](../openclaw-coder/playbook-test/README.md) — running the suite, the `ABC-0<S>N` ticket convention, the gotchas.
 
@@ -44,7 +44,7 @@ npm run env:down
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Runs are written to **timestamped** subdirs, so they accumulate without colliding — wiping the directory destroys prior runs for no reason. `mkdir -p` is enough to avoid root-owned dirs.
 
-Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-workspace-files.md`](./writing-workspace-files.md#doc-obedience-is-per-iteration).
+Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md#doc-obedience-is-per-iteration).
 
 ## Deployment
 

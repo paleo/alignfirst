@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.8.1"
+  version: "0.10.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -82,7 +82,7 @@ The main worktree is registered at `basePort` (the first slot); linked worktrees
 
 Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
-A second registry, `.local/_workspace-registry/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev:up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `dev:up --evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
+A second registry, `.local/_workspace-registry/dev-servers.json`, tracks live dev-servers. It lives in the main worktree's shared directory; linked worktrees reach it via the existing `.local` symlink. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev` / `dev up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `--evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
 
 ### Config files must be gitignored
 
@@ -119,7 +119,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
 2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
-3. Stops the dev server by shelling out to `node <devServerScript> --stop` with `cwd: <target worktree>`.
+3. Stops the dev server by shelling out to `node <devServerScript> down` with `cwd: <target worktree>`.
 4. Calls optional `config.purgeInfrastructure(ctx)` — destructive teardown (typically `docker compose down -v` to wipe volumes). Runs after the dev-server stop.
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
 
@@ -131,17 +131,17 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace setup <branch>` | Create a worktree for an existing branch, then set up the local environment |
 | `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c` |
 | `workspace remove [<branch>]` | Stop dev server + free slot + remove worktree by branch, or the current worktree when omitted |
-| `workspace list` | Print all registered worktrees (slot, status, branch, path, owner, created) |
-| `workspace info` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether `dev:up` is running, with PIDs and log paths |
+| `workspace list` | Print all registered worktrees (slot, type, status, dev, branch, path, owner, created). The `DEV` column shows `up` when a live dev-server is registered for that slot's worktree, `-` otherwise |
+| `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 
-Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `info`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. Running `workspace` with no command (or `--help`) shows help.
+Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
 
 **Config fields to populate:**
 
 - `scriptPath: string` — required. Absolute path to your wrapper script. Pass `fileURLToPath(import.meta.url)`. The package re-spawns this script for the detached finalize phase.
-- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `workspace remove`, the kernel shells out to `node <devServerScript> --stop` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
+- `devServerScript: string` — required. Absolute path to your `dev-server.mjs`. On `workspace remove`, the kernel shells out to `node <devServerScript> down` with `cwd: <target worktree>`. Set it via `fileURLToPath(new URL("./dev-server.mjs", import.meta.url))`.
 - `basePort` — required. The port that anchors the slot range. `8100` is the recommended default.
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
@@ -192,9 +192,9 @@ The rules below are not enforceable by the type system. Read them carefully:
 - `start(ctx)` MUST resolve only once the resource is ready (no log polling on the runner's side).
 - Always thread `ctx.cwd` into every child-process call (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve any paths against `ctx.cwd`. Never call bare `execSync("docker compose ...")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Do not capture paths or env values at module load. Resolve everything inside the callback from `ctx.cwd`.
-- Cross-worktree stop (`dev:down --all`, eviction) re-uses the **current process's** loaded callbacks with `ctx.cwd = <victim worktree>`. This works because git-worktrees of the same repo run the same dev-server script. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev:down` from inside that worktree finishes the cleanup. Same caveat applies to eviction.
+- Cross-worktree stop (`dev down --all`, eviction) invokes your callbacks with `ctx.cwd = <victim worktree>`, not the worktree the process started in. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev down` from inside that worktree finishes the cleanup.
 - Each worktree gets its own Docker stack on slot-scoped ports (host port remap; container port unchanged). `stop()` is local — no reference counting, no shared infra.
-- Registry liveness pruning is PID-based on spawn servers. If a user kills the spawn processes manually instead of running `dev:down`, the entry is pruned and callback `stop()` never fires (e.g. Docker is orphaned). Always use `dev:down`.
+- Registry liveness pruning is PID-based on spawn servers. If a user kills the spawn processes manually instead of running `dev down`, the entry is pruned and callback `stop()` never fires (e.g. Docker is orphaned). Always use `dev down`.
 
 See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
 
@@ -209,16 +209,22 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 7. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero.
 8. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, spawn pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
 
-`dev:list` prints the active dev-servers (sorted by slot). `dev:down --all` runs the SIGTERM-poll-SIGKILL stop logic against every spawn PID in every entry, invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
+**Foreground vs background:** bare `dev` starts in the foreground — it runs the same start pipeline, registers in `dev-servers.json` (so it counts toward the cap and shows in `dev list`), then holds the terminal and tails each spawn server's log to stdout. CTRL+C runs the local stop (kill spawn PIDs + callback `stop()` reverse + unregister) and exits. `dev up` is the same start without holding the terminal — it returns once ready. Children are spawned detached either way, so a hard-killed foreground parent leaves the children as registered orphans, cleanable via `dev down` / `dev list`.
 
-**Main worktree:** the main worktree owns the slot at `basePort` in `slots.json`. `dev:up` / `dev:list` / `dev:down --all` treat it like any other slot, so it counts toward the cap. `dev:list` marks it `type=main`.
+Stopping the servers from elsewhere — `dev down` / `down --all` from another terminal, eviction, or a manual kill — makes a foreground `dev` exit cleanly instead of hanging on dead servers.
+
+`dev list` prints the active dev-servers (sorted by slot). `dev down --all` stops every spawn process in every entry (graceful, then forced), invokes `stop({ cwd: entry.worktree })` for every `kind: "callback"` server in the current config (reverse order, per victim), and clears the registry.
+
+`dev restart` stops this worktree's dev-server (if running), then starts it in the background — equivalent to `dev up --restart`. `dev status` reports `Dev-server status: UP.` (followed by the start summary) or `Dev-server status: DOWN.` for the current worktree, without changing anything.
+
+**Main worktree:** the main worktree owns the slot at `basePort` in `slots.json`. `dev` / `dev up` / `dev list` / `dev down --all` treat it like any other slot, so it counts toward the cap. `dev list` marks it `type=main`.
 
 A single-process dev server uses a `SERVERS` array with one entry; the script's structure stays the same.
 
 **Two-tier shutdown:**
 
-- **`--stop` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast.
-- **`workspace remove`**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> --stop` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory. The re-exec is structural: `workspace` doesn't import your dev-server config, so it cannot dispatch callbacks in-process; delegating to the target's `dev-server.mjs` is how the kernel reaches them.
+- **`dev down` (dev-server)**: Kills the spawn-managed processes and runs every `kind: "callback"` server's `stop()` (reverse array order). The standard pattern is `docker compose down` (no `-v`) — containers stop, but volumes persist, so restarting is fast. Foreground CTRL+C runs the same sequence.
+- **`workspace remove`**: If the target has an entry in `dev-servers.json`, shells out to `node <devServerScript> down` in the target worktree (which kills the spawn PIDs and runs the callback `stop()` from the target's branch). Then calls `purgeInfrastructure(ctx)` (typically `docker compose down -v`), releases the slot, and removes the worktree directory.
 
 Decide what each callback's `stop()` does based on the soft-stop intent: containers down, data kept. The destructive part (volumes, container removal) lives in `purgeInfrastructure`. Data initialization is the expensive part; the dev server itself starts in seconds.
 
@@ -242,10 +248,10 @@ npm run workspace -- setup                  # set up the current worktree
 npm run workspace -- setup feat/42 --owner alice
 npm run workspace -- set-owner bob          # update later, no rebuild
 
-# Start developing
+# Start developing (foreground: holds the terminal, stops on CTRL+C)
 npm run dev
-# Or, for agents:
-npm run dev:up
+# Or, for agents (background):
+npm run dev -- up
 ```
 
 ### Removing a local environment
@@ -261,16 +267,18 @@ npm run workspace -- remove feat/42 --no-remote-check # skip remote branch check
 ### Stopping the dev server
 
 ```sh
-npm run dev:down   # Stop the spawn processes and run callback stop() (e.g. `docker compose down`)
-npm run dev:up     # Later, restart quickly
+npm run dev -- down   # Stop the spawn processes and run callback stop() (e.g. `docker compose down`)
+npm run dev -- up     # Later, restart quickly
 ```
+
+The foreground `npm run dev` stops the same way on CTRL+C.
 
 ### Listing and stopping all dev servers
 
 ```sh
-npm run dev:list             # List active dev-servers across all worktrees
-npm run dev:down -- --all    # Stop every active dev-server (kills PIDs + runs callback stop() per worktree)
-npm run dev:up -- --evict    # If the cap is full, evict the oldest dev-server and start
+npm run dev -- list           # List active dev-servers across all worktrees
+npm run dev -- down --all     # Stop every active dev-server (kills PIDs + runs callback stop() per worktree)
+npm run dev -- up --evict     # If the cap is full, evict the oldest dev-server and start
 ```
 
 ### Creating a worktree without setup
@@ -282,11 +290,11 @@ When you only need a worktree (no slot, no config, no install), use `git worktre
 ```json
 {
   "workspace": "node scripts/workspace/workspace.mjs",
-  "dev:up": "node scripts/workspace/dev-server.mjs",
-  "dev:down": "node scripts/workspace/dev-server.mjs --stop",
-  "dev:list": "node scripts/workspace/dev-server.mjs --list"
+  "dev": "node scripts/workspace/dev-server.mjs"
 }
 ```
+
+The single `dev` script carries every subcommand (`dev`, `dev up`, `dev restart`, `dev down`, `dev list`, `dev status`). Don't name it after the app's own dev command — a spawn server running `npm run dev` would recurse; use a distinct name (e.g. `dev:app`).
 
 ## Key Design Decisions and Rationale
 
@@ -360,7 +368,7 @@ The agents need to know:
 - [ ] **Install `@paleo/workspace`** as a dev-dependency (Node consumers).
 - [ ] **Write `workspace`** using [assets/workspace.mjs](assets/workspace.mjs) as a starting point. Search for `ADAPT` comments.
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
-- [ ] **Add npm scripts** (or Makefile targets, etc.) for `workspace`, `dev:up`, `dev:down`.
+- [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). Make sure `.local/_workspace-registry/` is covered (slot registry and dev-server registry live there).
 - [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).

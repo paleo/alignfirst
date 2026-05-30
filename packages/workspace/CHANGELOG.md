@@ -1,5 +1,29 @@
 # @paleo/worktree-env
 
+## 0.14.2
+
+### Patch Changes
+
+- Dedupe the dev-server spawn-and-rollback path and make foreground startup interruptible without double-teardown: a CTRL+C arriving while servers were still starting could roll back twice and exit with a nondeterministic code. The signal handler now owns teardown, and the in-flight failure defers to it.
+
+## 0.14.1
+
+### Patch Changes
+
+- Foreground `dev` now exits on its own when its servers are stopped externally (`dev down`, `down --all`, eviction, or a manual kill) instead of hanging on dead servers and holding the terminal.
+
+## 0.14.0
+
+### Minor Changes
+
+- b05c1fc: Add `dev status` (report UP/DOWN) and `dev restart` (stop then background-start) subcommands. Rename `workspace info` to `workspace status` (breaking).
+
+## 0.13.0
+
+### Minor Changes
+
+- 31c3668: `dev` subcommands + foreground mode; `workspace list` DEV column
+
 ## 0.12.0
 
 ### Minor Changes

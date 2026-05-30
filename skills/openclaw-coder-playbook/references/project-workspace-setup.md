@@ -41,7 +41,7 @@ Three sub-paths, in order. Pick exactly one. The setup command always runs *befo
 
 1. **Branch + worktree already registered** → attach to the existing workspace (no creation). Post the status report below.
 2. **Branch exists (locally or remote) but no registered worktree** → run the project's *attach-existing-branch* command from its workspace doc. This sets up a worktree on the existing branch and is mandatory before any further inspection — `git log <branch>` from the main project dir is not a substitute. Post the status report.
-3. **Neither exists** → if the user signalled a *new* work intent, create both. If the user asked for a *status update* and there's no branch yet, do not create anything — tell the user there's no work for that ticket and end turn.
+3. **Neither exists** → if the user signalled a *new* work intent, pull the base branch first (`git fetch` + fast-forward) so the new branch starts from the latest base, then create both. If the user asked for a *status update* and there's no branch yet, do not create anything — tell the user there's no work for that ticket and end turn.
 
 The path that does create (sub-paths 2 and 3) spawns background bootstrap — don't add your own `background` option. As soon as the setup command returns, post a status-only message with these three labelled fields (translated to the user's language):
 
@@ -50,6 +50,18 @@ Worktree: {dirname}
 Branch: {TICKET_ID}/{WORK_TYPE}
 Bootstrap: {running | ready | failed}
 ```
+
+### Sync an existing branch on takeover (sub-paths 1 & 2)
+
+Once the worktree is attached, bring the branch up to date *before* inspecting or working. In order:
+
+1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
+2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the coding agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
+3. **Fetch.** `git fetch`.
+4. **Merge the remote branch.** If the branch has a remote counterpart, merge it into the local branch to catch up. Delegate to the coding agent (`merge` protocol) when it doesn't fast-forward or conflicts.
+5. **Check the base branch.** If the freshly-fetched base branch (`origin/<base>`) has commits not yet in this branch, the branch is behind the base. Ask the user whether to merge the base in. On yes, run the "Updating a branch with the base branch" flow from [`working-session.md`](./working-session.md).
+6. **Check for an open MR/PR** on this branch and note its state.
+7. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
 
 ## Step 5 — User's turn
 

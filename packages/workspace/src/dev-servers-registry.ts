@@ -184,6 +184,20 @@ export function pruneDeadServers(
   return { servers: live };
 }
 
+/** Resolved worktree paths whose dev-server entry has at least one live PID. */
+export function liveWorktrees(
+  data: DevServersData,
+  isAlive: IsAliveFn = isProcessAlive,
+): Set<string> {
+  const live = new Set<string>();
+  for (const entry of data.servers) {
+    if (Object.values(entry.pids).some((pid) => isAlive(pid))) {
+      live.add(resolve(entry.worktree));
+    }
+  }
+  return live;
+}
+
 export function readDevServers(mainWorktree: string, registryDir: string): DevServersData {
   const fp = filePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return { servers: [] };
