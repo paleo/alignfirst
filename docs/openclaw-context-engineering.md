@@ -2,7 +2,7 @@
 
 How OpenClaw assembles the agent's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `bootstrap-budget.ts`). A read-only clone lives at `openclaw-coder/.local/openclaw/` for spot-checking.
 
-When you actually edit a workspace file, also read [`writing-workspace-files.md`](./writing-workspace-files.md) — heuristics from past test regressions.
+When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
 ## Workspace bootstrap files (auto-loaded each turn)
 
