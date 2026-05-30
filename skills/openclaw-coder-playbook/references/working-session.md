@@ -117,3 +117,7 @@ Run the reset **after** the final reply — it clears the session you're in.
 ### Creating a new project
 
 New projects live in `~/projects/`. Don't rush into scaffolding — discuss with the user first; they could know which stack they want. Settle the stack and shape together before creating anything.
+
+### Forbidden
+
+- Never force push. Never cheat with the remote git history.
