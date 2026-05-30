@@ -123,3 +123,16 @@ About tickets: feel free to replace this with your own instructions on how to ac
 ## Contribute
 
 The `openclaw-coder-playbook` skill is developed against an internal regression-test harness: [`playbook-test/README.md`](playbook-test/README.md). Maintainer overview: [`docs/openclaw-coder.md`](../docs/openclaw-coder.md).
+
+Get started:
+
+```bash
+cd openclaw-coder/
+git clone https://github.com/openclaw/openclaw.git .local/openclaw
+
+cd playbook-test
+npm install && npm run env:build
+
+# Run scenarios, e.g. all of them on every channel:
+npm run e2e -- --channel all --all
+```

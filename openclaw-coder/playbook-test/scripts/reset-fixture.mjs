@@ -8,12 +8,12 @@ const FIXTURES = ["nimbus", "lumen"];
 
 async function main() {
   // Stop dev-servers from the prior run before wiping. Configured fixtures
-  // know their `dev:down --all`; for any stray dir we kill anything still
+  // know their `dev down --all`; for any stray dir we kill anything still
   // listening best-effort.
   for (const name of FIXTURES) {
     const dst = `${PROJECTS}/${name}`;
     if (existsSync(dst)) {
-      await runWithTimeout("pnpm", ["-C", dst, "dev:down", "--all"], 10_000);
+      await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
     }
   }
   // Wipe everything under PROJECTS unconditionally. The fixture template lives

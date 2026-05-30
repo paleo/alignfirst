@@ -1,0 +1,6 @@
+# Local cruft that must never enter the build context.
+**/node_modules
+artifacts/
+.gateway-logs/
+.env.local
+.git

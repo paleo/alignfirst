@@ -9,15 +9,13 @@
   "scripts": {
     "docmap": "docmap",
     "workspace": "node scripts/workspace/workspace.mjs",
-    "dev:up": "node scripts/workspace/dev-server.mjs",
-    "dev:down": "node scripts/workspace/dev-server.mjs --stop",
-    "dev:list": "node scripts/workspace/dev-server.mjs --list"
+    "dev": "node scripts/workspace/dev-server.mjs"
   },
   "dependencies": {
     "express": "5.2.1"
   },
   "devDependencies": {
     "@paleo/docmap": "^0.5.1",
-    "@paleo/workspace": "^0.12.0"
+    "@paleo/workspace": "^0.14.2"
   }
 }

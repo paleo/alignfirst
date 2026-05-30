@@ -18,8 +18,9 @@ Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Single entrypoint `a
 ## Daily Commands
 
 ```sh
-pnpm dev:up               # start the app (background)
-pnpm dev:down             # stop it
+pnpm dev up     # start in background; `pnpm dev down` to stop
+pnpm dev down   # stop the background server in this worktree
+pnpm dev        # start the app (foreground; CTRL+C to stop)
 ```
 
 ## Workspaces (local environments)

@@ -89,30 +89,31 @@ When the user only wants a worktree (no ports, no build, no config), use `git wo
 
 ## Dev Server
 
-`pnpm dev:up` starts both the API and frontend dev servers in the background with logs redirected to files, and returns once both servers are ready.
+`pnpm dev up` starts the app dev server in the **foreground**: it holds the terminal, tails the log, and stops cleanly on CTRL+C. For agents, `pnpm dev up` starts it in the **background** with logs redirected to a file, and returns once the server is ready.
 
 ```sh
-pnpm dev:up         # Start in background
-pnpm dev:down       # Stop the background servers in this worktree
-pnpm dev:list       # List all running dev-servers across worktrees
-pnpm dev:down --all # Stop every running dev-server across worktrees
+pnpm dev up         # Start in the background (this worktree)
+pnpm dev down       # Stop the background server in this worktree
+pnpm dev list       # List all running dev-servers across worktrees
+pnpm dev down --all # Stop every running dev-server across worktrees
+pnpm dev            # Start in the foreground (holds the terminal, stops on CTRL+C)
 ```
 
 The script detects port conflicts: it will refuse to start if a dev server is already running.
 
 Logs are stored in `.local-wt/logs/` and `.local-wt/` (per-worktree).
 
-`dev:up` enforces a cap on simultaneously running dev-servers. When the cap is reached, `dev:up` errors with a table of active servers and exits non-zero. Free a slot via `pnpm dev:down` in another worktree, `pnpm dev:down --all`, or re-run with `pnpm dev:up --evict` to stop the oldest live dev-server across worktrees and start the new one.
+`dev` / `dev up` enforce a cap on simultaneously running dev-servers. When the cap is reached, the start errors with a table of active servers and exits non-zero. Free a slot via `pnpm dev down` in another worktree, `pnpm dev down --all`, or re-run with `pnpm dev up --evict` to stop the oldest live dev-server across worktrees and start the new one.
 
-**Two-tier shutdown:** both `dev:down` and `dev:down --all` only kill dev server processes — they intentionally leave infrastructure (Docker containers, databases) running so restarts are fast. Full infrastructure cleanup happens via `workspace remove` when tearing down the workspace entirely.
+**Two-tier shutdown:** `dev down` and `dev down --all` (and a foreground CTRL+C) only kill dev server processes — they intentionally leave infrastructure (Docker containers, databases) running so restarts are fast. Full infrastructure cleanup happens via `workspace remove` when tearing down the workspace entirely.
 
 ### Start the dev server in a specific worktree
 
 ```sh
-git worktree list                  # 1. find the worktree directory
-cd <worktree-dir> && pnpm dev:up   # 2. start the dev server
+git worktree list                   # 1. find the worktree directory
+cd <worktree-dir> && pnpm dev up    # 2. start the dev server in the background
 # 3. read the log files (paths printed on start) to confirm startup and find URLs
-pnpm dev:down                      # 4. stop when done (same directory)
+pnpm dev down                       # 4. stop when done (same directory)
 ```
 
 After starting, report the auto-login URL to the user: `http://localhost:{frontendPort}/auth/local?email=superadmin@test.dev`
