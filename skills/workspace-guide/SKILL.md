@@ -136,7 +136,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 
-Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. Running `workspace` with no command (or `--help`) shows help.
+Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
 
 **Config fields to populate:**
 

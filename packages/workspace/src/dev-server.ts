@@ -157,16 +157,7 @@ async function start(
   if (await runStartChecks(config, mainWorktree, ctx, options)) return;
 
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
-  try {
-    await spawnAndAwait(config, ctx, state);
-  } catch (err) {
-    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
-    if (err instanceof StartupError) {
-      handleStartupFailure(err);
-      process.exit(1);
-    }
-    throw err;
-  }
+  await spawnWithRollback(config, ctx, state);
 
   const slot = registerStartedServer(config, mainWorktree, state.spawnPids);
   printStartSummary(config, slot, state.spawnPids);
@@ -203,15 +194,10 @@ async function runForeground(
 
   if (await runStartChecks(config, mainWorktree, ctx, options)) process.exit(0);
 
-  try {
-    await spawnAndAwait(config, ctx, state);
-  } catch (err) {
-    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
-    if (err instanceof StartupError) {
-      handleStartupFailure(err);
-      process.exit(1);
-    }
-    throw err;
+  // A signal during startup hands teardown to onSignal (rollback + exit 130); block so we
+  // neither roll back twice nor register a server that is being torn down.
+  if (!(await spawnWithRollback(config, ctx, state, () => shuttingDown))) {
+    await new Promise<never>(() => {});
   }
 
   const slot = registerStartedServer(config, mainWorktree, state.spawnPids);
@@ -246,6 +232,30 @@ async function runStartChecks(
   checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
   await checkPortsFree(config.servers, ctx.cwd);
   return false;
+}
+
+/**
+ * Spawn and await readiness, rolling back on failure. Returns `false` when `isAborted` reports a
+ * concurrent shutdown — the caller must then yield teardown to whoever set it, not proceed.
+ */
+async function spawnWithRollback(
+  config: DevServerConfig,
+  ctx: ServerContext,
+  state: StartState,
+  isAborted: () => boolean = () => false,
+): Promise<boolean> {
+  try {
+    await spawnAndAwait(config, ctx, state);
+  } catch (err) {
+    if (isAborted()) return false;
+    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
+    if (err instanceof StartupError) {
+      handleStartupFailure(err);
+      process.exit(1);
+    }
+    throw err;
+  }
+  return !isAborted();
 }
 
 async function spawnAndAwait(
