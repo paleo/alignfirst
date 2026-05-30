@@ -95,14 +95,15 @@ When the user only wants a worktree (no ports, no build, no config), use `git wo
 
 ## Dev Server
 
-`npm run dev:up` starts the dev server in the background with logs redirected to a file, and returns once the server is ready.
+`npm run dev` starts the dev server in the **foreground**: it holds the terminal, tails the logs to stdout, and stops cleanly on CTRL+C. For agents, `npm run dev -- up` starts it in the **background** with logs redirected to a file, and returns once the server is ready.
 
 ```sh
-npm run dev:up             # Start in background
-npm run dev:down           # Stop the background server (this worktree only)
-npm run dev:list           # List active dev-servers across all worktrees
-npm run dev:down -- --all  # Stop every active dev-server
-npm run dev:up -- --evict  # If the cap is full, stop the oldest dev-server and start
+npm run dev                # Start in the foreground (holds the terminal, stops on CTRL+C)
+npm run dev -- up          # Start in the background (this worktree)
+npm run dev -- down        # Stop the dev-server (this worktree only)
+npm run dev -- list        # List active dev-servers across all worktrees
+npm run dev -- down --all  # Stop every active dev-server
+npm run dev -- up --evict  # If the cap is full, stop the oldest dev-server and start
 ```
 
 <!-- ADAPT: Document where the logs are stored (e.g., .local-wt/logs/).
@@ -114,17 +115,17 @@ The script detects port conflicts: it will refuse to start if a dev server is al
 
 ### Concurrent dev-server cap
 
-`dev:up` enforces a cap on simultaneously running dev-servers. When the cap is reached, `dev:up` errors with a table of active servers and exits non-zero. Free a slot via `npm run dev:down` in another worktree, or via `npm run dev:down -- --all`.
+`dev` / `dev up` enforce a cap on simultaneously running dev-servers. When the cap is reached, the start errors with a table of active servers and exits non-zero. Free a slot via `npm run dev -- down` in another worktree, or via `npm run dev -- down --all`.
 
-**Two-tier shutdown:** `dev:down` (and `dev:down --all`) only kills dev server processes — it intentionally leaves infrastructure (Docker containers, databases) running so restarts are fast. Full infrastructure cleanup happens via `workspace remove` when tearing down the worktree entirely.
+**Two-tier shutdown:** `dev down` (and `dev down --all`) only kills dev server processes — it intentionally leaves infrastructure (Docker containers, databases) running so restarts are fast. Full infrastructure cleanup happens via `workspace remove` when tearing down the worktree entirely.
 
 ### Start the dev server in a specific worktree
 
 ```sh
-git worktree list                    # 1. find the worktree directory
-cd <worktree-dir> && npm run dev:up  # 2. start the dev server
+git worktree list                       # 1. find the worktree directory
+cd <worktree-dir> && npm run dev -- up  # 2. start the dev server in the background
 # 3. read the log file (path printed on start) to confirm startup and find URLs
-npm run dev:down                     # 4. stop when done (same directory)
+npm run dev -- down                     # 4. stop when done (same directory)
 ```
 
 ## Directory Layout

@@ -71,7 +71,7 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
   // Re-runs of `workspace setup` keep a previously finalized slot ready, unless `--force` is set —
-  // then we reset to pending so `workspace wait` blocks and `dev:up` refuses during the re-finalize.
+  // then we reset to pending so `workspace wait` blocks and `dev` refuses during the re-finalize.
   const status: SlotStatus = existing?.status === "ready" && !input.force ? "ready" : "pending";
   const entry: SlotEntry = {
     worktree: input.currentWorktree,

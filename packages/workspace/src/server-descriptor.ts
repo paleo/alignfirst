@@ -3,7 +3,7 @@ export interface ServerContext {
   /**
    * Worktree directory for this lifecycle call. Equals `process.cwd()` at start time for local
    * starts/stops; equals the victim entry's worktree for cross-worktree stops (eviction,
-   * `dev:down --all`). Callbacks MUST thread this into every child-process call
+   * `dev down --all`). Callbacks MUST thread this into every child-process call
    * (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve relative paths against it.
    */
   cwd: string;

@@ -5,7 +5,7 @@ Run multiple local dev environments side by side, one per git worktree, with iso
 Each project writes two custom scripts on top, using these entry points:
 
 - `runWorkspace(config)` — worktree lifecycle (setup / remove / set-owner).
-- `runDevServer(config)` — background dev-server start / stop / list.
+- `runDevServer(config)` — dev-server start (foreground or background) / stop / list.
 
 ## Setup
 
@@ -27,11 +27,12 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 
 ```sh
 npm run workspace -- setup feat/42 -c   # new branch + worktree + isolated env
-npm run dev:up                          # start dev server in the background (no-op if already running here)
-npm run dev:up -- --restart             # stop the dev-server in this worktree if running, then start fresh
-npm run dev:up -- --evict               # if devLimit is reached, evict the oldest dev-server and start
-npm run dev:list                        # active dev-servers across all worktrees
-npm run dev:down                        # stop dev server (infrastructure stays up)
+npm run dev                             # start in the foreground; holds the terminal, stops on CTRL+C
+npm run dev -- up                       # start in the background (no-op if already running here)
+npm run dev -- up --restart             # stop the dev-server in this worktree if running, then start fresh
+npm run dev -- up --evict               # if devLimit is reached, evict the oldest dev-server and start
+npm run dev -- list                     # active dev-servers across all worktrees
+npm run dev -- down                     # stop dev server (infrastructure stays up)
 npm run workspace -- remove feat/42     # full teardown
 ```
 
@@ -78,7 +79,7 @@ Setup runs in two phases: a fast foreground Part 1 creates the worktree and conf
 
 **Bootstrap the main worktree first.** Linked-worktree setup copies config sources from the main worktree, so the main must already have those files. Run `workspace setup` once on the main checkout. Use `preSetup` (with `isMainWorktree === true`) to seed sources from examples or templates. `configFiles` entries are required by default; mark `optional: true` for sources that may legitimately be missing.
 
-`--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev:up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev:list` + `dev:down` deterministically.
+`--evict` is best-effort: the cap check and the subsequent register are not atomic, so two concurrent `dev up --evict` from different worktrees can both pass the check and end up at `devLimit + 1` live servers. The window is narrow; if it matters, `dev list` + `dev down` deterministically.
 
 ```ts
 import { runDevServer, helpers } from "@paleo/workspace";
@@ -92,7 +93,8 @@ await runDevServer({
     {
       kind: "spawn",
       name: "dev",
-      exec: { command: "npm", args: ["run", "dev"] },
+      // Not `dev` — the workspace wrapper script is named `dev`, so `npm run dev` would recurse.
+      exec: { command: "npm", args: ["run", "dev:app"] },
       port: helpers.readPortFromEnvFile(".env", "PORT"),
       detectSuccess: (log) => log.includes("Server is ready on port"),
     },

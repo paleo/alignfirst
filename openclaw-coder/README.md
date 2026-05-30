@@ -109,7 +109,7 @@ Do not improvise — no announcement, no `ls`, `grep`, `find`, or project lookup
 
 ## Language
 
-Replies to the user follow the user's language. Internal reasoning stays in English.
+Internal reasoning, messages to the coding agent, code, branches, commits, MR/PR titles — **English**. Replies to the user — **the user's language**.
 
 ## Tickets are labels, not lookup targets
 

@@ -12,7 +12,12 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 
 import { parseWorkspaceArgs, printWorkspaceHelp, type WorkspaceCommand } from "./cli.js";
-import { findOwnEntry, removeDevServerEntryByWorktree } from "./dev-servers-registry.js";
+import {
+  findOwnEntry,
+  liveWorktrees,
+  readDevServers,
+  removeDevServerEntryByWorktree,
+} from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import { copyAndPatchFile, formatDuration, setupLogPath } from "./helpers.js";
 import { isProcessAlive } from "./process-control.js";
@@ -52,7 +57,7 @@ export interface WorkspaceConfig {
   scriptPath: string;
   /**
    * Absolute path to your dev-server script (the file that calls `runDevServer`). On
-   * `workspace remove`, the kernel shells out to `node <devServerScript> --stop` with
+   * `workspace remove`, the kernel shells out to `node <devServerScript> down` with
    * `cwd: <target worktree>`. Typically
    * `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your `workspace.mjs`.
    */
@@ -197,8 +202,9 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     ({ command, verbose } = parseWorkspaceArgs());
   } catch (err) {
     if (err instanceof ConfigError) {
-      console.error(err.message);
-      process.exit(err.exitCode);
+      console.error(`Warning: ${err.message}`);
+      printWorkspaceHelp();
+      process.exit(1);
     }
     throw err;
   }
@@ -537,10 +543,12 @@ function runList(config: WorkspaceConfig): void {
     console.log("No workspaces registered.");
     return;
   }
+  const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, config.registryDir));
   const rows = entries.map(([port, e]) => ({
     slot: port,
     type: e.main ? "main" : "linked",
     status: e.status,
+    dev: liveSet.has(resolve(e.worktree)) ? "up" : "-",
     branch: getWorktreeBranch(e.worktree) ?? "(detached)",
     worktree: e.worktree,
     owner: e.owner ?? "-",
@@ -550,6 +558,7 @@ function runList(config: WorkspaceConfig): void {
     slot: "SLOT",
     type: "TYPE",
     status: "STATUS",
+    dev: "DEV",
     branch: "BRANCH",
     worktree: "PATH",
     owner: "OWNER",
@@ -559,12 +568,13 @@ function runList(config: WorkspaceConfig): void {
     slot: Math.max(headers.slot.length, ...rows.map((r) => r.slot.length)),
     type: Math.max(headers.type.length, ...rows.map((r) => r.type.length)),
     status: Math.max(headers.status.length, ...rows.map((r) => r.status.length)),
+    dev: Math.max(headers.dev.length, ...rows.map((r) => r.dev.length)),
     branch: Math.max(headers.branch.length, ...rows.map((r) => r.branch.length)),
     worktree: Math.max(headers.worktree.length, ...rows.map((r) => r.worktree.length)),
     owner: Math.max(headers.owner.length, ...rows.map((r) => r.owner.length)),
   };
   const fmt = (r: typeof headers): string =>
-    `${r.slot.padEnd(widths.slot)}  ${r.type.padEnd(widths.type)}  ${r.status.padEnd(widths.status)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
+    `${r.slot.padEnd(widths.slot)}  ${r.type.padEnd(widths.type)}  ${r.status.padEnd(widths.status)}  ${r.dev.padEnd(widths.dev)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
   console.log(fmt(headers));
   for (const r of rows) console.log(fmt(r));
 }
@@ -663,7 +673,7 @@ async function handleRemove(
   if (targetEntry) {
     stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
   } else {
-    verboseLog(`No dev-server running in ${target.worktreePath}; skipping --stop.`);
+    verboseLog(`No dev-server running in ${target.worktreePath}; skipping stop.`);
   }
 
   if (config.purgeInfrastructure) {
@@ -844,7 +854,7 @@ function resolveRemoveTarget(
 
 /**
  * Stops the dev-server running in the target worktree by shelling out to
- * `node <devServerScript> --stop` with `cwd: worktreePath`. The subprocess runs the target's
+ * `node <devServerScript> down` with `cwd: worktreePath`. The subprocess runs the target's
  * own stop flow — registry-based spawn-PID kill + callback `stop()` from the target's branch.
  */
 function stopTargetDevServer(
@@ -853,15 +863,15 @@ function stopTargetDevServer(
   log: (msg: string) => void,
 ): void {
   log(`Stopping dev-server in ${worktreePath}...`);
-  const result = spawnSync(process.execPath, [devServerScript, "--stop"], {
+  const result = spawnSync(process.execPath, [devServerScript, "down"], {
     cwd: worktreePath,
     stdio: "inherit",
     timeout: 30_000,
   });
   if (result.error) {
-    console.warn(`Warning: failed to run dev-server --stop: ${result.error.message}`);
+    console.warn(`Warning: failed to run dev down: ${result.error.message}`);
   } else if (result.status !== 0) {
-    console.warn(`Warning: dev-server --stop exited with code ${result.status}.`);
+    console.warn(`Warning: dev down exited with code ${result.status}.`);
   }
 }
 

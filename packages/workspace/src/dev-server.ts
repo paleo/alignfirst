@@ -1,13 +1,8 @@
 import { spawn } from "node:child_process";
-import { closeSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import {
-  parseDevServerArgs,
-  printDevServerHelp,
-  validateDevServerFlags,
-  type DevServerArgs,
-} from "./cli.js";
+import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
 import {
   type DevServerEntry,
   evictOldest,
@@ -76,96 +71,79 @@ export interface DevServerSummaryContext {
 }
 
 export async function runDevServer(config: DevServerConfig): Promise<void> {
-  let args: DevServerArgs;
+  let command: DevCommand;
   try {
-    args = parseDevServerArgs();
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
-  }
-
-  if (args.help) {
-    printDevServerHelp();
-    return;
-  }
-
-  try {
-    validateDevServerFlags(args);
+    command = parseDevArgs();
   } catch (err) {
     if (err instanceof ConfigError) {
-      console.error(err.message);
-      process.exit(err.exitCode);
+      console.error(`Warning: ${err.message}`);
+      printDevHelp();
+      process.exit(1);
     }
     throw err;
   }
 
+  if (command.kind === "help") {
+    printDevHelp();
+    return;
+  }
+
   const { mainWorktree } = detectWorktree();
 
-  if (args.list) {
-    listDevServers(mainWorktree, config.registryDir);
-    return;
+  switch (command.kind) {
+    case "list":
+      listDevServers(mainWorktree, config.registryDir);
+      return;
+    case "down":
+      if (command.all) {
+        await stopAllRegistered({
+          mainWorktree,
+          registryDir: config.registryDir,
+          callbackServers: callbackServersOf(config),
+        });
+      } else {
+        await stopLocal(config, mainWorktree);
+      }
+      return;
+    case "up":
+      await start(config, mainWorktree, { evict: command.evict, restart: command.restart });
+      return;
+    case "foreground":
+      await runForeground(config, mainWorktree, {
+        evict: command.evict,
+        restart: command.restart,
+      });
+      return;
   }
-  if (args.stop && args.all) {
-    await stopAllRegistered({
-      mainWorktree,
-      registryDir: config.registryDir,
-      callbackServers: callbackServersOf(config),
-    });
-    return;
-  }
-  if (args.stop) {
-    await stopLocal(config, mainWorktree);
-    return;
-  }
-
-  await start(config, mainWorktree, {
-    evict: Boolean(args.evict),
-    restart: Boolean(args.restart),
-  });
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
   return config.servers.filter((s): s is CallbackServer => s.kind === "callback");
 }
 
+interface StartState {
+  spawnPids: Record<string, number>;
+  startedCallbacks: CallbackServer[];
+}
+
+interface StartOptions {
+  evict: boolean;
+  restart: boolean;
+}
+
 async function start(
   config: DevServerConfig,
   mainWorktree: string,
-  { evict, restart }: { evict: boolean; restart: boolean },
+  options: StartOptions,
 ): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
+  if (await runStartChecks(config, mainWorktree, ctx, options)) return;
 
-  checkWorktreeReady(config, mainWorktree, ctx.cwd);
-  if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return;
-  await enforceCap(config, mainWorktree, evict);
-  checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
-  await checkPortsFree(config.servers, ctx.cwd);
-
-  const spawnPids: Record<string, number> = {};
-  const startedCallbacks: CallbackServer[] = [];
-
+  const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   try {
-    for (const server of config.servers) {
-      console.log(`Starting ${server.name} dev server...`);
-      if (server.kind === "spawn") {
-        spawnPids[server.name] = spawnServer(server, config.runtimeDir, ctx.cwd);
-      } else {
-        await server.start(ctx);
-        startedCallbacks.push(server);
-      }
-    }
-
-    const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
-    const pollables: PollableServer[] = spawnEntries.map((s) => ({
-      name: s.name,
-      logFile: logFileFor(config.runtimeDir, s.name),
-      detectSuccess: s.detectSuccess,
-      detectError: s.detectError ?? detectCommonJsError,
-    }));
-    const pollPids = spawnEntries.map((s) => spawnPids[s.name]);
-    await awaitAllReady(pollables, pollPids);
+    await spawnAndAwait(config, ctx, state);
   } catch (err) {
-    await rollbackStart(spawnPids, startedCallbacks, ctx);
+    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
     if (err instanceof StartupError) {
       handleStartupFailure(err);
       process.exit(1);
@@ -173,6 +151,111 @@ async function start(
     throw err;
   }
 
+  const slot = registerStartedServer(config, mainWorktree, state.spawnPids);
+  printStartSummary(config, slot, state.spawnPids);
+}
+
+/**
+ * Foreground start: hold the terminal and tail logs until CTRL+C, then stop cleanly. Signal
+ * handlers are installed before starting so an interrupt during startup rolls back; after a
+ * successful start they switch to the local stop sequence.
+ */
+async function runForeground(
+  config: DevServerConfig,
+  mainWorktree: string,
+  options: StartOptions,
+): Promise<void> {
+  const ctx: ServerContext = { cwd: process.cwd() };
+  const state: StartState = { spawnPids: {}, startedCallbacks: [] };
+  let started = false;
+  let shuttingDown = false;
+
+  const onSignal = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    if (started) {
+      void shutdownForeground(config, mainWorktree);
+    } else {
+      void rollbackStart(state.spawnPids, state.startedCallbacks, ctx).then(() =>
+        process.exit(130),
+      );
+    }
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
+  if (await runStartChecks(config, mainWorktree, ctx, options)) process.exit(0);
+
+  try {
+    await spawnAndAwait(config, ctx, state);
+  } catch (err) {
+    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
+    if (err instanceof StartupError) {
+      handleStartupFailure(err);
+      process.exit(1);
+    }
+    throw err;
+  }
+
+  const slot = registerStartedServer(config, mainWorktree, state.spawnPids);
+  started = true;
+  printStartSummary(config, slot, state.spawnPids);
+  tailLogs(config, state.spawnPids);
+  await new Promise<never>(() => {});
+}
+
+async function shutdownForeground(config: DevServerConfig, mainWorktree: string): Promise<void> {
+  console.log("\nStopping dev servers...");
+  await stopLocal(config, mainWorktree);
+  console.log("Stopped.");
+  process.exit(0);
+}
+
+async function runStartChecks(
+  config: DevServerConfig,
+  mainWorktree: string,
+  ctx: ServerContext,
+  { evict, restart }: StartOptions,
+): Promise<boolean> {
+  checkWorktreeReady(config, mainWorktree, ctx.cwd);
+  if (await handleAlreadyRunning(config, mainWorktree, ctx, restart)) return true;
+  await enforceCap(config, mainWorktree, evict);
+  checkNoLocalRegistryConflict(config, mainWorktree, ctx.cwd);
+  await checkPortsFree(config.servers, ctx.cwd);
+  return false;
+}
+
+async function spawnAndAwait(
+  config: DevServerConfig,
+  ctx: ServerContext,
+  state: StartState,
+): Promise<void> {
+  for (const server of config.servers) {
+    console.log(`Starting ${server.name} dev server...`);
+    if (server.kind === "spawn") {
+      state.spawnPids[server.name] = spawnServer(server, config.runtimeDir, ctx.cwd);
+    } else {
+      await server.start(ctx);
+      state.startedCallbacks.push(server);
+    }
+  }
+
+  const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
+  const pollables: PollableServer[] = spawnEntries.map((s) => ({
+    name: s.name,
+    logFile: logFileFor(config.runtimeDir, s.name),
+    detectSuccess: s.detectSuccess,
+    detectError: s.detectError ?? detectCommonJsError,
+  }));
+  const pollPids = spawnEntries.map((s) => state.spawnPids[s.name]);
+  await awaitAllReady(pollables, pollPids);
+}
+
+function registerStartedServer(
+  config: DevServerConfig,
+  mainWorktree: string,
+  spawnPids: Record<string, number>,
+): ResolvedSlot {
   const slot = resolveCurrentSlot(config.basePort, config.registryDir);
   const devEntry: DevServerEntry = {
     slot: slot.slot,
@@ -183,19 +266,54 @@ async function start(
   };
   if (slot.main) devEntry.main = true;
   registerDevServer(mainWorktree, config.registryDir, devEntry);
+  return slot;
+}
 
+function printStartSummary(
+  config: DevServerConfig,
+  slot: ResolvedSlot,
+  spawnPids: Record<string, number>,
+): void {
   const summaryServers = config.servers.map((server) => {
     if (server.kind === "spawn") {
       return { server, port: server.port, pid: spawnPids[server.name] };
     }
     return { server };
   });
-
   if (config.printSummary) {
     console.log(config.printSummary({ slot, servers: summaryServers }));
   } else {
     defaultPrintSummary(slot, summaryServers, config.runtimeDir);
   }
+}
+
+const TAIL_INTERVAL_MS = 300;
+
+function tailLogs(config: DevServerConfig, spawnPids: Record<string, number>): void {
+  const names = Object.keys(spawnPids);
+  const prefixed = names.length > 1;
+  for (const name of names) {
+    const path = join(process.cwd(), logFileFor(config.runtimeDir, name));
+    followLogFile(path, prefixed ? `[${name}] ` : "");
+  }
+}
+
+function followLogFile(path: string, prefix: string): void {
+  let offset = existsSync(path) ? statSync(path).size : 0;
+  setInterval(() => {
+    if (!existsSync(path)) return;
+    const size = statSync(path).size;
+    if (size < offset) offset = 0;
+    if (size <= offset) return;
+    const length = size - offset;
+    const fd = openSync(path, "r");
+    const buffer = Buffer.allocUnsafe(length);
+    const bytesRead = readSync(fd, buffer, 0, length, offset);
+    closeSync(fd);
+    offset += bytesRead;
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
+  }, TAIL_INTERVAL_MS);
 }
 
 async function rollbackStart(
@@ -224,7 +342,7 @@ async function rollbackStart(
 export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
 
 /**
- * Pure builder for the `dev:up` worktree-readiness gate. Returns `ok` when the slot is `ready`
+ * Pure builder for the `dev` worktree-readiness gate. Returns `ok` when the slot is `ready`
  * or absent (synthesized main); otherwise returns the user-facing error message.
  */
 export function buildWorktreeReadyMessage(input: {
@@ -244,7 +362,7 @@ export function buildWorktreeReadyMessage(input: {
       message:
         `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
         `Tail: ${logPath}\n` +
-        "Run `workspace wait` to block until it finishes, or retry `dev:up` once ready.",
+        "Run `workspace wait` to block until it finishes, or retry `dev` once ready.",
     };
   }
   const failureAt = entry.failure?.at ?? entry.createdAt;
@@ -300,11 +418,11 @@ async function handleAlreadyRunning(
   console.log(
     `dev-server already running for this worktree (slot ${entry.slot}, pids: ${pidList}).`,
   );
-  console.log("Run `dev:down` to stop it, or re-run with --restart to restart.");
+  console.log("Run `dev down` to stop it, or re-run with `--restart` to restart.");
   return true;
 }
 
-// TOCTOU: the cap check and the subsequent register are not atomic. Two concurrent `dev:up --evict`
+// TOCTOU: the cap check and the subsequent register are not atomic. Two concurrent `dev up --evict`
 // from different worktrees can both pass the cap check and both register, exceeding the limit by
 // one. Accepted: the race window is narrow and the consequence is bounded (one extra dev-server).
 async function enforceCap(
@@ -320,8 +438,8 @@ async function enforceCap(
   if (!evict) {
     console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
     printActiveServers(active);
-    console.error("Run `dev:down` in another worktree, or `dev:down --all`.");
-    console.error("Re-run with --evict to evict the oldest.");
+    console.error("Run `dev down` in another worktree, or `dev down --all`.");
+    console.error("Re-run with `--evict` to evict the oldest.");
     process.exit(1);
   }
 

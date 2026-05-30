@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDevServerArgs, parseWorkspaceArgs, validateDevServerFlags } from "../src/cli.js";
+import { parseDevArgs, parseWorkspaceArgs } from "../src/cli.js";
 import { ConfigError } from "../src/errors.js";
 
 describe("parseWorkspaceArgs", () => {
@@ -95,40 +95,59 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["frobnicate"])).toThrow(ConfigError);
   });
 
-  it("returns help for no command and for --help", () => {
-    expect(parseWorkspaceArgs([]).command).toEqual({ kind: "help" });
+  it("throws for no command, returns help for --help", () => {
+    expect(() => parseWorkspaceArgs([])).toThrow(ConfigError);
     expect(parseWorkspaceArgs(["--help"]).command).toEqual({ kind: "help" });
   });
 });
 
-describe("validateDevServerFlags", () => {
-  it("rejects --all without --stop", () => {
-    const args = parseDevServerArgs(["--all"]);
-    expect(() => validateDevServerFlags(args)).toThrow(/--all requires --stop/);
+describe("parseDevArgs", () => {
+  it("treats bare invocation as foreground", () => {
+    expect(parseDevArgs([])).toEqual({ kind: "foreground", evict: false, restart: false });
   });
 
-  it("rejects --list with --stop", () => {
-    const args = parseDevServerArgs(["--list", "--stop"]);
-    expect(() => validateDevServerFlags(args)).toThrow(/--list is mutually exclusive/);
+  it("parses foreground flags", () => {
+    expect(parseDevArgs(["--evict"])).toEqual({ kind: "foreground", evict: true, restart: false });
+    expect(parseDevArgs(["--restart"])).toEqual({
+      kind: "foreground",
+      evict: false,
+      restart: true,
+    });
   });
 
-  it("rejects --list with --all", () => {
-    const args = parseDevServerArgs(["--list", "--stop", "--all"]);
-    expect(() => validateDevServerFlags(args)).toThrow(/--list is mutually exclusive/);
+  it("parses `up` with flags", () => {
+    expect(parseDevArgs(["up"])).toEqual({ kind: "up", evict: false, restart: false });
+    expect(parseDevArgs(["up", "--evict"])).toEqual({ kind: "up", evict: true, restart: false });
+    expect(parseDevArgs(["up", "--restart"])).toEqual({
+      kind: "up",
+      evict: false,
+      restart: true,
+    });
   });
 
-  it("accepts --stop --all", () => {
-    const args = parseDevServerArgs(["--stop", "--all"]);
-    expect(() => validateDevServerFlags(args)).not.toThrow();
+  it("parses `down` and `down --all`", () => {
+    expect(parseDevArgs(["down"])).toEqual({ kind: "down", all: false });
+    expect(parseDevArgs(["down", "--all"])).toEqual({ kind: "down", all: true });
   });
 
-  it("rejects --restart with --stop", () => {
-    const args = parseDevServerArgs(["--restart", "--stop"]);
-    expect(() => validateDevServerFlags(args)).toThrow(/--restart cannot be combined with --stop/);
+  it("parses `list`", () => {
+    expect(parseDevArgs(["list"])).toEqual({ kind: "list" });
   });
 
-  it("accepts --restart alone", () => {
-    const args = parseDevServerArgs(["--restart"]);
-    expect(() => validateDevServerFlags(args)).not.toThrow();
+  it("parses `--help` / `-h`", () => {
+    expect(parseDevArgs(["--help"])).toEqual({ kind: "help" });
+    expect(parseDevArgs(["-h"])).toEqual({ kind: "help" });
+  });
+
+  it("rejects an unknown subcommand", () => {
+    expect(() => parseDevArgs(["bogus"])).toThrow(ConfigError);
+  });
+
+  it("rejects an unknown flag on `up`", () => {
+    expect(() => parseDevArgs(["up", "--nope"])).toThrow(ConfigError);
+  });
+
+  it("rejects positionals on `list`", () => {
+    expect(() => parseDevArgs(["list", "x"])).toThrow(ConfigError);
   });
 });

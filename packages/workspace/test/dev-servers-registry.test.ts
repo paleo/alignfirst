@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   evictOldest,
+  liveWorktrees,
   pruneDeadServers,
   readDevServers,
   writeDevServers,
@@ -56,6 +57,26 @@ describe("pruneDeadServers", () => {
     const data = { servers: [entry(8110, { main: 2 })] };
     const round = JSON.parse(JSON.stringify(data));
     expect(pruneDeadServers(round, isAlive)).toEqual(data);
+  });
+});
+
+describe("liveWorktrees", () => {
+  const isAlive = (pid: number) => pid % 2 === 0; // even = alive, odd = dead
+
+  it("returns only resolved worktrees with a live PID", () => {
+    const data = {
+      servers: [
+        entry(8110, { main: 1, helper: 3 }), // all dead
+        entry(8120, { main: 2 }), // live
+        entry(8130, { main: 1, helper: 4 }), // one live
+      ],
+    };
+    expect(liveWorktrees(data, isAlive)).toEqual(new Set(["/tmp/wt-8120", "/tmp/wt-8130"]));
+  });
+
+  it("returns an empty set when every entry is dead", () => {
+    const data = { servers: [entry(8110, { main: 1 })] };
+    expect(liveWorktrees(data, isAlive).size).toBe(0);
   });
 });
 

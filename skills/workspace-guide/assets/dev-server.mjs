@@ -2,10 +2,14 @@
 // Reference: dev-server.mjs
 //
 // Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
-// project-specific field. Two-tier shutdown: --stop kills dev processes and
+// project-specific field. Two-tier shutdown: `dev down` kills dev processes and
 // runs callback stop() (e.g. `docker compose down`); `workspace remove`
-// re-execs this script's --stop in the target worktree and then runs
+// re-execs this script's `down` in the target worktree and then runs
 // `purgeInfrastructure` to drop volumes.
+//
+// NOTE: this wrapper is wired to the `dev` npm script, so a spawn server must
+// not run `npm run dev` — that would recurse. Use a distinct script name
+// (e.g. `dev:app`) for the app's own dev command.
 // =============================================================================
 
 import { runDevServer, helpers } from "@paleo/workspace";
@@ -41,7 +45,7 @@ await runDevServer({
     {
       kind: "spawn",                                        // ADAPT
       name: "dev",                                          // ADAPT
-      exec: { command: "npm", args: ["run", "dev"] },       // ADAPT
+      exec: { command: "npm", args: ["run", "dev:app"] },   // ADAPT — must not be `dev` (recurses into this wrapper)
       port: helpers.readPortFromEnvFile(".env", "PORT"),    // ADAPT — or helpers.readPortFromJsonFile("config.json", "server.port")
       detectSuccess: (log) => log.includes("Server is ready on port"), // ADAPT
       // ADAPT: return the matched label, or false. Example with fatal markers:
