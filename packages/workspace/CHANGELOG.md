@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.14.2
+
+### Patch Changes
+
+- Dedupe the dev-server spawn-and-rollback path and make foreground startup interruptible without double-teardown: a CTRL+C arriving while servers were still starting could roll back twice and exit with a nondeterministic code. The signal handler now owns teardown, and the in-flight failure defers to it.
+
 ## 0.14.1
 
 ### Patch Changes
