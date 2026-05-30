@@ -60,8 +60,9 @@ Once the worktree is attached, bring the branch up to date *before* inspecting o
 3. **Fetch.** `git fetch`.
 4. **Merge the remote branch.** If the branch has a remote counterpart, merge it into the local branch to catch up. Delegate to the coding agent (`merge` protocol) when it doesn't fast-forward or conflicts.
 5. **Check the base branch.** If the freshly-fetched base branch (`origin/<base>`) has commits not yet in this branch, the branch is behind the base. Ask the user whether to merge the base in. On yes, run the "Updating a branch with the base branch" flow from [`working-session.md`](./working-session.md).
-6. **Check for an open MR/PR** on this branch and note its state.
-7. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
+6. **Reinstall deps (and rebuild) if commits came in.** If the merge brought in new commits, reinstall dependencies with the project's package manager, then rebuild if the project needs it. Delegate both to the coding agent.
+7. **Check for an open MR/PR** on this branch and note its state.
+8. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
 
 ## Step 5 — User's turn
 

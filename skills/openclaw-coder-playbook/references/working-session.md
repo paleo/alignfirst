@@ -75,6 +75,10 @@ When the current branch needs to catch up:
 
 Delegate the merge itself to the coding agent via `alignfirst-coaching` (`merge` protocol).
 
+### Reinstalling deps after a branch refresh
+
+Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast-forward, base-branch merge, …), reinstall dependencies with the project's package manager. And rebuild if the project needs it. Delegate both to the coding agent.
+
 ### Working and testing
 
 Before non-trivial code changes, like executing a plan, always stop the dev-server. Otherwise it will consume resources and might even interfere with the work.
