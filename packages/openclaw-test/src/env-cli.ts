@@ -81,9 +81,20 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     modelsEnv: readEnvVar("OPENCLAW_TEST_MODELS"),
     defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
   });
-  // Render the first model's config before the initial `up`; the matrix's forced
-  // model-boundary recreate handles every subsequent model.
-  renderRuntimeConfig(models[0]);
+  // Render each model's config once (its own temp file holding the expanded
+  // secret); the matrix re-points OPENCLAW_CONFIG_PATH and recreates the gateway
+  // on every model change.
+  const renderedConfigs = new Map<string, string>();
+  const renderConfigPath = (m: SelectedModel): string => {
+    const cached = renderedConfigs.get(m.id);
+    if (cached) return cached;
+    const path = renderRuntimeConfig(m);
+    if (!path) throw new Error("openclaw-test: OPENCLAW_CONFIG_PATH is unset");
+    renderedConfigs.set(m.id, path);
+    return path;
+  };
+  // Render the first model before the initial `up` so the gateway boots on it.
+  process.env.OPENCLAW_CONFIG_PATH = renderConfigPath(models[0]);
   setBaseTag(packageDir);
   ensureHostOutputDirs();
   const didBuild = ensureBaseImage(packageDir, { force: false });
@@ -114,7 +125,9 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH as string;
   const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
 
-  const scenarios = all ? discoverScenarios(scenariosDir) : positionals;
+  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
+  // order, deduped.
+  const scenarios = all ? discoverScenarios(scenariosDir) : [...new Set(positionals)];
   const channels = expandChannelSelection(channel, openclawConfigPath);
 
   const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -127,11 +140,7 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     scenarios,
     channels,
     models,
-    renderConfigPath: (m) => {
-      const path = renderRuntimeConfig(m);
-      if (!path) throw new Error("openclaw-test: OPENCLAW_CONFIG_PATH is unset");
-      return path;
-    },
+    renderConfigPath,
     iterations,
     maxFailures,
     stopOnFail,
@@ -165,8 +174,14 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
  * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
  * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
  */
+// Captured on the first render so every later render reads the real canonical
+// config, not a previously-rendered temp (renderRuntimeConfig repoints
+// OPENCLAW_CONFIG_PATH at its output).
+let canonicalConfigPath: string | undefined;
+
 function renderRuntimeConfig(model?: SelectedModel): string | undefined {
-  const canonicalPath = process.env.OPENCLAW_CONFIG_PATH;
+  canonicalConfigPath ??= process.env.OPENCLAW_CONFIG_PATH;
+  const canonicalPath = canonicalConfigPath;
   if (!canonicalPath) return;
   const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
   const dotenv = readDotenvFile(projectDir);

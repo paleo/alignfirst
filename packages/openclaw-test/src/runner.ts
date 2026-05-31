@@ -173,9 +173,9 @@ function setupRun(args: RunnerArgs): RunSetup {
   const accountId: ChannelId = args.channel;
   const iterSuffix =
     args.iterationWidth > 0
-      ? `-${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
+      ? `-#${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
       : "";
-  const leaf = `${args.scenario}-${args.channel}-${args.modelId}${iterSuffix}`;
+  const leaf = `${args.scenario}-${args.modelId}-${args.channel}${iterSuffix}`;
   const outDir = join(ARTIFACTS_ROOT, args.baseStamp, leaf);
   mkdirSync(outDir, { recursive: true });
 

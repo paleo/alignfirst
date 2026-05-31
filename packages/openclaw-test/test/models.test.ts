@@ -27,8 +27,14 @@ describe("resolveSelectedModels", () => {
     ]);
   });
 
-  it("expands 'all' to the whole catalog", () => {
-    expect(resolve("all")).toEqual([
+  it("expands 'all' to the whole catalog, sorted by bare id regardless of env order", () => {
+    expect(
+      resolveSelectedModels({
+        selection: "all",
+        modelsEnv: "custom-dashscope/qwen3.6-plus,anthropic/claude-sonnet-4-6",
+        defaultEnv: undefined,
+      }),
+    ).toEqual([
       { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
       { id: "qwen3.6-plus", ref: "custom-dashscope/qwen3.6-plus" },
     ]);

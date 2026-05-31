@@ -16,7 +16,7 @@ export function expandChannelSelection(raw: string, openclawConfigPath: string):
   };
   const allowed = Object.keys(cfg.channels ?? {});
   if (allowed.length === 0) throw new Error(`no channels declared in ${openclawConfigPath}`);
-  if (raw === "all") return allowed;
+  if (raw === "all") return [...allowed].sort();
   const ids = raw
     .split(",")
     .map((s) => s.trim())
@@ -126,10 +126,14 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   archiveLeftoverTrajectory(liveTrajectoryDir, opts.artifactsDir);
 
   try {
+    // Model is the outermost dimension so each model's config is loaded once and
+    // its whole sweep runs before the next — minimal gateway recreates under
+    // --reuse-stack (one per model boundary). The artifact dir name groups by
+    // scenario→model→channel independently (see the cell `leaf` below).
     outer: for (const model of opts.models) {
-      // Repoint the gateway config at this model's rendered file, then force the
-      // recreate at the model boundary even if skipFirstRestart/reuseStack would
-      // otherwise skip the next cell's restart, so the new config is loaded.
+      // Repoint the gateway config at this model's rendered file, then force a
+      // recreate at the model boundary even when reuseStack / skipFirstRestart
+      // would skip the next restart, so the gateway reloads the new config.
       process.env.OPENCLAW_CONFIG_PATH = opts.renderConfigPath(model);
       let forceModelRestart = !isFirstCell;
       for (const scenario of opts.scenarios) {
@@ -168,8 +172,8 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
             if (aborted) break outer;
 
             const iterSuffix =
-              iterationWidth > 0 ? `-${String(iter).padStart(iterationWidth, "0")}` : "";
-            const leaf = `${scenario}-${channel}-${model.id}${iterSuffix}`;
+              iterationWidth > 0 ? `-#${String(iter).padStart(iterationWidth, "0")}` : "";
+            const leaf = `${scenario}-${model.id}-${channel}${iterSuffix}`;
             const resultsPath = join(opts.resultsDir, `${leaf}.json`);
 
             const runnerArgs = [

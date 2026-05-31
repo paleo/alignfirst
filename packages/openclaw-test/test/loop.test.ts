@@ -28,8 +28,9 @@ describe("expandChannelSelection", () => {
     ]);
   });
 
-  it("expands 'all' to the configured channels", () => {
-    expect(expandChannelSelection("all", cfg)).toEqual(["discord-mock", "slack-mock"]);
+  it("expands 'all' to the configured channels, alphabetically", () => {
+    const reversed = makeConfig(["slack-mock", "discord-mock"]);
+    expect(expandChannelSelection("all", reversed)).toEqual(["discord-mock", "slack-mock"]);
   });
 
   it("dedupes repeated ids, order preserved", () => {
@@ -172,8 +173,9 @@ describe("runMatrix", () => {
       const m = c.argv[c.argv.indexOf("--model-id") + 1];
       return `${m}|${s}`;
     });
+    // model → scenario → channel: each model's whole sweep runs before the next.
     expect(order).toEqual(["m1|S1", "m1|S2", "m2|S1", "m2|S2"]);
-    // reuseStack skips per-cell recreates, but the second model boundary still forces one.
+    // reuseStack skips per-cell recreates; only the second model boundary forces one.
     expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(1);
   });
 

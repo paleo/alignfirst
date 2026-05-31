@@ -13,8 +13,9 @@ export interface SelectedModel {
  * and the recorded `model` are all bare ids (the suffix after the last `/`). A bare
  * id resolves to its ref by suffix-match; zero or many matches is a hard error.
  *
- * The selection is `all` (whole catalog), a single bare id, or a comma list of bare
- * ids (deduped, order preserved); `undefined` falls back to `OPENCLAW_DEFAULT_TEST_MODEL`.
+ * The selection is `all` (whole catalog, sorted by id), a single bare id, or a comma
+ * list of bare ids (deduped, CLI order preserved); `undefined` falls back to
+ * `OPENCLAW_DEFAULT_TEST_MODEL`.
  */
 export function resolveSelectedModels(params: {
   selection: string | undefined;
@@ -22,7 +23,7 @@ export function resolveSelectedModels(params: {
   defaultEnv: string | undefined;
 }): SelectedModel[] {
   const catalog = parseCatalog(params.modelsEnv);
-  if (params.selection === "all") return catalog;
+  if (params.selection === "all") return [...catalog].sort((a, b) => a.id.localeCompare(b.id));
   if (params.selection !== undefined) return resolveIdList(catalog, params.selection);
   if (!params.defaultEnv) {
     throw new Error(
