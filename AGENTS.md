@@ -1,13 +1,5 @@
 # Repository Guidelines
 
-**Important:** Every text in this repository must be sharp, concise, straight to the point. Each word must be carefully weighted and chosen.
-
-**Writing Markdown**: Do not wrap text to 80 chars; let it run freely.
-
-## Docmap - Seek Documentation
-
-**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
-
 ## Tooling
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
@@ -23,6 +15,19 @@
 **Releases**: Changesets (`.changeset/`). Author a changeset with `npm run changeset`; publish via `npm run changeset:publish`. Base branch: `main`. Default access: `public`.
 
 **Workspace scripts** (root): `build`, `test`, `clear`, `lint`, `lint:fix` — all fan out to packages via `npm run <name> --workspaces --if-present`.
+
+## Packages
+
+- `@paleo/docmap` — lightweight documentation system for AI agents and humans
+- `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
+- `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
+- `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
+- `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
+- `@paleo/workspace` — run multiple git-worktree dev environments side by side
+
+## Docmap - Seek Documentation
+
+**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
 
 ## AlignFirst - Ticket ID, Commit Message, Branch Name
 
@@ -42,11 +47,10 @@ Apply the `paleo-typescript-style` skill.
 - Use the semicolon syntax.
 - Prefer double quotes `"`.
 
-## Packages
+## Guidelines when writing markdown files
 
-- `@paleo/docmap` — lightweight documentation system for AI agents and humans
-- `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
-- `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
-- `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
-- `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/workspace` — run multiple git-worktree dev environments side by side
+- **Important:** Use sharp, precise, concise words, straight to the point. The less, the better. Make each word count.
+- Do not fill the context with bloated orders.
+- Do not treat the agent like a child; no need to be insistent and authoritarian. Make what is important more obvious.
+
+**Writing Markdown**: Do not wrap text to 80 chars; let it run freely.
