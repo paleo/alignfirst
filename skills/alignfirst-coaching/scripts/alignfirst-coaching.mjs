@@ -147,10 +147,12 @@ if (values.model) {
 }
 
 const env = { ...process.env };
-if (process.env.ALIGNFIRST_COACHING_UNSET) {
-  for (const name of process.env.ALIGNFIRST_COACHING_UNSET.split(",")) {
-    delete env[name.trim()];
-  }
+for (const name of (process.env.ALIGNFIRST_COACHING_UNSET ?? "").split(",")) {
+  const trimmed = name.trim();
+  if (trimmed) delete env[trimmed];
+}
+for (const key of Object.keys(env)) {
+  if (key.startsWith("ALIGNFIRST_COACHING_")) delete env[key];
 }
 
 const result = spawnSync("claude", args, {
