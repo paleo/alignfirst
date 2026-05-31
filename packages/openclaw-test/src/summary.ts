@@ -75,8 +75,8 @@ function costLine(results: CellResult[]): string {
   const judgeCost = results
     .flatMap((r) => r.judgeUsages)
     .reduce((sum, u) => sum + judgeCostUsd(u), 0);
-  const gatewayCost = results.reduce((sum, r) => sum + r.gatewayCostUsd, 0);
-  const gatewayTurns = results.reduce((sum, r) => sum + r.gatewayTurns, 0);
-  const totalCost = gatewayCost + judgeCost;
-  return `Total LLM cost: $${totalCost.toFixed(4)} (gateway: $${gatewayCost.toFixed(4)} over ${gatewayTurns} turns, judge: $${judgeCost.toFixed(4)})`;
+  const agentCost = results.reduce((sum, r) => sum + r.agentCostUsd, 0);
+  const agentTurns = results.reduce((sum, r) => sum + r.agentTurns, 0);
+  const totalCost = agentCost + judgeCost;
+  return `Total LLM cost: $${totalCost.toFixed(4)} (agent: $${agentCost.toFixed(4)} over ${agentTurns} turns, judge: $${judgeCost.toFixed(4)})`;
 }

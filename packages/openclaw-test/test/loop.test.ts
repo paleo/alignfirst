@@ -81,7 +81,7 @@ function setupFake(outcomes: Record<string, "pass" | "fail">): FakeSetup {
     const { scenario, channel, iter } = pendingCell;
     const verdict = cellOutcomes.get(`${scenario}|${channel}|${iter}`) ?? "pass";
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       scenarioId: scenario,
       channel,
       model: "m",
@@ -90,8 +90,8 @@ function setupFake(outcomes: Record<string, "pass" | "fail">): FakeSetup {
       durationMs: 1,
       conversationId: "x",
       artifactDirName: "x",
-      gatewayCostUsd: 0,
-      gatewayTurns: 0,
+      agentCostUsd: 0,
+      agentTurns: 0,
       judgeUsd: 0,
       judgeUsages: [],
     };
@@ -108,7 +108,7 @@ describe("runMatrix", () => {
       iterations: 2,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
       models: [{ id: "m", ref: "p/m" }],
       renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
@@ -155,7 +155,7 @@ describe("runMatrix", () => {
       iterations: 1,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -194,7 +194,7 @@ describe("runMatrix", () => {
       iterations: 3,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
       models: [{ id: "m", ref: "p/m" }],
       renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
@@ -226,7 +226,7 @@ describe("runMatrix", () => {
       iterations: 2,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
       models: [{ id: "m", ref: "p/m" }],
       renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
@@ -243,7 +243,7 @@ describe("runMatrix", () => {
     expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(0);
   });
 
-  it("skips first recreate when skipFirstRestart is set, recreates subsequent cells", async () => {
+  it("skips the first recreate when the gateway is fresh on the first model, recreates subsequent cells", async () => {
     const fake = setupFake({});
     await runMatrix({
       scenarios: ["S"],
@@ -251,7 +251,7 @@ describe("runMatrix", () => {
       iterations: 3,
       maxFailures: 1,
       reuseStack: false,
-      skipFirstRestart: true,
+      gatewayFreshOnFirstModel: true,
       models: [{ id: "m", ref: "p/m" }],
       renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
@@ -266,5 +266,31 @@ describe("runMatrix", () => {
       readResult: fake.readResult,
     });
     expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(2);
+  });
+
+  it("recreates for the first model when reusing a stack not on its config", async () => {
+    const fake = setupFake({});
+    await runMatrix({
+      scenarios: ["S"],
+      channels: ["C"],
+      iterations: 2,
+      maxFailures: 1,
+      reuseStack: true,
+      gatewayFreshOnFirstModel: false,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
+      composeArgs: ["compose"],
+      artifactsDir: "/tmp",
+      resultsDir: "/tmp",
+      runnerResultsDir: "/tmp",
+      gatewayLogsDir: "/tmp",
+      stopOnFail: false,
+      baseStamp: "stamp",
+      spawnRunner: fake.spawnRunner,
+      spawnRecreate: fake.spawnRecreate,
+      readResult: fake.readResult,
+    });
+    // The first cell must recreate to load the model; reuseStack skips the rest.
+    expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(1);
   });
 });

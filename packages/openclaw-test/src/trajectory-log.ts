@@ -40,9 +40,12 @@ export async function waitForTrajectoryUsage(opts: {
   const pollMs = opts.pollMs ?? 250;
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
-    if (!trajectoryDirExists()) return;
-    for (const event of readTrajectoryEvents()) {
-      if (isEventFor(event, opts.conversationId, opts.startedAtIso, MODEL_COMPLETED)) return;
+    // The dir itself appears only when the first delayed event flushes, so a
+    // missing dir means "not yet" — keep polling, don't give up early.
+    if (trajectoryDirExists()) {
+      for (const event of readTrajectoryEvents()) {
+        if (isEventFor(event, opts.conversationId, opts.startedAtIso, MODEL_COMPLETED)) return;
+      }
     }
     await new Promise((r) => setTimeout(r, pollMs));
   }
@@ -62,6 +65,11 @@ export function readTrajectoryCostFor(opts: { startTsIso: string; conversationId
     conversationId: opts.conversationId ?? "",
     startedAtIso: opts.startTsIso,
   });
+  if (last?.data?.truncated === true) {
+    console.warn(
+      "openclaw-test: last model.completed snapshot is truncated (~256 KB cap); reported cost may be undercounted.",
+    );
+  }
   const messages = last?.data?.messagesSnapshot;
   if (!Array.isArray(messages)) return { cost: 0, turns: 0 };
   let cost = 0;

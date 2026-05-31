@@ -146,6 +146,6 @@ The agent is otherwise a black box. A handful of env vars unlock raw introspecti
 
 Trajectories are written by default under `~/.openclaw/logs/trajectory/` and can be extracted with `openclaw export-trajectory --sessionKey <key>`.
 
-In the test harness, the gateway's `~/.openclaw/logs/` is bind-mounted to `playbook-test/.gateway-logs/`. The scenario runner parses `anthropic-payload.jsonl` from there to attribute per-turn tool calls and cost; if the file is absent (logging not enabled, or the dir is unwritable) the runner logs `agentToolCall parsing skipped: … anthropic-payload.jsonl not found` and reports `gatewayTurns: 0`. Enable `OPENCLAW_ANTHROPIC_PAYLOAD_LOG=1` and ensure `.gateway-logs/` is writable by your user when you need the trace.
+In the test harness, the gateway's `~/.openclaw/logs/` is bind-mounted to `playbook-test/.gateway-logs/`. The scenario runner parses the per-session `trajectory/*.jsonl` from there to attribute per-turn tool calls and cost (provider-neutral — works under any LiteLLM provider); if the dir is absent (logging disabled, or the dir is unwritable) the runner logs `agentToolCall parsing skipped: … trajectory not found` and reports `agentTurns: 0`. The trajectory log is default-on (disable with `OPENCLAW_TRAJECTORY=0`); ensure `.gateway-logs/` is writable by your user when you need the trace.
 
 Disable the debug vars once done — the JSONL files grow per turn.

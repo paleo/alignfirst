@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { JudgeUsage } from "./judge.js";
 
 export interface CellResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   scenarioId: string;
   channel: string;
   model: string;
@@ -11,8 +11,8 @@ export interface CellResult {
   durationMs: number;
   conversationId: string;
   artifactDirName: string;
-  gatewayCostUsd: number;
-  gatewayTurns: number;
+  agentCostUsd: number;
+  agentTurns: number;
   judgeUsd: number;
   judgeUsages: JudgeUsage[];
 }
@@ -32,7 +32,7 @@ export function readCellResult(path: string): CellResult | undefined {
   }
   if (!parsed || typeof parsed !== "object") return undefined;
   const r = parsed as { schemaVersion?: unknown };
-  if (r.schemaVersion !== 2) return undefined;
+  if (r.schemaVersion !== 3) return undefined;
   return parsed as CellResult;
 }
 

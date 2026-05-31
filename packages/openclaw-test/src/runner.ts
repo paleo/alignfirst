@@ -84,7 +84,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
     const { entries, judgeUsages, result } = internals.finalize({ failure });
 
     await waitForTrajectoryUsage({ conversationId, startedAtIso });
-    const { cost: gatewayCostUsd, turns: gatewayTurns } = readTrajectoryCostFor({
+    const { cost: agentCostUsd, turns: agentTurns } = readTrajectoryCostFor({
       startTsIso: startedAtIso,
       conversationId,
     });
@@ -106,7 +106,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
     await closeStream(logStream);
     const merged = mergeTimeline(entries, agentEntries);
     const report: ScenarioReport = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       scenario: args.scenario,
       channel: args.channel,
       model: args.modelId,
@@ -118,10 +118,10 @@ async function runCell(args: RunnerArgs): Promise<number> {
       result,
       entries: merged.map(prepareEntryForReport),
       cost: {
-        gatewayUsd: gatewayCostUsd,
+        agentUsd: agentCostUsd,
         judgeUsd,
-        totalUsd: gatewayCostUsd + judgeUsd,
-        gatewayTurns,
+        totalUsd: agentCostUsd + judgeUsd,
+        agentTurns,
       },
     };
 
@@ -133,7 +133,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
     const finalOutDir = writeReportArtifacts(outDir, result.verdict, report);
 
     writeCellResult(resultsPath, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       scenarioId: args.scenario,
       channel: args.channel,
       model: args.modelId,
@@ -142,8 +142,8 @@ async function runCell(args: RunnerArgs): Promise<number> {
       durationMs,
       conversationId,
       artifactDirName: basename(finalOutDir),
-      gatewayCostUsd,
-      gatewayTurns,
+      agentCostUsd,
+      agentTurns,
       judgeUsd,
       judgeUsages,
     });

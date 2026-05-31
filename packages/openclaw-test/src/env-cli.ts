@@ -145,7 +145,7 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     maxFailures,
     stopOnFail,
     reuseStack,
-    skipFirstRestart: !wereUpBefore && !reuseStack,
+    gatewayFreshOnFirstModel: !wereUpBefore,
     composeArgs: compose,
     artifactsDir: resolve(artifactsDir, baseStamp),
     gatewayLogsDir: process.env.OPENCLAW_TEST_GATEWAY_LOGS_DIR as string,
@@ -187,13 +187,30 @@ function renderRuntimeConfig(model?: SelectedModel): string | undefined {
   const dotenv = readDotenvFile(projectDir);
   const config = JSON.parse(readFileSync(canonicalPath, "utf8")) as Record<string, unknown>;
   const rendered = expandEnvRefs(config, dotenv) as Record<string, unknown>;
-  dropProvidersMissingKey(rendered);
-  if (model) setMainAgentModel(rendered, model.ref);
+  const droppedProviders = dropProvidersMissingKey(rendered);
+  if (model) {
+    assertModelProviderPresent(model, droppedProviders);
+    setMainAgentModel(rendered, model.ref);
+  }
   const dir = mkdtempSync(join(tmpdir(), "openclaw-test-config-"));
   const renderedPath = join(dir, "openclaw.json");
   writeFileSync(renderedPath, JSON.stringify(rendered, null, 2));
   process.env.OPENCLAW_CONFIG_PATH = renderedPath;
   return renderedPath;
+}
+
+// A model's provider is the ref's first segment (`provider/model`); built-in
+// providers (e.g. `anthropic`) aren't declared in config and never get dropped.
+// Fail fast only when the selected model's provider was declared but dropped for
+// an empty key — otherwise `setMainAgentModel` would point `main` at a missing
+// provider and the gateway would boot-fail with an opaque error.
+function assertModelProviderPresent(model: SelectedModel, droppedProviders: Set<string>): void {
+  const provider = model.ref.split("/")[0];
+  if (droppedProviders.has(provider)) {
+    throw new Error(
+      `openclaw-test: selected model "${model.ref}" needs provider "${provider}", but its API key expanded empty. Set the provider's API key in .env.local.`,
+    );
+  }
 }
 
 function setMainAgentModel(config: Record<string, unknown>, ref: string): void {
@@ -235,11 +252,12 @@ function expandEnvRefs(value: unknown, dotenv: Record<string, string>): unknown 
 // On the rendered config, an empty `apiKey` means its `${VAR}` reference expanded
 // to an unset value. Drop the whole provider so boot validation for a
 // defined-but-unused provider can't fail on the empty key.
-function dropProvidersMissingKey(config: Record<string, unknown>): void {
+function dropProvidersMissingKey(config: Record<string, unknown>): Set<string> {
+  const dropped = new Set<string>();
   const models = config.models;
-  if (!models || typeof models !== "object") return;
+  if (!models || typeof models !== "object") return dropped;
   const providers = (models as Record<string, unknown>).providers;
-  if (!providers || typeof providers !== "object") return;
+  if (!providers || typeof providers !== "object") return dropped;
   for (const [id, provider] of Object.entries(providers)) {
     if (
       provider &&
@@ -247,8 +265,10 @@ function dropProvidersMissingKey(config: Record<string, unknown>): void {
       (provider as { apiKey?: unknown }).apiKey === ""
     ) {
       delete (providers as Record<string, unknown>)[id];
+      dropped.add(id);
     }
   }
+  return dropped;
 }
 
 const BASE_IMAGE_NAME = "paleo/openclaw-test-base";
@@ -437,6 +457,13 @@ interface RunArgs {
   positionals: string[];
 }
 
+function requireFlagValue(flag: string, raw: string | undefined): string {
+  if (raw === undefined || raw.startsWith("--")) {
+    failRun(`error: ${flag} expects a value`);
+  }
+  return raw;
+}
+
 function parseIntFlag(flag: string, raw: string, min: number): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < min) {
@@ -461,9 +488,9 @@ function parseRunArgs(argv: string[]): RunArgs {
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--stop-on-fail") stopOnFail = true;
-    else if (a === "--channel") channel = argv[++i];
+    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i]);
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
-    else if (a === "--model") model = argv[++i];
+    else if (a === "--model") model = requireFlagValue("--model", argv[++i]);
     else if (a?.startsWith("--model=")) model = a.slice("--model=".length);
     else if (a === "--iterations") iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1);
     else if (a?.startsWith("--iterations="))

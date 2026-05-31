@@ -20,7 +20,7 @@
 import type { Readable, Writable } from "node:stream";
 
 export interface ScenarioReport {
-  schemaVersion: 3;
+  schemaVersion: 4;
   scenario: string;
   channel: ChannelId;
   model: string;
@@ -177,10 +177,10 @@ export interface ScenarioFailure {
 }
 
 export interface CostBreakdown {
-  gatewayUsd: number;
+  agentUsd: number;
   judgeUsd: number;
   totalUsd: number;
-  gatewayTurns: number;
+  agentTurns: number;
 }
 
 export interface CliMockHandlerArgs {

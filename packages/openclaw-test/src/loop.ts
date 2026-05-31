@@ -52,7 +52,13 @@ export interface MatrixOptions {
   /** Stop the whole matrix at the first failing cell (across all pairs). */
   stopOnFail: boolean;
   reuseStack: boolean;
-  skipFirstRestart: boolean;
+  /**
+   * The gateway is already running the first model's rendered config (it was just
+   * booted on it), so the first cell needs no recreate to load that model. False
+   * when we reused a stack we didn't boot — then the first model must force a
+   * recreate, or `--model` would be silently ignored for it.
+   */
+  gatewayFreshOnFirstModel: boolean;
   composeArgs: string[];
   artifactsDir: string;
   /** Host-side path to the gateway logs dir (bind-mounted into the gateway). */
@@ -132,17 +138,19 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
     // scenario→model→channel independently (see the cell `leaf` below).
     outer: for (const model of opts.models) {
       // Repoint the gateway config at this model's rendered file, then force a
-      // recreate at the model boundary even when reuseStack / skipFirstRestart
-      // would skip the next restart, so the gateway reloads the new config.
+      // recreate at the model boundary so the gateway reloads the new config —
+      // even when reuseStack would otherwise skip it. The first model recreates
+      // only if the gateway isn't already running its config.
       process.env.OPENCLAW_CONFIG_PATH = opts.renderConfigPath(model);
-      let forceModelRestart = !isFirstCell;
+      let forceModelRestart = isFirstCell ? !opts.gatewayFreshOnFirstModel : true;
       for (const scenario of opts.scenarios) {
         for (const channel of opts.channels) {
           let pairFailures = 0;
           for (let iter = 1; iter <= opts.iterations; ++iter) {
             if (aborted) break outer;
 
-            const perCellRestart = !opts.reuseStack && !(opts.skipFirstRestart && isFirstCell);
+            const perCellRestart =
+              !opts.reuseStack && !(opts.gatewayFreshOnFirstModel && isFirstCell);
             if (perCellRestart || forceModelRestart) {
               const code = await spawnRecreate({
                 command: "docker",
@@ -310,7 +318,7 @@ function synthesizeFailedResult(params: {
     `run: missing or invalid cell record at ${params.resultsPath} (runner exit ${params.childExit}) — counting as fail`,
   );
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     scenarioId: params.scenario,
     channel: params.channel,
     model: params.model,
@@ -319,8 +327,8 @@ function synthesizeFailedResult(params: {
     durationMs: 0,
     conversationId: "",
     artifactDirName: "",
-    gatewayCostUsd: 0,
-    gatewayTurns: 0,
+    agentCostUsd: 0,
+    agentTurns: 0,
     judgeUsd: 0,
     judgeUsages: [],
   };
