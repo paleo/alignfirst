@@ -30,6 +30,7 @@ See the upstream README for all flags.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `ALIGNFIRST_COACHING_SKILL_DIR` — host path to the `alignfirst-coaching` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
+- `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
 - [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
@@ -50,6 +51,6 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 ## Layout
 
 - [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) — committed.
-- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`.
+- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `anthropic-payload.jsonl` (always), `raw-stream.jsonl` (opt-in).
