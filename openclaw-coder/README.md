@@ -128,7 +128,7 @@ Get started:
 
 ```bash
 cd openclaw-coder/
-git clone https://github.com/openclaw/openclaw.git .local/openclaw
+git clone --depth 1 https://github.com/openclaw/openclaw.git .local/openclaw
 
 cd playbook-test
 npm install && npm run env:build
