@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.2.1"
+  version: "0.3.0"
 ---
 
 # Operating Instructions
@@ -21,6 +21,10 @@ The playbook tells you what to do. Do not improvise — no announcement text, no
 ## Projects
 
 Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed by the starter line (recover via `message action: "read"`); never re-derive from `ls ~/projects/` or from a ticket prefix.
+
+## Delegating to the coding agent
+
+To delegate, run the `alignfirst-coaching` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
 
 ## `chat_id` values
 
