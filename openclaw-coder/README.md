@@ -65,6 +65,7 @@ Optional `alignfirst-coaching` environment variables:
 ```bash
 export ALIGNFIRST_COACHING_LOG_DIR=path/to/directory # Write input/output logs
 export ALIGNFIRST_COACHING_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_COACHING_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
 ```
 
 ### `openclaw.json`

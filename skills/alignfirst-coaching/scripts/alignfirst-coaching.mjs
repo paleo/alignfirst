@@ -146,9 +146,19 @@ if (values.model) {
   args.push("--model", values.model);
 }
 
+const env = { ...process.env };
+for (const name of (process.env.ALIGNFIRST_COACHING_UNSET ?? "").split(",")) {
+  const trimmed = name.trim();
+  if (trimmed) delete env[trimmed];
+}
+for (const key of Object.keys(env)) {
+  if (key.startsWith("ALIGNFIRST_COACHING_")) delete env[key];
+}
+
 const result = spawnSync("claude", args, {
   encoding: "utf-8",
   maxBuffer: 50 * 1024 * 1024,
+  env,
 });
 
 if (result.status !== 0) {
