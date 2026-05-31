@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, readCellResult } from "./cell-result.js";
+import type { SelectedModel } from "./models.js";
 import { printSummary, printTotalCost } from "./summary.js";
 
 export interface ChannelSelection {
@@ -40,6 +41,12 @@ export function discoverScenarios(scenariosDir: string): string[] {
 export interface MatrixOptions {
   scenarios: string[];
   channels: string[];
+  models: SelectedModel[];
+  /**
+   * Renders the chosen model's ref into a run-scoped config and returns its path.
+   * The loop repoints `OPENCLAW_CONFIG_PATH` to it before the model-boundary recreate.
+   */
+  renderConfigPath: (model: SelectedModel) => string;
   iterations: number;
   maxFailures: number;
   /** Stop the whole matrix at the first failing cell (across all pairs). */
@@ -115,102 +122,115 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   let isFirstCell = true;
   let exitCode = 0;
 
-  const liveGatewayLogPath = join(opts.gatewayLogsDir, "anthropic-payload.jsonl");
-  archiveLeftoverGatewayLog(liveGatewayLogPath, opts.artifactsDir);
+  const liveTrajectoryDir = join(opts.gatewayLogsDir, "trajectory");
+  archiveLeftoverTrajectory(liveTrajectoryDir, opts.artifactsDir);
 
   try {
-    outer: for (const scenario of opts.scenarios) {
-      for (const channel of opts.channels) {
-        let pairFailures = 0;
-        for (let iter = 1; iter <= opts.iterations; ++iter) {
-          if (aborted) break outer;
+    outer: for (const model of opts.models) {
+      // Repoint the gateway config at this model's rendered file, then force the
+      // recreate at the model boundary even if skipFirstRestart/reuseStack would
+      // otherwise skip the next cell's restart, so the new config is loaded.
+      process.env.OPENCLAW_CONFIG_PATH = opts.renderConfigPath(model);
+      let forceModelRestart = !isFirstCell;
+      for (const scenario of opts.scenarios) {
+        for (const channel of opts.channels) {
+          let pairFailures = 0;
+          for (let iter = 1; iter <= opts.iterations; ++iter) {
+            if (aborted) break outer;
 
-          const doRestart = !opts.reuseStack && !(opts.skipFirstRestart && isFirstCell);
-          if (doRestart) {
-            const code = await spawnRecreate({
+            const perCellRestart = !opts.reuseStack && !(opts.skipFirstRestart && isFirstCell);
+            if (perCellRestart || forceModelRestart) {
+              const code = await spawnRecreate({
+                command: "docker",
+                argv: [
+                  ...opts.composeArgs,
+                  "up",
+                  "-d",
+                  "--force-recreate",
+                  "--wait",
+                  "bus",
+                  "gateway",
+                ],
+                onChild: (c) => {
+                  currentChild = c;
+                },
+              });
+              currentChild = undefined;
+              if (aborted) break outer;
+              if (code !== 0) {
+                exitCode = code;
+                break outer;
+              }
+            }
+            isFirstCell = false;
+            forceModelRestart = false;
+
+            if (aborted) break outer;
+
+            const iterSuffix =
+              iterationWidth > 0 ? `-${String(iter).padStart(iterationWidth, "0")}` : "";
+            const leaf = `${scenario}-${channel}-${model.id}${iterSuffix}`;
+            const resultsPath = join(opts.resultsDir, `${leaf}.json`);
+
+            const runnerArgs = [
+              ...opts.composeArgs,
+              "run",
+              "--rm",
+              "--use-aliases",
+              "runner",
+              "--scenario",
+              scenario,
+              "--channel",
+              channel,
+              "--model-id",
+              model.id,
+              "--model-ref",
+              model.ref,
+              "--iteration-index",
+              String(iter),
+              "--iteration-width",
+              String(iterationWidth),
+              "--base-stamp",
+              opts.baseStamp,
+              "--results-dir",
+              opts.runnerResultsDir,
+            ];
+            const childExit = await spawnRunner({
               command: "docker",
-              argv: [
-                ...opts.composeArgs,
-                "up",
-                "-d",
-                "--force-recreate",
-                "--wait",
-                "bus",
-                "gateway",
-              ],
+              argv: runnerArgs,
               onChild: (c) => {
                 currentChild = c;
               },
             });
             currentChild = undefined;
-            if (aborted) break outer;
-            if (code !== 0) {
-              exitCode = code;
-              break outer;
-            }
-          }
-          isFirstCell = false;
 
-          if (aborted) break outer;
+            const r =
+              readResult(resultsPath) ??
+              synthesizeFailedResult({
+                scenario,
+                channel,
+                model: model.id,
+                iter,
+                resultsPath,
+                childExit,
+              });
+            results.push(r);
 
-          const iterSuffix =
-            iterationWidth > 0 ? `-${String(iter).padStart(iterationWidth, "0")}` : "";
-          const leaf = `${scenario}-${channel}${iterSuffix}`;
-          const resultsPath = join(opts.resultsDir, `${leaf}.json`);
-
-          const runnerArgs = [
-            ...opts.composeArgs,
-            "run",
-            "--rm",
-            "--use-aliases",
-            "runner",
-            "--scenario",
-            scenario,
-            "--channel",
-            channel,
-            "--iteration-index",
-            String(iter),
-            "--iteration-width",
-            String(iterationWidth),
-            "--base-stamp",
-            opts.baseStamp,
-            "--results-dir",
-            opts.runnerResultsDir,
-          ];
-          const childExit = await spawnRunner({
-            command: "docker",
-            argv: runnerArgs,
-            onChild: (c) => {
-              currentChild = c;
-            },
-          });
-          currentChild = undefined;
-
-          const r =
-            readResult(resultsPath) ??
-            synthesizeFailedResult({
-              scenario,
-              channel,
-              iter,
-              resultsPath,
-              childExit,
+            rotateTrajectory({
+              liveTrajectoryDir,
+              artifactsDir: opts.artifactsDir,
+              cellDirName: r.artifactDirName,
+              fallbackDir: join(opts.resultsDir, `${leaf}.trajectory`),
             });
-          results.push(r);
 
-          rotateGatewayLog({
-            liveLogPath: liveGatewayLogPath,
-            artifactsDir: opts.artifactsDir,
-            cellDirName: r.artifactDirName,
-            fallbackPath: join(opts.resultsDir, `${leaf}.anthropic-payload.jsonl`),
-          });
-
-          if (r.verdict === "fail") {
-            if (opts.stopOnFail) {
-              break outer;
-            }
-            pairFailures += 1;
-            if (pairFailures > opts.maxFailures) {
-              break;
+            if (r.verdict === "fail") {
+              if (opts.stopOnFail) {
+                break outer;
+              }
+              pairFailures += 1;
+              if (pairFailures > opts.maxFailures) {
+                break;
+              }
             }
           }
         }
@@ -230,49 +250,54 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
 }
 
 /**
- * Move the live gateway payload log into the just-finished cell's artifact dir.
- * Rename is atomic and O(1); the gateway's writer reopens by path per write, so
- * the next write recreates a fresh file at the live path.
+ * Move the live trajectory dir's per-session files into the just-finished cell's
+ * artifact dir. Rename is atomic and O(1); the gateway's writer reopens by path
+ * per write, so the next write recreates fresh files at the live dir.
  */
-function rotateGatewayLog(params: {
-  liveLogPath: string;
+function rotateTrajectory(params: {
+  liveTrajectoryDir: string;
   artifactsDir: string;
   cellDirName: string;
-  fallbackPath: string;
+  fallbackDir: string;
 }): void {
-  if (!existsSync(params.liveLogPath)) return;
   const dest = params.cellDirName
-    ? join(params.artifactsDir, params.cellDirName, "anthropic-payload.jsonl")
-    : params.fallbackPath;
-  try {
-    renameSync(params.liveLogPath, dest);
-  } catch (err) {
-    console.warn(`run: failed to rotate gateway log to ${dest}:`, (err as Error).message);
-  }
+    ? join(params.artifactsDir, params.cellDirName, "trajectory")
+    : params.fallbackDir;
+  moveTrajectoryFiles(params.liveTrajectoryDir, dest);
 }
 
 /**
- * Archive any pre-existing live gateway log left behind by a prior session, so
- * this matrix's first cell starts with a clean file.
+ * Archive any per-session files left behind in the live trajectory dir by a
+ * prior session, so this matrix's first cell starts clean.
  */
-function archiveLeftoverGatewayLog(liveLogPath: string, artifactsDir: string): void {
-  if (!existsSync(liveLogPath)) return;
+function archiveLeftoverTrajectory(liveTrajectoryDir: string, artifactsDir: string): void {
+  moveTrajectoryFiles(liveTrajectoryDir, join(artifactsDir, "trajectory.leftover"));
+}
+
+function moveTrajectoryFiles(srcDir: string, destDir: string): void {
+  if (!existsSync(srcDir)) return;
+  let files: string[];
   try {
-    if (statSync(liveLogPath).size === 0) return;
+    files = readdirSync(srcDir).filter((f) => f.endsWith(".jsonl"));
   } catch {
     return;
   }
-  const dest = join(artifactsDir, "anthropic-payload.leftover.jsonl");
-  try {
-    renameSync(liveLogPath, dest);
-  } catch (err) {
-    console.warn(`run: failed to archive leftover gateway log to ${dest}:`, (err as Error).message);
+  if (files.length === 0) return;
+  mkdirSync(destDir, { recursive: true });
+  for (const file of files) {
+    const dest = join(destDir, file);
+    try {
+      renameSync(join(srcDir, file), dest);
+    } catch (err) {
+      console.warn(`run: failed to move trajectory file to ${dest}:`, (err as Error).message);
+    }
   }
 }
 
 function synthesizeFailedResult(params: {
   scenario: string;
   channel: string;
+  model: string;
   iter: number;
   resultsPath: string;
   childExit: number;
@@ -281,9 +306,10 @@ function synthesizeFailedResult(params: {
     `run: missing or invalid cell record at ${params.resultsPath} (runner exit ${params.childExit}) — counting as fail`,
   );
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     scenarioId: params.scenario,
     channel: params.channel,
+    model: params.model,
     iterationIndex: params.iter,
     verdict: "fail",
     durationMs: 0,

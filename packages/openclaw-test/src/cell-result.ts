@@ -2,9 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { JudgeUsage } from "./judge.js";
 
 export interface CellResult {
-  schemaVersion: 1;
+  schemaVersion: 2;
   scenarioId: string;
   channel: string;
+  model: string;
   iterationIndex: number;
   verdict: "pass" | "fail";
   durationMs: number;
@@ -31,7 +32,7 @@ export function readCellResult(path: string): CellResult | undefined {
   }
   if (!parsed || typeof parsed !== "object") return undefined;
   const r = parsed as { schemaVersion?: unknown };
-  if (r.schemaVersion !== 1) return undefined;
+  if (r.schemaVersion !== 2) return undefined;
   return parsed as CellResult;
 }
 

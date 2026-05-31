@@ -1,6 +1,8 @@
 export interface RunnerArgs {
   scenario: string;
   channel: string;
+  modelId: string;
+  modelRef: string;
   iterationIndex: number;
   iterationWidth: number;
   baseStamp: string;
@@ -10,6 +12,8 @@ export interface RunnerArgs {
 export function parseArgs(argv: string[]): RunnerArgs {
   let scenario: string | undefined;
   let channel: string | undefined;
+  let modelId: string | undefined;
+  let modelRef: string | undefined;
   let iterationIndex: number | undefined;
   let iterationWidth: number | undefined;
   let baseStamp: string | undefined;
@@ -25,6 +29,10 @@ export function parseArgs(argv: string[]): RunnerArgs {
       scenario = eat("--scenario");
     } else if (a === "--channel" || a.startsWith("--channel=")) {
       channel = eat("--channel");
+    } else if (a === "--model-id" || a.startsWith("--model-id=")) {
+      modelId = eat("--model-id");
+    } else if (a === "--model-ref" || a.startsWith("--model-ref=")) {
+      modelRef = eat("--model-ref");
     } else if (a === "--iteration-index" || a.startsWith("--iteration-index=")) {
       iterationIndex = parseNonNegativeInt(eat("--iteration-index"), "--iteration-index", 1);
     } else if (a === "--iteration-width" || a.startsWith("--iteration-width=")) {
@@ -40,12 +48,23 @@ export function parseArgs(argv: string[]): RunnerArgs {
 
   if (!scenario) throw new Error("runner: --scenario <id> is required");
   if (!channel) throw new Error("runner: --channel <id> is required");
+  if (!modelId) throw new Error("runner: --model-id <id> is required");
+  if (!modelRef) throw new Error("runner: --model-ref <ref> is required");
   if (iterationIndex === undefined) throw new Error("runner: --iteration-index <n> is required");
   if (iterationWidth === undefined) throw new Error("runner: --iteration-width <w> is required");
   if (!baseStamp) throw new Error("runner: --base-stamp <iso> is required");
   if (!resultsDir) throw new Error("runner: --results-dir <path> is required");
 
-  return { scenario, channel, iterationIndex, iterationWidth, baseStamp, resultsDir };
+  return {
+    scenario,
+    channel,
+    modelId,
+    modelRef,
+    iterationIndex,
+    iterationWidth,
+    baseStamp,
+    resultsDir,
+  };
 }
 
 function parseNonNegativeInt(raw: string | undefined, flag: string, min: number): number {

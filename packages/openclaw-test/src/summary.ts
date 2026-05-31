@@ -9,6 +9,7 @@ function artifactsRoot(): string {
 interface PairAggregate {
   scenarioId: string;
   channel: string;
+  model: string;
   runCount: number;
   passCount: number;
   durationSumMs: number;
@@ -18,12 +19,13 @@ function groupByPair(results: CellResult[]): PairAggregate[] {
   const order: string[] = [];
   const map = new Map<string, PairAggregate>();
   for (const r of results) {
-    const key = `${r.scenarioId}|${r.channel}`;
+    const key = `${r.scenarioId}|${r.channel}|${r.model}`;
     let agg = map.get(key);
     if (!agg) {
       agg = {
         scenarioId: r.scenarioId,
         channel: r.channel,
+        model: r.model,
         runCount: 0,
         passCount: 0,
         durationSumMs: 0,
@@ -47,7 +49,7 @@ export function printSummary(results: CellResult[], baseStamp: string): void {
     const verdict = (passed ? "PASS" : "FAIL").padEnd(4, " ");
     const counts = `${a.passCount}/${a.runCount}`.padStart(7, " ");
     console.log(
-      `  ${verdict}  ${a.channel.padEnd(12, " ")}  ${a.scenarioId.padEnd(40, " ")}  ${counts}  in ${a.durationSumMs}ms`,
+      `  ${verdict}  ${a.channel.padEnd(12, " ")}  ${a.model.padEnd(20, " ")}  ${a.scenarioId.padEnd(40, " ")}  ${counts}  in ${a.durationSumMs}ms`,
     );
   }
   console.log("");
@@ -56,14 +58,25 @@ export function printSummary(results: CellResult[], baseStamp: string): void {
 }
 
 export function printTotalCost(results: CellResult[]): void {
+  console.log("");
+  console.log(costLine(results));
+  const models = [...new Set(results.map((r) => r.model))];
+  if (models.length > 1) {
+    console.log("Per-model cost:");
+    for (const model of models) {
+      console.log(
+        `  ${model.padEnd(20, " ")}  ${costLine(results.filter((r) => r.model === model))}`,
+      );
+    }
+  }
+}
+
+function costLine(results: CellResult[]): string {
   const judgeCost = results
     .flatMap((r) => r.judgeUsages)
     .reduce((sum, u) => sum + judgeCostUsd(u), 0);
   const gatewayCost = results.reduce((sum, r) => sum + r.gatewayCostUsd, 0);
   const gatewayTurns = results.reduce((sum, r) => sum + r.gatewayTurns, 0);
   const totalCost = gatewayCost + judgeCost;
-  console.log("");
-  console.log(
-    `Total LLM cost: $${totalCost.toFixed(4)} (gateway: $${gatewayCost.toFixed(4)} over ${gatewayTurns} turns, judge: $${judgeCost.toFixed(4)})`,
-  );
+  return `Total LLM cost: $${totalCost.toFixed(4)} (gateway: $${gatewayCost.toFixed(4)} over ${gatewayTurns} turns, judge: $${judgeCost.toFixed(4)})`;
 }

@@ -73,9 +73,10 @@ function setupFake(outcomes: Record<string, "pass" | "fail">): FakeSetup {
     const { scenario, channel, iter } = pendingCell;
     const verdict = cellOutcomes.get(`${scenario}|${channel}|${iter}`) ?? "pass";
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       scenarioId: scenario,
       channel,
+      model: "m",
       iterationIndex: iter,
       verdict,
       durationMs: 1,
@@ -100,6 +101,8 @@ describe("runMatrix", () => {
       maxFailures: 1,
       reuseStack: true,
       skipFirstRestart: false,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -115,19 +118,56 @@ describe("runMatrix", () => {
     const order = runners.map((c) => {
       const s = c.argv[c.argv.indexOf("--scenario") + 1];
       const ch = c.argv[c.argv.indexOf("--channel") + 1];
+      const m = c.argv[c.argv.indexOf("--model-id") + 1];
       const it = c.argv[c.argv.indexOf("--iteration-index") + 1];
-      return `${s}|${ch}|${it}`;
+      return `${s}|${ch}|${m}|${it}`;
     });
     expect(order).toEqual([
-      "S1|C1|1",
-      "S1|C1|2",
-      "S1|C2|1",
-      "S1|C2|2",
-      "S2|C1|1",
-      "S2|C1|2",
-      "S2|C2|1",
-      "S2|C2|2",
+      "S1|C1|m|1",
+      "S1|C1|m|2",
+      "S1|C2|m|1",
+      "S1|C2|m|2",
+      "S2|C1|m|1",
+      "S2|C1|m|2",
+      "S2|C2|m|1",
+      "S2|C2|m|2",
     ]);
+  });
+
+  it("iterates models as the outermost dimension and forces a recreate per model boundary", async () => {
+    const fake = setupFake({});
+    await runMatrix({
+      scenarios: ["S1", "S2"],
+      channels: ["C"],
+      models: [
+        { id: "m1", ref: "p/m1" },
+        { id: "m2", ref: "p/m2" },
+      ],
+      renderConfigPath: () => "/tmp/openclaw.json",
+      iterations: 1,
+      maxFailures: 1,
+      reuseStack: true,
+      skipFirstRestart: false,
+      composeArgs: ["compose"],
+      artifactsDir: "/tmp",
+      resultsDir: "/tmp",
+      runnerResultsDir: "/tmp",
+      gatewayLogsDir: "/tmp",
+      stopOnFail: false,
+      baseStamp: "stamp",
+      spawnRunner: fake.spawnRunner,
+      spawnRecreate: fake.spawnRecreate,
+      readResult: fake.readResult,
+    });
+    const runners = fake.calls.filter((c) => c.kind === "runner");
+    const order = runners.map((c) => {
+      const s = c.argv[c.argv.indexOf("--scenario") + 1];
+      const m = c.argv[c.argv.indexOf("--model-id") + 1];
+      return `${m}|${s}`;
+    });
+    expect(order).toEqual(["m1|S1", "m1|S2", "m2|S1", "m2|S2"]);
+    // reuseStack skips per-cell recreates, but the second model boundary still forces one.
+    expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(1);
   });
 
   it("bails the pair when failures exceed maxFailures, continues others", async () => {
@@ -146,6 +186,8 @@ describe("runMatrix", () => {
       maxFailures: 1,
       reuseStack: true,
       skipFirstRestart: false,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -176,6 +218,8 @@ describe("runMatrix", () => {
       maxFailures: 1,
       reuseStack: true,
       skipFirstRestart: false,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -199,6 +243,8 @@ describe("runMatrix", () => {
       maxFailures: 1,
       reuseStack: false,
       skipFirstRestart: true,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",

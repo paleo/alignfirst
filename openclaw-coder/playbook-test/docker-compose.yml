@@ -15,6 +15,8 @@ volumes:
 
 services:
   gateway:
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
     volumes:
       - fixture-projects:/home/claw/projects
       # Live-mount the alignfirst-coaching skill over its baked copy so playbook

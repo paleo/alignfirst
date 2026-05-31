@@ -39,7 +39,8 @@ services:
     environment:
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      OPENCLAW_ANTHROPIC_PAYLOAD_LOG: "1"
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      OPENCLAW_TRAJECTORY_DIR: /home/claw/.openclaw/logs/trajectory
       OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}
       OPENCLAW_TEST_RUNNER_URL: "http://runner:43124"
       PATH: "/opt/openclaw-test/mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

@@ -20,9 +20,10 @@
 import type { Readable, Writable } from "node:stream";
 
 export interface ScenarioReport {
-  schemaVersion: 2;
+  schemaVersion: 3;
   scenario: string;
   channel: ChannelId;
+  model: string;
   conversationId: string;
   accountId: string;
 
