@@ -24,7 +24,7 @@ By the time you reach Step 3 in WORK mode, Step 2 has either produced a ready wo
 
 - **Code change** (WORK). Continue inside the worktree — delegate to the coding agent for the actual edits (see "What you delegate vs do" below).
 - **Status update** (WORK). Inspect the worktree Step 2 produced (branch state, dev-server, recent commits) and report. Delegate the inspection to the coding agent when it's faster than doing it yourself.
-- **Investigation / question** (TALK). Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol. Then summarize the agent's reply back to the user in the thread.
+- **Investigation / question** (TALK). Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol, **run from the project's directory** (`~/projects/<project>`) so it investigates the right repo. Then summarize the agent's reply back to the user in the thread.
 
 ## General rules
 

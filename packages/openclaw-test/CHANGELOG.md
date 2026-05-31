@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.7.0
+
+### Minor Changes
+
+- 635dc4a: `run --model` now accepts a comma list of bare ids (e.g. `--model claude-sonnet-4-6,qwen3.6-plus`), matching `--channel`. Both flags dedupe repeated ids.
+
 ## 0.6.1
 
 ### Patch Changes

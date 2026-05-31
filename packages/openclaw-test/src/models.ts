@@ -12,6 +12,9 @@ export interface SelectedModel {
  * place the `provider/` prefix appears. The CLI value, `OPENCLAW_DEFAULT_TEST_MODEL`,
  * and the recorded `model` are all bare ids (the suffix after the last `/`). A bare
  * id resolves to its ref by suffix-match; zero or many matches is a hard error.
+ *
+ * The selection is `all` (whole catalog), a single bare id, or a comma list of bare
+ * ids (deduped, order preserved); `undefined` falls back to `OPENCLAW_DEFAULT_TEST_MODEL`.
  */
 export function resolveSelectedModels(params: {
   selection: string | undefined;
@@ -20,13 +23,31 @@ export function resolveSelectedModels(params: {
 }): SelectedModel[] {
   const catalog = parseCatalog(params.modelsEnv);
   if (params.selection === "all") return catalog;
-  if (params.selection !== undefined) return [matchById(catalog, params.selection)];
+  if (params.selection !== undefined) return resolveIdList(catalog, params.selection);
   if (!params.defaultEnv) {
     throw new Error(
-      "run: no --model given and OPENCLAW_DEFAULT_TEST_MODEL is unset; pass --model <id|all> or set the default",
+      "run: no --model given and OPENCLAW_DEFAULT_TEST_MODEL is unset; pass --model <id|id,id,…|all> or set the default",
     );
   }
   return [matchById(catalog, params.defaultEnv)];
+}
+
+function resolveIdList(catalog: SelectedModel[], selection: string): SelectedModel[] {
+  const ids = selection
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (ids.length === 0) {
+    throw new Error(`run: --model expects a non-empty id list, got ${JSON.stringify(selection)}`);
+  }
+  const seen = new Set<string>();
+  const selected: SelectedModel[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    selected.push(matchById(catalog, id));
+  }
+  return selected;
 }
 
 function parseCatalog(modelsEnv: string | undefined): SelectedModel[] {

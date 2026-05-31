@@ -28,7 +28,7 @@ export function expandChannelSelection(raw: string, openclawConfigPath: string):
   if (unknown.length > 0) {
     throw new Error(`unknown channel(s): ${unknown.join(", ")} — allowed: ${allowed.join(", ")}`);
   }
-  return ids;
+  return [...new Set(ids)];
 }
 
 export function discoverScenarios(scenariosDir: string): string[] {

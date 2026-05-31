@@ -32,6 +32,13 @@ describe("expandChannelSelection", () => {
     expect(expandChannelSelection("all", cfg)).toEqual(["discord-mock", "slack-mock"]);
   });
 
+  it("dedupes repeated ids, order preserved", () => {
+    expect(expandChannelSelection("slack-mock,discord-mock,slack-mock", cfg)).toEqual([
+      "slack-mock",
+      "discord-mock",
+    ]);
+  });
+
   it("throws on unknown id", () => {
     expect(() => expandChannelSelection("nope", cfg)).toThrow(/unknown channel/);
   });

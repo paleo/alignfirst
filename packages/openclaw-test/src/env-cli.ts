@@ -19,15 +19,16 @@ const PATH_VARS = [
 type EnvSubcommand = "build" | "up" | "down";
 
 const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scenario> ...] [--all]
-                                   [--model <id|all>] [--iterations N] [--max-failures N]
+                                   [--model <id|id,id,…|all>] [--iterations N] [--max-failures N]
                                    [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
-  --model <id|all>    select the agent model(s). A bare id (e.g. claude-sonnet-4-6) or
-                      "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL. The catalog is
-                      OPENCLAW_TEST_MODELS (.env.local), a comma list of full
+  --model <id|id,id,…|all>
+                      select the agent model(s): a bare id (e.g. claude-sonnet-4-6), a
+                      comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
+                      The catalog is OPENCLAW_TEST_MODELS (.env.local), a comma list of full
                       provider/model refs; the bare id is the suffix after the last "/".
-                      "all" needs the API key for every referenced provider.
+                      "all" (or any selected provider) needs that provider's API key.
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1).
   --stop-on-fail      stop the whole matrix at the first failing cell — pairs with

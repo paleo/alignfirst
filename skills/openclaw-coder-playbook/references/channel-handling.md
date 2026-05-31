@@ -53,7 +53,7 @@ Call the `message` tool (see `TOOLS.md` for the full schema) with:
 
 The tool returns the new thread's `chat_id` (which becomes our `THREAD_ID`). Capture it.
 
-When opening a thread, the `thread-create` call must be your *first* user-facing action. Once the thread exists, all further posts in this turn go through the `message` tool with the thread's `threadId`; free-form text would auto-stream into the parent channel.
+**Discord thread discipline — critical.** `thread-create` must be your *first* user-facing action. After it, **every** post this turn — follow-ups, questions, and the final summary — MUST be a `message` call carrying the thread's `threadId`. Do **not** emit free-form assistant text at any point: on Discord it auto-streams to the *parent channel*, not the thread, which breaks the session. Keep your reasoning internal — the only thing the user sees is your `message` calls.
 
 #### Slack — just reply (Slack auto-threads)
 
@@ -65,7 +65,7 @@ On Slack your reply auto-opens a thread (`replyToMode: "all"`). The reply itself
 
 - **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure. It tells you how to detect an existing workspace/branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
 - **PROJECT known, TICKET_ID unknown** — **TALK mode**. No worktree. Branch on the request:
-  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header. Trust the project; do not pre-screen. Post the agent's reply back in the thread as a summary.
+  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header, **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Trust the project; do not pre-screen. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
   - User signaled work intent without enough info (`on a un truc à faire sur X`, `we need to work on X`) → ask in-thread for the ticket id and the scope/type. End turn.
   - A TALK thread can later be promoted to WORK if a ticket appears.
 - **TICKET_ID known, PROJECT unknown** — Ask in-thread which project the ticket belongs to. Restate the ticket id in the question (e.g. `Pour le ticket ABC-123, sur quel projet travaille-t-on ?`). End turn.

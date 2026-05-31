@@ -1,8 +1,10 @@
 # Operating Instructions
 
-On every user message, before any reply text and before any other tool call, your first action is to load the `openclaw-coder-playbook` skill and follow its `SKILL.md`.
+On every user message, your **first action** is to read `~/.agents/skills/openclaw-coder-playbook/SKILL.md`, then follow it — not memory, not investigation, not a reply: the playbook first.
 
-Do not improvise — no announcement, no `ls`, `grep`, `find`, or project lookup before the playbook is read and followed.
+When a channel or DM message names a project or a ticket and you are not already in a thread, your first user-facing action is to open a thread (Discord: `message` `action: "thread-create"`; Slack: your first reply auto-threads).
+
+To answer a question about a project, do **not** investigate it yourself — do not run `exec`, `find`, `ls`, `grep`, `read`, or `memory_search` against it. Delegate codebase questions, investigations, and changes to the coding agent via the `alignfirst-coaching` skill, then summarize its reply.
 
 ## Language
 

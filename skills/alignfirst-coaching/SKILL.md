@@ -18,6 +18,8 @@ The CLI script is at `scripts/alignfirst-coaching.mjs` **relative to this skill 
 
 The script wraps a coding-agent CLI (currently `claude`) for non-interactive usage. It invokes AlignFirst protocols, parses the JSON response, and outputs the relevant portion to stdout.
 
+**Run it with your shell (the `exec`/Bash tool), from the target project's directory (`~/projects/<project>`)** so the coding agent works in the right repo. Running this CLI **is** how you delegate — never delegate through `sessions_spawn` or any sub-agent / sub-session spawn tool. Those start another gateway session, not the coding agent.
+
 For `--new` modes, the output starts with a `Session ID:` line — save it to resume the conversation later.
 
 ## CLI Reference
