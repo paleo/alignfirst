@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "docmap": "docmap",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "build": "npm run build --workspaces --if-present",

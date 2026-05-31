@@ -4,6 +4,10 @@
 
 **Writing Markdown**: Do not wrap text to 80 chars; let it run freely.
 
+## Docmap - Seek Documentation
+
+**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
+
 ## Tooling
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
