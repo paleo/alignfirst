@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js and the Claude Code CLI
 metadata:
   author: Paleo
-  version: "0.11.0"
+  version: "0.11.1"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
@@ -17,6 +17,8 @@ Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overv
 The CLI script is at `scripts/alignfirst-coaching.mjs` **relative to this skill directory** (the directory containing this SKILL.md file). Resolve the absolute path before running it. For example, if this file is at `/home/user/.agents/skills/alignfirst-coaching/SKILL.md`, the script is at `/home/user/.agents/skills/alignfirst-coaching/scripts/alignfirst-coaching.mjs`.
 
 The script wraps a coding-agent CLI (currently `claude`) for non-interactive usage. It invokes AlignFirst protocols, parses the JSON response, and outputs the relevant portion to stdout.
+
+Run the script from the directory of the project you're coaching, so the coding agent works in the right repo.
 
 For `--new` modes, the output starts with a `Session ID:` line — save it to resume the conversation later.
 

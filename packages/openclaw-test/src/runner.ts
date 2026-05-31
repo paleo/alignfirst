@@ -11,12 +11,12 @@ import {
 } from "./context.js";
 import { judgeCostUsd } from "./cost.js";
 import {
-  GATEWAY_LOG_PATH,
-  gatewayLogExists,
   parseAgentToolCalls,
-  readGatewayCostFor,
-  waitForGatewayUsage,
-} from "./gateway-log.js";
+  readTrajectoryCostFor,
+  TRAJECTORY_DIR,
+  trajectoryDirExists,
+  waitForTrajectoryUsage,
+} from "./trajectory-log.js";
 import { startMockCliServer } from "./mock-cli-server.js";
 import type {
   AgentToolCall,
@@ -83,8 +83,8 @@ async function runCell(args: RunnerArgs): Promise<number> {
 
     const { entries, judgeUsages, result } = internals.finalize({ failure });
 
-    await waitForGatewayUsage({ conversationId, startedAtIso });
-    const { cost: gatewayCostUsd, turns: gatewayTurns } = readGatewayCostFor({
+    await waitForTrajectoryUsage({ conversationId, startedAtIso });
+    const { cost: agentCostUsd, turns: agentTurns } = readTrajectoryCostFor({
       startTsIso: startedAtIso,
       conversationId,
     });
@@ -92,12 +92,12 @@ async function runCell(args: RunnerArgs): Promise<number> {
 
     const agentCalls = parseAgentToolCalls({ conversationId, startedAtIso });
     pairAgentCallsWithCliMocks(agentCalls, entries);
-    if (agentCalls.length === 0 && !gatewayLogExists()) {
+    if (agentCalls.length === 0 && !trajectoryDirExists()) {
       entries.push({
         entrySeq: entries.length,
         ts: finishedAtIso,
         kind: "scenarioLog",
-        message: `agentToolCall parsing skipped: ${GATEWAY_LOG_PATH} not found`,
+        message: `agentToolCall parsing skipped: ${TRAJECTORY_DIR} not found`,
       });
     }
 
@@ -106,9 +106,10 @@ async function runCell(args: RunnerArgs): Promise<number> {
     await closeStream(logStream);
     const merged = mergeTimeline(entries, agentEntries);
     const report: ScenarioReport = {
-      schemaVersion: 2,
+      schemaVersion: 4,
       scenario: args.scenario,
       channel: args.channel,
+      model: args.modelId,
       conversationId,
       accountId,
       startedAt: startedAtIso,
@@ -117,10 +118,10 @@ async function runCell(args: RunnerArgs): Promise<number> {
       result,
       entries: merged.map(prepareEntryForReport),
       cost: {
-        gatewayUsd: gatewayCostUsd,
+        agentUsd: agentCostUsd,
         judgeUsd,
-        totalUsd: gatewayCostUsd + judgeUsd,
-        gatewayTurns,
+        totalUsd: agentCostUsd + judgeUsd,
+        agentTurns,
       },
     };
 
@@ -132,16 +133,17 @@ async function runCell(args: RunnerArgs): Promise<number> {
     const finalOutDir = writeReportArtifacts(outDir, result.verdict, report);
 
     writeCellResult(resultsPath, {
-      schemaVersion: 1,
+      schemaVersion: 3,
       scenarioId: args.scenario,
       channel: args.channel,
+      model: args.modelId,
       iterationIndex: args.iterationIndex,
       verdict: result.verdict,
       durationMs,
       conversationId,
       artifactDirName: basename(finalOutDir),
-      gatewayCostUsd,
-      gatewayTurns,
+      agentCostUsd,
+      agentTurns,
       judgeUsd,
       judgeUsages,
     });
@@ -171,9 +173,9 @@ function setupRun(args: RunnerArgs): RunSetup {
   const accountId: ChannelId = args.channel;
   const iterSuffix =
     args.iterationWidth > 0
-      ? `-${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
+      ? `-#${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
       : "";
-  const leaf = `${args.scenario}-${args.channel}${iterSuffix}`;
+  const leaf = `${args.scenario}-${args.modelId}-${args.channel}${iterSuffix}`;
   const outDir = join(ARTIFACTS_ROOT, args.baseStamp, leaf);
   mkdirSync(outDir, { recursive: true });
 

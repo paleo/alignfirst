@@ -35,15 +35,15 @@ If the thread name is missing the TICKET_ID or the PROJECT_NAME, rename it. Form
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-Before creating anything, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. The project's `docs/workspace.md` (linked from `docs/welcome.md`) lists the commands to **list registered workspaces** and to **attach a workspace to an existing branch**. Use them — never assume the branch is new.
+First, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. The project's `docs/workspace.md` (linked from `docs/welcome.md`) gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them — never assume the branch is new.
 
-Three sub-paths, in order. Pick exactly one. The setup command always runs *before* any per-ticket inspection (`git log`, `git diff`, `git status`, …) — the worktree is what you inspect.
+Whenever a branch exists, you work from its workspace — a status request included. "Status" here means: set up the workspace, then report its state — not `git log` from the main dir. Pick one sub-path:
 
-1. **Branch + worktree already registered** → attach to the existing workspace (no creation). Post the status report below.
-2. **Branch exists (locally or remote) but no registered worktree** → run the project's *attach-existing-branch* command from its workspace doc. This sets up a worktree on the existing branch and is mandatory before any further inspection — `git log <branch>` from the main project dir is not a substitute. Post the status report.
-3. **Neither exists** → if the user signalled a *new* work intent, pull the base branch first (`git fetch` + fast-forward) so the new branch starts from the latest base, then create both. If the user asked for a *status update* and there's no branch yet, do not create anything — tell the user there's no work for that ticket and end turn.
+1. **Branch + workspace already registered** → use it (no setup needed).
+2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
+3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The path that does create (sub-paths 2 and 3) spawns background bootstrap — don't add your own `background` option. As soon as the setup command returns, post a status-only message with these three labelled fields (translated to the user's language):
+The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. Bootstrap finishes in the background, so don't add your own `background` option. Inspect the workspace, never the main dir. In the user's language:
 
 ```text
 Worktree: {dirname}
@@ -53,7 +53,7 @@ Bootstrap: {running | ready | failed}
 
 ### Sync an existing branch on takeover (sub-paths 1 & 2)
 
-Once the worktree is attached, bring the branch up to date *before* inspecting or working. In order:
+Once the workspace is set up, bring the branch up to date *before* inspecting or working. In order:
 
 1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the coding agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.

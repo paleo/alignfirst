@@ -101,9 +101,11 @@ The harness does **not** provide a fixture reset. Scenarios that need to wipe an
 
 ## Per-cell hygiene
 
-The host CLI owns the matrix loop: each `(scenario, channel, iterationIndex)` cell is one `docker compose run --rm runner --scenario … --channel … --iteration-index …` invocation. Between cells the host issues `docker compose up -d --force-recreate --wait bus gateway`, recreating both containers in a single Compose call (`--wait` blocks on healthchecks). Recreation drops in-process gateway state, the bus's in-memory event log, transient container `/tmp` files, and on-process caches that survive a SIGTERM-only restart. The first cell skips recreation when `run` itself just brought the stack up; subsequent cells always recreate. `--reuse-stack` opts out entirely.
+The host CLI owns the matrix loop, nested `model → scenario → channel → iteration`: each cell is one `docker compose run --rm runner --scenario … --channel … --model-id … --model-ref … --iteration-index …` invocation. Between cells the host issues `docker compose up -d --force-recreate --wait bus gateway`, recreating both containers in a single Compose call (`--wait` blocks on healthchecks). Recreation drops in-process gateway state, the bus's in-memory event log, transient container `/tmp` files, and on-process caches that survive a SIGTERM-only restart. The first cell skips recreation when `run` itself just brought the stack up; subsequent cells always recreate. `--reuse-stack` opts out entirely.
 
-The `openclaw-test-ipc` named volume survives container recreation, so `exec-watcher` sweeps stale `*.req.json` / `*.req.json.processing` / `*.res.json` on startup. The runner writes a `CellResult` JSON to `<artifacts>/<baseStamp>/cells/<scenario>-<channel>[-<iter>].json` before renaming its artifact dir; the host reads these to drive the matrix-level summary and total-cost lines. Missing/invalid file → cell counted as fail, warning logged, loop continues. Per-pair `--max-failures` bail is enforced host-side.
+Model is the **outermost** dimension: each model's whole sweep runs before the next, so the gateway loads a model's config once and boots on it for that model's entire run — minimal recreates under `--reuse-stack` (one per model boundary). `--model <id|id,id,…|all>` resolves each bare id to a full `provider/model` ref via `OPENCLAW_TEST_MODELS` (`all` alphabetical, an explicit list in CLI order, so `qwen…,claude…` runs qwen first); the CLI renders that ref into `agents.list[id=main].model` of a run-scoped config (`renderRuntimeConfig`, which also expands `${VAR}` secret refs, memoized one temp file per model) that the gateway boots on — the canonical `openclaw.json` is never mutated. At each model boundary the host repoints `OPENCLAW_CONFIG_PATH` at that model's rendered file and **forces** a `--force-recreate` (even under `--reuse-stack`/skip-first-restart) so the gateway reloads the config; shell env wins over Compose `--env-file`. The artifact dir name orders segments `scenario → model → channel` independently of this run order.
+
+The `openclaw-test-ipc` named volume survives container recreation, so `exec-watcher` sweeps stale `*.req.json` / `*.req.json.processing` / `*.res.json` on startup. The runner writes a `CellResult` JSON (`schemaVersion: 2`, carrying the selected `model`) to `<artifacts>/<baseStamp>/cells/<scenario>-<modelId>-<channel>[-#<iter>].json` before renaming its artifact dir; the host reads these to drive the matrix-level summary and total-cost lines. Missing/invalid file → cell counted as fail, warning logged, loop continues. Per-pair `--max-failures` bail is enforced host-side.
 
 ## Exec RPC
 
@@ -158,15 +160,15 @@ Plugin actions and `send` route through different handlers in `message-action-ru
 
 ## Artifacts & cost
 
-Layout: `artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`.
+Layout: `artifacts/<runStamp>/<scenario>-<modelId>-<channel>[-#<NN>][-<VERDICT>]/`.
 
-- `<NN>` — iteration index, padded to the width of `--iterations`. Omitted when `--iterations 1`.
+- `-#<NN>` — iteration index, padded to the width of `--iterations`, prefixed with `#` so it reads distinctly from the model id's trailing digits. Omitted when `--iterations 1`.
 - `<VERDICT>` — `PASS` / `FAIL`. Applied by **renaming the directory** after `report.json` lands. A directory with no verdict suffix means the run is pending or crashed before the rename.
 
 Two files per task:
 
 - `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
-- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. Long string `content` on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { gatewayUsd, judgeUsd, totalUsd, gatewayTurns }`.
+- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. Long string `content` on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
 
 Scenario verdict is reported as `result: ScenarioResult` (a discriminated union):
 
@@ -188,9 +190,11 @@ Without `attachTo`, judges and other attachments fall back to the **current entr
 
 Authoritative types: `packages/openclaw-test/src/report.ts`.
 
-Cost: the runner sums the gateway's `stage:"usage"` entries from `anthropic-payload.jsonl` for any entry with `ts >= runStart`, plus the judge's inline `usage` priced via an in-runner table. A 5s grace wait after the last task lets OpenClaw flush its usage record (it lands ~2s after the outbound hits the bus). Failing runs that time out before the agent completes report `$0.0000` — the gateway never wrote a usage record for the unfinished turn.
+Cost: the runner takes the **last** `model.completed` event for the conversation (matched by `sessionKey`, `ts >= runStart`) in the provider-neutral trajectory log and sums `usage.cost.total` over the assistant messages in its cumulative `data.messagesSnapshot` (event-level `data.usage` is token counts only — no cost), plus the judge's inline `usage` priced via an in-runner table. The trajectory log is written for every provider (OpenClaw computes the cost from the configured per-million-token pricing), so cost and tool-call parsing work under Anthropic, DashScope/Qwen, or any other provider. A grace wait after the last task lets OpenClaw flush its `model.completed` event (it lands ~2s after the outbound hits the bus). Failing runs that time out before the agent completes report `$0.0000` — no `model.completed` event for the unfinished turn.
 
-`OPENCLAW_ANTHROPIC_PAYLOAD_LOG=1` is forced on by the Compose stack — tests need the file. `OPENCLAW_RAW_STREAM=1` is opt-in for `raw-stream.jsonl`. Both land under `.gateway-logs/` (bind-mounted from `~/.openclaw/logs/`).
+Tool calls are read from the same source: the runner takes the **last** `model.completed` event for the conversation and walks `data.messagesSnapshot` (OpenClaw's neutral message shape — assistant `toolCall` blocks, `toolResult` messages). Trajectory events are byte-capped (~256 KB/event); a large snapshot can be truncated, so tool-call parsing falls back to `[]` when the snapshot is unusable, but `data.usage` is tiny and unaffected, so cost survives.
+
+`OPENCLAW_TRAJECTORY_DIR=/home/claw/.openclaw/logs/trajectory` is set by the Compose stack — the trajectory log is default-on (disable with `OPENCLAW_TRAJECTORY=0`), one `<sessionId>.jsonl` per session. `OPENCLAW_RAW_STREAM=1` is opt-in for `raw-stream.jsonl`. Both land under `.gateway-logs/` (bind-mounted from `~/.openclaw/logs/`).
 
 ## Judge
 

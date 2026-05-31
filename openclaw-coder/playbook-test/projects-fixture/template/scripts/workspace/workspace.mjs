@@ -1,6 +1,8 @@
 // Workspace lifecycle wrapper. Stripped fixture mirror of a real product
-// script: same shape, no docker, no migrations, no config patching.
+// script: same shape, runs `pnpm install` like the real one; no docker, no
+// migrations, no builds, no config patching.
 
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runWorkspace } from "@paleo/workspace";
 
@@ -17,7 +19,12 @@ await runWorkspace({
 
   configFiles: [],
 
-  finalizeWorktree: async () => {},
+  finalizeWorktree: async ({ currentWorktree }) => {
+    execSync("pnpm install --frozen-lockfile --prod=false", {
+      stdio: "inherit",
+      cwd: currentWorktree,
+    });
+  },
 
   printSummary: ({ slot, branch, owner, currentWorktree, isMainWorktree, status }) => `
 Workspace setup complete!

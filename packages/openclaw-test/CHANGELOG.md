@@ -1,5 +1,17 @@
 # @paleo/openclaw-test
 
+## 0.8.0
+
+### Minor Changes
+
+- 7d1b19f: Cell dir names now order segments `scenario → model → channel` with a `#`-prefixed iteration (`…-<model>-<channel>-#<NN>`); `--model`/`--channel` `all` sort alphabetically, explicit lists dedupe in CLI order (model still runs outermost).
+
+## 0.7.0
+
+### Minor Changes
+
+- 635dc4a: `run --model` now accepts a comma list of bare ids (e.g. `--model claude-sonnet-4-6,qwen3.6-plus`), matching `--channel`. Both flags dedupe repeated ids.
+
 ## 0.6.1
 
 ### Patch Changes

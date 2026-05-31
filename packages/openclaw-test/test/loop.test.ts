@@ -28,8 +28,16 @@ describe("expandChannelSelection", () => {
     ]);
   });
 
-  it("expands 'all' to the configured channels", () => {
-    expect(expandChannelSelection("all", cfg)).toEqual(["discord-mock", "slack-mock"]);
+  it("expands 'all' to the configured channels, alphabetically", () => {
+    const reversed = makeConfig(["slack-mock", "discord-mock"]);
+    expect(expandChannelSelection("all", reversed)).toEqual(["discord-mock", "slack-mock"]);
+  });
+
+  it("dedupes repeated ids, order preserved", () => {
+    expect(expandChannelSelection("slack-mock,discord-mock,slack-mock", cfg)).toEqual([
+      "slack-mock",
+      "discord-mock",
+    ]);
   });
 
   it("throws on unknown id", () => {
@@ -73,16 +81,17 @@ function setupFake(outcomes: Record<string, "pass" | "fail">): FakeSetup {
     const { scenario, channel, iter } = pendingCell;
     const verdict = cellOutcomes.get(`${scenario}|${channel}|${iter}`) ?? "pass";
     return {
-      schemaVersion: 1,
+      schemaVersion: 3,
       scenarioId: scenario,
       channel,
+      model: "m",
       iterationIndex: iter,
       verdict,
       durationMs: 1,
       conversationId: "x",
       artifactDirName: "x",
-      gatewayCostUsd: 0,
-      gatewayTurns: 0,
+      agentCostUsd: 0,
+      agentTurns: 0,
       judgeUsd: 0,
       judgeUsages: [],
     };
@@ -99,7 +108,9 @@ describe("runMatrix", () => {
       iterations: 2,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -115,19 +126,57 @@ describe("runMatrix", () => {
     const order = runners.map((c) => {
       const s = c.argv[c.argv.indexOf("--scenario") + 1];
       const ch = c.argv[c.argv.indexOf("--channel") + 1];
+      const m = c.argv[c.argv.indexOf("--model-id") + 1];
       const it = c.argv[c.argv.indexOf("--iteration-index") + 1];
-      return `${s}|${ch}|${it}`;
+      return `${s}|${ch}|${m}|${it}`;
     });
     expect(order).toEqual([
-      "S1|C1|1",
-      "S1|C1|2",
-      "S1|C2|1",
-      "S1|C2|2",
-      "S2|C1|1",
-      "S2|C1|2",
-      "S2|C2|1",
-      "S2|C2|2",
+      "S1|C1|m|1",
+      "S1|C1|m|2",
+      "S1|C2|m|1",
+      "S1|C2|m|2",
+      "S2|C1|m|1",
+      "S2|C1|m|2",
+      "S2|C2|m|1",
+      "S2|C2|m|2",
     ]);
+  });
+
+  it("iterates models as the outermost dimension and forces a recreate per model boundary", async () => {
+    const fake = setupFake({});
+    await runMatrix({
+      scenarios: ["S1", "S2"],
+      channels: ["C"],
+      models: [
+        { id: "m1", ref: "p/m1" },
+        { id: "m2", ref: "p/m2" },
+      ],
+      renderConfigPath: () => "/tmp/openclaw.json",
+      iterations: 1,
+      maxFailures: 1,
+      reuseStack: true,
+      gatewayFreshOnFirstModel: true,
+      composeArgs: ["compose"],
+      artifactsDir: "/tmp",
+      resultsDir: "/tmp",
+      runnerResultsDir: "/tmp",
+      gatewayLogsDir: "/tmp",
+      stopOnFail: false,
+      baseStamp: "stamp",
+      spawnRunner: fake.spawnRunner,
+      spawnRecreate: fake.spawnRecreate,
+      readResult: fake.readResult,
+    });
+    const runners = fake.calls.filter((c) => c.kind === "runner");
+    const order = runners.map((c) => {
+      const s = c.argv[c.argv.indexOf("--scenario") + 1];
+      const m = c.argv[c.argv.indexOf("--model-id") + 1];
+      return `${m}|${s}`;
+    });
+    // model → scenario → channel: each model's whole sweep runs before the next.
+    expect(order).toEqual(["m1|S1", "m1|S2", "m2|S1", "m2|S2"]);
+    // reuseStack skips per-cell recreates; only the second model boundary forces one.
+    expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(1);
   });
 
   it("bails the pair when failures exceed maxFailures, continues others", async () => {
@@ -145,7 +194,9 @@ describe("runMatrix", () => {
       iterations: 3,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -175,7 +226,9 @@ describe("runMatrix", () => {
       iterations: 2,
       maxFailures: 1,
       reuseStack: true,
-      skipFirstRestart: false,
+      gatewayFreshOnFirstModel: true,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -190,7 +243,7 @@ describe("runMatrix", () => {
     expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(0);
   });
 
-  it("skips first recreate when skipFirstRestart is set, recreates subsequent cells", async () => {
+  it("skips the first recreate when the gateway is fresh on the first model, recreates subsequent cells", async () => {
     const fake = setupFake({});
     await runMatrix({
       scenarios: ["S"],
@@ -198,7 +251,9 @@ describe("runMatrix", () => {
       iterations: 3,
       maxFailures: 1,
       reuseStack: false,
-      skipFirstRestart: true,
+      gatewayFreshOnFirstModel: true,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
       composeArgs: ["compose"],
       artifactsDir: "/tmp",
       resultsDir: "/tmp",
@@ -211,5 +266,31 @@ describe("runMatrix", () => {
       readResult: fake.readResult,
     });
     expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(2);
+  });
+
+  it("recreates for the first model when reusing a stack not on its config", async () => {
+    const fake = setupFake({});
+    await runMatrix({
+      scenarios: ["S"],
+      channels: ["C"],
+      iterations: 2,
+      maxFailures: 1,
+      reuseStack: true,
+      gatewayFreshOnFirstModel: false,
+      models: [{ id: "m", ref: "p/m" }],
+      renderConfigPath: () => "/tmp/openclaw.json",
+      composeArgs: ["compose"],
+      artifactsDir: "/tmp",
+      resultsDir: "/tmp",
+      runnerResultsDir: "/tmp",
+      gatewayLogsDir: "/tmp",
+      stopOnFail: false,
+      baseStamp: "stamp",
+      spawnRunner: fake.spawnRunner,
+      spawnRecreate: fake.spawnRecreate,
+      readResult: fake.readResult,
+    });
+    // The first cell must recreate to load the model; reuseStack skips the rest.
+    expect(fake.calls.filter((c) => c.kind === "recreate")).toHaveLength(1);
   });
 });

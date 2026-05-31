@@ -23,8 +23,8 @@ Before any other tool call or reply, call `message` `action: "read"` with `chann
 By the time you reach Step 3 in WORK mode, Step 2 has either produced a ready worktree or ended the turn (status-update with no branch). Branch on the request shape:
 
 - **Code change** (WORK). Continue inside the worktree — delegate to the coding agent for the actual edits (see "What you delegate vs do" below).
-- **Status update** (WORK). Inspect the worktree Step 2 produced (branch state, dev-server, recent commits) and report. Delegate the inspection to the coding agent when it's faster than doing it yourself.
-- **Investigation / question** (TALK). Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol. Then summarize the agent's reply back to the user in the thread.
+- **Status update** (WORK). Step 2's workspace status template (worktree, branch, bootstrap) is the report. Add branch state on top — recent commits, dev-server. Delegate the inspection when it's faster than doing it yourself.
+- **Investigation / question** (TALK). Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol, **run from the project's directory** (`~/projects/<project>`) so it investigates the right repo. Then summarize the agent's reply back to the user in the thread.
 
 ## General rules
 

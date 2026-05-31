@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { discoverScenarios, expandChannelSelection, runMatrix } from "./loop.js";
+import { resolveSelectedModels, type SelectedModel } from "./models.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's project dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
@@ -17,9 +19,16 @@ const PATH_VARS = [
 type EnvSubcommand = "build" | "up" | "down";
 
 const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scenario> ...] [--all]
-                                   [--iterations N] [--max-failures N] [--stop-on-fail] [--reuse-stack]
+                                   [--model <id|id,id,…|all>] [--iterations N] [--max-failures N]
+                                   [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
+  --model <id|id,id,…|all>
+                      select the agent model(s): a bare id (e.g. claude-sonnet-4-6), a
+                      comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
+                      The catalog is OPENCLAW_TEST_MODELS (.env.local), a comma list of full
+                      provider/model refs; the bare id is the suffix after the last "/".
+                      "all" (or any selected provider) needs that provider's API key.
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1).
   --stop-on-fail      stop the whole matrix at the first failing cell — pairs with
@@ -47,6 +56,7 @@ export function envCommand(packageDir: string, argv: string[]): never {
     process.exit(1);
   }
   setupHostEnv(packageDir);
+  if (sub === "up") renderRuntimeConfig();
   setBaseTag(packageDir);
   if (sub !== "down") {
     ensureHostOutputDirs();
@@ -63,9 +73,28 @@ export function envCommand(packageDir: string, argv: string[]): never {
 }
 
 export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
-  const { channel, iterations, maxFailures, stopOnFail, reuseStack, all, positionals } =
+  const { channel, model, iterations, maxFailures, stopOnFail, reuseStack, all, positionals } =
     parseRunArgs(argv);
   setupHostEnv(packageDir);
+  const models = resolveSelectedModels({
+    selection: model,
+    modelsEnv: readEnvVar("OPENCLAW_TEST_MODELS"),
+    defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
+  });
+  // Render each model's config once (its own temp file holding the expanded
+  // secret); the matrix re-points OPENCLAW_CONFIG_PATH and recreates the gateway
+  // on every model change.
+  const renderedConfigs = new Map<string, string>();
+  const renderConfigPath = (m: SelectedModel): string => {
+    const cached = renderedConfigs.get(m.id);
+    if (cached) return cached;
+    const path = renderRuntimeConfig(m);
+    if (!path) throw new Error("openclaw-test: OPENCLAW_CONFIG_PATH is unset");
+    renderedConfigs.set(m.id, path);
+    return path;
+  };
+  // Render the first model before the initial `up` so the gateway boots on it.
+  process.env.OPENCLAW_CONFIG_PATH = renderConfigPath(models[0]);
   setBaseTag(packageDir);
   ensureHostOutputDirs();
   const didBuild = ensureBaseImage(packageDir, { force: false });
@@ -96,7 +125,9 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH as string;
   const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
 
-  const scenarios = all ? discoverScenarios(scenariosDir) : positionals;
+  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
+  // order, deduped.
+  const scenarios = all ? discoverScenarios(scenariosDir) : [...new Set(positionals)];
   const channels = expandChannelSelection(channel, openclawConfigPath);
 
   const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -108,11 +139,13 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const matrixExit = await runMatrix({
     scenarios,
     channels,
+    models,
+    renderConfigPath,
     iterations,
     maxFailures,
     stopOnFail,
     reuseStack,
-    skipFirstRestart: !wereUpBefore && !reuseStack,
+    gatewayFreshOnFirstModel: !wereUpBefore,
     composeArgs: compose,
     artifactsDir: resolve(artifactsDir, baseStamp),
     gatewayLogsDir: process.env.OPENCLAW_TEST_GATEWAY_LOGS_DIR as string,
@@ -125,6 +158,117 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     execComposeSync([...compose, "down"]);
   }
   process.exit(matrixExit);
+}
+
+/**
+ * OpenClaw has no native env interpolation in its config, so the harness expands
+ * `${VAR}` itself. Walk the canonical config, replace any string value of the
+ * exact form `${VAR}` with the value of `VAR` (process.env wins over `.env.local`),
+ * and write the rendered JSON to a run-scoped temp dir so the expanded secret is
+ * never persisted to a committed or artifact path. Returns the rendered path and
+ * repoints `OPENCLAW_CONFIG_PATH` at it; the canonical file is never mutated.
+ *
+ * When a `model` is given, `agents.list[id=main].model` is set to its full ref so
+ * the gateway boots on the selected model. Rendered per model (own temp file).
+ *
+ * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
+ * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
+ */
+// Captured on the first render so every later render reads the real canonical
+// config, not a previously-rendered temp (renderRuntimeConfig repoints
+// OPENCLAW_CONFIG_PATH at its output).
+let canonicalConfigPath: string | undefined;
+
+function renderRuntimeConfig(model?: SelectedModel): string | undefined {
+  canonicalConfigPath ??= process.env.OPENCLAW_CONFIG_PATH;
+  const canonicalPath = canonicalConfigPath;
+  if (!canonicalPath) return;
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  const dotenv = readDotenvFile(projectDir);
+  const config = JSON.parse(readFileSync(canonicalPath, "utf8")) as Record<string, unknown>;
+  const rendered = expandEnvRefs(config, dotenv) as Record<string, unknown>;
+  const droppedProviders = dropProvidersMissingKey(rendered);
+  if (model) {
+    assertModelProviderPresent(model, droppedProviders);
+    setMainAgentModel(rendered, model.ref);
+  }
+  const dir = mkdtempSync(join(tmpdir(), "openclaw-test-config-"));
+  const renderedPath = join(dir, "openclaw.json");
+  writeFileSync(renderedPath, JSON.stringify(rendered, null, 2));
+  process.env.OPENCLAW_CONFIG_PATH = renderedPath;
+  return renderedPath;
+}
+
+// A model's provider is the ref's first segment (`provider/model`); built-in
+// providers (e.g. `anthropic`) aren't declared in config and never get dropped.
+// Fail fast only when the selected model's provider was declared but dropped for
+// an empty key — otherwise `setMainAgentModel` would point `main` at a missing
+// provider and the gateway would boot-fail with an opaque error.
+function assertModelProviderPresent(model: SelectedModel, droppedProviders: Set<string>): void {
+  const provider = model.ref.split("/")[0];
+  if (droppedProviders.has(provider)) {
+    throw new Error(
+      `openclaw-test: selected model "${model.ref}" needs provider "${provider}", but its API key expanded empty. Set the provider's API key in .env.local.`,
+    );
+  }
+}
+
+function setMainAgentModel(config: Record<string, unknown>, ref: string): void {
+  const agents = config.agents;
+  const list =
+    agents && typeof agents === "object" ? (agents as { list?: unknown }).list : undefined;
+  if (!Array.isArray(list)) throw new Error("openclaw-test: config has no agents.list array");
+  const main = list.find(
+    (a): a is Record<string, unknown> =>
+      !!a && typeof a === "object" && (a as { id?: unknown }).id === "main",
+  );
+  if (!main) throw new Error("openclaw-test: config has no agents.list entry with id 'main'");
+  main.model = ref;
+}
+
+const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
+
+function expandEnvRefs(value: unknown, dotenv: Record<string, string>): unknown {
+  if (typeof value === "string") {
+    const m = value.match(ENV_REF);
+    if (!m) return value;
+    const name = m[1];
+    const resolved = process.env[name] ?? dotenv[name];
+    if (resolved === undefined) {
+      console.warn(`openclaw-test: config references unset env var ${name}; expanding to ""`);
+      return "";
+    }
+    return resolved;
+  }
+  if (Array.isArray(value)) return value.map((v) => expandEnvRefs(v, dotenv));
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = expandEnvRefs(v, dotenv);
+    return out;
+  }
+  return value;
+}
+
+// On the rendered config, an empty `apiKey` means its `${VAR}` reference expanded
+// to an unset value. Drop the whole provider so boot validation for a
+// defined-but-unused provider can't fail on the empty key.
+function dropProvidersMissingKey(config: Record<string, unknown>): Set<string> {
+  const dropped = new Set<string>();
+  const models = config.models;
+  if (!models || typeof models !== "object") return dropped;
+  const providers = (models as Record<string, unknown>).providers;
+  if (!providers || typeof providers !== "object") return dropped;
+  for (const [id, provider] of Object.entries(providers)) {
+    if (
+      provider &&
+      typeof provider === "object" &&
+      (provider as { apiKey?: unknown }).apiKey === ""
+    ) {
+      delete (providers as Record<string, unknown>)[id];
+      dropped.add(id);
+    }
+  }
+  return dropped;
 }
 
 const BASE_IMAGE_NAME = "paleo/openclaw-test-base";
@@ -222,9 +366,7 @@ function ensureHostOutputDirs(): void {
  * project dir. Exporting absolute paths via `process.env` sidesteps that.
  */
 function absolutizePathVarsFromEnvFile(projectDir: string): void {
-  const envFile = resolve(projectDir, ".env.local");
-  if (!existsSync(envFile)) return;
-  const parsed = parseDotenv(readFileSync(envFile, "utf8"));
+  const parsed = readDotenvFile(projectDir);
   for (const key of PATH_VARS) {
     // Shell env already wins over --env-file; only act when .env.local supplies a relative path.
     if (process.env[key]) continue;
@@ -232,6 +374,22 @@ function absolutizePathVarsFromEnvFile(projectDir: string): void {
     if (!raw) continue;
     process.env[key] = isAbsolute(raw) ? raw : resolve(projectDir, raw);
   }
+}
+
+// The two model vars are not path-shaped, so setupHostEnv never exports them.
+// Read the shell env first (wins over --env-file), then fall back to .env.local.
+function readEnvVar(key: string): string | undefined {
+  const fromShell = process.env[key];
+  if (fromShell !== undefined && fromShell !== "") return fromShell;
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  const fromFile = readDotenvFile(projectDir)[key];
+  return fromFile !== undefined && fromFile !== "" ? fromFile : undefined;
+}
+
+function readDotenvFile(projectDir: string): Record<string, string> {
+  const envFile = resolve(projectDir, ".env.local");
+  if (!existsSync(envFile)) return {};
+  return parseDotenv(readFileSync(envFile, "utf8"));
 }
 
 function parseDotenv(text: string): Record<string, string> {
@@ -290,12 +448,20 @@ function execComposeSync(args: string[]): number {
 
 interface RunArgs {
   channel: string;
+  model: string | undefined;
   iterations: number;
   maxFailures: number;
   stopOnFail: boolean;
   reuseStack: boolean;
   all: boolean;
   positionals: string[];
+}
+
+function requireFlagValue(flag: string, raw: string | undefined): string {
+  if (raw === undefined || raw.startsWith("--")) {
+    failRun(`error: ${flag} expects a value`);
+  }
+  return raw;
 }
 
 function parseIntFlag(flag: string, raw: string, min: number): number {
@@ -308,6 +474,7 @@ function parseIntFlag(flag: string, raw: string, min: number): number {
 
 function parseRunArgs(argv: string[]): RunArgs {
   let channel: string | undefined;
+  let model: string | undefined;
   let iterations = 1;
   let maxFailures = 1;
   let stopOnFail = false;
@@ -321,8 +488,10 @@ function parseRunArgs(argv: string[]): RunArgs {
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--stop-on-fail") stopOnFail = true;
-    else if (a === "--channel") channel = argv[++i];
+    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i]);
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
+    else if (a === "--model") model = requireFlagValue("--model", argv[++i]);
+    else if (a?.startsWith("--model=")) model = a.slice("--model=".length);
     else if (a === "--iterations") iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1);
     else if (a?.startsWith("--iterations="))
       iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1);
@@ -342,6 +511,7 @@ function parseRunArgs(argv: string[]): RunArgs {
 
   return {
     channel: channel as string,
+    model,
     iterations,
     maxFailures,
     stopOnFail,

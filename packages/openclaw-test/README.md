@@ -42,7 +42,7 @@ Drops four files:
 
 Edit `openclaw.json`:
 
-- `agents.list[id=main].model` — LiteLLM-style `provider/model` ref. The template ships a placeholder; OpenClaw fails loudly until you pick one.
+- `agents.list[id=main].model` — LiteLLM-style `provider/model` ref. The default boot model; `run --model` overrides it per run by rendering the chosen ref here before the gateway boots (see [Run](#run)).
 - `agents.list[id=main].workspace` — host path to your OpenClaw workspace, bind-mounted into the gateway. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.*` — both `discord-mock` and `slack-mock` blocks point at the same bus.
 - `channels.slack-mock.blockStreaming: true` — set this when running Slack scenarios under auto-thread (`replyToMode: "all"`), otherwise the agent's reply dribbles into the thread token-by-token. Discord-mock works fine without it.
@@ -58,13 +58,22 @@ Required:
 - `ANTHROPIC_API_KEY`
 - `OPENCLAW_WORKSPACE_DIR` — host path mounted at `/home/claw/.openclaw/workspace`.
 
+Model selection:
+
+- `OPENCLAW_TEST_MODELS` — comma list of full LiteLLM `provider/model` refs (the only place the `provider/` prefix appears). The catalog `run --model` resolves against.
+- `OPENCLAW_DEFAULT_TEST_MODEL` — default model as a **bare id** (the suffix after the last `/`, e.g. `claude-sonnet-4-6`), used when `--model` is omitted.
+
+Provider keys (required only when running that provider's model; harmlessly empty otherwise):
+
+- `DASHSCOPE_API_KEY` — Alibaba Model Studio (DashScope/Qwen). Custom providers have no env-var convention in OpenClaw, so the key is referenced from `openclaw.json` as `${DASHSCOPE_API_KEY}` and expanded by the CLI at render time.
+
 Optional (defaults relative to the consumer's project dir):
 
 - `OPENCLAW_CONFIG_PATH` → `./openclaw.json`
 - `OPENCLAW_TEST_SCENARIOS_DIR` → `./scenarios`
 - `OPENCLAW_TEST_ARTIFACTS_DIR` → `./artifacts`
 - `OPENCLAW_TEST_GATEWAY_LOGS_DIR` → `./.gateway-logs`
-- `OPENCLAW_RAW_STREAM=1` — also write `raw-stream.jsonl` alongside the always-on `anthropic-payload.jsonl`.
+- `OPENCLAW_RAW_STREAM=1` — also write `raw-stream.jsonl` alongside the always-on provider-neutral trajectory log (`trajectory/<sessionId>.jsonl`).
 
 `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` are injected by the CLI.
 
@@ -84,6 +93,9 @@ npm run env:build                                                  # build base 
 npm run e2e -- --channel all <scenario>                             # one scenario, both channels
 npm run e2e -- --channel all --all                                  # every scenario, both channels
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
+npm run e2e -- --channel all --model qwen3.6-plus <scenario>        # pick a model by bare id
+npm run e2e -- --channel all --model claude-sonnet-4-6,qwen3.6-plus <s>  # a comma list of bare ids
+npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
 npm run e2e -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
@@ -93,7 +105,9 @@ npm run env:down                                                   # tear down a
 
 `run` auto-starts `bus` + `gateway` via Docker Compose if they aren't running, and auto-`down`s them after the run completes. If you've explicitly run `env:up` beforehand, `run` leaves the stack up so subsequent runs are fast. Ctrl-C is forwarded to the running container; auto-`down` still runs. If the base image needs (re)building, any already-running bus+gateway are torn down first so the new image is picked up.
 
-**Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `run` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
+**Model selection.** `--model <id|id,id,…|all>` picks the agent model(s): a **bare id** (the suffix after the last `/`), a comma list of bare ids (deduped, CLI order preserved), or `all` (alphabetical). Each id resolves to a full ref by suffix-matching `OPENCLAW_TEST_MODELS`, then the CLI renders that ref into `agents.list[id=main].model` of a run-scoped config the gateway boots on (the canonical `openclaw.json` is never mutated). Omitting `--model` uses `OPENCLAW_DEFAULT_TEST_MODEL`. Model is the **outermost** matrix dimension — each model's whole sweep runs before the next, so the gateway reboots only once per model (cheap under `--reuse-stack`), and an explicit `--model` list runs in CLI order (e.g. `qwen3.6-plus,claude-sonnet-4-6` runs qwen first). The model is stamped into the artifact dir name, `report.json`, the cell record, and the summary; the total-cost line breaks down per model. The artifact dir name orders segments `scenario → model → channel`, so listings group a scenario's models side-by-side regardless of run order. Every selected provider needs its API key present.
+
+**Per-cell hygiene.** The host owns the matrix loop. Between cells (`scenario × channel × model × iteration`) it issues `docker compose up -d --force-recreate --wait bus gateway`, replacing both containers — the gateway for fresh in-process state, the bus to drop any cross-cell event history. The first cell skips recreation only when `run` itself just brought the stack up (`wereUpBefore === false`). Realistic per-cell recreation overhead: 10–25 s on a healthy box; up to ~40 s under load. `--reuse-stack` opts out entirely (fast, but only safe when you vouch for no cross-cell state leak).
 
 `env:build` first builds the base image (`paleo/openclaw-test-base:<pkg-version>`) from this package's `Dockerfile.base`, then builds the consumer image. Layer cache makes repeat base builds near-free; `env:up` / `run` skip the base build when the tag already exists.
 
@@ -128,14 +142,14 @@ Defaults to `anthropic/claude-haiku-4-5`. Override via `OPENCLAW_TEST_JUDGE_MODE
 
 ## Artifacts
 
-`artifacts/<runStamp>/<scenario>-<channel>[-<NN>][-<VERDICT>]/`:
+`artifacts/<runStamp>/<scenario>-<modelId>-<channel>[-#<NN>][-<VERDICT>]/`:
 
 - `scenario-log.jsonl` — appended live (one `ReportEntry` per line), survives a runner crash. Re-emits an entry every time a nested field is added; last write wins per `seq`.
-- `report.json` — final `ScenarioReport`. Merges `scenario-log.jsonl` with `agentToolCall` entries from the gateway payload log; adds per-scenario `cost`.
+- `report.json` — final `ScenarioReport`. Merges `scenario-log.jsonl` with `agentToolCall` entries parsed from the provider-neutral trajectory log; adds per-scenario `cost` (also sourced from the trajectory log).
 
-`<NN>` is the iteration index (omitted when `--iterations 1`). `<VERDICT>` is `PASS` / `FAIL`, applied by **renaming the directory** after `report.json` is written. A directory with no verdict suffix means the run is pending or crashed before rename.
+`<modelId>` is the selected model's bare id. `-#<NN>` is the iteration index, prefixed with `#` so it can't be mistaken for a trailing digit of the model id (omitted when `--iterations 1`). `<VERDICT>` is `PASS` / `FAIL`, applied by **renaming the directory** after `report.json` is written. A directory with no verdict suffix means the run is pending or crashed before rename.
 
-Each cell also writes `artifacts/<runStamp>/cells/<scenario>-<channel>[-<NN>].json` (the `CellResult` host-aggregation contract — `schemaVersion: 1`, verdict, cost, durations, judge usages). The host loop reads these to produce the summary and total-cost lines independently of the artifact-dir rename. A missing or invalid file counts the cell as a failure with a logged warning.
+Each cell also writes `artifacts/<runStamp>/cells/<scenario>-<modelId>-<channel>[-#<NN>].json` (the `CellResult` host-aggregation contract — `schemaVersion: 2`, verdict, model, cost, durations, judge usages). The host loop reads these to produce the summary and total-cost lines independently of the artifact-dir rename. A missing or invalid file counts the cell as a failure with a logged warning.
 
 Authoritative types: `src/report.ts`.
 
