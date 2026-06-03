@@ -167,5 +167,6 @@ async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise
     ticketId: TICKET_ID,
     project: PROJECT,
     audience: "tech",
+    timeoutMs: 120_000,
   });
 }
