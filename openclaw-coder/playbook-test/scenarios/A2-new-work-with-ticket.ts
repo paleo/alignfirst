@@ -1,8 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import {
-  STARTER_ANNOUNCEMENT_RUBRIC,
-  starterLineRegexWithTicket,
-} from "./_lib/common-constants.ts";
+import { STARTER_ANNOUNCEMENT_RUBRIC } from "./_lib/common-constants.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { requireThreadId } from "./_lib/outbound.ts";
@@ -59,26 +56,17 @@ async function sendRequestWithTicketAndExpectStarter(ctx: ScenarioContext): Prom
     message: starter.text,
   });
 
-  const lines = starter.text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const templateRe = starterLineRegexWithTicket(PROJECT, TICKET_ID);
-  const templateIdx = lines.findIndex((l) => templateRe.test(l));
-  if (templateIdx === -1) {
-    throw new Error(
-      `starter does not contain template line matching ${templateRe}; got: ${JSON.stringify(lines)}`,
-    );
-  }
-  const announcement = lines
-    .filter((_, i) => i !== templateIdx)
-    .join("\n")
-    .trim();
-  ctx.assertRegex(announcement, /\S/, "starter has content beyond the template line");
-
+  // The starter is announcement-only (no ticket/role header — that's the
+  // `[WORK]` header, posted later). It must still NAME the project: a fresh
+  // Discord thread session has no other record of it until the `[WORK]` header.
+  ctx.assertRegex(
+    starter.text,
+    new RegExp(PROJECT, "i"),
+    "starter names the project (recovery carrier)",
+  );
   await ctx.judgeLLM({
     attachTo: wait.entry,
-    message: announcement,
+    message: starter.text,
     rubric: STARTER_ANNOUNCEMENT_RUBRIC,
     label: "starter-announcement",
   });
@@ -93,5 +81,6 @@ async function expectAck(ctx: ScenarioContext, prev: Step): Promise<Step> {
     sinceCursor: prev.nextCursor,
     ticketId: TICKET_ID,
     project: PROJECT,
+    audience: "tech",
   });
 }

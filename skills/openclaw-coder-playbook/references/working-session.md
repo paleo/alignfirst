@@ -11,12 +11,12 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. The starter line carries PROJECT and TICKET_ID — read them from there. Never derive them from a ticket prefix or `ls ~/projects/`. Branch, worktree path, and dev-server URL also live in the history.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT and TICKET_ID from the thread: the `[WORK]` header carries both; before it's posted, the starter names the project and the ticket comes from the user's messages. Never derive them from a ticket prefix or `ls ~/projects/`. Branch, worktree path, and dev-server URL also live in the history.
 
 ### Step 2 — Determine the mode: WORK or TALK?
 
-- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK.
+- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its `[WORK]` header (Step 2), before any other ack or prose — this holds on a fresh WORK thread **and** when promoting a TALK thread the moment a ticket arrives. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK (post the `[WORK]` header then).
 
 ### Step 3 — Handle the actual request
 

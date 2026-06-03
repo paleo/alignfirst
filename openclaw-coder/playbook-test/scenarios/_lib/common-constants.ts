@@ -29,21 +29,19 @@ export const statusBranchOnlyRubric = (ticketId: string, branch: string): string
 export const statusNoBranchRubric = (ticketId: string): string =>
   `A short report that no workspace exists for ticket ${ticketId} — no branch, no worktree, "rien encore", "no branch yet", "pas de branche", "nothing started". Does NOT announce that a worktree was created. May offer to start a new workspace for the user.`;
 
-// Tolerant: agent occasionally drops the `:` after Project/Ticket/Requester
-// role, or prefixes the template with leading text on the same line. Per the
-// playbook-test README.md tolerance, those variances don't harm the outcome — the labelled variables
-// still parse. Substring-match (no ^/$ anchors).
-export const starterLineRegexNoTicket = (project: string): RegExp =>
+// The `[WORK]` header, posted on entering WORK mode, restates the project and
+// ticket. The values may be bolded (`**v**` on Discord, `*v*` on Slack) or
+// not, so bold markers are optional; `[WORK]` is kept literal. Tolerant
+// substring match (no ^/$ anchors), case-insensitive.
+const boldOpt = "\\*{0,2}";
+export const workHeaderRegex = (project: string, ticketId: string): RegExp =>
   new RegExp(
-    `Project:? \\*\\*${escapeRe(project)}\\*\\* — Ticket:? \\*\\*\\?\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
+    `\\[WORK\\][\\s\\S]*${boldOpt}${escapeRe(project)}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
+    "i",
   );
 
-export const starterLineRegexWithTicket = (project: string, ticketId: string): RegExp =>
+export const workHeaderMultiProjectRegex = (projects: string[], ticketId: string): RegExp =>
   new RegExp(
-    `Project:? \\*\\*${escapeRe(project)}\\*\\* — Ticket:? \\*\\*${escapeRe(ticketId)}\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
-  );
-
-export const starterLineRegexMultiProject = (projects: string[], ticketId: string): RegExp =>
-  new RegExp(
-    `Project:? \\*\\*${projects.map(escapeRe).join("\\+")}\\*\\* — Ticket:? \\*\\*${escapeRe(ticketId)}\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
+    `\\[WORK\\][\\s\\S]*${boldOpt}${projects.map(escapeRe).join("\\+")}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
+    "i",
   );

@@ -1,9 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import {
-  NEW_WORK_QUESTION_RUBRIC,
-  STARTER_ANNOUNCEMENT_RUBRIC,
-  starterLineRegexNoTicket,
-} from "./_lib/common-constants.ts";
+import { NEW_WORK_QUESTION_RUBRIC, STARTER_ANNOUNCEMENT_RUBRIC } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -51,7 +47,7 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
     text: "Nous avons un travail à faire sur nimbus.",
   });
 
-  // Starter wait is strict: the first thread message must be the templated
+  // Starter wait is strict: the first thread message must be the announcement
   // starter — no meta-narration tolerated here.
   const wait = await ctx.waitForOutbound(
     (m) =>
@@ -68,24 +64,16 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
     message: starter.text,
   });
 
-  const lines = starter.text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const templateRe = starterLineRegexNoTicket(PROJECT);
-  const templateIdx = lines.findIndex((l) => templateRe.test(l));
-  if (templateIdx === -1) {
-    throw new Error(
-      `starter does not contain template line matching ${templateRe}; got: ${JSON.stringify(lines)}`,
-    );
-  }
-  const rest = lines
-    .filter((_, i) => i !== templateIdx)
-    .join("\n")
-    .trim();
-  ctx.assertRegex(rest, /\S/, "starter has content beyond the template line");
-
-  const questionAlreadyAsked = await classifyStarterRest(ctx, wait.entry, rest);
+  // The starter has no ticket/role header (TICKET_ID is still unknown; the
+  // `[WORK]` header appears only once it's supplied), but it must NAME the
+  // project — a fresh Discord thread session has no other record of it.
+  ctx.assertRegex(
+    starter.text,
+    new RegExp(PROJECT, "i"),
+    "starter names the project (recovery carrier)",
+  );
+  // The agent may instead use the in-starter shortcut and ask about the work.
+  const questionAlreadyAsked = await classifyStarterRest(ctx, wait.entry, starter.text.trim());
 
   return {
     match: starter,
@@ -177,5 +165,6 @@ async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise
     sinceCursor: prev.nextCursor,
     ticketId: TICKET_ID,
     project: PROJECT,
+    audience: "tech",
   });
 }

@@ -17,26 +17,17 @@ The moment you detect an actionable mention, prepare a thread for a fresh sessio
 
 ### Starter message (`STARTER_MESSAGE`)
 
-The fresh session won't have access to the channel's transcript — only to the user's last message. If there is *additional* context from earlier in the channel that helps interpret it (constraints, leads, files to touch, decisions already made), include it explicitly — sharp and concise — in `{ANNOUNCEMENT}`.
+The fresh thread session won't have the channel's transcript — only the thread's own messages and the user's last message. So the starter must **name the project** (and the TICKET_ID, if you already have one): it's the thread's only record until the `[WORK]` header appears (a fresh Discord thread session can't see the channel message that named the project, nor the thread name).
 
-**Don't restate the user's last message.** Don't narrate the user in third person ("the user is asking…"). When there's nothing extra to add, `{ANNOUNCEMENT}` is just the announcement — see examples below.
+**Don't echo the user's last message** — the fresh session already has it. But earlier channel context *is* lost to that session: fold the relevant bits in, condensed and rephrased — not quoted verbatim, not narrated in third person ("the user is asking…").
 
-Use this exact template so the variables stay easy to grep for:
+Beyond the project, the starter carries **no ticket/role header** — that banner is the `[WORK]` header, posted only on entering WORK mode (see [`project-workspace-setup.md`](./project-workspace-setup.md)). Emphasize the project in bold with your surface's markers (not literal `**`). Multiple projects: name them all, joined with `+`.
 
-```text
-Project: **{PROJECT}** — Ticket: **{TICKET_ID}** — Requester role: **{USER_ROLE}**
-{ANNOUNCEMENT}
-```
+Vary the wording. English examples (translate to user's language; `{PROJECT}` is the real project name):
 
-- `{USER_ROLE}` — match the inbound sender against `USER.md`. On Discord, match the `username` field; on Slack, match the `sender_id`. If no entry matches, fall back to `guest`.
-- `{PROJECT}` or `{TICKET_ID}` missing — write `?` (e.g. `Project: **?**`).
-- Multiple projects: write them joined with `+`.
-
-When you have no extra context to add, `{ANNOUNCEMENT}` is a short announcement. Vary the wording. English examples (translate to user's language):
-
-- "Opening a new thread."
-- "Starting a thread."
-- "New thread."
+- "Opening a thread for {PROJECT}."
+- "New thread — {PROJECT}."
+- "Starting a thread on {PROJECT}."
 
 **The starter is announcement only.** Zero questions — not even a vague "what's the task?", "qu'est-ce qu'on fait ?", "tell me more". Anything you need to ask goes in a **separate follow-up message** inside the thread (see below).
 
@@ -63,7 +54,7 @@ On Slack your reply auto-opens a thread (`replyToMode: "all"`). The reply itself
 
 **Do not end your turn after creating the thread.** The thread session won't activate until the next user message, so anything actionable must happen now. Branch on what's known:
 
-- **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure. It tells you how to detect an existing workspace/branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
+- **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure — your first WORK post is its `[WORK]` header, before any other ack or prose. It tells you how to detect an existing workspace/branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
 - **PROJECT known, TICKET_ID unknown** — **TALK mode**. No worktree. Branch on the request:
   - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header, **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Trust the project; do not pre-screen. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
   - User signaled work intent without enough info (`on a un truc à faire sur X`, `we need to work on X`) → ask in-thread for the ticket id and the scope/type. End turn.
