@@ -362,23 +362,50 @@ function kindOrder(k: ReportEntry["kind"]): number {
 const REPORT_CONTENT_TRUNCATE_AT = 60;
 
 /**
- * Replace long string `content` with `truncatedContent` for `report.json` only.
- * The original entry (already streamed to `scenario-log.jsonl`) keeps the full
+ * Replace bulky `content` with `truncatedContent` for `report.json` only. The
+ * original entry (already streamed to `scenario-log.jsonl`) keeps the full
  * content; this returns a shallow-cloned `agentToolCall` entry with the
  * truncated `result`.
  */
 function prepareEntryForReport(entry: ReportEntry): ReportEntry {
   if (entry.kind !== "agentToolCall" || !entry.call.result) return entry;
-  const { content } = entry.call.result;
-  if (typeof content !== "string" || content.length <= REPORT_CONTENT_TRUNCATE_AT) return entry;
-  const truncated = `${content.slice(0, REPORT_CONTENT_TRUNCATE_AT).replace(/\s+$/, "")}…`;
+  const text = truncatableResultText(entry.call.toolName, entry.call.result.content);
+  if (text === undefined || text.length <= REPORT_CONTENT_TRUNCATE_AT) return entry;
+  const truncatedContent = `${text.slice(0, REPORT_CONTENT_TRUNCATE_AT).replace(/\s+$/, "")}…`;
   return {
     ...entry,
     call: {
       ...entry.call,
-      result: { isError: entry.call.result.isError, truncatedContent: truncated },
+      result: { isError: entry.call.result.isError, truncatedContent },
     },
   };
+}
+
+/**
+ * The string to truncate for `report.json`, or `undefined` to keep `content`
+ * as-is. The `read` tool returns its file content as text blocks rather than a
+ * string, so its text is joined — the file is identified by `input`, so the
+ * report needs no more than a preview.
+ */
+function truncatableResultText(toolName: string, content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (toolName === "read") return readBlocksText(content);
+  return;
+}
+
+function readBlocksText(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return;
+  let text = "";
+  for (const block of content) {
+    if (isRecord(block) && block.type === "text" && typeof block.text === "string") {
+      text += block.text;
+    }
+  }
+  return text.length > 0 ? text : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function writeReportArtifacts(

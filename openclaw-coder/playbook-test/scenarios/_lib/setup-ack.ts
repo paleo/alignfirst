@@ -61,7 +61,7 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
   if (opts.seedCandidate) {
     const seed = opts.seedCandidate;
     window.push(seed.match.text);
-    ctx.log({ attachTo: seed.entry, prefix: "ack candidate (starter)", message: seed.match.text });
+    ctx.log({ attachTo: seed.entry, label: "ack candidate (starter)" });
     if (await matches(seed.match.text)) return finalize(seed);
   }
 
@@ -74,7 +74,7 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
     );
     cursor = wait.nextCursor;
     window.push(wait.match.text);
-    ctx.log({ attachTo: wait.entry, prefix: `ack candidate ${i + 1}`, message: wait.match.text });
+    ctx.log({ attachTo: wait.entry, label: `ack candidate ${i + 1}` });
     if (await matches(wait.match.text)) {
       return finalize({
         match: wait.match,

@@ -168,7 +168,7 @@ Layout: `artifacts/<runStamp>/<modelId>-<scenario>-<channel>[-#<NN>][-<VERDICT>]
 Two files per task:
 
 - `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
-- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. Long string `content` on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
+- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. A long string `content`, or a `read` call's text content blocks, on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
 
 Scenario verdict is reported as `result: ScenarioResult` (a discriminated union):
 
@@ -182,7 +182,7 @@ Scenarios bind judges and attached logs to a specific action entry via `attachTo
 
 ```ts
 const wait = await ctx.waitForOutbound(predicate, opts);
-ctx.log({ attachTo: wait.entry, prefix: "follow-up received", message: wait.match.text });
+ctx.log({ attachTo: wait.entry, label: "follow-up received" });
 await ctx.judgeLLM({ attachTo: wait.entry, message: wait.match.text, rubric, label });
 ```
 

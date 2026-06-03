@@ -129,7 +129,7 @@ From `@paleo/openclaw-test` (`src/context.ts`):
 - `judgeLLM({ attachTo?, message, rubric, label })` — Anthropic-direct judgement. Pass `attachTo: entry` to bind the result to a specific action; otherwise it attaches to the **current entry**. `inboundSent` (scenario-emitted) never becomes the current entry — only agent-action entries (`outboundReceived`, `cliMock`, `agentToolCall`) do.
 - `mockCli(name, handler)` — intercepts the gateway's calls to `git` / `npm` / `pnpm` / `yarn` / `claude`. Unregistered calls fail the scenario with `failure.source = "cliMock"`.
 - `execInGateway(argv, { cwd?, env?, stdin?, timeoutMs? })` → `{ exitCode, stdout, stderr }`. Runs a command inside the gateway container via the exec watcher. Always resolves on completion (non-zero exits do not throw); throws only on transport failure or hard timeout. Typical use: invoke a consumer-shipped reset script (`/opt/openclaw-test/scripts/reset-fixture.mjs`) at the top of a scenario.
-- `log(message)` or `log({ attachTo, prefix, message })` — free-standing `scenarioLog` entry, or a `scenarioLog` note attached to an action entry.
+- `log(message)` or `log({ attachTo, label?, extra? })` — free-standing `scenarioLog` entry, or a `scenarioLog` note attached to an action entry. `extra` holds any JSON-serializable annotation; the entry's own `text` is not echoed.
 - `getCursor`.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.

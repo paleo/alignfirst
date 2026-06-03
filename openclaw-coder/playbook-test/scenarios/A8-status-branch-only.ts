@@ -35,11 +35,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(starterWait);
-  ctx.log({
-    attachTo: starterWait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starterWait.match.text,
-  });
+  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
   const worktreeDir = await waitForWorktreeDir(PROJECT, TICKET_ID, WORK_TYPE, {
     timeoutMs: 120_000,
@@ -66,11 +62,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
       failFastUnmatchedOutbounds: false,
     },
   );
-  ctx.log({
-    attachTo: reportWait.entry,
-    prefix: "status report received",
-    message: reportWait.match.text,
-  });
+  ctx.log({ attachTo: reportWait.entry, label: "status report received" });
   ctx.assertRegex(
     reportWait.match.text,
     new RegExp(`nimbus-${TICKET_ID}-${WORK_TYPE}`),

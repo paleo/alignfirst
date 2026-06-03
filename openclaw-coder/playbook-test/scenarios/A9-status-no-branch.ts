@@ -32,11 +32,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(starterWait);
-  ctx.log({
-    attachTo: starterWait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starterWait.match.text,
-  });
+  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
   const ticketRe = new RegExp(`\\b${TICKET_ID}\\b`);
   const absenceRe =
@@ -56,11 +52,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
       failFastUnmatchedOutbounds: false,
     },
   );
-  ctx.log({
-    attachTo: reportWait.entry,
-    prefix: "no-branch report received",
-    message: reportWait.match.text,
-  });
+  ctx.log({ attachTo: reportWait.entry, label: "no-branch report received" });
   await ctx.judgeLLM({
     attachTo: reportWait.entry,
     message: reportWait.match.text,

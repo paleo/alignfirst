@@ -23,7 +23,7 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
     prevStep: ack,
   });
 
-  ctx.log({ attachTo: ack.entry, prefix: "[WORK] header received", message: ack.match.text });
+  ctx.log({ attachTo: ack.entry, label: "[WORK] header received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
@@ -53,11 +53,7 @@ async function sendRequestWithTicketAndExpectWorkHeader(ctx: ScenarioContext): P
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(wait);
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: wait.match.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
   const starter: Step = {
     match: wait.match,
     entry: wait.entry,

@@ -66,11 +66,7 @@ export async function runWorkspaceFlow(
   ).catch(() => null);
   if (reportWait) {
     const reportText = reportWait.match.text;
-    ctx.log({
-      attachTo: reportWait.entry,
-      prefix: "workspace report received",
-      message: reportText,
-    });
+    ctx.log({ attachTo: reportWait.entry, label: "workspace report received" });
     ctx.assertRegex(reportText, locatorRe, "workspace-report: worktree locator (dir or slot)");
     ctx.assertRegex(reportText, branchRe, "workspace-report: branch name");
     ctx.assertRegex(reportText, bootstrapStatusRe, "workspace-report: bootstrap status");

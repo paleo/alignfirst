@@ -33,7 +33,7 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
     prevStep: ack,
   });
 
-  ctx.log({ attachTo: ack.entry, prefix: "ack received", message: ack.match.text });
+  ctx.log({ attachTo: ack.entry, label: "ack received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
@@ -58,11 +58,7 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   );
   const starter = wait.match;
   const threadId = requireThreadId(wait);
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starter.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
 
   // The starter has no ticket/role header (TICKET_ID is still unknown; the
   // `[WORK]` header appears only once it's supplied). On Discord it must NAME
@@ -111,8 +107,8 @@ async function classifyStarterRest(
   const asksAboutTheWork = classification.parsed.asksAboutTheWork;
   ctx.log({
     attachTo: entry,
-    prefix: "starter-rest classified",
-    message: `asksAboutTheWork=${asksAboutTheWork}: ${classification.parsed.reason}`,
+    label: "starter-rest classified",
+    extra: { asksAboutTheWork, reason: classification.parsed.reason },
   });
 
   // When the starter already asks about the work, validate that ask. Otherwise
@@ -135,7 +131,7 @@ async function expectTicketQuestion(ctx: ScenarioContext, prev: StarterStep): Pr
     (m) => m.direction === "outbound" && m.threadId === prev.threadId && m.id !== prev.match.id,
     { timeoutMs: 45_000, sinceCursor: prev.nextCursor },
   );
-  ctx.log({ attachTo: wait.entry, prefix: "follow-up received", message: wait.match.text });
+  ctx.log({ attachTo: wait.entry, label: "follow-up received" });
 
   await ctx.judgeLLM({
     attachTo: wait.entry,
