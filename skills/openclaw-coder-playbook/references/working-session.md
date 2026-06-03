@@ -24,7 +24,7 @@ Use the guidelines.
 
 ## Guidelines
 
-## Delegating to the coding agent
+### Delegating to the coding agent
 
 Always use the coding agent via `alignfirst-coaching`. **Run from the project's directory** (`~/projects/<project>`).
 
