@@ -342,7 +342,7 @@ export function printDevHelp(): void {
       "",
       "Commands:",
       "  dev               Start in the foreground, streaming logs from startup; CTRL+C stops it.",
-      "                    If one is already running here, attach to its logs instead",
+      "                    If one is already running here, attach to its logs instead.",
       "  dev up            Start in the background and return once ready.",
       "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
       "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
