@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Operating Instructions
@@ -20,7 +20,14 @@ The playbook tells you what to do. Do not improvise — no announcement text, no
 
 ## Projects
 
-Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed by the starter line (recover via `message action: "read"`); never re-derive from `ls ~/projects/` or from a ticket prefix.
+Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`: the `[WORK]` header carries both; before it's posted, the starter names the project and the ticket comes from the user's messages. Never re-derive from `ls ~/projects/` or from a ticket prefix.
+
+## Who you're talking to
+
+Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and read their group's **AUDIENCE** value — `tech` or `non-tech`. Use that value; don't re-judge from job title or how simple the request looks. An unmatched sender is `non-tech`.
+
+- **Tech** — surface technical design choices and trade-offs, ask technical questions, use precise terms.
+- **Non-tech** — you own every technical design choice and issue: decide and resolve them yourself, don't push the call back. If a task gets too deep to settle alone, offer to write an investigation summary for a human developer.
 
 ## Delegating to the coding agent
 

@@ -1,8 +1,4 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import {
-  STARTER_ANNOUNCEMENT_RUBRIC,
-  starterLineRegexWithTicket,
-} from "./_lib/common-constants.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { requireThreadId } from "./_lib/outbound.ts";
@@ -20,28 +16,33 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
   const claude = setupClaudeMock(ctx);
   setupGhMock(ctx);
 
-  const starter = await sendRequestWithTicketAndExpectStarter(ctx);
-  const ack = await expectAck(ctx, starter);
+  const ack = await sendRequestWithTicketAndExpectWorkHeader(ctx);
   await runWorkspaceFlow(ctx, claude, {
     project: PROJECT,
     ticketId: TICKET_ID,
     prevStep: ack,
   });
 
-  ctx.log({ attachTo: ack.entry, prefix: "ack received", message: ack.match.text });
+  ctx.log({ attachTo: ack.entry, label: "[WORK] header received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
 
-async function sendRequestWithTicketAndExpectStarter(ctx: ScenarioContext): Promise<Step> {
+async function sendRequestWithTicketAndExpectWorkHeader(ctx: ScenarioContext): Promise<Step> {
   const startCursor = await ctx.getCursor();
 
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. Ticket ${TICKET_ID}.`,
   });
 
+  // The thread opens with the first outbound. Under Slack auto-threading the
+  // first auto-streamed text becomes the starter, so a weak model may leak its
+  // reasoning here, or merge the announcement and the `[WORK]` header into one
+  // message — both tolerated. We don't judge the starter's form; we scan from
+  // it (inclusive) for the `[WORK]` header, the durable project/ticket carrier
+  // and the real outcome.
   const wait = await ctx.waitForOutbound(
     (m) =>
       m.direction === "outbound" &&
@@ -51,47 +52,22 @@ async function sendRequestWithTicketAndExpectStarter(ctx: ScenarioContext): Prom
     // scenario; the gateway processes the new conversation in turn.
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
-  const starter = wait.match;
   const threadId = requireThreadId(wait);
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starter.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
+  const starter: Step = {
+    match: wait.match,
+    entry: wait.entry,
+    threadId,
+    nextCursor: wait.nextCursor,
+  };
 
-  const lines = starter.text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const templateRe = starterLineRegexWithTicket(PROJECT, TICKET_ID);
-  const templateIdx = lines.findIndex((l) => templateRe.test(l));
-  if (templateIdx === -1) {
-    throw new Error(
-      `starter does not contain template line matching ${templateRe}; got: ${JSON.stringify(lines)}`,
-    );
-  }
-  const announcement = lines
-    .filter((_, i) => i !== templateIdx)
-    .join("\n")
-    .trim();
-  ctx.assertRegex(announcement, /\S/, "starter has content beyond the template line");
-
-  await ctx.judgeLLM({
-    attachTo: wait.entry,
-    message: announcement,
-    rubric: STARTER_ANNOUNCEMENT_RUBRIC,
-    label: "starter-announcement",
-  });
-
-  return { match: starter, entry: wait.entry, threadId, nextCursor: wait.nextCursor };
-}
-
-async function expectAck(ctx: ScenarioContext, prev: Step): Promise<Step> {
   return await waitForSetupAck(ctx, {
-    threadId: prev.threadId,
-    prevId: prev.match.id,
-    sinceCursor: prev.nextCursor,
+    threadId,
+    prevId: wait.match.id,
+    sinceCursor: wait.nextCursor,
     ticketId: TICKET_ID,
     project: PROJECT,
+    audience: "tech",
+    seedCandidate: starter,
   });
 }

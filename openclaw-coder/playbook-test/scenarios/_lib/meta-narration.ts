@@ -63,11 +63,7 @@ export async function waitForOutboundSkippingNarration(
     if (!(await isMetaNarration(ctx, wait.match.text))) {
       return wait;
     }
-    ctx.log({
-      attachTo: wait.entry,
-      prefix: "meta-narration skipped",
-      message: wait.match.text,
-    });
+    ctx.log({ attachTo: wait.entry, label: "meta-narration skipped" });
     cursor = wait.nextCursor;
     if (Date.now() >= deadline) {
       throw new Error(

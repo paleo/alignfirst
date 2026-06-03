@@ -1,9 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import {
-  NEW_WORK_QUESTION_RUBRIC,
-  STARTER_ANNOUNCEMENT_RUBRIC,
-  starterLineRegexNoTicket,
-} from "./_lib/common-constants.ts";
+import { escapeRe, NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -37,7 +33,7 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
     prevStep: ack,
   });
 
-  ctx.log({ attachTo: ack.entry, prefix: "ack received", message: ack.match.text });
+  ctx.log({ attachTo: ack.entry, label: "ack received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
@@ -46,12 +42,12 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   const startCursor = await ctx.getCursor();
 
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: "Nous avons un travail à faire sur nimbus.",
   });
 
-  // Starter wait is strict: the first thread message must be the templated
+  // Starter wait is strict: the first thread message must be the announcement
   // starter — no meta-narration tolerated here.
   const wait = await ctx.waitForOutbound(
     (m) =>
@@ -62,30 +58,23 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   );
   const starter = wait.match;
   const threadId = requireThreadId(wait);
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starter.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
 
-  const lines = starter.text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const templateRe = starterLineRegexNoTicket(PROJECT);
-  const templateIdx = lines.findIndex((l) => templateRe.test(l));
-  if (templateIdx === -1) {
-    throw new Error(
-      `starter does not contain template line matching ${templateRe}; got: ${JSON.stringify(lines)}`,
+  // The starter has no ticket/role header (TICKET_ID is still unknown; the
+  // `[WORK]` header appears only once it's supplied). On Discord it must NAME
+  // the project — a fresh Discord thread session can't see the channel message
+  // that named it, so the starter is the only pre-`[WORK]` carrier. On Slack
+  // the auto-threaded triggering message is in the thread history, so the
+  // project survives even when the starter is reasoning leak that omits it.
+  if (ctx.channel === "discord-mock") {
+    ctx.assertRegex(
+      starter.text,
+      new RegExp(escapeRe(PROJECT), "i"),
+      "starter names the project (Discord recovery carrier)",
     );
   }
-  const rest = lines
-    .filter((_, i) => i !== templateIdx)
-    .join("\n")
-    .trim();
-  ctx.assertRegex(rest, /\S/, "starter has content beyond the template line");
-
-  const questionAlreadyAsked = await classifyStarterRest(ctx, wait.entry, rest);
+  // The agent may instead use the in-starter shortcut and ask about the work.
+  const questionAlreadyAsked = await classifyStarterRest(ctx, wait.entry, starter.text.trim());
 
   return {
     match: starter,
@@ -118,23 +107,19 @@ async function classifyStarterRest(
   const asksAboutTheWork = classification.parsed.asksAboutTheWork;
   ctx.log({
     attachTo: entry,
-    prefix: "starter-rest classified",
-    message: `asksAboutTheWork=${asksAboutTheWork}: ${classification.parsed.reason}`,
+    label: "starter-rest classified",
+    extra: { asksAboutTheWork, reason: classification.parsed.reason },
   });
 
+  // When the starter already asks about the work, validate that ask. Otherwise
+  // it's an announcement-only starter (or tolerated reasoning leak) — nothing
+  // to judge here; the separate follow-up question is validated downstream.
   if (asksAboutTheWork) {
     await ctx.judgeLLM({
       attachTo: entry,
       message: rest,
       rubric: NEW_WORK_QUESTION_RUBRIC,
       label: "starter-work-question",
-    });
-  } else {
-    await ctx.judgeLLM({
-      attachTo: entry,
-      message: rest,
-      rubric: STARTER_ANNOUNCEMENT_RUBRIC,
-      label: "starter-announcement",
     });
   }
   return asksAboutTheWork;
@@ -146,7 +131,7 @@ async function expectTicketQuestion(ctx: ScenarioContext, prev: StarterStep): Pr
     (m) => m.direction === "outbound" && m.threadId === prev.threadId && m.id !== prev.match.id,
     { timeoutMs: 45_000, sinceCursor: prev.nextCursor },
   );
-  ctx.log({ attachTo: wait.entry, prefix: "follow-up received", message: wait.match.text });
+  ctx.log({ attachTo: wait.entry, label: "follow-up received" });
 
   await ctx.judgeLLM({
     attachTo: wait.entry,
@@ -165,8 +150,8 @@ async function expectTicketQuestion(ctx: ScenarioContext, prev: StarterStep): Pr
 
 async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise<Step> {
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Ticket ${TICKET_ID}. La fonctionnalité dont nous avons besoin : passer le bouton d'export en gras.`,
     threadId: prev.threadId,
   });
@@ -177,5 +162,7 @@ async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise
     sinceCursor: prev.nextCursor,
     ticketId: TICKET_ID,
     project: PROJECT,
+    audience: "tech",
+    timeoutMs: 120_000,
   });
 }

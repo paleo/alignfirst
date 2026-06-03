@@ -11,31 +11,32 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. The starter line carries PROJECT and TICKET_ID — read them from there. Never derive them from a ticket prefix or `ls ~/projects/`. Branch, worktree path, and dev-server URL also live in the history.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, and the AUDIENCE from the thread: the `[WORK]` header carries all three; before it's posted, the starter names the project and records the audience, and the ticket comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; recover the audience from the thread or the sender. Branch, worktree path, and dev-server URL also live in the history.
 
 ### Step 2 — Determine the mode: WORK or TALK?
 
-- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK.
+- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its `[WORK]` header (Step 2), before any other ack or prose — this holds on a fresh WORK thread **and** when promoting a TALK thread the moment a ticket arrives. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK (post the `[WORK]` header then).
 
 ### Step 3 — Handle the actual request
 
-By the time you reach Step 3 in WORK mode, Step 2 has either produced a ready worktree or ended the turn (status-update with no branch). Branch on the request shape:
+Use the guidelines.
 
-- **Code change** (WORK). Continue inside the worktree — delegate to the coding agent for the actual edits (see "What you delegate vs do" below).
-- **Status update** (WORK). Step 2's workspace status template (worktree, branch, bootstrap) is the report. Add branch state on top — recent commits, dev-server. Delegate the inspection when it's faster than doing it yourself.
-- **Investigation / question** (TALK). Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol, **run from the project's directory** (`~/projects/<project>`) so it investigates the right repo. Then summarize the agent's reply back to the user in the thread.
+## Guidelines
 
-## General rules
+### Delegating to the coding agent
+
+Always use the coding agent via `alignfirst-coaching`. **Run from the project's directory** (`~/projects/<project>`).
 
 ### Interpreting requests
 
 Interpret every user message in the context of the current project — something to do, investigate, challenge, or advise on inside the codebase. The user is rarely asking you to perform the action _in the chat_; they're asking about the project.
 
 - **Code change.** "Set this text bolder" → bold it in the project, not in the chat reply.
-- **Investigation, behavior question, or advice.** "Why does the export button fail when there are no comparables?" / "Should we cache that response?" → delegate to the coding agent, then summarize the finding back to the user. Ground the answer in the actual code. No code change unless asked.
 
 Only when the message is unambiguously about chat content ("summarize this thread", "what does this mean") should you treat it as a regular conversation.
+
+**Investigation / question, or advice.** Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol so it investigates the right repo. Then summarize the agent's reply back to the user in the thread. Ground the answer in the actual code. No code change unless asked.
 
 ### What you delegate vs do
 
@@ -78,6 +79,11 @@ Delegate the merge itself to the coding agent via `alignfirst-coaching` (`merge`
 ### Reinstalling deps after a branch refresh
 
 Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast-forward, base-branch merge, …), reinstall dependencies with the project's package manager. And rebuild if the project needs it. Delegate both to the coding agent.
+
+### Status update
+
+- Check the workspace status.
+- Delegate to the coding agent via `alignfirst-coaching`, use the **read** protocol.
 
 ### Working and testing
 

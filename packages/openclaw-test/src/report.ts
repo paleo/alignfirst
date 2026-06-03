@@ -88,14 +88,13 @@ export interface ActionEntryBase extends ReportEntryBase {
 }
 
 export interface ScenarioLogNote {
-  prefix?: string;
+  label?: string;
   ts: string;
-  message: string;
+  extra?: unknown;
 }
 
 export interface ScenarioLogEntry extends ReportEntryBase {
   kind: "scenarioLog";
-  prefix?: string;
   message: string;
 }
 
@@ -150,10 +149,12 @@ export interface AgentToolCall {
     isError: boolean;
     /**
      * Full tool result. Always present in `scenario-log.jsonl`. In `report.json`,
-     * replaced by `truncatedContent` when this was a string longer than 60 chars.
+     * replaced by `truncatedContent` when truncatable: a string longer than 60
+     * chars, or a `read` call's text content blocks (the file is identified by
+     * `input` and kept in full in the jsonl).
      */
     content?: unknown;
-    /** Only in `report.json`: rtrimmed first 60 chars + `…`, when `content` was a long string. */
+    /** Only in `report.json`: rtrimmed first 60 chars + `…` of the truncatable text. */
     truncatedContent?: string;
   };
   startedAt: string;

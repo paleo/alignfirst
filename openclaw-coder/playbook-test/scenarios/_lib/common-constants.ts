@@ -3,17 +3,15 @@
 // unambiguous leak signal: while running A<S>, any ABC-0<X>N with X ≠ S is
 // bleed from another scenario. See the playbook-test README.md.
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-export const STARTER_ANNOUNCEMENT_RUBRIC = `A short announcement that a new thread is being opened (e.g. "Nouveau thread.", "Opening a thread."). A brief filler or commitment phrase ("Je regarde ça", "On y va") is fine. No questions, no prompts for input, no narration of the user's request.`;
+export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const NEW_WORK_QUESTION_RUBRIC =
-  "A short message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. May also include a brief announcement clause alongside. No off-topic content, no offers to do something else.";
+  "A message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
 export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
 
 export const askWhichProjectRubric = (ticketId: string): string =>
-  `A short follow-up message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere in the message — main clause, aside, or parenthetical all count. Does NOT announce setup, does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
+  `A message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere — main clause, aside, or parenthetical all count. A thread-opening announcement or an audience note (\`tech\`/\`non-tech\`) before the question is fine. Does NOT claim a workspace/worktree/branch is being created or set up, and does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
 
 export const unknownProjectRubric = (projectName: string): string =>
   `A short follow-up message acknowledging that the project named by the user (${projectName}) is not found under \`~/projects/\`. Asks the user to confirm the name or supply the correct one. Does NOT proceed with setup, does NOT pretend the project exists.`;
@@ -29,21 +27,13 @@ export const statusBranchOnlyRubric = (ticketId: string, branch: string): string
 export const statusNoBranchRubric = (ticketId: string): string =>
   `A short report that no workspace exists for ticket ${ticketId} — no branch, no worktree, "rien encore", "no branch yet", "pas de branche", "nothing started". Does NOT announce that a worktree was created. May offer to start a new workspace for the user.`;
 
-// Tolerant: agent occasionally drops the `:` after Project/Ticket/Requester
-// role, or prefixes the template with leading text on the same line. Per the
-// playbook-test README.md tolerance, those variances don't harm the outcome — the labelled variables
-// still parse. Substring-match (no ^/$ anchors).
-export const starterLineRegexNoTicket = (project: string): RegExp =>
+// The `[WORK]` header, posted on entering WORK mode, restates the project and
+// ticket. The values may be bolded (`**v**` on Discord, `*v*` on Slack) or
+// not, so bold markers are optional; `[WORK]` is kept literal. Tolerant
+// substring match (no ^/$ anchors), case-insensitive.
+const boldOpt = "\\*{0,2}";
+export const workHeaderRegex = (project: string, ticketId: string): RegExp =>
   new RegExp(
-    `Project:? \\*\\*${escapeRe(project)}\\*\\* — Ticket:? \\*\\*\\?\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
-  );
-
-export const starterLineRegexWithTicket = (project: string, ticketId: string): RegExp =>
-  new RegExp(
-    `Project:? \\*\\*${escapeRe(project)}\\*\\* — Ticket:? \\*\\*${escapeRe(ticketId)}\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
-  );
-
-export const starterLineRegexMultiProject = (projects: string[], ticketId: string): RegExp =>
-  new RegExp(
-    `Project:? \\*\\*${projects.map(escapeRe).join("\\+")}\\*\\* — Ticket:? \\*\\*${escapeRe(ticketId)}\\*\\* — Requester role:? \\*\\*tech\\*\\*`,
+    `\\[WORK\\][\\s\\S]*${boldOpt}${escapeRe(project)}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
+    "i",
   );

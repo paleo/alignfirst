@@ -20,10 +20,10 @@ A single labelled template plus a short list of variation tails beats four full-
 Good:
 
 ```text
-Project **{P}**, ticket **{T}**. {setup signal}.
+[WORK] Project: {P} — Ticket: {T} — Audience: {tech | non-tech}. {setup signal}
 ```
 
-Vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch".
+Vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the agent to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.
 
 ## Temporal anchors are required
 
@@ -33,9 +33,9 @@ Vary the setup signal — "Setting up the workspace", "Spinning up the environme
 
 Channel/DM and thread sessions behave differently; phrase as "Channel/DM: …. Thread: ….". A blanket "never X" tends to break a sibling path — e.g. a "never emit free-form text in a channel session" rule kills the off-projects auto-stream that the same playbook relies on elsewhere.
 
-## The starter line is the thread's source of truth
+## The thread is its own source of truth
 
-Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Project + ticket come from `message action: "read"` on the thread, never from `ls ~/projects/` and never from a ticket prefix (`ABC-…` is a label, not a project namespace).
+Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project + ticket with `message action: "read"` on the thread: the `[WORK]` header carries both, and the starter names the project. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry the project forward; don't rely on the original message surviving. Never from `ls ~/projects/` and never from a ticket prefix (`ABC-…` is a label, not a project namespace).
 
 ## Don't treat a derived value as redundant
 

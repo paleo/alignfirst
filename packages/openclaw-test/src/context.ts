@@ -95,7 +95,7 @@ export interface ScenarioContext {
    */
   markScenarioAsEnded(reason?: string): void;
   log(message: string): void;
-  log(opts: { attachTo: ActionEntry; prefix: string; message: string }): void;
+  log(opts: { attachTo: ActionEntry; label?: string; extra?: unknown }): void;
   sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
   poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult>;
   waitForOutbound(
@@ -285,15 +285,15 @@ export function createContext(params: {
         reason !== undefined && reason.length > 0 ? `scenario ended: ${reason}` : "scenario ended";
       emit({ ...nextEntrySeqTs(), kind: "scenarioLog", message });
     },
-    log: ((arg: string | { attachTo: ActionEntry; prefix: string; message: string }) => {
+    log: ((arg: string | { attachTo: ActionEntry; label?: string; extra?: unknown }) => {
       if (typeof arg === "string") {
         emit({ ...nextEntrySeqTs(), kind: "scenarioLog", message: arg });
         return;
       }
       const note: ScenarioLogNote = {
-        prefix: arg.prefix,
         ts: new Date().toISOString(),
-        message: arg.message,
+        label: arg.label,
+        extra: arg.extra,
       };
       arg.attachTo.scenarioLog = note;
       emitAugment(arg.attachTo.entrySeq, { kind: "scenarioLog", scenarioLog: note });

@@ -17,28 +17,20 @@ The moment you detect an actionable mention, prepare a thread for a fresh sessio
 
 ### Starter message (`STARTER_MESSAGE`)
 
-The fresh session won't have access to the channel's transcript — only to the user's last message. If there is *additional* context from earlier in the channel that helps interpret it (constraints, leads, files to touch, decisions already made), include it explicitly — sharp and concise — in `{ANNOUNCEMENT}`.
+The fresh thread session won't have the channel's transcript — only the thread's own messages and the user's last message. So the starter must carry what that session otherwise can't recover: the **project** (and the TICKET_ID, if you already have one) and **who you're talking to** — the audience (`tech` / `non-tech`) you read from the sender (see "Who you're talking to" in the dispatcher).
 
-**Don't restate the user's last message.** Don't narrate the user in third person ("the user is asking…"). When there's nothing extra to add, `{ANNOUNCEMENT}` is just the announcement — see examples below.
+Emphasize the variables (project, ticket ID, audience) in bold with your surface's markers. Multiple projects: name them all, joined with `+`.
 
-Use this exact template so the variables stay easy to grep for:
+**Don't echo the user's last message** — the fresh session already has it. But earlier channel context *is* lost to that session: fold the relevant bits in, condensed and rephrased — not quoted verbatim, not narrated in third person ("the user is asking…").
 
-```text
-Project: **{PROJECT}** — Ticket: **{TICKET_ID}** — Requester role: **{USER_ROLE}**
-{ANNOUNCEMENT}
-```
+Vary the wording. English examples (translate to user's language; `{PROJECT}` is the real project name, `{TICKET_ID}` is the ticket ID, `{AUDIENCE}` is `tech` or `non-tech`):
 
-- `{USER_ROLE}` — match the inbound sender against `USER.md`. On Discord, match the `username` field; on Slack, match the `sender_id`. If no entry matches, fall back to `guest`.
-- `{PROJECT}` or `{TICKET_ID}` missing — write `?` (e.g. `Project: **?**`).
-- Multiple projects: write them joined with `+`.
+- "Opening a thread for **{PROJECT}**, ticket **{TICKET_ID}** — talking to a **{AUDIENCE}**."
+- "Opening a thread for **{PROJECT}** — talking to a **{AUDIENCE}**."
+- "New thread — **{PROJECT}**, ticket **{TICKET_ID}**. Talking to a **{AUDIENCE}**."
+- "Starting a thread on **{PROJECT}**, ticket **{TICKET_ID}**, **{AUDIENCE}** audience."
 
-When you have no extra context to add, `{ANNOUNCEMENT}` is a short announcement. Vary the wording. English examples (translate to user's language):
-
-- "Opening a new thread."
-- "Starting a thread."
-- "New thread."
-
-**The starter is announcement only.** Zero questions — not even a vague "what's the task?", "qu'est-ce qu'on fait ?", "tell me more". Anything you need to ask goes in a **separate follow-up message** inside the thread (see below).
+**The starter is announcement only.** Zero questions — not even a vague "what's the task?", "tell me more". Anything you need to ask goes in a **separate follow-up message** inside the thread (see below).
 
 #### Discord — open the thread via `message` action `thread-create`
 
@@ -61,17 +53,30 @@ On Slack your reply auto-opens a thread (`replyToMode: "all"`). The reply itself
 
 ### Continue inside the thread — IN THIS SAME TURN
 
-**Do not end your turn after creating the thread.** The thread session won't activate until the next user message, so anything actionable must happen now. Branch on what's known:
+**Do not end your turn after creating the thread.** The thread session won't activate until the next user message, so anything actionable must happen now.
 
-- **PROJECT + TICKET_ID known** — **WORK mode**. **Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure. It tells you how to detect an existing workspace/branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
-- **PROJECT known, TICKET_ID unknown** — **TALK mode**. No worktree. Branch on the request:
-  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header, **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Trust the project; do not pre-screen. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
+Branch on what's known:
+
+- PROJECT + TICKET_ID known → **WORK mode**.
+- no PROJECT or no TICKET_ID → **TALK mode**.
+
+#### WORK mode
+
+**Read [`project-workspace-setup.md`](./project-workspace-setup.md) first**, then follow its procedure — your first WORK post is its `[WORK]` header, before any other ack or prose. It tells you how to detect an existing workspace/branch/worktree and reuse them — do not bypass it by running `git` or `ls` or any CLI on the project directly. Applies to code changes, status updates, and any other request that benefits from a worktree.
+
+#### TALK mode
+
+No workspace.
+
+[`working-session.md`](./working-session.md)
+
+- **PROJECT known, no TICKET_ID** — Branch on the request:
+  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header, **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
   - User signaled work intent without enough info (`on a un truc à faire sur X`, `we need to work on X`) → ask in-thread for the ticket id and the scope/type. End turn.
   - A TALK thread can later be promoted to WORK if a ticket appears.
 - **TICKET_ID known, PROJECT unknown** — Ask in-thread which project the ticket belongs to. Restate the ticket id in the question (e.g. `Pour le ticket ABC-123, sur quel projet travaille-t-on ?`). End turn.
 - **PROJECT FS-check fails** — the named project is not a directory under `~/projects/`. Acknowledge the missing project; ask the user to confirm or correct. End turn.
 - **PROJECT unclear / generic chatter** — Ask the user to clarify. End turn.
-- **Multiple projects + TICKET_ID + code change** — WORK per project. FS-check each. For every project that exists, follow [`project-workspace-setup.md`](./project-workspace-setup.md) in this same turn (one worktree per project, same ticket id). Report status at the end. If any project's FS-check fails, acknowledge that one and continue with the others.
 
 Subsequent user messages in the thread route to a **fresh thread session**.
 

@@ -21,13 +21,16 @@ If you have a clear reason to infer the WORK_TYPE, do so. Otherwise, don't guess
 
 The branch name will be: `{TICKET_ID}/{WORK_TYPE}`.
 
-## Step 2 — Acknowledge
+## Step 2 — Post the `[WORK]` header
 
-Post one short message in the thread:
+The moment you enter WORK mode, your **first** user-facing post is this banner — before any other ack or prose. It's the thread's project/ticket source of truth:
 
-> Project **{PROJECT_NAME}**, ticket **{TICKET_ID}**. {setup signal}.
+> [WORK] Project: {PROJECT_NAME} — Ticket: {TICKET_ID} — Audience: {AUDIENCE}. {setup signal}
 
-Translate to the user's language. Vary the setup signal — e.g. "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
+- `{AUDIENCE}` — `tech` / `non-tech`, carried forward from the starter (which already recorded it). If no starter recorded it yet, read the sender's `AUDIENCE` from `USER.md` — see "Who you're talking to" in the dispatcher skill.
+- Bold the values — project, ticket, audience — with your surface's bold markers (not literal `**`).
+- Multiple projects: join them with `+` (e.g. `proj-a+proj-b`).
+- Keep `[WORK]` and the values (including the `tech`/`non-tech` token) intact; translate the setup signal to the user's language and vary it — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 
 ## Step 3 — Fix the thread name if needed (Discord-only)
 

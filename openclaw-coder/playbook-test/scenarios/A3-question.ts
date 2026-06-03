@@ -21,8 +21,8 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: QUESTION_TEXT,
   });
 
@@ -34,11 +34,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(starterWait);
-  ctx.log({
-    attachTo: starterWait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starterWait.match.text,
-  });
+  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
   const delegationCall = await expectNoProtocolDelegation(ctx, claude, {
     rubric: `The captured invocation is a prompt sent to a coding agent via the alignfirst-coaching wrapper, **without** an alignfirst protocol header. Expected: an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine) and signals "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject only if: the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), or the question content is missing or unrelated.`,
@@ -81,11 +77,7 @@ async function waitForSummary(
     (m) => m.direction === "outbound" && m.threadId === threadId,
     { timeoutMs: 90_000, sinceCursor, failFastCliMockGraceMs: 30_000 },
   );
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: "post-delegation message received",
-    message: wait.match.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: "post-delegation message received" });
   return wait;
 }
 

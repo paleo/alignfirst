@@ -297,8 +297,8 @@ export async function expectNoProtocolDelegation(
   }
   ctx.log({
     attachTo: target,
-    prefix: "claude no-protocol delegation call captured",
-    message: `argv[0] length=${claudeCall.argv[0]?.length ?? 0}`,
+    label: "claude no-protocol delegation call captured",
+    extra: { argv0Length: claudeCall.argv[0]?.length ?? 0 },
   });
 
   await ctx.judgeLLM({
@@ -342,8 +342,8 @@ export async function expectCodingDelegation(
   }
   ctx.log({
     attachTo: target,
-    prefix: "claude coding-delegation call captured",
-    message: `argv[0] length=${claudeCall.argv[0]?.length ?? 0}`,
+    label: "claude coding-delegation call captured",
+    extra: { argv0Length: claudeCall.argv[0]?.length ?? 0 },
   });
 
   await ctx.judgeLLM({

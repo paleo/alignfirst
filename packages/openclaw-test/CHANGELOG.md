@@ -1,5 +1,17 @@
 # @paleo/openclaw-test
 
+## 0.9.0
+
+### Minor Changes
+
+- Compact `report.json` (full values stay in `scenario-log.jsonl`): truncate `read` tool result content, and replace the `scenarioLog` note's `prefix`/`message` with `label?`/`extra?` so it no longer echoes the entry's `text`.
+
+## 0.8.1
+
+### Patch Changes
+
+- Cell names lead with the model, then the scenario
+
 ## 0.8.0
 
 ### Minor Changes

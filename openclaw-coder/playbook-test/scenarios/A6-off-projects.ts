@@ -12,8 +12,8 @@ export default async function offProjectsChat(ctx: ScenarioContext): Promise<voi
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: "Salut, ça va ?",
   });
 
@@ -40,11 +40,7 @@ async function assertDiscordChannelReply(ctx: ScenarioContext, startCursor: numb
     (m) => m.direction === "outbound" && m.conversation.id === ctx.conversationId && !m.threadId,
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: "channel reply received",
-    message: wait.match.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: "channel reply received" });
   await ctx.judgeLLM({
     attachTo: wait.entry,
     message: wait.match.text,
@@ -64,11 +60,7 @@ async function assertSlackReply(ctx: ScenarioContext, startCursor: number): Prom
     (m) => m.direction === "outbound" && m.conversation.id === ctx.conversationId,
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
-  ctx.log({
-    attachTo: wait.entry,
-    prefix: "reply received",
-    message: wait.match.text,
-  });
+  ctx.log({ attachTo: wait.entry, label: "reply received" });
   await ctx.judgeLLM({
     attachTo: wait.entry,
     message: wait.match.text,

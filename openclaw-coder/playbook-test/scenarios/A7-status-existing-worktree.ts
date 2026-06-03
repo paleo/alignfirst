@@ -25,8 +25,8 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 
@@ -38,11 +38,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(starterWait);
-  ctx.log({
-    attachTo: starterWait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starterWait.match.text,
-  });
+  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
   // Accept the report in the thread OR auto-streamed to the parent channel —
   // some iterations of the agent emit free-form text after thread-create which
@@ -64,11 +60,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
       failFastUnmatchedOutbounds: false,
     },
   );
-  ctx.log({
-    attachTo: reportWait.entry,
-    prefix: "status report received",
-    message: reportWait.match.text,
-  });
+  ctx.log({ attachTo: reportWait.entry, label: "status report received" });
   await ctx.judgeLLM({
     attachTo: reportWait.entry,
     message: reportWait.match.text,

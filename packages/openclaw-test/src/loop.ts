@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { type CellResult, readCellResult } from "./cell-result.js";
+import { type CellResult, cellLeafName, readCellResult } from "./cell-result.js";
 import type { SelectedModel } from "./models.js";
 import { printSummary, printTotalCost } from "./summary.js";
 
@@ -135,7 +135,7 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
     // Model is the outermost dimension so each model's config is loaded once and
     // its whole sweep runs before the next — minimal gateway recreates under
     // --reuse-stack (one per model boundary). The artifact dir name groups by
-    // scenario→model→channel independently (see the cell `leaf` below).
+    // model→scenario→channel independently (see the cell `leaf` below).
     outer: for (const model of opts.models) {
       // Repoint the gateway config at this model's rendered file, then force a
       // recreate at the model boundary so the gateway reloads the new config —
@@ -179,9 +179,13 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
 
             if (aborted) break outer;
 
-            const iterSuffix =
-              iterationWidth > 0 ? `-#${String(iter).padStart(iterationWidth, "0")}` : "";
-            const leaf = `${scenario}-${model.id}-${channel}${iterSuffix}`;
+            const leaf = cellLeafName({
+              scenarioId: scenario,
+              modelId: model.id,
+              channel,
+              iterationIndex: iter,
+              iterationWidth,
+            });
             const resultsPath = join(opts.resultsDir, `${leaf}.json`);
 
             const runnerArgs = [

@@ -18,8 +18,8 @@ export default async function ticketWithoutProject(ctx: ScenarioContext): Promis
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Ticket ${TICKET_ID}, on doit corriger le bug d'export.`,
   });
 
@@ -31,11 +31,7 @@ export default async function ticketWithoutProject(ctx: ScenarioContext): Promis
     { timeoutMs: 90_000, sinceCursor: startCursor },
   );
   const threadId = requireThreadId(starterWait);
-  ctx.log({
-    attachTo: starterWait.entry,
-    prefix: `starter received in thread ${threadId}`,
-    message: starterWait.match.text,
-  });
+  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
   // The agent may combine starter + project question in one message (the
   // in-starter shortcut documented in the playbook-test README.md tolerance). If so, judge the
@@ -49,20 +45,12 @@ export default async function ticketWithoutProject(ctx: ScenarioContext): Promis
       (m) => m.direction === "outbound" && m.threadId === threadId && m.id !== starterWait.match.id,
       { timeoutMs: 60_000, sinceCursor: starterWait.nextCursor },
     );
-    ctx.log({
-      attachTo: followupWait.entry,
-      prefix: "follow-up received",
-      message: followupWait.match.text,
-    });
+    ctx.log({ attachTo: followupWait.entry, label: "follow-up received" });
     questionEntry = followupWait.entry;
     questionText = followupWait.match.text;
     cursorAfterQuestion = followupWait.nextCursor;
   } else {
-    ctx.log({
-      attachTo: starterWait.entry,
-      prefix: "starter already asks for the project",
-      message: starterWait.match.text,
-    });
+    ctx.log({ attachTo: starterWait.entry, label: "starter already asks for the project" });
   }
   await ctx.judgeLLM({
     attachTo: questionEntry,
