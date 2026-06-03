@@ -25,6 +25,7 @@ export function extractHost(content: string, key: string, fallback = "localhost"
 }
 
 export function lastLines(content: string, count: number): string {
+  if (count <= 0) return "";
   return content.split("\n").slice(-count).join("\n");
 }
 

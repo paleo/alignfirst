@@ -408,12 +408,15 @@ function tailLogs(
   }
 }
 
+// Prints the last `lines` of the log, then returns the byte offset where `followLogFile` resumes
+// (the file's current size). Reads raw bytes so the offset matches the file even if it holds
+// invalid UTF-8, which a decoded string's byte length would not.
 function replayTail(path: string, prefix: string, lines: number): number {
   if (!existsSync(path)) return 0;
-  const content = readFileSync(path, "utf8");
-  const tail = lastLines(content, lines);
+  const buffer = readFileSync(path);
+  const tail = lastLines(buffer.toString("utf8"), lines);
   if (tail.length > 0) writeWithPrefix(tail.endsWith("\n") ? tail : `${tail}\n`, prefix);
-  return Buffer.byteLength(content, "utf8");
+  return buffer.length;
 }
 
 function writeWithPrefix(text: string, prefix: string): void {

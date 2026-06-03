@@ -99,6 +99,11 @@ describe("lastLines", () => {
   it("preserves a trailing newline as an empty last line", () => {
     expect(lastLines("a\nb\n", 2)).toBe("b\n");
   });
+
+  it("returns an empty string for a count of zero or less", () => {
+    expect(lastLines("a\nb\nc", 0)).toBe("");
+    expect(lastLines("a\nb\nc", -3)).toBe("");
+  });
 });
 
 describe("formatDuration", () => {

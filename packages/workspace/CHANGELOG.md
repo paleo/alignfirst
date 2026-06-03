@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.15.1
+
+### Patch Changes
+
+- Fix the foreground log-follow offset to count raw bytes (a log with invalid UTF-8 no longer skews where following resumes), and guard `lastLines` against a non-positive count.
+
 ## 0.15.0
 
 ### Minor Changes
