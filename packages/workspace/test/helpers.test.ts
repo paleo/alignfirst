@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { detectCommonJsError, extractHost, formatDuration, patchEnvFile } from "../src/helpers.js";
+import {
+  detectCommonJsError,
+  extractHost,
+  formatDuration,
+  lastLines,
+  patchEnvFile,
+} from "../src/helpers.js";
 
 describe("patchEnvFile", () => {
   it("replaces an existing line in place", () => {
@@ -78,6 +84,25 @@ describe("detectCommonJsError", () => {
 
   it("returns false on clean startup log", () => {
     expect(detectCommonJsError("Server ready on port 3000\n")).toBe(false);
+  });
+});
+
+describe("lastLines", () => {
+  it("returns all lines when fewer than count", () => {
+    expect(lastLines("a\nb", 5)).toBe("a\nb");
+  });
+
+  it("keeps only the last count lines", () => {
+    expect(lastLines("a\nb\nc\nd", 2)).toBe("c\nd");
+  });
+
+  it("preserves a trailing newline as an empty last line", () => {
+    expect(lastLines("a\nb\n", 2)).toBe("b\n");
+  });
+
+  it("returns an empty string for a count of zero or less", () => {
+    expect(lastLines("a\nb\nc", 0)).toBe("");
+    expect(lastLines("a\nb\nc", -3)).toBe("");
   });
 });
 

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { StartupError } from "./errors.js";
+import { lastLines } from "./helpers.js";
 import { isProcessAlive as defaultIsAlive } from "./process-control.js";
 
 export const LOG_TAIL_LINES = 30;
@@ -29,14 +30,22 @@ export async function awaitAllReady(
   await Promise.all(servers.map((server, i) => waitForReady(server, pids[i], options)));
 }
 
-export function handleStartupFailure(err: StartupError): void {
+export interface StartupFailureOptions {
+  /** When false (the foreground already streamed the log live), skip the redundant log tail. */
+  includeTail?: boolean;
+}
+
+export function handleStartupFailure(err: StartupError, options: StartupFailureOptions = {}): void {
   console.error(`\nError: ${err.label} ${err.reason}.`);
-  if (err.logFile && existsSync(err.logFile)) {
-    const lines = readFileSync(err.logFile, "utf-8").split("\n").slice(-LOG_TAIL_LINES);
+  if (!err.logFile || !existsSync(err.logFile)) return;
+  const fullLog = join(process.cwd(), err.logFile);
+  if (options.includeTail ?? true) {
     console.error(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
-    console.error(lines.join("\n"));
-    console.error(`--- end ---\nFull log: ${join(process.cwd(), err.logFile)}`);
+    console.error(lastLines(readFileSync(err.logFile, "utf-8"), LOG_TAIL_LINES));
+    console.error(`--- end ---\nFull log: ${fullLog}`);
+    return;
   }
+  console.error(`Full log: ${fullLog}`);
 }
 
 async function waitForReady(
