@@ -24,6 +24,10 @@ export function extractHost(content: string, key: string, fallback = "localhost"
   return m ? m[1] : fallback;
 }
 
+export function lastLines(content: string, count: number): string {
+  return content.split("\n").slice(-count).join("\n");
+}
+
 /**
  * Reads `<varName>=<value>` from a dotenv-style file and parses it as a port.
  * Exits with code 1 on missing file, missing variable, or non-numeric value.

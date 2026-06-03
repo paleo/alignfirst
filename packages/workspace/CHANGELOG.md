@@ -1,5 +1,11 @@
 # @paleo/worktree-env
 
+## 0.15.0
+
+### Minor Changes
+
+- `dev` (foreground): stream logs from the first byte so the whole startup is visible live, and attach to an already-running dev-server (replay recent log + follow; CTRL+C detaches) instead of refusing to start.
+
 ## 0.14.2
 
 ### Patch Changes
