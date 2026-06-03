@@ -17,6 +17,20 @@ export interface CellResult {
   judgeUsages: JudgeUsage[];
 }
 
+export function cellLeafName(parts: {
+  scenarioId: string;
+  modelId: string;
+  channel: string;
+  iterationIndex: number;
+  iterationWidth: number;
+}): string {
+  const iterSuffix =
+    parts.iterationWidth > 0
+      ? `-#${String(parts.iterationIndex).padStart(parts.iterationWidth, "0")}`
+      : "";
+  return `${parts.modelId}-${parts.scenarioId}-${parts.channel}${iterSuffix}`;
+}
+
 export function readCellResult(path: string): CellResult | undefined {
   let raw: string;
   try {

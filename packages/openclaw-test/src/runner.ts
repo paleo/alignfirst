@@ -2,7 +2,7 @@ import { pollQaBus } from "@paleo/openclaw-channel-mock-core";
 import { randomBytes } from "node:crypto";
 import { createWriteStream, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { writeCellResult } from "./cell-result.js";
+import { cellLeafName, writeCellResult } from "./cell-result.js";
 import {
   type ChannelId,
   createContext,
@@ -171,11 +171,13 @@ interface RunSetup {
 function setupRun(args: RunnerArgs): RunSetup {
   const conversationId = `${args.scenario}-${args.channel}-${shortRand()}`;
   const accountId: ChannelId = args.channel;
-  const iterSuffix =
-    args.iterationWidth > 0
-      ? `-#${String(args.iterationIndex).padStart(args.iterationWidth, "0")}`
-      : "";
-  const leaf = `${args.scenario}-${args.modelId}-${args.channel}${iterSuffix}`;
+  const leaf = cellLeafName({
+    scenarioId: args.scenario,
+    modelId: args.modelId,
+    channel: args.channel,
+    iterationIndex: args.iterationIndex,
+    iterationWidth: args.iterationWidth,
+  });
   const outDir = join(ARTIFACTS_ROOT, args.baseStamp, leaf);
   mkdirSync(outDir, { recursive: true });
 

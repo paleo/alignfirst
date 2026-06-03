@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.8.1
+
+### Patch Changes
+
+- Cell names lead with the model, then the scenario
+
 ## 0.8.0
 
 ### Minor Changes
