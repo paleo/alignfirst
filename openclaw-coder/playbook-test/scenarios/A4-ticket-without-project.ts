@@ -18,8 +18,8 @@ export default async function ticketWithoutProject(ctx: ScenarioContext): Promis
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Ticket ${TICKET_ID}, on doit corriger le bug d'export.`,
   });
 

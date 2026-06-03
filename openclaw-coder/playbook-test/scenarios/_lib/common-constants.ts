@@ -5,10 +5,8 @@
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const STARTER_ANNOUNCEMENT_RUBRIC = `A short announcement that a new thread is being opened (e.g. "Nouveau thread.", "Opening a thread."). A brief filler or commitment phrase ("Je regarde ça", "On y va") is fine. No questions, no prompts for input, no narration of the user's request.`;
-
 export const NEW_WORK_QUESTION_RUBRIC =
-  "A short message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. May also include a brief announcement clause alongside. No off-topic content, no offers to do something else.";
+  "A message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
 export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
 

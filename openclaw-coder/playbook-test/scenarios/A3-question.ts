@@ -21,8 +21,8 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: QUESTION_TEXT,
   });
 

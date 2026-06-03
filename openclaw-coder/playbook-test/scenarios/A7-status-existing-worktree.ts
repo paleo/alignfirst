@@ -25,8 +25,8 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 

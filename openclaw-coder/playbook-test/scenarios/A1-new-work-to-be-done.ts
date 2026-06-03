@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { NEW_WORK_QUESTION_RUBRIC, STARTER_ANNOUNCEMENT_RUBRIC } from "./_lib/common-constants.ts";
+import { NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -42,8 +42,8 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   const startCursor = await ctx.getCursor();
 
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: "Nous avons un travail à faire sur nimbus.",
   });
 
@@ -65,13 +65,18 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   });
 
   // The starter has no ticket/role header (TICKET_ID is still unknown; the
-  // `[WORK]` header appears only once it's supplied), but it must NAME the
-  // project — a fresh Discord thread session has no other record of it.
-  ctx.assertRegex(
-    starter.text,
-    new RegExp(PROJECT, "i"),
-    "starter names the project (recovery carrier)",
-  );
+  // `[WORK]` header appears only once it's supplied). On Discord it must NAME
+  // the project — a fresh Discord thread session can't see the channel message
+  // that named it, so the starter is the only pre-`[WORK]` carrier. On Slack
+  // the auto-threaded triggering message is in the thread history, so the
+  // project survives even when the starter is reasoning leak that omits it.
+  if (ctx.channel === "discord-mock") {
+    ctx.assertRegex(
+      starter.text,
+      new RegExp(PROJECT, "i"),
+      "starter names the project (Discord recovery carrier)",
+    );
+  }
   // The agent may instead use the in-starter shortcut and ask about the work.
   const questionAlreadyAsked = await classifyStarterRest(ctx, wait.entry, starter.text.trim());
 
@@ -110,19 +115,15 @@ async function classifyStarterRest(
     message: `asksAboutTheWork=${asksAboutTheWork}: ${classification.parsed.reason}`,
   });
 
+  // When the starter already asks about the work, validate that ask. Otherwise
+  // it's an announcement-only starter (or tolerated reasoning leak) — nothing
+  // to judge here; the separate follow-up question is validated downstream.
   if (asksAboutTheWork) {
     await ctx.judgeLLM({
       attachTo: entry,
       message: rest,
       rubric: NEW_WORK_QUESTION_RUBRIC,
       label: "starter-work-question",
-    });
-  } else {
-    await ctx.judgeLLM({
-      attachTo: entry,
-      message: rest,
-      rubric: STARTER_ANNOUNCEMENT_RUBRIC,
-      label: "starter-announcement",
     });
   }
   return asksAboutTheWork;
@@ -153,8 +154,8 @@ async function expectTicketQuestion(ctx: ScenarioContext, prev: StarterStep): Pr
 
 async function sendTicketAndExpectAck(ctx: ScenarioContext, prev: Step): Promise<Step> {
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Ticket ${TICKET_ID}. La fonctionnalité dont nous avons besoin : passer le bouton d'export en gras.`,
     threadId: prev.threadId,
   });

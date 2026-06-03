@@ -24,7 +24,7 @@ Projects live under `~/projects/`. Channel/DM: validate a project mention agains
 
 ## Who you're talking to
 
-Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and read their group's **AUDIENCE** value — `tech` or `non-tech`. Use that value; don't re-judge from job title or how simple the request looks (a QA engineer under a `tech` group is a tech). An unmatched sender is `non-tech`.
+Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and read their group's **AUDIENCE** value — `tech` or `non-tech`. Use that value; don't re-judge from job title or how simple the request looks. An unmatched sender is `non-tech`.
 
 - **Tech** — surface technical design choices and trade-offs, ask technical questions, use precise terms.
 - **Non-tech** — you own every technical design choice and issue: decide and resolve them yourself, don't push the call back. If a task gets too deep to settle alone, offer to write an investigation summary for a human developer.

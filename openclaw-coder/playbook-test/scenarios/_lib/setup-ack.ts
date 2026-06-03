@@ -13,6 +13,13 @@ export interface SetupAckOptions {
   audience?: "tech" | "non-tech";
   timeoutMs?: number;
   maxCandidates?: number;
+  /**
+   * A first thread message already received — e.g. the auto-streamed Slack
+   * starter, which under auto-threading may merge the announcement and the
+   * `[WORK]` header into one message. Tested as a candidate before the scan;
+   * narration-only or announcement-only seeds fall through to the wait loop.
+   */
+  seedCandidate?: Step;
 }
 
 /**
@@ -31,6 +38,33 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
   const maxCandidates = opts.maxCandidates ?? 5;
   const headerRe = workHeaderRegex(project, ticketId);
   const window: string[] = [];
+
+  // A candidate matches when (audience mode) it carries the `[WORK]` header
+  // with the expected audience token, or (no audience) it commits to setup.
+  const matches = async (text: string): Promise<boolean> => {
+    if (opts.audience) {
+      if (!headerRe.test(text)) return false;
+      assertWorkHeaderAudience(text, opts.audience);
+      return true;
+    }
+    return await commitsToSetup(ctx, text);
+  };
+  const finalize = (step: Step): Step => {
+    if (!opts.audience) {
+      const joined = window.join("\n");
+      ctx.assertRegex(joined, new RegExp(`\\b${ticketId}\\b`), "ack window states the ticket");
+      ctx.assertRegex(joined, new RegExp(`\\b${project}\\b`, "i"), "ack window names the project");
+    }
+    return step;
+  };
+
+  if (opts.seedCandidate) {
+    const seed = opts.seedCandidate;
+    window.push(seed.match.text);
+    ctx.log({ attachTo: seed.entry, prefix: "ack candidate (starter)", message: seed.match.text });
+    if (await matches(seed.match.text)) return finalize(seed);
+  }
+
   let cursor = opts.sinceCursor;
   for (let i = 0; i < maxCandidates; i += 1) {
     const wait = await waitForOutboundSkippingNarration(
@@ -41,17 +75,13 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
     cursor = wait.nextCursor;
     window.push(wait.match.text);
     ctx.log({ attachTo: wait.entry, prefix: `ack candidate ${i + 1}`, message: wait.match.text });
-
-    if (opts.audience) {
-      if (headerRe.test(wait.match.text)) {
-        assertWorkHeaderAudience(wait.match.text, opts.audience);
-        return { match: wait.match, entry: wait.entry, threadId, nextCursor: wait.nextCursor };
-      }
-    } else if (await commitsToSetup(ctx, wait.match.text)) {
-      const joined = window.join("\n");
-      ctx.assertRegex(joined, new RegExp(`\\b${ticketId}\\b`), "ack window states the ticket");
-      ctx.assertRegex(joined, new RegExp(`\\b${project}\\b`, "i"), "ack window names the project");
-      return { match: wait.match, entry: wait.entry, threadId, nextCursor: wait.nextCursor };
+    if (await matches(wait.match.text)) {
+      return finalize({
+        match: wait.match,
+        entry: wait.entry,
+        threadId,
+        nextCursor: wait.nextCursor,
+      });
     }
     if (Date.now() >= deadline) break;
   }

@@ -27,7 +27,7 @@ The moment you enter WORK mode, your **first** user-facing post is this banner �
 
 > [WORK] Project: {PROJECT_NAME} — Ticket: {TICKET_ID} — Audience: {AUDIENCE}. {setup signal}
 
-- `{AUDIENCE}` — the sender's `AUDIENCE` value (`tech` / `non-tech`) from `USER.md`; see "Who you're talking to" in the dispatcher skill.
+- `{AUDIENCE}` — `tech` / `non-tech`, carried forward from the starter (which already recorded it). If no starter recorded it yet, read the sender's `AUDIENCE` from `USER.md` — see "Who you're talking to" in the dispatcher skill.
 - Bold the values — project, ticket, audience — with your surface's bold markers (not literal `**`).
 - Multiple projects: join them with `+` (e.g. `proj-a+proj-b`).
 - Keep `[WORK]` and the values (including the `tech`/`non-tech` token) intact; translate the setup signal to the user's language and vary it — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.

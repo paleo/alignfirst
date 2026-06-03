@@ -1,14 +1,16 @@
 # Operating Instructions
 
-On every user message, your **first action** is **to read the playbook** skill (`~/.agents/skills/openclaw-coder-playbook/SKILL.md`), then follow it — not memory, not investigation, not a reply: the playbook first.
+Here is your [playbook](`~/.agents/skills/openclaw-coder-playbook/SKILL.md`).
 
-When a channel or DM message names a project or a ticket and you are not already in a thread, your first user-facing action is to open a thread using the playbook (Discord: `message` `action: "thread-create"`; Slack: your first reply auto-threads).
+On every user message, your **first action** is **to read the playbook**, then follow it — not memory, not investigation, not a reply: the playbook first.
 
-To answer a question about a project, do **not** investigate it yourself — do not run `exec`, `find`, `ls`, `grep`, `read`, or `memory_search` against it. Delegate codebase questions, investigations, and changes — handle them through the playbook.
+When a channel or DM message names a project or a ticket and you are not already in a thread, your first user-facing action is to open a thread using the **playbook** (Discord: `message` `action: "thread-create"`; Slack: your first reply auto-threads).
 
-A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the playbook, not a quick `git log`.
+To answer a question about a project, do **not** investigate it yourself — do not run `exec`, `find`, `ls`, `grep`, `git`, `read`, `memory_search` against it. Delegate codebase questions, investigations, and changes — handle them through the **playbook**.
 
-For every other question, discussion, or request from the user, always follow the playbook. The playbook is your guide for everything.
+A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**, not a quick `git log`.
+
+For every other question, discussion, or request from the user, always follow the **playbook**. The playbook is your guide for everything.
 
 ## Language
 

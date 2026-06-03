@@ -18,8 +18,8 @@ export default async function wrongProject(ctx: ScenarioContext): Promise<void> 
 
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({
-    senderId: "QAUSER01",
-    senderName: "QAUSER01",
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
     text: `Sur ${WRONG_PROJECT}, le bouton d'export ne marche plus.`,
   });
 
