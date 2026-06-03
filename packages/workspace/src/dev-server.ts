@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
@@ -16,8 +24,13 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError, formatDuration, setupLogPath } from "./helpers.js";
-import { awaitAllReady, handleStartupFailure, type PollableServer } from "./log-polling.js";
+import { detectCommonJsError, formatDuration, lastLines, setupLogPath } from "./helpers.js";
+import {
+  awaitAllReady,
+  handleStartupFailure,
+  LOG_TAIL_LINES,
+  type PollableServer,
+} from "./log-polling.js";
 import {
   canonicalCwd,
   detectPortConflicts,
@@ -174,6 +187,11 @@ async function runForeground(
   options: StartOptions,
 ): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
+  if (!options.restart) {
+    const running = findOwnLiveEntry(config, mainWorktree, ctx.cwd);
+    if (running) return attachForeground(config, running);
+  }
+
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   let started = false;
   let shuttingDown = false;
@@ -194,19 +212,63 @@ async function runForeground(
 
   if (await runStartChecks(config, mainWorktree, ctx, options)) process.exit(0);
 
+  // Stream logs from the first byte so the whole startup (e.g. a slow build) is visible live.
+  const streamLogs = (): void => tailLogs(config, state.spawnPids, { fromStart: true });
   // A signal during startup hands teardown to onSignal (rollback + exit 130); block so we
   // neither roll back twice nor register a server that is being torn down.
-  if (!(await spawnWithRollback(config, ctx, state, () => shuttingDown))) {
+  if (!(await spawnWithRollback(config, ctx, state, () => shuttingDown, streamLogs))) {
     await new Promise<never>(() => {});
   }
 
   const slot = registerStartedServer(config, mainWorktree, state.spawnPids);
   started = true;
   printStartSummary(config, slot, state.spawnPids);
-  tailLogs(config, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    console.log("\nDev-server stopped externally (e.g. `dev down`). Exiting.");
+    process.exit(0);
+  });
+  await new Promise<never>(() => {});
+}
+
+function findOwnLiveEntry(
+  config: DevServerConfig,
+  mainWorktree: string,
+  cwd: string,
+): DevServerEntry | undefined {
+  const entry = findOwnEntry(mainWorktree, config.registryDir, cwd);
+  if (!entry) return;
+  return Object.values(entry.pids).some(isProcessAlive) ? entry : undefined;
+}
+
+/**
+ * Attach to a dev-server already running in this worktree: replay the recent log, follow it live,
+ * and exit when it stops. CTRL+C only detaches — this session does not own the server.
+ */
+async function attachForeground(config: DevServerConfig, entry: DevServerEntry): Promise<void> {
+  const pidList = Object.entries(entry.pids)
+    .map(([name, pid]) => `${name}=${pid}`)
+    .join(", ");
+  console.log(
+    `Attaching to the dev-server in this worktree (slot ${entry.slot}, pids: ${pidList}).`,
+  );
+  console.log("Showing live logs. Press CTRL+C to detach — the dev-server keeps running.");
+
+  let detaching = false;
+  const onSignal = (): void => {
+    if (detaching) return;
+    detaching = true;
+    console.log("\nDetached. The dev-server is still running (`dev down` to stop it).");
+    process.exit(0);
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
+  tailLogs(config, entry.pids, { replayLines: LOG_TAIL_LINES });
+  watchForExternalStop(Object.values(entry.pids).filter(isProcessAlive), () => {
+    if (detaching) return;
+    detaching = true;
     console.log("\nDev-server stopped externally (e.g. `dev down`). Exiting.");
     process.exit(0);
   });
@@ -243,14 +305,16 @@ async function spawnWithRollback(
   ctx: ServerContext,
   state: StartState,
   isAborted: () => boolean = () => false,
+  onSpawned?: () => void,
 ): Promise<boolean> {
   try {
-    await spawnAndAwait(config, ctx, state);
+    await spawnAndAwait(config, ctx, state, onSpawned);
   } catch (err) {
     if (isAborted()) return false;
     await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
     if (err instanceof StartupError) {
-      handleStartupFailure(err);
+      // The foreground (onSpawned set) already streamed the log live, so skip the redundant tail.
+      handleStartupFailure(err, { includeTail: onSpawned === undefined });
       process.exit(1);
     }
     throw err;
@@ -262,6 +326,7 @@ async function spawnAndAwait(
   config: DevServerConfig,
   ctx: ServerContext,
   state: StartState,
+  onSpawned?: () => void,
 ): Promise<void> {
   for (const server of config.servers) {
     console.log(`Starting ${server.name} dev server...`);
@@ -272,6 +337,7 @@ async function spawnAndAwait(
       state.startedCallbacks.push(server);
     }
   }
+  onSpawned?.();
 
   const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
   const pollables: PollableServer[] = spawnEntries.map((s) => ({
@@ -323,17 +389,42 @@ function printStartSummary(
 const TAIL_INTERVAL_MS = 300;
 const LIVENESS_POLL_MS = 1000;
 
-function tailLogs(config: DevServerConfig, spawnPids: Record<string, number>): void {
+// `fromStart` follows from the first byte (fresh start); `replayLines` prints the last N lines of
+// an existing log before following (attaching to a running server).
+type TailMode = { fromStart: true } | { replayLines: number };
+
+function tailLogs(
+  config: DevServerConfig,
+  spawnPids: Record<string, number>,
+  mode: TailMode,
+): void {
   const names = Object.keys(spawnPids);
   const prefixed = names.length > 1;
   for (const name of names) {
     const path = join(process.cwd(), logFileFor(config.runtimeDir, name));
-    followLogFile(path, prefixed ? `[${name}] ` : "");
+    const prefix = prefixed ? `[${name}] ` : "";
+    const offset = "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines);
+    followLogFile(path, prefix, offset);
   }
 }
 
-function followLogFile(path: string, prefix: string): void {
-  let offset = existsSync(path) ? statSync(path).size : 0;
+// Prints the last `lines` of the log, then returns the byte offset where `followLogFile` resumes
+// (the file's current size). Reads raw bytes so the offset matches the file even if it holds
+// invalid UTF-8, which a decoded string's byte length would not.
+function replayTail(path: string, prefix: string, lines: number): number {
+  if (!existsSync(path)) return 0;
+  const buffer = readFileSync(path);
+  const tail = lastLines(buffer.toString("utf8"), lines);
+  if (tail.length > 0) writeWithPrefix(tail.endsWith("\n") ? tail : `${tail}\n`, prefix);
+  return buffer.length;
+}
+
+function writeWithPrefix(text: string, prefix: string): void {
+  process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
+}
+
+function followLogFile(path: string, prefix: string, initialOffset: number): void {
+  let offset = initialOffset;
   setInterval(() => {
     if (!existsSync(path)) return;
     const size = statSync(path).size;
@@ -345,8 +436,7 @@ function followLogFile(path: string, prefix: string): void {
     const bytesRead = readSync(fd, buffer, 0, length, offset);
     closeSync(fd);
     offset += bytesRead;
-    const text = buffer.subarray(0, bytesRead).toString("utf8");
-    process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
+    writeWithPrefix(buffer.subarray(0, bytesRead).toString("utf8"), prefix);
   }, TAIL_INTERVAL_MS);
 }
 

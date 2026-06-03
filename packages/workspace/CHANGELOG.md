@@ -1,5 +1,17 @@
 # @paleo/worktree-env
 
+## 0.15.1
+
+### Patch Changes
+
+- Fix the foreground log-follow offset to count raw bytes (a log with invalid UTF-8 no longer skews where following resumes), and guard `lastLines` against a non-positive count.
+
+## 0.15.0
+
+### Minor Changes
+
+- `dev` (foreground): stream logs from the first byte so the whole startup is visible live, and attach to an already-running dev-server (replay recent log + follow; CTRL+C detaches) instead of refusing to start.
+
 ## 0.14.2
 
 ### Patch Changes
