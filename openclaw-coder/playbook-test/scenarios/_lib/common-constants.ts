@@ -11,7 +11,7 @@ export const NEW_WORK_QUESTION_RUBRIC =
 export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
 
 export const askWhichProjectRubric = (ticketId: string): string =>
-  `A short follow-up message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere in the message — main clause, aside, or parenthetical all count. Does NOT announce setup, does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
+  `A message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere — main clause, aside, or parenthetical all count. A thread-opening announcement or an audience note (\`tech\`/\`non-tech\`) before the question is fine. Does NOT claim a workspace/worktree/branch is being created or set up, and does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
 
 export const unknownProjectRubric = (projectName: string): string =>
   `A short follow-up message acknowledging that the project named by the user (${projectName}) is not found under \`~/projects/\`. Asks the user to confirm the name or supply the correct one. Does NOT proceed with setup, does NOT pretend the project exists.`;

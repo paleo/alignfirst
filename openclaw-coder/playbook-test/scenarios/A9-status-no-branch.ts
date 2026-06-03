@@ -37,25 +37,40 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
   const ticketRe = new RegExp(`\\b${TICKET_ID}\\b`);
   const absenceRe =
     /\b(no branch|aucune branche|pas de branche|pas de worktree|no work|aucun travail|rien (n'a |de |encore|started|encore commenc)|nothing (yet|started|to))\b/i;
-  const reportWait = await waitForOutboundSkippingNarration(
-    ctx,
-    (m) =>
-      m.direction === "outbound" &&
-      m.threadId === threadId &&
-      m.id !== starterWait.match.id &&
-      ticketRe.test(m.text) &&
-      absenceRe.test(m.text),
-    {
-      timeoutMs: 120_000,
-      sinceCursor: starterWait.nextCursor,
-      failFastCliMockGraceMs: 30_000,
-      failFastUnmatchedOutbounds: false,
-    },
-  );
-  ctx.log({ attachTo: reportWait.entry, label: "no-branch report received" });
+  const isNoBranchReport = (text: string): boolean => ticketRe.test(text) && absenceRe.test(text);
+
+  // No-branch status is WORK-mode but fully scoped: the channel session reads
+  // project-workspace-setup.md, detects no branch (Step 4 sub-path 3), and
+  // reports "nothing here" in the same turn — ending it. On Slack that turn
+  // auto-streams into the thread and the report often rides in the starter
+  // message itself. So accept the starter as the report; otherwise wait for a
+  // separate one (Discord, or a same-turn follow-up message).
+  let reportEntry = starterWait.entry;
+  let reportText = starterWait.match.text;
+  if (!isNoBranchReport(reportText)) {
+    const reportWait = await waitForOutboundSkippingNarration(
+      ctx,
+      (m) =>
+        m.direction === "outbound" &&
+        m.threadId === threadId &&
+        m.id !== starterWait.match.id &&
+        isNoBranchReport(m.text),
+      {
+        // Match A7/A8: a slow model can take a while to settle the report after
+        // the `[WORK]` header (it may attempt setup before concluding no branch).
+        timeoutMs: 180_000,
+        sinceCursor: starterWait.nextCursor,
+        failFastCliMockGraceMs: 30_000,
+        failFastUnmatchedOutbounds: false,
+      },
+    );
+    reportEntry = reportWait.entry;
+    reportText = reportWait.match.text;
+  }
+  ctx.log({ attachTo: reportEntry, label: "no-branch report received" });
   await ctx.judgeLLM({
-    attachTo: reportWait.entry,
-    message: reportWait.match.text,
+    attachTo: reportEntry,
+    message: reportText,
     rubric: statusNoBranchRubric(TICKET_ID),
     label: "status-no-branch",
   });
