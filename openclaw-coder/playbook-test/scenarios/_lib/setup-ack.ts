@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { workHeaderRegex } from "./common-constants.ts";
+import { escapeRe, workHeaderRegex } from "./common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import type { Step } from "./types.ts";
 
@@ -52,8 +52,16 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
   const finalize = (step: Step): Step => {
     if (!opts.audience) {
       const joined = window.join("\n");
-      ctx.assertRegex(joined, new RegExp(`\\b${ticketId}\\b`), "ack window states the ticket");
-      ctx.assertRegex(joined, new RegExp(`\\b${project}\\b`, "i"), "ack window names the project");
+      ctx.assertRegex(
+        joined,
+        new RegExp(`\\b${escapeRe(ticketId)}\\b`),
+        "ack window states the ticket",
+      );
+      ctx.assertRegex(
+        joined,
+        new RegExp(`\\b${escapeRe(project)}\\b`, "i"),
+        "ack window names the project",
+      );
     }
     return step;
   };
@@ -95,7 +103,7 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
 // token (kept intact across languages), so check it by token rather than by an
 // LLM judge. "non-tech" contains "tech", so the tech case must also exclude it.
 function assertWorkHeaderAudience(text: string, expected: "tech" | "non-tech"): void {
-  const hasNonTech = /non-?tech/i.test(text);
+  const hasNonTech = /\bnon-?tech\b/i.test(text);
   if (expected === "non-tech") {
     if (!hasNonTech) {
       throw new Error(`[WORK] header audience: expected non-tech, got: ${JSON.stringify(text)}`);

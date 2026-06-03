@@ -20,7 +20,7 @@ A single labelled template plus a short list of variation tails beats four full-
 Good:
 
 ```text
-[WORK] Project: {P} — Ticket: {T} — talking to a {tech | non-tech}. {setup signal}
+[WORK] Project: {P} — Ticket: {T} — Audience: {tech | non-tech}. {setup signal}
 ```
 
 Vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the agent to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.

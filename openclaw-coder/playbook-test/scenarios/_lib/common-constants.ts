@@ -3,7 +3,7 @@
 // unambiguous leak signal: while running A<S>, any ABC-0<X>N with X ≠ S is
 // bleed from another scenario. See the playbook-test README.md.
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const NEW_WORK_QUESTION_RUBRIC =
   "A message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
@@ -35,11 +35,5 @@ const boldOpt = "\\*{0,2}";
 export const workHeaderRegex = (project: string, ticketId: string): RegExp =>
   new RegExp(
     `\\[WORK\\][\\s\\S]*${boldOpt}${escapeRe(project)}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
-    "i",
-  );
-
-export const workHeaderMultiProjectRegex = (projects: string[], ticketId: string): RegExp =>
-  new RegExp(
-    `\\[WORK\\][\\s\\S]*${boldOpt}${projects.map(escapeRe).join("\\+")}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
     "i",
   );

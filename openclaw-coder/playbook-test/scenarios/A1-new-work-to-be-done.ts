@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
+import { escapeRe, NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -69,7 +69,7 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
   if (ctx.channel === "discord-mock") {
     ctx.assertRegex(
       starter.text,
-      new RegExp(PROJECT, "i"),
+      new RegExp(escapeRe(PROJECT), "i"),
       "starter names the project (Discord recovery carrier)",
     );
   }
