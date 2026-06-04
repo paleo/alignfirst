@@ -99,27 +99,9 @@ The playbook expects each task to run in its **own thread session**. With Slack,
 
 ### `workspace/AGENTS.md`
 
-Here is an example of a workspace's `AGENTS.md`:
+Here is an example of a [workspace's `AGENTS.md`](playbook-test/workspace/AGENTS.md). The only required part is the first section.
 
-```markdown
-# Operating Instructions
-
-On every user message, before any reply text and before any other tool call, your first action is to load the `openclaw-coder-playbook` skill and follow its `SKILL.md`.
-
-Do not improvise — no announcement, no `ls`, `grep`, `find`, or project lookup before the playbook is read and followed.
-
-## Language
-
-Internal reasoning, messages to the coding agent, code, branches, commits, MR/PR titles — **English**. Replies to the user — **the user's language**.
-
-## Tickets are labels, not lookup targets
-
-When a user mentions a ticket ID (`ABC-123`, `12`, …), it's a label for branch names, thread names, and the AlignFirst workflow — not an invitation to look up its content. Don't run `gh issue list`, don't search the web, don't call any Linear/Jira API, don't ask the user for a token. The user will tell you in chat what they want. Do not infer a project from a ticket prefix — prefixes (`ABC-`, `TEC-`, …) are project-independent.
-```
-
-The only required part is the first paragraph.
-
-About tickets: feel free to replace this with your own instructions on how to access your Linear, Jira, or GitHub/GitLab issues.
+Feel free to adapt the other sections. In particular, replace the instructions related to tickets with your own instructions on how to access your Linear, Jira, or GitHub/GitLab issues.
 
 ## Contribute
 
@@ -128,10 +110,14 @@ The `openclaw-coder-playbook` skill is developed against an internal regression-
 Get started:
 
 ```bash
-cd openclaw-coder/
+# From this `openclaw-coder/` directory
 git clone --depth 1 https://github.com/openclaw/openclaw.git .local/openclaw
 
 cd playbook-test
+
+cp .env.local.example .env.local
+# Set the API keys in `.env.local` as needed
+
 npm install && npm run env:build
 
 # Run scenarios, e.g. all of them on every channel:
