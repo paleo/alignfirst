@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.10.0
+
+### Minor Changes
+
+- Switched test harness to OpenRouter (Qwen 3.6 Plus)
+
 ## 0.9.0
 
 ### Minor Changes
