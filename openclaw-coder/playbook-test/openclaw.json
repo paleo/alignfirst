@@ -20,17 +20,17 @@
   },
   "models": {
     "providers": {
-      "custom-dashscope-intl-aliyuncs-com": {
-        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        "apiKey": "${DASHSCOPE_API_KEY}",
+      "custom-openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "apiKey": "${OPENROUTER_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen3.6-plus",
-            "name": "qwen3.6-plus (Custom Provider)",
+            "id": "qwen/qwen3.6-plus",
+            "name": "Qwen 3.6 Plus (OpenRouter)",
             "reasoning": false,
             "input": ["text"],
-            "cost": { "input": 0.4, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
+            "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
             "contextWindow": 1000000,
             "maxTokens": 65536
           }

@@ -65,7 +65,7 @@ Model selection:
 
 Provider keys (required only when running that provider's model; harmlessly empty otherwise):
 
-- `DASHSCOPE_API_KEY` — Alibaba Model Studio (DashScope/Qwen). Custom providers have no env-var convention in OpenClaw, so the key is referenced from `openclaw.json` as `${DASHSCOPE_API_KEY}` and expanded by the CLI at render time.
+- `OPENROUTER_API_KEY` — OpenRouter (Qwen 3.6 Plus, OpenAI-compatible endpoint). Custom providers have no env-var convention in OpenClaw, so the key is referenced from `openclaw.json` as `${OPENROUTER_API_KEY}` and expanded by the CLI at render time.
 
 Optional (defaults relative to the consumer's project dir):
 

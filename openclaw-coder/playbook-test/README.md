@@ -51,6 +51,6 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 ## Layout
 
 - [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) — committed.
-- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `DASHSCOPE_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`.
+- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `trajectory/<sessionId>.jsonl` (always, provider-neutral), `raw-stream.jsonl` (opt-in).

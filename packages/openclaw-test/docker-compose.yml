@@ -39,7 +39,7 @@ services:
     environment:
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENCLAW_TRAJECTORY_DIR: /home/claw/.openclaw/logs/trajectory
       OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}
       OPENCLAW_TEST_RUNNER_URL: "http://runner:43124"

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveSelectedModels } from "../src/models.js";
 
-const MODELS = "anthropic/claude-sonnet-4-6,custom-dashscope/qwen3.6-plus";
+const MODELS = "anthropic/claude-sonnet-4-6,custom-openrouter/qwen/qwen3.6-plus";
 
 function resolve(selection: string | undefined, defaultEnv?: string) {
   return resolveSelectedModels({ selection, modelsEnv: MODELS, defaultEnv });
@@ -10,20 +10,20 @@ function resolve(selection: string | undefined, defaultEnv?: string) {
 describe("resolveSelectedModels", () => {
   it("resolves a single bare id to its full ref", () => {
     expect(resolve("qwen3.6-plus")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-dashscope/qwen3.6-plus" },
+      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
     ]);
   });
 
   it("resolves a comma list of bare ids, order preserved", () => {
     expect(resolve("qwen3.6-plus,claude-sonnet-4-6")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-dashscope/qwen3.6-plus" },
+      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
       { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
     ]);
   });
 
   it("dedupes repeated ids in a list", () => {
     expect(resolve("qwen3.6-plus,qwen3.6-plus")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-dashscope/qwen3.6-plus" },
+      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
     ]);
   });
 
@@ -31,12 +31,12 @@ describe("resolveSelectedModels", () => {
     expect(
       resolveSelectedModels({
         selection: "all",
-        modelsEnv: "custom-dashscope/qwen3.6-plus,anthropic/claude-sonnet-4-6",
+        modelsEnv: "custom-openrouter/qwen/qwen3.6-plus,anthropic/claude-sonnet-4-6",
         defaultEnv: undefined,
       }),
     ).toEqual([
       { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
-      { id: "qwen3.6-plus", ref: "custom-dashscope/qwen3.6-plus" },
+      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
     ]);
   });
 
