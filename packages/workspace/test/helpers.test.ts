@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  copyAndPatchFile,
   detectCommonJsError,
   extractHost,
   formatDuration,
@@ -137,5 +141,91 @@ describe("formatDuration", () => {
 
   it("drops the zero smaller unit", () => {
     expect(formatDuration(5 * 86400 * 1000)).toBe("5d");
+  });
+});
+
+describe("copyAndPatchFile", () => {
+  const dirs: string[] = [];
+  const tmp = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-"));
+    dirs.push(dir);
+    return dir;
+  };
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads from a path source and patches it", () => {
+    const cur = tmp();
+    const src = join(tmp(), "in.txt");
+    writeFileSync(src, "PORT=1\n");
+    copyAndPatchFile(
+      { currentWorktree: cur, log: () => {} },
+      "out.txt",
+      { path: src },
+      (c) => c.replace("1", "2"),
+      "out",
+      false,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\n");
+  });
+
+  it("uses a content source verbatim through patch", () => {
+    const cur = tmp();
+    copyAndPatchFile(
+      { currentWorktree: cur, log: () => {} },
+      "out.txt",
+      { content: "A=1\n" },
+      (c) => `${c}B=2\n`,
+      "out",
+      false,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("A=1\nB=2\n");
+  });
+
+  it("skips when the target exists without force", () => {
+    const cur = tmp();
+    writeFileSync(join(cur, "out.txt"), "orig\n");
+    const logs: string[] = [];
+    copyAndPatchFile(
+      { currentWorktree: cur, log: (m) => logs.push(m) },
+      "out.txt",
+      { content: "new\n" },
+      (c) => c,
+      "out",
+      false,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("orig\n");
+    expect(logs.some((l) => l.includes("Skipped"))).toBe(true);
+  });
+
+  it("overwrites the target with force", () => {
+    const cur = tmp();
+    writeFileSync(join(cur, "out.txt"), "orig\n");
+    copyAndPatchFile(
+      { currentWorktree: cur, log: () => {} },
+      "out.txt",
+      { content: "new\n" },
+      (c) => c,
+      "out",
+      true,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("new\n");
+  });
+
+  it("skips an optional path source that is missing", () => {
+    const cur = tmp();
+    const logs: string[] = [];
+    copyAndPatchFile(
+      { currentWorktree: cur, log: (m) => logs.push(m) },
+      "out.txt",
+      { path: join(cur, "nope.txt") },
+      (c) => c,
+      "out",
+      false,
+      true,
+    );
+    expect(existsSync(join(cur, "out.txt"))).toBe(false);
+    expect(logs.some((l) => l.includes("optional"))).toBe(true);
   });
 });

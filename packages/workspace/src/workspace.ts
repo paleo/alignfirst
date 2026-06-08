@@ -19,7 +19,12 @@ import {
   removeDevServerEntryByWorktree,
 } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
-import { copyAndPatchFile, formatDuration, setupLogPath } from "./helpers.js";
+import {
+  copyAndPatchFile,
+  formatDuration,
+  type ResolvedFileSource,
+  setupLogPath,
+} from "./helpers.js";
 import { isProcessAlive } from "./process-control.js";
 import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
 import {
@@ -173,16 +178,36 @@ export interface PurgeContext {
   verbose: boolean;
 }
 
+/** A `{ path }` (relative to the main worktree) or `{ content }` (verbatim) initial source. */
+export type ConfigFileSourceSpec = { path: string } | { content: string };
+
+/**
+ * Overrides where a {@link ConfigFileEntry}'s initial content comes from. Defaults to reading
+ * `entry.path` from the main worktree.
+ *
+ * - `{ path }` — read this path (relative to the main worktree) instead of `entry.path`,
+ *   e.g. seed from a committed example: `{ path: "packages/api/.env.local.example" }`.
+ * - `{ content }` — use this string as the initial content verbatim.
+ * - a callback returning either of the above, resolved per worktree with the same
+ *   {@link PatchContext} the `patch` callback receives.
+ */
+export type ConfigFileSource = ConfigFileSourceSpec | ((ctx: PatchContext) => ConfigFileSourceSpec);
+
 /** One config file copied from the main worktree and patched per slot. */
 export interface ConfigFileEntry {
-  /** Path relative to the worktree root. Same path is read from main and written to current. */
+  /** Path relative to the worktree root. Written to the current worktree. */
   path: string;
+  /**
+   * Overrides the initial content's source. Defaults to reading `path` from the main worktree.
+   * Use this to seed from a committed example or supplied content instead. See {@link ConfigFileSource}.
+   */
+  source?: ConfigFileSource;
   /** Returns the patched content given the source content and the slot's ports. */
   patch: (content: string, ctx: PatchContext) => string;
   /**
-   * When `true`, a missing source on the main worktree logs a warning and skips the entry.
+   * When `true`, a missing `{ path }` source logs a warning and skips the entry.
    * Default: required (missing source aborts setup). Bootstrap the main worktree first via
-   * `workspace setup`, or seed sources in `preSetup`.
+   * `workspace setup`, or seed sources in `preSetup`. Ignored for `{ content }` sources.
    */
   optional?: boolean;
 }
@@ -783,21 +808,29 @@ function generateConfigFiles(
   log: (msg: string) => void,
 ): void {
   for (const entry of entries) {
+    const patchCtx: PatchContext = {
+      slot,
+      ports,
+      mainWorktree: ctx.mainWorktree,
+      currentWorktree: ctx.currentWorktree,
+    };
     copyAndPatchFile(
-      { currentWorktree: ctx.currentWorktree, mainWorktree: ctx.mainWorktree, log },
+      { currentWorktree: ctx.currentWorktree, log },
       entry.path,
-      (content) =>
-        entry.patch(content, {
-          slot,
-          ports,
-          mainWorktree: ctx.mainWorktree,
-          currentWorktree: ctx.currentWorktree,
-        }),
+      resolveConfigSource(entry, patchCtx),
+      (content) => entry.patch(content, patchCtx),
       entry.path,
       force,
       entry.optional ?? false,
     );
   }
+}
+
+function resolveConfigSource(entry: ConfigFileEntry, ctx: PatchContext): ResolvedFileSource {
+  const spec = typeof entry.source === "function" ? entry.source(ctx) : entry.source;
+  if (spec === undefined) return { path: join(ctx.mainWorktree, entry.path) };
+  if ("content" in spec) return { content: spec.content };
+  return { path: join(ctx.mainWorktree, spec.path) };
 }
 
 interface RemoveTarget {
