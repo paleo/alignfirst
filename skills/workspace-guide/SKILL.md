@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.10.0"
+  version: "0.10.1"
   repository: https://github.com/paleo/skills
 ---
 
@@ -111,7 +111,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
 4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths.
-5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, patch(content, ctx), required? }`; the file is copied from the main worktree and run through `patch`. `required: true` upgrades the "missing source" warning to an error.
+5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, source?, patch(content, ctx), optional? }`; the source (the main worktree's `path` by default) is read and run through `patch`. `optional: true` downgrades a missing source from an error to a skip+warning.
 6. **Runs `await config.finalizeWorktree(ctx)`** in a detached background process. This callback owns infrastructure startup, dependency install / build, database provisioning, migrations, and seeding (see "Database provisioning" below). It MUST be idempotent — `workspace setup` re-runs it as the documented retry path.
 7. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
 
@@ -148,7 +148,7 @@ Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s
 - `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
 - `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs.
 - `registryDir: string` — required. Shared registry directory relative to a worktree root (e.g. `.local/_workspace-registry`). Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory across linked worktrees — typically a subdirectory under a `sharedDirs` entry (e.g. `.local`).
-- `configFiles: Array<{ path, patch, required? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts.
+- `configFiles: Array<{ path, source?, patch, optional? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts. `source` overrides where the initial content comes from (default: `path` read from the main worktree): `{ path }` (relative to the main worktree, e.g. a committed example), `{ content }` (verbatim), or a callback `(ctx) => { path } | { content }` receiving the same `PatchContext`. `optional: true` skips the entry (warning) when a `{ path }` source is missing instead of aborting.
 - `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `workspace setup` retry can't import `@paleo/workspace`. Failures are logged to `<runtimeDir>/logs/workspace-setup.log` with a `FAILED:` banner.
 - `purgeInfrastructure(ctx)` — optional. Called by `workspace remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.
 - `printSummary(ctx)` — required. Returns the string to print after the foreground phase (slot creation + symlinks + config files) completes.
@@ -190,6 +190,7 @@ Servers start in array order. The typical layout is a `kind: "callback"` infra e
 The rules below are not enforceable by the type system. Read them carefully:
 
 - `start(ctx)` MUST resolve only once the resource is ready (no log polling on the runner's side).
+- Surface a failing command's output and let it throw. Run the startup command with `stdio: "inherit"` (or, on `"pipe"`, print `err.stderr` in the catch) so the real error is visible — never swallow it with an empty `catch {}`. A `start()` that throws aborts cleanly (the runner rolls back and reports it); a `start()` that catches-and-returns falsely signals success, so later servers start against a dead dependency and the root cause is hidden.
 - Always thread `ctx.cwd` into every child-process call (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve any paths against `ctx.cwd`. Never call bare `execSync("docker compose ...")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Do not capture paths or env values at module load. Resolve everything inside the callback from `ctx.cwd`.
 - Cross-worktree stop (`dev down --all`, eviction) invokes your callbacks with `ctx.cwd = <victim worktree>`, not the worktree the process started in. If a victim worktree is on a branch that declares an extra callback server not present in the current config, that server is skipped — `dev down` from inside that worktree finishes the cleanup.
@@ -206,7 +207,7 @@ See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference con
 4. Aborts if this worktree already has an entry in `dev-servers.json` whose spawn PIDs are alive. A stale entry (all PIDs dead) is dropped so the start can proceed.
 5. Iterates `config.servers` in array order. For `kind: "spawn"`: spawns a detached process group with stdout/stderr to `<runtimeDir>/logs/<name>.log` and records the PID in-memory. For `kind: "callback"`: `await server.start({ cwd: process.cwd() })`.
 6. Polls each spawn server's log in parallel and asks `detectSuccess(logContent)` whether it's ready. Fails fast when `detectError(logContent)` returns a label (e.g. matching `"[ExceptionHandler]"` or Node's `"Node.js v"` exit footer) or when the process dies, instead of waiting for the timeout.
-7. On any startup failure, prints the last lines of the failing log, stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero.
+7. On any startup failure — a spawn server's `detectError`/death, or a `kind: "callback"` `start()` that throws — stops every spawned sibling process, invokes `stop()` on every callback server that already started (reverse order), and exits non-zero. A spawn failure prints the failing log's tail; a callback failure prints the thrown error's message.
 8. On success, registers the dev-server in `dev-servers.json` (slot, worktree, branch, owner, spawn pids keyed by `server.name`, `startedAt`) and calls `config.printSummary?.(ctx)` (or prints a default summary when omitted).
 
 **Foreground vs background:** bare `dev` starts in the foreground — it runs the same start pipeline, registers in `dev-servers.json` (so it counts toward the cap and shows in `dev list`), then holds the terminal and tails each spawn server's log to stdout. CTRL+C runs the local stop (kill spawn PIDs + callback `stop()` reverse + unregister) and exits. `dev up` is the same start without holding the terminal — it returns once ready. Children are spawned detached either way, so a hard-killed foreground parent leaves the children as registered orphans, cleanable via `dev down` / `dev list`.
@@ -314,7 +315,7 @@ This works reliably regardless of where worktrees are physically located. The co
 Centralizing worktree path computation prevents a common mistake: creating the worktree as a child directory of the main worktree instead of a sibling. The script derives the path automatically from the branch name and the main worktree directory name.
 
 **Why copy configs from the main worktree instead of from `.example` files?**
-Sibling worktrees should inherit the developer's main-worktree customizations (e.g., a public dev-server IP overriding `localhost`, alternate hosts, secrets configured once). The `.example` files remain the bootstrap source for the main worktree itself, but stop being the per-worktree source after that — propagating customizations automatically is more valuable than re-deriving from the example each time.
+Sibling worktrees should inherit the developer's main-worktree customizations (e.g., a public dev-server IP overriding `localhost`, alternate hosts, secrets configured once). The `.example` files remain the bootstrap source for the main worktree itself, but stop being the per-worktree source after that — propagating customizations automatically is more valuable than re-deriving from the example each time. This is the default; a consumer who prefers example-derived configs can set a per-entry `source` (e.g. `{ path: "...example" }`), typically gated on a developer-local toggle so the choice stays per-developer rather than per-repo.
 
 ## Agent Instructions
 

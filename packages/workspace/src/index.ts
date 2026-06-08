@@ -7,6 +7,8 @@ export type {
   SummaryContext,
   PatchContext,
   ConfigFileEntry,
+  ConfigFileSource,
+  ConfigFileSourceSpec,
   PurgeContext,
 } from "./workspace.js";
 

@@ -1,4 +1,14 @@
-# @paleo/worktree-env
+# @paleo/workspace
+
+## 0.16.0
+
+### Minor Changes
+
+- 8724de4: Add `source` option to `configFiles` entries to override a config file's initial content.
+
+### Patch Changes
+
+- 5494483: Report a failing callback server's `start()` cleanly instead of as an unhandled stack trace.
 
 ## 0.15.1
 

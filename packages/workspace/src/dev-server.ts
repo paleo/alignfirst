@@ -322,6 +322,16 @@ async function spawnWithRollback(
   return !isAborted();
 }
 
+/**
+ * Wraps an error thrown by a callback server's `start()` into a {@link StartupError}, so a failing
+ * callback (e.g. `docker compose up -d`) gets the same clean rollback-and-report path as a spawn
+ * server instead of surfacing as a raw unhandled-rejection stack trace.
+ */
+export function toCallbackStartupError(name: string, err: unknown): StartupError {
+  if (err instanceof StartupError) return err;
+  return new StartupError(name, err instanceof Error ? err.message : String(err));
+}
+
 async function spawnAndAwait(
   config: DevServerConfig,
   ctx: ServerContext,
@@ -333,7 +343,11 @@ async function spawnAndAwait(
     if (server.kind === "spawn") {
       state.spawnPids[server.name] = spawnServer(server, config.runtimeDir, ctx.cwd);
     } else {
-      await server.start(ctx);
+      try {
+        await server.start(ctx);
+      } catch (err) {
+        throw toCallbackStartupError(server.name, err);
+      }
       state.startedCallbacks.push(server);
     }
   }

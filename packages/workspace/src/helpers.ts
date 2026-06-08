@@ -74,20 +74,22 @@ export function readPortFromJsonFile(file: string, jsonPath: string): number {
 
 export interface CopyAndPatchCtx {
   currentWorktree: string;
-  mainWorktree: string;
   log: (msg: string) => void;
 }
+
+/** Resolved initial-content source for {@link copyAndPatchFile}. `path` is absolute. */
+export type ResolvedFileSource = { path: string } | { content: string };
 
 export function copyAndPatchFile(
   ctx: CopyAndPatchCtx,
   relPath: string,
+  source: ResolvedFileSource,
   patchFn: (content: string) => string,
   label: string,
   force: boolean,
   optional = false,
 ): void {
   const targetPath = join(ctx.currentWorktree, relPath);
-  const sourcePath = join(ctx.mainWorktree, relPath);
   const alreadyExists = existsSync(targetPath);
 
   if (alreadyExists && !force) {
@@ -95,19 +97,24 @@ export function copyAndPatchFile(
     return;
   }
 
-  if (!existsSync(sourcePath)) {
-    if (!optional) {
-      console.error(
-        `Error: ${relPath} not found in main worktree. Bootstrap the main worktree first ` +
-          "(`workspace setup`), or mark the entry as optional.",
-      );
-      process.exit(1);
+  let content: string;
+  if ("content" in source) {
+    content = source.content;
+  } else {
+    if (!existsSync(source.path)) {
+      if (!optional) {
+        console.error(
+          `Error: source ${source.path} not found. Bootstrap the main worktree first ` +
+            "(`workspace setup`), provide a `source`, or mark the entry as optional.",
+        );
+        process.exit(1);
+      }
+      ctx.log(`Warning: source ${source.path} not found, skipping (optional).`);
+      return;
     }
-    ctx.log(`Warning: ${relPath} not found in main worktree, skipping (optional).`);
-    return;
+    content = readFileSync(source.path, "utf-8");
   }
 
-  const content = readFileSync(sourcePath, "utf-8");
   const patched = patchFn(content);
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
