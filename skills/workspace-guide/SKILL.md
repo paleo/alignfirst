@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.10.0"
+  version: "0.10.1"
   repository: https://github.com/paleo/skills
 ---
 

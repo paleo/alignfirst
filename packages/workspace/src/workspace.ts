@@ -193,7 +193,7 @@ export type ConfigFileSourceSpec = { path: string } | { content: string };
  */
 export type ConfigFileSource = ConfigFileSourceSpec | ((ctx: PatchContext) => ConfigFileSourceSpec);
 
-/** One config file copied from the main worktree and patched per slot. */
+/** One config file seeded from its source (the main worktree by default) and patched per slot. */
 export interface ConfigFileEntry {
   /** Path relative to the worktree root. Written to the current worktree. */
   path: string;

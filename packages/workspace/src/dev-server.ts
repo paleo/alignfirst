@@ -328,6 +328,7 @@ async function spawnWithRollback(
  * server instead of surfacing as a raw unhandled-rejection stack trace.
  */
 export function toCallbackStartupError(name: string, err: unknown): StartupError {
+  if (err instanceof StartupError) return err;
   return new StartupError(name, err instanceof Error ? err.message : String(err));
 }
 

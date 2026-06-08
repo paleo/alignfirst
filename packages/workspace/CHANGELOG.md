@@ -1,4 +1,4 @@
-# @paleo/worktree-env
+# @paleo/workspace
 
 ## 0.16.0
 

@@ -52,4 +52,12 @@ describe("toCallbackStartupError", () => {
   it("stringifies a non-Error throw", () => {
     expect(toCallbackStartupError("docker", "boom").reason).toBe("boom");
   });
+
+  it("passes an existing StartupError through unchanged", () => {
+    const original = new StartupError("docker", "compose failed", "/tmp/docker.log");
+    const err = toCallbackStartupError("api", original);
+    expect(err).toBe(original);
+    expect(err.reason).toBe("compose failed");
+    expect(err.logFile).toBe("/tmp/docker.log");
+  });
 });
