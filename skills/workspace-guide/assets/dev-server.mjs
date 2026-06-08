@@ -26,7 +26,8 @@ await runDevServer({
     //   kind: "callback",
     //   name: "docker",
     //   start: async ({ cwd }) => {
-    //     execSync("docker compose up -d", { stdio: "pipe", cwd });
+    //     // `inherit` so docker's output/error is visible; a failure throws and aborts the start.
+    //     execSync("docker compose up -d", { stdio: "inherit", cwd });
     //     const deadline = Date.now() + 30_000;
     //     while (Date.now() < deadline) {
     //       try {
@@ -39,7 +40,7 @@ await runDevServer({
     //     throw new Error("PostgreSQL did not become ready within 30s.");
     //   },
     //   stop: async ({ cwd }) => {
-    //     execSync("docker compose down", { stdio: "pipe", cwd });
+    //     execSync("docker compose down", { stdio: "inherit", cwd });
     //   },
     // },
     {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { watchForExternalStop } from "../src/dev-server.js";
+import { toCallbackStartupError, watchForExternalStop } from "../src/dev-server.js";
+import { StartupError } from "../src/errors.js";
 
 describe("watchForExternalStop", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -36,5 +37,19 @@ describe("watchForExternalStop", () => {
     vi.advanceTimersByTime(1000);
     expect(onStopped).not.toHaveBeenCalled();
     expect(timer).toBeUndefined();
+  });
+});
+
+describe("toCallbackStartupError", () => {
+  it("wraps an Error's message under the server name", () => {
+    const err = toCallbackStartupError("docker", new Error("compose failed"));
+    expect(err).toBeInstanceOf(StartupError);
+    expect(err.label).toBe("docker");
+    expect(err.reason).toBe("compose failed");
+    expect(err.logFile).toBeUndefined();
+  });
+
+  it("stringifies a non-Error throw", () => {
+    expect(toCallbackStartupError("docker", "boom").reason).toBe("boom");
   });
 });
