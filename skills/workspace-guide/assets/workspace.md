@@ -136,6 +136,5 @@ npm run dev -- down                     # 4. stop when done (same directory)
 
 - **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
-  - `shared-registry/slots.json` — Slot registry; main worktree at `basePort` plus linked-worktree slots. (Symlinked to the main worktree in linked worktrees.)
-  - `shared-registry/dev-servers.json` — Live dev-server registry.
+  - `shared-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
 - **`.plans/`** — Shared across worktrees (symlinked). Task planning files.
