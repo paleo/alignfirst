@@ -43,6 +43,28 @@ describe("parseWorkspaceArgs", () => {
     expect(verbose).toBe(true);
   });
 
+  it("parses `setup <branch> -c --from <ref>`", () => {
+    const { command } = parseWorkspaceArgs([
+      "setup",
+      "feat/456",
+      "-c",
+      "--from",
+      "origin/feat/123",
+    ]);
+    expect(command).toMatchObject({
+      kind: "setup",
+      branch: "feat/456",
+      newBranch: true,
+      from: "origin/feat/123",
+    });
+  });
+
+  it("rejects `--from` without `-c`", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/456", "--from", "origin/feat/123"])).toThrow(
+      ConfigError,
+    );
+  });
+
   it("rejects `-c` without a branch", () => {
     expect(() => parseWorkspaceArgs(["setup", "-c"])).toThrow(ConfigError);
   });
@@ -57,12 +79,16 @@ describe("parseWorkspaceArgs", () => {
 
   it("parses `remove` without a branch", () => {
     const { command } = parseWorkspaceArgs(["remove"]);
-    expect(command).toEqual({ kind: "remove", branch: undefined, noRemoteCheck: false });
+    expect(command).toEqual({ kind: "remove", branch: undefined, force: false });
   });
 
-  it("parses `remove <branch> --no-remote-check`", () => {
-    const { command } = parseWorkspaceArgs(["remove", "feat/42", "--no-remote-check"]);
-    expect(command).toEqual({ kind: "remove", branch: "feat/42", noRemoteCheck: true });
+  it("parses `remove <branch> --force`", () => {
+    const { command } = parseWorkspaceArgs(["remove", "feat/42", "--force"]);
+    expect(command).toEqual({ kind: "remove", branch: "feat/42", force: true });
+  });
+
+  it("rejects the removed `--no-remote-check` flag", () => {
+    expect(() => parseWorkspaceArgs(["remove", "--no-remote-check"])).toThrow(ConfigError);
   });
 
   it("parses `set-owner <name>`", () => {

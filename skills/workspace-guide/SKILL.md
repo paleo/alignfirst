@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.10.2"
+  version: "0.11.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -107,7 +107,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 
 **Lifecycle for setup (with `workspace setup <branch>`):**
 
-1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `-c`, branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
+1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `-c`, the new branch starts at the current worktree's HEAD, or at any commit-ish via `--from <ref>`; branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
 4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths. On a linked worktree it also creates the `shared-registry` symlink, pointing the worktree's `${runtimeDir}/shared-registry` at the main worktree's.
@@ -118,7 +118,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 **Lifecycle for removal (with `workspace remove [<branch>]`):**
 
 1. Looks up the branch in the slot registry to find the worktree path and slot.
-2. Verifies the branch is absent from the remote (skipped with `--no-remote-check`).
+2. Refuses when the worktree has uncommitted changes, unless `--force` is passed.
 3. Stops the dev server by shelling out to `node <devServerScript> down` with `cwd: <target worktree>`.
 4. Calls optional `config.purgeInfrastructure(ctx)` — destructive teardown (typically `docker compose down -v` to wipe volumes). Runs after the dev-server stop.
 5. Frees the slot, drops the matching `dev-servers.json` entry, and removes the worktree via `git worktree remove --force`.
@@ -129,7 +129,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | --- | --- |
 | `workspace setup` | Set up the local environment in the current worktree (idempotent; bootstrap/retry path) |
 | `workspace setup <branch>` | Create a worktree for an existing branch, then set up the local environment |
-| `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c` |
+| `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c`: the branch starts at the current worktree's HEAD, or at any commit-ish via `--from <ref>` |
 | `workspace remove [<branch>]` | Stop dev server + free slot + remove worktree by branch, or the current worktree when omitted |
 | `workspace list` | Print all registered worktrees (slot, type, status, dev, branch, path, owner, created). The `DEV` column shows `up` when a live dev-server is registered for that slot's worktree, `-` otherwise |
 | `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
@@ -137,7 +137,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 | `workspace migrate-0.16 <old-registryDir>` | Transitional (0.16 only): merge a pre-0.16 registry into `${runtimeDir}/shared-registry` and relink worktrees. Removed in the next release |
 
-Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--no-remote-check`; `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
+Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--from <ref>`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--force` (proceed despite uncommitted changes); `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
 
 **Config fields to populate:**
 
@@ -242,6 +242,9 @@ Decide what each callback's `stop()` does based on the soft-stop intent: contain
 
 ```sh
 npm run workspace -- setup feat/42 -c       # new branch + worktree (dedup: appends -2, -3… if taken)
+npm run workspace -- setup feat/456 -c --from origin/feat/123   # new branch based on another branch
+# --from accepts any commit-ish (local branch, tag, SHA); without it, the branch starts at the
+# current worktree's HEAD, like `git switch -c`.
 npm run workspace -- setup feat/42          # new worktree on an existing branch
 npm run workspace -- setup                  # set up the current worktree
 
@@ -260,7 +263,7 @@ npm run dev -- up
 ```sh
 npm run workspace -- remove feat/42       # remove by branch name
 npm run workspace -- remove               # remove the current worktree
-npm run workspace -- remove feat/42 --no-remote-check # skip remote branch check
+npm run workspace -- remove feat/42 --force # discard uncommitted changes in a dirty worktree
 ```
 
 `workspace remove` (no branch, from inside the worktree) prints the main worktree path. The parent shell's CWD will point to a deleted directory — run `cd <main-worktree>` afterward.

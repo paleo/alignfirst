@@ -6,12 +6,13 @@ export type WorkspaceCommand =
       kind: "setup";
       branch?: string;
       newBranch: boolean;
+      from?: string;
       owner?: string;
       slot?: string;
       force: boolean;
       wait: boolean;
     }
-  | { kind: "remove"; branch?: string; noRemoteCheck: boolean }
+  | { kind: "remove"; branch?: string; force: boolean }
   | { kind: "list" }
   | { kind: "status"; slot?: string }
   | { kind: "wait"; slot?: string }
@@ -67,6 +68,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     args: tokens,
     options: {
       "new-branch": { type: "boolean", short: "c" },
+      from: { type: "string" },
       owner: { type: "string" },
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
@@ -81,11 +83,15 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup <branch> -c` requires a branch name.");
   }
+  if (values.from !== undefined && !newBranch) {
+    throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
+  }
   return {
     command: {
       kind: "setup",
       branch,
       newBranch,
+      from: values.from,
       owner: values.owner,
       slot: values.slot,
       force: values.force ?? false,
@@ -99,7 +105,7 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
-      "no-remote-check": { type: "boolean" },
+      force: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
     },
     allowPositionals: true,
@@ -107,7 +113,7 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
   });
   const branch = takeOptionalPositional(positionals, "remove");
   return {
-    command: { kind: "remove", branch, noRemoteCheck: values["no-remote-check"] ?? false },
+    command: { kind: "remove", branch, force: values.force ?? false },
     verbose: values.verbose ?? false,
   };
 }
@@ -212,13 +218,15 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--owner <name>] [-s|--slot <port>] [--force] [--wait]",
+      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [--owner <name>] [-s|--slot <port>] [--force] [--wait]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
+      "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
       "      Finalize runs in the background; add --wait to block until it reaches READY.",
-      "  remove [<branch>] [--no-remote-check]",
+      "  remove [<branch>] [--force]",
       "      Remove a workspace by branch, or the current one when omitted.",
+      "      Refuses on uncommitted changes unless --force.",
       "  list",
       "      List all registered workspaces (slot, status, branch, path, owner, created).",
       "  status [-s|--slot <port>]",

@@ -18,9 +18,12 @@ When the user asks to "set up a new workspace" or "set up a new worktree":
 
 ```sh
 npm run workspace -- setup fix/123 -c    # new branch + worktree (dedup: appends -2, -3… if taken)
+npm run workspace -- setup fix/456 -c --from origin/fix/123   # new branch based on another branch
 npm run workspace -- setup fix/123       # new worktree on an existing branch
 npm run workspace -- setup               # set up the current worktree (idempotent — also the retry path)
 ```
+
+With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base.
 
 <!-- ADAPT: Update the setup command if your project uses a different task runner.
      Document any project-specific ports or URLs the developer should know about. -->
@@ -78,12 +81,11 @@ npm run workspace -- set-owner bob   # update later, no rebuild
 ```sh
 npm run workspace -- remove fix/123    # remove by branch name
 npm run workspace -- remove            # remove the current worktree
-npm run workspace -- remove fix/123 --no-remote-check # skip remote branch check
 ```
 
 Stops the dev server (if running), frees the slot, and removes the worktree.
 
-By default, it verifies the branch has been removed from the remote first. Use `--no-remote-check` to skip that. When run from inside the worktree (`workspace remove` with no branch), the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
+Removal refuses when the worktree has uncommitted changes; pass `--force` to discard them. When run from inside the worktree (`workspace remove` with no branch), the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 

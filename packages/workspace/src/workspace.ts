@@ -51,12 +51,11 @@ import {
 import {
   createBranch,
   detectWorktree,
-  enforceWorktreeMode,
   getWorktreeBranch,
+  isWorktreeDirty,
   removeWorktree,
   type RunCtx,
   useExistingBranch,
-  verifyBranchAbsentFromRemote,
   type WorktreeContext,
   type WorktreeDirNameFn,
 } from "./worktree.js";
@@ -274,7 +273,6 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 
   const ctx = detectWorktree();
-  enforceWorktreeMode(command, ctx);
   const run: RunCtx = { verbose };
 
   switch (command.kind) {
@@ -705,10 +703,6 @@ async function handleRemove(
     process.exit(1);
   }
 
-  if (!command.noRemoteCheck) {
-    verifyBranchAbsentFromRemote(target.branch, run);
-  }
-
   const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
 
   if (!existsSync(target.worktreePath)) {
@@ -721,6 +715,13 @@ async function handleRemove(
       `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
     );
     return;
+  }
+
+  if (!command.force && isWorktreeDirty(target.worktreePath)) {
+    console.error(
+      `Error: Uncommitted changes in ${target.worktreePath}. Commit or stash them, or pass --force.`,
+    );
+    process.exit(1);
   }
 
   const targetEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
@@ -876,7 +877,7 @@ function ensureWorktree(
   dirNameFn: WorktreeDirNameFn | undefined,
 ): WorktreeContext {
   if (command.branch === undefined) return ctx;
-  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn);
+  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn, command.from);
   return useExistingBranch(command.branch, ctx, run, dirNameFn);
 }
 
