@@ -144,5 +144,5 @@ When the user asks to create a PR:
 
 - **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
-  - `shared-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
+  - `workspace-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
 - **`.plans/`** — Shared across worktrees (symlinked). Task planning files.
