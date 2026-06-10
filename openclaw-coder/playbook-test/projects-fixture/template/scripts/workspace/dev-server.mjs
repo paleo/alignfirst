@@ -10,7 +10,6 @@ const appScript = resolve(here, "..", "..", "app.mjs");
 await runDevServer({
   basePort: 6500,
   runtimeDir: ".local-wt",
-  registryDir: ".local/_workspace-registry",
 
   servers: [
     {
