@@ -63,7 +63,7 @@ export function createBranch(
   const worktreePath = dedupeWorktreePath(
     computeWorktreePath(ctx.mainWorktree, finalBranch, dirNameFn),
   );
-  const addArgs = ["worktree", "add", "-b", finalBranch, worktreePath];
+  const addArgs = ["worktree", "add", "-b", finalBranch, "--end-of-options", worktreePath];
   if (from !== undefined) addArgs.push(from);
   execFileSync("git", addArgs, { stdio: stdioFor(run) });
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
@@ -72,7 +72,10 @@ export function createBranch(
 function verifyFromRef(from: string): void {
   try {
     // `^{commit}` accepts any commit-ish: branch, origin/x, tag, SHA.
-    execFileSync("git", ["rev-parse", "--verify", `${from}^{commit}`], { stdio: "pipe" });
+    // `--end-of-options` guards against option-like refs (rev-parse treats args after `--` as paths).
+    execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${from}^{commit}`], {
+      stdio: "pipe",
+    });
   } catch {
     console.error(`Error: --from ref "${from}" does not resolve to a commit.`);
     process.exit(1);
@@ -80,12 +83,19 @@ function verifyFromRef(from: string): void {
 }
 
 export function isWorktreeDirty(worktreePath: string): boolean {
-  const out = execFileSync("git", ["status", "--porcelain"], {
-    stdio: "pipe",
-    cwd: worktreePath,
-    encoding: "utf-8",
-  });
-  return out.trim().length > 0;
+  try {
+    const out = execFileSync("git", ["status", "--porcelain"], {
+      stdio: "pipe",
+      cwd: worktreePath,
+      encoding: "utf-8",
+    });
+    return out.trim().length > 0;
+  } catch {
+    console.error(
+      `Error: Cannot check for uncommitted changes in ${worktreePath}. Pass --force to remove anyway.`,
+    );
+    process.exit(1);
+  }
 }
 
 export function getWorktreeBranch(worktreePath: string): string | undefined {
