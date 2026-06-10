@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.17.0
+
+### Minor Changes
+
+- b027838: Remove `registryDir`. The registry is now derived as `${runtimeDir}/shared-registry`, auto-symlinked per linked worktree by `workspace setup`. To migrate an existing registry: `workspace migrate-0.16 <old-registryDir>`.
+
 ## 0.16.0
 
 ### Minor Changes

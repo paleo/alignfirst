@@ -3,20 +3,24 @@ import {
   appendFileSync,
   closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { parseWorkspaceArgs, printWorkspaceHelp, type WorkspaceCommand } from "./cli.js";
 import {
   findOwnEntry,
   liveWorktrees,
+  mergeDevServers,
   readDevServers,
   removeDevServerEntryByWorktree,
+  writeDevServers,
 } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
 import {
@@ -31,12 +35,17 @@ import {
   handleSetOwner,
   markSlotFailed,
   markSlotReady,
+  mergeSlots,
   readSlots,
+  REGISTRY_SUBDIR,
+  registryDirFor,
   resolveAndRegisterSlot,
   resolveCurrentSlot,
   type SlotEntry,
+  type SlotsRegistry,
   type SlotStatus,
   validateSlotAvailability,
+  warnLegacyRegistryDir,
   writeSlots,
 } from "./slots.js";
 import {
@@ -84,12 +93,6 @@ export interface WorkspaceConfig {
    * Holds the setup log and dev-server logs.
    */
   runtimeDir: string;
-  /**
-   * Shared registry directory, relative to a worktree root (e.g. `.local/_workspace-registry`).
-   * Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory
-   * across linked worktrees — typically via a symlink listed in `sharedDirs` (e.g. `.local`).
-   */
-  registryDir: string;
   /** Config files copied from the main worktree and patched per slot. */
   configFiles: ConfigFileEntry[];
   /**
@@ -239,6 +242,14 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     return;
   }
 
+  warnLegacyRegistryDir(config);
+  const registryDir = registryDirFor(config.runtimeDir);
+
+  if (command.kind === "migrate") {
+    handleMigrate(command, config, registryDir);
+    return;
+  }
+
   if (!existsSync(config.scriptPath)) {
     console.error(
       `Error: scriptPath does not exist: ${config.scriptPath}. ` +
@@ -249,16 +260,16 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   switch (command.kind) {
     case "finalize":
-      await runFinalize(command, config);
+      await runFinalize(command, config, registryDir);
       return;
     case "wait":
-      await runWait(command, config);
+      await runWait(command, config, registryDir);
       return;
     case "status":
-      runStatus(command, config);
+      runStatus(command, config, registryDir);
       return;
     case "list":
-      runList(config);
+      runList(registryDir);
       return;
   }
 
@@ -268,14 +279,14 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   switch (command.kind) {
     case "remove":
-      await handleRemove(command, ctx, run, config);
+      await handleRemove(command, ctx, run, config, registryDir);
       return;
     case "set-owner":
-      handleSetOwnerMode(command, ctx, config);
+      handleSetOwnerMode(command, ctx, registryDir);
       return;
     case "setup": {
-      const { slot } = await runSetup(command, ctx, run, config);
-      if (command.wait) await waitForSlot(slot, config, { printSummary: false });
+      const { slot } = await runSetup(command, ctx, run, config, registryDir);
+      if (command.wait) await waitForSlot(slot, config, registryDir, { printSummary: false });
       return;
     }
   }
@@ -288,6 +299,7 @@ async function runSetup(
   ctx: WorktreeContext,
   run: RunCtx,
   config: WorkspaceConfig,
+  registryDir: string,
 ): Promise<{ slot: number }> {
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
@@ -295,12 +307,12 @@ async function runSetup(
   validateSlotAvailability(command.slot, {
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
-    registryDir: config.registryDir,
+    registryDir,
     scheme,
   });
 
   const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
-  refuseIfFinalizePending(setupCtx, config.registryDir, command.force);
+  refuseIfFinalizePending(setupCtx, registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
   const {
     port: slot,
@@ -310,7 +322,7 @@ async function runSetup(
     slot: command.slot,
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
-    registryDir: config.registryDir,
+    registryDir,
     scheme,
     requestedOwner: command.owner,
     isMainWorktree: setupCtx.isMainWorktree,
@@ -351,6 +363,7 @@ async function runSetup(
   }
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
+  linkSharedRegistry(setupCtx, config.runtimeDir, verboseLog);
   generateConfigFiles(setupCtx, config.configFiles, slot, ports, command.force, verboseLog);
 
   teeLog(
@@ -403,7 +416,11 @@ function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, forc
 
 type FinalizeCommand = Extract<WorkspaceCommand, { kind: "finalize" }>;
 
-async function runFinalize(command: FinalizeCommand, config: WorkspaceConfig): Promise<void> {
+async function runFinalize(
+  command: FinalizeCommand,
+  config: WorkspaceConfig,
+  registryDir: string,
+): Promise<void> {
   const slot = Number(command.slot);
   const ctx = detectWorktree();
   const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
@@ -411,7 +428,7 @@ async function runFinalize(command: FinalizeCommand, config: WorkspaceConfig): P
     appendFileSync(logPath, `${message}\n`);
   };
 
-  const registry = readSlots(ctx.mainWorktree, config.registryDir);
+  const registry = readSlots(ctx.mainWorktree, registryDir);
   const entry = registry.slots[String(slot)];
   if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
     appendLog(`FAILED: No matching slot ${slot} for worktree ${ctx.currentWorktree}.`);
@@ -444,21 +461,25 @@ async function runFinalize(command: FinalizeCommand, config: WorkspaceConfig): P
 
   try {
     await config.finalizeWorktree(setupContext);
-    markSlotReady(ctx.mainWorktree, config.registryDir, slot);
+    markSlotReady(ctx.mainWorktree, registryDir, slot);
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (slot ${slot})`);
     appendLog("============================================================");
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
-    markSlotFailed(ctx.mainWorktree, config.registryDir, slot, message);
+    markSlotFailed(ctx.mainWorktree, registryDir, slot, message);
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
     process.exit(1);
   }
 }
 
-function resolveTargetSlot(slotArg: string | undefined, config: WorkspaceConfig): number {
+function resolveTargetSlot(
+  slotArg: string | undefined,
+  config: WorkspaceConfig,
+  registryDir: string,
+): number {
   if (slotArg !== undefined) {
     const slot = Number(slotArg);
     const scheme = resolvePortScheme(config);
@@ -470,17 +491,18 @@ function resolveTargetSlot(slotArg: string | undefined, config: WorkspaceConfig)
     }
     return slot;
   }
-  return resolveCurrentSlot(config.basePort, config.registryDir).slot;
+  return resolveCurrentSlot(config.basePort, registryDir).slot;
 }
 
 function printWorktreeInfo(
   config: WorkspaceConfig,
+  registryDir: string,
   slot: number,
   worktreeForLog: string,
   fallback: { owner?: string },
 ): void {
   const ctx = detectWorktree();
-  const registry = readSlots(ctx.mainWorktree, config.registryDir);
+  const registry = readSlots(ctx.mainWorktree, registryDir);
   const entry: SlotEntry | undefined = registry.slots[String(slot)];
   const ports = resolvePortsFn(config)(slot);
 
@@ -512,16 +534,17 @@ function printWorktreeInfo(
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
     console.log(`Pending since ${elapsed} ago (tail ${setupLogPath})`);
   }
-  printDevServerBlock(config, ctx.mainWorktree, targetWorktree, now);
+  printDevServerBlock(config, registryDir, ctx.mainWorktree, targetWorktree, now);
 }
 
 function printDevServerBlock(
   config: WorkspaceConfig,
+  registryDir: string,
   mainWorktree: string,
   targetWorktree: string,
   now: number,
 ): void {
-  const entry = findOwnEntry(mainWorktree, config.registryDir, targetWorktree);
+  const entry = findOwnEntry(mainWorktree, registryDir, targetWorktree);
   const liveEntries = entry
     ? Object.entries(entry.pids)
         .filter(([, pid]) => isProcessAlive(pid))
@@ -541,34 +564,34 @@ function printDevServerBlock(
 
 type StatusCommand = Extract<WorkspaceCommand, { kind: "status" }>;
 
-function runStatus(command: StatusCommand, config: WorkspaceConfig): void {
+function runStatus(command: StatusCommand, config: WorkspaceConfig, registryDir: string): void {
   if (command.slot !== undefined) {
-    const slot = resolveTargetSlot(command.slot, config);
+    const slot = resolveTargetSlot(command.slot, config, registryDir);
     const ctx = detectWorktree();
-    const entry = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+    const entry = readSlots(ctx.mainWorktree, registryDir).slots[String(slot)];
     if (!entry) {
       console.error(`Error: No slot ${slot} in registry.`);
       process.exit(1);
     }
-    printWorktreeInfo(config, slot, entry.worktree, { owner: entry.owner });
+    printWorktreeInfo(config, registryDir, slot, entry.worktree, { owner: entry.owner });
     return;
   }
-  const resolved = resolveCurrentSlot(config.basePort, config.registryDir);
-  printWorktreeInfo(config, resolved.slot, resolved.worktree, {
+  const resolved = resolveCurrentSlot(config.basePort, registryDir);
+  printWorktreeInfo(config, registryDir, resolved.slot, resolved.worktree, {
     owner: resolved.owner,
   });
 }
 
-function runList(config: WorkspaceConfig): void {
+function runList(registryDir: string): void {
   const ctx = detectWorktree();
-  const entries = Object.entries(readSlots(ctx.mainWorktree, config.registryDir).slots).sort(
+  const entries = Object.entries(readSlots(ctx.mainWorktree, registryDir).slots).sort(
     ([a], [b]) => Number(a) - Number(b),
   );
   if (entries.length === 0) {
     console.log("No workspaces registered.");
     return;
   }
-  const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, config.registryDir));
+  const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
   const rows = entries.map(([port, e]) => ({
     slot: port,
     type: e.main ? "main" : "linked",
@@ -606,20 +629,25 @@ function runList(config: WorkspaceConfig): void {
 
 type WaitCommand = Extract<WorkspaceCommand, { kind: "wait" }>;
 
-async function runWait(command: WaitCommand, config: WorkspaceConfig): Promise<void> {
+async function runWait(
+  command: WaitCommand,
+  config: WorkspaceConfig,
+  registryDir: string,
+): Promise<void> {
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
-  const slot = resolveTargetSlot(command.slot, config);
-  await waitForSlot(slot, config);
+  const slot = resolveTargetSlot(command.slot, config, registryDir);
+  await waitForSlot(slot, config, registryDir);
 }
 
 async function waitForSlot(
   slot: number,
   config: WorkspaceConfig,
+  registryDir: string,
   options: { printSummary?: boolean } = {},
 ): Promise<void> {
   const printSummary = options.printSummary ?? true;
   const ctx = detectWorktree();
-  const initial = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+  const initial = readSlots(ctx.mainWorktree, registryDir).slots[String(slot)];
   if (!initial) {
     console.error(`Error: No slot ${slot} in registry.`);
     process.exit(1);
@@ -629,7 +657,7 @@ async function waitForSlot(
   // Poll slots.json — the finalize child writes `status` on success or failure. Tiny file, no
   // log-tailing race.
   for (;;) {
-    const entry = readSlots(ctx.mainWorktree, config.registryDir).slots[String(slot)];
+    const entry = readSlots(ctx.mainWorktree, registryDir).slots[String(slot)];
     if (!entry) {
       console.error(`Error: Slot ${slot} disappeared from registry.`);
       process.exit(1);
@@ -637,7 +665,7 @@ async function waitForSlot(
     if (entry.status === "ready") {
       console.log("\n… ready");
       if (printSummary) {
-        printWorktreeInfo(config, slot, entry.worktree, {
+        printWorktreeInfo(config, registryDir, slot, entry.worktree, {
           owner: entry.owner,
         });
       }
@@ -660,10 +688,11 @@ async function handleRemove(
   ctx: WorktreeContext,
   run: RunCtx,
   config: WorkspaceConfig,
+  registryDir: string,
 ): Promise<void> {
   const verboseLog = makeVerboseLog(run.verbose);
   const removeHere = command.branch === undefined;
-  const registry = readSlots(ctx.mainWorktree, config.registryDir);
+  const registry = readSlots(ctx.mainWorktree, registryDir);
   const target = resolveRemoveTarget(command, ctx, registry);
 
   // Refuse to remove while the detached finalize is still writing to slots.json / workspace-setup.log:
@@ -687,14 +716,14 @@ async function handleRemove(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
     delete registry.slots[target.slotPort];
-    writeSlots(ctx.mainWorktree, config.registryDir, registry);
+    writeSlots(ctx.mainWorktree, registryDir, registry);
     console.log(
       `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
     );
     return;
   }
 
-  const targetEntry = findOwnEntry(ctx.mainWorktree, config.registryDir, target.worktreePath);
+  const targetEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
   if (targetEntry) {
     stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
   } else {
@@ -710,8 +739,8 @@ async function handleRemove(
   }
 
   delete registry.slots[target.slotPort];
-  writeSlots(ctx.mainWorktree, config.registryDir, registry);
-  removeDevServerEntryByWorktree(ctx.mainWorktree, config.registryDir, target.worktreePath);
+  writeSlots(ctx.mainWorktree, registryDir, registry);
+  removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, target.worktreePath);
 
   if (removeHere) {
     process.chdir(ctx.mainWorktree);
@@ -733,19 +762,19 @@ type SetOwnerCommand = Extract<WorkspaceCommand, { kind: "set-owner" }>;
 function handleSetOwnerMode(
   command: SetOwnerCommand,
   ctx: WorktreeContext,
-  config: WorkspaceConfig,
+  registryDir: string,
 ): void {
   const newOwner = command.name;
   const { slotPort } = handleSetOwner({
     newOwner,
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
-    registryDir: config.registryDir,
+    registryDir,
     isMainWorktree: ctx.isMainWorktree,
   });
 
   // Propagate to dev-servers.json entries for this worktree.
-  const devServersPath = join(ctx.mainWorktree, config.registryDir, "dev-servers.json");
+  const devServersPath = join(ctx.mainWorktree, registryDir, "dev-servers.json");
   if (existsSync(devServersPath)) {
     const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
       servers: { worktree: string; owner?: string }[];
@@ -766,6 +795,78 @@ function handleSetOwnerMode(
   }
 
   console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
+}
+
+type MigrateCommand = Extract<WorkspaceCommand, { kind: "migrate" }>;
+
+/** Transitional (0.16 only): merge a pre-0.16 registry into `${runtimeDir}/shared-registry`. */
+function handleMigrate(command: MigrateCommand, config: WorkspaceConfig, newRel: string): void {
+  const ctx = detectWorktree();
+  const oldRel = command.oldRegistryDir;
+  const oldAbs = join(ctx.mainWorktree, oldRel);
+
+  if (resolve(oldAbs) === resolve(join(ctx.mainWorktree, newRel))) {
+    console.log(`Registry already at ${newRel}; relinking worktrees.`);
+    relinkWorktrees(readSlots(ctx.mainWorktree, newRel), ctx.mainWorktree, config.runtimeDir);
+    return;
+  }
+  refuseUnlessOldRegistry(oldAbs, ctx.mainWorktree);
+
+  const mergedSlots = mergeSlots(
+    readSlots(ctx.mainWorktree, oldRel),
+    readSlots(ctx.mainWorktree, newRel),
+  );
+  writeSlots(ctx.mainWorktree, newRel, mergedSlots);
+  const mergedDevServers = mergeDevServers(
+    readDevServers(ctx.mainWorktree, oldRel),
+    readDevServers(ctx.mainWorktree, newRel),
+  );
+  writeDevServers(ctx.mainWorktree, newRel, mergedDevServers);
+  rmSync(oldAbs, { recursive: true, force: true });
+
+  const relinked = relinkWorktrees(mergedSlots, ctx.mainWorktree, config.runtimeDir);
+  console.log(
+    `Migrated ${oldRel} → ${newRel}: ${Object.keys(mergedSlots.slots).length} slot(s), ` +
+      `${mergedDevServers.servers.length} dev-server(s); ${relinked} symlink(s) recreated.`,
+  );
+}
+
+/** `oldAbs` is recursively deleted after the merge — refuse anything that isn't clearly a registry. */
+function refuseUnlessOldRegistry(oldAbs: string, mainWorktree: string): void {
+  const fromMain = relative(mainWorktree, resolve(oldAbs));
+  if (fromMain.startsWith("..") || isAbsolute(fromMain)) {
+    console.error(`Error: the old registry must be inside the main worktree; got ${oldAbs}.`);
+    process.exit(1);
+  }
+  if (!existsSync(oldAbs)) {
+    console.error(`Error: nothing to migrate at ${oldAbs}.`);
+    process.exit(1);
+  }
+  if (!existsSync(join(oldAbs, "slots.json")) && !existsSync(join(oldAbs, "dev-servers.json"))) {
+    console.error(
+      `Error: ${oldAbs} does not look like a registry (no slots.json or dev-servers.json).`,
+    );
+    process.exit(1);
+  }
+}
+
+function relinkWorktrees(slots: SlotsRegistry, mainWorktree: string, runtimeDir: string): number {
+  let count = 0;
+  for (const entry of Object.values(slots.slots)) {
+    if (entry.main) continue;
+    if (!existsSync(entry.worktree)) {
+      console.warn(`Warning: worktree ${entry.worktree} not found; skipping symlink.`);
+      continue;
+    }
+    linkSharedRegistry(
+      { currentWorktree: entry.worktree, mainWorktree, isMainWorktree: false },
+      runtimeDir,
+      console.log,
+      { force: true },
+    );
+    ++count;
+  }
+  return count;
 }
 
 function ensureWorktree(
@@ -797,6 +898,41 @@ function linkSharedDirectories(
       log(`Created ${dirName} symlink → main worktree.`);
     }
   }
+}
+
+/**
+ * Symlinks the linked worktree's `${runtimeDir}/shared-registry` to the main worktree's, so the
+ * cwd-relative registry read in `resolveCurrentSlot` reaches main. `runtimeDir` is per-worktree and
+ * not in `sharedDirs`, so this is distinct from {@link linkSharedDirectories}.
+ */
+function linkSharedRegistry(
+  ctx: WorktreeContext,
+  runtimeDir: string,
+  log: (msg: string) => void,
+  opts?: { force?: boolean },
+): void {
+  if (ctx.isMainWorktree) return;
+  const mainDir = join(ctx.mainWorktree, runtimeDir, REGISTRY_SUBDIR);
+  mkdirSync(mainDir, { recursive: true });
+  const runtimeRoot = join(ctx.currentWorktree, runtimeDir);
+  mkdirSync(runtimeRoot, { recursive: true });
+  const link = join(runtimeRoot, REGISTRY_SUBDIR);
+  // lstat, not existsSync: existsSync follows symlinks, so a broken one would read as absent and
+  // make symlinkSync throw EEXIST. A broken symlink is recreated even without `force`.
+  const linkStat = lstatSync(link, { throwIfNoEntry: false });
+  if (linkStat) {
+    if (!linkStat.isSymbolicLink()) {
+      log("Skipped shared-registry symlink (a real directory exists here).");
+      return;
+    }
+    if (!opts?.force && existsSync(link)) {
+      log("Skipped shared-registry symlink (already exists).");
+      return;
+    }
+    rmSync(link);
+  }
+  symlinkSync(relative(runtimeRoot, mainDir), link);
+  log("Created shared-registry symlink → main worktree.");
 }
 
 function generateConfigFiles(

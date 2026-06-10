@@ -140,8 +140,7 @@ When the user asks to create a PR:
 
 ## Directory Layout
 
-- **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g., personal notes).
-  - `_workspace-registry/slots.json` — Slot registry; main worktree at slot 6500 plus linked-worktree slots 6510 → 6690 (step 10).
-  - `_workspace-registry/dev-servers.json` — Live dev-server registry.
-- **`.local-wt/`** — Per-worktree. Runtime data: `s3/` (file storage), `logs/` (dev server logs, `workspace-setup.log`).
+- **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
+- **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
+  - `shared-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
 - **`.plans/`** — Shared across worktrees (symlinked). Task planning files.

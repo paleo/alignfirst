@@ -91,6 +91,15 @@ describe("parseWorkspaceArgs", () => {
     expect(parseWorkspaceArgs(["wait"]).command).toEqual({ kind: "wait", slot: undefined });
   });
 
+  it("parses `migrate-0.16 <old-registry-dir>`", () => {
+    const { command } = parseWorkspaceArgs(["migrate-0.16", ".local/_workspace-registry"]);
+    expect(command).toEqual({ kind: "migrate", oldRegistryDir: ".local/_workspace-registry" });
+  });
+
+  it("rejects `migrate-0.16` without a positional", () => {
+    expect(() => parseWorkspaceArgs(["migrate-0.16"])).toThrow(ConfigError);
+  });
+
   it("rejects an unknown subcommand", () => {
     expect(() => parseWorkspaceArgs(["frobnicate"])).toThrow(ConfigError);
   });

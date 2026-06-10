@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startBus } from "./bus.js";
@@ -7,6 +7,13 @@ import { main as runnerMain } from "./runner.js";
 
 // `dist/cli.js` ships under `<package>/dist/`; one level up from its dir is the package root.
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const INIT_SCRIPTS: Record<string, string> = {
+  "env:build": "openclaw-test env build",
+  "env:up": "openclaw-test env up",
+  "env:down": "openclaw-test env down",
+  e2e: "openclaw-test run",
+};
 
 export async function dispatch(argv: string[]): Promise<void> {
   const [cmd, ...rest] = argv;
@@ -41,6 +48,63 @@ async function initCommand(targetDirRaw: string | undefined): Promise<void> {
     await copyFile(join(templatesDir, name), join(target, name));
     console.log(`copied ${name} -> ${join(target, name)}`);
   }
+  await addScriptsToPackageJson(target);
+  printNextSteps();
+}
+
+async function addScriptsToPackageJson(target: string): Promise<void> {
+  const pkgPath = join(target, "package.json");
+  let raw: string;
+  try {
+    raw = await readFile(pkgPath, "utf8");
+  } catch {
+    console.log(
+      "no package.json found — run `npm init`, then add the scripts manually (see README)",
+    );
+    return;
+  }
+  let pkg: PackageJsonScripts;
+  try {
+    pkg = JSON.parse(raw) as PackageJsonScripts;
+  } catch {
+    console.error(
+      `${pkgPath} is not valid JSON — fix it, then add the scripts manually (see README)`,
+    );
+    return;
+  }
+  const added = addInitScripts(pkg);
+  if (added.length === 0) {
+    console.log("package.json scripts already present");
+    return;
+  }
+  await writeFile(pkgPath, `${JSON.stringify(pkg, undefined, 2)}\n`);
+  console.log(`added scripts to package.json: ${added.join(", ")}`);
+}
+
+export interface PackageJsonScripts {
+  scripts?: Record<string, string>;
+}
+
+export function addInitScripts(pkg: PackageJsonScripts): string[] {
+  pkg.scripts ??= {};
+  const scripts = pkg.scripts;
+  const added: string[] = [];
+  for (const [name, command] of Object.entries(INIT_SCRIPTS)) {
+    if (scripts[name] !== undefined) continue;
+    scripts[name] = command;
+    added.push(name);
+  }
+  return added;
+}
+
+function printNextSteps(): void {
+  console.log(
+    "\nNext steps:\n" +
+      "  1. npm i -D @paleo/openclaw-test @paleo/openclaw-channel-mock-core" +
+      " @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock openclaw\n" +
+      "  2. cp .env.local.example .env.local   # then fill it in\n" +
+      "  3. npm run env:build",
+  );
 }
 
 function usage(): never {

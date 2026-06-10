@@ -51,7 +51,6 @@ await runWorkspace({
   portNames: ["server", "frontend", "db"],
   sharedDirs: [".local", ".plans"],
   runtimeDir: ".local-wt",
-  registryDir: ".local/_workspace-registry",
   configFiles: [
     {
       path: ".env",
@@ -89,7 +88,6 @@ import { runDevServer, helpers } from "@paleo/workspace";
 await runDevServer({
   basePort: 8100,
   runtimeDir: ".local-wt",
-  registryDir: ".local/_workspace-registry",
   devLimit: 5,
   servers: [
     {
