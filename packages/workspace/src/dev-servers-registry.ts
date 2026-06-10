@@ -214,6 +214,19 @@ export function writeDevServers(
   writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
 }
 
+/** Union by resolved `worktree`; `override` wins on conflict. Base-first then override-only order. */
+export function mergeDevServers(base: DevServersData, override: DevServersData): DevServersData {
+  const overrideByWorktree = new Map(override.servers.map((e) => [resolve(e.worktree), e]));
+  const merged: DevServerEntry[] = base.servers.map(
+    (entry) => overrideByWorktree.get(resolve(entry.worktree)) ?? entry,
+  );
+  const baseWorktrees = new Set(base.servers.map((e) => resolve(e.worktree)));
+  for (const entry of override.servers) {
+    if (!baseWorktrees.has(resolve(entry.worktree))) merged.push(entry);
+  }
+  return { servers: merged };
+}
+
 function filePath(mainWorktree: string, registryDir: string): string {
   return join(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
 }

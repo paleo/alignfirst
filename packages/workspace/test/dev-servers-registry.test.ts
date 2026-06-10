@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   evictOldest,
   liveWorktrees,
+  mergeDevServers,
   pruneDeadServers,
   readDevServers,
   writeDevServers,
@@ -77,6 +78,21 @@ describe("liveWorktrees", () => {
   it("returns an empty set when every entry is dead", () => {
     const data = { servers: [entry(8110, { main: 1 })] };
     expect(liveWorktrees(data, isAlive).size).toBe(0);
+  });
+});
+
+describe("mergeDevServers", () => {
+  it("unions by worktree, override wins, order preserved (base-first then override-only)", () => {
+    const base = {
+      servers: [entry(8110, { main: 1 }), entry(8120, { main: 2 })],
+    };
+    const override = {
+      servers: [{ ...entry(8120, { main: 99 }), owner: "bob" }, entry(8130, { main: 3 })],
+    };
+    const merged = mergeDevServers(base, override);
+    expect(merged.servers.map((e) => e.slot)).toEqual([8110, 8120, 8130]);
+    expect(merged.servers[1].pids).toEqual({ main: 99 });
+    expect(merged.servers[1].owner).toBe("bob");
   });
 });
 

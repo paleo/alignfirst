@@ -51,11 +51,6 @@ await runWorkspace({
   // and dev-server logs under here.
   runtimeDir: ".local-wt",
 
-  // Shared registry directory holding `slots.json` and `dev-servers.json`.
-  // Must resolve to the same physical directory across linked worktrees —
-  // typically via a symlink listed in `sharedDirs` (e.g. `.local`).
-  registryDir: ".local/_workspace-registry",
-
   // ADAPT: gitignored config files copied from the main worktree and patched
   // per slot. The source is the same path in the main worktree.
   configFiles: [

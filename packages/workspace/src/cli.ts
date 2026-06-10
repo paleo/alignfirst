@@ -17,6 +17,7 @@ export type WorkspaceCommand =
   | { kind: "wait"; slot?: string }
   | { kind: "set-owner"; name: string }
   | { kind: "finalize"; slot: string; force: boolean }
+  | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "help" };
 
 export interface ParsedWorkspaceArgs {
@@ -54,6 +55,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseSetOwner(tokens);
     case "__finalize":
       return parseFinalize(tokens);
+    case "migrate-0.16":
+      return parseMigrate(tokens);
     default:
       throw new ConfigError(`Unknown command "${subcommand}". Run \`workspace --help\`.`);
   }
@@ -168,6 +171,17 @@ function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   });
   const slot = takeRequiredPositional(positionals, "__finalize", "slot");
   return { command: { kind: "finalize", slot, force: values.force ?? false }, verbose: false };
+}
+
+function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { verbose: { type: "boolean", short: "v" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  const oldRegistryDir = takeRequiredPositional(positionals, "migrate-0.16", "old-registry-dir");
+  return { command: { kind: "migrate", oldRegistryDir }, verbose: values.verbose ?? false };
 }
 
 function takeOptionalPositional(positionals: string[], command: string): string | undefined {

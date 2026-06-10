@@ -45,7 +45,14 @@ import type {
   ServerDescriptor,
   SpawnServer,
 } from "./server-descriptor.js";
-import { readSlots, resolveCurrentSlot, type ResolvedSlot, type SlotEntry } from "./slots.js";
+import {
+  readSlots,
+  registryDirFor,
+  resolveCurrentSlot,
+  type ResolvedSlot,
+  type SlotEntry,
+  warnLegacyRegistryDir,
+} from "./slots.js";
 import { detectWorktree, getWorktreeBranch } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
@@ -56,12 +63,6 @@ export interface DevServerConfig {
   basePort: number;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
-  /**
-   * Shared registry directory, relative to a worktree root (e.g. `.local/_workspace-registry`).
-   * Holds `slots.json` and `dev-servers.json`. Must resolve to the same physical directory
-   * across linked worktrees — typically via a symlink (e.g. `.local`).
-   */
-  registryDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
   devLimit?: number;
   /** One entry per server to start. Started in array order; stopped in reverse order. */
@@ -101,17 +102,19 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     return;
   }
 
+  warnLegacyRegistryDir(config.runtimeDir, (config as { registryDir?: string }).registryDir);
+
   const { mainWorktree } = detectWorktree();
 
   switch (command.kind) {
     case "list":
-      listDevServers(mainWorktree, config.registryDir);
+      listDevServers(mainWorktree, registryDirFor(config.runtimeDir));
       return;
     case "down":
       if (command.all) {
         await stopAllRegistered({
           mainWorktree,
-          registryDir: config.registryDir,
+          registryDir: registryDirFor(config.runtimeDir),
           callbackServers: callbackServersOf(config),
         });
       } else {
@@ -137,13 +140,13 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
 }
 
 function printStatus(config: DevServerConfig, mainWorktree: string): void {
-  const entry = findOwnEntry(mainWorktree, config.registryDir, process.cwd());
+  const entry = findOwnEntry(mainWorktree, registryDirFor(config.runtimeDir), process.cwd());
   if (!entry || !Object.values(entry.pids).some(isProcessAlive)) {
     console.log("Dev-server status: DOWN.");
     return;
   }
   console.log("Dev-server status: UP.");
-  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
+  const slot = resolveCurrentSlot(config.basePort, registryDirFor(config.runtimeDir));
   printStartSummary(config, slot, entry.pids);
 }
 
@@ -237,7 +240,7 @@ function findOwnLiveEntry(
   mainWorktree: string,
   cwd: string,
 ): DevServerEntry | undefined {
-  const entry = findOwnEntry(mainWorktree, config.registryDir, cwd);
+  const entry = findOwnEntry(mainWorktree, registryDirFor(config.runtimeDir), cwd);
   if (!entry) return;
   return Object.values(entry.pids).some(isProcessAlive) ? entry : undefined;
 }
@@ -369,7 +372,7 @@ function registerStartedServer(
   mainWorktree: string,
   spawnPids: Record<string, number>,
 ): ResolvedSlot {
-  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
+  const slot = resolveCurrentSlot(config.basePort, registryDirFor(config.runtimeDir));
   const devEntry: DevServerEntry = {
     slot: slot.slot,
     worktree: slot.worktree,
@@ -378,7 +381,7 @@ function registerStartedServer(
     startedAt: new Date().toISOString(),
   };
   if (slot.main) devEntry.main = true;
-  registerDevServer(mainWorktree, config.registryDir, devEntry);
+  registerDevServer(mainWorktree, registryDirFor(config.runtimeDir), devEntry);
   return slot;
 }
 
@@ -536,8 +539,8 @@ export function buildWorktreeReadyMessage(input: {
 }
 
 function checkWorktreeReady(config: DevServerConfig, mainWorktree: string, cwd: string): void {
-  const slot = resolveCurrentSlot(config.basePort, config.registryDir);
-  const entry = readSlots(mainWorktree, config.registryDir).slots[String(slot.slot)];
+  const slot = resolveCurrentSlot(config.basePort, registryDirFor(config.runtimeDir));
+  const entry = readSlots(mainWorktree, registryDirFor(config.runtimeDir)).slots[String(slot.slot)];
   const result = buildWorktreeReadyMessage({
     slotPort: slot.slot,
     worktreePath: cwd,
@@ -561,7 +564,7 @@ async function handleAlreadyRunning(
   ctx: ServerContext,
   restart: boolean,
 ): Promise<boolean> {
-  const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
+  const entry = findOwnEntry(mainWorktree, registryDirFor(config.runtimeDir), ctx.cwd);
   if (!entry) return false;
   const livePids = Object.entries(entry.pids).filter(([, pid]) => isProcessAlive(pid));
   if (livePids.length === 0) return false;
@@ -590,7 +593,7 @@ async function enforceCap(
 ): Promise<void> {
   const limit = config.devLimit;
   if (limit === undefined) return;
-  const active = pruneAndPersist(mainWorktree, config.registryDir).servers;
+  const active = pruneAndPersist(mainWorktree, registryDirFor(config.runtimeDir)).servers;
   if (active.length < limit) return;
 
   if (!evict) {
@@ -605,7 +608,7 @@ async function enforceCap(
   console.log(`Evicting ${toEvict} dev-server(s) to make room (cap ${limit}).`);
   const evicted = await evictOldest({
     mainWorktree,
-    registryDir: config.registryDir,
+    registryDir: registryDirFor(config.runtimeDir),
     callbackServers: callbackServersOf(config),
     count: toEvict,
   });
@@ -666,7 +669,7 @@ function checkNoLocalRegistryConflict(
   mainWorktree: string,
   cwd: string,
 ): void {
-  const entry = findOwnEntry(mainWorktree, config.registryDir, cwd);
+  const entry = findOwnEntry(mainWorktree, registryDirFor(config.runtimeDir), cwd);
   if (!entry) return;
   for (const [name, pid] of Object.entries(entry.pids)) {
     if (isProcessAlive(pid)) {
@@ -675,12 +678,12 @@ function checkNoLocalRegistryConflict(
     }
   }
   // Stale entry — drop it so registration overwrites cleanly.
-  removeDevServerEntryByWorktree(mainWorktree, config.registryDir, cwd);
+  removeDevServerEntryByWorktree(mainWorktree, registryDirFor(config.runtimeDir), cwd);
 }
 
 async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise<void> {
   const ctx: ServerContext = { cwd: process.cwd() };
-  const entry = findOwnEntry(mainWorktree, config.registryDir, ctx.cwd);
+  const entry = findOwnEntry(mainWorktree, registryDirFor(config.runtimeDir), ctx.cwd);
   if (!entry) {
     console.log("No dev-server running in this worktree.");
     await sweepStalePorts(config.servers, ctx.cwd);
@@ -700,7 +703,7 @@ async function stopLocal(config: DevServerConfig, mainWorktree: string): Promise
       console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
     }
   }
-  unregisterDevServer(mainWorktree, config.registryDir, ctx.cwd);
+  unregisterDevServer(mainWorktree, registryDirFor(config.runtimeDir), ctx.cwd);
   await sweepStalePorts(config.servers, ctx.cwd);
 }
 

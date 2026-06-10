@@ -16,8 +16,7 @@ import { runDevServer, helpers } from "@paleo/workspace";
 
 await runDevServer({
   basePort: 8100, // ADAPT
-  runtimeDir: ".local-wt", // Per-worktree runtime directory; dev-server log paths derive from this + each server's name.
-  registryDir: ".local/_workspace-registry", // Shared registry dir (`slots.json`, `dev-servers.json`); reached via the `.local` symlink in linked worktrees.
+  runtimeDir: ".local-wt", // Per-worktree runtime directory; dev-server log paths derive from this + each server's name. The registry lives at `${runtimeDir}/shared-registry`.
   devLimit: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
   servers: [

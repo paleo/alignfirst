@@ -5,7 +5,26 @@ import { dirname, join, resolve } from "node:path";
 import { allPorts, isValidPort, type PortScheme } from "./ports.js";
 import { getWorktreeBranch } from "./worktree.js";
 
+export const REGISTRY_SUBDIR = "shared-registry";
+
 const SLOTS_FILENAME = "slots.json";
+
+export function registryDirFor(runtimeDir: string): string {
+  return join(runtimeDir, REGISTRY_SUBDIR);
+}
+
+export function warnLegacyRegistryDir(
+  runtimeDir: string,
+  legacyRegistryDir: string | undefined,
+): void {
+  if (legacyRegistryDir === undefined) return;
+  console.warn(
+    "Warning: `registryDir` is obsolete and ignored. The registry now lives at " +
+      `\`${registryDirFor(runtimeDir)}\`. Remove \`registryDir\` from your config. ` +
+      `If you have an existing registry at "${legacyRegistryDir}", run ` +
+      `\`workspace migrate-0.16 ${legacyRegistryDir}\` once to merge it.`,
+  );
+}
 
 export interface ResolvedSlot {
   slot: number;
@@ -45,6 +64,11 @@ export function writeSlots(
   const filePath = join(mainWorktree, registryDir, SLOTS_FILENAME);
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(registry, undefined, 2)}\n`);
+}
+
+/** Union of slots keyed by port; `override` wins on conflict. */
+export function mergeSlots(base: SlotsRegistry, override: SlotsRegistry): SlotsRegistry {
+  return { slots: { ...base.slots, ...override.slots } };
 }
 
 export interface RegisterSlotInput {
