@@ -51,12 +51,11 @@ import {
 import {
   createBranch,
   detectWorktree,
-  enforceWorktreeMode,
   getWorktreeBranch,
+  isWorktreeDirty,
   removeWorktree,
   type RunCtx,
   useExistingBranch,
-  verifyBranchAbsentFromRemote,
   type WorktreeContext,
   type WorktreeDirNameFn,
 } from "./worktree.js";
@@ -274,7 +273,6 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 
   const ctx = detectWorktree();
-  enforceWorktreeMode(command, ctx);
   const run: RunCtx = { verbose };
 
   switch (command.kind) {
@@ -363,7 +361,7 @@ async function runSetup(
   }
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
-  linkSharedRegistry(setupCtx, config.runtimeDir, verboseLog);
+  linkWorkspaceRegistry(setupCtx, config.runtimeDir, verboseLog);
   generateConfigFiles(setupCtx, config.configFiles, slot, ports, command.force, verboseLog);
 
   teeLog(
@@ -705,10 +703,6 @@ async function handleRemove(
     process.exit(1);
   }
 
-  if (!command.noRemoteCheck) {
-    verifyBranchAbsentFromRemote(target.branch, run);
-  }
-
   const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
 
   if (!existsSync(target.worktreePath)) {
@@ -721,6 +715,13 @@ async function handleRemove(
       `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
     );
     return;
+  }
+
+  if (!command.force && isWorktreeDirty(target.worktreePath)) {
+    console.error(
+      `Error: Uncommitted changes in ${target.worktreePath}. Commit or stash them, or pass --force.`,
+    );
+    process.exit(1);
   }
 
   const targetEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
@@ -799,7 +800,7 @@ function handleSetOwnerMode(
 
 type MigrateCommand = Extract<WorkspaceCommand, { kind: "migrate" }>;
 
-/** Transitional (0.16 only): merge a pre-0.16 registry into `${runtimeDir}/shared-registry`. */
+/** Transitional (0.16 only): merge a pre-0.16 registry into `${runtimeDir}/workspace-registry`. */
 function handleMigrate(command: MigrateCommand, config: WorkspaceConfig, newRel: string): void {
   const ctx = detectWorktree();
   const oldRel = command.oldRegistryDir;
@@ -858,7 +859,7 @@ function relinkWorktrees(slots: SlotsRegistry, mainWorktree: string, runtimeDir:
       console.warn(`Warning: worktree ${entry.worktree} not found; skipping symlink.`);
       continue;
     }
-    linkSharedRegistry(
+    linkWorkspaceRegistry(
       { currentWorktree: entry.worktree, mainWorktree, isMainWorktree: false },
       runtimeDir,
       console.log,
@@ -876,7 +877,7 @@ function ensureWorktree(
   dirNameFn: WorktreeDirNameFn | undefined,
 ): WorktreeContext {
   if (command.branch === undefined) return ctx;
-  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn);
+  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn, command.from);
   return useExistingBranch(command.branch, ctx, run, dirNameFn);
 }
 
@@ -901,11 +902,11 @@ function linkSharedDirectories(
 }
 
 /**
- * Symlinks the linked worktree's `${runtimeDir}/shared-registry` to the main worktree's, so the
+ * Symlinks the linked worktree's `${runtimeDir}/workspace-registry` to the main worktree's, so the
  * cwd-relative registry read in `resolveCurrentSlot` reaches main. `runtimeDir` is per-worktree and
  * not in `sharedDirs`, so this is distinct from {@link linkSharedDirectories}.
  */
-function linkSharedRegistry(
+function linkWorkspaceRegistry(
   ctx: WorktreeContext,
   runtimeDir: string,
   log: (msg: string) => void,
@@ -922,17 +923,17 @@ function linkSharedRegistry(
   const linkStat = lstatSync(link, { throwIfNoEntry: false });
   if (linkStat) {
     if (!linkStat.isSymbolicLink()) {
-      log("Skipped shared-registry symlink (a real directory exists here).");
+      log("Skipped workspace-registry symlink (a real directory exists here).");
       return;
     }
     if (!opts?.force && existsSync(link)) {
-      log("Skipped shared-registry symlink (already exists).");
+      log("Skipped workspace-registry symlink (already exists).");
       return;
     }
     rmSync(link);
   }
   symlinkSync(relative(runtimeRoot, mainDir), link);
-  log("Created shared-registry symlink → main worktree.");
+  log("Created workspace-registry symlink → main worktree.");
 }
 
 function generateConfigFiles(

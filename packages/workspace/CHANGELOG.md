@@ -1,5 +1,17 @@
 # @paleo/workspace
 
+## 0.19.0
+
+### Minor Changes
+
+- Rename the registry directory: `${runtimeDir}/shared-registry` → `${runtimeDir}/workspace-registry`. `workspace migrate-0.16 <old-registryDir>` now merges into the new location and accepts any old registry path — including a 0.17/0.18 `${runtimeDir}/shared-registry` — and relinks worktrees.
+
+## 0.18.0
+
+### Minor Changes
+
+- 966b65d: `workspace remove` no longer checks the remote (`--no-remote-check` is gone — the local branch is always kept) and now refuses on uncommitted changes unless `--force`. `workspace setup <branch> [-c]` runs from any worktree; with `-c`, the new branch starts at the current worktree's HEAD, or at any commit-ish via the new `--from <ref>` option.
+
 ## 0.17.0
 
 ### Minor Changes

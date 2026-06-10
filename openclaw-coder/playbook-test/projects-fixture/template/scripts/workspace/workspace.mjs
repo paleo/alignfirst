@@ -15,7 +15,6 @@ await runWorkspace({
 
   sharedDirs: [".local", ".plans"],
   runtimeDir: ".local-wt",
-  registryDir: ".local/_workspace-registry",
 
   configFiles: [],
 

@@ -56,7 +56,7 @@ Consequences for callback authors:
 
 ## The `workspace remove` re-exec
 
-`workspace remove` shells out to `node <devServerScript> down` with `cwd: <target worktree>` rather than stopping the dev-server in-process. This is structural: the `workspace` script doesn't import the dev-server config, so it cannot dispatch callbacks itself. Delegating to the target's own `dev-server.mjs` is how the kernel reaches the callbacks defined on the target's branch. Only after that does `remove` run `purgeInfrastructure` (e.g. `docker compose down -v`), free the slot, and `git worktree remove --force`.
+`workspace remove` shells out to `node <devServerScript> down` with `cwd: <target worktree>` rather than stopping the dev-server in-process. This is structural: the `workspace` script doesn't import the dev-server config, so it cannot dispatch callbacks itself. Delegating to the target's own `dev-server.mjs` is how the kernel reaches the callbacks defined on the target's branch. Only after that does `remove` run `purgeInfrastructure` (e.g. `docker compose down -v`), free the slot, and `git worktree remove --force`. Before any of these teardown steps, `remove` refuses when the worktree has uncommitted changes, unless `--force` is passed.
 
 ## Concurrency-cap TOCTOU race
 

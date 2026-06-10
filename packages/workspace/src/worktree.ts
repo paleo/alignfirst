@@ -2,8 +2,6 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import type { WorkspaceCommand } from "./cli.js";
-
 export interface WorktreeContext {
   currentWorktree: string;
   mainWorktree: string;
@@ -28,15 +26,6 @@ export function detectWorktree(): WorktreeContext {
   return { currentWorktree, mainWorktree, isMainWorktree };
 }
 
-export function enforceWorktreeMode(command: WorkspaceCommand, ctx: WorktreeContext): void {
-  // Adding a worktree for a branch must happen from the main worktree. A branch-less
-  // `workspace setup` runs anywhere: linked worktree (retry path) or main (initial bootstrap).
-  if (command.kind === "setup" && command.branch !== undefined && !ctx.isMainWorktree) {
-    console.error("Error: Adding a workspace for a branch must be run from the main worktree.");
-    process.exit(1);
-  }
-}
-
 export function useExistingBranch(
   branch: string,
   ctx: WorktreeContext,
@@ -57,7 +46,9 @@ export function createBranch(
   ctx: WorktreeContext,
   run: RunCtx,
   dirNameFn: WorktreeDirNameFn = defaultWorktreeDirName,
+  from?: string,
 ): WorktreeContext {
+  if (from !== undefined) verifyFromRef(from);
   let finalBranch = requestedBranch;
   if (branchExists(finalBranch)) {
     let suffix = 2;
@@ -72,20 +63,36 @@ export function createBranch(
   const worktreePath = dedupeWorktreePath(
     computeWorktreePath(ctx.mainWorktree, finalBranch, dirNameFn),
   );
-  execFileSync("git", ["worktree", "add", "-b", finalBranch, worktreePath], {
-    stdio: stdioFor(run),
-  });
+  const addArgs = ["worktree", "add", "-b", finalBranch, "--end-of-options", worktreePath];
+  if (from !== undefined) addArgs.push(from);
+  execFileSync("git", addArgs, { stdio: stdioFor(run) });
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 
-export function verifyBranchAbsentFromRemote(branch: string, run: RunCtx): void {
-  execFileSync("git", ["fetch"], { stdio: stdioFor(run) });
-  const remoteBranches = execFileSync("git", ["branch", "-r", "--list", `origin/${branch}`], {
-    encoding: "utf-8",
-  }).trim();
-  if (remoteBranches.length > 0) {
+function verifyFromRef(from: string): void {
+  try {
+    // `^{commit}` accepts any commit-ish: branch, origin/x, tag, SHA.
+    // `--end-of-options` guards against option-like refs (rev-parse treats args after `--` as paths).
+    execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${from}^{commit}`], {
+      stdio: "pipe",
+    });
+  } catch {
+    console.error(`Error: --from ref "${from}" does not resolve to a commit.`);
+    process.exit(1);
+  }
+}
+
+export function isWorktreeDirty(worktreePath: string): boolean {
+  try {
+    const out = execFileSync("git", ["status", "--porcelain"], {
+      stdio: "pipe",
+      cwd: worktreePath,
+      encoding: "utf-8",
+    });
+    return out.trim().length > 0;
+  } catch {
     console.error(
-      `Error: Branch "${branch}" still exists on the remote. Use --no-remote-check to skip this verification.`,
+      `Error: Cannot check for uncommitted changes in ${worktreePath}. Pass --force to remove anyway.`,
     );
     process.exit(1);
   }

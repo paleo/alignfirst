@@ -17,9 +17,12 @@ When the user asks to "set up a new workspace" or "set up a new worktree":
 
 ```sh
 pnpm workspace setup ABC-123/fix -c    # new branch + worktree (dedup: appends -2, -3… if taken)
+pnpm workspace setup ABC-456/fix -c --from origin/ABC-123/fix   # new branch based on another branch
 pnpm workspace setup ABC-123/fix       # worktree on an existing branch
 pnpm workspace setup                   # set up the current worktree (idempotent — also the retry path)
 ```
+
+With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base.
 
 The foreground command creates the worktree, assigns a port slot, and generates config files. The remaining steps (`pnpm install`, build, Docker PostgreSQL, migrations, seed) run **detached in the background** and stream progress to `.local-wt/logs/workspace-setup.log`, ending with a `READY:` or `FAILED:` banner.
 
@@ -56,8 +59,8 @@ pnpm workspace list  # print all registered worktrees (slot, type, status, branc
 ### Take over an existing workspace
 
 ```sh
-pnpm workspace info               # print the current worktree's summary (type, ports, branch, readiness)
-pnpm workspace info --slot 6510   # same, for another worktree
+pnpm workspace status               # print the current worktree's summary (type, ports, branch, readiness)
+pnpm workspace status --slot 6510   # same, for another worktree
 ```
 
 ### Slot Owner
@@ -74,12 +77,11 @@ pnpm workspace set-owner bob        # update later, no rebuild
 ```sh
 pnpm workspace remove ABC-123/fix    # remove by branch name
 pnpm workspace remove                # remove the current worktree (from inside it)
-pnpm workspace remove ABC-123/fix --no-remote-check # skip remote branch check
 ```
 
-Stops the dev servers (if running), tears down the Docker container and volumes, frees the slot, and removes the worktree.
+Stops the dev servers (if running), tears down the Docker container and volumes, frees the slot, and removes the worktree. The local branch is always kept.
 
-By default, it verifies the branch has been removed from the remote first. Use `--no-remote-check` to skip that. When run from inside the worktree, the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
+Removal refuses when the worktree has uncommitted changes; pass `--force` to discard them. When run from inside the worktree, the script prints the main worktree path. You'll have to run `cd <main-worktree>` afterward.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 
@@ -142,5 +144,5 @@ When the user asks to create a PR:
 
 - **`.local/`** — Shared across worktrees (symlinked). It's the right place for any gitignored working files (e.g. personal notes…).
 - **`.local-wt/`** — Per-worktree. Runtime data: databases, caches, `logs/` (dev server logs).
-  - `shared-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
+  - `workspace-registry/` — The workspace registry. Symlinked to the main worktree in linked worktrees.
 - **`.plans/`** — Shared across worktrees (symlinked). Task planning files.
