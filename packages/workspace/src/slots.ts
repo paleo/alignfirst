@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { allPorts, isValidPort, type PortScheme } from "./ports.js";
 import { getWorktreeBranch } from "./worktree.js";
 
-export const REGISTRY_SUBDIR = "shared-registry";
+export const REGISTRY_SUBDIR = "workspace-registry";
 
 const SLOTS_FILENAME = "slots.json";
 

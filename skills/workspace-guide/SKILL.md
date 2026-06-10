@@ -6,7 +6,7 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.11.0"
+  version: "0.12.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -65,7 +65,7 @@ Each worktree gets a unique "slot" that determines its port(s). A central **slot
 
 The slot is identified by the primary port number itself (e.g., `--slot 8120`).
 
-**Registry format** (stored under the main worktree's `runtimeDir`, e.g. `.local-wt/shared-registry/slots.json`):
+**Registry format** (stored under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/slots.json`):
 
 ```json
 {
@@ -82,7 +82,7 @@ The main worktree is registered at `basePort` (the first slot); linked worktrees
 
 Host RAM is shared. Without a cap, parallel dev-servers (especially when an AI bot fans out worktrees) can exhaust memory. The wrapper passes an optional `devLimit` number to `runDevServer`; omit it for no limit. A hardcoded `5` is a sensible default — bump it if your stack is light, lower it if it's heavy.
 
-A second registry, `.local-wt/shared-registry/dev-servers.json`, tracks live dev-servers. It lives under the main worktree's `runtimeDir`; linked worktrees reach it via a `shared-registry` symlink created by `workspace setup`. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev` / `dev up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `--evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
+A second registry, `.local-wt/workspace-registry/dev-servers.json`, tracks live dev-servers. It lives under the main worktree's `runtimeDir`; linked worktrees reach it via a `workspace-registry` symlink created by `workspace setup`. An entry is **live** if at least one PID in its `pids` map is alive; dead entries are pruned on every read. When `live >= limit`, `dev` / `dev up` aborts and lists the active servers (slot, branch, owner, pids, started-at, worktree path). Re-run with `--evict` to stop the oldest live dev-server across all worktrees and start the new one instead of aborting.
 
 ### Config files must be gitignored
 
@@ -110,7 +110,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 1. **Creates the worktree.** Path computed automatically (`../<reponame>-<slug>`). The default slug strips a recognizable ticket suffix from the last branch segment (`feat/ABC-123-extra` → `feat-ABC-123`), caps at 22 chars, and trims trailing dashes. Override via `config.worktreeDirName` (see below). With `-c`, the new branch starts at the current worktree's HEAD, or at any commit-ish via `--from <ref>`; branch-name dedup (appends `-2`, `-3`...) when the name is taken; the directory is independently deduped if a directory of the same name already exists on disk.
 2. **Detects worktrees.** Finds the main worktree via `git rev-parse --git-common-dir` (parent of `.git`).
 3. **Assigns a slot.** Auto-assigns the first available port, or accepts `--slot PORT`. Records `{ worktree, branch, owner? }` in the slot registry. `owner` is undefined by default; `--owner NAME` sets it; on re-setup without `--owner`, the existing owner is preserved.
-4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths. On a linked worktree it also creates the `shared-registry` symlink, pointing the worktree's `${runtimeDir}/shared-registry` at the main worktree's.
+4. **Symlinks shared directories** from `config.sharedDirs` (default `[".local", ".plans"]`) to the main worktree using relative paths. On a linked worktree it also creates the `workspace-registry` symlink, pointing the worktree's `${runtimeDir}/workspace-registry` at the main worktree's.
 5. **Generates config files** by iterating `config.configFiles`. Each entry is `{ path, source?, patch(content, ctx), optional? }`; the source (the main worktree's `path` by default) is read and run through `patch`. `optional: true` downgrades a missing source from an error to a skip+warning.
 6. **Runs `await config.finalizeWorktree(ctx)`** in a detached background process. This callback owns infrastructure startup, dependency install / build, database provisioning, migrations, and seeding (see "Database provisioning" below). It MUST be idempotent — `workspace setup` re-runs it as the documented retry path.
 7. **Prints a summary** by calling `config.printSummary(ctx)` and `console.log`-ing the returned string.
@@ -135,7 +135,7 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
-| `workspace migrate-0.16 <old-registryDir>` | Transitional (0.16 only): merge a pre-0.16 registry into `${runtimeDir}/shared-registry` and relink worktrees. Removed in the next release |
+| `workspace migrate-0.16 <old-registryDir>` | Transitional: merge a pre-0.16 registry into `${runtimeDir}/workspace-registry` and relink worktrees |
 
 Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--from <ref>`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--force` (proceed despite uncommitted changes); `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
 
@@ -147,7 +147,7 @@ Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--from <ref>`, `--ow
 - `portStep` (default `10`), `maxSlotCount` (default `19`).
 - `ports(slot)` or `portNames` — supply either a function returning the port map for a slot, or a list of names that defaults to consecutive ports (`{ name0: slot, name1: slot+1, ... }`).
 - `sharedDirs: string[]` — required. Directories symlinked from the main worktree (e.g. `[".local", ".plans"]`).
-- `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs. The registry lives at `${runtimeDir}/shared-registry` (`slots.json`, `dev-servers.json`), symlinked to the main worktree per linked worktree by `workspace setup`.
+- `runtimeDir: string` — required. Per-worktree runtime directory relative to the worktree root (e.g. `.local-wt`). Holds the setup log and dev-server logs. The registry lives at `${runtimeDir}/workspace-registry` (`slots.json`, `dev-servers.json`), symlinked to the main worktree per linked worktree by `workspace setup`.
 - `configFiles: Array<{ path, source?, patch, optional? }>` — one entry per gitignored config file. `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. Use `helpers.patchEnvFile` for `KEY=VALUE` files and `helpers.extractHost` to preserve non-localhost hosts. `source` overrides where the initial content comes from (default: `path` read from the main worktree): `{ path }` (relative to the main worktree, e.g. a committed example), `{ content }` (verbatim), or a callback `(ctx) => { path } | { content }` receiving the same `PatchContext`. `optional: true` skips the entry (warning) when a `{ path }` source is missing instead of aborting.
 - `finalizeWorktree(ctx)` — required callback. Runs in a detached background process after the foreground command returns. Owns infrastructure startup (e.g. `docker compose up -d`), database readiness wait, `npm install` / build, migrations, and seeding. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs this same callback. **Run `npm install` first** so any later failure leaves a worktree with usable `node_modules/`; otherwise the `workspace setup` retry can't import `@paleo/workspace`. Failures are logged to `<runtimeDir>/logs/workspace-setup.log` with a `FAILED:` banner.
 - `purgeInfrastructure(ctx)` — optional. Called by `workspace remove` after the dev-server stop. The standard pattern is `docker compose down -v` if you use Docker — destructive teardown that wipes volumes, complementing the soft `docker compose down` in the callback `stop()`.

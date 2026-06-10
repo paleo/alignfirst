@@ -16,7 +16,7 @@ import { helpers, runDevServer } from "@paleo/workspace";
 
 await runDevServer({
   basePort: 8100, // ADAPT
-  runtimeDir: ".local-wt", // Per-worktree runtime directory. The symlinked registry lives at `${runtimeDir}/shared-registry`.
+  runtimeDir: ".local-wt", // Per-worktree runtime directory. The symlinked registry lives at `${runtimeDir}/workspace-registry`.
   devLimit: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
   servers: [

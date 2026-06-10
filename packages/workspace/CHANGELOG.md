@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.19.0
+
+### Minor Changes
+
+- Rename the registry directory: `${runtimeDir}/shared-registry` → `${runtimeDir}/workspace-registry`. `workspace migrate-0.16 <old-registryDir>` now merges into the new location and accepts any old registry path — including a 0.17/0.18 `${runtimeDir}/shared-registry` — and relinks worktrees.
+
 ## 0.18.0
 
 ### Minor Changes

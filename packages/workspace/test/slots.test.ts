@@ -9,8 +9,8 @@ function slot(worktree: string, status: SlotEntry["status"] = "ready"): SlotEntr
 }
 
 describe("registryDirFor", () => {
-  it("appends the shared-registry subdir to runtimeDir", () => {
-    expect(registryDirFor(".local-wt")).toBe(join(".local-wt", "shared-registry"));
+  it("appends the workspace-registry subdir to runtimeDir", () => {
+    expect(registryDirFor(".local-wt")).toBe(join(".local-wt", "workspace-registry"));
   });
 });
 
