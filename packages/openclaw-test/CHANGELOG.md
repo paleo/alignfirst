@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.11.0
+
+### Minor Changes
+
+- 4107ff1: `init` now adds the four `package.json` scripts (`env:build`, `env:up`, `env:down`, `e2e`) when missing — existing scripts are never overwritten — and prints the next steps. Simplified README.
+
 ## 0.10.0
 
 ### Minor Changes
