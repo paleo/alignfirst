@@ -371,6 +371,6 @@ The agents need to know:
 - [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
 - [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
-- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directories (e.g. `.local/`, `.local-wt/`). The registry now lives under `runtimeDir` (`.local-wt/shared-registry/`), already covered.
+- [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
 - [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
