@@ -13,16 +13,14 @@ export function registryDirFor(runtimeDir: string): string {
   return join(runtimeDir, REGISTRY_SUBDIR);
 }
 
-export function warnLegacyRegistryDir(
-  runtimeDir: string,
-  legacyRegistryDir: string | undefined,
-): void {
-  if (legacyRegistryDir === undefined) return;
+/** `registryDir` is gone from the config types but may linger in a consumer's config file. */
+export function warnLegacyRegistryDir(config: { runtimeDir: string; registryDir?: string }): void {
+  if (config.registryDir === undefined) return;
   console.warn(
     "Warning: `registryDir` is obsolete and ignored. The registry now lives at " +
-      `\`${registryDirFor(runtimeDir)}\`. Remove \`registryDir\` from your config. ` +
-      `If you have an existing registry at "${legacyRegistryDir}", run ` +
-      `\`workspace migrate-0.16 ${legacyRegistryDir}\` once to merge it.`,
+      `\`${registryDirFor(config.runtimeDir)}\`. Remove \`registryDir\` from your config. ` +
+      `If you have an existing registry at "${config.registryDir}", run ` +
+      `\`workspace migrate-0.16 ${config.registryDir}\` once to merge it.`,
   );
 }
 

@@ -63,7 +63,15 @@ async function addScriptsToPackageJson(target: string): Promise<void> {
     );
     return;
   }
-  const pkg = JSON.parse(raw) as PackageJsonScripts;
+  let pkg: PackageJsonScripts;
+  try {
+    pkg = JSON.parse(raw) as PackageJsonScripts;
+  } catch {
+    console.error(
+      `${pkgPath} is not valid JSON — fix it, then add the scripts manually (see README)`,
+    );
+    return;
+  }
   const added = addInitScripts(pkg);
   if (added.length === 0) {
     console.log("package.json scripts already present");
