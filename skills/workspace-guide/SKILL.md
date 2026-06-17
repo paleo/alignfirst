@@ -6,19 +6,42 @@ compatibility: Requires git. Template scripts are in Node.js but the approach wo
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.12.0"
+  version: "0.12.1"
   repository: https://github.com/paleo/skills
 ---
 
 # Implementing Worktree-Based Concurrent Local Environments
 
-This skill helps you implement a system for running multiple local development environments simultaneously using git worktrees. It is meant to be adapted to any repository, regardless of tech stack or database engine.
+Implement a system for running multiple local dev environments side by side via git worktrees. Adapt it to any repository, regardless of tech stack or database engine.
 
 **Node consumers** install the `@paleo/workspace` package and write two custom scripts that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel — slot/dev-server registries, port math, branch lifecycle, process-group control, log polling, CLI parsing. Consumers supply project-specific callbacks (`finalizeWorktree`, `printSummary`, optional `purgeInfrastructure`, optional `devServerScript`) plus a `configFiles` list with patch functions, and resolve their own dev-limit ladder.
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
-The `assets/` directory contains reference scripts ([workspace.mjs](assets/workspace.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/workspace.md). The scripts are annotated with `ADAPT` comments to highlight what needs changing.
+The `assets/` directory contains reference scripts ([workspace.mjs](assets/workspace.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/workspace.md). The scripts carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
+
+## Implementation Process
+
+Apply the skill in this order. The per-project decisions live in the [checklist](#checklist-for-adapting-to-a-new-repository); this section is the sequence and its guardrails.
+
+1. **Require a clean working tree.** Run `git status` first. If it is not clean, stop and ask the developer to commit or stash. Testing the CLI commits scaffolding and creates/removes worktrees and branches — safe and reviewable only from a clean baseline.
+
+2. **Investigate.** Read the rest of this document, then inspect the repo to answer every checklist item: current ports and config files, shared vs per-worktree gitignored directories, database provisioning, package manager, and the dev-server's ready / fatal log markers. Note what needs migrating (scattered ports, a config file not yet gitignored, a colliding dev-script name, etc.).
+
+3. **Present findings and plan, then get approval.** Summarize what you found and exactly what you intend to do — base port and port scheme, the shared / per-worktree split, config files to patch, database-provisioning strategy, dev-server command (and any rename), and migrations. **Do not change anything until the developer agrees.**
+
+4. **Implement.** Work through the checklist: install the package, write the two lean scripts, add the npm scripts, migrate ports / config, update `.gitignore`, write the agent docs.
+
+5. **Commit once, then test.** Make a **single commit** with all the scaffolding — a prerequisite for testing, not a wrap-up. `workspace setup <branch> -c` builds the linked worktree from the committed `HEAD`, so the scripts and `package.json` changes must be committed to exist there; the commit also gives the clean tree `workspace remove` expects. Then exercise the CLI end to end:
+   - bootstrap the main worktree (`workspace setup`);
+   - create a throwaway workspace (`workspace setup <test-branch> -c`);
+   - start / stop dev servers (`dev up`, `dev list`, `dev down` / `down --all`);
+   - `workspace list` and `status`;
+   - remove the throwaway workspace (`workspace remove <test-branch>`), then delete the test branch you created — your own artifact, the one case where deleting a branch is expected.
+
+6. **Fix by amending, then re-test.** When a test surfaces a problem, fix it, fold it into the same commit with `git commit --amend`, and re-run the affected tests. Keep the whole effort as one commit. A common find: a gitignored credential file (e.g. `.npmrc`, a private-registry token) not propagated to new worktrees, so `npm install` fails there — add it to `configFiles` (verbatim copy, usually `optional: true`).
+
+7. **Never push.** Leave the final, amended commit for the developer to review and push.
 
 ## The Problem
 
@@ -370,10 +393,21 @@ The agents need to know:
 - [ ] **Decide on fatal log markers for `dev-server`** (or leave the array empty). Substrings that mean "unrecoverable startup failure" let the script fail fast instead of waiting for the timeout.
 - [ ] **Bootstrap the main worktree's config files manually once** (from `.example` files), since sibling worktrees inherit from the main worktree.
 - [ ] **Install `@paleo/workspace`** as a dev-dependency (Node consumers).
-- [ ] **Write `workspace`** using [assets/workspace.mjs](assets/workspace.mjs) as a starting point. Search for `ADAPT` comments.
-- [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach.
+- [ ] **Write `workspace`** using [assets/workspace.mjs](assets/workspace.mjs) as a starting point. Search for `ADAPT` comments — then strip them (and the other scaffolding comments) from your final script.
+- [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach: adapt, then leave a lean script.
 - [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
 - [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
+
+## Removing This Guide Skill
+
+Once the workspace system is implemented, committed, and tested, this guide has done its job — it is not needed for day-to-day work. As the very last step, give the developer the command to uninstall it (assuming it was installed with the [`skills` CLI](https://github.com/vercel-labs/skills)):
+
+```sh
+npx skills remove workspace-guide --yes
+
+# prune the entry in skills-lock.json
+node --input-type=module -e 'import {readFileSync as r,writeFileSync as w} from "node:fs";const f="skills-lock.json",j=JSON.parse(r(f));delete j.skills["workspace-guide"];w(f,JSON.stringify(j,null,2)+"\n")'
+```
