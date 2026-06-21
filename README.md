@@ -8,7 +8,7 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 ## Docmap - Agent-discoverable documentation
 
-`@paleo/docmap` — a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. Run `docmap --guide` for authoring conventions; the `alignfirst-setup-guide` skill installs it in a new repo. See [packages/docmap/README.md](packages/docmap/README.md).
+`@paleo/docmap` — a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
 ## Workspaces - Local environments with worktrees
 

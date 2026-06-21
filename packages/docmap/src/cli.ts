@@ -64,7 +64,9 @@ export function main(options?: MainOptions): number {
   }
 
   // A bare invocation over a small doc set lists recursively and is the only case that
-  // prefixes the listing with short help.
+  // prefixes the listing with short help. The threshold check walks the tree (capped at
+  // SMALL_SET_THRESHOLD), and renderListing below walks it again to format — an intentional
+  // double traversal, negligible at this threshold and not worth threading a shared pass through.
   const bare = paths.length === 0 && !recursive;
   const smallSet = bare && countFilesUpTo(baseDir, SMALL_SET_THRESHOLD) < SMALL_SET_THRESHOLD;
   if (smallSet) stdout.write(`${renderHelp(pm, { full: false })}\n`);
@@ -312,9 +314,21 @@ function detectPackageManager(cwd: string): PackageManagerCommands {
     if (existsSync(join(dir, "bun.lockb")) || existsSync(join(dir, "bun.lock")))
       return sameCommand("bun run docmap");
     const parent = dirname(dir);
-    if (parent === dir) return sameCommand("docmap");
+    if (parent === dir) return fallbackCommand();
     dir = parent;
   }
+}
+
+// No lockfile found: docmap is likely not wired as a project script, so a bare `docmap` would
+// assume a global install. Suggest the package-runner form instead, picking the runner from the
+// manager that launched this process (npm_config_user_agent) and defaulting to npx, which ships
+// with every Node install.
+function fallbackCommand(): PackageManagerCommands {
+  const agent = process.env.npm_config_user_agent ?? "";
+  if (agent.startsWith("pnpm")) return sameCommand("pnpm dlx @paleo/docmap");
+  if (agent.startsWith("yarn")) return sameCommand("yarn dlx @paleo/docmap");
+  if (agent.startsWith("bun")) return sameCommand("bunx @paleo/docmap");
+  return sameCommand("npx @paleo/docmap");
 }
 
 // Only npm needs a `--` separator before forwarded args; every other manager passes them verbatim.
