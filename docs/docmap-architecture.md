@@ -20,21 +20,24 @@ Three TypeScript modules in `packages/docmap/src/`, compiled to `packages/docmap
 | --- | --- |
 | `src/parser.ts` | YAML frontmatter extraction (`extractMetadata`) and stripping (`stripFrontmatter`). |
 | `src/formatter.ts` | Directory reading, listing/formatting, name validation, `--check`, and file resolution (`readDocFile`, direct path then fuzzy basename search; returns `undefined` when nothing resolves). |
-| `src/cli.ts` | Argument parsing, flow orchestration, package-manager detection for tips. |
+| `src/cli.ts` | Argument parsing, flow orchestration, package-manager detection, and help/guide rendering (the `--guide` body is read from `templates/guide.md`). |
 
 Entry point: `packages/docmap/bin/docmap.mjs` → imports `packages/docmap/dist/cli.js` → calls `main()` → returns an exit code.
+
+The `--guide` text lives as Markdown in `packages/docmap/templates/guide.md` with two placeholders: `{{PM}}` for a bare invocation and `{{PM_ARGS}}` for one that forwards arguments. They differ only for npm, whose `run` script needs a `--` separator before args (`npm run docmap` vs `npm run docmap --`); every other manager forwards args verbatim, so both placeholders resolve to the same command. `renderGuide()` reads the file via `new URL("../templates/guide.md", import.meta.url)` — the path resolves from both `src/cli.ts` (dev/test) and `dist/cli.js` (published), each one level under the package root — and substitutes both tokens. `templates/` is listed in `package.json` `files` so it ships with the package.
 
 ## CLI Flow
 
 `main()` in `src/cli.ts` drives everything:
 
-1. **Parse args** — `parseArgs()` extracts `--recursive`, `--root`, `--check`, collects positional **paths**, and collects unknown `--flags`. Tokens starting with `--` are never paths; an unknown one is recorded and later warned about on stderr (so a stale `docmap --dir topic-a` still works — `--dir` is skipped, `topic-a` is a positional). `parseArgs` is pure (no writes).
+1. **Parse args** — `parseArgs()` extracts the mode flags `--help`, `--guide`, `--search <terms>`, `--recursive`, `--root <path>`, `--check`, collects positional **paths**, and collects unknown `--flags`. `--search` consumes the next token as its value (same shape as `--root`); without a following token it is recorded as unknown. Tokens starting with `--` are never paths; an unknown one is recorded and later warned about on stderr (so a stale `docmap --dir topic-a` still works — `--dir` is skipped, `topic-a` is a positional). `parseArgs` is pure (no writes).
 2. **Resolve base directory** — `--root` or default `docs/` relative to `cwd`. The **display prefix** is `relative(cwd, baseDir)` — `docs` by default, or the root's path for a custom `--root` (e.g. `config/docs`, or `../shared` outside cwd). All displayed paths carry this prefix, so they stay real and openable; the empty prefix (root === cwd) yields bare paths.
-3. **`--check`** → `checkAll()` validates every file and directory name (shell-safe regex) and every `.md` frontmatter. Returns exit code 1 if any issues. (Only `--check` returns non-zero.)
-4. **Classify positionals** — each path is normalized (trailing slashes stripped, leading display prefix removed; the bare prefix → root), resolved under the base dir, then `statSync`-tested. Existing directory → listing bucket; everything else (existing file, or missing) → read bucket. `statSync` throwing on a missing path is caught and treated as "not a directory". The filesystem is the source of truth — no extension heuristic.
-5. **Listings** — produced for each directory-classified path via `listDirectory()`/`formatDirectory()` or `formatRecursive()`. With no positionals at all, or with `--recursive` and no directory positionals, the root is listed. Files-only with `--recursive` off produces no listing.
-6. **Reads** — each read-bucket path goes through `readDocFile()` (direct path, then fuzzy basename search). A resolved result is wrapped in `<document_file>` tags; an unresolved one becomes a single generic `⚠ Not found: <path>` line (same wording for a mistyped file or directory — classification can't read intent, and a not-found read keeps exit code 0). Reads follow listings, separated by a blank line.
-7. **Tip** — After a listing, one contextual tip (`formatTip`) is appended explaining that several paths can be passed at once; the example shows directory args only when subdirs exist and file args (carrying the display prefix) only when files exist. The package manager is auto-detected from lockfiles.
+3. **Mode dispatch** — modes are tried in precedence and each returns early after printing only its own output: `--help` (full help) → `--guide` (authoring guide) → `--search` (frontmatter match) → `--check` (validation) → listing/read. `--help`/`--guide`/`--search` always return `0`; only `--check` can return `1`. Help and guide text is rendered from the auto-detected package manager so every shown command is copy-pasteable.
+4. **`--search`** → `searchDocs()` walks the tree (`collectAllFiles`), reads each file, and keeps the ones whose joined `title + summary + read_when` text contains every whitespace-split term (case-insensitive; body text is not searched). Matches render as file bullets, or a single `No documents match: <terms>` line.
+5. **Classify positionals** — each path is normalized (trailing slashes stripped, leading display prefix removed; the bare prefix → root), resolved under the base dir, then `statSync`-tested. Existing directory → listing bucket; everything else (existing file, or missing) → read bucket. `statSync` throwing on a missing path is caught and treated as "not a directory". The filesystem is the source of truth — no extension heuristic.
+6. **Listings** — produced for each directory-classified path via `listDirectory()`/`formatDirectory()` or `formatRecursive()`. With no positionals at all, or with `--recursive` and no directory positionals, the root is listed. A **bare** invocation (no positionals, none of `--recursive`/`--check`/`--help`/`--guide`/`--search`) lists recursively when the tree holds fewer than 20 `.md` files (`collectAllFiles` count), and is the only case prefixed with short help; at ≥20 it keeps the top-level listing. An explicit `--recursive` is unaffected. Files-only with `--recursive` off produces no listing.
+7. **Reads** — each read-bucket path goes through `readDocFile()` (direct path, then fuzzy basename search). A resolved result is wrapped in `<document_file>` tags; an unresolved one becomes a single generic `⚠ Not found: <path>` line (same wording for a mistyped file or directory — classification can't read intent, and a not-found read keeps exit code 0). Reads follow listings, separated by a blank line.
+8. **Tip** — After a listing, one contextual tip (`formatTip`) is appended explaining that several paths can be passed at once; the example shows directory args only when subdirs exist and file args (carrying the display prefix) only when files exist. The package manager is auto-detected from lockfiles, falling back to bare `docmap` when no lockfile is found.
 
 ## Frontmatter Contract
 
@@ -74,8 +77,8 @@ Warnings (⚠) appear inline for name issues or frontmatter errors.
 | `npm -w @paleo/docmap test` | Run tests with Vitest |
 | `npm run lint` | Biome linter (root) |
 
-Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories under `packages/docmap/test/fixtures/` (basic, errors, empty, nested, bad-names, subdirs-only). Each fixture is a self-contained `docs/`-like tree passed via `--root`.
+Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories under `packages/docmap/test/fixtures/` (basic, errors, empty, nested, bad-names, subdirs-only, classify, no-frontmatter, large). Each fixture is a self-contained `docs/`-like tree passed via `--root`. The `large` fixture (≥20 `.md` files) exercises the top-level listing kept above the recursive-default threshold.
 
-## Agent Skill
+## Authoring Guide and Setup
 
-The `skills/docmap/` directory ships a reusable agent skill that teaches AI agents how to use docmap, write documents, install it in a project, bootstrap a `docs/` directory, and migrate documentation from skills. It is distributed separately from the npm package.
+The authoring conventions (frontmatter contract, naming, workflow) ship with the CLI as `templates/guide.md`: `docmap --guide` prints that file, rendered with the project's package-manager prefix. Project setup — bootstrapping a `docs/` tree, wiring docmap into a repo, and migrating existing docs or skills — lives in the separate `alignfirst-setup-guide` skill, distributed outside the npm package.

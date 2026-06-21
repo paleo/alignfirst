@@ -1,15 +1,20 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
   checkAll,
   collectAllFiles,
+  countFilesUpTo,
   formatDirectory,
   formatRecursive,
   isUnder,
   listDirectory,
   readDocFile,
+  searchDocs,
   type FormatResult,
 } from "./formatter.js";
+
+// A bare invocation over fewer .md files than this lists recursively by default.
+const SMALL_SET_THRESHOLD = 20;
 
 export interface MainOptions {
   argv?: string[];
@@ -24,7 +29,7 @@ export function main(options?: MainOptions): number {
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
 
-  const { paths, unknownFlags, recursive, root, check } = parseArgs(argv);
+  const { paths, unknownFlags, recursive, root, check, help, guide, search } = parseArgs(argv);
   const baseDir = root ? resolve(cwd, root) : resolve(cwd, "docs");
   // cwd-relative form of baseDir, prepended to every displayed path so output is copy-pasteable.
   // A `--root` outside cwd yields a `..`-leading prefix; paths still strip and resolve correctly.
@@ -32,15 +37,48 @@ export function main(options?: MainOptions): number {
 
   for (const flag of unknownFlags) stderr.write(`Unknown option: ${flag} (ignored)\n`);
 
+  const pm = detectPackageManager(cwd);
+
+  // Mode precedence (each prints only its own output, then returns): help → guide → search →
+  // check → listing/read.
+  if (help) {
+    stdout.write(renderHelp(pm, { full: true }));
+    return 0;
+  }
+  if (guide) {
+    stdout.write(renderGuide(pm));
+    return 0;
+  }
+  if (search !== undefined) {
+    const terms = search.split(/\s+/).filter((term) => term.length > 0);
+    const lines = searchDocs(baseDir, terms, prefix);
+    stdout.write(
+      lines.length > 0 ? `${lines.join("\n")}\n` : `No documents match: ${terms.join(" ")}\n`,
+    );
+    return 0;
+  }
   if (check) {
     const issues = checkAll(baseDir, "", prefix);
     for (const issue of issues) stdout.write(`${issue.path}: ${issue.message}\n`);
     return issues.length > 0 ? 1 : 0;
   }
 
+  // A bare invocation over a small doc set lists recursively and is the only case that
+  // prefixes the listing with short help.
+  const bare = paths.length === 0 && !recursive;
+  const smallSet = bare && countFilesUpTo(baseDir, SMALL_SET_THRESHOLD) < SMALL_SET_THRESHOLD;
+  if (smallSet) stdout.write(`${renderHelp(pm, { full: false })}\n`);
+
   const { dirs, files } = classifyTargets(baseDir, paths, prefix);
 
-  const listing = renderListing(baseDir, dirs, recursive, paths.length === 0, cwd, prefix);
+  const listing = renderListing(
+    baseDir,
+    dirs,
+    recursive || smallSet,
+    paths.length === 0,
+    cwd,
+    prefix,
+  );
   if (listing) stdout.write(listing);
 
   const reads = renderReads(baseDir, files, prefix);
@@ -58,6 +96,9 @@ export interface ParsedArgs {
   recursive: boolean;
   root: string | undefined;
   check: boolean;
+  help: boolean;
+  guide: boolean;
+  search: string | undefined;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -67,15 +108,24 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let recursive = false;
   let root: string | undefined;
   let check = false;
+  let help = false;
+  let guide = false;
+  let search: string | undefined;
 
   for (let i = 0; i < args.length; ++i) {
     const arg = args[i];
     if (arg === "--root" && i + 1 < args.length) {
       root = args[++i];
+    } else if (arg === "--search" && i + 1 < args.length) {
+      search = args[++i];
     } else if (arg === "--recursive") {
       recursive = true;
     } else if (arg === "--check") {
       check = true;
+    } else if (arg === "--help") {
+      help = true;
+    } else if (arg === "--guide") {
+      guide = true;
     } else if (arg.startsWith("--")) {
       unknownFlags.push(arg);
     } else {
@@ -83,7 +133,48 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
   }
 
-  return { paths, unknownFlags, recursive, root, check };
+  return { paths, unknownFlags, recursive, root, check, help, guide, search };
+}
+
+interface HelpOptions {
+  full: boolean;
+}
+
+interface PackageManagerCommands {
+  base: string;
+  withArgs: string;
+}
+
+function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
+  const lines = [
+    "docmap — browse and read a project's docs/ tree of Markdown files.",
+    "",
+    "Browse:",
+    `  ${pm.base}                # list root documents`,
+    `  ${pm.withArgs} topic-a        # list a subdirectory`,
+    `  ${pm.withArgs} topic-a/doc.md # read a document`,
+    `  ${pm.withArgs} --recursive    # list every document`,
+    "",
+    `To write documentation, run \`${pm.withArgs} --guide\` first.`,
+  ];
+  if (full) {
+    lines.push(
+      "",
+      "More:",
+      `  ${pm.withArgs} --search "term1 term2" # match frontmatter (title, summary, read_when)`,
+      `  ${pm.withArgs} --check                # validate names and frontmatter`,
+      `  ${pm.withArgs} --root <path>          # use a custom docs root`,
+      "",
+      "Positional paths are classified by the filesystem: a directory is listed, a file is read,",
+      "an unmatched name falls back to a fuzzy basename search. The docs/ prefix is optional on input.",
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function renderGuide(pm: PackageManagerCommands): string {
+  const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
+  return template.replaceAll("{{PM_ARGS}}", pm.withArgs).replaceAll("{{PM}}", pm.base);
 }
 
 interface ClassifiedTargets {
@@ -168,8 +259,8 @@ function formatTip(
       displayExample(prefix, "dir-name-b", "doc-2.md"),
     );
   if (examples.length === 0) return;
-  const pm = detectPackageManager(cwd);
-  return `Tip: Pass several paths in one call — directories are listed, files are read. E.g. \`${pm} ${examples.join(" ")}\`.\n`;
+  const { withArgs } = detectPackageManager(cwd);
+  return `Tip: Pass several paths in one call — directories are listed, files are read. E.g. \`${withArgs} ${examples.join(" ")}\`.\n`;
 }
 
 function displayExample(prefix: string, dir: string, file: string): string {
@@ -211,16 +302,22 @@ function renderReads(baseDir: string, files: FileTarget[], prefix: string): stri
   return `${blocks.join("\n\n")}\n`;
 }
 
-function detectPackageManager(cwd: string): string {
+function detectPackageManager(cwd: string): PackageManagerCommands {
   let dir = cwd;
   while (true) {
-    if (existsSync(join(dir, "package-lock.json"))) return "npm run docmap --";
-    if (existsSync(join(dir, "pnpm-lock.yaml"))) return "pnpm docmap";
-    if (existsSync(join(dir, "yarn.lock"))) return "yarn docmap";
+    if (existsSync(join(dir, "package-lock.json")))
+      return { base: "npm run docmap", withArgs: "npm run docmap --" };
+    if (existsSync(join(dir, "pnpm-lock.yaml"))) return sameCommand("pnpm docmap");
+    if (existsSync(join(dir, "yarn.lock"))) return sameCommand("yarn docmap");
     if (existsSync(join(dir, "bun.lockb")) || existsSync(join(dir, "bun.lock")))
-      return "bun run docmap";
+      return sameCommand("bun run docmap");
     const parent = dirname(dir);
-    if (parent === dir) return "npx docmap";
+    if (parent === dir) return sameCommand("docmap");
     dir = parent;
   }
+}
+
+// Only npm needs a `--` separator before forwarded args; every other manager passes them verbatim.
+function sameCommand(command: string): PackageManagerCommands {
+  return { base: command, withArgs: command };
 }

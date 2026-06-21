@@ -15,6 +15,7 @@ const fixtures = {
   badNames: resolve(__dirname, "fixtures/bad-names"),
   noFrontmatter: resolve(__dirname, "fixtures/no-frontmatter"),
   classify: resolve(__dirname, "fixtures/classify"),
+  large: resolve(__dirname, "fixtures/large"),
 };
 
 const TIP = "Pass several paths in one call";
@@ -50,10 +51,11 @@ function invoke(argv: string[], cwd: string) {
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
 
-describe("default listing (basic fixture)", () => {
-  it("lists root files with titles and summaries", () => {
+describe("recursive-by-default for small sets (basic fixture)", () => {
+  it("lists root files with titles and summaries, prefixed by short help", () => {
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
+    expect(stdout).toContain("--guide");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain("Code Style");
     expect(stdout).toContain("Conventions and formatting rules for the codebase.");
@@ -61,18 +63,43 @@ describe("default listing (basic fixture)", () => {
     expect(stdout).toContain("Getting Started");
   });
 
-  it("shows Sub-directories section", () => {
+  it("recurses into subdirectories without a flag", () => {
     const { stdout } = run([], fixtures.basic);
-    expect(stdout).toContain("## Sub-directories");
-    expect(stdout).toContain("- backend/");
-    expect(stdout).toContain("- frontend/");
+    expect(stdout).toContain("## `backend/`");
+    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
+    expect(stdout).toContain("## `frontend/`");
+    expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
+    expect(stdout).not.toContain("## Sub-directories");
   });
 
-  it("shows a tip with both directory and file examples", () => {
-    const { stdout } = run([], fixtures.basic);
+  it("does not print short help for a positional directory", () => {
+    const { stdout } = run(["backend"], fixtures.basic);
+    expect(stdout).not.toContain("--guide");
+  });
+});
+
+describe("top-level listing for large sets (large fixture)", () => {
+  it("counts files recursively for the threshold: 20 docs nested under bulk/ still stay top-level", () => {
+    const { code, stdout } = run([], fixtures.large);
+    expect(code).toBe(0);
+    expect(stdout).toContain("## Sub-directories");
+    expect(stdout).toContain("- bulk/");
+    expect(stdout).toContain("- nested-a/");
+    // Top-level mode does not descend into subdirs, so the nested docs are not expanded.
+    expect(stdout).not.toContain(dp(fixtures.large, "bulk/doc-01.md"));
+    expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
+  });
+
+  it("does not prefix the listing with short help", () => {
+    const { stdout } = run([], fixtures.large);
+    expect(stdout).not.toContain("--guide");
+  });
+
+  it("shows a tip with only the directory example when no files sit at the top level", () => {
+    const { stdout } = run([], fixtures.large);
     expect(stdout).toContain(TIP);
     expect(stdout).toContain(DIR_EXAMPLE);
-    expect(stdout).toContain(FILE_EXAMPLE);
+    expect(stdout).not.toContain(FILE_EXAMPLE);
   });
 });
 
@@ -311,7 +338,7 @@ describe("tip conditions", () => {
   });
 
   it("only subdirs (no files) shows only the directory example", () => {
-    const { stdout } = run([], fixtures.subdirsOnly);
+    const { stdout } = run(["only-subs"], fixtures.large);
     expect(stdout).toContain(TIP);
     expect(stdout).toContain(DIR_EXAMPLE);
     expect(stdout).not.toContain(FILE_EXAMPLE);
@@ -376,6 +403,54 @@ describe("--check", () => {
     expect(stdout).not.toContain("Missing frontmatter");
     expect(stdout).toContain("Unterminated frontmatter");
     expect(stdout).not.toContain("Missing 'summary'");
+  });
+});
+
+describe("--help", () => {
+  it("prints full help with the extra-option markers and no listing", () => {
+    const { code, stdout } = run(["--help"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("--guide");
+    expect(stdout).toContain("--search");
+    expect(stdout).toContain("--check");
+    expect(stdout).not.toContain("# Documentation");
+    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
+    expect(stdout).not.toContain("<document_file");
+  });
+});
+
+describe("--guide", () => {
+  it("prints the authoring guide and no listing", () => {
+    const { code, stdout } = run(["--guide"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("# Authoring Documentation");
+    expect(stdout).toContain("YAML Frontmatter");
+    expect(stdout).not.toContain("# Documentation");
+    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
+    expect(stdout).not.toContain("<document_file");
+  });
+});
+
+describe("--search", () => {
+  it("matches a single term against frontmatter", () => {
+    const { code, stdout } = run(["--search", "database"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
+    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
+    expect(stdout).not.toContain(dp(fixtures.basic, "backend/api-guide.md"));
+  });
+
+  it("requires every term to match (AND) and excludes non-matching files", () => {
+    const { code, stdout } = run(["--search", "guide api"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
+    expect(stdout).not.toContain(dp(fixtures.basic, "backend/database.md"));
+  });
+
+  it("reports when nothing matches", () => {
+    const { code, stdout } = run(["--search", "zzznomatch"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("No documents match: zzznomatch");
   });
 });
 

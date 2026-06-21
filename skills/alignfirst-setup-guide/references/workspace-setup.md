@@ -1,16 +1,6 @@
----
-name: workspace-guide
-description: >-
-  Blueprint for implementing a workspace system — multiple git-worktree dev environments side by side — in a repository.
-compatibility: Requires git. Template scripts are in Node.js but the approach works with any runtime.
-license: CC0 1.0
-metadata:
-  author: Paleo
-  version: "0.12.1"
-  repository: https://github.com/paleo/skills
----
-
 # Implementing Worktree-Based Concurrent Local Environments
+
+Blueprint for implementing a workspace system — multiple git-worktree dev environments side by side — in a repository. Requires git. Template scripts are in Node.js but the approach works with any runtime.
 
 Implement a system for running multiple local dev environments side by side via git worktrees. Adapt it to any repository, regardless of tech stack or database engine.
 
@@ -18,7 +8,7 @@ Implement a system for running multiple local dev environments side by side via 
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
-The `assets/` directory contains reference scripts ([workspace.mjs](assets/workspace.mjs), [dev-server.mjs](assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](assets/workspace.md). The scripts carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
+The `assets/` directory contains reference scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](../assets/workspace.md). The scripts carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
 
 ## Implementation Process
 
@@ -126,7 +116,7 @@ Trade-off: mistakes in the main worktree's config also propagate. Keep it clean.
 
 This is the central piece. It handles the full worktree lifecycle: creation, setup, and removal. It can create a worktree for an existing branch, create a new branch with automatic deduplication, set up the local environment, and tear everything down.
 
-The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle below. See [assets/workspace.mjs](assets/workspace.mjs) for a populated reference config.
+The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle below. See [assets/workspace.mjs](../assets/workspace.mjs) for a populated reference config.
 
 **Lifecycle for setup (with `workspace setup <branch>`):**
 
@@ -220,7 +210,7 @@ The rules below are not enforceable by the type system. Read them carefully:
 - Each worktree gets its own Docker stack on slot-scoped ports (host port remap; container port unchanged). `stop()` is local — no reference counting, no shared infra.
 - Registry liveness pruning is PID-based on spawn servers. If a user kills the spawn processes manually instead of running `dev down`, the entry is pruned and callback `stop()` never fires (e.g. Docker is orphaned). Always use `dev down`.
 
-See [assets/dev-server.mjs](assets/dev-server.mjs) for a populated reference config.
+See [assets/dev-server.mjs](../assets/dev-server.mjs) for a populated reference config.
 
 **Lifecycle:**
 
@@ -374,7 +364,7 @@ Without the conventions, the agent creates branches and commits with inconsisten
 
 ### 2. Detailed workspace documentation (`docs/workspace.md`)
 
-This is the file referenced above. It contains the step-by-step procedures: how to create a workspace, how to start the dev server, how to tear things down. See [assets/workspace.md](assets/workspace.md) for a starting point.
+This is the file referenced above. It contains the step-by-step procedures: how to create a workspace, how to start the dev server, how to tear things down. See [assets/workspace.md](../assets/workspace.md) for a starting point.
 
 The agents need to know:
 
@@ -393,21 +383,10 @@ The agents need to know:
 - [ ] **Decide on fatal log markers for `dev-server`** (or leave the array empty). Substrings that mean "unrecoverable startup failure" let the script fail fast instead of waiting for the timeout.
 - [ ] **Bootstrap the main worktree's config files manually once** (from `.example` files), since sibling worktrees inherit from the main worktree.
 - [ ] **Install `@paleo/workspace`** as a dev-dependency (Node consumers).
-- [ ] **Write `workspace`** using [assets/workspace.mjs](assets/workspace.mjs) as a starting point. Search for `ADAPT` comments — then strip them (and the other scaffolding comments) from your final script.
-- [ ] **Write `dev-server`** using [assets/dev-server.mjs](assets/dev-server.mjs) as a starting point. Same approach: adapt, then leave a lean script.
+- [ ] **Write `workspace`** using [assets/workspace.mjs](../assets/workspace.mjs) as a starting point. Search for `ADAPT` comments — then strip them (and the other scaffolding comments) from your final script.
+- [ ] **Write `dev-server`** using [assets/dev-server.mjs](../assets/dev-server.mjs) as a starting point. Same approach: adapt, then leave a lean script.
 - [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
-- [ ] **Write agent documentation** if applicable (see [assets/workspace.md](assets/workspace.md)).
+- [ ] **Write agent documentation** if applicable (see [assets/workspace.md](../assets/workspace.md)).
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
-
-## Removing This Guide Skill
-
-Once the workspace system is implemented, committed, and tested, this guide has done its job — it is not needed for day-to-day work. As the very last step, give the developer the command to uninstall it (assuming it was installed with the [`skills` CLI](https://github.com/vercel-labs/skills)):
-
-```sh
-npx skills remove workspace-guide --yes
-
-# prune the entry in skills-lock.json
-node --input-type=module -e 'import {readFileSync as r,writeFileSync as w} from "node:fs";const f="skills-lock.json",j=JSON.parse(r(f));delete j.skills["workspace-guide"];w(f,JSON.stringify(j,null,2)+"\n")'
-```

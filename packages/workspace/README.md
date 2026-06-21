@@ -9,16 +9,16 @@ Each project writes two custom scripts on top, using these entry points:
 
 ## Setup
 
-The `workspace-guide` skill is a setup-time companion. Install the skill (globally or locally):
+The `alignfirst-setup-guide` skill is a setup-time companion. Install the skill (globally or locally):
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill workspace-guide
+npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
 ```
 
 Then, in your project, ask your agent:
 
 ```text
-Use your workspace-guide skill. Set up worktree-based local environments in this project.
+Use your alignfirst-setup-guide skill. Set up worktree-based local environments in this project.
 ```
 
 The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm scripts. After that, you can uninstall the skill, it won't be used by your project anymore.

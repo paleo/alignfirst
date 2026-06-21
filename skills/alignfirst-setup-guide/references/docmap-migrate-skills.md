@@ -88,11 +88,11 @@ You must provide each subagent with:
 
 If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, add or replace the documentation discovery section with the following.
 
-_**Note**: Adapt the commands to the project's package manager (see the [installation reference](installation.md) for the full command table)._
+_**Note**: Adapt the `npm run docmap` command to the project's package manager (`pnpm docmap`, `yarn docmap`, `bun run docmap`)._
 
 > ## Docmap - Seek Documentation
 >
-> **Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
+> **Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
 Remove any references to the deleted skill directories.
 

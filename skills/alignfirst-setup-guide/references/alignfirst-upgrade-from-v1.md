@@ -80,7 +80,7 @@ If `AGENTS.md` (or `CLAUDE.md`) exists, edit it:
 
 Check if any `.md` files remain in `_docs/`.
 
-- **If files remain**: Use the **docfront** skill to migrate them. Specifically, use its "Migrate Existing Documents" capability to bring the `_docs/` contents into a new `docs/` directory (do not modify in-place). After a successful migration, delete the old directory:
+- **If files remain**: Migrate them by following [docmap-migrate-existing-docs.md](docmap-migrate-existing-docs.md) to bring the `_docs/` contents into a new `docs/` directory (do not modify in-place). After a successful migration, delete the old directory:
 
   ```bash
   rm -rf _docs
@@ -101,4 +101,4 @@ Summarize what was done:
 - `_plans` renamed to `.plans`
 - `.gitignore` updated
 - `AGENTS.md` cleaned
-- Whether documentation was migrated to `docs/` via docfront, or no remaining docs were found
+- Whether documentation was migrated to `docs/` via docmap, or no remaining docs were found

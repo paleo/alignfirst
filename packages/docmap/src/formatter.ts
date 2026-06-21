@@ -239,6 +239,34 @@ export function readDocFile(
   return { path: displayPath(prefix, found), content: stripFrontmatter(content) };
 }
 
+export function searchDocs(baseDir: string, terms: string[], prefix: string): string[] {
+  const needles = terms.map((term) => term.toLowerCase());
+  const lines: string[] = [];
+  for (const rel of collectAllFiles(baseDir, "")) {
+    const slash = rel.lastIndexOf("/");
+    const relDir = slash === -1 ? "" : rel.slice(0, slash);
+    const name = slash === -1 ? rel : rel.slice(slash + 1);
+    const content = readFileSync(join(baseDir, rel), "utf-8");
+    const meta = extractMetadata(content);
+    const title = meta.title ?? extractFallbackTitle(content);
+    const haystack = [title, meta.summary, ...meta.readWhen]
+      .filter((part): part is string => part !== undefined)
+      .join(" ")
+      .toLowerCase();
+    if (!needles.every((needle) => haystack.includes(needle))) continue;
+    const entry: FileEntry = {
+      name,
+      title,
+      summary: meta.summary,
+      readWhen: meta.readWhen,
+      error: meta.error,
+      nameError: validateName(name),
+    };
+    lines.push(...formatFileBullets([entry], relDir, prefix));
+  }
+  return lines;
+}
+
 export function collectAllFiles(dirPath: string, prefix: string): string[] {
   const result: string[] = [];
   let entries: Dirent<string>[];
@@ -256,6 +284,32 @@ export function collectAllFiles(dirPath: string, prefix: string): string[] {
     }
   }
   return result;
+}
+
+// Counts `.md` files (recursively, CHANGELOG* excluded) but stops walking as soon as `limit`
+// is reached, so a multi-thousand-file tree is not fully traversed just to compare against a
+// small threshold. The returned count is capped at `limit`.
+export function countFilesUpTo(dirPath: string, limit: number): number {
+  let count = 0;
+  const walk = (dir: string): boolean => {
+    let entries: Dirent<string>[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (walk(join(dir, entry.name))) return true;
+      } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+        count++;
+        if (count >= limit) return true;
+      }
+    }
+    return false;
+  };
+  walk(dirPath);
+  return count;
 }
 
 function displayPath(...parts: string[]): string {

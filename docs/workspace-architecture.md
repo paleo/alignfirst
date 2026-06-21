@@ -1,6 +1,6 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@paleo/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, and registry liveness. Complements the `workspace-guide` skill (the consumer-facing blueprint).
+summary: Internals of the `@paleo/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, and registry liveness. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
 read_when:
   - onboarding to the @paleo/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
@@ -10,7 +10,7 @@ read_when:
 
 # Workspace Package Architecture
 
-For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [`workspace-guide` skill](../skills/workspace-guide/SKILL.md). This document covers package internals and edge-case behavior that don't belong in that guide.
+For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [workspace setup blueprint](../skills/alignfirst-setup-guide/references/workspace-setup.md). This document covers package internals and edge-case behavior that don't belong in that guide.
 
 ## Foreground self-exit
 
