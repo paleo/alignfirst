@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.6.0
+
+### Minor Changes
+
+- 4396c78: Self-documenting CLI: add `--help`, `--guide`, and `--search`. Bare run lists recursively for small doc sets. No-lockfile fallback now suggests the package-runner form.
+
 ## 0.5.1
 
 ### Patch Changes
