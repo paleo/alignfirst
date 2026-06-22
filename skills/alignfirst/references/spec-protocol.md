@@ -45,7 +45,7 @@ You should ask questions freely to ensure you fully understand:
 - User preferences for implementation approaches
 - Any constraints or considerations you might have missed
 
-Do not use your question tool. Always ask in plain text. Your questions must be the opportunity for a real discussion.
+Do not use your question tool. Always ask in plain text. Your questions will be the opportunity for a real discussion.
 
 ## Phase 3. Specification Phase
 
