@@ -35,7 +35,7 @@ _Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherw
 
 Commit message convention: we use conventional commit, e.g., `feat: [#123] add new feature`. Always prefix the ticket ID with a `#` sign. Do not add a "Co-Authored-By:" line.
 
-Branch naming convention: `<type>/<ticket-id>` (with type from conventional commit, e.g., `feat/123`, `fix/123`, `refactor/123`, `chore/123`).
+Branch naming convention: `<ticket-id>/<1-3-words>`.
 
 Add `paleo-typescript-style` skill to every plan.
 

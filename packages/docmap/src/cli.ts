@@ -1,16 +1,16 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  checkAll,
-  collectAllFiles,
-  countFilesUpTo,
-  formatDirectory,
-  formatRecursive,
-  isUnder,
-  listDirectory,
-  readDocFile,
-  searchDocs,
-  type FormatResult,
+    checkAll,
+    collectAllFiles,
+    countFilesUpTo,
+    formatDirectory,
+    formatRecursive,
+    isUnder,
+    listDirectory,
+    readDocFile,
+    searchDocs,
+    type FormatResult,
 } from "./formatter.js";
 
 // A bare invocation over fewer .md files than this lists recursively by default.
@@ -147,15 +147,57 @@ interface PackageManagerCommands {
   withArgs: string;
 }
 
+interface CommandRow {
+  command: string;
+  comment: string;
+}
+
+// Pad every command to the longest one so the `#` comments line up, whatever the
+// package-manager prefix length (npm's `run … --` vs a bare `pnpm docmap`). This
+// is why the command lists for short help, full help, and the guide all render
+// through one helper instead of carrying hand-counted padding.
+function renderCommands(rows: CommandRow[], indent = ""): string {
+  const width = Math.max(...rows.map((row) => row.command.length));
+  return rows.map((row) => `${indent}${row.command.padEnd(width)} # ${row.comment}`).join("\n");
+}
+
+// Everyday browse/search commands, shared by short help, full help, and the guide.
+// Examples carry the `docs/` prefix to nudge agents toward valid, openable paths.
+function browseCommands(pm: PackageManagerCommands): CommandRow[] {
+  return [
+    { command: pm.base, comment: "list root documents" },
+    { command: `${pm.withArgs} docs/topic-a`, comment: "list a sub-directory" },
+    { command: `${pm.withArgs} docs/intro.md`, comment: "read a document" },
+    { command: `${pm.withArgs} docs/intro.md docs/setup.md`, comment: "read several at once" },
+    { command: `${pm.withArgs} --recursive`, comment: "list every document" },
+    {
+      command: `${pm.withArgs} --search "term1 term2"`,
+      comment: "search frontmatter (title, summary, read_when)",
+    },
+  ];
+}
+
+function moreCommands(pm: PackageManagerCommands): CommandRow[] {
+  return [
+    { command: `${pm.withArgs} --check`, comment: "validate names and frontmatter" },
+    { command: `${pm.withArgs} --root <path>`, comment: "use a custom docs root" },
+  ];
+}
+
+// The guide shows the browse/search set plus validation.
+function guideCommands(pm: PackageManagerCommands): CommandRow[] {
+  return [
+    ...browseCommands(pm),
+    { command: `${pm.withArgs} --check`, comment: "validate all files" },
+  ];
+}
+
 function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
   const lines = [
     "docmap — browse and read a project's docs/ tree of Markdown files.",
     "",
-    "Browse:",
-    `  ${pm.base}                # list root documents`,
-    `  ${pm.withArgs} topic-a        # list a subdirectory`,
-    `  ${pm.withArgs} topic-a/doc.md # read a document`,
-    `  ${pm.withArgs} --recursive    # list every document`,
+    "Commands:",
+    renderCommands(browseCommands(pm), "  "),
     "",
     `To write documentation, run \`${pm.withArgs} --guide\` first.`,
   ];
@@ -163,9 +205,7 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
     lines.push(
       "",
       "More:",
-      `  ${pm.withArgs} --search "term1 term2" # match frontmatter (title, summary, read_when)`,
-      `  ${pm.withArgs} --check                # validate names and frontmatter`,
-      `  ${pm.withArgs} --root <path>          # use a custom docs root`,
+      renderCommands(moreCommands(pm), "  "),
       "",
       "Positional paths are classified by the filesystem: a directory is listed, a file is read,",
       "an unmatched name falls back to a fuzzy basename search. The docs/ prefix is optional on input.",
@@ -176,7 +216,10 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
 
 function renderGuide(pm: PackageManagerCommands): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
-  return template.replaceAll("{{PM_ARGS}}", pm.withArgs).replaceAll("{{PM}}", pm.base);
+  return template
+    .replaceAll("{{COMMANDS}}", renderCommands(guideCommands(pm)))
+    .replaceAll("{{PM_ARGS}}", pm.withArgs)
+    .replaceAll("{{PM}}", pm.base);
 }
 
 interface ClassifiedTargets {

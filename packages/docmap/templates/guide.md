@@ -7,13 +7,7 @@ All project documentation lives in the `docs/` directory. The `docmap` CLI lets 
 Targets are positional paths; the CLI classifies each by inspecting the filesystem (directory → list, file → read). Pass several at once. The `docs/` prefix shown in listings is optional on input.
 
 ```bash
-{{PM}}                                   # list root docs
-{{PM_ARGS}} topic-a topic-b/sub-topic-c  # list subdirectories
-{{PM_ARGS}} --recursive                  # list everything
-{{PM_ARGS}} doc-1.md topic-a/doc-2.md    # read documents (frontmatter stripped)
-{{PM_ARGS}} topic-a topic-a/doc-1.md     # mix listing and reading
-{{PM_ARGS}} --search "term1 term2"       # search frontmatter
-{{PM_ARGS}} --check                      # validate all files
+{{COMMANDS}}
 ```
 
 ## Workflow

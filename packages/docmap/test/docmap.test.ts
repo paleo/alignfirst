@@ -56,6 +56,7 @@ describe("recursive-by-default for small sets (basic fixture)", () => {
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain("--guide");
+    expect(stdout).toContain("--search");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain("Code Style");
     expect(stdout).toContain("Conventions and formatting rules for the codebase.");
@@ -416,6 +417,24 @@ describe("--help", () => {
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
+  });
+
+  it("groups --search under Commands, above the More section", () => {
+    const { stdout } = run(["--help"], fixtures.basic);
+    expect(stdout.indexOf("--search")).toBeLessThan(stdout.indexOf("More:"));
+  });
+
+  it("aligns the inline comments within a command group", () => {
+    const { stdout } = run(["--help"], fixtures.basic);
+    const lines = stdout.split("\n");
+    const start = lines.indexOf("Commands:") + 1;
+    const columns: number[] = [];
+    for (let i = start; i < lines.length && lines[i].startsWith("  "); ++i) {
+      columns.push(lines[i].indexOf(" # "));
+    }
+    // Every command line in the group shares one comment column.
+    expect(columns.length).toBeGreaterThan(1);
+    expect(new Set(columns).size).toBe(1);
   });
 });
 
