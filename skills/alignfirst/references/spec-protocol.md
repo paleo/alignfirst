@@ -45,6 +45,8 @@ You should ask questions freely to ensure you fully understand:
 - User preferences for implementation approaches
 - Any constraints or considerations you might have missed
 
+Do not use your question tool. Always ask in plain text. Your questions will be the opportunity for a real discussion.
+
 ## Phase 3. Specification Phase
 
 After the user approves your proposal, write the specification in a markdown file in TASK_DIR. Compose the filename with the current CYCLE_LETTER and the next FILE_NUMBER, e.g. `A1-spec.md`. Do not overwrite an existing file.

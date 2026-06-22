@@ -8,21 +8,7 @@ This prompt detects your current AlignFirst version (v1 or v2) and runs the appr
 
 1. If this is a git repository, verify the working tree is clean. **Do not proceed with uncommitted changes.**
 
-2. Verify you have access to the **docfront** skill. If you don't, stop and tell the user:
-
-   > "I don't have access to the docfront skill. Please install it first:
-   >
-   > ```bash
-   > npx skills add paleo/docfront --skill docfront
-   > ```"
-
-3. Verify the **docfront CLI** is available (e.g., check if `package.json` has a `docfront` script, or try running `npx docfront --help`). If not available, stop and tell the user:
-
-   > "The docfront CLI is not installed in this project. Please install it first — ask your agent:
-   >
-   > ```text
-   > Use your docfront skill. Install docfront CLI in this project.
-   > ```"
+2. Verify the **docmap CLI** is available (e.g., check if `package.json` has a `docmap` script, or try running `npx docmap --help`). If not, install it first by following [docmap-setup.md](docmap-setup.md).
 
 ## Step 2 — Ensure Conventions Section
 
@@ -69,8 +55,8 @@ Check if the INSTRUCTION_FILE already contains an `## AlignFirst` section with t
 
 ## Step 4 — Route
 
-- **If v1 detected**: Fetch and follow **[upgrade-from-v1.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade-from-v1.md)**.
-- **If v2 detected**: Fetch and follow **[upgrade-from-v2.md](https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/migrations/upgrade-from-v2.md)**.
+- **If v1 detected**: Follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
+- **If v2 detected**: Follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
 - **If neither**: Stop and tell the user:
 
   > "This project doesn't appear to have AlignFirst v1 or v2 installed. Use the installation instructions instead."

@@ -30,6 +30,21 @@ export interface CheckIssue {
   message: string;
 }
 
+// Reads a `.md` file and turns its frontmatter (plus name validation) into a FileEntry. The single
+// source of the extractMetadata -> fallback-title -> validateName sequence used across the module.
+function buildFileEntry(dirPath: string, name: string): FileEntry {
+  const content = readFileSync(join(dirPath, name), "utf-8");
+  const meta = extractMetadata(content);
+  return {
+    name,
+    title: meta.title ?? extractFallbackTitle(content),
+    summary: meta.summary,
+    readWhen: meta.readWhen,
+    error: meta.error,
+    nameError: validateName(name),
+  };
+}
+
 export function checkAll(dirPath: string, relDir: string, prefix: string): CheckIssue[] {
   const issues: CheckIssue[] = [];
   let entries: Dirent<string>[];
@@ -41,19 +56,17 @@ export function checkAll(dirPath: string, relDir: string, prefix: string): Check
 
   for (const entry of entries) {
     const rel = displayPath(prefix, relDir, entry.name);
-    const nameWarning = validateName(entry.name);
 
     if (entry.isDirectory()) {
+      const nameWarning = validateName(entry.name);
       if (nameWarning) issues.push({ path: rel, message: nameWarning });
       const subRel = relDir ? `${relDir}/${entry.name}` : entry.name;
       issues.push(...checkAll(join(dirPath, entry.name), subRel, prefix));
     } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
-      if (nameWarning) issues.push({ path: rel, message: nameWarning });
-      const content = readFileSync(join(dirPath, entry.name), "utf-8");
-      const meta = extractMetadata(content);
-      if (meta.error) issues.push({ path: rel, message: meta.error });
-      const title = meta.title ?? extractFallbackTitle(content);
-      if (!title) issues.push({ path: rel, message: "Missing title" });
+      const file = buildFileEntry(dirPath, entry.name);
+      if (file.nameError) issues.push({ path: rel, message: file.nameError });
+      if (file.error) issues.push({ path: rel, message: file.error });
+      if (!file.title) issues.push({ path: rel, message: "Missing title" });
     }
   }
 
@@ -88,20 +101,7 @@ export function listDirectory(dirPath: string): DirectoryListing {
     if (warning) subdirWarnings.set(sub, warning);
   }
 
-  const files: FileEntry[] = mdFiles.map((name) => {
-    const content = readFileSync(join(dirPath, name), "utf-8");
-    const meta = extractMetadata(content);
-    const title = meta.title ?? extractFallbackTitle(content);
-    const nameError = validateName(name);
-    return {
-      name,
-      title,
-      summary: meta.summary,
-      readWhen: meta.readWhen,
-      error: meta.error,
-      nameError,
-    };
-  });
+  const files: FileEntry[] = mdFiles.map((name) => buildFileEntry(dirPath, name));
 
   return { subdirs, files, subdirWarnings };
 }
@@ -239,6 +239,24 @@ export function readDocFile(
   return { path: displayPath(prefix, found), content: stripFrontmatter(content) };
 }
 
+export function searchDocs(baseDir: string, terms: string[], prefix: string): string[] {
+  const needles = terms.map((term) => term.toLowerCase());
+  const lines: string[] = [];
+  for (const rel of collectAllFiles(baseDir, "")) {
+    const slash = rel.lastIndexOf("/");
+    const relDir = slash === -1 ? "" : rel.slice(0, slash);
+    const name = slash === -1 ? rel : rel.slice(slash + 1);
+    const entry = buildFileEntry(join(baseDir, relDir), name);
+    const haystack = [rel, entry.title, entry.summary, ...entry.readWhen]
+      .filter((part): part is string => part !== undefined)
+      .join(" ")
+      .toLowerCase();
+    if (!needles.every((needle) => haystack.includes(needle))) continue;
+    lines.push(...formatFileBullets([entry], relDir, prefix));
+  }
+  return lines;
+}
+
 export function collectAllFiles(dirPath: string, prefix: string): string[] {
   const result: string[] = [];
   let entries: Dirent<string>[];
@@ -256,6 +274,32 @@ export function collectAllFiles(dirPath: string, prefix: string): string[] {
     }
   }
   return result;
+}
+
+// Counts `.md` files (recursively, CHANGELOG* excluded) but stops walking as soon as `limit`
+// is reached, so a multi-thousand-file tree is not fully traversed just to compare against a
+// small threshold. The returned count is capped at `limit`.
+export function countFilesUpTo(dirPath: string, limit: number): number {
+  let count = 0;
+  const walk = (dir: string): boolean => {
+    let entries: Dirent<string>[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (walk(join(dir, entry.name))) return true;
+      } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+        count++;
+        if (count >= limit) return true;
+      }
+    }
+    return false;
+  };
+  walk(dirPath);
+  return count;
 }
 
 function displayPath(...parts: string[]): string {

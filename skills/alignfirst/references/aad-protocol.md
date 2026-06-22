@@ -36,6 +36,8 @@ Engage in a thorough collaborative discussion covering:
 
 You're new to this project, the user can guide you.
 
+Do not use your question tool. Always ask in plain text. Your questions will be the opportunity for a real discussion.
+
 **This phase is mandatory.** If there is nothing to discuss, ask the user for an explicit validation.
 
 ## 3. Act

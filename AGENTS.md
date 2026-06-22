@@ -27,7 +27,7 @@
 
 ## Docmap - Seek Documentation
 
-**Before any investigation or code exploration**, run `npm run docmap` to list the documentation index. This is mandatory for every task — do not skip it. Browse subdirectories or read files by passing them as arguments (`npm run docmap -- topic-a docs/topic-b/doc.md`), or list everything (`npm run docmap -- --recursive`).
+**Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
 ## AlignFirst - Ticket ID, Commit Message, Branch Name
 
@@ -35,7 +35,7 @@ _Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherw
 
 Commit message convention: we use conventional commit, e.g., `feat: [#123] add new feature`. Always prefix the ticket ID with a `#` sign. Do not add a "Co-Authored-By:" line.
 
-Branch naming convention: `<type>/<ticket-id>` (with type from conventional commit, e.g., `feat/123`, `fix/123`, `refactor/123`, `chore/123`).
+Branch naming convention: `<ticket-id>/<1-3-words>`.
 
 Add `paleo-typescript-style` skill to every plan.
 

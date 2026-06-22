@@ -71,7 +71,7 @@ If `AGENTS.md` (or `CLAUDE.md`) exists, edit it:
 
 Check if any skill directories remain in `{SKILLS_DIR}/` (after deleting alignfirst and technical-documentation-authoring).
 
-- **If skills remain**: Use the **docfront** skill to migrate them. Specifically, use its "Migrate Skills to Docfront Documentation" capability. This includes a discussion phase where the agent and user decide which skills to migrate and how to organize them.
+- **If skills remain**: Migrate them by following [docmap-migrate-skills.md](docmap-migrate-skills.md). This includes a discussion phase where the agent and user decide which skills to migrate and how to organize them.
 
 - **If no skills remain**: Skip this step.
 
@@ -84,4 +84,4 @@ Summarize what was done:
 - `_plans` renamed to `.plans`
 - `.gitignore` updated
 - `AGENTS.md` cleaned
-- Whether custom skills were migrated to `docs/` via docfront, or no remaining skills were found
+- Whether custom skills were migrated to `docs/` via docmap, or no remaining skills were found

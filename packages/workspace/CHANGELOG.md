@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.19.1
+
+### Patch Changes
+
+- 4396c78: Point README Setup at the `alignfirst-setup-guide` skill.
+
 ## 0.19.0
 
 ### Minor Changes
