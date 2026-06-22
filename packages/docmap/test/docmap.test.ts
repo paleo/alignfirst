@@ -466,6 +466,21 @@ describe("--search", () => {
     expect(stdout).not.toContain(dp(fixtures.basic, "backend/database.md"));
   });
 
+  it("matches the file basename even when absent from frontmatter", () => {
+    const { code, stdout } = run(["--search", "code-style"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
+    expect(stdout).not.toContain(dp(fixtures.basic, "getting-started.md"));
+  });
+
+  it("matches a directory segment of the path", () => {
+    const { code, stdout } = run(["--search", "backend"], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
+    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
+    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
+  });
+
   it("reports when nothing matches", () => {
     const { code, stdout } = run(["--search", "zzznomatch"], fixtures.basic);
     expect(code).toBe(0);

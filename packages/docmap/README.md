@@ -82,7 +82,7 @@ npx @paleo/docmap docs/topic-a/doc-1.md docs/topic-b/doc-2.md
 # Mix directories and files in one call
 npx @paleo/docmap topic-a docs/topic-b/doc-2.md
 
-# Search frontmatter (title, summary, read_when); every term must match
+# Search path and frontmatter (title, summary, read_when); every term must match
 npx @paleo/docmap --search "api endpoint"
 
 # Validate all files (names, frontmatter)
@@ -99,7 +99,7 @@ A bare invocation lists recursively when the tree holds fewer than 20 documents,
 Each positional path is resolved against the docs root:
 
 - **Existing directory** → listed (honoring `--recursive`).
-- **Existing file** → read, frontmatter stripped. Any extension is accepted; an extensionless file works too.
+- **Existing file** → read, frontmatter stripped.
 - **Neither** → a fuzzy basename search over `.md` files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
 
 Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/topic-a/`, `docs/topic-a`, and `topic-a` resolve identically — so listing output can be pasted straight back as arguments.
@@ -110,7 +110,7 @@ Listings display each path prefixed with the docs root **relative to your workin
 | --- | --- |
 | `--help` | Print full help and exit. |
 | `--guide` | Print the authoring guide (conventions for writing documents) and exit. |
-| `--search <terms>` | List documents whose frontmatter (title, summary, read_when) matches every whitespace-separated term. |
+| `--search <terms>` | List documents whose path or frontmatter (title, summary, read_when) matches every whitespace-separated term. |
 | `--recursive` | Walk the entire tree. Applies to directory listings (root or positional). |
 | `--check` | Validate all files and directories. Reports name and frontmatter issues. |
 | `--root <path>` | Use a custom directory as the docs root instead of `docs/`. |

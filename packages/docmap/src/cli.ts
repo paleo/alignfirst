@@ -1,16 +1,16 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-    checkAll,
-    collectAllFiles,
-    countFilesUpTo,
-    formatDirectory,
-    formatRecursive,
-    isUnder,
-    listDirectory,
-    readDocFile,
-    searchDocs,
-    type FormatResult,
+  checkAll,
+  collectAllFiles,
+  countFilesUpTo,
+  formatDirectory,
+  formatRecursive,
+  isUnder,
+  listDirectory,
+  readDocFile,
+  searchDocs,
+  type FormatResult,
 } from "./formatter.js";
 
 // A bare invocation over fewer .md files than this lists recursively by default.
@@ -166,13 +166,13 @@ function renderCommands(rows: CommandRow[], indent = ""): string {
 function browseCommands(pm: PackageManagerCommands): CommandRow[] {
   return [
     { command: pm.base, comment: "list root documents" },
-    { command: `${pm.withArgs} docs/topic-a`, comment: "list a sub-directory" },
-    { command: `${pm.withArgs} docs/intro.md`, comment: "read a document" },
-    { command: `${pm.withArgs} docs/intro.md docs/setup.md`, comment: "read several at once" },
+    { command: `${pm.withArgs} topic-a`, comment: "list a sub-directory" },
+    { command: `${pm.withArgs} docs/doc-1.md`, comment: "read a document" },
+    { command: `${pm.withArgs} docs/doc-1.md docs/doc-2.md topic-b`, comment: "several at once" },
     { command: `${pm.withArgs} --recursive`, comment: "list every document" },
     {
       command: `${pm.withArgs} --search "term1 term2"`,
-      comment: "search frontmatter (title, summary, read_when)",
+      comment: "search path and frontmatter (title, summary, read_when)",
     },
   ];
 }

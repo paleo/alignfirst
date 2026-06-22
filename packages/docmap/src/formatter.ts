@@ -247,7 +247,7 @@ export function searchDocs(baseDir: string, terms: string[], prefix: string): st
     const relDir = slash === -1 ? "" : rel.slice(0, slash);
     const name = slash === -1 ? rel : rel.slice(slash + 1);
     const entry = buildFileEntry(join(baseDir, relDir), name);
-    const haystack = [entry.title, entry.summary, ...entry.readWhen]
+    const haystack = [rel, entry.title, entry.summary, ...entry.readWhen]
       .filter((part): part is string => part !== undefined)
       .join(" ")
       .toLowerCase();
