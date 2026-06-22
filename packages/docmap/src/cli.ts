@@ -167,8 +167,11 @@ function browseCommands(pm: PackageManagerCommands): CommandRow[] {
   return [
     { command: pm.base, comment: "list root documents" },
     { command: `${pm.withArgs} topic-a`, comment: "list a sub-directory" },
-    { command: `${pm.withArgs} docs/doc-1.md`, comment: "read a document" },
-    { command: `${pm.withArgs} docs/doc-1.md docs/doc-2.md topic-b`, comment: "several at once" },
+    { command: `${pm.withArgs} docs/topic-a/doc-1.md`, comment: "read a document" },
+    {
+      command: `${pm.withArgs} docs/topic-a/doc-1.md docs/doc-2.md topic-b`,
+      comment: "several at once",
+    },
     { command: `${pm.withArgs} --recursive`, comment: "list every document" },
     {
       command: `${pm.withArgs} --search "term1 term2"`,
