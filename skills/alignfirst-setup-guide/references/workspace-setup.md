@@ -10,7 +10,7 @@ Implement a system for running multiple local dev environments side by side via 
 
 The `assets/` directory contains reference scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) — thin wrappers around the package. They carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
 
-The CLI is self-documenting: `workspace --guide` (and `dev --guide`) print the full operating guide, rendered in the project's package-manager syntax. Consumers do **not** write a `docs/workspace.md` — they point agents at the command and record only project-specific facts (see [Agent Instructions](#agent-instructions)).
+The CLI is self-documenting: `workspace --guide` prints the full operating guide (workspace + dev-server), rendered in the project's package-manager syntax. Consumers do **not** write a `docs/workspace.md` — they point agents at the command and record only project-specific facts (see [Agent Instructions](#agent-instructions)).
 
 ## Implementation Process
 
@@ -340,7 +340,7 @@ Sibling worktrees should inherit the developer's main-worktree customizations (e
 
 ## Agent Instructions
 
-If you use AI coding agents, the worktree system only works if agents know about it. The CLI documents its own procedures via `workspace --guide` / `dev --guide`, so you only wire two things: a pointer to that command, and the project-specific facts the CLI can't know.
+If you use AI coding agents, the worktree system only works if agents know about it. The CLI documents its own procedures via `workspace --guide`, so you only wire two things: a pointer to that command, and the project-specific facts the CLI can't know.
 
 ### 1. Main instruction file (`AGENTS.md` or `CLAUDE.md`)
 

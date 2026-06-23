@@ -272,13 +272,11 @@ export type DevCommand =
   | { kind: "down"; all: boolean }
   | { kind: "list" }
   | { kind: "status" }
-  | { kind: "guide" }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
   const [first] = argv;
   if (first === "--help" || first === "-h") return { kind: "help" };
-  if (first === "--guide") return { kind: "guide" };
   try {
     if (first === undefined || first.startsWith("-")) return parseForeground(argv);
     return parseDevSubcommand(first, argv.slice(1));
@@ -394,7 +392,6 @@ export function printDevHelp(): void {
       "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
       "  dev list          List active dev-servers across all worktrees.",
       "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
-      "  dev --guide       Print the full workspace + dev-server operating guide.",
       "  dev --help        Show this help message (alias: -h).",
       "",
       "Options (dev, dev up, dev restart):",

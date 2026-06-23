@@ -244,7 +244,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 
   if (command.kind === "guide") {
-    printGuide();
+    printGuide({ runtimeDir: config.runtimeDir, sharedDirs: config.sharedDirs });
     return;
   }
 

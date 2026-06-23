@@ -203,8 +203,8 @@ describe("parseDevArgs", () => {
     expect(parseDevArgs(["-h"])).toEqual({ kind: "help" });
   });
 
-  it("parses `--guide`", () => {
-    expect(parseDevArgs(["--guide"])).toEqual({ kind: "guide" });
+  it("rejects `--guide` (only `workspace --guide` prints the guide)", () => {
+    expect(() => parseDevArgs(["--guide"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown subcommand", () => {

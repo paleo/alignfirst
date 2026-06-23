@@ -1,13 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { REGISTRY_SUBDIR } from "./slots.js";
 
-// One combined operating guide for the `workspace` and `dev` scripts, printed by both
-// `workspace --guide` and `dev --guide`. The prose lives in `templates/guide.md` (easy to edit);
-// the command tables stay here so we can align their `#` comments vertically whatever the
-// package-manager prefix length. Tags in the template:
+// One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
+// --guide` (only the `workspace` script knows the full config — `sharedDirs` included). The prose
+// lives in `templates/guide.md` (easy to edit); the command tables stay here so we can align their
+// `#` comments vertically whatever the package-manager prefix length. Tags in the template:
 //   {{COMMANDS:<name>}} — an aligned command block (see commandBlocks)
 //   {{SNIPPET:drive-dev}} — the multi-step "drive the dev server elsewhere" shell snippet
 //   {{WS}} / {{DEV}} / {{DEV_BASE}} — inline command prefixes
+//   {{RUNTIME_DIR}} / {{REGISTRY_SUBDIR}} — the per-worktree runtime dir + its registry sub-dir
+//   {{LAYOUT:shared}} — the shared-dirs line, listing the configured `sharedDirs` by name
 
 interface ScriptInvocation {
   /** Run with no forwarded args, e.g. `npm run dev`. */
@@ -19,6 +22,13 @@ interface ScriptInvocation {
 export interface PackageManagerCommands {
   workspace: ScriptInvocation;
   dev: ScriptInvocation;
+}
+
+export interface GuideLayout {
+  /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
+  runtimeDir: string;
+  /** The shared (symlinked-from-main) dir names (config `sharedDirs`). */
+  sharedDirs: string[];
 }
 
 interface CommandRow {
@@ -51,14 +61,14 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
   return {
     setup: [
       {
-        command: `${ws} setup fix/123 -c`,
+        command: `${ws} setup my-branch -c`,
         comment: "new branch + worktree (dedup: appends -2, -3…)",
       },
       {
-        command: `${ws} setup fix/456 -c --from origin/fix/123`,
+        command: `${ws} setup my-branch -c --from origin/main`,
         comment: "new branch based on another ref",
       },
-      { command: `${ws} setup fix/123`, comment: "new worktree on an existing branch" },
+      { command: `${ws} setup my-branch`, comment: "new worktree on an existing branch" },
       {
         command: `${ws} setup`,
         comment: "set up the current worktree (idempotent; bootstrap + retry path)",
@@ -86,11 +96,11 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
       { command: `${ws} status --slot 8110`, comment: "same, for another worktree" },
     ],
     owner: [
-      { command: `${ws} setup fix/123 -c --owner alice`, comment: "set on creation" },
+      { command: `${ws} setup my-branch -c --owner alice`, comment: "set on creation" },
       { command: `${ws} set-owner bob`, comment: "update later, no rebuild" },
     ],
     remove: [
-      { command: `${ws} remove fix/123`, comment: "remove by branch name" },
+      { command: `${ws} remove my-branch`, comment: "remove by branch name" },
       { command: `${ws} remove`, comment: "remove the current worktree (run from inside it)" },
     ],
     prune: [
@@ -134,7 +144,15 @@ function driveDevSnippet(pm: PackageManagerCommands): string {
   ]);
 }
 
-export function renderGuide(pm: PackageManagerCommands): string {
+function renderSharedLayout(sharedDirs: string[]): string {
+  if (sharedDirs.length === 0) {
+    return "- No dirs are shared across worktrees.";
+  }
+  const names = sharedDirs.map((dir) => `\`${dir}/\``).join(", ");
+  return `- Shared across worktrees, symlinked from the main worktree: ${names}.`;
+}
+
+export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   let out = template;
   for (const [name, rows] of Object.entries(commandBlocks(pm))) {
@@ -145,11 +163,14 @@ export function renderGuide(pm: PackageManagerCommands): string {
     .replaceAll("{{DEV_BASE}}", pm.dev.base)
     .replaceAll("{{WS}}", pm.workspace.withArgs)
     .replaceAll("{{DEV}}", pm.dev.withArgs)
+    .replaceAll("{{RUNTIME_DIR}}", layout.runtimeDir)
+    .replaceAll("{{REGISTRY_SUBDIR}}", REGISTRY_SUBDIR)
+    .replaceAll("{{LAYOUT:shared}}", renderSharedLayout(layout.sharedDirs))
     .trimEnd();
 }
 
-export function printGuide(cwd: string = process.cwd()): void {
-  console.log(renderGuide(detectPackageManager(cwd)));
+export function printGuide(layout: GuideLayout, cwd: string = process.cwd()): void {
+  console.log(renderGuide(detectPackageManager(cwd), layout));
 }
 
 // Mirror docmap's lockfile walk. These scripts are always wired as project scripts (the package

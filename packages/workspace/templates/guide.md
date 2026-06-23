@@ -85,7 +85,7 @@ When you only want a worktree (no ports, no build, no config), use the `git work
 
 ## Directory layout
 
-- `.local/` — shared across worktrees (symlinked). Gitignored working files (registries, notes).
-- `.local-wt/` — per-worktree. Runtime data: databases, caches, `logs/` (dev-server + setup log).
-  - `workspace-registry/` — the registry. Symlinked to the main worktree in linked worktrees.
-- `.plans/` — shared across worktrees (symlinked). Task planning files.
+- `{{RUNTIME_DIR}}/` — per-worktree runtime data (not shared). Names below are fixed by the package:
+  - `logs/` — dev-server + setup logs.
+  - `{{REGISTRY_SUBDIR}}/` — the registry. Symlinked to the main worktree in linked worktrees.
+{{LAYOUT:shared}}
