@@ -1,5 +1,12 @@
 # @paleo/workspace
 
+## 0.20.0
+
+### Minor Changes
+
+- 398e372: Self-heal orphaned workspaces (worktree deleted out-of-band). New `workspace prune` stops their dev-servers, drops the registry entries, and runs `git worktree prune`. `workspace list` auto-prunes the safe case; `workspace remove` now cleans up an already-deleted worktree too.
+- 1273837: Self-documenting CLI: `workspace --guide` prints the full operating guide (every command, the directory layout, the guardrails), rendered in the project's package-manager syntax. Consumers point agents at the command instead of maintaining a separate `docs/workspace.md`.
+
 ## 0.19.1
 
 ### Patch Changes
