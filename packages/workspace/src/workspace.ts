@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
@@ -29,8 +29,9 @@ import {
   type ResolvedFileSource,
   setupLogPath,
 } from "./helpers.js";
-import { isProcessAlive } from "./process-control.js";
-import { defaultComputePorts, isValidPort, resolvePortScheme, type PortScheme } from "./ports.js";
+import { findOrphanPorts } from "./orphans.js";
+import { defaultComputePorts, isValidPort, type PortScheme, resolvePortScheme } from "./ports.js";
+import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
   handleSetOwner,
   markSlotFailed,
@@ -269,6 +270,9 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       return;
     case "list":
       runList(registryDir);
+      return;
+    case "prune":
+      await runPrune(registryDir);
       return;
   }
 
@@ -582,11 +586,13 @@ function runStatus(command: StatusCommand, config: WorkspaceConfig, registryDir:
 
 function runList(registryDir: string): void {
   const ctx = detectWorktree();
+  const liveOrphans = autoPruneSafeOrphans(ctx.mainWorktree, registryDir);
   const entries = Object.entries(readSlots(ctx.mainWorktree, registryDir).slots).sort(
     ([a], [b]) => Number(a) - Number(b),
   );
   if (entries.length === 0) {
     console.log("No workspaces registered.");
+    hintLiveOrphans(liveOrphans);
     return;
   }
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
@@ -623,6 +629,92 @@ function runList(registryDir: string): void {
     `${r.slot.padEnd(widths.slot)}  ${r.type.padEnd(widths.type)}  ${r.status.padEnd(widths.status)}  ${r.dev.padEnd(widths.dev)}  ${r.branch.padEnd(widths.branch)}  ${r.worktree.padEnd(widths.worktree)}  ${r.owner.padEnd(widths.owner)}  ${r.created}`;
   console.log(fmt(headers));
   for (const r of rows) console.log(fmt(r));
+  hintLiveOrphans(liveOrphans);
+}
+
+/**
+ * Silently drop registry entries for worktrees deleted out-of-band that have no live dev-server —
+ * harmless bookkeeping, consistent with the existing dead-PID pruning. Orphans whose dev-server is
+ * still running are left untouched (stopping a live process is the explicit `workspace prune`'s job)
+ * and returned so the caller can hint about them.
+ */
+function autoPruneSafeOrphans(mainWorktree: string, registryDir: string): string[] {
+  const registry = readSlots(mainWorktree, registryDir);
+  const orphanPorts = findOrphanPorts(registry);
+  if (orphanPorts.length === 0) return [];
+  const live = liveWorktrees(readDevServers(mainWorktree, registryDir));
+  const liveOrphans: string[] = [];
+  let changed = false;
+  for (const port of orphanPorts) {
+    const entry = registry.slots[port];
+    if (live.has(resolve(entry.worktree))) {
+      liveOrphans.push(port);
+      continue;
+    }
+    delete registry.slots[port];
+    removeDevServerEntryByWorktree(mainWorktree, registryDir, entry.worktree);
+    changed = true;
+  }
+  if (changed) writeSlots(mainWorktree, registryDir, registry);
+  return liveOrphans;
+}
+
+function hintLiveOrphans(liveOrphans: string[]): void {
+  if (liveOrphans.length === 0) return;
+  console.log(
+    `\nNote: ${liveOrphans.length} workspace(s) have a deleted worktree but a still-running ` +
+      "dev-server. Run `workspace prune` to stop them and clean up.",
+  );
+}
+
+async function runPrune(registryDir: string): Promise<void> {
+  const ctx = detectWorktree();
+  const registry = readSlots(ctx.mainWorktree, registryDir);
+  const orphanPorts = findOrphanPorts(registry);
+
+  let stoppedProcesses = 0;
+  for (const port of orphanPorts) {
+    const entry = registry.slots[port];
+    // The worktree dir (and its dev-server.mjs) is gone, so we can't shell out to `dev down` to run
+    // callback stop(). We can only kill the recorded spawn PIDs directly.
+    const devEntry = findOwnEntry(ctx.mainWorktree, registryDir, entry.worktree);
+    if (devEntry) {
+      for (const pid of Object.values(devEntry.pids)) {
+        if (isProcessAlive(pid)) {
+          await stopProcessGroup(pid);
+          ++stoppedProcesses;
+        }
+      }
+      removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, entry.worktree);
+    }
+    delete registry.slots[port];
+    const ownerSuffix = entry.owner ? `, owner ${entry.owner}` : "";
+    console.log(`Pruned slot ${port} (${entry.worktree}${ownerSuffix}).`);
+  }
+
+  if (orphanPorts.length > 0) writeSlots(ctx.mainWorktree, registryDir, registry);
+  pruneGitWorktrees(ctx.mainWorktree);
+
+  if (orphanPorts.length === 0) {
+    console.log("No orphaned workspaces to prune.");
+    return;
+  }
+  console.log(`Pruned ${orphanPorts.length} orphaned workspace(s).`);
+  if (stoppedProcesses > 0) {
+    console.log(
+      `Stopped ${stoppedProcesses} orphaned process(es). Note: infrastructure managed by callback ` +
+        "servers (e.g. `docker compose`) is not torn down automatically — check for leftover containers.",
+    );
+  }
+}
+
+/** Best-effort: clear git's stale `.git/worktrees/<name>` admin files for deleted worktrees. */
+function pruneGitWorktrees(mainWorktree: string): void {
+  try {
+    execFileSync("git", ["worktree", "prune"], { cwd: mainWorktree, stdio: "ignore" });
+  } catch {
+    // Best-effort; nothing actionable if git is unavailable.
+  }
 }
 
 type WaitCommand = Extract<WorkspaceCommand, { kind: "wait" }>;
@@ -709,6 +801,15 @@ async function handleRemove(
     console.warn(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
+    // The worktree dir (and its dev-server.mjs) is gone, so we can't shell out to `dev down`. Kill
+    // any recorded spawn PIDs directly and drop the dev-server entry alongside the slot.
+    const devEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
+    if (devEntry) {
+      for (const pid of Object.values(devEntry.pids)) {
+        if (isProcessAlive(pid)) await stopProcessGroup(pid);
+      }
+      removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, target.worktreePath);
+    }
     delete registry.slots[target.slotPort];
     writeSlots(ctx.mainWorktree, registryDir, registry);
     console.log(

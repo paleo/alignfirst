@@ -144,13 +144,16 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace setup <branch>` | Create a worktree for an existing branch, then set up the local environment |
 | `workspace setup <branch> -c` | Create a new branch (`-c`/`--new-branch`, with suffix dedup) + worktree, then set up. Mirrors `git switch -c`: the branch starts at the current worktree's HEAD, or at any commit-ish via `--from <ref>` |
 | `workspace remove [<branch>]` | Stop dev server + free slot + remove worktree by branch, or the current worktree when omitted |
-| `workspace list` | Print all registered worktrees (slot, type, status, dev, branch, path, owner, created). The `DEV` column shows `up` when a live dev-server is registered for that slot's worktree, `-` otherwise |
+| `workspace list` | Print all registered worktrees (slot, type, status, dev, branch, path, owner, created). The `DEV` column shows `up` when a live dev-server is registered for that slot's worktree, `-` otherwise. Auto-prunes registry entries for worktrees deleted out-of-band that have no live dev-server, and hints to run `workspace prune` when a deleted worktree still has one running |
+| `workspace prune` | Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers' processes, drop their slot + dev-server registry entries, then run `git worktree prune`. See note below |
 | `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
 | `workspace migrate-0.16 <old-registryDir>` | Transitional: merge a pre-0.16 registry into `${runtimeDir}/workspace-registry` and relink worktrees |
 
 Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--from <ref>`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--force` (proceed despite uncommitted changes); `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
+
+**Orphaned-workspace healing.** When a worktree directory is deleted out-of-band (a manual `rm -rf`, a bare `git worktree remove`), its registry state goes stale. `workspace list` silently drops the entries of orphans with no live dev-server; `workspace prune` heals the rest — it kills each orphan's recorded spawn PIDs, drops both registry entries, and runs `git worktree prune`. The kernel can only kill spawn processes, not run callback `stop()` (the deleted worktree's dev-server config is gone), so `prune` prints a generic caveat about possible leftover callback infrastructure (e.g. Docker containers) whenever it stops a process.
 
 **Config fields to populate:**
 
