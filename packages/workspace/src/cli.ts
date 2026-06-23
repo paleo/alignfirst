@@ -20,6 +20,7 @@ export type WorkspaceCommand =
   | { kind: "set-owner"; name: string }
   | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
+  | { kind: "guide" }
   | { kind: "help" };
 
 export interface ParsedWorkspaceArgs {
@@ -31,6 +32,9 @@ export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): Pars
   const [subcommand, ...tokens] = argv;
   if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
+  }
+  if (subcommand === "--guide") {
+    return { command: { kind: "guide" }, verbose: false };
   }
   if (subcommand === undefined) throw new ConfigError("No command given.");
   try {
@@ -255,6 +259,7 @@ export function printWorkspaceHelp(): void {
       "",
       "Global options:",
       "  -v, --verbose   Show intermediate output.",
+      "      --guide     Print the full workspace + dev-server operating guide.",
       "  -h, --help      Show this help message.",
     ].join("\n"),
   );
@@ -267,11 +272,13 @@ export type DevCommand =
   | { kind: "down"; all: boolean }
   | { kind: "list" }
   | { kind: "status" }
+  | { kind: "guide" }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
   const [first] = argv;
   if (first === "--help" || first === "-h") return { kind: "help" };
+  if (first === "--guide") return { kind: "guide" };
   try {
     if (first === undefined || first.startsWith("-")) return parseForeground(argv);
     return parseDevSubcommand(first, argv.slice(1));
@@ -387,6 +394,7 @@ export function printDevHelp(): void {
       "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
       "  dev list          List active dev-servers across all worktrees.",
       "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
+      "  dev --guide       Print the full workspace + dev-server operating guide.",
       "  dev --help        Show this help message (alias: -h).",
       "",
       "Options (dev, dev up, dev restart):",

@@ -142,6 +142,10 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs([])).toThrow(ConfigError);
     expect(parseWorkspaceArgs(["--help"]).command).toEqual({ kind: "help" });
   });
+
+  it("returns guide for --guide", () => {
+    expect(parseWorkspaceArgs(["--guide"]).command).toEqual({ kind: "guide" });
+  });
 });
 
 describe("parseDevArgs", () => {
@@ -197,6 +201,10 @@ describe("parseDevArgs", () => {
   it("parses `--help` / `-h`", () => {
     expect(parseDevArgs(["--help"])).toEqual({ kind: "help" });
     expect(parseDevArgs(["-h"])).toEqual({ kind: "help" });
+  });
+
+  it("parses `--guide`", () => {
+    expect(parseDevArgs(["--guide"])).toEqual({ kind: "guide" });
   });
 
   it("rejects an unknown subcommand", () => {

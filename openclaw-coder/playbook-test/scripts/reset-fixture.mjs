@@ -53,13 +53,13 @@ function patchFixture(dst, name) {
   pkg.name = `@playbook-test/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  const welcomePath = `${dst}/docs/welcome.md`;
+  const devDocPath = `${dst}/DEVELOPMENT.md`;
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
-  const welcome = readFileSync(welcomePath, "utf8").replace(
+  const devDoc = readFileSync(devDocPath, "utf8").replace(
     /^# Welcome$/m,
     `# Welcome to ${capitalized}`,
   );
-  writeFileSync(welcomePath, welcome);
+  writeFileSync(devDocPath, devDoc);
 }
 
 function runGit(cwd, args, env) {

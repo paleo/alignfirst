@@ -23,6 +23,7 @@ import {
   writeDevServers,
 } from "./dev-servers-registry.js";
 import { ConfigError } from "./errors.js";
+import { printGuide } from "./guide.js";
 import {
   copyAndPatchFile,
   formatDuration,
@@ -239,6 +240,11 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   if (command.kind === "help") {
     printWorkspaceHelp();
+    return;
+  }
+
+  if (command.kind === "guide") {
+    printGuide();
     return;
   }
 

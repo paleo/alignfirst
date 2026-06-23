@@ -1,8 +1,3 @@
----
-title: Welcome
-summary: Entry point for new developers.
----
-
 # Welcome
 
 A small full-stack product monorepo (API + frontend).
@@ -27,9 +22,7 @@ pnpm dev        # start the app (foreground; CTRL+C to stop)
 
 A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
 
-Read when relevant:
-
-- [`docs/workspace.md`](docs/workspace.md) — Creating/removing workspaces, starting/stopping the dev server.
+Run `pnpm workspace --guide` for the full procedures (creating/removing workspaces, starting/stopping the dev server).
 
 ### Fresh Clone
 
@@ -49,9 +42,9 @@ pnpm workspace setup --wait
 ## Documentation
 
 ```sh
-pnpm docmap                  # browse the table of contents
-pnpm docmap --recursive      # view the full tree
-pnpm docmap docs/workspace.md
+pnpm docmap                   # browse the table of contents
+pnpm docmap --recursive       # view the full tree
+pnpm docmap docs/architecture.md   # read a document
 ```
 
 ## Layout Quirks

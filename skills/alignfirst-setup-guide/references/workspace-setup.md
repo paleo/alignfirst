@@ -8,7 +8,9 @@ Implement a system for running multiple local dev environments side by side via 
 
 **Non-Node consumers** reimplement the system from this design doc; the rationale sections below are self-contained.
 
-The `assets/` directory contains reference scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) — thin wrappers around the package — plus a template for [agent documentation](../assets/workspace.md). The scripts carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
+The `assets/` directory contains reference scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) — thin wrappers around the package. They carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
+
+The CLI is self-documenting: `workspace --guide` (and `dev --guide`) print the full operating guide, rendered in the project's package-manager syntax. Consumers do **not** write a `docs/workspace.md` — they point agents at the command and record only project-specific facts (see [Agent Instructions](#agent-instructions)).
 
 ## Implementation Process
 
@@ -338,7 +340,7 @@ Sibling worktrees should inherit the developer's main-worktree customizations (e
 
 ## Agent Instructions
 
-If you use AI coding agents, the worktree system only works if agents know about it. There are two pieces to set up:
+If you use AI coding agents, the worktree system only works if agents know about it. The CLI documents its own procedures via `workspace --guide` / `dev --guide`, so you only wire two things: a pointer to that command, and the project-specific facts the CLI can't know.
 
 ### 1. Main instruction file (`AGENTS.md` or `CLAUDE.md`)
 
@@ -351,29 +353,27 @@ This is the file the agent reads on every task. It must contain:
   Commit message convention: conventional commits, e.g., `feat: [#123] add new feature`.
   ```
 
-- **A section about workspaces**. For example:
+- **A section about workspaces** that points at the built-in guide. For example:
 
   ```markdown
   ## Workspaces
 
   A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
 
-  Read when relevant:
-
-  - `docs/workspace.md` — Creating/removing workspaces, starting/stopping the dev server.
+  Run `npm run workspace -- --guide` for the full procedures (creating/removing workspaces, starting/stopping the dev server).
   ```
 
-Without the conventions, the agent creates branches and commits with inconsistent naming; without the workspaces section, it won't share your vocabulary or discover the procedures.
+Without the conventions, the agent creates branches and commits with inconsistent naming; without the workspaces section, it won't share your vocabulary or know the guide exists.
 
-### 2. Detailed workspace documentation (`docs/workspace.md`)
+### 2. Project-specific facts the guide can't know
 
-This is the file referenced above. It contains the step-by-step procedures: how to create a workspace, how to start the dev server, how to tear things down. See [assets/workspace.md](../assets/workspace.md) for a starting point.
+`workspace --guide` covers the generic CLI surface — every command, every flag, the directory layout. Do **not** duplicate it into a `docs/workspace.md`. Record only what is specific to this repo, in whatever entry point your developers and agents already read (e.g. `DEVELOPMENT.md`, `README.md`, or `AGENTS.md`):
 
-The agents need to know:
+1. **URLs to open after `dev` starts** (admin UI, auto-login), with the dynamic port — the guide tells agents to read the printed log; tell them what to do with the URL.
+2. **Release process** if it lives near the dev workflow — changeset rules, PR/MR procedure, target branch.
+3. **Any project quirk** — extra build steps, a non-obvious log path.
 
-1. The exact commands to run (the script handles worktree creation, setup, and removal)
-2. What guardrails to respect (never delete a branch unless explicitly requested)
-3. Where logs and config files live
+The guide already covers the guardrails (never delete a branch; two-tier shutdown) and where logs/config live in the generic layout.
 
 ## Checklist for Adapting to a New Repository
 
@@ -391,5 +391,5 @@ The agents need to know:
 - [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
-- [ ] **Write agent documentation** if applicable (see [assets/workspace.md](../assets/workspace.md)).
+- [ ] **Point agents at the guide** — add a workspaces section to `AGENTS.md`/`CLAUDE.md` referencing `workspace --guide`, and record project-specific facts (URLs, release process) in your entry point. Do not write a `docs/workspace.md`.
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

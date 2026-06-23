@@ -24,6 +24,7 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
+import { printGuide } from "./guide.js";
 import { detectCommonJsError, formatDuration, lastLines, setupLogPath } from "./helpers.js";
 import {
   awaitAllReady,
@@ -99,6 +100,11 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
 
   if (command.kind === "help") {
     printDevHelp();
+    return;
+  }
+
+  if (command.kind === "guide") {
+    printGuide();
     return;
   }
 
