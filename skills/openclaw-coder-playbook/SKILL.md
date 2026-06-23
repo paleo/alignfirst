@@ -4,7 +4,8 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.4.0"
+  version: "0.5.0"
+  repository: https://github.com/paleo/alignfirst
 ---
 
 # Operating Instructions

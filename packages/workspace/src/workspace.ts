@@ -681,18 +681,7 @@ async function runPrune(registryDir: string): Promise<void> {
   let stoppedProcesses = 0;
   for (const port of orphanPorts) {
     const entry = registry.slots[port];
-    // The worktree dir (and its dev-server.mjs) is gone, so we can't shell out to `dev down` to run
-    // callback stop(). We can only kill the recorded spawn PIDs directly.
-    const devEntry = findOwnEntry(ctx.mainWorktree, registryDir, entry.worktree);
-    if (devEntry) {
-      for (const pid of Object.values(devEntry.pids)) {
-        if (isProcessAlive(pid)) {
-          await stopProcessGroup(pid);
-          ++stoppedProcesses;
-        }
-      }
-      removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, entry.worktree);
-    }
+    stoppedProcesses += await stopOrphanedDevServer(ctx.mainWorktree, registryDir, entry.worktree);
     delete registry.slots[port];
     const ownerSuffix = entry.owner ? `, owner ${entry.owner}` : "";
     console.log(`Pruned slot ${port} (${entry.worktree}${ownerSuffix}).`);
@@ -712,6 +701,30 @@ async function runPrune(registryDir: string): Promise<void> {
         "servers (e.g. `docker compose`) is not torn down automatically — check for leftover containers.",
     );
   }
+}
+
+/**
+ * Stop a gone worktree's dev-server the only way left: its dir (and `dev-server.mjs`) is deleted, so
+ * we can't shell out to `dev down` to run callback stop() — we kill the recorded spawn PIDs directly
+ * and drop the dev-server entry. Returns the count of live PIDs stopped. Callback-managed infra is
+ * not torn down (see `runPrune`'s caveat).
+ */
+async function stopOrphanedDevServer(
+  mainWorktree: string,
+  registryDir: string,
+  worktree: string,
+): Promise<number> {
+  const devEntry = findOwnEntry(mainWorktree, registryDir, worktree);
+  if (!devEntry) return 0;
+  let stopped = 0;
+  for (const pid of Object.values(devEntry.pids)) {
+    if (isProcessAlive(pid)) {
+      await stopProcessGroup(pid);
+      ++stopped;
+    }
+  }
+  removeDevServerEntryByWorktree(mainWorktree, registryDir, worktree);
+  return stopped;
 }
 
 /** Best-effort: clear git's stale `.git/worktrees/<name>` admin files for deleted worktrees. */
@@ -807,17 +820,10 @@ async function handleRemove(
     console.warn(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
-    // The worktree dir (and its dev-server.mjs) is gone, so we can't shell out to `dev down`. Kill
-    // any recorded spawn PIDs directly and drop the dev-server entry alongside the slot.
-    const devEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
-    if (devEntry) {
-      for (const pid of Object.values(devEntry.pids)) {
-        if (isProcessAlive(pid)) await stopProcessGroup(pid);
-      }
-      removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, target.worktreePath);
-    }
+    await stopOrphanedDevServer(ctx.mainWorktree, registryDir, target.worktreePath);
     delete registry.slots[target.slotPort];
     writeSlots(ctx.mainWorktree, registryDir, registry);
+    pruneGitWorktrees(ctx.mainWorktree);
     console.log(
       `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
     );
