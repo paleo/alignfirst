@@ -202,7 +202,7 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
     "Commands:",
     renderCommands(browseCommands(pm), "  "),
     "",
-    `To write documentation, run \`${pm.withArgs} --guide\` first.`,
+    `Before writing a new document or editing an existing one, run \`${pm.withArgs} --guide\` and follow its rules.`,
   ];
   if (full) {
     lines.push(

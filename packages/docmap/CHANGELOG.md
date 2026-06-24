@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.6.1
+
+### Patch Changes
+
+- Clarify the help hint: run `--guide` before writing a new document or editing an existing one.
+
 ## 0.6.0
 
 ### Minor Changes
