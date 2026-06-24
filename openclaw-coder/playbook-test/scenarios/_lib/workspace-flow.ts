@@ -1,4 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { execMatches, readsFile } from "./agent-tool-calls.ts";
 import { assertBranch, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
@@ -88,5 +89,17 @@ export async function runWorkspaceFlow(
   await expectCodingDelegation(ctx, claude, {
     ticketId,
     timeoutMs: delegationTimeoutMs,
+  });
+
+  // The setup flow's documented prerequisites (project-workspace-setup.md): the
+  // agent must read the project's DEVELOPMENT.md — the worktree-setup entry
+  // point — and run `workspace --guide` to discover the setup commands. These
+  // happen during the setup turn; by now its trajectory has flushed, and
+  // waitForAgentToolCall rides out any remaining flush latency.
+  await ctx.waitForAgentToolCall((c) => readsFile(c, `${project}/DEVELOPMENT.md`), {
+    label: "agent reads the project DEVELOPMENT.md",
+  });
+  await ctx.waitForAgentToolCall((c) => execMatches(c, /workspace\s+--guide/), {
+    label: "agent runs `workspace --guide`",
   });
 }

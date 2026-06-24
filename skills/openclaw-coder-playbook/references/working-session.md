@@ -5,7 +5,7 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 ## Prerequisites
 
 - load the `alignfirst-coaching` skill — how to delegate to the coding agent.
-- read `~/projects/{PROJECT_NAME}/docs/welcome.md` — how to create a worktree or a branch.
+- read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Take over a working session
 
@@ -93,7 +93,7 @@ After non-trivial code changes, always ensure the application still runs. Start 
 
 ### Improving project docs
 
-When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `welcome.md`. Propose the improvement to the user, ask for confirmation, then have the coding agent make the edit.
+When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `DEVELOPMENT.md`. Propose the improvement to the user, ask for confirmation, then have the coding agent make the edit.
 
 ### Commit & push cadence
 

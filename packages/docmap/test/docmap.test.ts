@@ -18,10 +18,6 @@ const fixtures = {
   large: resolve(__dirname, "fixtures/large"),
 };
 
-const TIP = "Pass several paths in one call";
-const DIR_EXAMPLE = "dir-name-a dir-name-b";
-const FILE_EXAMPLE = "doc-1.md";
-
 // The display prefix is the root relative to cwd; mirror it to build expected paths.
 function dp(fixtureDir: string, rel: string) {
   return `${relative(process.cwd(), fixtureDir)}/${rel}`;
@@ -94,13 +90,6 @@ describe("top-level listing for large sets (large fixture)", () => {
   it("does not prefix the listing with short help", () => {
     const { stdout } = run([], fixtures.large);
     expect(stdout).not.toContain("--guide");
-  });
-
-  it("shows a tip with only the directory example when no files sit at the top level", () => {
-    const { stdout } = run([], fixtures.large);
-    expect(stdout).toContain(TIP);
-    expect(stdout).toContain(DIR_EXAMPLE);
-    expect(stdout).not.toContain(FILE_EXAMPLE);
   });
 });
 
@@ -310,10 +299,11 @@ describe("error fixtures", () => {
 });
 
 describe("empty fixture", () => {
-  it("shows no files and no tip", () => {
+  it("shows no files", () => {
     const { code, stdout } = run([], fixtures.empty);
     expect(code).toBe(0);
-    expect(stdout).not.toContain(TIP);
+    // Only the short help prints; no listing bullets follow.
+    expect(stdout).not.toMatch(/^- /m);
   });
 });
 
@@ -327,32 +317,6 @@ describe("nested fixture with --recursive", () => {
     expect(stdout).toContain(dp(fixtures.nested, "level-one/doc-a.md"));
     expect(stdout).toContain("### `level-two/`");
     expect(stdout).toContain(dp(fixtures.nested, "level-one/level-two/deep-doc.md"));
-  });
-});
-
-describe("tip conditions", () => {
-  it("only files (no subdirs) shows only the file example", () => {
-    const { stdout } = run([], fixtures.errors);
-    expect(stdout).toContain(TIP);
-    expect(stdout).toContain(FILE_EXAMPLE);
-    expect(stdout).not.toContain(DIR_EXAMPLE);
-  });
-
-  it("only subdirs (no files) shows only the directory example", () => {
-    const { stdout } = run(["only-subs"], fixtures.large);
-    expect(stdout).toContain(TIP);
-    expect(stdout).toContain(DIR_EXAMPLE);
-    expect(stdout).not.toContain(FILE_EXAMPLE);
-  });
-
-  it("--recursive does not show the directory example even when subdirs exist", () => {
-    const { stdout } = run(["--recursive"], fixtures.basic);
-    expect(stdout).not.toContain(DIR_EXAMPLE);
-  });
-
-  it("--recursive shows the file example when files exist", () => {
-    const { stdout } = run(["--recursive"], fixtures.basic);
-    expect(stdout).toContain(FILE_EXAMPLE);
   });
 });
 
@@ -427,9 +391,10 @@ describe("--help", () => {
   it("aligns the inline comments within a command group", () => {
     const { stdout } = run(["--help"], fixtures.basic);
     const lines = stdout.split("\n");
-    const start = lines.indexOf("Commands:") + 1;
+    // Commands render inside a ``` fence; collect the command lines between the fences.
+    const fence = lines.indexOf("```", lines.indexOf("Commands:"));
     const columns: number[] = [];
-    for (let i = start; i < lines.length && lines[i].startsWith("  "); ++i) {
+    for (let i = fence + 1; i < lines.length && lines[i] !== "```"; ++i) {
       columns.push(lines[i].indexOf(" # "));
     }
     // Every command line in the group shares one comment column.

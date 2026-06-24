@@ -13,13 +13,21 @@ Install the docmap CLI in a consumer repo so humans and agents share one set of 
 
 3. **Install `@paleo/docmap`** as a dev dependency with the detected package manager: `npm install -D @paleo/docmap` (`pnpm add -D` / `yarn add -D` / `bun add -D`).
 4. **Ensure a `docs/` directory** exists (`mkdir docs` if missing).
-5. **Add the docmap section** to `AGENTS.md` (or `CLAUDE.md`), adapting the run command to the package manager (`pnpm docmap`, `yarn docmap`, `bun run docmap`):
+5. **Add the docmap section** to `AGENTS.md` (or `CLAUDE.md`):
 
    ```markdown
    ## Docmap - Seek Documentation
 
    **Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+
+   ### Essential Documentation
+
+   Always read before any investigation or work:
+
+   - `docs/<doc>.md` — <one-line reason>
    ```
+
+   The **Essential Documentation** sub-list names the 1–3 docs an agent must always read first (e.g. architecture, code style) — the always-read subset, not the full index. Populate it from the docs that already exist; if there are none yet, omit the sub-list for now — the bootstrap/migrate step below adds it once docs exist.
 
 ## Then
 

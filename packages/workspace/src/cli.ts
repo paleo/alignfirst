@@ -14,11 +14,13 @@ export type WorkspaceCommand =
     }
   | { kind: "remove"; branch?: string; force: boolean }
   | { kind: "list" }
+  | { kind: "prune" }
   | { kind: "status"; slot?: string }
   | { kind: "wait"; slot?: string }
   | { kind: "set-owner"; name: string }
   | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
+  | { kind: "guide" }
   | { kind: "help" };
 
 export interface ParsedWorkspaceArgs {
@@ -30,6 +32,9 @@ export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): Pars
   const [subcommand, ...tokens] = argv;
   if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
+  }
+  if (subcommand === "--guide") {
+    return { command: { kind: "guide" }, verbose: false };
   }
   if (subcommand === undefined) throw new ConfigError("No command given.");
   try {
@@ -48,6 +53,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseRemove(tokens);
     case "list":
       return parseList(tokens);
+    case "prune":
+      return parsePrune(tokens);
     case "status":
       return parseStatus(tokens);
     case "wait":
@@ -127,6 +134,17 @@ function parseList(tokens: string[]): ParsedWorkspaceArgs {
   });
   rejectPositionals(positionals, "list");
   return { command: { kind: "list" }, verbose: values.verbose ?? false };
+}
+
+function parsePrune(tokens: string[]): ParsedWorkspaceArgs {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { verbose: { type: "boolean", short: "v" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectPositionals(positionals, "prune");
+  return { command: { kind: "prune" }, verbose: values.verbose ?? false };
 }
 
 function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
@@ -229,6 +247,9 @@ export function printWorkspaceHelp(): void {
       "      Refuses on uncommitted changes unless --force.",
       "  list",
       "      List all registered workspaces (slot, status, branch, path, owner, created).",
+      "  prune",
+      "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
+      "      and drop their registry entries, then run `git worktree prune`.",
       "  status [-s|--slot <port>]",
       "      Print a workspace summary (ports, branch, readiness, dev-server).",
       "  wait [-s|--slot <port>]",
@@ -238,6 +259,7 @@ export function printWorkspaceHelp(): void {
       "",
       "Global options:",
       "  -v, --verbose   Show intermediate output.",
+      "      --guide     Print the full workspace + dev-server operating guide.",
       "  -h, --help      Show this help message.",
     ].join("\n"),
   );

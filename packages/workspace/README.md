@@ -36,7 +36,11 @@ npm run dev -- status                   # report whether this worktree's dev-ser
 npm run dev -- list                     # active dev-servers across all worktrees
 npm run dev -- down                     # stop dev server (infrastructure stays up)
 npm run workspace -- remove feat/42     # full teardown
+npm run workspace -- prune              # heal workspaces whose worktree was deleted out-of-band
+npm run workspace -- --guide            # full operating guide (workspace + dev-server)
 ```
+
+`--guide` prints the complete workspace + dev-server procedures in your package-manager's syntax. Point agents at it instead of maintaining a separate doc.
 
 ## API
 

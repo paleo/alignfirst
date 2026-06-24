@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.14.0"
+  version: "0.16.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -24,7 +24,11 @@ Follow these four steps in order. Do not skip ahead: complete each before starti
 
 ## Step 1 — Investigate
 
-Detect the stack and **package manager**: check the `packageManager` field in `package.json`, else the root lockfile — `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb`/`bun.lock` → bun — falling back to npm. Record the result — every reference in Step 3 reuses this one detection rather than repeating it. Then detect each tool's existing footprint:
+Detect the stack and **package manager**: check the `packageManager` field in `package.json`, else the root lockfile — `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb`/`bun.lock` → bun — falling back to npm. Record the result — every reference in Step 3 reuses this one detection rather than repeating it.
+
+**Commands in this guide are written for npm; convert each one to the detected manager** — both when you run it and when you write it into project files. Only npm needs a `--` separator to pass flags to a script (`npm run docmap -- --guide`); pnpm and yarn drop the `run` and the separator (`pnpm docmap --guide`), and bun keeps `run` but needs no separator (`bun run docmap --guide`). Install verbs differ too (`npm install -D` vs `pnpm add -D` / `yarn add -D` / `bun add -D`).
+
+Then detect each tool's existing footprint:
 
 - **docmap**: a `docmap` script, a `@paleo/docmap` dependency, or a `docs/` directory.
 - **workspace**: a `workspace` script or a `@paleo/workspace` dependency.

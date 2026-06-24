@@ -17,7 +17,7 @@
     "changeset:publish": "npm i && npm run clear && npm run build && npm run lint && npm run test && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.4.15",
+    "@biomejs/biome": "~2.5.1",
     "@changesets/cli": "~2.31.0"
   }
 }

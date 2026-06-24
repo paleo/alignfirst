@@ -105,6 +105,14 @@ describe("parseWorkspaceArgs", () => {
     expect(command).toEqual({ kind: "list" });
   });
 
+  it("parses `prune`", () => {
+    expect(parseWorkspaceArgs(["prune"]).command).toEqual({ kind: "prune" });
+  });
+
+  it("rejects `prune` with a positional", () => {
+    expect(() => parseWorkspaceArgs(["prune", "feat/42"])).toThrow(ConfigError);
+  });
+
   it("parses `status` and `status --slot`", () => {
     expect(parseWorkspaceArgs(["status"]).command).toEqual({ kind: "status", slot: undefined });
     expect(parseWorkspaceArgs(["status", "--slot", "8110"]).command).toEqual({
@@ -133,6 +141,10 @@ describe("parseWorkspaceArgs", () => {
   it("throws for no command, returns help for --help", () => {
     expect(() => parseWorkspaceArgs([])).toThrow(ConfigError);
     expect(parseWorkspaceArgs(["--help"]).command).toEqual({ kind: "help" });
+  });
+
+  it("returns guide for --guide", () => {
+    expect(parseWorkspaceArgs(["--guide"]).command).toEqual({ kind: "guide" });
   });
 });
 
@@ -189,6 +201,10 @@ describe("parseDevArgs", () => {
   it("parses `--help` / `-h`", () => {
     expect(parseDevArgs(["--help"])).toEqual({ kind: "help" });
     expect(parseDevArgs(["-h"])).toEqual({ kind: "help" });
+  });
+
+  it("rejects `--guide` (only `workspace --guide` prints the guide)", () => {
+    expect(() => parseDevArgs(["--guide"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown subcommand", () => {

@@ -20,6 +20,7 @@ import {
 } from "./judge.js";
 import type {
   ActionEntry,
+  AgentToolCall,
   AssertionRecord,
   AugmentPatch,
   ChannelId,
@@ -35,6 +36,7 @@ import type {
   ScenarioLogNote,
   ScenarioResult,
 } from "./report.js";
+import { parseAgentToolCalls } from "./trajectory-log.js";
 
 const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
@@ -144,6 +146,27 @@ export interface ScenarioContext {
    * watcher to record a kill before this side gives up).
    */
   execInGateway(argv: string[], opts?: ExecInGatewayOptions): Promise<ExecInGatewayResult>;
+  /**
+   * Poll the trajectory log until an agent tool call matches `predicate`, then
+   * record a passing `AssertionRecord` on the current entry and return the call.
+   * On timeout, record a failing assertion and throw (hard-fail) — use it to
+   * assert the agent took a specific action (read a file, ran a command).
+   * Aggregates across all the conversation's sessions, so it sees thread and
+   * subagent tool calls, and rides out the trajectory's flush latency.
+   */
+  waitForAgentToolCall(
+    predicate: (call: AgentToolCall) => boolean,
+    opts: WaitForAgentToolCallOptions,
+  ): Promise<AgentToolCall>;
+}
+
+export interface WaitForAgentToolCallOptions {
+  /** Assertion label recorded on the current entry. */
+  label: string;
+  /** Default 30_000. */
+  timeoutMs?: number;
+  /** Default 500. */
+  pollMs?: number;
 }
 
 export interface WaitForOutboundOptions {
@@ -197,9 +220,12 @@ export class AssertionError extends Error {
 export function createContext(params: {
   channel: ChannelId;
   conversationId: string;
+  /** Scenario start time; bounds the trajectory window for `waitForAgentToolCall`. */
+  startedAtIso?: string;
   emitSink?: EmitSink;
 }): { ctx: ScenarioContext; internals: ScenarioInternals } {
   const { channel, conversationId, emitSink } = params;
+  const startedAtIso = params.startedAtIso ?? new Date().toISOString();
   const accountId: ChannelId = channel;
   const entries: ReportEntry[] = [];
   const judgeUsages: JudgeUsage[] = [];
@@ -323,6 +349,12 @@ export function createContext(params: {
     getCursor,
     mockCli: (name, handler, opts) => registerMockCli(mockHandlers, name, handler, opts),
     execInGateway: (argv, opts) => execInGateway(argv, opts),
+    waitForAgentToolCall: (predicate, opts) =>
+      waitForAgentToolCall(
+        { conversationId, startedAtIso, getCurrentEntry: () => currentEntry, emitAugment },
+        predicate,
+        opts,
+      ),
   };
 
   const internals: ScenarioInternals = {
@@ -612,6 +644,53 @@ async function expectNoOutbound(
     }
   }
   return { nextCursor: cursor };
+}
+
+interface WaitForToolCallDeps extends AttachDeps {
+  conversationId: string;
+  startedAtIso: string;
+}
+
+async function waitForAgentToolCall(
+  deps: WaitForToolCallDeps,
+  predicate: (call: AgentToolCall) => boolean,
+  opts: WaitForAgentToolCallOptions,
+): Promise<AgentToolCall> {
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const pollMs = opts.pollMs ?? 500;
+  const deadline = Date.now() + timeoutMs;
+  let calls: AgentToolCall[] = [];
+  while (Date.now() < deadline) {
+    calls = parseAgentToolCalls({
+      conversationId: deps.conversationId,
+      startedAtIso: deps.startedAtIso,
+    });
+    const match = calls.find(predicate);
+    if (match) {
+      pushAssertion(deps, deps.getCurrentEntry(), { label: opts.label, ok: true });
+      return match;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  const detail = `no agent tool call matched within ${timeoutMs}ms; observed: ${summarizeToolCalls(calls)}`;
+  pushAssertion(deps, deps.getCurrentEntry(), { label: opts.label, ok: false, detail });
+  throw new AssertionError(`${opts.label}: ${detail}`);
+}
+
+function summarizeToolCalls(calls: AgentToolCall[]): string {
+  if (calls.length === 0) return "(none)";
+  return calls.map((c) => `${c.toolName}${toolCallHint(c.input)}`).join("; ");
+}
+
+function toolCallHint(input: unknown): string {
+  if (!isRecord(input)) return "";
+  if (typeof input.path === "string") return ` ${input.path}`;
+  if (typeof input.command === "string") return ` ${input.command.slice(0, 60)}`;
+  return "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function assertRegex(deps: AttachDeps, actual: string, pattern: RegExp, label: string): void {

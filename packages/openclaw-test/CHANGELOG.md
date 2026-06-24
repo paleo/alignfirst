@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.12.0
+
+### Minor Changes
+
+- Aggregate trajectory across all conversation sessions (channel + thread + subagents) so reports and cost capture every turn, not just the first. Adds `ctx.waitForAgentToolCall` for asserting agent tool calls.
+
 ## 0.11.0
 
 ### Minor Changes
