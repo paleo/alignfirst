@@ -293,11 +293,27 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       handleSetOwnerMode(command, ctx, registryDir);
       return;
     case "setup": {
-      const { slot } = await runSetup(command, ctx, run, config, registryDir);
+      const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
       if (command.wait) await waitForSlot(slot, config, registryDir, { printSummary: false });
+      if (command.go) enterWorktree(worktree);
       return;
     }
   }
+}
+
+/**
+ * `--go`: open an interactive shell in the freshly set-up worktree (exit to return). Falls back to
+ * printing a `cd` hint when there is no `$SHELL` or stdin is not a tty (scripts, pipes) — dropping
+ * into an interactive shell there would hang.
+ */
+function enterWorktree(worktree: string): void {
+  const shell = process.env.SHELL;
+  if (shell === undefined || !process.stdin.isTTY) {
+    console.log(`Now run: cd ${worktree}`);
+    return;
+  }
+  console.error(`Entering ${worktree} (exit to return).`);
+  spawnSync(shell, [], { cwd: worktree, stdio: "inherit" });
 }
 
 type SetupCommand = Extract<WorkspaceCommand, { kind: "setup" }>;
@@ -308,7 +324,7 @@ async function runSetup(
   run: RunCtx,
   config: WorkspaceConfig,
   registryDir: string,
-): Promise<{ slot: number }> {
+): Promise<{ slot: number; worktree: string }> {
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
 
@@ -402,7 +418,7 @@ async function runSetup(
   });
   child.unref();
   closeSync(logFd);
-  return { slot };
+  return { slot, worktree: setupCtx.currentWorktree };
 }
 
 function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, force: boolean): void {

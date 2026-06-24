@@ -29,6 +29,7 @@ describe("parseWorkspaceArgs", () => {
       "8110",
       "--force",
       "--wait",
+      "--go",
       "-v",
     ]);
     expect(command).toEqual({
@@ -39,6 +40,7 @@ describe("parseWorkspaceArgs", () => {
       slot: "8110",
       force: true,
       wait: true,
+      go: true,
     });
     expect(verbose).toBe(true);
   });
@@ -67,6 +69,15 @@ describe("parseWorkspaceArgs", () => {
 
   it("rejects `-c` without a branch", () => {
     expect(() => parseWorkspaceArgs(["setup", "-c"])).toThrow(ConfigError);
+  });
+
+  it("parses `setup <branch> -c --go`", () => {
+    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--go"]);
+    expect(command).toMatchObject({ kind: "setup", branch: "feat/42", newBranch: true, go: true });
+  });
+
+  it("rejects `--go` without a branch", () => {
+    expect(() => parseWorkspaceArgs(["setup", "--go"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown flag on setup", () => {

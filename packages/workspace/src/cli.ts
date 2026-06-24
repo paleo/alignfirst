@@ -11,6 +11,7 @@ export type WorkspaceCommand =
       slot?: string;
       force: boolean;
       wait: boolean;
+      go: boolean;
     }
   | { kind: "remove"; branch?: string; force: boolean }
   | { kind: "list" }
@@ -80,6 +81,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       wait: { type: "boolean" },
+      go: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
     },
     allowPositionals: true,
@@ -87,11 +89,15 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   });
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
+  const go = values.go ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup <branch> -c` requires a branch name.");
   }
   if (values.from !== undefined && !newBranch) {
     throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
+  }
+  if (go && branch === undefined) {
+    throw new ConfigError("`--go` requires a branch (the worktree to enter).");
   }
   return {
     command: {
@@ -103,6 +109,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: values.slot,
       force: values.force ?? false,
       wait: values.wait ?? false,
+      go,
     },
     verbose: values.verbose ?? false,
   };
@@ -236,12 +243,14 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [--owner <name>] [-s|--slot <port>] [--force] [--wait]",
+      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [--owner <name>] [-s|--slot <port>] [--force] [--wait] [--go]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
       "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
       "      Finalize runs in the background; add --wait to block until it reaches READY.",
+      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
+      "      combine with --wait to enter only once it is READY. Requires a branch and $SHELL.",
       "  remove [<branch>] [--force]",
       "      Remove a workspace by branch, or the current one when omitted.",
       "      Refuses on uncommitted changes unless --force.",

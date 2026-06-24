@@ -26,7 +26,8 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 ## Workflow
 
 ```sh
-npm run workspace -- setup feat/42 -c   # new branch + worktree + isolated env
+npm run workspace -- setup feat/42 -c        # new branch + worktree + isolated env
+npm run workspace -- setup feat/42 -c --go   # …then drop into a shell there (exit to return)
 npm run dev                             # foreground: stream logs, CTRL+C stops; attaches if already running
 npm run dev -- up                       # start in the background (no-op if already running here)
 npm run dev -- up --restart             # stop the dev-server in this worktree if running, then start fresh
