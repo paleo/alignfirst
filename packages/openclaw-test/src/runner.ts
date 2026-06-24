@@ -191,7 +191,12 @@ function setupRun(args: RunnerArgs): RunSetup {
       logStream.write(`${JSON.stringify({ entrySeq: event.entrySeq, augment: event.patch })}\n`);
     }
   };
-  const { ctx, internals } = createContext({ channel: args.channel, conversationId, emitSink });
+  const { ctx, internals } = createContext({
+    channel: args.channel,
+    conversationId,
+    startedAtIso,
+    emitSink,
+  });
   return {
     ctx,
     internals,

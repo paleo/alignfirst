@@ -6,7 +6,7 @@ export const TRAJECTORY_DIR = "/home/claw/.openclaw/logs/trajectory";
 
 const MODEL_COMPLETED = "model.completed";
 
-interface TrajectoryEvent {
+export interface TrajectoryEvent {
   ts?: string;
   type?: string;
   sessionKey?: string;
@@ -24,27 +24,38 @@ interface ToolResultBlock {
 }
 
 /**
- * Polls the trajectory log until a `model.completed` event matching this
- * conversation lands (it flushes ~2-10s after the agent's last bus traffic),
- * or the budget expires. mtime-based "quiescence" doesn't work: the log can
- * stay idle for several seconds *before* the event is written, which a
- * naive heuristic would mistake for "done".
+ * Polls the trajectory log until it is *quiescent* for this conversation — no
+ * new `model.completed` event has appeared for `settleMs` — or the budget
+ * expires. A conversation spans multiple OpenClaw sessions (e.g. Discord's
+ * channel session plus a per-thread session), and each flushes its own
+ * `model.completed` ~2-10s after its last turn. Returning on the first event
+ * would miss a late-flushing session, so we wait for the count to stabilise.
  */
 export async function waitForTrajectoryUsage(opts: {
   conversationId: string;
   startedAtIso: string;
   maxWaitMs?: number;
   pollMs?: number;
+  settleMs?: number;
 }): Promise<void> {
-  const maxWaitMs = opts.maxWaitMs ?? 15_000;
+  const maxWaitMs = opts.maxWaitMs ?? 20_000;
   const pollMs = opts.pollMs ?? 250;
+  const settleMs = opts.settleMs ?? 4_000;
   const deadline = Date.now() + maxWaitMs;
+  let lastCount = 0;
+  let lastChangeAt = Date.now();
+  let seenAny = false;
   while (Date.now() < deadline) {
     // The dir itself appears only when the first delayed event flushes, so a
     // missing dir means "not yet" — keep polling, don't give up early.
     if (trajectoryDirExists()) {
-      for (const event of readTrajectoryEvents()) {
-        if (isEventFor(event, opts.conversationId, opts.startedAtIso, MODEL_COMPLETED)) return;
+      const count = conversationCompletedEvents(opts).length;
+      if (count > 0) seenAny = true;
+      if (count !== lastCount) {
+        lastCount = count;
+        lastChangeAt = Date.now();
+      } else if (seenAny && Date.now() - lastChangeAt >= settleMs) {
+        return;
       }
     }
     await new Promise((r) => setTimeout(r, pollMs));
@@ -54,32 +65,43 @@ export async function waitForTrajectoryUsage(opts: {
 /**
  * Cost lives per assistant message inside `messagesSnapshot`, as
  * `usage.cost.total` (the event-level `data.usage` is token counts only, with no
- * cost). The last `model.completed` event holds the cumulative snapshot, so we
- * sum every assistant message's cost there. `turns` counts those messages.
+ * cost). A conversation spans several sessions; each session's latest
+ * `model.completed` holds that session's cumulative snapshot, so we sum every
+ * assistant message's cost across the per-session latest events. `turns` counts
+ * those messages.
  */
 export function readTrajectoryCostFor(opts: { startTsIso: string; conversationId?: string }): {
   cost: number;
   turns: number;
 } {
-  const last = findLastCompletedEvent({
-    conversationId: opts.conversationId ?? "",
-    startedAtIso: opts.startTsIso,
-  });
-  if (last?.data?.truncated === true) {
+  const sessions = latestCompletedPerSession(
+    conversationCompletedEvents({
+      conversationId: opts.conversationId ?? "",
+      startedAtIso: opts.startTsIso,
+    }),
+  );
+  if (sessions.some((e) => e.data?.truncated === true)) {
     console.warn(
-      "openclaw-test: last model.completed snapshot is truncated (~256 KB cap); reported cost may be undercounted.",
+      "openclaw-test: a model.completed snapshot is truncated (~256 KB cap); reported cost may be undercounted.",
     );
   }
-  const messages = last?.data?.messagesSnapshot;
-  if (!Array.isArray(messages)) return { cost: 0, turns: 0 };
+  return aggregateCost(sessions);
+}
+
+/** Sum assistant-message cost and count turns across the given snapshots. */
+export function aggregateCost(sessions: TrajectoryEvent[]): { cost: number; turns: number } {
   let cost = 0;
   let turns = 0;
-  for (const msg of messages) {
-    if (!isRecord(msg) || msg.role !== "assistant") continue;
-    const total = assistantCostTotal(msg);
-    if (typeof total !== "number") continue;
-    cost += total;
-    turns += 1;
+  for (const last of sessions) {
+    const messages = last.data?.messagesSnapshot;
+    if (!Array.isArray(messages)) continue;
+    for (const msg of messages) {
+      if (!isRecord(msg) || msg.role !== "assistant") continue;
+      const total = assistantCostTotal(msg);
+      if (typeof total !== "number") continue;
+      cost += total;
+      turns += 1;
+    }
   }
   return { cost, turns };
 }
@@ -94,24 +116,40 @@ function assistantCostTotal(msg: Record<string, unknown>): number | undefined {
 
 /**
  * Parse agent tool calls from the trajectory log filtered by conversationId.
- * We take the LAST `model.completed` event for that session (the most complete
- * transcript) and walk `data.messagesSnapshot`, collecting assistant `toolCall`
- * blocks and matching them with `toolResult` messages.
+ * A conversation spans multiple sessions (channel, thread, subagents), each its
+ * own trajectory file with its own cumulative `messagesSnapshot`. We take each
+ * session's latest `model.completed` (the most complete transcript for it),
+ * walk `data.messagesSnapshot` collecting assistant `toolCall` blocks matched
+ * with `toolResult` messages, then union across sessions deduped by
+ * `toolUseId`.
  *
  * Events are byte-capped by OpenClaw (~256 KB); a large snapshot can be
  * truncated to an unusable shape. `data.usage` is tiny and unaffected, so cost
- * and sync survive. When the snapshot is not a usable array, return `[]`.
+ * and sync survive. A session whose snapshot is not a usable array contributes
+ * nothing; the others still do.
  */
 export function parseAgentToolCalls(opts: {
   conversationId: string;
   startedAtIso: string;
 }): AgentToolCall[] {
-  const last = findLastCompletedEvent(opts);
-  if (!last) return [];
-  const messages = last.data?.messagesSnapshot;
-  if (!Array.isArray(messages)) return [];
-  const results = collectToolResults(messages);
-  return collectToolUses(messages, results, last.ts ?? "");
+  return aggregateAgentToolCalls(latestCompletedPerSession(conversationCompletedEvents(opts)));
+}
+
+/** Union tool calls across the given snapshots, deduped by `toolUseId`. */
+export function aggregateAgentToolCalls(sessions: TrajectoryEvent[]): AgentToolCall[] {
+  const calls: AgentToolCall[] = [];
+  const seen = new Set<string>();
+  for (const last of sessions) {
+    const messages = last.data?.messagesSnapshot;
+    if (!Array.isArray(messages)) continue;
+    const results = collectToolResults(messages);
+    for (const call of collectToolUses(messages, results, last.ts ?? "")) {
+      if (seen.has(call.toolUseId)) continue;
+      seen.add(call.toolUseId);
+      calls.push(call);
+    }
+  }
+  return calls;
 }
 
 export function trajectoryDirExists(): boolean {
@@ -159,16 +197,29 @@ function isEventFor(
   return event.sessionKey?.toLowerCase().includes(conversationId.toLowerCase()) === true;
 }
 
-function findLastCompletedEvent(opts: {
+/** All `model.completed` events for the conversation, from every session file. */
+function conversationCompletedEvents(opts: {
   conversationId: string;
   startedAtIso: string;
-}): TrajectoryEvent | undefined {
-  const matching = readTrajectoryEvents().filter((e) =>
+}): TrajectoryEvent[] {
+  return readTrajectoryEvents().filter((e) =>
     isEventFor(e, opts.conversationId, opts.startedAtIso, MODEL_COMPLETED),
   );
-  if (matching.length === 0) return;
-  matching.sort((a, b) => ((a.ts ?? "") < (b.ts ?? "") ? -1 : 1));
-  return matching[matching.length - 1];
+}
+
+/**
+ * The latest `model.completed` per session (`sessionKey`). Within one session
+ * the snapshot is cumulative, so the latest event is the fullest; across
+ * sessions each contributes its own. Pure — operates on the given events.
+ */
+export function latestCompletedPerSession(events: TrajectoryEvent[]): TrajectoryEvent[] {
+  const bySession = new Map<string, TrajectoryEvent>();
+  for (const e of events) {
+    const key = e.sessionKey ?? "";
+    const prev = bySession.get(key);
+    if (!prev || (prev.ts ?? "") < (e.ts ?? "")) bySession.set(key, e);
+  }
+  return [...bySession.values()];
 }
 
 function collectToolResults(messages: unknown[]): Map<string, ToolResultBlock> {
