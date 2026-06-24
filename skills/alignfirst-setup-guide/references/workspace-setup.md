@@ -10,7 +10,7 @@ Implement a system for running multiple local dev environments side by side via 
 
 The `assets/` directory contains reference scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) — thin wrappers around the package. They carry `ADAPT` comments and long explanatory blocks — scaffolding to guide _you_, not part of the deliverable. Strip them from the scripts you generate; keep only the rare comment explaining a non-obvious, project-specific choice (e.g. why a file is copied). Aim for lean wrappers.
 
-The CLI is self-documenting: `workspace --guide` prints the full operating guide (workspace + dev-server), rendered in the project's package-manager syntax. Consumers do **not** write a `docs/workspace.md` — they point agents at the command and record only project-specific facts (see [Agent Instructions](#agent-instructions)).
+The CLI is self-documenting: `workspace --guide` prints the full operating guide (workspace + dev-server), rendered in the project's package-manager syntax. Point agents at the command and record only project-specific facts (see [Agent Instructions](#agent-instructions)).
 
 ## Implementation Process
 
@@ -151,7 +151,6 @@ The package's `runWorkspace(config: WorkspaceConfig)` performs the lifecycle bel
 | `workspace status` | Print the summary (ports, branch, readiness) for the current worktree. Status shows elapsed time since `createdAt` / `failure.at` for `pending` / `failed` slots (e.g. `pending, started 4m 12s ago`); a `Dev-server:` block reports whether the dev-server is running, with PIDs and log paths |
 | `workspace wait` | Block until the background finalize reaches `READY:` (exit 0, prints the worktree summary) or `FAILED:` (exit 1). Uses the current worktree's slot, or `--slot PORT` to target another. Use for CI / agent orchestration |
 | `workspace set-owner <name>` | Update the owner of the current linked worktree's slot — no rebuild |
-| `workspace migrate-0.16 <old-registryDir>` | Transitional: merge a pre-0.16 registry into `${runtimeDir}/workspace-registry` and relink worktrees |
 
 Per-subcommand flags: `setup` accepts `-c`/`--new-branch`, `--from <ref>`, `--owner <name>`, `-s`/`--slot <port>`, `--force`, `--wait`; `remove` accepts `--force` (proceed despite uncommitted changes); `status`/`wait` accept `-s`/`--slot <port>`; `-v`/`--verbose` is global. `workspace --help` prints help and exits 0; bare `workspace` (or an unknown command) prints a warning then help and exits 1.
 
@@ -373,7 +372,7 @@ Without the conventions, the agent creates branches and commits with inconsisten
 
 ### 2. Project-specific facts the guide can't know
 
-`workspace --guide` covers the generic CLI surface — every command, every flag, the directory layout. Do **not** duplicate it into a `docs/workspace.md`. Record only what is specific to this repo, in whatever entry point your developers and agents already read (e.g. `README.md`, `AGENTS.md`, or `DEVELOPMENT.md`):
+`workspace --guide` covers the generic CLI surface — every command, every flag, the directory layout. Record only what is specific to this repo, in whatever entry point your developers and agents already read (e.g. `README.md`, `AGENTS.md`, or `DEVELOPMENT.md`):
 
 1. **URLs to open after `dev` starts** (admin UI, auto-login), with the dynamic port — the guide tells agents to read the printed log; tell them what to do with the URL.
 2. **Release process** if it lives near the dev workflow — changeset rules, PR/MR procedure, target branch.
@@ -398,5 +397,5 @@ The guide already covers the guardrails (never delete a branch; two-tier shutdow
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
 - [ ] **Tell agents to skip runtime dirs** — add `runtimeDir` (and `.local`, if used) to the "ignore when searching" line in `AGENTS.md`/`CLAUDE.md`, extending an existing line rather than duplicating it.
-- [ ] **Point agents at the guide** — add a workspaces section to `AGENTS.md`/`CLAUDE.md` referencing `workspace --guide`, and record project-specific facts (URLs, release process) in your entry point. Do not write a `docs/workspace.md`.
+- [ ] **Point agents at the guide** — add a workspaces section to `AGENTS.md`/`CLAUDE.md` referencing `workspace --guide`, and record project-specific facts (URLs, release process) in your entry point.
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.
