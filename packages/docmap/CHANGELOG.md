@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.6.2
+
+### Patch Changes
+
+- Render help command lists inside fenced code blocks, and drop the listing "Tip" line.
+
 ## 0.6.1
 
 ### Patch Changes

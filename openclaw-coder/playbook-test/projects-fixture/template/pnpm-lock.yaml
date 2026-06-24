@@ -13,16 +13,16 @@ importers:
         version: 5.2.1
     devDependencies:
       '@paleo/docmap':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.6.2
+        version: 0.6.2
       '@paleo/workspace':
         specifier: ^0.20.0
         version: 0.20.0
 
 packages:
 
-  '@paleo/docmap@0.6.0':
-    resolution: {integrity: sha512-RLuyd/mFotdkBRfnCzD34EX+vdutXHPRFlb8fPyGkdfp1oLRvxbFrXpNVOkBiRobQ9eGcNrA8ZYgKLm8GeGd9g==}
+  '@paleo/docmap@0.6.2':
+    resolution: {integrity: sha512-QdHuPqeIZfwZZSPrAsQWOWVQuOCMnNCTI9P7RIUUWiWU2pJ4tvapJNbxyUT5vS3YxItUlmWbqJ2RWj3ZnBe4qA==}
     engines: {node: '>=22.11.0'}
     hasBin: true
 
@@ -290,7 +290,7 @@ packages:
 
 snapshots:
 
-  '@paleo/docmap@0.6.0': {}
+  '@paleo/docmap@0.6.2': {}
 
   '@paleo/workspace@0.20.0': {}
 

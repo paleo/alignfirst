@@ -73,14 +73,7 @@ export function main(options?: MainOptions): number {
 
   const { dirs, files } = classifyTargets(baseDir, paths, prefix);
 
-  const listing = renderListing(
-    baseDir,
-    dirs,
-    recursive || smallSet,
-    paths.length === 0,
-    cwd,
-    prefix,
-  );
+  const listing = renderListing(baseDir, dirs, recursive || smallSet, paths.length === 0, prefix);
   if (listing) stdout.write(listing);
 
   const reads = renderReads(baseDir, files, prefix);
@@ -156,9 +149,9 @@ interface CommandRow {
 // package-manager prefix length (npm's `run … --` vs a bare `pnpm docmap`). This
 // is why the command lists for short help, full help, and the guide all render
 // through one helper instead of carrying hand-counted padding.
-function renderCommands(rows: CommandRow[], indent = ""): string {
+function renderCommands(rows: CommandRow[]): string {
   const width = Math.max(...rows.map((row) => row.command.length));
-  return rows.map((row) => `${indent}${row.command.padEnd(width)} # ${row.comment}`).join("\n");
+  return rows.map((row) => `${row.command.padEnd(width)} # ${row.comment}`).join("\n");
 }
 
 // Everyday browse/search commands, shared by short help, full help, and the guide.
@@ -200,7 +193,10 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
     "docmap — browse and read a project's docs/ tree of Markdown files.",
     "",
     "Commands:",
-    renderCommands(browseCommands(pm), "  "),
+    "",
+    "```",
+    renderCommands(browseCommands(pm)),
+    "```",
     "",
     `Before writing a new document or editing an existing one, run \`${pm.withArgs} --guide\` and follow its rules.`,
   ];
@@ -208,7 +204,9 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
     lines.push(
       "",
       "More:",
-      renderCommands(moreCommands(pm), "  "),
+      "```",
+      renderCommands(moreCommands(pm)),
+      "```",
       "",
       "Positional paths are classified by the filesystem: a directory is listed, a file is read,",
       "an unmatched name falls back to a fuzzy basename search. The docs/ prefix is optional on input.",
@@ -269,50 +267,20 @@ function renderListing(
   dirs: string[],
   recursive: boolean,
   noPositionals: boolean,
-  cwd: string,
   prefix: string,
 ): string {
   const targets = listingTargets(baseDir, dirs, recursive, noPositionals);
   if (targets.length === 0) return "";
 
   const allLines: string[] = [];
-  let anySubdirList = false;
-  let anyFiles = false;
   for (const { targetDir, rootTitle, rootRelDir } of targets) {
     const formatted: FormatResult = recursive
       ? formatRecursive(targetDir, rootTitle, 1, rootRelDir, prefix)
       : formatDirectory(targetDir, rootTitle, listDirectory(targetDir), rootRelDir, prefix);
     allLines.push(...formatted.lines);
-    if (formatted.hasSubdirList) anySubdirList = true;
-    if (formatted.hasFiles) anyFiles = true;
   }
 
-  let out = `${allLines.join("\n")}\n`;
-  const tip = formatTip(anySubdirList, anyFiles, prefix, cwd);
-  if (tip) out += tip;
-  return out;
-}
-
-function formatTip(
-  anySubdirList: boolean,
-  anyFiles: boolean,
-  prefix: string,
-  cwd: string,
-): string | undefined {
-  const examples: string[] = [];
-  if (anySubdirList) examples.push("dir-name-a", "dir-name-b");
-  if (anyFiles)
-    examples.push(
-      displayExample(prefix, "dir-name-a", "doc-1.md"),
-      displayExample(prefix, "dir-name-b", "doc-2.md"),
-    );
-  if (examples.length === 0) return;
-  const { withArgs } = detectPackageManager(cwd);
-  return `Tip: Pass several paths in one call — directories are listed, files are read. E.g. \`${withArgs} ${examples.join(" ")}\`.\n`;
-}
-
-function displayExample(prefix: string, dir: string, file: string): string {
-  return [prefix, dir, file].filter((part) => part.length > 0).join("/");
+  return allLines.join("\n");
 }
 
 interface ListingTarget {
