@@ -88,13 +88,17 @@ You must provide each subagent with:
 
 If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, add or replace the documentation discovery section with the following.
 
-_**Note**: Adapt the `npm run docmap` command to the project's package manager (`pnpm docmap`, `yarn docmap`, `bun run docmap`)._
-
 > ## Docmap - Seek Documentation
 >
 > **Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+>
+> ### Essential Documentation
+>
+> Always read before any investigation or work:
+>
+> - `docs/<doc>.md` — <one-line reason>
 
-Remove any references to the deleted skill directories.
+Populate the **Essential Documentation** sub-list with the 1–3 docs an agent must always read first — the knowledge you just migrated is a prime candidate. Keep it to the always-read subset, not the full index. Remove any references to the deleted skill directories.
 
 ### package.json
 

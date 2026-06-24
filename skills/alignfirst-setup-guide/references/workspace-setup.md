@@ -363,11 +363,17 @@ This is the file the agent reads on every task. It must contain:
   Run `npm run workspace -- --guide` for the full procedures (creating/removing workspaces, starting/stopping the dev server).
   ```
 
-Without the conventions, the agent creates branches and commits with inconsistent naming; without the workspaces section, it won't share your vocabulary or know the guide exists.
+- **A search-ignore line** so agents don't grep the workspace's gitignored runtime dirs. List `runtimeDir` (e.g. `.local-wt`), and `.local` **only if your repo uses it** (it's project-specific). If such a line already exists (e.g. the alignfirst skills added `.plans`), extend it rather than duplicate:
+
+  ```markdown
+  Always ignore the `.local-wt`, `.plans` directories when searching the codebase.
+  ```
+
+Without the conventions, the agent creates branches and commits with inconsistent naming; without the workspaces section, it won't share your vocabulary or know the guide exists; without the search-ignore line, it wastes context grepping per-worktree runtime dirs.
 
 ### 2. Project-specific facts the guide can't know
 
-`workspace --guide` covers the generic CLI surface — every command, every flag, the directory layout. Do **not** duplicate it into a `docs/workspace.md`. Record only what is specific to this repo, in whatever entry point your developers and agents already read (e.g. `DEVELOPMENT.md`, `README.md`, or `AGENTS.md`):
+`workspace --guide` covers the generic CLI surface — every command, every flag, the directory layout. Do **not** duplicate it into a `docs/workspace.md`. Record only what is specific to this repo, in whatever entry point your developers and agents already read (e.g. `README.md`, `AGENTS.md`, or `DEVELOPMENT.md`):
 
 1. **URLs to open after `dev` starts** (admin UI, auto-login), with the dynamic port — the guide tells agents to read the printed log; tell them what to do with the URL.
 2. **Release process** if it lives near the dev workflow — changeset rules, PR/MR procedure, target branch.
@@ -391,5 +397,6 @@ The guide already covers the guardrails (never delete a branch; two-tier shutdow
 - [ ] **Add npm scripts** (or Makefile targets, etc.): `workspace` and a single `dev` (don't reuse the app's own dev script name).
 - [ ] **Set the dev-server cap** by passing `devLimit` to `runDevServer` (default `5`).
 - [ ] **Update `.gitignore`** to ignore your shared and per-worktree directory (e.g. `.local-wt/`).
+- [ ] **Tell agents to skip runtime dirs** — add `runtimeDir` (and `.local`, if used) to the "ignore when searching" line in `AGENTS.md`/`CLAUDE.md`, extending an existing line rather than duplicating it.
 - [ ] **Point agents at the guide** — add a workspaces section to `AGENTS.md`/`CLAUDE.md` referencing `workspace --guide`, and record project-specific facts (URLs, release process) in your entry point. Do not write a `docs/workspace.md`.
 - [ ] **Update your main instruction file** (`AGENTS.md` / `CLAUDE.md`) with a pointer to the agent documentation and any conventions (branch naming, commit messages) the agent needs to follow.

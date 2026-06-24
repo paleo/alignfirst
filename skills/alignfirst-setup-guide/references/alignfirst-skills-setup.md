@@ -19,7 +19,7 @@ Configure a consumer repo for the AlignFirst skills: add `.plans` to `.gitignore
 5. Detect the default branch with `git remote show origin | grep "HEAD branch"` (e.g., `main`, `master`, `develop`).
 
 6. Insert the following into the INSTRUCTION_FILE (skip any part already present):
-   - Add this line where it feels appropriate: "Always ignore the `.plans` directory when searching the codebase."
+   - Add `.plans` to the codebase-search ignore instruction: "Always ignore the `.plans` directory when searching the codebase." If such a line already exists (e.g. the workspace setup added `.local-wt`/`.local`), append `.plans` to it rather than duplicating.
    - If a ticket ID format was found, add this section (include each convention line only if one was detected or provided):
 
    > ## AlignFirst - Ticket ID, Commit Message, Default Branch

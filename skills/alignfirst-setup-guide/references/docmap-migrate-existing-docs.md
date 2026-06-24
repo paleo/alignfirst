@@ -56,3 +56,7 @@ For each `.md` file (except `CHANGELOG*.md`):
 ## Phase 4 — Verify
 
 Run `docmap --check` on the migrated directory and show the output to the user. Confirm all files pass validation.
+
+## Phase 5 — Point agents at the essentials
+
+In the `## Docmap - Seek Documentation` section of `AGENTS.md` (or `CLAUDE.md`), add or refresh an `### Essential Documentation` sub-list naming the 1–3 docs an agent must always read first (e.g. architecture, code style). Keep it short — it is the always-read subset, not the full index.
