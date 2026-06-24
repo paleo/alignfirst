@@ -1,4 +1,4 @@
-# Welcome
+# Developing
 
 A small full-stack product monorepo (API + frontend).
 
@@ -41,16 +41,16 @@ pnpm workspace setup --wait
 
 ## Documentation
 
+All technical documentation lives under `docs/` and is browsable via docmap:
+
 ```sh
-pnpm docmap                   # browse the table of contents
-pnpm docmap --recursive       # view the full tree
-pnpm docmap docs/architecture.md   # read a document
+npm run docmap
 ```
 
 ## Layout Quirks
 
-- `.local/` — symlinked across worktrees. Shared gitignored files (slot registry, dev-server registry, personal notes).
 - `.local-wt/` — per-worktree. Dev-server logs, setup log.
+- `.local/` — symlinked across worktrees. Shared gitignored files (slot registry, dev-server registry, personal notes).
 - `.plans/` — symlinked across worktrees. AlignFirst task plans.
 
 Always exclude `.local/`, `.local-wt/`, and `.plans/` from codebase searches.

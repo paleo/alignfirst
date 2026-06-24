@@ -56,8 +56,8 @@ function patchFixture(dst, name) {
   const devDocPath = `${dst}/DEVELOPMENT.md`;
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
   const devDoc = readFileSync(devDocPath, "utf8").replace(
-    /^# Welcome$/m,
-    `# Welcome to ${capitalized}`,
+    /^# Developing$/m,
+    `# Developing ${capitalized}`,
   );
   writeFileSync(devDocPath, devDoc);
 }
