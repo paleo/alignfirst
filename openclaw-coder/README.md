@@ -103,6 +103,13 @@ Here is an example of a [workspace's `AGENTS.md`](playbook-test/workspace/AGENTS
 
 Feel free to adapt the other sections. In particular, replace the instructions related to tickets with your own instructions on how to access your Linear, Jira, or GitHub/GitLab issues.
 
+## Preparing a project
+
+Before handing a project to OpenClaw, set it up for autonomous work:
+
+- **Install [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace)** so the agent runs each task in its own isolated git-worktree environment, several branches in parallel. See its [README](../packages/workspace/README.md) for setup.
+- **Add a `DEVELOPMENT.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPMENT.md`](playbook-test/projects-fixture/template/DEVELOPMENT.md).
+
 ## Contribute
 
 The `openclaw-coder-playbook` skill is developed against an internal regression-test harness: [`playbook-test/README.md`](playbook-test/README.md). Maintainer overview: [`docs/openclaw-coder.md`](../docs/openclaw-coder.md).
