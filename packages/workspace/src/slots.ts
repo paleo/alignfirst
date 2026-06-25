@@ -42,6 +42,9 @@ export interface SlotEntry {
   failure?: { at: string; message: string };
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;
+  /** Opaque blob the consumer returns from `finalizeWorktree`, handed back to `purgeInfrastructure`
+   * so an orphan's infrastructure can be torn down by name after its worktree (and config) is gone. */
+  extra?: unknown;
 }
 
 export interface SlotsRegistry {
@@ -102,17 +105,24 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   };
   if (input.isMainWorktree) entry.main = true;
   if (owner !== undefined) entry.owner = owner;
+  if (existing?.extra !== undefined) entry.extra = existing.extra;
   registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, input.registryDir, registry);
   return { port, owner, status };
 }
 
-export function markSlotReady(mainWorktree: string, registryDir: string, slotPort: number): void {
+export function markSlotReady(
+  mainWorktree: string,
+  registryDir: string,
+  slotPort: number,
+  extra?: unknown,
+): void {
   const registry = readSlots(mainWorktree, registryDir);
   const entry = registry.slots[String(slotPort)];
   if (!entry) return;
   entry.status = "ready";
   delete entry.failure;
+  if (extra !== undefined) entry.extra = extra;
   writeSlots(mainWorktree, registryDir, registry);
 }
 
@@ -197,6 +207,7 @@ export function handleSetOwner(input: SetOwnerInput): {
     status: slotData.status,
   };
   if (slotData.failure) updated.failure = slotData.failure;
+  if (slotData.extra !== undefined) updated.extra = slotData.extra;
   if (input.newOwner !== undefined) updated.owner = input.newOwner;
   registry.slots[slotPort] = updated;
   writeSlots(input.mainWorktree, input.registryDir, registry);

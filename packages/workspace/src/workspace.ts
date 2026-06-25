@@ -111,11 +111,21 @@ export interface WorkspaceConfig {
    *
    * Runs in a detached child whose stdout/stderr are already redirected to
    * `<runtimeDir>/logs/workspace-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
+   *
+   * May return `{ extra }` — an opaque blob persisted on the slot entry and handed back to
+   * {@link purgeInfrastructure}. Use it to record what infrastructure to tear down by name (e.g.
+   * container and volume names) so an orphaned worktree can still be cleaned up after its config is gone.
    */
-  finalizeWorktree: (ctx: SetupContext) => Promise<void> | void;
+  finalizeWorktree: (
+    ctx: SetupContext,
+  ) => Promise<FinalizeResult | undefined> | FinalizeResult | undefined;
   /**
-   * Destructive infrastructure teardown on `workspace remove` (e.g. `docker compose down -v` to
-   * wipe volumes). Runs after the dev-server stop. Best-effort; errors should be swallowed.
+   * Destructive infrastructure teardown (e.g. `docker compose down -v` to wipe volumes). Runs after
+   * the dev-server stop on `workspace remove`, and on `workspace prune` / removing an orphaned
+   * worktree. MUST be idempotent and tolerate already-absent infrastructure: it may run when the
+   * worktree directory is gone (`ctx.extra` carries the recorded teardown identifiers; `ctx.worktree`
+   * no longer exists), so branch on the worktree's presence and tear down by name in that case.
+   * Best-effort; errors should be swallowed.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
@@ -139,6 +149,11 @@ export interface PreSetupContext {
   force: boolean;
   /** Writes to stdout and the setup log. */
   log: (msg: string) => void;
+}
+
+/** Return value of {@link WorkspaceConfig.finalizeWorktree}. */
+export interface FinalizeResult {
+  extra: unknown;
 }
 
 /** Context passed to {@link WorkspaceConfig.finalizeWorktree}. */
@@ -177,8 +192,13 @@ export interface SummaryContext {
 
 /** Context passed to {@link WorkspaceConfig.purgeInfrastructure}. */
 export interface PurgeContext {
+  /** The target worktree. May no longer exist on disk when purging an orphan — check before
+   * running cwd-bound commands; tear down by name (from {@link extra}) in that case. */
   worktree: string;
   mainWorktree: string;
+  slot: number;
+  /** The blob the consumer returned from `finalizeWorktree`, if any. */
+  extra?: unknown;
   verbose: boolean;
 }
 
@@ -278,7 +298,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       runList(registryDir);
       return;
     case "prune":
-      await runPrune(registryDir);
+      await runPrune(config, registryDir, verbose);
       return;
   }
 
@@ -484,8 +504,8 @@ async function runFinalize(
   };
 
   try {
-    await config.finalizeWorktree(setupContext);
-    markSlotReady(ctx.mainWorktree, registryDir, slot);
+    const result = await config.finalizeWorktree(setupContext);
+    markSlotReady(ctx.mainWorktree, registryDir, slot, result?.extra);
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (slot ${slot})`);
     appendLog("============================================================");
@@ -689,7 +709,11 @@ function hintLiveOrphans(liveOrphans: string[]): void {
   );
 }
 
-async function runPrune(registryDir: string): Promise<void> {
+async function runPrune(
+  config: WorkspaceConfig,
+  registryDir: string,
+  verbose: boolean,
+): Promise<void> {
   const ctx = detectWorktree();
   const registry = readSlots(ctx.mainWorktree, registryDir);
   const orphanPorts = findOrphanPorts(registry);
@@ -698,6 +722,13 @@ async function runPrune(registryDir: string): Promise<void> {
   for (const port of orphanPorts) {
     const entry = registry.slots[port];
     stoppedProcesses += await stopOrphanedDevServer(ctx.mainWorktree, registryDir, entry.worktree);
+    await runPurgeInfrastructure(config, {
+      worktree: entry.worktree,
+      mainWorktree: ctx.mainWorktree,
+      slot: Number(port),
+      extra: entry.extra,
+      verbose,
+    });
     delete registry.slots[port];
     const ownerSuffix = entry.owner ? `, owner ${entry.owner}` : "";
     console.log(`Pruned slot ${port} (${entry.worktree}${ownerSuffix}).`);
@@ -711,10 +742,11 @@ async function runPrune(registryDir: string): Promise<void> {
     return;
   }
   console.log(`Pruned ${orphanPorts.length} orphaned workspace(s).`);
-  if (stoppedProcesses > 0) {
+  if (stoppedProcesses > 0) console.log(`Stopped ${stoppedProcesses} orphaned process(es).`);
+  if (config.purgeInfrastructure === undefined) {
     console.log(
-      `Stopped ${stoppedProcesses} orphaned process(es). Note: infrastructure managed by callback ` +
-        "servers (e.g. `docker compose`) is not torn down automatically — check for leftover containers.",
+      "Note: infrastructure managed by callback servers (e.g. `docker compose`) is not torn down " +
+        "automatically — check for leftover containers.",
     );
   }
 }
@@ -722,8 +754,8 @@ async function runPrune(registryDir: string): Promise<void> {
 /**
  * Stop a gone worktree's dev-server the only way left: its dir (and `dev-server.mjs`) is deleted, so
  * we can't shell out to `dev down` to run callback stop() — we kill the recorded spawn PIDs directly
- * and drop the dev-server entry. Returns the count of live PIDs stopped. Callback-managed infra is
- * not torn down (see `runPrune`'s caveat).
+ * and drop the dev-server entry. Returns the count of live PIDs stopped. The caller separately runs
+ * `purgeInfrastructure` (by name, from the slot's `extra`) to tear down callback-managed infra.
  */
 async function stopOrphanedDevServer(
   mainWorktree: string,
@@ -837,6 +869,13 @@ async function handleRemove(
       `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
     );
     await stopOrphanedDevServer(ctx.mainWorktree, registryDir, target.worktreePath);
+    await runPurgeInfrastructure(config, {
+      worktree: target.worktreePath,
+      mainWorktree: ctx.mainWorktree,
+      slot: Number(target.slotPort),
+      extra: registry.slots[target.slotPort]?.extra,
+      verbose: run.verbose,
+    });
     delete registry.slots[target.slotPort];
     writeSlots(ctx.mainWorktree, registryDir, registry);
     pruneGitWorktrees(ctx.mainWorktree);
@@ -860,13 +899,13 @@ async function handleRemove(
     verboseLog(`No dev-server running in ${target.worktreePath}; skipping stop.`);
   }
 
-  if (config.purgeInfrastructure) {
-    await config.purgeInfrastructure({
-      worktree: target.worktreePath,
-      mainWorktree: ctx.mainWorktree,
-      verbose: run.verbose,
-    });
-  }
+  await runPurgeInfrastructure(config, {
+    worktree: target.worktreePath,
+    mainWorktree: ctx.mainWorktree,
+    slot: Number(target.slotPort),
+    extra: registry.slots[target.slotPort]?.extra,
+    verbose: run.verbose,
+  });
 
   delete registry.slots[target.slotPort];
   writeSlots(ctx.mainWorktree, registryDir, registry);
@@ -885,6 +924,10 @@ async function handleRemove(
   if (removeHere) {
     console.log(`Now run: cd ${ctx.mainWorktree}`);
   }
+}
+
+async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext): Promise<void> {
+  if (config.purgeInfrastructure) await config.purgeInfrastructure(ctx);
 }
 
 type SetOwnerCommand = Extract<WorkspaceCommand, { kind: "set-owner" }>;

@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.22.0
+
+### Minor Changes
+
+- Tear down an orphaned worktree's infrastructure on `prune`/`remove`. `finalizeWorktree` may return `{ extra }`, persisted on the slot and handed back to `purgeInfrastructure` (now also called for orphans, by name).
+
 ## 0.21.0
 
 ### Minor Changes

@@ -4,6 +4,7 @@ export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   WorkspaceConfig,
   SetupContext,
+  FinalizeResult,
   SummaryContext,
   PatchContext,
   ConfigFileEntry,
