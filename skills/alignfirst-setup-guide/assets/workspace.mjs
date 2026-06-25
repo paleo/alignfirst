@@ -52,8 +52,11 @@ await runWorkspace({
   // and dev-server logs under here.
   runtimeDir: ".local-wt",
 
-  // ADAPT: gitignored config files copied from the main worktree and patched
-  // per slot. The source is the same path in the main worktree.
+  // ADAPT: EVERY gitignored file a linked worktree needs — not only the
+  // port-bearing ones. The source is the same path in the main worktree. Port
+  // files patch the slot's ports in; files that need no rewrite are copied
+  // verbatim with `patch: (content) => content` (see ".vscode/settings.json"
+  // below). Omitting one leaves the linked worktree silently missing that file.
   configFiles: [
     {
       path: ".env",
@@ -78,6 +81,13 @@ await runWorkspace({
           .replace(/^(\s*-\s*")[^"]*:5432(")/m, `$1${ports.db}:5432$2`)
           .replace(/^(\s*container_name:\s*).+$/m, `$1${repoName}-database-slot-${slot}`);
       },
+    },
+    // ADAPT: a verbatim copy — no ports, just a gitignored file the worktree
+    // needs. `optional: true` skips it (with a warning) when absent in main.
+    {
+      path: ".vscode/settings.json",
+      patch: (content) => content,
+      optional: true,
     },
   ],
 
