@@ -4,7 +4,7 @@ Run multiple local dev environments side by side, one per git worktree, with iso
 
 Each project writes two custom scripts on top, using these entry points:
 
-- `runWorkspace(config)` — worktree lifecycle (setup / remove / set-owner).
+- `runWorkspace(config)` — worktree lifecycle (setup / remove).
 - `runDevServer(config)` — dev-server start (foreground or background) / stop / list.
 
 ## Setup
@@ -74,8 +74,8 @@ await runWorkspace({
   finalizeWorktree: async ({ currentWorktree }) => {
     // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
-  printSummary: ({ slot, branch, owner, ports, isMainWorktree, status }) =>
-    `Type:   ${isMainWorktree ? "main" : "linked"}\nStatus: ${status}\nSlot:   ${slot}\nBranch: ${branch}${owner ? `\nOwner:  ${owner}` : ""}\nServer: :${ports.server}`,
+  printSummary: ({ slot, branch, ports, isMainWorktree, status }) =>
+    `Type:   ${isMainWorktree ? "main" : "linked"}\nStatus: ${status}\nSlot:   ${slot}\nBranch: ${branch}\nServer: :${ports.server}`,
 });
 ```
 
@@ -105,7 +105,7 @@ await runDevServer({
     },
   ],
   printSummary: ({ slot, servers }) =>
-    `Dev servers started in slot ${slot.slot}${slot.owner ? ` (${slot.owner})` : ""}: ${servers
+    `Dev servers started in slot ${slot.slot}: ${servers
       .map((s) => `${s.server.name} :${s.port} (PID ${s.pid})`)
       .join(", ")}`,
 });

@@ -56,7 +56,7 @@ Each worktree gets a **slot** — identified by its primary port number (e.g. `-
 Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/slots.json`):
 
 ```json
-{ "slots": { "8110": { "worktree": "/abs/path/myproject-feat-214", "branch": "feat/214", "owner": "alice" } } }
+{ "slots": { "8110": { "worktree": "/abs/path/myproject-feat-214", "status": "ready", "createdAt": "2026-01-01T00:00:00.000Z" } } }
 ```
 
 The main worktree sits at `basePort`; linked worktrees at `basePort + portStep × k` for k ≥ 1.

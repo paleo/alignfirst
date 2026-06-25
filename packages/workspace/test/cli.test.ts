@@ -23,8 +23,6 @@ describe("parseWorkspaceArgs", () => {
     const { command, verbose } = parseWorkspaceArgs([
       "setup",
       "feat/42",
-      "--owner",
-      "alice",
       "--slot",
       "8110",
       "--force",
@@ -36,13 +34,16 @@ describe("parseWorkspaceArgs", () => {
       kind: "setup",
       branch: "feat/42",
       newBranch: false,
-      owner: "alice",
       slot: "8110",
       force: true,
       wait: true,
       go: true,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("rejects the removed `--owner` flag on setup", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--owner", "alice"])).toThrow(ConfigError);
   });
 
   it("parses `setup <branch> -c --from <ref>`", () => {
@@ -123,33 +124,8 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["remove", "--no-remote-check"])).toThrow(ConfigError);
   });
 
-  it("parses `set-owner <name>` and `set-owner <name> <dir>`", () => {
-    expect(parseWorkspaceArgs(["set-owner", "alice"]).command).toEqual({
-      kind: "set-owner",
-      name: "alice",
-      selector: { dir: undefined, slot: undefined },
-    });
-    expect(parseWorkspaceArgs(["set-owner", "alice", "../my-wt"]).command).toEqual({
-      kind: "set-owner",
-      name: "alice",
-      selector: { dir: "../my-wt", slot: undefined },
-    });
-  });
-
-  it("parses `set-owner <name> --slot <port>`", () => {
-    expect(parseWorkspaceArgs(["set-owner", "alice", "--slot", "8110"]).command).toEqual({
-      kind: "set-owner",
-      name: "alice",
-      selector: { dir: undefined, slot: "8110" },
-    });
-  });
-
-  it("rejects `set-owner` without a name", () => {
-    expect(() => parseWorkspaceArgs(["set-owner"])).toThrow(ConfigError);
-  });
-
-  it("rejects `set-owner` with too many positionals", () => {
-    expect(() => parseWorkspaceArgs(["set-owner", "alice", "../wt", "extra"])).toThrow(ConfigError);
+  it("rejects the removed `set-owner` command", () => {
+    expect(() => parseWorkspaceArgs(["set-owner", "alice"])).toThrow(ConfigError);
   });
 
   it("parses `list`", () => {

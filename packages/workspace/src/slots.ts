@@ -27,7 +27,6 @@ export function warnLegacyRegistryDir(config: { runtimeDir: string; registryDir?
 export interface ResolvedSlot {
   slot: number;
   worktree: string;
-  owner?: string;
   /** `true` when this slot is the main worktree. */
   main?: boolean;
 }
@@ -36,7 +35,6 @@ export type SlotStatus = "pending" | "ready" | "failed";
 
 export interface SlotEntry {
   worktree: string;
-  owner?: string;
   createdAt: string;
   status: SlotStatus;
   failure?: { at: string; message: string };
@@ -78,7 +76,6 @@ export interface RegisterSlotInput {
   mainWorktree: string;
   registryDir: string;
   scheme: PortScheme;
-  requestedOwner?: string;
   /** When `true`, the slot is forced to `scheme.basePort` regardless of `slot` arg. */
   isMainWorktree: boolean;
   /** When `true`, an existing `ready` slot is reset to `pending` so the re-finalize is observable. */
@@ -87,13 +84,11 @@ export interface RegisterSlotInput {
 
 export function resolveAndRegisterSlot(input: RegisterSlotInput): {
   port: number;
-  owner: string | undefined;
   status: SlotStatus;
 } {
   const registry = readSlots(input.mainWorktree, input.registryDir);
   const port = pickSlotPort(input, registry);
   const existing = registry.slots[String(port)];
-  const owner = input.requestedOwner ?? existing?.owner;
   const createdAt = existing?.createdAt ?? new Date().toISOString();
   // Re-runs of `workspace setup` keep a previously finalized slot ready, unless `--force` is set —
   // then we reset to pending so `workspace wait` blocks and `dev` refuses during the re-finalize.
@@ -104,11 +99,10 @@ export function resolveAndRegisterSlot(input: RegisterSlotInput): {
     status,
   };
   if (input.isMainWorktree) entry.main = true;
-  if (owner !== undefined) entry.owner = owner;
   if (existing?.extra !== undefined) entry.extra = existing.extra;
   registry.slots[String(port)] = entry;
   writeSlots(input.mainWorktree, input.registryDir, registry);
-  return { port, owner, status };
+  return { port, status };
 }
 
 export function markSlotReady(
@@ -175,37 +169,6 @@ export function resolveCurrentSlot(basePort: number, registryDir: string): Resol
   return slot;
 }
 
-export interface SetOwnerInput {
-  newOwner: string | undefined;
-  slotPort: string;
-  mainWorktree: string;
-  registryDir: string;
-}
-
-export function handleSetOwner(input: SetOwnerInput): {
-  slotPort: string;
-  owner: string | undefined;
-} {
-  const registry = readSlots(input.mainWorktree, input.registryDir);
-  const slotData = registry.slots[input.slotPort];
-  if (!slotData) {
-    console.error(`Error: No slot ${input.slotPort} in registry.`);
-    process.exit(1);
-  }
-  const updated: SlotEntry = {
-    worktree: slotData.worktree,
-    createdAt: slotData.createdAt,
-    status: slotData.status,
-  };
-  if (slotData.main) updated.main = true;
-  if (slotData.failure) updated.failure = slotData.failure;
-  if (slotData.extra !== undefined) updated.extra = slotData.extra;
-  if (input.newOwner !== undefined) updated.owner = input.newOwner;
-  registry.slots[input.slotPort] = updated;
-  writeSlots(input.mainWorktree, input.registryDir, registry);
-  return { slotPort: input.slotPort, owner: input.newOwner };
-}
-
 interface PickSlotArgs {
   slot?: string;
   currentWorktree: string;
@@ -259,7 +222,6 @@ function lookupSlotForCwd(registryDir: string): ResolvedSlot | undefined {
       const resolved: ResolvedSlot = {
         slot: Number(port),
         worktree: entry.worktree,
-        owner: entry.owner,
       };
       if (entry.main) resolved.main = true;
       return resolved;

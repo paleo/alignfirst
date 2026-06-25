@@ -25,12 +25,12 @@ await runWorkspace({
     });
   },
 
-  printSummary: ({ slot, branch, owner, currentWorktree, isMainWorktree, status }) => `
+  printSummary: ({ slot, branch, currentWorktree, isMainWorktree, status }) => `
 Workspace setup complete!
   Worktree type: ${isMainWorktree ? "main" : "linked"}
   Status: ${status}
   Slot:   ${slot}
-  Branch: ${branch}${owner ? `\n  Owner:  ${owner}` : ""}
+  Branch: ${branch}
   Path:   ${currentWorktree}
 `,
 });

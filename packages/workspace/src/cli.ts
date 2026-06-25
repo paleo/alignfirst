@@ -7,7 +7,6 @@ export type WorkspaceCommand =
       branch?: string;
       newBranch: boolean;
       from?: string;
-      owner?: string;
       slot?: string;
       force: boolean;
       wait: boolean;
@@ -18,7 +17,6 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "set-owner"; name: string; selector: WorkspaceSelector }
   | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "guide" }
@@ -68,8 +66,6 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
-    case "set-owner":
-      return parseSetOwner(tokens);
     case "__finalize":
       return parseFinalize(tokens);
     case "migrate-0.16":
@@ -85,7 +81,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
-      owner: { type: "string" },
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       wait: { type: "boolean" },
@@ -113,7 +108,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       branch,
       newBranch,
       from: values.from,
-      owner: values.owner,
       slot: values.slot,
       force: values.force ?? false,
       wait: values.wait ?? false,
@@ -201,29 +195,6 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
   };
 }
 
-function parseSetOwner(tokens: string[]): ParsedWorkspaceArgs {
-  const { values, positionals } = parseArgs({
-    args: tokens,
-    options: {
-      slot: { type: "string", short: "s" },
-      verbose: { type: "boolean", short: "v" },
-    },
-    allowPositionals: true,
-    strict: true,
-  });
-  if (positionals.length === 0) {
-    throw new ConfigError("`workspace set-owner` requires a name.");
-  }
-  if (positionals.length > 2) {
-    throw new ConfigError("`workspace set-owner` accepts at most a name and a directory.");
-  }
-  const [name, dir] = positionals;
-  return {
-    command: { kind: "set-owner", name, selector: buildSelector(dir, values.slot, "set-owner") },
-    verbose: values.verbose ?? false,
-  };
-}
-
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
@@ -285,7 +256,7 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [--owner <name>] [-s|--slot <port>] [--force] [--wait] [--go]",
+      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [-s|--slot <port>] [--force] [--wait] [--go]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
@@ -297,7 +268,7 @@ export function printWorkspaceHelp(): void {
       "      Remove a workspace, selected by directory (path or basename) or --slot;",
       "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
       "  list",
-      "      List all registered workspaces (slot, status, branch, path, owner, created).",
+      "      List all registered workspaces (slot, status, branch, path, created).",
       "  prune",
       "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
       "      and drop their registry entries, then run `git worktree prune`.",
@@ -306,9 +277,6 @@ export function printWorkspaceHelp(): void {
       "      Selected by directory (path or basename) or --slot; the current worktree when omitted.",
       "  wait [<dir>] [-s|--slot <port>]",
       "      Block until the background finalize reaches READY (exit 0) or FAILED (exit 1).",
-      "  set-owner <name> [<dir>] [-s|--slot <port>]",
-      "      Update a workspace's owner (no rebuild). Selected by directory or --slot;",
-      "      the current worktree when omitted.",
       "",
       "Global options:",
       "  -v, --verbose   Show intermediate output.",

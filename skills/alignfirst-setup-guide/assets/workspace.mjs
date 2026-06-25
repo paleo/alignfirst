@@ -177,11 +177,11 @@ await runWorkspace({
 
   // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
   // at this point. The worktree path is the useful pointer.
-  printSummary: ({ slot, branch, owner, currentWorktree, isMainWorktree }) => `
+  printSummary: ({ slot, branch, currentWorktree, isMainWorktree }) => `
 Workspace setup complete!
   Worktree type: ${isMainWorktree ? "main" : "linked"}
   Slot:          ${slot}
-  Branch:        ${branch}${owner ? `\n  Owner:         ${owner}` : ""}
+  Branch:        ${branch}
   Path:          ${currentWorktree}
 `,
 });

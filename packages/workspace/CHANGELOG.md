@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.25.0
+
+### Minor Changes
+
+- Remove the unused workspace `owner` feature (`--owner`, `set-owner`, the OWNER column, and `owner` in the contexts/registry). Breaking: drop `owner` from `printSummary`.
+
 ## 0.24.0
 
 ### Minor Changes

@@ -10,7 +10,6 @@ const DEV_SERVERS_FILENAME = "dev-servers.json";
 export interface DevServerEntry {
   slot: number;
   worktree: string;
-  owner?: string;
   pids: Record<string, number>;
   startedAt: string;
   /** `true` for the main-worktree entry. */
@@ -57,9 +56,8 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
     return;
   }
   for (const entry of data.servers) {
-    const ownerSuffix = entry.owner ? `, owner=${entry.owner}` : "";
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-    console.log(`Stopping slot ${entry.slot} (${branch}${ownerSuffix})...`);
+    console.log(`Stopping slot ${entry.slot} (${branch})...`);
     for (const [name, pid] of Object.entries(entry.pids)) {
       if (!isProcessAlive(pid)) continue;
       console.log(`  ${name} (PID ${pid})`);
@@ -235,8 +233,7 @@ function formatEntry(entry: DevServerEntry): string {
   const pids = Object.entries(entry.pids)
     .map(([name, pid]) => `${name}=${pid}`)
     .join(",");
-  const ownerPart = entry.owner ? `  owner=${entry.owner}` : "";
   const type = entry.main ? "main" : "linked";
   const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-  return `  slot ${entry.slot}  type=${type}  branch=${branch}${ownerPart}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
+  return `  slot ${entry.slot}  type=${type}  branch=${branch}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
 }
