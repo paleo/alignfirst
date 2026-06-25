@@ -104,8 +104,8 @@ export function copyAndPatchFile(
     if (!existsSync(source.path)) {
       if (!optional) {
         console.error(
-          `Error: source ${source.path} not found. Bootstrap the main worktree first ` +
-            "(`workspace setup`), provide a `source`, or mark the entry as optional.",
+          `Error: config source ${source.path} not found. Bootstrap it first ` +
+            "(`workspace setup`, or commit the template), or mark the entry as optional.",
         );
         process.exit(1);
       }

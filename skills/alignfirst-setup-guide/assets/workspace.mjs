@@ -53,13 +53,17 @@ await runWorkspace({
   runtimeDir: ".local-wt",
 
   // ADAPT: EVERY gitignored file a linked worktree needs — not only the
-  // port-bearing ones. The source is the same path in the main worktree. Port
-  // files patch the slot's ports in; files that need no rewrite are copied
-  // verbatim with `patch: (content) => content` (see ".vscode/settings.json"
-  // below). Omitting one leaves the linked worktree silently missing that file.
+  // port-bearing ones. Each entry declares a `source`:
+  //   { kind: "mainWorktree" }              copy the file from the main worktree
+  //   { kind: "newWorktree", path: "..." }  copy a committed template (e.g. an
+  //                                         .example) from the new worktree
+  //   { kind: "content", content }          inline string, or a (async) function
+  // `patch` is optional — omit it to copy verbatim (see ".vscode/settings.json").
+  // Omitting an entry leaves the linked worktree silently missing that file.
   configFiles: [
     {
       path: ".env",
+      source: { kind: "mainWorktree" },
       patch: (content, { ports }) => {
         // Use extractHost to preserve a non-localhost API_URL configured in the
         // main worktree (e.g. a public dev-server IP).
@@ -75,6 +79,7 @@ await runWorkspace({
     // worktrees don't collide. Drop this entry on a non-Docker stack.
     {
       path: "docker-compose.yml",
+      source: { kind: "mainWorktree" },
       patch: (content, { slot, ports, mainWorktree }) => {
         const repoName = basename(mainWorktree);
         return content
@@ -83,10 +88,10 @@ await runWorkspace({
       },
     },
     // ADAPT: a verbatim copy — no ports, just a gitignored file the worktree
-    // needs. `optional: true` skips it (with a warning) when absent in main.
+    // needs. No `patch`. `optional: true` skips it (with a warning) when absent.
     {
       path: ".vscode/settings.json",
-      patch: (content) => content,
+      source: { kind: "mainWorktree" },
       optional: true,
     },
   ],

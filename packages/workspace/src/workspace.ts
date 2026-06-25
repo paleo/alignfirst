@@ -94,7 +94,7 @@ export interface WorkspaceConfig {
    * Holds the setup log and dev-server logs.
    */
   runtimeDir: string;
-  /** Config files copied from the main worktree and patched per slot. */
+  /** Gitignored files seeded into each worktree (from main, a committed template, or content) and patched per slot. */
   configFiles: ConfigFileEntry[];
   /**
    * Runs before `configFiles` are copied. Use this to bootstrap source files the kernel expects
@@ -202,38 +202,43 @@ export interface PurgeContext {
   verbose: boolean;
 }
 
-/** A `{ path }` (relative to the main worktree) or `{ content }` (verbatim) initial source. */
-export type ConfigFileSourceSpec = { path: string } | { content: string };
-
-/**
- * Overrides where a {@link ConfigFileEntry}'s initial content comes from. Defaults to reading
- * `entry.path` from the main worktree.
- *
- * - `{ path }` — read this path (relative to the main worktree) instead of `entry.path`,
- *   e.g. seed from a committed example: `{ path: "packages/api/.env.local.example" }`.
- * - `{ content }` — use this string as the initial content verbatim.
- * - a callback returning either of the above, resolved per worktree with the same
- *   {@link PatchContext} the `patch` callback receives.
- */
-export type ConfigFileSource = ConfigFileSourceSpec | ((ctx: PatchContext) => ConfigFileSourceSpec);
-
-/** One config file seeded from its source (the main worktree by default) and patched per slot. */
+/** One config file seeded from its source and patched per slot. */
 export interface ConfigFileEntry {
   /** Path relative to the worktree root. Written to the current worktree. */
   path: string;
+  /** Where the initial content comes from. */
+  source: ConfigFileSource;
+  /** Rewrites the source content per slot. Omit to copy the content verbatim. */
+  patch?: (content: string, ctx: PatchContext) => string;
   /**
-   * Overrides the initial content's source. Defaults to reading `path` from the main worktree.
-   * Use this to seed from a committed example or supplied content instead. See {@link ConfigFileSource}.
-   */
-  source?: ConfigFileSource;
-  /** Returns the patched content given the source content and the slot's ports. */
-  patch: (content: string, ctx: PatchContext) => string;
-  /**
-   * When `true`, a missing `{ path }` source logs a warning and skips the entry.
-   * Default: required (missing source aborts setup). Bootstrap the main worktree first via
-   * `workspace setup`, or seed sources in `preSetup`. Ignored for `{ content }` sources.
+   * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
+   * Applies to `mainWorktree` and `newWorktree` sources; ignored for `content`.
    */
   optional?: boolean;
+}
+
+/** Where a {@link ConfigFileEntry}'s initial content comes from. */
+export type ConfigFileSource =
+  | MainWorktreeConfigFileSource
+  | NewWorktreeConfigFileSource
+  | ContentConfigFileSource;
+
+/** Copies the gitignored file at the entry's `path` from the main worktree. */
+export interface MainWorktreeConfigFileSource {
+  kind: "mainWorktree";
+}
+
+/** Copies a committed template from the new worktree's own checkout. */
+export interface NewWorktreeConfigFileSource {
+  kind: "newWorktree";
+  /** Path of the template, relative to the worktree root (e.g. a committed `.example` file). */
+  path: string;
+}
+
+/** Uses the given content verbatim. The function form may be async. */
+export interface ContentConfigFileSource {
+  kind: "content";
+  content: string | (() => string | Promise<string>);
 }
 
 /** Context passed to {@link ConfigFileEntry.patch}. */
@@ -408,7 +413,7 @@ async function runSetup(
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
   linkWorkspaceRegistry(setupCtx, config.runtimeDir, verboseLog);
-  generateConfigFiles(setupCtx, config.configFiles, slot, ports, command.force, verboseLog);
+  await generateConfigFiles(setupCtx, config.configFiles, slot, ports, command.force, verboseLog);
 
   teeLog(
     config.printSummary({
@@ -1108,14 +1113,14 @@ function linkWorkspaceRegistry(
   log("Created workspace-registry symlink → main worktree.");
 }
 
-function generateConfigFiles(
+async function generateConfigFiles(
   ctx: WorktreeContext,
   entries: ConfigFileEntry[],
   slot: number,
   ports: Record<string, number>,
   force: boolean,
   log: (msg: string) => void,
-): void {
+): Promise<void> {
   for (const entry of entries) {
     const patchCtx: PatchContext = {
       slot,
@@ -1123,11 +1128,15 @@ function generateConfigFiles(
       mainWorktree: ctx.mainWorktree,
       currentWorktree: ctx.currentWorktree,
     };
+    const { patch } = entry;
+    const patchFn = patch
+      ? (content: string) => patch(content, patchCtx)
+      : (content: string) => content;
     copyAndPatchFile(
       { currentWorktree: ctx.currentWorktree, log },
       entry.path,
-      resolveConfigSource(entry, patchCtx),
-      (content) => entry.patch(content, patchCtx),
+      await resolveConfigSource(entry, patchCtx),
+      patchFn,
       entry.path,
       force,
       entry.optional ?? false,
@@ -1135,11 +1144,21 @@ function generateConfigFiles(
   }
 }
 
-function resolveConfigSource(entry: ConfigFileEntry, ctx: PatchContext): ResolvedFileSource {
-  const spec = typeof entry.source === "function" ? entry.source(ctx) : entry.source;
-  if (spec === undefined) return { path: join(ctx.mainWorktree, entry.path) };
-  if ("content" in spec) return { content: spec.content };
-  return { path: join(ctx.mainWorktree, spec.path) };
+export async function resolveConfigSource(
+  entry: ConfigFileEntry,
+  ctx: PatchContext,
+): Promise<ResolvedFileSource> {
+  const { source } = entry;
+  switch (source.kind) {
+    case "mainWorktree":
+      return { path: join(ctx.mainWorktree, entry.path) };
+    case "newWorktree":
+      return { path: join(ctx.currentWorktree, source.path) };
+    case "content":
+      return {
+        content: typeof source.content === "function" ? await source.content() : source.content,
+      };
+  }
 }
 
 interface RemoveTarget {

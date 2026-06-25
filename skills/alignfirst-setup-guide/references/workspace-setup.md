@@ -69,13 +69,19 @@ Host RAM is shared; parallel dev-servers can exhaust it. Pass `devLimit` to `run
 
 Config files carrying ports (`.env`, `docker-compose.yml`, …) **must be gitignored**: worktrees share one git history, so a tracked config would be identical everywhere, defeating per-worktree ports.
 
-`configFiles` propagates a file from the main worktree into each linked worktree. It is **not only for port-bearing files** — it is for **every gitignored file a worktree needs to function**:
+`configFiles` seeds a gitignored file into each new worktree, then patches it per slot. It is **not only for port-bearing files** — it is for **every gitignored file a worktree needs to function**. Each entry declares where its initial content comes from via `source.kind`:
+
+- `{ kind: "mainWorktree" }` — copy the file at the same path from the main worktree. The common case: the developer's customized config flows into every sibling.
+- `{ kind: "newWorktree", path }` — copy a committed template (e.g. an `.example`) from the new worktree's own checkout, so it tracks the branch.
+- `{ kind: "content", content }` — an inline string, or a sync/async function returning one.
+
+`patch(content, { slot, ports, mainWorktree, currentWorktree })` rewrites the content per slot; **omit it to copy verbatim**:
 
 - **Port-bearing** files patch the slot's ports in: use `helpers.patchEnvFile` for `KEY=VALUE` files, and `helpers.extractHost` to preserve a non-localhost host (a main-worktree `API_URL=http://1.2.3.4:8001` stays `http://1.2.3.4:<newPort>` rather than collapsing to localhost).
-- **Verbatim** files need no rewrite — `patch: (content) => content`. These are the easy ones to forget, and the usual cause of a half-broken linked worktree: editor settings (`.vscode/settings.json`), a secondary `.env`, a private-registry token (`.npmrc`), a package's own env file, etc. **List every one** — a missing entry means the linked worktree silently lacks that file.
-- Set `optional: true` for a file that may legitimately be absent in the main worktree; a missing `{ path }` source then warns and skips instead of aborting.
+- **Verbatim** files need no `patch`. These are the easy ones to forget, and the usual cause of a half-broken linked worktree: editor settings (`.vscode/settings.json`), a secondary `.env`, a private-registry token (`.npmrc`), a package's own env file, etc. **List every one** — a missing entry means the linked worktree silently lacks that file.
+- Set `optional: true` for a file that may legitimately be absent at its source; it then warns and skips instead of aborting.
 
-**Two-stage flow.** (1) Once per repo, the developer creates the main worktree's actual config from its `.example` and customizes it. (2) For every sibling, setup copies the main worktree's config and patches the ports — so main-worktree customizations (a public dev IP, secrets, feature flags) flow in for free. Trade-off: mistakes in the main config propagate too; keep it clean. A consumer who prefers example-derived configs can set a per-entry `source` (e.g. `{ path: "...example" }`), usually behind a developer-local toggle so the choice stays per-developer.
+**Two-stage flow** (the `mainWorktree` source). (1) Once per repo, the developer creates the main worktree's actual config from its `.example` and customizes it. (2) For every sibling, setup copies the main worktree's config and patches the ports — so main-worktree customizations (a public dev IP, secrets, feature flags) flow in for free. Trade-off: mistakes in the main config propagate too; keep it clean. A consumer who prefers example-derived configs uses a `newWorktree` source (`{ kind: "newWorktree", path: "...example" }`), usually behind a developer-local toggle so the choice stays per-developer.
 
 ## Writing the Two Wrappers
 
@@ -88,7 +94,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 - `scriptPath` / `devServerScript` — absolute paths; leave the `import.meta.url` lines as-is (the package re-spawns the script for the detached finalize phase, and shells out to the dev-server script on removal).
 - `basePort`, `portStep` (default 10), `maxSlotCount` (default 19), and either `portNames` (consecutive ports) or `ports(slot)` (full control).
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
-- `configFiles: Array<{ path, source?, patch, optional? }>` — one entry per gitignored file (see above). `patch(content, { slot, ports, mainWorktree, currentWorktree })` returns the rewritten content. `source` overrides where the initial content comes from: `{ path }` (relative to main), `{ content }` (verbatim), or a callback returning either.
+- `configFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree" }`, `{ kind: "newWorktree", path }`, or `{ kind: "content", content }`. `patch(content, { slot, ports, mainWorktree, currentWorktree })` rewrites per slot; omit it to copy verbatim.
 - `finalizeWorktree(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers an orphan-and-reuse of the slot (force-remove a stale slot-named container before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@paleo/workspace`. May `return { extra }` — an opaque blob persisted on the slot and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from slot + paths, so they don't go here).
 - `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.slot` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.extra` for non-derivable ids. Swallow errors.
 - `printSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.

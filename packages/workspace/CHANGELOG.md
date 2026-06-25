@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.23.0
+
+### Minor Changes
+
+- `configFiles`: `source` is now required and discriminated by `kind` (`mainWorktree`, `newWorktree`, `content`); `patch` is now optional.
+
 ## 0.22.0
 
 ### Minor Changes

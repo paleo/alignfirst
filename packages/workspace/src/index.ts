@@ -9,7 +9,9 @@ export type {
   PatchContext,
   ConfigFileEntry,
   ConfigFileSource,
-  ConfigFileSourceSpec,
+  MainWorktreeConfigFileSource,
+  NewWorktreeConfigFileSource,
+  ContentConfigFileSource,
   PurgeContext,
 } from "./workspace.js";
 
