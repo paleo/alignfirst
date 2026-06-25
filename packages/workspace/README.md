@@ -59,7 +59,8 @@ await runWorkspace({
   configFiles: [
     {
       path: ".env",
-      patch: (content, { ports }) =>
+      source: { kind: "mainWorktree" }, // or { kind: "newWorktree", path } | { kind: "content", content }
+      patch: (content, { ports }) => // optional; omit to copy verbatim
         helpers.patchEnvFile(content, {
           PORT: String(ports.frontend),
           SERVER_PORT: String(ports.server),

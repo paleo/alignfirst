@@ -332,10 +332,10 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 function enterWorktree(worktree: string): void {
   const shell = process.env.SHELL;
   if (shell === undefined || !process.stdin.isTTY) {
-    console.log(`Now run: cd ${worktree}`);
+    console.log(`Now run: cd '${worktree}'`);
     return;
   }
-  console.error(`Entering ${worktree} (exit to return).`);
+  console.log(`Entering ${worktree} (exit to return).`);
   spawnSync(shell, [], { cwd: worktree, stdio: "inherit" });
 }
 
@@ -527,13 +527,11 @@ function resolveTarget(
   config: WorkspaceConfig,
   registryDir: string,
 ): ResolvedTarget {
-  if (selector.slot !== undefined) {
+  const { slot, dir } = selector;
+  if (slot !== undefined || dir !== undefined) {
     const registry = readSlots(ctx.mainWorktree, registryDir);
-    return targetFromSlot(selector.slot, registry, config);
-  }
-  if (selector.dir !== undefined) {
-    const registry = readSlots(ctx.mainWorktree, registryDir);
-    return targetFromDir(selector.dir, registry);
+    if (slot !== undefined) return targetFromSlot(slot, registry, config);
+    if (dir !== undefined) return targetFromDir(dir, registry);
   }
   const resolved = resolveCurrentSlot(config.basePort, registryDir);
   return { slot: resolved.slot, worktree: resolved.worktree };

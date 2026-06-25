@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.25.1
+
+### Patch Changes
+
+- Quote the `--go` `cd` fallback hint and dedupe the registry read in `resolveTarget`.
+
 ## 0.25.0
 
 ### Minor Changes

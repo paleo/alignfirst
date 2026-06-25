@@ -7,7 +7,7 @@
 // project knowledge.
 // =============================================================================
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,7 +110,7 @@ await runWorkspace({
     // (it belongs to a different compose project, so `up` can't reuse it — it errors on the name
     // conflict). Force-remove it by name first so `up` is idempotent across slot reuse.
     try {
-      execSync(`docker rm -f ${container}`, { stdio: "pipe" });
+      execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
     } catch {
       // no leftover container
     }
@@ -166,8 +166,8 @@ await runWorkspace({
       if (existsSync(worktree)) {
         execSync("docker compose down -v", { stdio: "pipe", cwd: worktree });
       } else {
-        execSync(`docker rm -f ${container}`, { stdio: "pipe" });
-        execSync(`docker volume rm ${project}_db-data`, { stdio: "pipe" });
+        execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
+        execFileSync("docker", ["volume", "rm", `${project}_db-data`], { stdio: "pipe" });
       }
       if (extra?.tunnelId) closeDevTunnel(extra.tunnelId); // ADAPT: external teardown
     } catch {
