@@ -116,8 +116,9 @@ export interface WorkspaceConfig {
    * `<runtimeDir>/logs/workspace-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
    *
    * May return `{ extra }` — an opaque blob persisted on the slot entry and handed back to
-   * {@link purgeInfrastructure}. Use it to record what infrastructure to tear down by name (e.g.
-   * container and volume names) so an orphaned worktree can still be cleaned up after its config is gone.
+   * {@link purgeInfrastructure}, so an orphaned worktree can still be torn down after its config is gone.
+   * Store only teardown identifiers you cannot re-derive at purge time (e.g. a random external resource
+   * id). Deterministic names — containers, volumes — derive from `slot` + paths, so they don't belong here.
    */
   finalizeWorktree: (
     ctx: SetupContext,
@@ -332,11 +333,19 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 function enterWorktree(worktree: string): void {
   const shell = process.env.SHELL;
   if (shell === undefined || !process.stdin.isTTY) {
-    console.log(`Now run: cd '${worktree}'`);
+    printCdHint(worktree);
     return;
   }
   console.log(`Entering ${worktree} (exit to return).`);
-  spawnSync(shell, [], { cwd: worktree, stdio: "inherit" });
+  const result = spawnSync(shell, [], { cwd: worktree, stdio: "inherit" });
+  if (result.error) {
+    console.error(`Could not start ${shell}: ${result.error.message}`);
+    printCdHint(worktree);
+  }
+}
+
+function printCdHint(worktree: string): void {
+  console.log(`Now run: cd '${worktree}'`);
 }
 
 type SetupCommand = Extract<WorkspaceCommand, { kind: "setup" }>;

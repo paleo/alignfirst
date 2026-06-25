@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.25.2
+
+### Patch Changes
+
+- `--go` falls back to the `cd` hint (and reports the error) when `$SHELL` can't be started.
+
 ## 0.25.1
 
 ### Patch Changes
