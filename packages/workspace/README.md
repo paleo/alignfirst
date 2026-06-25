@@ -4,7 +4,7 @@ Run multiple local dev environments side by side, one per git worktree, with iso
 
 Each project writes two custom scripts on top, using these entry points:
 
-- `runWorkspace(config)` — worktree lifecycle (setup / remove / set-owner).
+- `runWorkspace(config)` — worktree lifecycle (setup / remove).
 - `runDevServer(config)` — dev-server start (foreground or background) / stop / list.
 
 ## Setup
@@ -26,7 +26,8 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 ## Workflow
 
 ```sh
-npm run workspace -- setup feat/42 -c   # new branch + worktree + isolated env
+npm run workspace -- setup feat/42 -c        # new branch + worktree + isolated env
+npm run workspace -- setup feat/42 -c --go   # …then drop into a shell there (exit to return)
 npm run dev                             # foreground: stream logs, CTRL+C stops; attaches if already running
 npm run dev -- up                       # start in the background (no-op if already running here)
 npm run dev -- up --restart             # stop the dev-server in this worktree if running, then start fresh
@@ -35,7 +36,7 @@ npm run dev -- restart                  # stop the dev-server in this worktree i
 npm run dev -- status                   # report whether this worktree's dev-server is UP or DOWN
 npm run dev -- list                     # active dev-servers across all worktrees
 npm run dev -- down                     # stop dev server (infrastructure stays up)
-npm run workspace -- remove feat/42     # full teardown
+npm run workspace -- remove ../my-wt    # full teardown (by dir path/name, --slot, or omit for current)
 npm run workspace -- prune              # heal workspaces whose worktree was deleted out-of-band
 npm run workspace -- --guide            # full operating guide (workspace + dev-server)
 ```
@@ -58,7 +59,8 @@ await runWorkspace({
   configFiles: [
     {
       path: ".env",
-      patch: (content, { ports }) =>
+      source: { kind: "mainWorktree" }, // or { kind: "newWorktree", path } | { kind: "content", content }
+      patch: (content, { ports }) => // optional; omit to copy verbatim
         helpers.patchEnvFile(content, {
           PORT: String(ports.frontend),
           SERVER_PORT: String(ports.server),
@@ -73,8 +75,8 @@ await runWorkspace({
   finalizeWorktree: async ({ currentWorktree }) => {
     // MUST be idempotent. Install deps, start containers, seed a database, etc.
   },
-  printSummary: ({ slot, branch, owner, ports, isMainWorktree, status }) =>
-    `Type:   ${isMainWorktree ? "main" : "linked"}\nStatus: ${status}\nSlot:   ${slot}\nBranch: ${branch}${owner ? `\nOwner:  ${owner}` : ""}\nServer: :${ports.server}`,
+  printSummary: ({ slot, branch, ports, isMainWorktree, status }) =>
+    `Type:   ${isMainWorktree ? "main" : "linked"}\nStatus: ${status}\nSlot:   ${slot}\nBranch: ${branch}\nServer: :${ports.server}`,
 });
 ```
 
@@ -104,7 +106,7 @@ await runDevServer({
     },
   ],
   printSummary: ({ slot, servers }) =>
-    `Dev servers started in slot ${slot.slot}${slot.owner ? ` (${slot.owner})` : ""}: ${servers
+    `Dev servers started in slot ${slot.slot}: ${servers
       .map((s) => `${s.server.name} :${s.port} (PID ${s.pid})`)
       .join(", ")}`,
 });

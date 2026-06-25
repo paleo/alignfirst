@@ -16,8 +16,8 @@ importers:
         specifier: ^0.6.2
         version: 0.6.2
       '@paleo/workspace':
-        specifier: ^0.20.0
-        version: 0.20.0
+        specifier: ^0.25.0
+        version: 0.25.0
 
 packages:
 
@@ -26,8 +26,8 @@ packages:
     engines: {node: '>=22.11.0'}
     hasBin: true
 
-  '@paleo/workspace@0.20.0':
-    resolution: {integrity: sha512-qHXT4jkveeHspYgLH841lbCveBGNwRa9ZpXvCsZnEwcYXz24LPaaWfBv9K0GGovHS36D6Pyl1EgpIayF1BDi6A==}
+  '@paleo/workspace@0.25.0':
+    resolution: {integrity: sha512-1MlpwK93JL8cP9iDQ9KRpSsMEkOuy7uDjCx9v3AjwdQnCP/xXnGwS5kySTwQXpl/gn/8BAOMtHpQKYJpRsEpWg==}
     engines: {node: '>=22.11.0'}
 
   accepts@2.0.0:
@@ -292,7 +292,7 @@ snapshots:
 
   '@paleo/docmap@0.6.2': {}
 
-  '@paleo/workspace@0.20.0': {}
+  '@paleo/workspace@0.25.0': {}
 
   accepts@2.0.0:
     dependencies:

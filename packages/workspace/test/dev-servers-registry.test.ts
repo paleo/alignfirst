@@ -23,7 +23,6 @@ function entry(
   return {
     slot,
     worktree: `/tmp/wt-${slot}`,
-    owner: "alice",
     pids,
     startedAt,
   };
@@ -87,12 +86,11 @@ describe("mergeDevServers", () => {
       servers: [entry(8110, { main: 1 }), entry(8120, { main: 2 })],
     };
     const override = {
-      servers: [{ ...entry(8120, { main: 99 }), owner: "bob" }, entry(8130, { main: 3 })],
+      servers: [entry(8120, { main: 99 }), entry(8130, { main: 3 })],
     };
     const merged = mergeDevServers(base, override);
     expect(merged.servers.map((e) => e.slot)).toEqual([8110, 8120, 8130]);
     expect(merged.servers[1].pids).toEqual({ main: 99 });
-    expect(merged.servers[1].owner).toBe("bob");
   });
 });
 

@@ -388,7 +388,6 @@ function registerStartedServer(
   const devEntry: DevServerEntry = {
     slot: slot.slot,
     worktree: slot.worktree,
-    owner: slot.owner,
     pids: spawnPids,
     startedAt: new Date().toISOString(),
   };
@@ -632,11 +631,8 @@ async function enforceCap(
     count: toEvict,
   });
   for (const entry of evicted) {
-    const ownerPart = entry.owner ? `, owner=${entry.owner}` : "";
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-    console.log(
-      `Evicted slot ${entry.slot} (branch=${branch}${ownerPart}, startedAt=${entry.startedAt}).`,
-    );
+    console.log(`Evicted slot ${entry.slot} (branch=${branch}, startedAt=${entry.startedAt}).`);
   }
 }
 
@@ -736,8 +732,7 @@ function defaultPrintSummary(
   runtimeDir: string,
 ): void {
   console.log("\nDev servers started!");
-  const ownerSuffix = slot.owner ? `, owner ${slot.owner}` : "";
-  console.log(`  Workspace: slot ${slot.slot}${ownerSuffix}`);
+  console.log(`  Workspace: slot ${slot.slot}`);
   for (const { server, port, pid } of servers) {
     if (server.kind === "spawn") {
       const url = `http://localhost:${port}/`;

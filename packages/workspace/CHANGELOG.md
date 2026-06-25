@@ -1,5 +1,47 @@
 # @paleo/workspace
 
+## 0.25.2
+
+### Patch Changes
+
+- `--go` falls back to the `cd` hint (and reports the error) when `$SHELL` can't be started.
+
+## 0.25.1
+
+### Patch Changes
+
+- Quote the `--go` `cd` fallback hint and dedupe the registry read in `resolveTarget`.
+
+## 0.25.0
+
+### Minor Changes
+
+- Remove the unused workspace `owner` feature (`--owner`, `set-owner`, the OWNER column, and `owner` in the contexts/registry). Breaking: drop `owner` from `printSummary`.
+
+## 0.24.0
+
+### Minor Changes
+
+- Select a workspace consistently across `remove`, `status`, `wait`, and `set-owner`: omit for the current worktree, give a directory (path or basename), or `--slot <port>`. Breaking: `remove <branch>` is gone — use the directory or `--slot`.
+
+## 0.23.0
+
+### Minor Changes
+
+- `configFiles`: `source` is now required and discriminated by `kind` (`mainWorktree`, `newWorktree`, `content`); `patch` is now optional.
+
+## 0.22.0
+
+### Minor Changes
+
+- Tear down an orphaned worktree's infrastructure on `prune`/`remove`. `finalizeWorktree` may return `{ extra }`, persisted on the slot and handed back to `purgeInfrastructure` (now also called for orphans, by name).
+
+## 0.21.0
+
+### Minor Changes
+
+- 62afc9a: Add `--go` to `workspace setup`: open an interactive shell in the new worktree (exit to return). Falls back to printing a `cd` hint when `$SHELL` is unset or stdin is not a tty.
+
 ## 0.20.0
 
 ### Minor Changes

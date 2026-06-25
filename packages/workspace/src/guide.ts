@@ -87,21 +87,23 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
     inspect: [
       {
         command: `${ws} list`,
-        comment: "all registered workspaces (slot, status, branch, path, owner, created)",
+        comment: "all registered workspaces (slot, status, branch, path, created)",
       },
       {
         command: `${ws} status`,
         comment: "current worktree summary (ports, branch, readiness, dev-server)",
       },
-      { command: `${ws} status --slot 8110`, comment: "same, for another worktree" },
-    ],
-    owner: [
-      { command: `${ws} setup my-branch -c --owner alice`, comment: "set on creation" },
-      { command: `${ws} set-owner bob`, comment: "update later, no rebuild" },
+      {
+        command: `${ws} status ../my-worktree`,
+        comment: "another worktree (by path or dir name; or --slot <port>)",
+      },
     ],
     remove: [
-      { command: `${ws} remove my-branch`, comment: "remove by branch name" },
       { command: `${ws} remove`, comment: "remove the current worktree (run from inside it)" },
+      {
+        command: `${ws} remove ../my-worktree`,
+        comment: "remove another (by path or dir name; or --slot <port>)",
+      },
     ],
     prune: [
       {

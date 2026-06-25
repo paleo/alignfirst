@@ -16,6 +16,6 @@
   },
   "devDependencies": {
     "@paleo/docmap": "^0.6.2",
-    "@paleo/workspace": "^0.20.0"
+    "@paleo/workspace": "^0.25.0"
   }
 }

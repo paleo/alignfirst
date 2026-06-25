@@ -7,21 +7,28 @@ export type WorkspaceCommand =
       branch?: string;
       newBranch: boolean;
       from?: string;
-      owner?: string;
       slot?: string;
       force: boolean;
       wait: boolean;
+      go: boolean;
     }
-  | { kind: "remove"; branch?: string; force: boolean }
+  | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
   | { kind: "list" }
   | { kind: "prune" }
-  | { kind: "status"; slot?: string }
-  | { kind: "wait"; slot?: string }
-  | { kind: "set-owner"; name: string }
+  | { kind: "status"; selector: WorkspaceSelector }
+  | { kind: "wait"; selector: WorkspaceSelector }
   | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "guide" }
   | { kind: "help" };
+
+/** Picks an existing workspace. Empty = the current worktree. */
+export interface WorkspaceSelector {
+  /** Path to the target worktree, or just its directory basename. */
+  dir?: string;
+  /** The target slot's primary port. */
+  slot?: string;
+}
 
 export interface ParsedWorkspaceArgs {
   command: WorkspaceCommand;
@@ -59,8 +66,6 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
-    case "set-owner":
-      return parseSetOwner(tokens);
     case "__finalize":
       return parseFinalize(tokens);
     case "migrate-0.16":
@@ -76,10 +81,10 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
-      owner: { type: "string" },
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       wait: { type: "boolean" },
+      go: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
     },
     allowPositionals: true,
@@ -87,11 +92,15 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   });
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
+  const go = values.go ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup <branch> -c` requires a branch name.");
   }
   if (values.from !== undefined && !newBranch) {
     throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
+  }
+  if (go && branch === undefined) {
+    throw new ConfigError("`--go` requires a branch (the worktree to enter).");
   }
   return {
     command: {
@@ -99,10 +108,10 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       branch,
       newBranch,
       from: values.from,
-      owner: values.owner,
       slot: values.slot,
       force: values.force ?? false,
       wait: values.wait ?? false,
+      go,
     },
     verbose: values.verbose ?? false,
   };
@@ -112,15 +121,20 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
+      slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
     },
     allowPositionals: true,
     strict: true,
   });
-  const branch = takeOptionalPositional(positionals, "remove");
+  const dir = takeOptionalPositional(positionals, "remove");
   return {
-    command: { kind: "remove", branch, force: values.force ?? false },
+    command: {
+      kind: "remove",
+      selector: buildSelector(dir, values.slot, "remove"),
+      force: values.force ?? false,
+    },
     verbose: values.verbose ?? false,
   };
 }
@@ -157,8 +171,11 @@ function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  rejectPositionals(positionals, "status");
-  return { command: { kind: "status", slot: values.slot }, verbose: values.verbose ?? false };
+  const dir = takeOptionalPositional(positionals, "status");
+  return {
+    command: { kind: "status", selector: buildSelector(dir, values.slot, "status") },
+    verbose: values.verbose ?? false,
+  };
 }
 
 function parseWait(tokens: string[]): ParsedWorkspaceArgs {
@@ -171,19 +188,11 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  rejectPositionals(positionals, "wait");
-  return { command: { kind: "wait", slot: values.slot }, verbose: values.verbose ?? false };
-}
-
-function parseSetOwner(tokens: string[]): ParsedWorkspaceArgs {
-  const { values, positionals } = parseArgs({
-    args: tokens,
-    options: { verbose: { type: "boolean", short: "v" } },
-    allowPositionals: true,
-    strict: true,
-  });
-  const name = takeRequiredPositional(positionals, "set-owner", "name");
-  return { command: { kind: "set-owner", name }, verbose: values.verbose ?? false };
+  const dir = takeOptionalPositional(positionals, "wait");
+  return {
+    command: { kind: "wait", selector: buildSelector(dir, values.slot, "wait") },
+    verbose: values.verbose ?? false,
+  };
 }
 
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
@@ -206,6 +215,17 @@ function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
   });
   const oldRegistryDir = takeRequiredPositional(positionals, "migrate-0.16", "old-registry-dir");
   return { command: { kind: "migrate", oldRegistryDir }, verbose: values.verbose ?? false };
+}
+
+function buildSelector(
+  dir: string | undefined,
+  slot: string | undefined,
+  command: string,
+): WorkspaceSelector {
+  if (dir !== undefined && slot !== undefined) {
+    throw new ConfigError(`\`workspace ${command}\` accepts a directory or --slot, not both.`);
+  }
+  return { dir, slot };
 }
 
 function takeOptionalPositional(positionals: string[], command: string): string | undefined {
@@ -236,26 +256,27 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [--owner <name>] [-s|--slot <port>] [--force] [--wait]",
+      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [-s|--slot <port>] [--force] [--wait] [--go]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
       "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
       "      Finalize runs in the background; add --wait to block until it reaches READY.",
-      "  remove [<branch>] [--force]",
-      "      Remove a workspace by branch, or the current one when omitted.",
-      "      Refuses on uncommitted changes unless --force.",
+      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
+      "      combine with --wait to enter only once it is READY. Requires a branch and $SHELL.",
+      "  remove [<dir>] [-s|--slot <port>] [--force]",
+      "      Remove a workspace, selected by directory (path or basename) or --slot;",
+      "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
       "  list",
-      "      List all registered workspaces (slot, status, branch, path, owner, created).",
+      "      List all registered workspaces (slot, status, branch, path, created).",
       "  prune",
       "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
       "      and drop their registry entries, then run `git worktree prune`.",
-      "  status [-s|--slot <port>]",
+      "  status [<dir>] [-s|--slot <port>]",
       "      Print a workspace summary (ports, branch, readiness, dev-server).",
-      "  wait [-s|--slot <port>]",
+      "      Selected by directory (path or basename) or --slot; the current worktree when omitted.",
+      "  wait [<dir>] [-s|--slot <port>]",
       "      Block until the background finalize reaches READY (exit 0) or FAILED (exit 1).",
-      "  set-owner <name>",
-      "      Update the current workspace's owner (no rebuild).",
       "",
       "Global options:",
       "  -v, --verbose   Show intermediate output.",
