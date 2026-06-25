@@ -88,7 +88,7 @@ if (!protocol) {
 
 // --- Log file (inputs) ---
 
-const logDir = process.env.ALIGNFIRST_COACHING_LOG_DIR;
+const logDir = process.env.ALIGNFIRST_COACHING_DEBUG_LOG_DIR;
 let logPath;
 if (logDir) {
   const now = new Date();
