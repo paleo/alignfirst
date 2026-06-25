@@ -36,7 +36,7 @@ npm run dev -- restart                  # stop the dev-server in this worktree i
 npm run dev -- status                   # report whether this worktree's dev-server is UP or DOWN
 npm run dev -- list                     # active dev-servers across all worktrees
 npm run dev -- down                     # stop dev server (infrastructure stays up)
-npm run workspace -- remove feat/42     # full teardown
+npm run workspace -- remove ../my-wt    # full teardown (by dir path/name, --slot, or omit for current)
 npm run workspace -- prune              # heal workspaces whose worktree was deleted out-of-band
 npm run workspace -- --guide            # full operating guide (workspace + dev-server)
 ```

@@ -177,41 +177,33 @@ export function resolveCurrentSlot(basePort: number, registryDir: string): Resol
 
 export interface SetOwnerInput {
   newOwner: string | undefined;
-  currentWorktree: string;
+  slotPort: string;
   mainWorktree: string;
   registryDir: string;
-  isMainWorktree: boolean;
 }
 
 export function handleSetOwner(input: SetOwnerInput): {
   slotPort: string;
   owner: string | undefined;
 } {
-  if (input.isMainWorktree) {
-    console.error("Error: `workspace set-owner` must be run from a linked worktree.");
-    process.exit(1);
-  }
   const registry = readSlots(input.mainWorktree, input.registryDir);
-  const resolvedCurrent = resolve(input.currentWorktree);
-  const entry = Object.entries(registry.slots).find(
-    ([, v]) => resolve(v.worktree) === resolvedCurrent,
-  );
-  if (!entry) {
-    console.error("Error: No slot found for this worktree in the registry.");
+  const slotData = registry.slots[input.slotPort];
+  if (!slotData) {
+    console.error(`Error: No slot ${input.slotPort} in registry.`);
     process.exit(1);
   }
-  const [slotPort, slotData] = entry;
   const updated: SlotEntry = {
     worktree: slotData.worktree,
     createdAt: slotData.createdAt,
     status: slotData.status,
   };
+  if (slotData.main) updated.main = true;
   if (slotData.failure) updated.failure = slotData.failure;
   if (slotData.extra !== undefined) updated.extra = slotData.extra;
   if (input.newOwner !== undefined) updated.owner = input.newOwner;
-  registry.slots[slotPort] = updated;
+  registry.slots[input.slotPort] = updated;
   writeSlots(input.mainWorktree, input.registryDir, registry);
-  return { slotPort, owner: input.newOwner };
+  return { slotPort: input.slotPort, owner: input.newOwner };
 }
 
 interface PickSlotArgs {

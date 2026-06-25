@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.24.0
+
+### Minor Changes
+
+- Select a workspace consistently across `remove`, `status`, `wait`, and `set-owner`: omit for the current worktree, give a directory (path or basename), or `--slot <port>`. Breaking: `remove <branch>` is gone — use the directory or `--slot`.
+
 ## 0.23.0
 
 ### Minor Changes

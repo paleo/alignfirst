@@ -88,27 +88,68 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["setup", "a", "b"])).toThrow(ConfigError);
   });
 
-  it("parses `remove` without a branch", () => {
+  it("parses `remove` without a selector", () => {
     const { command } = parseWorkspaceArgs(["remove"]);
-    expect(command).toEqual({ kind: "remove", branch: undefined, force: false });
+    expect(command).toEqual({
+      kind: "remove",
+      selector: { dir: undefined, slot: undefined },
+      force: false,
+    });
   });
 
-  it("parses `remove <branch> --force`", () => {
-    const { command } = parseWorkspaceArgs(["remove", "feat/42", "--force"]);
-    expect(command).toEqual({ kind: "remove", branch: "feat/42", force: true });
+  it("parses `remove <dir> --force`", () => {
+    const { command } = parseWorkspaceArgs(["remove", "../my-wt", "--force"]);
+    expect(command).toEqual({
+      kind: "remove",
+      selector: { dir: "../my-wt", slot: undefined },
+      force: true,
+    });
+  });
+
+  it("parses `remove --slot <port>`", () => {
+    const { command } = parseWorkspaceArgs(["remove", "--slot", "8110"]);
+    expect(command).toEqual({
+      kind: "remove",
+      selector: { dir: undefined, slot: "8110" },
+      force: false,
+    });
+  });
+
+  it("rejects `remove <dir> --slot` together", () => {
+    expect(() => parseWorkspaceArgs(["remove", "../my-wt", "--slot", "8110"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `--no-remote-check` flag", () => {
     expect(() => parseWorkspaceArgs(["remove", "--no-remote-check"])).toThrow(ConfigError);
   });
 
-  it("parses `set-owner <name>`", () => {
-    const { command } = parseWorkspaceArgs(["set-owner", "alice"]);
-    expect(command).toEqual({ kind: "set-owner", name: "alice" });
+  it("parses `set-owner <name>` and `set-owner <name> <dir>`", () => {
+    expect(parseWorkspaceArgs(["set-owner", "alice"]).command).toEqual({
+      kind: "set-owner",
+      name: "alice",
+      selector: { dir: undefined, slot: undefined },
+    });
+    expect(parseWorkspaceArgs(["set-owner", "alice", "../my-wt"]).command).toEqual({
+      kind: "set-owner",
+      name: "alice",
+      selector: { dir: "../my-wt", slot: undefined },
+    });
+  });
+
+  it("parses `set-owner <name> --slot <port>`", () => {
+    expect(parseWorkspaceArgs(["set-owner", "alice", "--slot", "8110"]).command).toEqual({
+      kind: "set-owner",
+      name: "alice",
+      selector: { dir: undefined, slot: "8110" },
+    });
   });
 
   it("rejects `set-owner` without a name", () => {
     expect(() => parseWorkspaceArgs(["set-owner"])).toThrow(ConfigError);
+  });
+
+  it("rejects `set-owner` with too many positionals", () => {
+    expect(() => parseWorkspaceArgs(["set-owner", "alice", "../wt", "extra"])).toThrow(ConfigError);
   });
 
   it("parses `list`", () => {
@@ -124,16 +165,30 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["prune", "feat/42"])).toThrow(ConfigError);
   });
 
-  it("parses `status` and `status --slot`", () => {
-    expect(parseWorkspaceArgs(["status"]).command).toEqual({ kind: "status", slot: undefined });
+  it("parses `status`, `status <dir>` and `status --slot`", () => {
+    expect(parseWorkspaceArgs(["status"]).command).toEqual({
+      kind: "status",
+      selector: { dir: undefined, slot: undefined },
+    });
+    expect(parseWorkspaceArgs(["status", "../my-wt"]).command).toEqual({
+      kind: "status",
+      selector: { dir: "../my-wt", slot: undefined },
+    });
     expect(parseWorkspaceArgs(["status", "--slot", "8110"]).command).toEqual({
       kind: "status",
-      slot: "8110",
+      selector: { dir: undefined, slot: "8110" },
     });
   });
 
+  it("rejects `status <dir> --slot` together", () => {
+    expect(() => parseWorkspaceArgs(["status", "../my-wt", "--slot", "8110"])).toThrow(ConfigError);
+  });
+
   it("parses `wait`", () => {
-    expect(parseWorkspaceArgs(["wait"]).command).toEqual({ kind: "wait", slot: undefined });
+    expect(parseWorkspaceArgs(["wait"]).command).toEqual({
+      kind: "wait",
+      selector: { dir: undefined, slot: undefined },
+    });
   });
 
   it("parses `migrate-0.16 <old-registry-dir>`", () => {

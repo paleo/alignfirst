@@ -11,9 +11,14 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { parseWorkspaceArgs, printWorkspaceHelp, type WorkspaceCommand } from "./cli.js";
+import {
+  parseWorkspaceArgs,
+  printWorkspaceHelp,
+  type WorkspaceCommand,
+  type WorkspaceSelector,
+} from "./cli.js";
 import {
   findOwnEntry,
   liveWorktrees,
@@ -315,7 +320,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       await handleRemove(command, ctx, run, config, registryDir);
       return;
     case "set-owner":
-      handleSetOwnerMode(command, ctx, registryDir);
+      handleSetOwnerMode(command, ctx, config, registryDir);
       return;
     case "setup": {
       const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
@@ -524,23 +529,78 @@ async function runFinalize(
   }
 }
 
-function resolveTargetSlot(
-  slotArg: string | undefined,
+/** The single workspace a `status`/`wait`/`remove`/`set-owner` selector points at. */
+interface ResolvedTarget {
+  slot: number;
+  worktree: string;
+  owner?: string;
+}
+
+function resolveTarget(
+  selector: WorkspaceSelector,
+  ctx: WorktreeContext,
   config: WorkspaceConfig,
   registryDir: string,
-): number {
-  if (slotArg !== undefined) {
-    const slot = Number(slotArg);
-    const scheme = resolvePortScheme(config);
-    if (!isValidPort(slot, scheme)) {
-      console.error(
-        `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
-      );
-      process.exit(1);
-    }
-    return slot;
+): ResolvedTarget {
+  if (selector.slot !== undefined) {
+    const registry = readSlots(ctx.mainWorktree, registryDir);
+    return targetFromSlot(selector.slot, registry, config);
   }
-  return resolveCurrentSlot(config.basePort, registryDir).slot;
+  if (selector.dir !== undefined) {
+    const registry = readSlots(ctx.mainWorktree, registryDir);
+    return targetFromDir(selector.dir, registry);
+  }
+  const resolved = resolveCurrentSlot(config.basePort, registryDir);
+  return { slot: resolved.slot, worktree: resolved.worktree, owner: resolved.owner };
+}
+
+function targetFromSlot(
+  slotArg: string,
+  registry: SlotsRegistry,
+  config: WorkspaceConfig,
+): ResolvedTarget {
+  const scheme = resolvePortScheme(config);
+  const slot = Number(slotArg);
+  if (!isValidPort(slot, scheme)) {
+    console.error(
+      `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
+    );
+    process.exit(1);
+  }
+  const entry = registry.slots[String(slot)];
+  if (!entry) {
+    console.error(`Error: No slot ${slot} in registry.`);
+    process.exit(1);
+  }
+  return { slot, worktree: entry.worktree, owner: entry.owner };
+}
+
+function targetFromDir(dir: string, registry: SlotsRegistry): ResolvedTarget {
+  const port = matchWorktreeByDir(dir, registry, process.cwd());
+  if (port === undefined) {
+    console.error(
+      `Error: No workspace matching "${dir}" (by path or directory name). Run \`workspace list\`.`,
+    );
+    process.exit(1);
+  }
+  const entry = registry.slots[port];
+  return { slot: Number(port), worktree: entry.worktree, owner: entry.owner };
+}
+
+/** Matches `dir` against the registry: first as a path (resolved against `cwd`), then by basename. */
+export function matchWorktreeByDir(
+  dir: string,
+  registry: SlotsRegistry,
+  cwd: string,
+): string | undefined {
+  const resolvedPath = resolve(cwd, dir);
+  for (const [port, entry] of Object.entries(registry.slots)) {
+    if (resolve(entry.worktree) === resolvedPath) return port;
+  }
+  for (const [port, entry] of Object.entries(registry.slots)) {
+    if (basename(entry.worktree) === dir) return port;
+  }
+  return undefined;
 }
 
 function printWorktreeInfo(
@@ -614,21 +674,9 @@ function printDevServerBlock(
 type StatusCommand = Extract<WorkspaceCommand, { kind: "status" }>;
 
 function runStatus(command: StatusCommand, config: WorkspaceConfig, registryDir: string): void {
-  if (command.slot !== undefined) {
-    const slot = resolveTargetSlot(command.slot, config, registryDir);
-    const ctx = detectWorktree();
-    const entry = readSlots(ctx.mainWorktree, registryDir).slots[String(slot)];
-    if (!entry) {
-      console.error(`Error: No slot ${slot} in registry.`);
-      process.exit(1);
-    }
-    printWorktreeInfo(config, registryDir, slot, entry.worktree, { owner: entry.owner });
-    return;
-  }
-  const resolved = resolveCurrentSlot(config.basePort, registryDir);
-  printWorktreeInfo(config, registryDir, resolved.slot, resolved.worktree, {
-    owner: resolved.owner,
-  });
+  const ctx = detectWorktree();
+  const target = resolveTarget(command.selector, ctx, config, registryDir);
+  printWorktreeInfo(config, registryDir, target.slot, target.worktree, { owner: target.owner });
 }
 
 function runList(registryDir: string): void {
@@ -797,8 +845,9 @@ async function runWait(
   registryDir: string,
 ): Promise<void> {
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
-  const slot = resolveTargetSlot(command.slot, config, registryDir);
-  await waitForSlot(slot, config, registryDir);
+  const ctx = detectWorktree();
+  const target = resolveTarget(command.selector, ctx, config, registryDir);
+  await waitForSlot(target.slot, config, registryDir);
 }
 
 async function waitForSlot(
@@ -853,82 +902,80 @@ async function handleRemove(
   registryDir: string,
 ): Promise<void> {
   const verboseLog = makeVerboseLog(run.verbose);
-  const removeHere = command.branch === undefined;
   const registry = readSlots(ctx.mainWorktree, registryDir);
-  const target = resolveRemoveTarget(command, ctx, registry);
+  const target = resolveTarget(command.selector, ctx, config, registryDir);
+  const slotPort = String(target.slot);
+  const worktree = target.worktree;
+  if (resolve(worktree) === resolve(ctx.mainWorktree)) {
+    console.error("Error: Cannot remove the main worktree.");
+    process.exit(1);
+  }
+  const removeHere = resolve(worktree) === resolve(ctx.currentWorktree);
+  const branch = getWorktreeBranch(worktree) ?? "(detached)";
+  const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
 
   // Refuse to remove while the detached finalize is still writing to slots.json / workspace-setup.log:
   // racing the two corrupts the registry and leaves the worktree directory orphaned.
-  if (registry.slots[target.slotPort]?.status === "pending") {
+  if (registry.slots[slotPort]?.status === "pending") {
     console.error(
-      `Error: Setup is still in progress for slot ${target.slotPort}. ` +
-        `Run 'workspace wait --slot ${target.slotPort}' to wait for it to finish (or fail), then retry the removal.`,
+      `Error: Setup is still in progress for slot ${slotPort}. ` +
+        `Run 'workspace wait --slot ${slotPort}' to wait for it to finish (or fail), then retry the removal.`,
     );
     process.exit(1);
   }
 
-  const ownerSuffix = target.owner ? `, owner ${target.owner}` : "";
-
-  if (!existsSync(target.worktreePath)) {
-    console.warn(
-      `Warning: Worktree directory ${target.worktreePath} not found. Cleaning up registry only.`,
-    );
-    await stopOrphanedDevServer(ctx.mainWorktree, registryDir, target.worktreePath);
+  if (!existsSync(worktree)) {
+    console.warn(`Warning: Worktree directory ${worktree} not found. Cleaning up registry only.`);
+    await stopOrphanedDevServer(ctx.mainWorktree, registryDir, worktree);
     await runPurgeInfrastructure(config, {
-      worktree: target.worktreePath,
+      worktree,
       mainWorktree: ctx.mainWorktree,
-      slot: Number(target.slotPort),
-      extra: registry.slots[target.slotPort]?.extra,
+      slot: target.slot,
+      extra: registry.slots[slotPort]?.extra,
       verbose: run.verbose,
     });
-    delete registry.slots[target.slotPort];
+    delete registry.slots[slotPort];
     writeSlots(ctx.mainWorktree, registryDir, registry);
     pruneGitWorktrees(ctx.mainWorktree);
-    console.log(
-      `Removed registry entry for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}).`,
-    );
+    console.log(`Removed registry entry for branch "${branch}" (slot ${slotPort}${ownerSuffix}).`);
     return;
   }
 
-  if (!command.force && isWorktreeDirty(target.worktreePath)) {
+  if (!command.force && isWorktreeDirty(worktree)) {
     console.error(
-      `Error: Uncommitted changes in ${target.worktreePath}. Commit or stash them, or pass --force.`,
+      `Error: Uncommitted changes in ${worktree}. Commit or stash them, or pass --force.`,
     );
     process.exit(1);
   }
 
-  const targetEntry = findOwnEntry(ctx.mainWorktree, registryDir, target.worktreePath);
+  const targetEntry = findOwnEntry(ctx.mainWorktree, registryDir, worktree);
   if (targetEntry) {
-    stopTargetDevServer(config.devServerScript, target.worktreePath, verboseLog);
+    stopTargetDevServer(config.devServerScript, worktree, verboseLog);
   } else {
-    verboseLog(`No dev-server running in ${target.worktreePath}; skipping stop.`);
+    verboseLog(`No dev-server running in ${worktree}; skipping stop.`);
   }
 
   await runPurgeInfrastructure(config, {
-    worktree: target.worktreePath,
+    worktree,
     mainWorktree: ctx.mainWorktree,
-    slot: Number(target.slotPort),
-    extra: registry.slots[target.slotPort]?.extra,
+    slot: target.slot,
+    extra: registry.slots[slotPort]?.extra,
     verbose: run.verbose,
   });
 
-  delete registry.slots[target.slotPort];
+  delete registry.slots[slotPort];
   writeSlots(ctx.mainWorktree, registryDir, registry);
-  removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, target.worktreePath);
+  removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, worktree);
 
-  if (removeHere) {
-    process.chdir(ctx.mainWorktree);
-  }
+  if (removeHere) process.chdir(ctx.mainWorktree);
 
-  removeWorktree(target.worktreePath, run);
+  removeWorktree(worktree, run);
 
   console.log(
-    `Removed workspace for branch "${target.branch}" (slot ${target.slotPort}${ownerSuffix}). ` +
-      `Branch "${target.branch}" kept.`,
+    `Removed workspace for branch "${branch}" (slot ${slotPort}${ownerSuffix}). ` +
+      `Branch "${branch}" kept.`,
   );
-  if (removeHere) {
-    console.log(`Now run: cd ${ctx.mainWorktree}`);
-  }
+  if (removeHere) console.log(`Now run: cd ${ctx.mainWorktree}`);
 }
 
 async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext): Promise<void> {
@@ -940,39 +987,48 @@ type SetOwnerCommand = Extract<WorkspaceCommand, { kind: "set-owner" }>;
 function handleSetOwnerMode(
   command: SetOwnerCommand,
   ctx: WorktreeContext,
+  config: WorkspaceConfig,
   registryDir: string,
 ): void {
+  const target = resolveTarget(command.selector, ctx, config, registryDir);
+  if (resolve(target.worktree) === resolve(ctx.mainWorktree)) {
+    console.error("Error: Cannot set the owner of the main worktree.");
+    process.exit(1);
+  }
   const newOwner = command.name;
   const { slotPort } = handleSetOwner({
     newOwner,
-    currentWorktree: ctx.currentWorktree,
+    slotPort: String(target.slot),
     mainWorktree: ctx.mainWorktree,
     registryDir,
-    isMainWorktree: ctx.isMainWorktree,
   });
+  propagateOwnerToDevServers(ctx.mainWorktree, registryDir, target.worktree, newOwner);
+  console.log(`Owner for slot ${slotPort}: ${newOwner}`);
+}
 
-  // Propagate to dev-servers.json entries for this worktree.
-  const devServersPath = join(ctx.mainWorktree, registryDir, "dev-servers.json");
-  if (existsSync(devServersPath)) {
-    const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
-      servers: { worktree: string; owner?: string }[];
-    };
-    let changed = false;
-    const resolvedCurrent = resolve(ctx.currentWorktree);
-    for (const server of data.servers) {
-      if (resolve(server.worktree) === resolvedCurrent) {
-        if (newOwner !== undefined) server.owner = newOwner;
-        else delete server.owner;
-        changed = true;
-      }
-    }
-    if (changed) {
-      mkdirSync(dirname(devServersPath), { recursive: true });
-      writeFileSync(devServersPath, `${JSON.stringify(data, undefined, 2)}\n`);
+function propagateOwnerToDevServers(
+  mainWorktree: string,
+  registryDir: string,
+  worktree: string,
+  newOwner: string,
+): void {
+  const devServersPath = join(mainWorktree, registryDir, "dev-servers.json");
+  if (!existsSync(devServersPath)) return;
+  const data = JSON.parse(readFileSync(devServersPath, "utf-8")) as {
+    servers: { worktree: string; owner?: string }[];
+  };
+  let changed = false;
+  const resolvedTarget = resolve(worktree);
+  for (const server of data.servers) {
+    if (resolve(server.worktree) === resolvedTarget) {
+      server.owner = newOwner;
+      changed = true;
     }
   }
-
-  console.log(`Owner for slot ${slotPort}: ${newOwner ?? "(none)"}`);
+  if (changed) {
+    mkdirSync(dirname(devServersPath), { recursive: true });
+    writeFileSync(devServersPath, `${JSON.stringify(data, undefined, 2)}\n`);
+  }
 }
 
 type MigrateCommand = Extract<WorkspaceCommand, { kind: "migrate" }>;
@@ -1159,58 +1215,6 @@ export async function resolveConfigSource(
         content: typeof source.content === "function" ? await source.content() : source.content,
       };
   }
-}
-
-interface RemoveTarget {
-  slotPort: string;
-  branch: string;
-  worktreePath: string;
-  owner?: string;
-}
-
-function resolveRemoveTarget(
-  command: RemoveCommand,
-  ctx: WorktreeContext,
-  registry: ReturnType<typeof readSlots>,
-): RemoveTarget {
-  if (command.branch === undefined) {
-    if (ctx.isMainWorktree) {
-      console.error("Error: Cannot remove the main worktree.");
-      process.exit(1);
-    }
-    const resolvedCurrent = resolve(ctx.currentWorktree);
-    const entry = Object.entries(registry.slots).find(
-      ([, v]) => resolve(v.worktree) === resolvedCurrent,
-    );
-    if (!entry) {
-      console.error("Error: No slot found for this worktree in the registry.");
-      process.exit(1);
-    }
-    const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
-    return {
-      slotPort: entry[0],
-      branch,
-      worktreePath: ctx.currentWorktree,
-      owner: entry[1].owner,
-    };
-  }
-
-  const branch = command.branch;
-  const entry = Object.entries(registry.slots).find(
-    ([, v]) => getWorktreeBranch(v.worktree) === branch,
-  );
-  if (!entry) {
-    console.error(`Error: No workspace found for branch "${branch}" in the registry.`);
-    process.exit(1);
-  }
-  const worktreePath = entry[1].worktree;
-  if (resolve(ctx.currentWorktree) === resolve(worktreePath)) {
-    console.error(
-      "Error: You are currently in this worktree. Run `workspace remove` (no branch) instead.",
-    );
-    process.exit(1);
-  }
-  return { slotPort: entry[0], branch, worktreePath, owner: entry[1].owner };
 }
 
 /**
