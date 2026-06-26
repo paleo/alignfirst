@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.25.3
+
+### Patch Changes
+
+- Streamline the README: define what a "workspace" is, and replace the verbose API dump with a pointer to the skill's reference.
+
 ## 0.25.2
 
 ### Patch Changes

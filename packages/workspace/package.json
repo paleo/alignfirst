@@ -1,13 +1,15 @@
 {
   "name": "@paleo/workspace",
-  "version": "0.25.2",
+  "version": "0.25.3",
   "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [
     "workspace",
     "worktree",
     "environment",
     "concurrent",
-    "local"
+    "isolated",
+    "local",
+    "dev-server"
   ],
   "license": "CC0-1.0",
   "author": "Thomas MUR",
