@@ -278,11 +278,22 @@ export interface ExpectNoProtocolDelegationOptions {
   timeoutMs?: number;
 }
 
+export interface NoProtocolDelegationResult {
+  call: ClaudeCall;
+  /**
+   * Bus cursor captured the instant the delegation is detected, before the
+   * judge runs. The judge is a multi-second Anthropic round-trip; the agent
+   * posts its summary right after the claude mock returns, so a cursor taken
+   * after the judge lands past the summary and strands it.
+   */
+  cursorAfterDelegation: number;
+}
+
 export async function expectNoProtocolDelegation(
   ctx: ScenarioContext,
   handle: ClaudeMockHandle,
   { rubric, label, timeoutMs = 90_000 }: ExpectNoProtocolDelegationOptions,
-): Promise<ClaudeCall> {
+): Promise<NoProtocolDelegationResult> {
   const claudeCall = await handle.waitForCall({
     predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]),
     rejectOn: (call) => !isAlignfirstWrapperCall(call),
@@ -290,6 +301,7 @@ export async function expectNoProtocolDelegation(
       `unexpected non-wrapper claude call: argv=${JSON.stringify(call.argv)}`,
     timeoutMs,
   });
+  const cursorAfterDelegation = await ctx.getCursor();
 
   const target = claudeCall.entry;
   if (!target) {
@@ -308,7 +320,7 @@ export async function expectNoProtocolDelegation(
     label,
   });
 
-  return claudeCall;
+  return { call: claudeCall, cursorAfterDelegation };
 }
 
 export interface ExpectCodingDelegationOptions {
