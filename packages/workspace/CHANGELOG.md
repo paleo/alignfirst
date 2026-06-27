@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.25.4
+
+### Patch Changes
+
+- Improve the README.
+
 ## 0.25.3
 
 ### Patch Changes

@@ -15,7 +15,7 @@ Several workspaces run at once without colliding, so you can develop, test, or h
 
 ## Setup
 
-The `alignfirst-setup-guide` skill is a setup-time companion. Install the skill (globally or locally):
+The `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill (globally or locally):
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
@@ -24,7 +24,7 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 Then, in your project, ask your agent:
 
 ```text
-Use your alignfirst-setup-guide skill. Set up worktree-based local environments in this project.
+Use your alignfirst-setup-guide skill. Set up workspace in this project.
 ```
 
 The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
