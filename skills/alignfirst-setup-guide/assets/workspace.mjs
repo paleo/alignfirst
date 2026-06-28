@@ -8,8 +8,8 @@
 // =============================================================================
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { copyFileSync, existsSync } from "node:fs";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@paleo/workspace";
 
@@ -95,6 +95,24 @@ await runWorkspace({
       optional: true,
     },
   ],
+
+  // ADAPT (optional): runs BEFORE configFiles are copied. Seed gitignored files
+  // the kernel will look for — typically the main worktree's config, from its
+  // committed .example — so a fresh clone's first `workspace setup` works with no
+  // manual step (otherwise a mainWorktree-sourced config has no initial content
+  // and setup aborts). MUST be idempotent; on a linked-worktree setup it MUST NOT
+  // touch the main worktree, so gate on isMainWorktree. List one [template, target]
+  // per mainWorktree-sourced config that has a committed template. Drop this field
+  // when every configFile uses a newWorktree or content source.
+  preSetup: ({ isMainWorktree, currentWorktree, force, log }) => {
+    if (!isMainWorktree) return;
+    for (const [template, target] of [[".env.example", ".env"]]) {
+      const targetPath = join(currentWorktree, target);
+      if (existsSync(targetPath) && !force) continue;
+      copyFileSync(join(currentWorktree, template), targetPath);
+      log(`Bootstrapped ${target} from ${template}.`);
+    }
+  },
 
   // ADAPT: Detached finalization step. Runs in the background after the
   // worktree is created and the foreground command has returned.
