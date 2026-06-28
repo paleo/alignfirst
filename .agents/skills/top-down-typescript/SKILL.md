@@ -1,14 +1,14 @@
 ---
-name: paleo-typescript-style
-description: TypeScript and JavaScript coding style conventions. Read before writing or reviewing TypeScript/JavaScript code, including code inside a spec or a plan.
+name: top-down-typescript
+description: TypeScript and JavaScript coding style conventions, centered on top-down narrative ordering (caller first, helpers below) and functions over classes. Read before writing or reviewing TypeScript/JavaScript code, including code inside a spec or a plan.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.1.1"
+  version: "0.2.0"
   repository: https://github.com/paleo/skills
 ---
 
-# Paleo's TypeScript Coding Style
+# Top-Down TypeScript Coding Style
 
 ## General Rules
 
@@ -111,11 +111,19 @@ metadata:
 
 Before adding a dependency or dev-dependency, search the codebase first and reuse the version already in use. If not found, install the latest version using the default install command.
 
+## Changeset messages
+
+Write for someone already using the project who wants to know what changed, in a few words. Mention only what is actionable for them; skip the _why_ and the internal details. Always a single short paragraph.
+
+- New feature: name it in a few words.
+- Extends a feature: title it if obvious, otherwise "Improved the {X} feature."
+- Nothing actionable (for example documentation or refactoring): stay succinct, like "Improved documentation about {topic}."
+
+When a version mixes actionable and non-actionable changes (for example a big refactoring plus a small feature), mention only the actionable one. Mention non-actionable changes only when there is nothing else for the user.
+
 ## Improving code quality
 
-If the code is fine, say so. Otherwise, apply the following principles to keep the code clean, maintainable, and efficient.
-
-## SRP - Single Responsibility Principle
+### SRP - Single Responsibility Principle
 
 Think of it as **narrative decomposition**: the caller reads like a paragraph that names what happens; each helper expands one sentence of that paragraph.
 
@@ -156,15 +164,15 @@ Guidelines:
 - Avoid exceeding the height of one screen (~50 lines) for function implementations.
 - Keep code clean and self-explanatory rather than adding explanatory comments.
 
-## DRY - Don't Repeat Yourself
+### DRY - Don't Repeat Yourself
 
 Each time you see duplicated logic, take the time to refactor it into a reusable function.
 
-## YAGNI - You Aren't Gonna Need It
+### YAGNI - You Aren't Gonna Need It
 
 Do not keep unused code such as variables, functions, implementations, etc.
 
-## Warning signs
+### Warning signs
 
 - Fallbacks to empty string or zero rarely have a good reason: review every `?? ""` and `?? 0` and confirm it is intentional. Otherwise, understand the typing and find an elegant fix.
   - Note: a valid use case for `?? ""` is when the UI requires an empty string.
@@ -173,7 +181,7 @@ Do not keep unused code such as variables, functions, implementations, etc.
 - Do not use `ReturnType<T>` or `Parameters<T>` if you can import the actual type.
 - Do not use `SomeType["someMemberName"]` if you can import the actual type.
 
-## Remove Unnecessary Comments
+### Remove Unnecessary Comments
 
 - About comments: the fewer the better. Comments are read by skilled developers. Each comment must be sharp, concise, straight to the point. Each word must be carefully weighted and chosen.
 - Remove comments that are redundant with the code itself.

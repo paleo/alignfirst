@@ -52,5 +52,3 @@ npm run docmap
 - `.local-wt/` — per-worktree. Dev-server logs, setup log.
 - `.local/` — symlinked across worktrees. Shared gitignored files (slot registry, dev-server registry, personal notes).
 - `.plans/` — symlinked across worktrees. AlignFirst task plans.
-
-Always exclude `.local/`, `.local-wt/`, and `.plans/` from codebase searches.

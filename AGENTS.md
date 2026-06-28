@@ -37,20 +37,12 @@ Commit message convention: we use conventional commit, e.g., `feat: [#123] add n
 
 Branch naming convention: `<ticket-id>/<1-3-words>`.
 
-Add `paleo-typescript-style` skill to every plan.
+Add the `top-down-typescript` skill to every plan.
 
 ## Coding rules
 
-Apply the `paleo-typescript-style` skill.
+Apply the `top-down-typescript` skill.
 
 - Use UTF-8 encoding with 2-space indentation, 100-char line width.
 - Use the semicolon syntax.
 - Prefer double quotes `"`.
-
-## Guidelines when writing markdown files
-
-- **Important:** Use sharp, precise, concise words, straight to the point. The less, the better. Make each word count.
-- Do not fill the context with bloated orders.
-- Do not treat the agent like a child; no need to be insistent and authoritarian. Make what is important more obvious.
-
-**Writing Markdown**: Do not wrap text to 80 chars; let it run freely.
