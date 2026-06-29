@@ -40,7 +40,7 @@ To bootstrap a `docs/` directory, wire docmap into a project, and migrate existi
 npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
 ```
 
-Then asks your agent:
+Then ask your agent:
 
 ```md
 Use your **alignfirst-setup-guide** skill. What are my options for bootstrapping a `docs/` directory in this project?

@@ -63,7 +63,8 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
       },
       {
         command: `${ws} wait ../my-worktree`,
-        comment: "block until ready/failed (no arg here; by path/dir name; or --slot <port>)",
+        comment:
+          "block until ready/failed (by path/dir name; --slot <port>; or omit the arg for the current worktree)",
       },
     ],
     recovery: [

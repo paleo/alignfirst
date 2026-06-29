@@ -555,7 +555,7 @@ function resolveTarget(
   const { slot, dir } = selector;
   if (slot !== undefined || dir !== undefined) {
     const registry = readSlots(ctx.mainWorktree, registryDir);
-    if (slot !== undefined) return targetFromSlot(slot, registry, config);
+    if (slot !== undefined) return targetFromSlot(slot, registry, config, ctx.mainWorktree);
     if (dir !== undefined) return targetFromDir(dir, registry);
   }
   const resolved = resolveCurrentSlot(config.basePort, registryDir);
@@ -566,6 +566,7 @@ function targetFromSlot(
   slotArg: string,
   registry: SlotsRegistry,
   config: WorkspaceConfig,
+  mainWorktree: string,
 ): ResolvedTarget {
   const scheme = resolvePortScheme(config);
   const slot = Number(slotArg);
@@ -576,6 +577,11 @@ function targetFromSlot(
       `Error: --slot expects ${scheme.basePort} (main worktree) or a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
     );
     process.exit(1);
+  }
+  // The main worktree is never recorded in the slots registry, so map its reserved slot straight to
+  // the known main worktree path — mirroring how the no-arg current-worktree path synthesizes it.
+  if (isReservedMainSlot(slot, scheme)) {
+    return { slot, worktree: mainWorktree };
   }
   const entry = registry.slots[String(slot)];
   if (!entry) {

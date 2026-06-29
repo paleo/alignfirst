@@ -566,7 +566,7 @@ function checkWorktreeReady(
     runtimeDir: config.runtimeDir,
     entry,
     now: Date.now(),
-    pm: packageManagerCommands(cwd),
+    pm: packageManagerCommands(),
   });
   if (result.ok) return;
   console.error(result.message);

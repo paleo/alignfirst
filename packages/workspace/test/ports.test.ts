@@ -40,7 +40,7 @@ describe("isReservedMainSlot", () => {
     expect(isReservedMainSlot(8090, scheme)).toBe(false);
   });
 
-  it("is the slot isValidPort excludes, so the base port stays out of the assignable pool", () => {
+  it("matches the slot isValidPort excludes, so the base port stays out of the assignable pool", () => {
     expect(isValidPort(scheme.basePort, scheme)).toBe(false);
     expect(isReservedMainSlot(scheme.basePort, scheme)).toBe(true);
     expect(allPorts(scheme)).not.toContain(scheme.basePort);

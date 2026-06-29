@@ -14,20 +14,22 @@ export interface ScriptInvocation {
 }
 
 /** A `workspace <args>` command string, prefixed for the detected package manager. */
-export function wsCmd(args: string, cwd?: string): string {
-  return `${packageManagerCommands(cwd).workspace.withArgs} ${args}`;
+export function wsCmd(args: string): string {
+  return `${packageManagerCommands().workspace.withArgs} ${args}`;
 }
 
 /** A `dev <args>` command string, prefixed for the detected package manager. */
-export function devCmd(args: string, cwd?: string): string {
-  return `${packageManagerCommands(cwd).dev.withArgs} ${args}`;
+export function devCmd(args: string): string {
+  return `${packageManagerCommands().dev.withArgs} ${args}`;
 }
 
-// The detected manager is stable for the whole CLI process (same repo, same lockfile), so cache it.
+// The detected manager is stable for the whole CLI process (same repo, same lockfile), so detect
+// once from the process cwd and cache it. No per-call cwd: every worktree of a repo resolves to the
+// same manager, and a single CLI process never spans repos.
 let cached: PackageManagerCommands | undefined;
 
-export function packageManagerCommands(cwd: string = process.cwd()): PackageManagerCommands {
-  cached ??= detectPackageManager(cwd);
+export function packageManagerCommands(): PackageManagerCommands {
+  cached ??= detectPackageManager(process.cwd());
   return cached;
 }
 

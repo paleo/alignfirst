@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.6.3
+
+### Patch Changes
+
+- 1c6c16b: Improved the README setup instructions.
+
 ## 0.6.2
 
 ### Patch Changes
