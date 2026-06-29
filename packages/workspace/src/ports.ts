@@ -34,6 +34,11 @@ export function isValidPort(port: number, scheme: PortScheme): boolean {
   );
 }
 
+/** The base port is the main worktree's reserved slot — not an assignable sibling slot. */
+export function isReservedMainSlot(port: number, scheme: PortScheme): boolean {
+  return port === scheme.basePort;
+}
+
 export function allPorts(scheme: PortScheme): number[] {
   const ports: number[] = [];
   for (let p = scheme.minPort; p <= scheme.maxPort; p += scheme.portStep) {

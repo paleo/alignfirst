@@ -35,7 +35,14 @@ import {
   setupLogPath,
 } from "./helpers.js";
 import { findOrphanPorts } from "./orphans.js";
-import { defaultComputePorts, isValidPort, type PortScheme, resolvePortScheme } from "./ports.js";
+import { wsCmd } from "./package-manager.js";
+import {
+  defaultComputePorts,
+  isReservedMainSlot,
+  isValidPort,
+  type PortScheme,
+  resolvePortScheme,
+} from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
   markSlotFailed,
@@ -432,7 +439,7 @@ async function runSetup(
   teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    teeLog(`Block until ready: workspace wait --slot ${slot}`);
+    teeLog(`Block until ready: ${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}`);
   }
 
   const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];
@@ -447,6 +454,15 @@ async function runSetup(
   return { slot, worktree: setupCtx.currentWorktree };
 }
 
+/**
+ * The `wait` command to suggest for a worktree: no argument when it is the current worktree (the
+ * common case), otherwise selected by its directory name.
+ */
+function waitCommand(worktree: string, currentWorktree: string): string {
+  if (resolve(worktree) === resolve(currentWorktree)) return wsCmd("wait");
+  return wsCmd(`wait ${basename(worktree)}`);
+}
+
 function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, force: boolean): void {
   if (force) return;
   const registry = readSlots(ctx.mainWorktree, registryDir);
@@ -458,8 +474,8 @@ function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, forc
   const [slotPort] = found;
   console.error(
     `Error: Setup is already in progress for slot ${slotPort}. ` +
-      `Run 'workspace wait --slot ${slotPort}' to wait for it to finish (or fail), ` +
-      "then retry. Use --force to bypass.",
+      `Run \`${wsCmd("wait")}\` to wait for it to finish (or fail), then retry. ` +
+      "Use --force to bypass.",
   );
   process.exit(1);
 }
@@ -553,9 +569,11 @@ function targetFromSlot(
 ): ResolvedTarget {
   const scheme = resolvePortScheme(config);
   const slot = Number(slotArg);
-  if (!isValidPort(slot, scheme)) {
+  // The main worktree's reserved base port is a selectable slot even though it is not an assignable
+  // sibling slot, so accept it here alongside the stepped sibling range.
+  if (!isValidPort(slot, scheme) && !isReservedMainSlot(slot, scheme)) {
     console.error(
-      `Error: --slot expects a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
+      `Error: --slot expects ${scheme.basePort} (main worktree) or a port in [${scheme.minPort}, ${scheme.maxPort}] stepped by ${scheme.portStep}; got "${slotArg}".`,
     );
     process.exit(1);
   }
@@ -571,7 +589,7 @@ function targetFromDir(dir: string, registry: SlotsRegistry): ResolvedTarget {
   const port = matchWorktreeByDir(dir, registry, process.cwd());
   if (port === undefined) {
     console.error(
-      `Error: No workspace matching "${dir}" (by path or directory name). Run \`workspace list\`.`,
+      `Error: No workspace matching "${dir}" (by path or directory name). Run \`${wsCmd("list")}\`.`,
     );
     process.exit(1);
   }
@@ -744,7 +762,7 @@ function hintLiveOrphans(liveOrphans: string[]): void {
   if (liveOrphans.length === 0) return;
   console.log(
     `\nNote: ${liveOrphans.length} workspace(s) have a deleted worktree but a still-running ` +
-      "dev-server. Run `workspace prune` to stop them and clean up.",
+      `dev-server. Run \`${wsCmd("prune")}\` to stop them and clean up.`,
   );
 }
 
@@ -901,7 +919,7 @@ async function handleRemove(
   if (registry.slots[slotPort]?.status === "pending") {
     console.error(
       `Error: Setup is still in progress for slot ${slotPort}. ` +
-        `Run 'workspace wait --slot ${slotPort}' to wait for it to finish (or fail), then retry the removal.`,
+        `Run \`${waitCommand(worktree, ctx.currentWorktree)}\` to wait for it to finish (or fail), then retry the removal.`,
     );
     process.exit(1);
   }

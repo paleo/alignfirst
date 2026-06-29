@@ -27,8 +27,8 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 
 Then ask your agent:
 
-```text
-Use your alignfirst-setup-guide skill. Configure the AlignFirst skills in this project.
+```md
+Use your **alignfirst-setup-guide** skill. Configure the `alignfirst` skills in this project.
 ```
 
 Once done, you can uninstall the setup-guide skill — it won't be used by your project anymore.

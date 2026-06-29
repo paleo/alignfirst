@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { type PackageManagerCommands, detectPackageManager } from "./package-manager.js";
 import { REGISTRY_SUBDIR } from "./slots.js";
 
 // One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
@@ -11,18 +11,6 @@ import { REGISTRY_SUBDIR } from "./slots.js";
 //   {{WS}} / {{DEV}} / {{DEV_BASE}} — inline command prefixes
 //   {{RUNTIME_DIR}} / {{REGISTRY_SUBDIR}} — the per-worktree runtime dir + its registry sub-dir
 //   {{LAYOUT:shared}} — the shared-dirs line, listing the configured `sharedDirs` by name
-
-interface ScriptInvocation {
-  /** Run with no forwarded args, e.g. `npm run dev`. */
-  base: string;
-  /** Prefix before forwarded args, e.g. `npm run dev --`. */
-  withArgs: string;
-}
-
-export interface PackageManagerCommands {
-  workspace: ScriptInvocation;
-  dev: ScriptInvocation;
-}
 
 export interface GuideLayout {
   /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
@@ -74,8 +62,8 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
         comment: "set up the current worktree (idempotent; bootstrap + retry path)",
       },
       {
-        command: `${ws} wait --slot 8110`,
-        comment: "block until ready (exit 0) or failed (exit 1)",
+        command: `${ws} wait ../my-worktree`,
+        comment: "block until ready/failed (no arg here; by path/dir name; or --slot <port>)",
       },
     ],
     recovery: [
@@ -173,35 +161,4 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
 
 export function printGuide(layout: GuideLayout, cwd: string = process.cwd()): void {
   console.log(renderGuide(detectPackageManager(cwd), layout));
-}
-
-// Mirror docmap's lockfile walk. These scripts are always wired as project scripts (the package
-// is a dev dependency), so there is no global-install fallback — default to npm when unsure.
-function detectPackageManager(cwd: string): PackageManagerCommands {
-  let dir = cwd;
-  while (true) {
-    if (existsSync(join(dir, "pnpm-lock.yaml"))) return same("pnpm");
-    if (existsSync(join(dir, "yarn.lock"))) return same("yarn run");
-    if (existsSync(join(dir, "bun.lockb")) || existsSync(join(dir, "bun.lock")))
-      return same("bun run");
-    if (existsSync(join(dir, "package-lock.json"))) return npm();
-    const parent = dirname(dir);
-    if (parent === dir) return npm();
-    dir = parent;
-  }
-}
-
-// Only npm needs a `--` separator before forwarded args; every other manager passes them verbatim.
-function npm(): PackageManagerCommands {
-  return {
-    workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
-    dev: { base: "npm run dev", withArgs: "npm run dev --" },
-  };
-}
-
-function same(prefix: string): PackageManagerCommands {
-  return {
-    workspace: { base: `${prefix} workspace`, withArgs: `${prefix} workspace` },
-    dev: { base: `${prefix} dev`, withArgs: `${prefix} dev` },
-  };
 }

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { wsCmd } from "./package-manager.js";
+
 export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
   return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.log");
 }
@@ -35,7 +37,7 @@ export function lastLines(content: string, count: number): string {
  */
 export function readPortFromEnvFile(file: string, varName: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
+    console.error(`Error: ${file} not found. Run \`${wsCmd("setup")}\` first.`);
     process.exit(1);
   }
   const content = readFileSync(file, "utf-8");
@@ -53,7 +55,7 @@ export function readPortFromEnvFile(file: string, varName: string): number {
  */
 export function readPortFromJsonFile(file: string, jsonPath: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run \`workspace setup\` first.`);
+    console.error(`Error: ${file} not found. Run \`${wsCmd("setup")}\` first.`);
     process.exit(1);
   }
   const data = JSON.parse(readFileSync(file, "utf-8"));
@@ -105,7 +107,7 @@ export function copyAndPatchFile(
       if (!optional) {
         console.error(
           `Error: config source ${source.path} not found. Bootstrap it first ` +
-            "(`workspace setup`, or commit the template), or mark the entry as optional.",
+            `(\`${wsCmd("setup")}\`, or commit the template), or mark the entry as optional.`,
         );
         process.exit(1);
       }

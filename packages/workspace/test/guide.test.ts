@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { type GuideLayout, type PackageManagerCommands, renderGuide } from "../src/guide.js";
+import { type GuideLayout, renderGuide } from "../src/guide.js";
+import type { PackageManagerCommands } from "../src/package-manager.js";
 
 const NPM: PackageManagerCommands = {
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },

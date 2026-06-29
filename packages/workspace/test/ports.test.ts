@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { allPorts, defaultComputePorts, isValidPort, resolvePortScheme } from "../src/ports.js";
+import {
+  allPorts,
+  defaultComputePorts,
+  isReservedMainSlot,
+  isValidPort,
+  resolvePortScheme,
+} from "../src/ports.js";
 
 const scheme = resolvePortScheme({ basePort: 8100 });
 
@@ -24,6 +30,20 @@ describe("isValidPort", () => {
   it("rejects non-integers", () => {
     expect(isValidPort(8110.5, scheme)).toBe(false);
     expect(isValidPort(Number.NaN, scheme)).toBe(false);
+  });
+});
+
+describe("isReservedMainSlot", () => {
+  it("accepts only the base port (the main worktree's reserved slot)", () => {
+    expect(isReservedMainSlot(8100, scheme)).toBe(true);
+    expect(isReservedMainSlot(8110, scheme)).toBe(false);
+    expect(isReservedMainSlot(8090, scheme)).toBe(false);
+  });
+
+  it("is the slot isValidPort excludes, so the base port stays out of the assignable pool", () => {
+    expect(isValidPort(scheme.basePort, scheme)).toBe(false);
+    expect(isReservedMainSlot(scheme.basePort, scheme)).toBe(true);
+    expect(allPorts(scheme)).not.toContain(scheme.basePort);
   });
 });
 
