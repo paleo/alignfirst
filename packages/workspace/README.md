@@ -23,8 +23,8 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 
 Then, in your project, ask your agent:
 
-```text
-Use your alignfirst-setup-guide skill. Set up workspace in this project.
+```md
+Use your **alignfirst-setup-guide** skill. Set up *workspaces* in this project.
 ```
 
 The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
@@ -56,11 +56,3 @@ npm run workspace -- --guide            # full operating guide (workspace + dev-
 ## API Reference
 
 The documentation on `runWorkspace` and `runDevServer` (ports, `configFiles`, `finalizeWorktree`, dev-server descriptors, and more), along with the design rationale, lives in the skill's [workspace-setup.md](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) reference.
-
-## Build / test
-
-```sh
-npm install
-npm run build
-npm test
-```

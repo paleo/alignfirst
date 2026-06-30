@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { allPorts, isValidPort, type PortScheme } from "./ports.js";
+import { wsCmd } from "./package-manager.js";
+import { allPorts, isReservedMainSlot, isValidPort, type PortScheme } from "./ports.js";
 import { getWorktreeBranch } from "./worktree.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
@@ -146,7 +147,7 @@ export function validateSlotAvailability(
   if (slotArg === undefined) return;
   const port = Number(slotArg);
   if (!isValidPort(port, ctx.scheme)) {
-    console.error(`Error: Slot must be a valid port: ${allPorts(ctx.scheme).join(", ")}.`);
+    console.error(`Error: ${invalidSlotMessage(port, ctx.scheme)}`);
     process.exit(1);
   }
   const registry = readSlots(ctx.mainWorktree, ctx.registryDir);
@@ -160,10 +161,17 @@ export function validateSlotAvailability(
   }
 }
 
+function invalidSlotMessage(port: number, scheme: PortScheme): string {
+  if (isReservedMainSlot(port, scheme)) {
+    return `Slot ${port} is reserved for the main worktree, which takes it automatically — omit --slot.`;
+  }
+  return `Slot must be a valid port: ${allPorts(scheme).join(", ")}.`;
+}
+
 export function resolveCurrentSlot(basePort: number, registryDir: string): ResolvedSlot {
   const slot = lookupSlotForCwd(registryDir) ?? synthesizeMainSlot(basePort);
   if (!slot) {
-    console.error("Error: No workspace here. Run `workspace setup` first.");
+    console.error(`Error: No workspace here. Run \`${wsCmd("setup")}\` first.`);
     process.exit(1);
   }
   return slot;
@@ -185,7 +193,7 @@ function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
   if (args.slot !== undefined) {
     const port = Number(args.slot);
     if (!isValidPort(port, args.scheme)) {
-      console.error(`Error: Slot must be a valid port: ${allPorts(args.scheme).join(", ")}.`);
+      console.error(`Error: ${invalidSlotMessage(port, args.scheme)}`);
       process.exit(1);
     }
     const existing = registry.slots[String(port)];
@@ -207,7 +215,9 @@ function pickSlotPort(args: PickSlotArgs, registry: SlotsRegistry): number {
   for (const port of allPorts(args.scheme)) {
     if (!registry.slots[String(port)]) return port;
   }
-  console.error("Error: All slots are taken. Remove a workspace with `workspace remove` first.");
+  console.error(
+    `Error: All slots are taken. Remove a workspace with \`${wsCmd("remove")}\` first.`,
+  );
   process.exit(1);
 }
 

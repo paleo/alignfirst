@@ -14,6 +14,8 @@ Install the CLI as a dev dependency and add a `docmap` script:
 npm install -D @paleo/docmap
 ```
 
+In your `package.json`:
+
 ```json
 {
   "scripts": {
@@ -22,10 +24,26 @@ npm install -D @paleo/docmap
 }
 ```
 
-To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill and let an agent drive the setup:
+In your `AGENTS.md` or `CLAUDE.md` file:
+
+```md
+## Docmap - Seek Documentation
+
+**Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+```
+
+### Bootstrapping a docs/ directory
+
+To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+```
+
+Then ask your agent:
+
+```md
+Use your **alignfirst-setup-guide** skill. What are my options for bootstrapping a `docs/` directory in this project?
 ```
 
 ## How It Works
@@ -103,18 +121,3 @@ Each positional path is resolved against the docs root:
 - **Neither** → a fuzzy basename search over `.md` files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
 
 Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/topic-a/`, `docs/topic-a`, and `topic-a` resolve identically — so listing output can be pasted straight back as arguments.
-
-### Options
-
-| Option | Description |
-| --- | --- |
-| `--help` | Print full help and exit. |
-| `--guide` | Print the authoring guide (conventions for writing documents) and exit. |
-| `--search <terms>` | List documents whose path or frontmatter (title, summary, read_when) matches every whitespace-separated term. |
-| `--recursive` | Walk the entire tree. Applies to directory listings (root or positional). |
-| `--check` | Validate all files and directories. Reports name and frontmatter issues. |
-| `--root <path>` | Use a custom directory as the docs root instead of `docs/`. |
-
-Unknown `--flags` are warned about on stderr and skipped; stdout stays clean. A leftover `docmap --dir topic-a` therefore still works — `--dir` is skipped and `topic-a` is treated as a positional directory.
-
-For internals, see [docs/docmap-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/docmap-architecture.md).

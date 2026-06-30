@@ -11,6 +11,7 @@ import {
 import { dirname, join } from "node:path";
 
 import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
+import { devCmd, type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
 import {
   type DevServerEntry,
   evictOldest,
@@ -235,7 +236,7 @@ async function runForeground(
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log("\nDev-server stopped externally (e.g. `dev down`). Exiting.");
+    console.log(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
     process.exit(0);
   });
   await new Promise<never>(() => {});
@@ -268,7 +269,7 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
   const onSignal = (): void => {
     if (detaching) return;
     detaching = true;
-    console.log("\nDetached. The dev-server is still running (`dev down` to stop it).");
+    console.log(`\nDetached. The dev-server is still running (\`${devCmd("down")}\` to stop it).`);
     process.exit(0);
   };
   process.on("SIGINT", onSignal);
@@ -278,7 +279,7 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
   watchForExternalStop(Object.values(entry.pids).filter(isProcessAlive), () => {
     if (detaching) return;
     detaching = true;
-    console.log("\nDev-server stopped externally (e.g. `dev down`). Exiting.");
+    console.log(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
     process.exit(0);
   });
   await new Promise<never>(() => {});
@@ -523,9 +524,11 @@ export function buildWorktreeReadyMessage(input: {
   runtimeDir: string;
   entry: SlotEntry | undefined;
   now: number;
+  pm: PackageManagerCommands;
 }): WorktreeReadyCheck {
-  const { slotPort, worktreePath, runtimeDir, entry, now } = input;
+  const { slotPort, worktreePath, runtimeDir, entry, now, pm } = input;
   if (!entry || entry.status === "ready") return { ok: true };
+  const ws = pm.workspace.withArgs;
   const logPath = setupLogPath(worktreePath, runtimeDir);
   if (entry.status === "pending") {
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
@@ -534,7 +537,7 @@ export function buildWorktreeReadyMessage(input: {
       message:
         `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
         `Tail: ${logPath}\n` +
-        "Run `workspace wait` to block until it finishes, or retry `dev` once ready.",
+        `Run \`${ws} wait\` to block until it finishes, or retry \`${pm.dev.base}\` once ready.`,
     };
   }
   const failureAt = entry.failure?.at ?? entry.createdAt;
@@ -545,7 +548,7 @@ export function buildWorktreeReadyMessage(input: {
     message:
       `Error: Worktree setup failed (slot ${slotPort}, ${elapsed} ago): ${reason}\n` +
       `Tail: ${logPath}\n` +
-      "Re-run `workspace setup` to retry the finalize.",
+      `Re-run \`${ws} setup\` to retry the finalize.`,
   };
 }
 
@@ -563,6 +566,7 @@ function checkWorktreeReady(
     runtimeDir: config.runtimeDir,
     entry,
     now: Date.now(),
+    pm: packageManagerCommands(),
   });
   if (result.ok) return;
   console.error(result.message);
@@ -596,7 +600,7 @@ async function handleAlreadyRunning(
   console.log(
     `dev-server already running for this worktree (slot ${entry.slot}, pids: ${pidList}).`,
   );
-  console.log("Run `dev down` to stop it, or re-run with `--restart` to restart.");
+  console.log(`Run \`${devCmd("down")}\` to stop it, or re-run with \`--restart\` to restart.`);
   return true;
 }
 
@@ -617,7 +621,7 @@ async function enforceCap(
   if (!evict) {
     console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
     printActiveServers(active);
-    console.error("Run `dev down` in another worktree, or `dev down --all`.");
+    console.error(`Run \`${devCmd("down")}\` in another worktree, or \`${devCmd("down --all")}\`.`);
     console.error("Re-run with `--evict` to evict the oldest.");
     process.exit(1);
   }

@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { buildWorktreeReadyMessage } from "../src/dev-server.js";
+import type { PackageManagerCommands } from "../src/package-manager.js";
 import type { SlotEntry } from "../src/slots.js";
 
 const NOW = Date.parse("2026-05-17T00:00:00.000Z");
+
+const PM: PackageManagerCommands = {
+  workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
+  dev: { base: "npm run dev", withArgs: "npm run dev --" },
+};
 
 function input(entry: SlotEntry | undefined): Parameters<typeof buildWorktreeReadyMessage>[0] {
   return {
@@ -12,6 +18,7 @@ function input(entry: SlotEntry | undefined): Parameters<typeof buildWorktreeRea
     runtimeDir: ".local-wt",
     entry,
     now: NOW,
+    pm: PM,
   };
 }
 
@@ -57,7 +64,7 @@ describe("buildWorktreeReadyMessage", () => {
     expect(result.message).toContain("failed");
     expect(result.message).toContain("boom");
     expect(result.message).toContain("30m");
-    expect(result.message).toContain("workspace setup");
+    expect(result.message).toContain("npm run workspace -- setup");
   });
 
   it("uses (no message) when failure.message is absent", () => {
