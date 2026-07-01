@@ -77,6 +77,7 @@ Examples: [openclaw-coder/playbook-test/scenarios](https://github.com/paleo/alig
 
 ```sh
 npm run env:build                                                  # build base + consumer image
+npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
 npm run e2e -- --channel all <scenario>                             # one scenario, both channels
 npm run e2e -- --channel all --all                                  # every scenario, both channels
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
@@ -86,7 +87,6 @@ npm run e2e -- --channel all --model all <scenario>                 # run every 
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
 npm run e2e -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
-npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
 npm run env:down                                                   # tear down a warm stack
 ```
 

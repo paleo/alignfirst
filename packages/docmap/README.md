@@ -43,7 +43,7 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 Then ask your agent:
 
 ```md
-Use your **alignfirst-setup-guide** skill. What are my options for bootstrapping a `docs/` directory in this project?
+Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a `docs/` directory in this project?
 ```
 
 ## How It Works
