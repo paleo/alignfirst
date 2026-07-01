@@ -34,14 +34,30 @@
   },
   "models": {
     "providers": {
+      "custom-anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "${ANTHROPIC_API_KEY}",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          }
+        ]
+      },
       "custom-openrouter": {
         "baseUrl": "https://openrouter.ai/api/v1",
         "apiKey": "${OPENROUTER_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen/qwen3.6-plus",
-            "name": "Qwen 3.6 Plus (OpenRouter)",
+            "id": "qwen/qwen3.7-plus",
+            "name": "Qwen 3.7 Plus (OpenRouter)",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
@@ -63,7 +79,7 @@
       {
         "id": "main",
         "name": "OpenClaw Main",
-        "model": "anthropic/claude-sonnet-4-6",
+        "model": "custom-anthropic/claude-sonnet-4-6",
         "workspace": "/home/claw/.openclaw/workspace"
       }
     ]

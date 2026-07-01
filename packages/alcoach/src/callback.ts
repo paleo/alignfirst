@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { relative } from "node:path";
+import { resolve } from "node:path";
 
 import type { CallbackConfig } from "./mode.js";
 
@@ -22,7 +22,9 @@ export function buildCallbackRequest(
   logPath: string,
   cwd: string,
 ): CallbackRequest {
-  const relativePath = relative(cwd, logPath);
+  // Absolute path: the callback dispatches an isolated agent turn whose cwd is not alcoach's project
+  // cwd, so a cwd-relative path would not resolve for the reader.
+  const absolutePath = resolve(cwd, logPath);
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (config.token) headers.authorization = `Bearer ${config.token}`;
   return {
@@ -31,7 +33,7 @@ export function buildCallbackRequest(
     body: {
       sessionKey: config.sessionKey,
       message:
-        `The AlignFirst coaching run finished. Read its log at \`${relativePath}\` ` +
+        `The AlignFirst coaching run finished. Read its log at \`${absolutePath}\` ` +
         "(the frontmatter holds the status and session id, the `---- Result ----` block holds the " +
         "outcome), then continue the workflow and report back to the user.",
       idempotencyKey: idempotencyKeyFor(logPath),

@@ -17,10 +17,11 @@ describe("buildCallbackRequest", () => {
     expect(req.headers["content-type"]).toBe("application/json");
   });
 
-  it("carries the session key and a message that points at the relative log path", () => {
+  it("carries the session key and a message that points at the absolute log path", () => {
     const req = buildCallbackRequest(CONFIG, "/proj/.plans/29/coding-sessions/s.md", "/proj");
     expect(req.body.sessionKey).toBe("current");
-    expect(req.body.message).toContain(".plans/29/coding-sessions/s.md");
+    // Absolute so the isolated callback turn (a different cwd) can resolve it.
+    expect(req.body.message).toContain("/proj/.plans/29/coding-sessions/s.md");
     expect(req.body.message).not.toContain("Session ID");
   });
 
