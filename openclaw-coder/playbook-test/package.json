@@ -14,11 +14,12 @@
     "e2e": "openclaw-test run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "~0.98.0",
     "@paleo/openclaw-channel-mock-core": "^0.3.1",
     "@paleo/openclaw-discord-mock": "^0.3.2",
     "@paleo/openclaw-slack-mock": "^0.3.2",
     "@paleo/openclaw-test": "^0.12.0",
-    "openclaw": "2026.5.18"
+    "openclaw": "2026.6.11"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",

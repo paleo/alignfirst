@@ -1,7 +1,7 @@
 // Hook transform for the alcoach coaching-session completion callback.
 //
 // alcoach POSTs `{ sessionKey, message, idempotencyKey }` to this hook (see
-// ALCOACH_CALLBACK_URL on the gateway service). The built-in `/hooks/agent`
+// ALIGNFIRST_COACH_CALLBACK_URL on the gateway service). The built-in `/hooks/agent`
 // path defaults to `deliver: true` (announce mode), which requires an explicit
 // delivery channel + target. In this harness neither resolves automatically:
 // two channels (discord-mock, slack-mock) are configured, and the target

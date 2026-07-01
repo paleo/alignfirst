@@ -20,7 +20,7 @@ RUN apk add --no-cache git && \
     mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects
 
 # PATH wrapper for the real `@paleo/alcoach` CLI. The package's built output is
-# live-mounted at /opt/alcoach (`${ALCOACH_DIR}:/opt/alcoach:ro` in the compose
+# live-mounted at /opt/alcoach (`${ALIGNFIRST_COACH_DIR}:/opt/alcoach:ro` in the compose
 # overlay), so alcoach edits iterate without a rebuild — mirroring the skill
 # live-mount. `/usr/local/bin` sits after `/opt/openclaw-test/mocks/bin` in
 # PATH, so this wrapper is only reached for `alcoach` (never shimmed), while

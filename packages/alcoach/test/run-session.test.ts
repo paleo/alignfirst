@@ -46,12 +46,12 @@ describe("buildClaudeArgs", () => {
 });
 
 describe("buildClaudeEnv", () => {
-  it("strips every ALCOACH_* var and the ALCOACH_UNSET names", () => {
+  it("strips every ALIGNFIRST_COACH_* var and the ALIGNFIRST_COACH_UNSET names", () => {
     const env = buildClaudeEnv(
       {
         PATH: "/bin",
-        ALCOACH_CALLBACK_TOKEN: "secret",
-        ALCOACH_RUN_CONFIG: "{}",
+        ALIGNFIRST_COACH_CALLBACK_TOKEN: "secret",
+        ALIGNFIRST_COACH_RUN_CONFIG: "{}",
         SECRET_KEY: "leak",
         KEEP: "yes",
       },
@@ -59,8 +59,8 @@ describe("buildClaudeEnv", () => {
     );
     expect(env.PATH).toBe("/bin");
     expect(env.KEEP).toBe("yes");
-    expect(env.ALCOACH_CALLBACK_TOKEN).toBeUndefined();
-    expect(env.ALCOACH_RUN_CONFIG).toBeUndefined();
+    expect(env.ALIGNFIRST_COACH_CALLBACK_TOKEN).toBeUndefined();
+    expect(env.ALIGNFIRST_COACH_RUN_CONFIG).toBeUndefined();
     expect(env.SECRET_KEY).toBeUndefined();
   });
 });

@@ -60,13 +60,27 @@ Skills:
 - **`alignfirst-coaching`** — teaches the agent to delegate coding tasks to Claude Code.
 - **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
 
-Optional `alignfirst-coaching` environment variables:
+The `alignfirst-coaching` skill drives the [`alcoach`](../packages/alcoach/README.md) CLI, which coaches Claude Code through a protocol and streams a live transcript to a log file under `.plans/`.
+
+Optional `alcoach` environment variables:
 
 ```bash
-export ALIGNFIRST_COACHING_DEBUG_LOG_DIR=path/to/directory # Write input/output logs
-export ALIGNFIRST_COACHING_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
-export ALIGNFIRST_COACHING_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
+export ALIGNFIRST_COACH_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_COACH_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
 ```
+
+#### Background runs and the completion callback
+
+Coaching runs are long, so `alcoach` does not block OpenClaw. When a callback URL is configured, a run executes as a detached background task: `alcoach` returns immediately, streams its transcript to the log, and on completion calls OpenClaw back **in the originating thread** so it resumes the workflow and posts the outcome to the user. The agent goes available and waits for that callback — it does **not** poll.
+
+Set these on the gateway so the callback resolves:
+
+```bash
+export ALIGNFIRST_COACH_CALLBACK_URL=http://127.0.0.1:<gateway-port>/hooks/agent  # its presence selects background mode
+export ALIGNFIRST_COACH_CALLBACK_TOKEN=<bearer-token>                             # must match hooks.token in openclaw.json
+```
+
+The per-thread session key is not an env var: the agent reads it from the `session_status` tool and passes it as `--session-key`. If a callback URL is configured but `--session-key` is missing, `alcoach` exits non-zero rather than degrading silently. Without a callback URL, `alcoach` runs in the foreground (for a human or another agent) and blocks until the run finishes.
 
 ### `openclaw.json`
 

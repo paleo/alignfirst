@@ -11,7 +11,7 @@ Run `alcoach` from the root of the project you are coaching, so the agent works 
 `alcoach` picks its mode from whether a callback target is resolvable:
 
 - **Foreground** (a human or another coding agent runs it): the command streams the transcript live and blocks until the run finishes, then prints the result. This is the default.
-- **Background** (OpenClaw runs it): set by `ALCOACH_CALLBACK_URL` (or `--callback-url`). The command prints `Started. Log: <path>` and returns in about a second. When the run finishes, `alcoach` calls OpenClaw back in the same thread session.
+- **Background** (OpenClaw runs it): set by `ALIGNFIRST_COACH_CALLBACK_URL` (or `--callback-url`). The command prints `Started. Log: <path>` and returns in about a second. When the run finishes, `alcoach` calls OpenClaw back in the same thread session.
 
 In background mode you **must not poll** the log or re-run the command to check progress. Pass `--session-key` (from the `session_status` tool, `sessionKey="current"`), go available, and wait for the callback to resume the workflow.
 

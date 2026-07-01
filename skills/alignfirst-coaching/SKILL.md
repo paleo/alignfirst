@@ -22,7 +22,7 @@ For `--new` modes, save the `Session ID:` (surfaced in the output in foreground,
 
 ## Foreground vs background — and the callback
 
-`alcoach` selects its mode automatically: **background** when a callback URL is resolvable (env `ALCOACH_CALLBACK_URL` or `--callback-url`), else **foreground**.
+`alcoach` selects its mode automatically: **background** when a callback URL is resolvable (env `ALIGNFIRST_COACH_CALLBACK_URL` or `--callback-url`), else **foreground**.
 
 - **Foreground** (a human or another coding agent): the command streams the transcript and blocks until the run finishes, then prints the result.
 - **Background** (OpenClaw): the command returns immediately with `Started. Log: <path>`, and on completion calls OpenClaw back in the same thread session via `POST <callbackUrl>`.

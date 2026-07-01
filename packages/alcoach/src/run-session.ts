@@ -18,7 +18,7 @@ export interface RunConfig {
   callback?: CallbackConfig;
 }
 
-export const RUN_CONFIG_ENV = "ALCOACH_RUN_CONFIG";
+export const RUN_CONFIG_ENV = "ALIGNFIRST_COACH_RUN_CONFIG";
 
 export async function runSession(config: RunConfig): Promise<void> {
   const state = createStreamState();
@@ -73,8 +73,8 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   return args;
 }
 
-// Strip every ALCOACH_* var (including the callback token and the run-config blob) plus any name in
-// the caller's ALCOACH_UNSET list, so wrapper env never leaks into the claude child.
+// Strip every ALIGNFIRST_COACH_* var (including the callback token and the run-config blob) plus any name in
+// the caller's ALIGNFIRST_COACH_UNSET list, so wrapper env never leaks into the claude child.
 export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, unset: string[]): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
   for (const name of unset) {
@@ -82,7 +82,7 @@ export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, unset: string[]): Nod
     if (trimmed) delete env[trimmed];
   }
   for (const key of Object.keys(env)) {
-    if (key.startsWith("ALCOACH_")) delete env[key];
+    if (key.startsWith("ALIGNFIRST_COACH_")) delete env[key];
   }
   return env;
 }

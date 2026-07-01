@@ -133,8 +133,8 @@ function buildRunConfig(
     isBackground,
     resume: parsed.resume,
     model: parsed.model,
-    skipPermissions: env.ALCOACH_SKIP_PERMISSIONS === "1",
-    unset: (env.ALCOACH_UNSET ?? "").split(","),
+    skipPermissions: env.ALIGNFIRST_COACH_SKIP_PERMISSIONS === "1",
+    unset: (env.ALIGNFIRST_COACH_UNSET ?? "").split(","),
     callback,
   };
 }
@@ -238,13 +238,13 @@ Options:
   --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>   Model override.
   --session-key <k> Callback target for OpenClaw (from the session_status tool).
-  --callback-url <u> Override ALCOACH_CALLBACK_URL.
+  --callback-url <u> Override ALIGNFIRST_COACH_CALLBACK_URL.
 
 Env:
-  ALCOACH_CALLBACK_URL     Callback endpoint; its presence selects background mode.
-  ALCOACH_CALLBACK_TOKEN   Bearer token for the callback.
-  ALCOACH_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
-  ALCOACH_UNSET            Comma-list of env vars to strip from the claude child.
+  ALIGNFIRST_COACH_CALLBACK_URL     Callback endpoint; its presence selects background mode.
+  ALIGNFIRST_COACH_CALLBACK_TOKEN   Bearer token for the callback.
+  ALIGNFIRST_COACH_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
+  ALIGNFIRST_COACH_UNSET            Comma-list of env vars to strip from the claude child.
 
 Run \`alcoach --guide\` for the full coaching guide.
 `;

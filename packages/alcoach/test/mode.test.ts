@@ -15,7 +15,10 @@ describe("resolveMode", () => {
   it("is background with a callback when a URL and session key are present", () => {
     const mode = resolveMode(
       { sessionKey: "current" },
-      { ALCOACH_CALLBACK_URL: "http://x/hooks/agent", ALCOACH_CALLBACK_TOKEN: "tok" },
+      {
+        ALIGNFIRST_COACH_CALLBACK_URL: "http://x/hooks/agent",
+        ALIGNFIRST_COACH_CALLBACK_TOKEN: "tok",
+      },
     );
     expect(isModeError(mode)).toBe(false);
     if (!isModeError(mode)) {
@@ -31,13 +34,13 @@ describe("resolveMode", () => {
   it("prefers the --callback-url override over the env var", () => {
     const mode = resolveMode(
       { callbackUrl: "http://override", sessionKey: "k" },
-      { ALCOACH_CALLBACK_URL: "http://env" },
+      { ALIGNFIRST_COACH_CALLBACK_URL: "http://env" },
     );
     if (!isModeError(mode)) expect(mode.callback?.url).toBe("http://override");
   });
 
   it("fails loudly when a callback URL is set but --session-key is missing", () => {
-    const mode = resolveMode({}, { ALCOACH_CALLBACK_URL: "http://x" });
+    const mode = resolveMode({}, { ALIGNFIRST_COACH_CALLBACK_URL: "http://x" });
     expect(isModeError(mode)).toBe(true);
     if (isModeError(mode)) expect(mode.error).toContain("--session-key is missing");
   });

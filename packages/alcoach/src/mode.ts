@@ -21,7 +21,7 @@ export interface ModeInput {
 // Background iff a callback target is resolvable (OpenClaw configured it). A configured URL with no
 // --session-key is a misconfiguration and fails loudly rather than silently degrading to foreground.
 export function resolveMode(input: ModeInput, env: NodeJS.ProcessEnv): ModeResolution | ModeError {
-  const url = input.callbackUrl ?? env.ALCOACH_CALLBACK_URL;
+  const url = input.callbackUrl ?? env.ALIGNFIRST_COACH_CALLBACK_URL;
   if (!url) return { isBackground: false };
   if (!input.sessionKey) {
     return {
@@ -32,7 +32,7 @@ export function resolveMode(input: ModeInput, env: NodeJS.ProcessEnv): ModeResol
   }
   return {
     isBackground: true,
-    callback: { url, token: env.ALCOACH_CALLBACK_TOKEN, sessionKey: input.sessionKey },
+    callback: { url, token: env.ALIGNFIRST_COACH_CALLBACK_TOKEN, sessionKey: input.sessionKey },
   };
 }
 

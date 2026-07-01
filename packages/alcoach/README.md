@@ -9,7 +9,7 @@ Run `alcoach --guide` for the full coaching guide.
 Every run spawns `claude` as a detached background process that streams a live transcript into a log file with a YAML frontmatter status lifecycle (`running` → `succeeded`/`failed`).
 
 - **Foreground** (a human or another coding agent): tails the transcript and blocks until the run finishes, then prints the result. This is the default.
-- **Background** (OpenClaw): selected when a callback URL is resolvable (`ALCOACH_CALLBACK_URL` or `--callback-url`). The command returns immediately, and on completion calls OpenClaw back in the exact thread session (`--session-key`) via `POST <url>` so it resumes the workflow.
+- **Background** (OpenClaw): selected when a callback URL is resolvable (`ALIGNFIRST_COACH_CALLBACK_URL` or `--callback-url`). The command returns immediately, and on completion calls OpenClaw back in the exact thread session (`--session-key`) via `POST <url>` so it resumes the workflow.
 
 ## Usage
 
