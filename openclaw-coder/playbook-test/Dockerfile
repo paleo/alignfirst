@@ -48,7 +48,13 @@ USER claw
 RUN printf 'store-dir=/home/claw/.pnpm-store\n' > /home/claw/.pnpmrc && \
     mkdir -p /home/claw/.pnpm-store
 
+# The @paleo/openclaw-* packages install from locally-built tarballs under
+# vendor/ (see scripts/vendor-packages.mjs), not from npmjs — so the image tests
+# this checkout without a publish. `npm run env:build` repacks + relocks before
+# this build; the tarballs must sit in the build context for the `file:` deps to
+# resolve during `npm ci`.
 COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/
+COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \

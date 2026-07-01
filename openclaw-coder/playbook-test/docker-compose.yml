@@ -41,14 +41,6 @@ services:
       # (build it with `npm run build` first). Read-only: the CLI only reads its
       # own dist/bin/templates and spawns its detached runner from there.
       - ${ALIGNFIRST_COACH_DIR}:/opt/alcoach:ro
-      # TEMPORARY (ticket 29 / cycle C): overlay the locally-built
-      # @paleo/openclaw-channel-mock-core carrying the OpenClaw 2026.6.11 fix
-      # (channel.turn.runAssembled -> channel.inbound.dispatchReply) before it is
-      # published. Build it first (npm run build --workspace
-      # @paleo/openclaw-channel-mock-core). Remove once the fixed mock packages
-      # are published and the playbook-test deps are bumped. Path is relative to
-      # this compose file.
-      - ../../packages/openclaw-channel-mock-core/dist:/opt/openclaw-test/src/node_modules/@paleo/openclaw-channel-mock-core/dist:ro
 
   runner:
     environment:
