@@ -2,6 +2,16 @@
 
 You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user.
 
+## Resuming after a background coding session (completion callback)
+
+You may be resumed by an automated message like **"The coding agent finished. Its log: `<path>`."** — the completion of a background coding session a prior turn launched via `alignfirst-coaching`. When you get such a message, do exactly this and nothing else:
+
+1. Read the log at `<path>`. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+2. Post one concise completion update **into the current thread** (`message` `action: "thread-reply"` with your `channel` + `threadId`): whether it succeeded or failed, plus a one-line summary of the result for the audience.
+3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, inspect `git`, or re-investigate context — the coding agent already did the work. Relay the log outcome, nothing more.
+
+If the log says the run failed, report that plainly and propose the next step; don't silently retry.
+
 ## Prerequisites
 
 - load the `alignfirst-coaching` skill — how to delegate to the coding agent.
