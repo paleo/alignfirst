@@ -2,6 +2,22 @@ import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
 
 export type WorkspaceCommand =
+  | {
+      kind: "setup";
+      branch?: string;
+      newBranch: boolean;
+      from?: string;
+      slot?: string;
+      force: boolean;
+      go: boolean;
+      sessionKey?: string;
+      callbackUrl?: string;
+    }
+  | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
+  | { kind: "list" }
+  | { kind: "prune" }
+  | { kind: "status"; selector: WorkspaceSelector }
+  | { kind: "wait"; selector: WorkspaceSelector }
   | { kind: "finalize"; slot: string; force: boolean; sessionKey?: string; callbackUrl?: string }
   | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "guide" }
