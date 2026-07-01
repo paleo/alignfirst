@@ -15,8 +15,9 @@ export interface CallbackBody {
   idempotencyKey: string;
 }
 
-// Points OpenClaw at the log file and asks it to continue; the result is not inlined. This maps to
-// OpenClaw's `POST /hooks/agent`, which dispatches an agent turn into the given thread session.
+// Points OpenClaw at the log file and nothing more; the result is not inlined and no next action is
+// presumed (alcoach does not know the caller's workflow). This maps to OpenClaw's `POST /hooks/agent`,
+// which dispatches an agent turn into the given thread session.
 export function buildCallbackRequest(
   config: CallbackConfig,
   logPath: string,
@@ -32,10 +33,7 @@ export function buildCallbackRequest(
     headers,
     body: {
       sessionKey: config.sessionKey,
-      message:
-        `The AlignFirst coaching run finished. Read its log at \`${absolutePath}\` ` +
-        "(the frontmatter holds the status and session id, the `---- Result ----` block holds the " +
-        "outcome), then continue the workflow and report back to the user.",
+      message: `The agent has finished. The result: \`${absolutePath}\`.`,
       idempotencyKey: idempotencyKeyFor(logPath),
     },
   };
