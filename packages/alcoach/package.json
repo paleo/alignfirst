@@ -1,0 +1,48 @@
+{
+  "name": "@paleo/alcoach",
+  "version": "0.0.0",
+  "license": "CC0-1.0",
+  "author": "Thomas MUR",
+  "description": "Coach a coding agent through AlignFirst protocols, with background runs and a session callback.",
+  "keywords": [
+    "ai",
+    "agent",
+    "alignfirst",
+    "coaching",
+    "cli",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/alcoach"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.11.0",
+  "type": "module",
+  "bin": {
+    "alcoach": "bin/alcoach.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.4",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.7"
+  }
+}

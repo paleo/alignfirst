@@ -2,6 +2,20 @@
   "gateway": {
     "mode": "local"
   },
+  "hooks": {
+    "enabled": true,
+    "token": "playbook-hook-token",
+    "allowRequestSessionKey": true,
+    "allowedSessionKeyPrefixes": ["agent:main:", "hook:"],
+    "mappings": [
+      {
+        "id": "coding-callback",
+        "match": { "path": "coding" },
+        "action": "agent",
+        "transform": { "module": "coding-callback.mjs" }
+      }
+    ]
+  },
   "plugins": {
     "load": {
       "paths": [

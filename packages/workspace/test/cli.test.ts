@@ -26,7 +26,6 @@ describe("parseWorkspaceArgs", () => {
       "--slot",
       "8110",
       "--force",
-      "--wait",
       "--go",
       "-v",
     ]);
@@ -34,12 +33,52 @@ describe("parseWorkspaceArgs", () => {
       kind: "setup",
       branch: "feat/42",
       newBranch: false,
+      from: undefined,
       slot: "8110",
       force: true,
-      wait: true,
       go: true,
+      sessionKey: undefined,
+      callbackUrl: undefined,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("threads the OpenClaw callback args on setup", () => {
+    const { command } = parseWorkspaceArgs([
+      "setup",
+      "feat/42",
+      "--session-key",
+      "current",
+      "--callback-url",
+      "http://gw/hooks/agent",
+    ]);
+    expect(command).toMatchObject({
+      kind: "setup",
+      sessionKey: "current",
+      callbackUrl: "http://gw/hooks/agent",
+    });
+  });
+
+  it("rejects the removed `--wait` flag on setup", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--wait"])).toThrow(ConfigError);
+  });
+
+  it("threads the OpenClaw callback args on __finalize", () => {
+    const { command } = parseWorkspaceArgs([
+      "__finalize",
+      "8110",
+      "--session-key",
+      "current",
+      "--callback-url",
+      "http://gw/hooks/agent",
+    ]);
+    expect(command).toEqual({
+      kind: "finalize",
+      slot: "8110",
+      force: false,
+      sessionKey: "current",
+      callbackUrl: "http://gw/hooks/agent",
+    });
   });
 
   it("rejects the removed `--owner` flag on setup", () => {

@@ -69,8 +69,8 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
     ],
     recovery: [
       {
-        command: `${ws} setup --wait`,
-        comment: "retry the finalize step, block until READY/FAILED",
+        command: `${ws} setup`,
+        comment: "retry the finalize step; blocks until READY/FAILED",
       },
     ],
     inspect: [

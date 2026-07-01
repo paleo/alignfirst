@@ -11,15 +11,32 @@ USER root
 
 # Fixture runtime deps (git for `git init` / worktree, pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted.
+# this consumer wants intercepted. Only `claude` and `gh` are shimmed —
+# `alcoach` runs for real (see the wrapper below), and its own `claude`
+# subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git && \
     corepack enable && corepack prepare pnpm@latest --activate && \
     for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects
 
+# PATH wrapper for the real `@paleo/alcoach` CLI. The package's built output is
+# live-mounted at /opt/alcoach (`${ALCOACH_DIR}:/opt/alcoach:ro` in the compose
+# overlay), so alcoach edits iterate without a rebuild — mirroring the skill
+# live-mount. `/usr/local/bin` sits after `/opt/openclaw-test/mocks/bin` in
+# PATH, so this wrapper is only reached for `alcoach` (never shimmed), while
+# alcoach's own `claude` subprocess still hits the shim.
+RUN printf '#!/bin/sh\nexec node /opt/alcoach/bin/alcoach.mjs "$@"\n' > /usr/local/bin/alcoach && \
+    chmod +x /usr/local/bin/alcoach
+
 # Reset / seed scripts invoked from scenarios via ctx.execInGateway(...).
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
 RUN chmod +x /opt/openclaw-test/scripts/*.mjs
+
+# Hook transforms (baked, not mounted): the alcoach completion callback maps
+# through /hooks/coding, whose transform derives the delivery channel from the
+# session key. configDir is /home/claw/.openclaw (the container's config path),
+# so the transforms root is /home/claw/.openclaw/hooks/transforms/.
+COPY --chown=claw:claw hooks/transforms/ /home/claw/.openclaw/hooks/transforms/
 
 USER claw
 

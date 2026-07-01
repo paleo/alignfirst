@@ -10,7 +10,9 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: dedi
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base.
 
-The foreground command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream to the setup log, ending with a `READY:` or `FAILED:` banner. Add `--wait` to block until that banner.
+The foreground command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream to the setup log, ending with a `READY:` or `FAILED:` banner.
+
+By default `setup` **blocks** until that banner (former `--wait` behavior). When a callback URL is configured — `WORKSPACE_CALLBACK_URL` (or `--callback-url`), i.e. an OpenClaw caller — it instead **returns immediately** and fires a completion callback once finalize reaches READY/FAILED; pass `--session-key` (from the `session_status` tool) to target it. OpenClaw must **not** poll: it goes available and waits for the callback.
 
 **Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
 

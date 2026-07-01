@@ -25,6 +25,38 @@ function buildClaudeResponse(result: string): string {
   });
 }
 
+// alcoach drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
+// event stream line-by-line: it needs a system/init line carrying a session_id, optional
+// assistant/text lines, and a terminal `result` line (session_id + result + is_error). This mirrors
+// the canned stream A3's runner expects.
+function buildClaudeStreamResponse(sessionId: string, result: string): string {
+  const events: unknown[] = [
+    { type: "system", subtype: "init", session_id: sessionId },
+    { type: "assistant", message: { content: [{ type: "text", text: "Working on it…" }] } },
+    { type: "assistant", message: { content: [{ type: "text", text: result }] } },
+    {
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result,
+      session_id: sessionId,
+      total_cost_usd: 0,
+      duration_ms: 0,
+      num_turns: 1,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    },
+  ];
+  return `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+let streamSessionCounter = 0;
+function nextStreamSessionId(): string {
+  streamSessionCounter += 1;
+  return `alcoach-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
+}
+
 export type ClaudeCall = { argv: string[]; cwd: string; entry?: CliMockEntry };
 
 export interface WaitForCallOptions {
@@ -44,6 +76,12 @@ export interface ClaudeMockHandle {
 export interface SetupClaudeMockOptions {
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
+  /**
+   * Delay (ms) before the stream-json (alcoach) branch emits its NDJSON. alcoach runs `claude` as a
+   * detached background child, so this spaces the callback-driven completion after the immediate
+   * "started" ack. Default 4000.
+   */
+  streamDelayMs?: number;
 }
 
 /**
@@ -55,6 +93,7 @@ export function setupClaudeMock(
   options: SetupClaudeMockOptions = {},
 ): ClaudeMockHandle {
   const defaultResult = options.defaultResult ?? REVEAL_TEST_RESULT;
+  const streamDelayMs = options.streamDelayMs ?? 4000;
   const claudeCalls: ClaudeCall[] = [];
   type Watcher = {
     options: WaitForCallOptions;
@@ -169,6 +208,15 @@ export function setupClaudeMock(
     // handler returns. Defer one macrotask: by then `ctx.currentEntry` is this
     // call's entry, so we snapshot it onto the call before notifying watchers.
     setImmediate(() => finalizeCall(call));
+    if (isAlcoachStreamJsonCall(call)) {
+      // Real alcoach delegation: it drives `claude` in stream-json as a detached
+      // background child and calls OpenClaw back on completion. Emulate a short
+      // run so the agent's "started" ack lands first, then stream the NDJSON
+      // transcript alcoach parses (init → assistant text → result).
+      await delay(streamDelayMs);
+      stdout.write(buildClaudeStreamResponse(nextStreamSessionId(), resultText));
+      return 0;
+    }
     stdout.write(buildClaudeResponse(resultText));
     return 0;
   });
@@ -224,6 +272,23 @@ export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
     a[1] === "-p" &&
     a[2] === "--output-format" &&
     a[3] === "json" &&
+    (a.includes("--permission-mode") || a.includes("--dangerously-skip-permissions"))
+  );
+}
+
+/**
+ * True iff the call has the argv shape alcoach emits when driving `claude`:
+ * `claude "<prompt>" -p --output-format stream-json --verbose … (--permission-mode auto|--dangerously-skip-permissions) [--resume <id>] [--model <m>]`.
+ */
+export function isAlcoachStreamJsonCall(call: ClaudeCall): boolean {
+  const a = call.argv;
+  return (
+    typeof a[0] === "string" &&
+    a[0].length > 0 &&
+    a[1] === "-p" &&
+    a[2] === "--output-format" &&
+    a[3] === "stream-json" &&
+    a[4] === "--verbose" &&
     (a.includes("--permission-mode") || a.includes("--dangerously-skip-permissions"))
   );
 }
