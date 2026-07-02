@@ -6,10 +6,11 @@ Run `alcoach --guide` for the full coaching guide.
 
 ## Execution model
 
-Every run spawns `claude` as a detached background process that streams a live transcript into a log file with a YAML frontmatter status lifecycle (`running` → `succeeded`/`failed`).
+`alcoach` runs `claude` as a direct **foreground** child of its own process: it streams a live transcript to stdout and to a per-run log file (with a YAML frontmatter status lifecycle `running` → `succeeded`/`failed`), and blocks until `claude` exits. It never backgrounds or detaches itself.
 
-- **Foreground** (a human or another coding agent): tails the transcript and blocks until the run finishes, then prints the result. This is the default.
-- **Background** (OpenClaw): selected when a callback URL is resolvable (`ALIGNFIRST_COACH_CALLBACK_URL` or `--callback-url`). The command returns immediately, and on completion calls OpenClaw back in the exact thread session (`--session-key`) via `POST <url>` so it resumes the workflow.
+To run it as a background task, the caller does the backgrounding. Under OpenClaw the agent invokes `alcoach` through the `exec` tool with `timeout: 0` — OpenClaw auto-backgrounds it and wakes the agent on exit (via `tools.exec.notifyOnExit`), which then reads the log for the result. This keeps the run's lifecycle owned by one supervisor (the caller) instead of a detached process phoning back in. The log is the durable result handoff: frontmatter `sessionId` + status, and the `---- Result ----` block.
+
+If `alcoach` is terminated, it kills its `claude` child (signal handlers + process-group membership), so no orphaned `claude` is left behind.
 
 ## Usage
 

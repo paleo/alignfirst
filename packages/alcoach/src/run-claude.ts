@@ -1,33 +1,45 @@
-import { spawn } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { type ChildProcess, spawn } from "node:child_process";
 
-import { buildCallbackRequest, type CallbackRequest, fireCallback } from "./callback.js";
 import { appendTranscript, applyCompletion } from "./log-file.js";
-import type { CallbackConfig } from "./mode.js";
 
 export interface RunConfig {
   prompt: string;
   logPath: string;
   cwd: string;
   isNew: boolean;
-  isBackground: boolean;
   resume?: string;
   model?: string;
   skipPermissions: boolean;
   unset: string[];
-  callback?: CallbackConfig;
 }
 
-export const RUN_CONFIG_ENV = "ALIGNFIRST_COACH_RUN_CONFIG";
+export interface RunOutput {
+  write(text: string): void;
+}
 
-export async function runSession(config: RunConfig): Promise<void> {
+export interface RunResult {
+  status: "succeeded" | "failed";
+  sessionId: string | null;
+  result: string;
+}
+
+// Runs `claude` as a direct foreground child of this process: parses its NDJSON stream, mirrors a
+// human-readable transcript to both the log file and `out` as it arrives, and on exit rewrites the
+// log's terminal frontmatter and returns the outcome. OpenClaw backgrounds *alcoach* via its own
+// `exec` tool and wakes on alcoach's exit — alcoach itself never detaches.
+export async function runClaude(config: RunConfig, out: RunOutput): Promise<RunResult> {
   const state = createStreamState();
-  const outcome = await spawnClaude(config, state);
-  const completion = buildCompletion(state, outcome);
-  applyCompletion(config.logPath, completion);
-  if (config.isBackground && config.callback) {
-    await runCallback(config, config.callback);
-  }
+  const outcome = await spawnClaude(config, state, out);
+  const failed = state.isError || outcome.exitCode !== 0 || state.result === undefined;
+  const result = state.result ?? failureMessage(outcome);
+  applyCompletion(config.logPath, {
+    status: failed ? "failed" : "succeeded",
+    endedAt: new Date().toISOString(),
+    exitReason: failed ? "error" : "completed",
+    sessionId: state.sessionId ?? null,
+    result,
+  });
+  return { status: failed ? "failed" : "succeeded", sessionId: state.sessionId ?? null, result };
 }
 
 interface ClaudeOutcome {
@@ -35,18 +47,23 @@ interface ClaudeOutcome {
   stderr: string;
 }
 
-function spawnClaude(config: RunConfig, state: StreamState): Promise<ClaudeOutcome> {
+function spawnClaude(
+  config: RunConfig,
+  state: StreamState,
+  out: RunOutput,
+): Promise<ClaudeOutcome> {
   const child = spawn("claude", buildClaudeArgs(config), {
     cwd: config.cwd,
     env: buildClaudeEnv(process.env, config.unset),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const detachChildGuards = guardChildLifecycle(child);
   let buffer = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8");
   child.stdout.on("data", (chunk: string) => {
     buffer += chunk;
-    buffer = drainLines(buffer, (line) => appendEvent(config.logPath, line, state));
+    buffer = drainLines(buffer, (line) => emitEvent(config.logPath, line, state, out));
   });
   child.stderr.setEncoding("utf-8");
   child.stderr.on("data", (chunk: string) => {
@@ -54,11 +71,45 @@ function spawnClaude(config: RunConfig, state: StreamState): Promise<ClaudeOutco
   });
   return new Promise((resolve) => {
     child.on("close", (code) => {
-      if (buffer.trim()) appendEvent(config.logPath, buffer, state);
+      if (buffer.trim()) emitEvent(config.logPath, buffer, state, out);
+      detachChildGuards();
       resolve({ exitCode: code, stderr });
     });
-    child.on("error", (err) => resolve({ exitCode: 1, stderr: err.message }));
+    child.on("error", (err) => {
+      detachChildGuards();
+      resolve({ exitCode: 1, stderr: err.message });
+    });
   });
+}
+
+// A direct `kill <alcoach>` (not a process-group kill) would otherwise orphan the foreground
+// `claude`. Forward termination signals and process exit to the child, then SIGKILL it, so alcoach
+// never leaves a dangling `claude`. Returns a teardown that removes the guards once the child is
+// gone (so alcoach can exit normally afterward).
+function guardChildLifecycle(child: ChildProcess): () => void {
+  const killChild = () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The child is already gone; nothing to clean up.
+      }
+    }
+  };
+  const onSignal = (signal: NodeJS.Signals) => {
+    killChild();
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+  const onSigint = () => onSignal("SIGINT");
+  const onSigterm = () => onSignal("SIGTERM");
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
+  process.on("exit", killChild);
+  return () => {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+    process.off("exit", killChild);
+  };
 }
 
 export function buildClaudeArgs(config: RunConfig): string[] {
@@ -73,8 +124,8 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   return args;
 }
 
-// Strip every ALIGNFIRST_COACH_* var (including the callback token and the run-config blob) plus any name in
-// the caller's ALIGNFIRST_COACH_UNSET list, so wrapper env never leaks into the claude child.
+// Strip every ALIGNFIRST_COACH_* var plus any name in the caller's ALIGNFIRST_COACH_UNSET list, so
+// wrapper env never leaks into the claude child.
 export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, unset: string[]): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
   for (const name of unset) {
@@ -96,9 +147,11 @@ function drainLines(buffer: string, onLine: (line: string) => void): string {
   return rest;
 }
 
-function appendEvent(logPath: string, line: string, state: StreamState): void {
+function emitEvent(logPath: string, line: string, state: StreamState, out: RunOutput): void {
   const rendered = renderEvent(parseEventLine(line), state);
-  if (rendered !== undefined) appendTranscript(logPath, `${rendered}\n`);
+  if (rendered === undefined) return;
+  appendTranscript(logPath, `${rendered}\n`);
+  out.write(`${rendered}\n`);
 }
 
 // --- NDJSON stream parsing ---
@@ -187,42 +240,9 @@ function renderToolResult(content: unknown): string {
   return compactJson(content);
 }
 
-// --- Completion ---
-
-function buildCompletion(state: StreamState, outcome: ClaudeOutcome) {
-  const failed = state.isError || outcome.exitCode !== 0 || state.result === undefined;
-  return {
-    status: failed ? ("failed" as const) : ("succeeded" as const),
-    endedAt: new Date().toISOString(),
-    exitReason: failed ? "error" : "completed",
-    sessionId: state.sessionId ?? null,
-    result: state.result ?? failureMessage(outcome),
-  };
-}
-
 function failureMessage(outcome: ClaudeOutcome): string {
   const stderr = outcome.stderr.trim();
   return stderr || `claude exited with code ${outcome.exitCode ?? "unknown"}`;
-}
-
-async function runCallback(config: RunConfig, callback: CallbackConfig): Promise<void> {
-  const request: CallbackRequest = buildCallbackRequest(callback, config.logPath, config.cwd);
-  // Log the attempt before firing: if the detached runner is reaped mid-callback, the absence of a
-  // following "delivered"/"failed" line is itself the diagnostic. Absence of this whole block means
-  // the runner never reached the callback at all.
-  appendTranscript(
-    config.logPath,
-    `\n---- Callback ----\n\nPOST ${request.url} sessionKey=${callback.sessionKey}\n`,
-  );
-  try {
-    await fireCallback(request);
-    appendTranscript(config.logPath, "Callback delivered.\n");
-  } catch (err) {
-    appendTranscript(
-      config.logPath,
-      `Callback FAILED: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
-  }
 }
 
 // --- Shared helpers ---
@@ -245,28 +265,4 @@ function compactJson(value: unknown): string {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-// --- Entry point (spawned as a detached child by the parent CLI) ---
-
-function readConfigFromEnv(env: NodeJS.ProcessEnv): RunConfig {
-  const raw = env[RUN_CONFIG_ENV];
-  if (!raw) throw new Error(`Missing ${RUN_CONFIG_ENV} in the runner environment.`);
-  return JSON.parse(raw) as RunConfig;
-}
-
-function isMainModule(): boolean {
-  const entry = process.argv[1];
-  return entry !== undefined && import.meta.url === pathToFileURL(entry).href;
-}
-
-export function runSessionEntryPath(): string {
-  return fileURLToPath(new URL("./run-session.js", import.meta.url));
-}
-
-if (isMainModule()) {
-  void runSession(readConfigFromEnv(process.env)).catch((err) => {
-    console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  });
 }

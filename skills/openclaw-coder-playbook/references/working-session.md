@@ -2,16 +2,13 @@
 
 You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user.
 
-## Resuming after a background coding session (completion callback)
+## Completion of a background coding session
 
-You may be resumed by a short automated message telling you a **background coding session finished** and pointing at a **log file path** (e.g. _"The agent has finished. The result: `<path>`."_). A prior turn launched that session via `alignfirst-coaching`; this is its completion signal.
+When your `alcoach` `exec` run (launched with `timeout: 0`, backgrounded by OpenClaw) exits, you are woken with your full thread transcript intact. This is the completion signal. Do exactly this, and nothing else:
 
-**This resume is isolated.** You do NOT have the launching thread's transcript — no threadId, no prior context, only this message and the log. So do exactly this, and nothing else:
-
-1. **Read the log** at `<path>`. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. **Report the outcome as your reply** — one concise message: succeeded or failed, plus a one-line summary of the result for the audience. This reply is delivered to the user's conversation for you; just make the report your response.
-3. Do **not** try to `thread-reply`, do **not** call `sessions_list`/`sessions_history` or otherwise hunt for the originating thread or session — you cannot reach it from here, and you don't need to. Reply where you are.
-4. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, inspect `git`, or re-investigate context — the coding agent already did the work and the log is authoritative. Relay the log outcome, nothing more.
+1. **Read the run's log** (the path `alcoach` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+2. **Report the outcome in the thread** — one concise message: succeeded or failed, plus a one-line summary of the result for the audience.
+3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git` — the coding agent already did the work and the log is authoritative. Relay the log outcome, nothing more.
 
 If the log says the run failed, report that plainly and propose the next step; don't silently retry.
 

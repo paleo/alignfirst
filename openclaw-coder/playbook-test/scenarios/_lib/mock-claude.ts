@@ -11,20 +11,6 @@ const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/(feat|fix|refactor|chore|docs|test
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 
-function buildClaudeResponse(result: string): string {
-  return JSON.stringify({
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    result,
-    session_id: "test-stub-session",
-    total_cost_usd: 0,
-    duration_ms: 0,
-    num_turns: 0,
-    usage: { input_tokens: 0, output_tokens: 0 },
-  });
-}
-
 // alcoach drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
 // event stream line-by-line: it needs a system/init line carrying a session_id, optional
 // assistant/text lines, and a terminal `result` line (session_id + result + is_error). This mirrors
@@ -77,9 +63,10 @@ export interface SetupClaudeMockOptions {
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
   /**
-   * Delay (ms) before the stream-json (alcoach) branch emits its NDJSON. alcoach runs `claude` as a
-   * detached background child, so this spaces the callback-driven completion after the immediate
-   * "started" ack. Default 4000.
+   * Delay (ms) before the stream-json (alcoach) branch emits its NDJSON. alcoach runs `claude` in
+   * the foreground and blocks on it, so this delay is what makes the whole alcoach exec long enough
+   * for OpenClaw to background it (and the agent to post a "started" ack) before it exits and the
+   * completion wake fires. Default 4000.
    */
   streamDelayMs?: number;
 }
@@ -204,20 +191,16 @@ export function setupClaudeMock(
     } else {
       resultText = defaultResult;
     }
-    // The mock-cli server emits this call's cliMock entry only AFTER the
-    // handler returns. Defer one macrotask: by then `ctx.currentEntry` is this
-    // call's entry, so we snapshot it onto the call before notifying watchers.
+    // alcoach drives `claude` in stream-json in the foreground and blocks on it. Emulate a short run
+    // (so OpenClaw backgrounds the alcoach exec and the agent's "started" ack lands first), then
+    // stream the NDJSON transcript alcoach parses (init → text → result).
+    await delay(streamDelayMs);
+    stdout.write(buildClaudeStreamResponse(nextStreamSessionId(), resultText));
+    // The mock-cli server emits this call's cliMock entry only AFTER the handler returns. Defer one
+    // macrotask past the return so `ctx.currentEntry` is this call's entry, then snapshot it onto the
+    // call before notifying watchers. (Scheduled here, after the await, so the delay does not elapse
+    // before the entry exists.)
     setImmediate(() => finalizeCall(call));
-    if (isAlcoachStreamJsonCall(call)) {
-      // Real alcoach delegation: it drives `claude` in stream-json as a detached
-      // background child and calls OpenClaw back on completion. Emulate a short
-      // run so the agent's "started" ack lands first, then stream the NDJSON
-      // transcript alcoach parses (init → assistant text → result).
-      await delay(streamDelayMs);
-      stdout.write(buildClaudeStreamResponse(nextStreamSessionId(), resultText));
-      return 0;
-    }
-    stdout.write(buildClaudeResponse(resultText));
     return 0;
   });
 
@@ -260,27 +243,11 @@ export function setupClaudeMock(
 }
 
 /**
- * True iff the call has the argv shape produced by alignfirst-coaching's
- * `scripts/alignfirst-coaching.mjs` wrapper:
- * `claude "<prompt>" -p --output-format json … (--permission-mode|--dangerously-skip-permissions)`.
- */
-export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
-  const a = call.argv;
-  return (
-    typeof a[0] === "string" &&
-    a[0].length > 0 &&
-    a[1] === "-p" &&
-    a[2] === "--output-format" &&
-    a[3] === "json" &&
-    (a.includes("--permission-mode") || a.includes("--dangerously-skip-permissions"))
-  );
-}
-
-/**
  * True iff the call has the argv shape alcoach emits when driving `claude`:
  * `claude "<prompt>" -p --output-format stream-json --verbose … (--permission-mode auto|--dangerously-skip-permissions) [--resume <id>] [--model <m>]`.
+ * This is the only shape alcoach produces, so it doubles as "this claude call came from alcoach".
  */
-export function isAlcoachStreamJsonCall(call: ClaudeCall): boolean {
+export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
   const a = call.argv;
   return (
     typeof a[0] === "string" &&
@@ -426,7 +393,7 @@ export async function expectCodingDelegation(
   await ctx.judgeLLM({
     attachTo: target,
     message: renderClaudeCall(claudeCall),
-    rubric: `The message is a prompt sent to a coding agent (Claude) via the alignfirst-coaching skill's \`alignfirst-coaching.mjs\` wrapper. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
+    rubric: `The message is a prompt sent to a coding agent (Claude) via the \`alcoach\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
     label,
   });
 

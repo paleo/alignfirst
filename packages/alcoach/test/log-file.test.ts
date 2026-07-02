@@ -97,8 +97,7 @@ describe("log lifecycle", () => {
       endedAt: null,
       exitReason: null,
     };
-    const length = writeInitialLog(logPath, header);
-    expect(length).toBeGreaterThan(0);
+    writeInitialLog(logPath, header);
     expect(existsSync(logPath)).toBe(true);
 
     appendTranscript(logPath, "[init] session abc\n");

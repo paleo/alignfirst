@@ -6,16 +6,13 @@ Coach a coding agent through AlignFirst protocols with the `alcoach` CLI. It wra
 
 Run `alcoach` from the root of the project you are coaching, so the agent works in the right repo. The project must contain a `.plans/` directory.
 
-## Foreground vs background
+## How it runs
 
-`alcoach` picks its mode from whether a callback target is resolvable:
+`alcoach` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript to stdout as it arrives. It never backgrounds or detaches itself.
 
-- **Foreground** (a human or another coding agent runs it): the command streams the transcript live and blocks until the run finishes, then prints the result. This is the default.
-- **Background** (OpenClaw runs it): set by `ALIGNFIRST_COACH_CALLBACK_URL` (or `--callback-url`). The command prints `Started. Log: <path>` and returns in about a second. When the run finishes, `alcoach` calls OpenClaw back in the same thread session.
+If your run should be a background task (so you stay free while it works), let **your caller** do the backgrounding. Under OpenClaw, run `alcoach` through the `exec` tool with a disabled or generous timeout (`timeout: 0`) — OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits. Do **not** poll: read the log when you are woken.
 
-In background mode you **must not poll** the log or re-run the command to check progress. Pass `--session-key` (from the `session_status` tool, `sessionKey="current"`), go available, and wait for the callback to resume the workflow.
-
-Every run writes a log under `.plans/`: `.plans/<ticket>/coding-sessions/<stamp>.md`, or `.plans/_coding-sessions/<stamp>.md` without a ticket. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`.
+Every run writes a log under `.plans/`: `.plans/<ticket>/coding-sessions/<stamp>.md`, or `.plans/_coding-sessions/<stamp>.md` without a ticket. This log is the durable record of the run — its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Read it to get the result after a background run completes.
 
 ## CLI reference
 
@@ -33,9 +30,8 @@ alcoach --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol`. |
 | `--model <model>` | Model override. |
-| `--session-key <key>` | Callback target (OpenClaw only). |
 
-For `--new` runs, the output surfaces a `Session ID:` (in foreground) or writes it to the log frontmatter (in background). Save it to resume the conversation later.
+For `--new` runs, the `Session ID:` is printed to stdout and written to the log frontmatter (the durable source of truth). Save it to resume the conversation later.
 
 **No protocol:** the message is sent as-is (no AlignFirst command). Use it to answer the agent's questions in an existing session, execute a plan in a new session, or ask a question:
 

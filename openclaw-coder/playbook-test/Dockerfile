@@ -32,12 +32,6 @@ RUN printf '#!/bin/sh\nexec node /opt/alcoach/bin/alcoach.mjs "$@"\n' > /usr/loc
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
 RUN chmod +x /opt/openclaw-test/scripts/*.mjs
 
-# Hook transforms (baked, not mounted): the alcoach completion callback maps
-# through /hooks/coding, whose transform derives the delivery channel from the
-# session key. configDir is /home/claw/.openclaw (the container's config path),
-# so the transforms root is /home/claw/.openclaw/hooks/transforms/.
-COPY --chown=claw:claw hooks/transforms/ /home/claw/.openclaw/hooks/transforms/
-
 USER claw
 
 # Pin pnpm's content-addressable store outside /home/claw/projects/, which is a

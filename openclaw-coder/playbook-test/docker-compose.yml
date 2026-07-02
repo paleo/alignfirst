@@ -17,15 +17,6 @@ services:
   gateway:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      # Callback wiring for the real alcoach CLI. When alcoach runs a coding
-      # session it POSTs back here on completion; the gateway serves /hooks/*
-      # on its own HTTP port (18789, per the base stack's `gateway run --port`).
-      # The `/hooks/coding` path is a mapping whose transform derives the
-      # delivery channel from the session key (the built-in /hooks/agent path
-      # can't pick a channel when both mock channels are configured). The token
-      # must match `hooks.token` in openclaw.json.
-      ALIGNFIRST_COACH_CALLBACK_URL: http://127.0.0.1:18789/hooks/coding
-      ALIGNFIRST_COACH_CALLBACK_TOKEN: playbook-hook-token
     volumes:
       - fixture-projects:/home/claw/projects
       # Live-mount the alignfirst-coaching skill over its baked copy so playbook
@@ -39,7 +30,7 @@ services:
       # Live-mount the built @paleo/alcoach package so the /usr/local/bin/alcoach
       # wrapper resolves to it. ALIGNFIRST_COACH_DIR is the host path to packages/alcoach
       # (build it with `npm run build` first). Read-only: the CLI only reads its
-      # own dist/bin/templates and spawns its detached runner from there.
+      # own dist/bin/templates and spawns `claude` from there.
       - ${ALIGNFIRST_COACH_DIR}:/opt/alcoach:ro
 
   runner:

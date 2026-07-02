@@ -1,7 +1,6 @@
 import { relative } from "node:path";
 import { parseArgs } from "node:util";
 
-import { type ForegroundParams, runForeground, type Writer } from "./foreground.js";
 import { renderGuide } from "./guide.js";
 import {
   assertPlansGate,
@@ -9,15 +8,13 @@ import {
   resolveLogPath,
   writeInitialLog,
 } from "./log-file.js";
-import { isModeError, resolveMode } from "./mode.js";
-import { spawnDetachedNode } from "./process-utils.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
-import { RUN_CONFIG_ENV, type RunConfig, runSessionEntryPath } from "./run-session.js";
+import { type RunConfig, type RunOutput, runClaude } from "./run-claude.js";
 
 export interface MainOptions {
   argv?: string[];
-  stdout?: Writer;
-  stderr?: Writer;
+  stdout?: RunOutput;
+  stderr?: RunOutput;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
 }
@@ -58,10 +55,15 @@ export async function main(options?: MainOptions): Promise<number> {
 interface RunContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
-  stdout: Writer;
-  stderr: Writer;
+  stdout: RunOutput;
+  stderr: RunOutput;
 }
 
+// alcoach always runs `claude` in the foreground and blocks until it exits. When OpenClaw drives
+// alcoach, it wraps this call in its own `exec` tool (which backgrounds after `yieldMs` and wakes
+// the agent on exit) — alcoach owns no backgrounding or callback of its own. The per-run log under
+// `.plans/` is the durable result handoff: on completion the frontmatter carries the session id and
+// status, and the `---- Result ----` block carries the outcome for a waking agent (or a human).
 async function runCoaching(parsed: AlcoachArgs, ctx: RunContext): Promise<number> {
   const { cwd, env, stdout, stderr } = ctx;
 
@@ -71,36 +73,17 @@ async function runCoaching(parsed: AlcoachArgs, ctx: RunContext): Promise<number
     return 1;
   }
 
-  const mode = resolveMode({ callbackUrl: parsed.callbackUrl, sessionKey: parsed.sessionKey }, env);
-  if (isModeError(mode)) {
-    stderr.write(`${mode.error}\n`);
-    return 1;
-  }
-
   const now = new Date();
   const logPath = resolveLogPath(cwd, parsed.ticket, now);
   writeInitialLog(logPath, buildFrontmatter(parsed, now));
+  stdout.write(`Log: ${relative(cwd, logPath)}\n\n`);
 
-  const runConfig = buildRunConfig(parsed, cwd, logPath, mode.isBackground, mode.callback, env);
-  const childEnv: NodeJS.ProcessEnv = { ...env, [RUN_CONFIG_ENV]: JSON.stringify(runConfig) };
-  const childPid = spawnDetachedNode(runSessionEntryPath(), childEnv, cwd);
-  const relativePath = relative(cwd, logPath);
+  const result = await runClaude(buildRunConfig(parsed, cwd, logPath, env), stdout);
 
-  if (mode.isBackground) {
-    stdout.write(`Started. Log: ${relativePath}\n`);
-    if (parsed.isNew) {
-      stdout.write("The claude session id lands in the log frontmatter on completion.\n");
-    }
-    return 0;
+  if (parsed.isNew && result.sessionId) {
+    stdout.write(`\nSession ID: ${result.sessionId}\n`);
   }
-
-  const foreground: ForegroundParams = {
-    logPath,
-    childPid,
-    isNew: parsed.isNew,
-    stdout,
-  };
-  return runForeground(foreground);
+  return result.status === "succeeded" ? 0 : 1;
 }
 
 function buildFrontmatter(parsed: AlcoachArgs, now: Date): LogFrontmatter {
@@ -121,8 +104,6 @@ function buildRunConfig(
   parsed: AlcoachArgs,
   cwd: string,
   logPath: string,
-  isBackground: boolean,
-  callback: RunConfig["callback"],
   env: NodeJS.ProcessEnv,
 ): RunConfig {
   return {
@@ -130,12 +111,10 @@ function buildRunConfig(
     logPath,
     cwd,
     isNew: parsed.isNew,
-    isBackground,
     resume: parsed.resume,
     model: parsed.model,
     skipPermissions: env.ALIGNFIRST_COACH_SKIP_PERMISSIONS === "1",
     unset: (env.ALIGNFIRST_COACH_UNSET ?? "").split(","),
-    callback,
   };
 }
 
@@ -159,8 +138,6 @@ export interface AlcoachArgs {
   protocol?: string;
   message?: string;
   model?: string;
-  sessionKey?: string;
-  callbackUrl?: string;
   guide: boolean;
   help: boolean;
 }
@@ -175,8 +152,6 @@ export function parseAlcoachArgs(argv: string[]): AlcoachArgs {
       protocol: { type: "string" },
       message: { type: "string" },
       model: { type: "string" },
-      "session-key": { type: "string" },
-      "callback-url": { type: "string" },
       guide: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
@@ -189,8 +164,6 @@ export function parseAlcoachArgs(argv: string[]): AlcoachArgs {
     protocol: values.protocol,
     message: values.message,
     model: values.model,
-    sessionKey: values["session-key"],
-    callbackUrl: values["callback-url"],
     guide: values.guide === true,
     help: values.help === true,
   };
@@ -237,14 +210,14 @@ Options:
   --ticket <id>     Ticket ID. Required with --new + --protocol.
   --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>   Model override.
-  --session-key <k> Callback target for OpenClaw (from the session_status tool).
-  --callback-url <u> Override ALIGNFIRST_COACH_CALLBACK_URL.
 
 Env:
-  ALIGNFIRST_COACH_CALLBACK_URL     Callback endpoint; its presence selects background mode.
-  ALIGNFIRST_COACH_CALLBACK_TOKEN   Bearer token for the callback.
   ALIGNFIRST_COACH_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
   ALIGNFIRST_COACH_UNSET            Comma-list of env vars to strip from the claude child.
+
+alcoach runs claude in the foreground and blocks until it finishes, streaming the transcript to
+stdout and to a log under .plans/. To run it as a background task, let your caller (e.g. OpenClaw's
+exec tool) do the backgrounding; do not detach alcoach yourself.
 
 Run \`alcoach --guide\` for the full coaching guide.
 `;

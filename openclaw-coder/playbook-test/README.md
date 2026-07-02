@@ -42,12 +42,12 @@ See the upstream README for all flags.
 - `ALIGNFIRST_COACHING_SKILL_DIR` — host path to the `alignfirst-coaching` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_COACH_DIR` — host path to `packages/alcoach` (build it first). Live-mounted read-only at `/opt/alcoach`; the `/usr/local/bin/alcoach` wrapper runs `node /opt/alcoach/bin/alcoach.mjs`. Not shimmed — alcoach runs for real; its `claude` subprocess still resolves to the mock via PATH order.
-- [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`, and a `hooks` block (`enabled`, a `token`, `allowRequestSessionKey`, `allowedSessionKeyPrefixes`) so alcoach's completion callback can dispatch an agent turn.
-- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcoach bind mounts on `gateway`; `ALIGNFIRST_COACH_CALLBACK_URL`/`ALIGNFIRST_COACH_CALLBACK_TOKEN` on `gateway` (points alcoach at the gateway's in-container `http://127.0.0.1:18789/hooks/agent`, token matching `hooks.token`); `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
+- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcoach bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
-## Coaching callback (alcoach)
+## Coaching completion (alcoach)
 
-The coaching flow runs the real `alcoach` CLI. When a callback URL resolves (`ALIGNFIRST_COACH_CALLBACK_URL`), alcoach runs the coding session in the **background**: it returns immediately (`Started. Log: …`), runs `claude` as a detached child, and on completion `POST`s `{ sessionKey, message, idempotencyKey }` to the gateway's `/hooks/agent` endpoint (`Authorization: Bearer <token>`). OpenClaw dispatches an agent turn into that session (the `sessionKey` the agent captured via `session_status` and passed as `--session-key`), which resumes the thread and reports the outcome. The gateway serves `/hooks/*` on its own HTTP port (18789) in `gateway.mode: "local"`; `hooks.allowRequestSessionKey=true` lets the request-supplied `sessionKey` through, and `allowedSessionKeyPrefixes` scopes it to the agent's sessions (`agent:main:`) plus the `hook:` fallback the config validator requires.
+The coaching flow runs the real `alcoach` CLI. `alcoach` runs `claude` in the **foreground** and blocks; the agent runs `alcoach` through OpenClaw's `exec` tool with `timeout: 0`, so OpenClaw backgrounds it (letting the agent post a "started" ack) and wakes the **same** thread session when it exits, via the native exec completion event (`tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads alcoach's log under `.plans/<ticket>/coding-sessions/` and reports the outcome in the thread. No callback, no gateway RPC, no isolated turn — the completion lands in the exact-case conversation because it is the same session resuming.
 
 ## Fixtures
 
@@ -55,7 +55,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcoach` background + `/hooks/agent` callback path (asserts the agent delegates to `alcoach`, not `claude`, then rides the callback-driven completion).
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcoach` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcoach`, not `claude`, then rides the native exec completion wake).
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 

@@ -5,7 +5,7 @@ license: CC0 1.0
 compatibility: Requires Node.js, the Claude Code CLI, and the @paleo/alcoach CLI
 metadata:
   author: Paleo
-  version: "0.12.0"
+  version: "0.13.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
@@ -20,14 +20,11 @@ Run `alcoach` from the root of the project you're coaching, so the coding agent 
 
 For `--new` modes, save the `Session ID:` (surfaced in the output in foreground, or written to the log frontmatter in background) to resume the conversation later.
 
-## Foreground vs background — and the callback
+## How it runs — and backgrounding long runs
 
-`alcoach` selects its mode automatically: **background** when a callback URL is resolvable (env `ALIGNFIRST_COACH_CALLBACK_URL` or `--callback-url`), else **foreground**.
+`alcoach` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript. It never backgrounds itself.
 
-- **Foreground** (a human or another coding agent): the command streams the transcript and blocks until the run finishes, then prints the result.
-- **Background** (OpenClaw): the command returns immediately with `Started. Log: <path>`, and on completion calls OpenClaw back in the same thread session via `POST <callbackUrl>`.
-
-When running in background, capture your session key with the `session_status` tool (`sessionKey="current"`) and pass it as `--session-key`. Then **do not poll** the log or re-run the command to check progress — go available and wait for the callback to resume the workflow.
+Coaching runs are long. If you are an OpenClaw agent, run `alcoach` through the `exec` tool with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits. Then **do not poll** — go available, and when you are woken, read the run's log (its path is printed on the first line and lives under `.plans/`) to get the outcome.
 
 ## CLI Reference
 
@@ -47,7 +44,6 @@ alcoach --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol` is given. Optional for other protocols. |
 | `--model <model>` | Optional model override. |
-| `--session-key <key>` | Callback target (OpenClaw only; from the `session_status` tool). |
 
 **Key pattern — no protocol:** When no `--protocol` is given, the message is sent as-is (no AlignFirst slash command is invoked). This is used to:
 - Continue a discussion in an existing session (e.g. answering agent questions)

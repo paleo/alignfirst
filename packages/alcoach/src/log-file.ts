@@ -44,13 +44,12 @@ export function resolveLogPath(
   return candidate;
 }
 
-// Writes the initial `running` header and returns its byte length, which the foreground uses as the
-// starting offset when tailing the transcript.
-export function writeInitialLog(logPath: string, frontmatter: LogFrontmatter): number {
+// Writes the initial `running` header. Present before the run starts so an interrupted run still
+// leaves an auditable log; the terminal frontmatter rewrite happens on completion.
+export function writeInitialLog(logPath: string, frontmatter: LogFrontmatter): void {
   const header = `${serializeFrontmatter(frontmatter)}\n`;
   mkdirSync(dirname(logPath), { recursive: true });
   writeFileSync(logPath, header);
-  return Buffer.byteLength(header);
 }
 
 export interface CompletionUpdate {
@@ -86,6 +85,8 @@ export interface LogCompletion {
   result: string | undefined;
 }
 
+// Reads back a completed (or in-progress) log — the durable result handoff a waking OpenClaw agent
+// or a human reads: frontmatter status/sessionId plus the `---- Result ----` block.
 export function readCompletion(logPath: string): LogCompletion {
   const content = readFileSync(logPath, "utf-8");
   const { frontmatter } = splitLog(content);
@@ -93,15 +94,6 @@ export function readCompletion(logPath: string): LogCompletion {
   const result =
     markerIndex === -1 ? undefined : content.slice(markerIndex + RESULT_MARKER.length).trim();
   return { frontmatter, result };
-}
-
-// Everything after the frontmatter block. Recomputed from the current frontmatter boundary each
-// call, so the foreground's transcript offset stays valid across the terminal frontmatter rewrite
-// (which changes the header's byte length).
-export function readTranscriptBody(logPath: string): string {
-  const content = readFileSync(logPath, "utf-8");
-  const match = content.match(/^---\n[\s\S]*?\n---\n/);
-  return match ? content.slice(match[0].length) : content;
 }
 
 // --- Frontmatter serialization (dependency-free, round-trips with parseFrontmatter) ---

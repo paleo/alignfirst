@@ -11,18 +11,12 @@ function validate(flags: string[]): string | undefined {
 }
 
 describe("parseAlcoachArgs", () => {
-  it("reads the kebab-case flags into camelCase fields", () => {
-    const args = parse([
-      "--resume",
-      "sess-1",
-      "--session-key",
-      "current",
-      "--callback-url",
-      "http://x/hooks/agent",
-    ]);
-    expect(args.resume).toBe("sess-1");
-    expect(args.sessionKey).toBe("current");
-    expect(args.callbackUrl).toBe("http://x/hooks/agent");
+  it("reads the flags into camelCase fields", () => {
+    const args = parse(["--new", "--protocol", "aad", "--ticket", "29", "--message", "go"]);
+    expect(args.isNew).toBe(true);
+    expect(args.protocol).toBe("aad");
+    expect(args.ticket).toBe("29");
+    expect(args.message).toBe("go");
   });
 
   it("throws on unknown flags", () => {
