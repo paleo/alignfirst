@@ -15,7 +15,7 @@ These top-level files under `~/.openclaw/workspace/` are read on every turn and 
 - `BOOTSTRAP.md` — first-run ritual (optional)
 - `HEARTBEAT.md` — heartbeat checklist (optional, dynamic load)
 
-Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootstrap cache (`src/agents/bootstrap-cache.ts`) refreshes per turn keyed on inode/mtime, so live edits are picked up without restarting the gateway. This is why the harness can bind-mount the workspace and the `alignfirst-coaching` skill into the gateway and have playbook edits iterate without a rebuild.
+Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootstrap cache (`src/agents/bootstrap-cache.ts`) refreshes per turn keyed on inode/mtime, so live edits are picked up without restarting the gateway. This is why the harness can bind-mount the workspace and the playbook skill into the gateway and have playbook edits iterate without a rebuild.
 
 ## Subagent sessions get a filtered subset
 
@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `openclaw-coder-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill, not the coaching `alignfirst-coaching`.
+This is the mechanism the `openclaw-coder-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --guide`) is only read at delegation time.
 
 ## Character budgets
 

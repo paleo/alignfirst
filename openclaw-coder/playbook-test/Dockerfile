@@ -66,4 +66,4 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent universal --agent claude-code \
       --skill alignfirst --skill al --skill alplan --skill alspec \
       --skill aldescription --skill alreview --skill alread \
-      --skill almerge --skill openclaw-coder-playbook --skill alignfirst-coaching
+      --skill almerge --skill openclaw-coder-playbook

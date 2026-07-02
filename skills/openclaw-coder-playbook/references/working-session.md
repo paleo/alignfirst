@@ -2,19 +2,9 @@
 
 You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user.
 
-## Completion of a background coding session
-
-When your `alcode` `exec` run (launched with `timeout: 0`, backgrounded by OpenClaw) exits, you are woken with your full thread transcript intact. This is the completion signal. Do exactly this, and nothing else:
-
-1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. **Report the outcome in the thread** — one concise message: succeeded or failed, plus a one-line summary of the result for the audience.
-3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git` — the coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
-
-If the session file says the run failed, report that plainly and propose the next step; don't silently retry.
-
 ## Prerequisites
 
-- load the `alignfirst-coaching` skill — how to delegate to the coding agent.
+- run `alcode --guide` (`exec`) and follow it — how to delegate to the coding agent.
 - read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Take over a working session
@@ -36,7 +26,7 @@ Use the guidelines.
 
 ### Delegating to the coding agent
 
-Always use the coding agent via `alignfirst-coaching`. **Run from the project's directory** (`~/projects/<project>`).
+Always use the coding agent via the `alcode` CLI, as its `--guide` describes. **Run from the project's directory** (`~/projects/<project>`).
 
 ### Interpreting requests
 
@@ -46,13 +36,13 @@ Interpret every user message in the context of the current project — something
 
 Only when the message is unambiguously about chat content ("summarize this thread", "what does this mean") should you treat it as a regular conversation.
 
-**Investigation / question, or advice.** Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alignfirst-coaching` without a protocol so it investigates the right repo. Then summarize the agent's reply back to the user in the thread. Ground the answer in the actual code. No code change unless asked.
+**Investigation / question, or advice.** Answer freely. If you need to investigate in a project's codebase, delegate to the coding agent via `alcode` without a protocol so it investigates the right repo. Then summarize the agent's reply back to the user in the thread. Ground the answer in the actual code. No code change unless asked.
 
 ### What you delegate vs do
 
 Lean toward delegating; the less you touch the project directly, the better.
 
-Delegate to the coding agent (via `alignfirst-coaching`): workspace/branch/worktree creation, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs.
+Delegate to the coding agent (via `alcode`): workspace/branch/worktree creation, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs.
 
 Prefer delegating almost everything to the coding agent. But also feel free to do it yourself (except coding) when it's more practical.
 
@@ -84,7 +74,7 @@ When the current branch needs to catch up:
    - Trivial changes, no conflict risk — `git stash`, then `git stash pop` after the merge.
    - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile. Push it if the thread already has remote commits.
 
-Delegate the merge itself to the coding agent via `alignfirst-coaching` (`merge` protocol).
+Delegate the merge itself to the coding agent via `alcode` (`merge` protocol).
 
 ### Reinstalling deps after a branch refresh
 
@@ -93,7 +83,7 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 ### Status update
 
 - Check the workspace status.
-- Delegate to the coding agent via `alignfirst-coaching`, use the **read** protocol.
+- Delegate to the coding agent via `alcode`, use the **read** protocol.
 
 ### Working and testing
 
@@ -115,7 +105,7 @@ Do not create a MR/PR without the user's validation.
 
 When you're ready to create the MR/PR, check that the code compiles, passes lint, and passes all tests.
 
-After creating the MR/PR (via `alignfirst-coaching`):
+After creating the MR/PR (via `alcode`):
 
 - Post the MR/PR link.
 - Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.

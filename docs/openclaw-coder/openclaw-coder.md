@@ -5,8 +5,8 @@ Maintainer's map of the [`openclaw-coder/`](../openclaw-coder/) subproject: a sh
 ## Three layers
 
 1. **Reference workspace** — [`openclaw-coder/playbook-test/workspace/`](../openclaw-coder/playbook-test/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`), auto-loaded into the system prompt every turn. It lives inside the harness (its only consumer) as the test fixture, and doubles as the worked example the consumer [`README`](../openclaw-coder/README.md) points at. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `openclaw-coder-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
-2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules (language, "tickets are labels", projects, `chat_id`). The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the separate `alignfirst-coaching` coaching skill. Nothing here is auto-loaded — files are read on demand (see context engineering below).
-3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts both the workspace dir and the `alignfirst-coaching` skill into the gateway, so edits to layers 1 and 2 iterate live without rebuilding the image.
+2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules (language, "tickets are labels", projects, `chat_id`). The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the `alcode` CLI; the delegation manual is its `--guide` output ([`packages/alcode/templates/guide.md`](../packages/alcode/templates/guide.md)), run via `exec` at delegation time. Nothing here is auto-loaded — files are read on demand (see context engineering below).
+3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts the workspace dir, the playbook skill, and the built `@paleo/alcode` package into the gateway, so edits to layers 1 and 2 (and the guide) iterate live without rebuilding the image.
 
 ## How a turn flows
 
@@ -16,10 +16,10 @@ user message
   → openclaw-coder-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
   → references/project-workspace-setup.md (if WORK)       layer 2
-  → delegate coding to the alignfirst-coaching skill (coaching/CLI, read last)
+  → run `alcode --guide` (delegation manual, read last), then delegate via alcode
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the coaching `alignfirst-coaching/SKILL.md` is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the exec-exit wake arrives.
 
 ## Reading order for maintainers
 

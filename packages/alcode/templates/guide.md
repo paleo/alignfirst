@@ -10,9 +10,21 @@ Run `alcode` from the root of the target project, so the agent works in the righ
 
 `alcode` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript to stdout as it arrives. It never backgrounds or detaches itself.
 
-If your run should be a background task (so you stay free while it works), let **your caller** do the backgrounding. Under OpenClaw, run `alcode` through the `exec` tool with a disabled or generous timeout (`timeout: 0`) — OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits. Do **not** poll: read the session file when you are woken.
+If your run should be a background task (so you stay free while it works), let **your caller** do the backgrounding. Under OpenClaw, run `alcode` through the `exec` tool with a disabled or generous timeout (`timeout: 0`) — OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits.
 
-Every run writes a session file under `.plans/`: `.plans/<ticket>/coding-sessions/<stamp>.md`, or `.plans/_coding-sessions/<stamp>.md` without a ticket. This file is the durable record of the run — its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Read it to get the result after a background run completes.
+As soon as the run is backgrounded, tell the user the coding agent is now working in the background and that you will report back when it finishes (e.g. *"Le coding agent tourne en arrière-plan — je te préviens dès que c'est terminé."*). Then go available. Do **not** poll.
+
+Every run writes a session file under `.plans/`: `.plans/<ticket>/coding-sessions/<stamp>.md`, or `.plans/_coding-sessions/<stamp>.md` without a ticket. This file is the durable record of the run — its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+
+## After a background run completes
+
+Your platform wakes you when the backgrounded `alcode` exits. The wake may arrive as a **plain heartbeat poll with no message text** — do not wait for an explicit "exec finished" notice. Whenever you are woken, or receive any heartbeat, while an `alcode` run is pending, do exactly this:
+
+1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+2. **Report the outcome to the user** where the work was requested — one concise message: succeeded or failed, plus a one-line summary of the result for the audience.
+3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git` — the coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
+
+If the session file says the run failed, report that plainly and propose the next step; don't silently retry.
 
 ## CLI reference
 
@@ -44,7 +56,7 @@ When asking a question (not executing a plan) with `--new` and no protocol, the 
 
 ## Spec-Plan-Execute workflow
 
-The default. Start here except for trivial tasks.
+The default workflow. Always start with it, except for very insignificant tasks.
 
 1. **Spec** — `alcode --new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
 2. **Plan** — `alcode --resume <sessionId> --protocol plan`. The agent writes the plan file.
@@ -53,7 +65,7 @@ The default. Start here except for trivial tasks.
 
 ## Light workflow (AAD)
 
-For one-shot changes or follow-up adjustments. The agent investigates, discusses, then implements in one session.
+For one-shot changes or follow-up adjustments right after executing a plan. The agent investigates, discusses, then implements in one session.
 
 ```bash
 alcode --new --protocol aad --ticket AB-123 --message "Task description"
@@ -79,7 +91,7 @@ alcode --resume <sessionId> --message \
 3 - Yes, it should be optional."
 ```
 
-**Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"What would be the most elegant way to do it?"*, *"Check if a similar pattern exists elsewhere."*
+**Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the most elegant way to do it?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
 
 **Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user, then relay the answer.
 

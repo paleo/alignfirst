@@ -12,11 +12,11 @@ Install OpenClaw on a VPS.
 ```mermaid
 flowchart TD
   U([User]) -->|"asks via Discord / Slack"| O[OpenClaw]
-  O -->|"delegates the task<br/>(openclaw-coder-playbook + alignfirst-coaching skills)"| CC[Claude Code]
+  O -->|"delegates the task<br/>(openclaw-coder-playbook skill + alcode CLI)"| CC[Claude Code]
   CC -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
-OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** and **`alignfirst-coaching`** skills. Claude Code does the actual work with the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
+OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI (whose `--guide` is the delegation manual). Claude Code does the actual work with the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
 
 ### Supported OpenClaw channels
 
@@ -47,20 +47,19 @@ Skill:
 
 ### Skills for OpenClaw
 
-OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst-coaching`, `alignfirst`:
+OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst`:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --yes --agent universal \
-  --skill openclaw-coder-playbook --skill alignfirst-coaching --skill alignfirst
+  --skill openclaw-coder-playbook --skill alignfirst
 ```
 
 Skills:
 
 - **`openclaw-coder-playbook`** — operating instructions for an OpenClaw AI coder.
-- **`alignfirst-coaching`** — teaches the agent to delegate coding tasks to Claude Code.
 - **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
 
-The `alignfirst-coaching` skill drives the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`.
+The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`. The agent learns how to use it by running `alcode --guide` — install the CLI so the command is on the bot's PATH (there is no separate coaching skill).
 
 Optional `alcode` environment variables:
 
@@ -79,7 +78,7 @@ Run alcode directly (not through OpenClaw) and it simply blocks in the foregroun
 
 ### `openclaw.json`
 
-OpenClaw needs a coding tool profile that can still post to chat, and the three skills wired in:
+OpenClaw needs a coding tool profile that can still post to chat, and the two skills wired in:
 
 ```jsonc
 {
@@ -89,7 +88,7 @@ OpenClaw needs a coding tool profile that can still post to chat, and the three 
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "alignfirst-coaching", "openclaw-coder-playbook"]
+      "skills": ["alignfirst", "openclaw-coder-playbook"]
     }
   },
   "channels": {
