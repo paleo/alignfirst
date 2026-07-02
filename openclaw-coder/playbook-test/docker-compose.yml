@@ -27,11 +27,11 @@ services:
       # workspace AGENTS.md, so the coaching alignfirst-coaching SKILL.md is no
       # longer the agent's first body read on a turn.
       - ${OPENCLAW_CODER_PLAYBOOK_SKILL_DIR}:/home/claw/.agents/skills/openclaw-coder-playbook
-      # Live-mount the built @paleo/alcoach package so the /usr/local/bin/alcoach
-      # wrapper resolves to it. ALIGNFIRST_COACH_DIR is the host path to packages/alcoach
+      # Live-mount the built @paleo/alcode package so the /usr/local/bin/alcode
+      # wrapper resolves to it. ALIGNFIRST_CODE_DIR is the host path to packages/alcode
       # (build it with `npm run build` first). Read-only: the CLI only reads its
       # own dist/bin/templates and spawns `claude` from there.
-      - ${ALIGNFIRST_COACH_DIR}:/opt/alcoach:ro
+      - ${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro
 
   runner:
     environment:

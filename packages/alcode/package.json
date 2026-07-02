@@ -1,21 +1,20 @@
 {
-  "name": "@paleo/alcoach",
+  "name": "@paleo/alcode",
   "version": "0.0.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
-  "description": "Coach a coding agent through AlignFirst protocols, with background runs and a session callback.",
+  "description": "Run a coding agent through AlignFirst protocols, with a durable session file per run.",
   "keywords": [
     "ai",
     "agent",
     "alignfirst",
-    "coaching",
     "cli",
     "claude"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
-    "directory": "packages/alcoach"
+    "directory": "packages/alcode"
   },
   "engines": {
     "node": ">=22.11.0"
@@ -23,7 +22,7 @@
   "packageManager": "npm@11.11.0",
   "type": "module",
   "bin": {
-    "alcoach": "bin/alcoach.mjs"
+    "alcode": "bin/alcode.mjs"
   },
   "files": [
     "bin",

@@ -15,8 +15,8 @@ This README only documents what is specific to this harness.
 cp .env.local.example .env.local
 # Edit .env.local — fill ANTHROPIC_API_KEY
 
-# Build the real coaching CLI the gateway runs (packages/alcoach/dist must exist).
-npm run build --workspace @paleo/alcoach --prefix ../..
+# Build the real alcode CLI the gateway runs (packages/alcode/dist must exist).
+npm run build --workspace @paleo/alcode --prefix ../..
 
 npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first run only; env:build repeats it)
 npm install
@@ -28,10 +28,10 @@ npm run env:down
 
 See the upstream README for all flags.
 
-> ℹ️ **Build `@paleo/alcoach` before `env:up`.** The gateway runs the real `alcoach` CLI
-> (live-mounted from `ALIGNFIRST_COACH_DIR`, host path to `packages/alcoach`) via a `/usr/local/bin/alcoach`
-> wrapper — only its own `claude` subprocess is mocked. If `packages/alcoach/dist` is missing the
-> wrapper fails at runtime. alcoach edits iterate live (no rebuild); a `tsc` rebuild of alcoach is
+> ℹ️ **Build `@paleo/alcode` before `env:up`.** The gateway runs the real `alcode` CLI
+> (live-mounted from `ALIGNFIRST_CODE_DIR`, host path to `packages/alcode`) via a `/usr/local/bin/alcode`
+> wrapper — only its own `claude` subprocess is mocked. If `packages/alcode/dist` is missing the
+> wrapper fails at runtime. alcode edits iterate live (no rebuild); a `tsc` rebuild of alcode is
 > enough.
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
@@ -41,21 +41,21 @@ See the upstream README for all flags.
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `ALIGNFIRST_COACHING_SKILL_DIR` — host path to the `alignfirst-coaching` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
-- `ALIGNFIRST_COACH_DIR` — host path to `packages/alcoach` (build it first). Live-mounted read-only at `/opt/alcoach`; the `/usr/local/bin/alcoach` wrapper runs `node /opt/alcoach/bin/alcoach.mjs`. Not shimmed — alcoach runs for real; its `claude` subprocess still resolves to the mock via PATH order.
+- `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Not shimmed — alcode runs for real; its `claude` subprocess still resolves to the mock via PATH order.
 - [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
-- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcoach bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
-## Coaching completion (alcoach)
+## Coding-session completion (alcode)
 
-The coaching flow runs the real `alcoach` CLI. `alcoach` runs `claude` in the **foreground** and blocks; the agent runs `alcoach` through OpenClaw's `exec` tool with `timeout: 0`, so OpenClaw backgrounds it (letting the agent post a "started" ack) and wakes the **same** thread session when it exits, via the native exec completion event (`tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads alcoach's log under `.plans/<ticket>/coding-sessions/` and reports the outcome in the thread. No callback, no gateway RPC, no isolated turn — the completion lands in the exact-case conversation because it is the same session resuming.
+The delegation flow runs the real `alcode` CLI. `alcode` runs `claude` in the **foreground** and blocks; the agent runs `alcode` through OpenClaw's `exec` tool with `timeout: 0`, so OpenClaw backgrounds it (letting the agent post a "started" ack) and wakes the **same** thread session when it exits, via the native exec completion event (`tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads alcode's session file under `.plans/<ticket>/coding-sessions/` and reports the outcome in the thread. No callback, no gateway RPC, no isolated turn — the completion lands in the exact-case conversation because it is the same session resuming.
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes two git repos on branch `develop` at `/home/claw/projects/{nimbus,lumen}`, both copied from the committed [`projects-fixture/template/`](projects-fixture/template/) — a minimal Express monorepo stand-in. Each carries `package.json` `name` `@playbook-test/<name>-fixture` and `DEVELOPMENT.md` H1 `# Developing <Name>`, plus an (untracked) `.plans/` directory so `alcoach`'s project gate is satisfied.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes two git repos on branch `develop` at `/home/claw/projects/{nimbus,lumen}`, both copied from the committed [`projects-fixture/template/`](projects-fixture/template/) — a minimal Express monorepo stand-in. Each carries `package.json` `name` `@playbook-test/<name>-fixture` and `DEVELOPMENT.md` H1 `# Developing <Name>`, plus an (untracked) `.plans/` directory so `alcode`'s project gate is satisfied.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcoach` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcoach`, not `claude`, then rides the native exec completion wake).
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the native exec completion wake).
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
@@ -69,6 +69,6 @@ This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs
 
 - [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) · [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) — committed.
 - `vendor/` (gitignored) — locally-built `@paleo/openclaw-*` tarballs, regenerated by `npm run vendor`.
-- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`, `ALIGNFIRST_COACH_DIR`.
+- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`, `ALIGNFIRST_CODE_DIR`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `trajectory/<sessionId>.jsonl` (always, provider-neutral), `raw-stream.jsonl` (opt-in).

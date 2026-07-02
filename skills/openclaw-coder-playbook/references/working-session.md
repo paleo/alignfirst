@@ -4,13 +4,13 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 
 ## Completion of a background coding session
 
-When your `alcoach` `exec` run (launched with `timeout: 0`, backgrounded by OpenClaw) exits, you are woken with your full thread transcript intact. This is the completion signal. Do exactly this, and nothing else:
+When your `alcode` `exec` run (launched with `timeout: 0`, backgrounded by OpenClaw) exits, you are woken with your full thread transcript intact. This is the completion signal. Do exactly this, and nothing else:
 
-1. **Read the run's log** (the path `alcoach` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
 2. **Report the outcome in the thread** — one concise message: succeeded or failed, plus a one-line summary of the result for the audience.
-3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git` — the coding agent already did the work and the log is authoritative. Relay the log outcome, nothing more.
+3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git` — the coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
 
-If the log says the run failed, report that plainly and propose the next step; don't silently retry.
+If the session file says the run failed, report that plainly and propose the next step; don't silently retry.
 
 ## Prerequisites
 

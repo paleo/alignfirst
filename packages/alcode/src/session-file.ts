@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export interface LogFrontmatter {
+export interface SessionFrontmatter {
   status: "running" | "succeeded" | "failed";
   protocol: string | null;
   ticket: string | null;
@@ -21,11 +21,11 @@ export function assertPlansGate(cwd: string): string | undefined {
   if (existsSync(join(cwd, ".plans"))) return;
   return (
     "Error: no `.plans/` directory found in the current directory. " +
-    "Run alcoach from the root of an AlignFirst-managed project."
+    "Run alcode from the root of an AlignFirst-managed project."
   );
 }
 
-export function resolveLogPath(
+export function resolveSessionFilePath(
   cwd: string,
   ticket: string | undefined,
   now: Date,
@@ -45,27 +45,30 @@ export function resolveLogPath(
 }
 
 // Writes the initial `running` header. Present before the run starts so an interrupted run still
-// leaves an auditable log; the terminal frontmatter rewrite happens on completion.
-export function writeInitialLog(logPath: string, frontmatter: LogFrontmatter): void {
+// leaves an auditable record; the terminal frontmatter rewrite happens on completion.
+export function writeInitialSessionFile(
+  sessionFilePath: string,
+  frontmatter: SessionFrontmatter,
+): void {
   const header = `${serializeFrontmatter(frontmatter)}\n`;
-  mkdirSync(dirname(logPath), { recursive: true });
-  writeFileSync(logPath, header);
+  mkdirSync(dirname(sessionFilePath), { recursive: true });
+  writeFileSync(sessionFilePath, header);
 }
 
 export interface CompletionUpdate {
   status: "succeeded" | "failed";
   endedAt: string;
-  exitReason: string;
+  exitReason: "completed" | "error" | "terminated";
   sessionId: string | null;
   result: string;
 }
 
 // Appends the result block, then rewrites the frontmatter in place. Append-first keeps the tailed
 // transcript intact until the single terminal rewrite.
-export function applyCompletion(logPath: string, update: CompletionUpdate): void {
-  const content = readFileSync(logPath, "utf-8");
-  const { frontmatter, body } = splitLog(content);
-  const updated: LogFrontmatter = {
+export function applyCompletion(sessionFilePath: string, update: CompletionUpdate): void {
+  const content = readFileSync(sessionFilePath, "utf-8");
+  const { frontmatter, body } = splitSessionFile(content);
+  const updated: SessionFrontmatter = {
     ...frontmatter,
     status: update.status,
     endedAt: update.endedAt,
@@ -73,23 +76,23 @@ export function applyCompletion(logPath: string, update: CompletionUpdate): void
     sessionId: update.sessionId ?? frontmatter.sessionId,
   };
   const resultBlock = `${RESULT_MARKER}\n${update.result}\n`;
-  writeFileSync(logPath, `${serializeFrontmatter(updated)}\n${body}${resultBlock}`);
+  writeFileSync(sessionFilePath, `${serializeFrontmatter(updated)}\n${body}${resultBlock}`);
 }
 
-export function appendTranscript(logPath: string, text: string): void {
-  writeFileSync(logPath, text, { flag: "a" });
+export function appendTranscript(sessionFilePath: string, text: string): void {
+  writeFileSync(sessionFilePath, text, { flag: "a" });
 }
 
-export interface LogCompletion {
-  frontmatter: LogFrontmatter;
+export interface SessionCompletion {
+  frontmatter: SessionFrontmatter;
   result: string | undefined;
 }
 
-// Reads back a completed (or in-progress) log — the durable result handoff a waking OpenClaw agent
-// or a human reads: frontmatter status/sessionId plus the `---- Result ----` block.
-export function readCompletion(logPath: string): LogCompletion {
-  const content = readFileSync(logPath, "utf-8");
-  const { frontmatter } = splitLog(content);
+// Reads back a completed (or in-progress) session file — the durable result handoff a waking
+// OpenClaw agent or a human reads: frontmatter status/sessionId plus the `---- Result ----` block.
+export function readCompletion(sessionFilePath: string): SessionCompletion {
+  const content = readFileSync(sessionFilePath, "utf-8");
+  const { frontmatter } = splitSessionFile(content);
   const markerIndex = content.indexOf(RESULT_MARKER);
   const result =
     markerIndex === -1 ? undefined : content.slice(markerIndex + RESULT_MARKER.length).trim();
@@ -98,7 +101,7 @@ export function readCompletion(logPath: string): LogCompletion {
 
 // --- Frontmatter serialization (dependency-free, round-trips with parseFrontmatter) ---
 
-export function serializeFrontmatter(frontmatter: LogFrontmatter): string {
+export function serializeFrontmatter(frontmatter: SessionFrontmatter): string {
   const lines = Object.entries(frontmatter).map(
     ([key, value]) => `${key}: ${serializeValue(value)}`,
   );
@@ -114,18 +117,18 @@ function needsQuote(value: string): boolean {
   return value === "" || /[:"#]/.test(value) || value !== value.trim();
 }
 
-interface SplitLog {
-  frontmatter: LogFrontmatter;
+interface SplitSessionFile {
+  frontmatter: SessionFrontmatter;
   body: string;
 }
 
-function splitLog(content: string): SplitLog {
+function splitSessionFile(content: string): SplitSessionFile {
   const match = content.match(/^---\n([\s\S]*?)\n---\n/);
-  if (!match) throw new Error("Log file is missing its frontmatter block.");
+  if (!match) throw new Error("Session file is missing its frontmatter block.");
   return { frontmatter: parseFrontmatter(match[1]), body: content.slice(match[0].length) };
 }
 
-export function parseFrontmatter(block: string): LogFrontmatter {
+export function parseFrontmatter(block: string): SessionFrontmatter {
   const map: Record<string, string | null> = {};
   for (const line of block.split("\n")) {
     const index = line.indexOf(":");
@@ -134,7 +137,7 @@ export function parseFrontmatter(block: string): LogFrontmatter {
     map[key] = parseValue(line.slice(index + 1).trim());
   }
   return {
-    status: (map.status as LogFrontmatter["status"]) ?? "running",
+    status: (map.status as SessionFrontmatter["status"]) ?? "running",
     protocol: map.protocol ?? null,
     ticket: map.ticket ?? null,
     model: map.model ?? null,

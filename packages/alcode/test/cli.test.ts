@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { type AlcoachArgs, parseAlcoachArgs, validateArgs } from "../src/cli.js";
+import { type AlcodeArgs, parseAlcodeArgs, validateArgs } from "../src/cli.js";
 
-function parse(flags: string[]): AlcoachArgs {
-  return parseAlcoachArgs(["node", "alcoach", ...flags]);
+function parse(flags: string[]): AlcodeArgs {
+  return parseAlcodeArgs(["node", "alcode", ...flags]);
 }
 
 function validate(flags: string[]): string | undefined {
   return validateArgs(parse(flags));
 }
 
-describe("parseAlcoachArgs", () => {
+describe("parseAlcodeArgs", () => {
   it("reads the flags into camelCase fields", () => {
     const args = parse(["--new", "--protocol", "aad", "--ticket", "29", "--message", "go"]);
     expect(args.isNew).toBe(true);

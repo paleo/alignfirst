@@ -2,10 +2,10 @@
 name: alignfirst-coaching
 description: "Coach an AlignFirst spec-plan-execute or AAD workflow using a CLI wrapper around a coding-agent CLI. Use when orchestrating coding agents through AlignFirst protocols non-interactively."
 license: CC0 1.0
-compatibility: Requires Node.js, the Claude Code CLI, and the @paleo/alcoach CLI
+compatibility: Requires Node.js, the Claude Code CLI, and the @paleo/alcode CLI
 metadata:
   author: Paleo
-  version: "0.13.0"
+  version: "0.14.0"
 ---
 
 Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overview.md` if not already loaded.
@@ -14,24 +14,24 @@ Read the *alignfirst* skill (`../alignfirst/SKILL.md`) and its `references/overv
 
 # AlignFirst Coaching Guide
 
-Coaching runs through the `alcoach` CLI (the `@paleo/alcoach` package). It wraps a coding-agent CLI (currently `claude`) for non-interactive use: it invokes an AlignFirst protocol, streams the run to a per-call log file, and returns the result.
+Coaching runs through the `alcode` CLI (the `@paleo/alcode` package). It wraps a coding-agent CLI (currently `claude`) for non-interactive use: it invokes an AlignFirst protocol, streams the run to a per-call session file, and returns the result.
 
-Run `alcoach` from the root of the project you're coaching, so the coding agent works in the right repo. The project must contain a `.plans/` directory. For the full reference, run `alcoach --guide`.
+Run `alcode` from the root of the project you're coaching, so the coding agent works in the right repo. The project must contain a `.plans/` directory. For the full reference, run `alcode --guide`.
 
-For `--new` modes, save the `Session ID:` (surfaced in the output in foreground, or written to the log frontmatter in background) to resume the conversation later.
+For `--new` modes, save the `Session ID:` (surfaced in the output in foreground, or written to the session file's frontmatter) to resume the conversation later.
 
 ## How it runs — and backgrounding long runs
 
-`alcoach` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript. It never backgrounds itself.
+`alcode` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript. It never backgrounds itself.
 
-Coaching runs are long. If you are an OpenClaw agent, run `alcoach` through the `exec` tool with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits. Then **do not poll** — go available, and when you are woken, read the run's log (its path is printed on the first line and lives under `.plans/`) to get the outcome.
+Coaching runs are long. If you are an OpenClaw agent, run `alcode` through the `exec` tool with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits. Then **do not poll** — go available, and when you are woken, read the run's session file (its path is printed on the first line and lives under `.plans/`) to get the outcome.
 
 ## CLI Reference
 
 ```
-alcoach --new --protocol <protocol> --ticket <id> [--message "..."]
-alcoach --new --message "..."
-alcoach --resume <sessionId> [--protocol <protocol>] [--message "..."]
+alcode --new --protocol <protocol> --ticket <id> [--message "..."]
+alcode --new --message "..."
+alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
 ```
 
 **Flags:**
@@ -51,9 +51,9 @@ alcoach --resume <sessionId> [--protocol <protocol>] [--message "..."]
 - Ask the agent a question in a new session
 
 ```bash
-alcoach --resume <sessionId> --message "Your answer"
-alcoach --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
-alcoach --new --message "Explain how ... works in this project. Do not implement anything. We need to talk first."
+alcode --resume <sessionId> --message "Your answer"
+alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+alcode --new --message "Explain how ... works in this project. Do not implement anything. We need to talk first."
 ```
 
 **Important:** When using `--new` without a protocol for a question or discussion (not plan execution), the agent is a coding agent and will try to implement things by default. End your message with a clear constraint, e.g.: *"Do not implement anything. We need to talk first."*
@@ -65,7 +65,7 @@ The default workflow. Always start with it, except for very insignificant tasks.
 ### Step 1 — Create a spec
 
 ```bash
-alcoach --new --protocol spec --ticket AB-123 --message "Description of the feature or task"
+alcode --new --protocol spec --ticket AB-123 --message "Description of the feature or task"
 ```
 
 The agent investigates the codebase and responds with its findings and questions. Save the session ID from the output. There may be several back-and-forths before the agent is satisfied and writes the spec file — see [Answering agent questions](#answering-agent-questions).
@@ -75,7 +75,7 @@ The agent investigates the codebase and responds with its findings and questions
 Once the spec is written, request a plan in the same session:
 
 ```bash
-alcoach --resume <sessionId> --protocol plan
+alcode --resume <sessionId> --protocol plan
 ```
 
 The agent writes a plan file (e.g. `.plans/AB-123/A2-plan.md`) and provides its path in the output. The agent rarely asks questions at this stage.
@@ -85,7 +85,7 @@ The agent writes a plan file (e.g. `.plans/AB-123/A2-plan.md`) and provides its 
 Start a **new** session to execute the plan:
 
 ```bash
-alcoach --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
+alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"
 ```
 
 The agent implements the plan and writes a summary file (e.g. `.plans/AB-123/A2-plan.summary.md`), providing its path in the output.
@@ -101,7 +101,7 @@ For straightforward changes that can be done in one shot — like moving a butto
 ### Step 1 — Start an AAD session
 
 ```bash
-alcoach --new --protocol aad --ticket AB-123 --message "Description of the task"
+alcode --new --protocol aad --ticket AB-123 --message "Description of the task"
 ```
 
 Like the spec workflow, the agent investigates the codebase and asks questions. Save the session ID. Answer questions the same way — see [Answering agent questions](#answering-agent-questions).
@@ -117,7 +117,7 @@ The summary file contains a suggested commit message. Commit locally as in the s
 Generates a PR/MR description for work already committed. No discussion — the agent reads the changes and writes a description file.
 
 ```bash
-alcoach --new --protocol description --ticket AB-123
+alcode --new --protocol description --ticket AB-123
 ```
 
 The agent writes a markdown file with the description and provides its path in the output.
@@ -127,8 +127,8 @@ The agent writes a markdown file with the description and provides its path in t
 Loads the spec and summary files for a ticket into the agent's context. Without `--message`, the agent describes what was done for the ticket. With `--message`, it loads context then processes the message in a single call — useful to ask questions about prior work.
 
 ```bash
-alcoach --new --protocol read --ticket AB-123
-alcoach --new --protocol read --ticket AB-123 --message "Did we propagate the changes in ...? Do not implement anything. We need to talk first."
+alcode --new --protocol read --ticket AB-123
+alcode --new --protocol read --ticket AB-123 --message "Did we propagate the changes in ...? Do not implement anything. We need to talk first."
 ```
 
 ## Review (Code Review)
@@ -136,7 +136,7 @@ alcoach --new --protocol read --ticket AB-123 --message "Did we propagate the ch
 Reviews the current branch against the base branch and writes a review report.
 
 ```bash
-alcoach --new --protocol review --ticket AB-123
+alcode --new --protocol review --ticket AB-123
 ```
 
 The agent writes a review file (e.g. `.plans/AB-123/A3-review.md`) and provides its path in the output.
@@ -148,13 +148,13 @@ Resolves merge or rebase conflicts and summarizes the tricky resolutions. Can al
 When conflicts are already present:
 
 ```bash
-alcoach --new --protocol merge --ticket AB-123
+alcode --new --protocol merge --ticket AB-123
 ```
 
 When the merge has not started, pass the incoming branch via `--message`:
 
 ```bash
-alcoach --new --protocol merge --ticket AB-123 --message "Merge \`main\` into the current branch."
+alcode --new --protocol merge --ticket AB-123 --message "Merge \`main\` into the current branch."
 ```
 
 On conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summary.md`) and provides its path. On a clean merge, no summary is written.
@@ -164,7 +164,7 @@ On conflicts, the agent writes a summary file (e.g. `.plans/AB-123/A4-merge.summ
 During spec and AAD sessions, the agent asks questions before proceeding. Resume the session **without a protocol** to answer:
 
 ```bash
-alcoach --resume <sessionId> --message "Your answer here"
+alcode --resume <sessionId> --message "Your answer here"
 ```
 
 There may be several back-and-forths before the agent is satisfied.
@@ -172,7 +172,7 @@ There may be several back-and-forths before the agent is satisfied.
 The agent often asks multiple questions at once. Answer them all in a single message, numbered to match:
 
 ```bash
-alcoach --resume <sessionId> --message \
+alcode --resume <sessionId> --message \
   "1 - Explore the codebase to find out, and give me your opinion.
 2 - Is that a good design? We need the cleanest code possible.
 3 - We checked with the team: yes, it should be optional."

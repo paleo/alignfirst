@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { buildCallbackRequest, fireCallback } from "./callback.js";
 import {
   parseWorkspaceArgs,
   printWorkspaceHelp,
@@ -35,7 +34,6 @@ import {
   type ResolvedFileSource,
   setupLogPath,
 } from "./helpers.js";
-import { isModeError, type ModeResolution, resolveMode } from "./mode.js";
 import { findOrphanPorts } from "./orphans.js";
 import { wsCmd } from "./package-manager.js";
 import {
@@ -326,20 +324,11 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       await handleRemove(command, ctx, run, config, registryDir);
       return;
     case "setup": {
-      const mode = resolveMode(
-        { callbackUrl: command.callbackUrl, sessionKey: command.sessionKey },
-        process.env,
-      );
-      if (isModeError(mode)) {
-        console.error(mode.error);
-        process.exit(1);
-      }
-      const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir, mode);
-      // Non-OpenClaw callers block until finalize settles (former `--wait` behavior); OpenClaw
-      // callers return immediately and are woken by the completion callback.
-      if (!mode.isBackground) {
-        await waitForSlot(slot, config, registryDir, { printSummary: false });
-      }
+      const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
+      // Block until the detached finalize settles (READY/FAILED). A caller that wants the whole
+      // setup in the background backgrounds this command itself (e.g. OpenClaw's exec tool, which
+      // wakes the agent when it exits).
+      await waitForSlot(slot, config, registryDir, { printSummary: false });
       if (command.go) enterWorktree(worktree);
       return;
     }
@@ -377,7 +366,6 @@ async function runSetup(
   run: RunCtx,
   config: WorkspaceConfig,
   registryDir: string,
-  mode: ModeResolution,
 ): Promise<{ slot: number; worktree: string }> {
   const scheme: PortScheme = resolvePortScheme(config);
   const portsFn = resolvePortsFn(config);
@@ -454,22 +442,12 @@ async function runSetup(
   teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    // In foreground mode the parent auto-blocks on the slot, so the manual wait hint is only useful
-    // to OpenClaw callers, which return immediately.
-    if (mode.isBackground) {
-      teeLog(`Block until ready: ${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}`);
-    }
+    // The parent auto-blocks on the slot, so this hint is the recovery path after a Ctrl-C.
+    teeLog(`Re-attach with: ${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}`);
   }
 
   const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];
   if (command.force) finalizeArgs.push("--force");
-  // The session key is a CLI arg (env does not carry it), so thread it into the detached child so
-  // `runFinalize` can fire the completion callback. The URL/token arrive via inherited env; only a
-  // `--callback-url` override needs threading.
-  if (mode.isBackground && mode.callback) {
-    finalizeArgs.push("--session-key", mode.callback.sessionKey);
-    if (command.callbackUrl) finalizeArgs.push("--callback-url", command.callbackUrl);
-  }
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -556,41 +534,13 @@ async function runFinalize(
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (slot ${slot})`);
     appendLog("============================================================");
-    await fireFinalizeCallback(command, ctx.currentWorktree, slot, logPath, appendLog);
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
     markSlotFailed(ctx.mainWorktree, registryDir, slot, message);
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
-    await fireFinalizeCallback(command, ctx.currentWorktree, slot, logPath, appendLog);
     process.exit(1);
-  }
-}
-
-/**
- * OpenClaw completion callback, fired from inside the detached finalize child (the only place where
- * READY/FAILED is authoritative). The URL/token come from inherited env; the session key was
- * threaded into this child's argv. A missing/foreground config is a no-op; a failed POST is recorded
- * in the setup log rather than crashing the finalize.
- */
-async function fireFinalizeCallback(
-  command: FinalizeCommand,
-  worktree: string,
-  slot: number,
-  logPath: string,
-  appendLog: (message: string) => void,
-): Promise<void> {
-  const mode = resolveMode(
-    { callbackUrl: command.callbackUrl, sessionKey: command.sessionKey },
-    process.env,
-  );
-  if (isModeError(mode) || !mode.callback) return;
-  const request = buildCallbackRequest(mode.callback, logPath, `${worktree}#${slot}`, worktree);
-  try {
-    await fireCallback(request);
-  } catch (err) {
-    appendLog(`Callback POST failed: ${(err as Error).message}`);
   }
 }
 

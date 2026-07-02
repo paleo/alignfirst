@@ -39,10 +39,10 @@ async function resetFixture(name) {
   const dst = `${PROJECTS}/${name}`;
   cpSync(TEMPLATE, dst, { recursive: true, preserveTimestamps: true });
   patchFixture(dst, name);
-  // alcoach refuses to run outside a project that has a `.plans/` directory
+  // alcode refuses to run outside a project that has a `.plans/` directory
   // (its coaching-session logs land there). Seed an empty one — the fixture's
   // .gitignore already ignores `.plans/`, so it stays untracked like a real
-  // repo; the agent runs alcoach from this project root (~/projects/<name>).
+  // repo; the agent runs alcode from this project root (~/projects/<name>).
   mkdirSync(`${dst}/.plans`, { recursive: true });
   const gitEnv = {
     ...process.env,

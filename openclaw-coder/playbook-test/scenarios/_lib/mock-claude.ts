@@ -11,7 +11,7 @@ const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/(feat|fix|refactor|chore|docs|test
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 
-// alcoach drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
+// alcode drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
 // event stream line-by-line: it needs a system/init line carrying a session_id, optional
 // assistant/text lines, and a terminal `result` line (session_id + result + is_error). This mirrors
 // the canned stream A3's runner expects.
@@ -40,7 +40,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 let streamSessionCounter = 0;
 function nextStreamSessionId(): string {
   streamSessionCounter += 1;
-  return `alcoach-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
+  return `alcode-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
 }
 
 export type ClaudeCall = { argv: string[]; cwd: string; entry?: CliMockEntry };
@@ -63,8 +63,8 @@ export interface SetupClaudeMockOptions {
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
   /**
-   * Delay (ms) before the stream-json (alcoach) branch emits its NDJSON. alcoach runs `claude` in
-   * the foreground and blocks on it, so this delay is what makes the whole alcoach exec long enough
+   * Delay (ms) before the stream-json (alcode) branch emits its NDJSON. alcode runs `claude` in
+   * the foreground and blocks on it, so this delay is what makes the whole alcode exec long enough
    * for OpenClaw to background it (and the agent to post a "started" ack) before it exits and the
    * completion wake fires. Default 4000.
    */
@@ -191,9 +191,9 @@ export function setupClaudeMock(
     } else {
       resultText = defaultResult;
     }
-    // alcoach drives `claude` in stream-json in the foreground and blocks on it. Emulate a short run
-    // (so OpenClaw backgrounds the alcoach exec and the agent's "started" ack lands first), then
-    // stream the NDJSON transcript alcoach parses (init → text → result).
+    // alcode drives `claude` in stream-json in the foreground and blocks on it. Emulate a short run
+    // (so OpenClaw backgrounds the alcode exec and the agent's "started" ack lands first), then
+    // stream the NDJSON transcript alcode parses (init → text → result).
     await delay(streamDelayMs);
     stdout.write(buildClaudeStreamResponse(nextStreamSessionId(), resultText));
     // The mock-cli server emits this call's cliMock entry only AFTER the handler returns. Defer one
@@ -243,9 +243,9 @@ export function setupClaudeMock(
 }
 
 /**
- * True iff the call has the argv shape alcoach emits when driving `claude`:
+ * True iff the call has the argv shape alcode emits when driving `claude`:
  * `claude "<prompt>" -p --output-format stream-json --verbose … (--permission-mode auto|--dangerously-skip-permissions) [--resume <id>] [--model <m>]`.
- * This is the only shape alcoach produces, so it doubles as "this claude call came from alcoach".
+ * This is the only shape alcode produces, so it doubles as "this claude call came from alcode".
  */
 export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
   const a = call.argv;
@@ -393,7 +393,7 @@ export async function expectCodingDelegation(
   await ctx.judgeLLM({
     attachTo: target,
     message: renderClaudeCall(claudeCall),
-    rubric: `The message is a prompt sent to a coding agent (Claude) via the \`alcoach\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
+    rubric: `The message is a prompt sent to a coding agent (Claude) via the \`alcode\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
     label,
   });
 

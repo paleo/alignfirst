@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildClaudeArgs,
   buildClaudeEnv,
+  buildTerminationUpdate,
   createStreamState,
   renderEvent,
   type RunConfig,
@@ -10,7 +11,7 @@ import {
 
 const BASE: RunConfig = {
   prompt: "do the thing",
-  logPath: "/tmp/x.md",
+  sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
   isNew: true,
   skipPermissions: false,
@@ -45,12 +46,12 @@ describe("buildClaudeArgs", () => {
 });
 
 describe("buildClaudeEnv", () => {
-  it("strips every ALIGNFIRST_COACH_* var and the ALIGNFIRST_COACH_UNSET names", () => {
+  it("strips every ALIGNFIRST_CODE_* var and the ALIGNFIRST_CODE_UNSET names", () => {
     const env = buildClaudeEnv(
       {
         PATH: "/bin",
-        ALIGNFIRST_COACH_SKIP_PERMISSIONS: "1",
-        ALIGNFIRST_COACH_UNSET: "SECRET_KEY",
+        ALIGNFIRST_CODE_SKIP_PERMISSIONS: "1",
+        ALIGNFIRST_CODE_UNSET: "SECRET_KEY",
         SECRET_KEY: "leak",
         KEEP: "yes",
       },
@@ -58,8 +59,28 @@ describe("buildClaudeEnv", () => {
     );
     expect(env.PATH).toBe("/bin");
     expect(env.KEEP).toBe("yes");
-    expect(env.ALIGNFIRST_COACH_SKIP_PERMISSIONS).toBeUndefined();
+    expect(env.ALIGNFIRST_CODE_SKIP_PERMISSIONS).toBeUndefined();
     expect(env.SECRET_KEY).toBeUndefined();
+  });
+});
+
+describe("buildTerminationUpdate", () => {
+  it("seals the session as failed/terminated with the captured session id", () => {
+    const state = createStreamState();
+    state.sessionId = "sess-1";
+    const update = buildTerminationUpdate("SIGTERM", state, new Date("2026-07-02T10:00:00Z"));
+    expect(update).toEqual({
+      status: "failed",
+      endedAt: "2026-07-02T10:00:00.000Z",
+      exitReason: "terminated",
+      sessionId: "sess-1",
+      result: "Terminated by SIGTERM before completion.",
+    });
+  });
+
+  it("leaves the session id null when the stream never reported one", () => {
+    const update = buildTerminationUpdate("SIGINT", createStreamState(), new Date(0));
+    expect(update.sessionId).toBeNull();
   });
 });
 

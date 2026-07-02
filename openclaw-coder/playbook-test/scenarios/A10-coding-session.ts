@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { invokesAlcoach, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
+import { invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { requireThreadId } from "./_lib/outbound.ts";
@@ -34,16 +34,16 @@ const COMPLETION_RUBRIC =
   "the work is still starting or in progress.";
 
 /**
- * Regression for the real `@paleo/alcoach` foreground run driven as an OpenClaw background exec. The
- * agent delegates coding work to the `alcoach` CLI (never `claude` directly) by running it through
- * the `exec` tool with `timeout: 0`. alcoach runs `claude` in the foreground and blocks; OpenClaw
- * backgrounds the exec, lets the agent post a "started" ack, and — when alcoach exits — wakes the
+ * Regression for the real `@paleo/alcode` foreground run driven as an OpenClaw background exec. The
+ * agent delegates coding work to the `alcode` CLI (never `claude` directly) by running it through
+ * the `exec` tool with `timeout: 0`. alcode runs `claude` in the foreground and blocks; OpenClaw
+ * backgrounds the exec, lets the agent post a "started" ack, and — when alcode exits — wakes the
  * SAME thread session via its native exec completion event (`tools.exec.notifyOnExit`). The woken
- * agent reads alcoach's log and reports the outcome in the thread. No callback, no gateway RPC, no
+ * agent reads alcode's session file and reports the outcome in the thread. No callback, no gateway RPC, no
  * isolated turn.
  *
- * We assert four things: alcoach is the exec the agent runs, an immediate "started in the
- * background" ack lands, alcoach's log reaches `status: succeeded`, and the completion wake drives a
+ * We assert four things: alcode is the exec the agent runs, an immediate "started in the
+ * background" ack lands, alcode's session file reaches `status: succeeded`, and the completion wake drives a
  * finished-report into the same thread. The completion lands in the exact-case conversation (same
  * session, same thread) — no case-variant hacks. The `status: succeeded` gate is the
  * model-independent proof the delegated session actually finished.
@@ -51,7 +51,7 @@ const COMPLETION_RUBRIC =
 export default async function codingSession(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcoach exec even if
+  // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
   setupClaudeMock(ctx, { streamDelayMs: 12000 });
   setupGhMock(ctx);
@@ -76,15 +76,15 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   const threadId = requireThreadId(starter);
   ctx.log({ attachTo: starter.entry, label: `thread opened ${threadId}` });
 
-  // Deterministic proof the agent delegated through the real alcoach CLI. Its own `claude`
+  // Deterministic proof the agent delegated through the real alcode CLI. Its own `claude`
   // subprocess is a cliMock, not an agent tool call, so `claude` must never appear at this level.
-  const alcoachCall = await ctx.waitForAgentToolCall(invokesAlcoach, {
-    label: "agent delegates to the alcoach CLI",
+  const alcodeCall = await ctx.waitForAgentToolCall(invokesAlcode, {
+    label: "agent delegates to the alcode CLI",
     timeoutMs: 180_000,
   });
-  if (invokesClaudeDirectly(alcoachCall)) {
+  if (invokesClaudeDirectly(alcodeCall)) {
     throw new Error(
-      `agent invoked claude directly instead of alcoach: ${JSON.stringify(alcoachCall.input)}`,
+      `agent invoked claude directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
     );
   }
 
@@ -112,14 +112,16 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     label: "background-started-ack",
   });
 
-  // Structural, model-independent proof the delegated coding session finished: alcoach rewrites its
-  // per-run log frontmatter to `status: succeeded` when its `claude` child completes. This is the
+  // Structural, model-independent proof the delegated coding session finished: alcode rewrites its
+  // per-run session file frontmatter to `status: succeeded` when its `claude` child completes. This is the
   // ground truth the completion wake rides on — assert it before the user-facing report.
-  const logPath = await waitForCodingSessionSucceeded(ctx, TICKET_ID, { timeoutMs: 120_000 });
-  ctx.log(`coding-session log succeeded: ${logPath}`);
+  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, TICKET_ID, {
+    timeoutMs: 120_000,
+  });
+  ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
-  // Completion wake: when the backgrounded alcoach exec exits, OpenClaw wakes THIS thread session
-  // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the log and
+  // Completion wake: when the backgrounded alcode exec exits, OpenClaw wakes THIS thread session
+  // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the session file and
   // reports in the thread — the same session, so the completion carries the thread's id and lands in
   // the exact-case conversation. Scan from `starter.nextCursor` (before the ack), not `ack.nextCursor`:
   // if a slow poll lands the ack and completion in one batch, an ack-relative cursor would skip the
@@ -149,10 +151,10 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Poll the gateway for alcoach's per-run coding-session log reaching `status: succeeded`.
- * `find` (not a shell glob) so an absent match in any single project dir does not error; alcoach
- * writes the log under `<project>/.plans/<ticket>/coding-sessions/<stamp>.md`, and worktree `.plans`
- * symlinks back to the main project so either path resolves. Returns the matching log path.
+ * Poll the gateway for alcode's per-run coding-session file reaching `status: succeeded`.
+ * `find` (not a shell glob) so an absent match in any single project dir does not error; alcode
+ * writes the session file under `<project>/.plans/<ticket>/coding-sessions/<stamp>.md`, and worktree `.plans`
+ * symlinks back to the main project so either path resolves. Returns the matching session file path.
  */
 async function waitForCodingSessionSucceeded(
   ctx: ScenarioContext,
@@ -181,7 +183,7 @@ async function waitForCodingSessionSucceeded(
     await delay(3_000);
   }
   throw new Error(
-    `alcoach coding-session log for ${ticketId} never reached "status: succeeded" ` +
+    `alcode coding-session file for ${ticketId} never reached "status: succeeded" ` +
       `within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
   );
 }

@@ -4,10 +4,10 @@ import { parseArgs } from "node:util";
 import { renderGuide } from "./guide.js";
 import {
   assertPlansGate,
-  type LogFrontmatter,
-  resolveLogPath,
-  writeInitialLog,
-} from "./log-file.js";
+  resolveSessionFilePath,
+  type SessionFrontmatter,
+  writeInitialSessionFile,
+} from "./session-file.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import { type RunConfig, type RunOutput, runClaude } from "./run-claude.js";
 
@@ -26,9 +26,9 @@ export async function main(options?: MainOptions): Promise<number> {
   const cwd = options?.cwd ?? process.cwd();
   const env = options?.env ?? process.env;
 
-  let parsed: AlcoachArgs;
+  let parsed: AlcodeArgs;
   try {
-    parsed = parseAlcoachArgs(argv);
+    parsed = parseAlcodeArgs(argv);
   } catch (err) {
     stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -49,7 +49,7 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  return runCoaching(parsed, { cwd, env, stdout, stderr });
+  return runSession(parsed, { cwd, env, stdout, stderr });
 }
 
 interface RunContext {
@@ -59,12 +59,13 @@ interface RunContext {
   stderr: RunOutput;
 }
 
-// alcoach always runs `claude` in the foreground and blocks until it exits. When OpenClaw drives
-// alcoach, it wraps this call in its own `exec` tool (which backgrounds after `yieldMs` and wakes
-// the agent on exit) — alcoach owns no backgrounding or callback of its own. The per-run log under
-// `.plans/` is the durable result handoff: on completion the frontmatter carries the session id and
-// status, and the `---- Result ----` block carries the outcome for a waking agent (or a human).
-async function runCoaching(parsed: AlcoachArgs, ctx: RunContext): Promise<number> {
+// alcode always runs `claude` in the foreground and blocks until it exits. When OpenClaw drives
+// alcode, it wraps this call in its own `exec` tool (which backgrounds after `yieldMs` and wakes
+// the agent on exit) — alcode owns no backgrounding or callback of its own. The per-run session
+// file under `.plans/` is the durable result handoff: on completion the frontmatter carries the
+// session id and status, and the `---- Result ----` block carries the outcome for a waking agent
+// (or a human).
+async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> {
   const { cwd, env, stdout, stderr } = ctx;
 
   const gateError = assertPlansGate(cwd);
@@ -74,11 +75,11 @@ async function runCoaching(parsed: AlcoachArgs, ctx: RunContext): Promise<number
   }
 
   const now = new Date();
-  const logPath = resolveLogPath(cwd, parsed.ticket, now);
-  writeInitialLog(logPath, buildFrontmatter(parsed, now));
-  stdout.write(`Log: ${relative(cwd, logPath)}\n\n`);
+  const sessionFilePath = resolveSessionFilePath(cwd, parsed.ticket, now);
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now));
+  stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
-  const result = await runClaude(buildRunConfig(parsed, cwd, logPath, env), stdout);
+  const result = await runClaude(buildRunConfig(parsed, cwd, sessionFilePath, env), stdout);
 
   if (parsed.isNew && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
@@ -86,7 +87,7 @@ async function runCoaching(parsed: AlcoachArgs, ctx: RunContext): Promise<number
   return result.status === "succeeded" ? 0 : 1;
 }
 
-function buildFrontmatter(parsed: AlcoachArgs, now: Date): LogFrontmatter {
+function buildFrontmatter(parsed: AlcodeArgs, now: Date): SessionFrontmatter {
   return {
     status: "running",
     protocol: parsed.protocol ?? null,
@@ -101,25 +102,25 @@ function buildFrontmatter(parsed: AlcoachArgs, now: Date): LogFrontmatter {
 }
 
 function buildRunConfig(
-  parsed: AlcoachArgs,
+  parsed: AlcodeArgs,
   cwd: string,
-  logPath: string,
+  sessionFilePath: string,
   env: NodeJS.ProcessEnv,
 ): RunConfig {
   return {
     prompt: buildPrompt(parsed),
-    logPath,
+    sessionFilePath,
     cwd,
     isNew: parsed.isNew,
     resume: parsed.resume,
     model: parsed.model,
-    skipPermissions: env.ALIGNFIRST_COACH_SKIP_PERMISSIONS === "1",
-    unset: (env.ALIGNFIRST_COACH_UNSET ?? "").split(","),
+    skipPermissions: env.ALIGNFIRST_CODE_SKIP_PERMISSIONS === "1",
+    unset: (env.ALIGNFIRST_CODE_UNSET ?? "").split(","),
   };
 }
 
-function formatCommand(parsed: AlcoachArgs): string {
-  const parts = ["alcoach"];
+function formatCommand(parsed: AlcodeArgs): string {
+  const parts = ["alcode"];
   if (parsed.isNew) parts.push("--new");
   if (parsed.resume) parts.push("--resume", parsed.resume);
   if (parsed.protocol) parts.push("--protocol", parsed.protocol);
@@ -131,7 +132,7 @@ function formatCommand(parsed: AlcoachArgs): string {
 
 // --- Argument parsing + validation (ported from the retired .mjs) ---
 
-export interface AlcoachArgs {
+export interface AlcodeArgs {
   isNew: boolean;
   resume?: string;
   ticket?: string;
@@ -142,7 +143,7 @@ export interface AlcoachArgs {
   help: boolean;
 }
 
-export function parseAlcoachArgs(argv: string[]): AlcoachArgs {
+export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
   const { values } = parseArgs({
     args: argv.slice(2),
     options: {
@@ -169,7 +170,7 @@ export function parseAlcoachArgs(argv: string[]): AlcoachArgs {
   };
 }
 
-export function validateArgs(args: AlcoachArgs): string | undefined {
+export function validateArgs(args: AlcodeArgs): string | undefined {
   const isResume = args.resume !== undefined;
   if (args.isNew && isResume) return "Error: --new and --resume are mutually exclusive.";
   if (!args.isNew && !isResume) return "Error: at least one of --new or --resume is required.";
@@ -192,14 +193,14 @@ export function validateArgs(args: AlcoachArgs): string | undefined {
 }
 
 function renderHelp(): string {
-  return `alcoach — coach a coding agent through AlignFirst protocols.
+  return `alcode — run a coding agent through AlignFirst protocols.
 
 Usage:
-  alcoach --new --protocol <protocol> --ticket <id> [--message "..."]
-  alcoach --new --message "..."
-  alcoach --resume <sessionId> [--protocol <protocol>] [--message "..."]
-  alcoach --guide
-  alcoach --help
+  alcode --new --protocol <protocol> --ticket <id> [--message "..."]
+  alcode --new --message "..."
+  alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
+  alcode --guide
+  alcode --help
 
 Modes:
   --new                 Start a new session.
@@ -212,13 +213,13 @@ Options:
   --model <model>   Model override.
 
 Env:
-  ALIGNFIRST_COACH_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
-  ALIGNFIRST_COACH_UNSET            Comma-list of env vars to strip from the claude child.
+  ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
+  ALIGNFIRST_CODE_UNSET            Comma-list of env vars to strip from the claude child.
 
-alcoach runs claude in the foreground and blocks until it finishes, streaming the transcript to
-stdout and to a log under .plans/. To run it as a background task, let your caller (e.g. OpenClaw's
-exec tool) do the backgrounding; do not detach alcoach yourself.
+alcode runs claude in the foreground and blocks until it finishes, streaming the transcript to
+stdout and to a session file under .plans/. To run it as a background task, let your caller (e.g.
+OpenClaw's exec tool) do the backgrounding; do not detach alcode yourself.
 
-Run \`alcoach --guide\` for the full coaching guide.
+Run \`alcode --guide\` for the full delegation guide.
 `;
 }

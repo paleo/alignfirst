@@ -12,11 +12,11 @@ metadata:
 
 ## First: was a background coding session just finished?
 
-If you are woken by a system event saying a **backgrounded `exec` command exited** — the `alcoach` run you launched earlier — the coding session is done. You are still in the same session, with your full transcript, so you know the project, ticket, and thread. Handle the completion and stop, doing **only** this:
+If you are woken by a system event saying a **backgrounded `exec` command exited** — the `alcode` run you launched earlier — the coding session is done. You are still in the same session, with your full transcript, so you know the project, ticket, and thread. Handle the completion and stop, doing **only** this:
 
-1. Read the run's log (the path `alcoach` printed on its first line, a `.md` under `coding-sessions/`): frontmatter `status: succeeded|failed`; the `---- Result ----` block holds the outcome.
+1. Read the run's session file (the path `alcode` printed on its first line, a `.md` under `coding-sessions/`): frontmatter `status: succeeded|failed`; the `---- Result ----` block holds the outcome.
 2. Report the outcome in the thread — one concise message: succeeded or failed, plus a one-line summary for the audience.
-3. Do **not** re-verify the repo or inspect `git`, and do **not** re-run the coding agent — the log is authoritative. Relay it, nothing more.
+3. Do **not** re-verify the repo or inspect `git`, and do **not** re-run the coding agent — the session file is authoritative. Relay it, nothing more.
 
 Otherwise (a real user message), continue below.
 
@@ -42,9 +42,9 @@ Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and r
 
 ## Delegating to the coding agent
 
-To delegate, run the `alcoach` CLI (the `alignfirst-coaching` skill) with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
+To delegate, run the `alcode` CLI (the `alignfirst-coaching` skill) with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
 
-Coding runs are long. Run `alcoach` via `exec` with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically and wakes you when it exits. Do **not** poll — go available; on the exit event, read the run's log and report (see the completion section at the top of this file).
+Coding runs are long. Run `alcode` via `exec` with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically and wakes you when it exits. Do **not** poll — go available; on the exit event, read the run's session file and report (see the completion section at the top of this file).
 
 ## `chat_id` values
 

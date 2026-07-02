@@ -32,26 +32,26 @@ export function execMatches(call: AgentToolCall, pattern: RegExp): boolean {
   );
 }
 
-// `alcoach` at a word boundary — a bare `alcoach …` or an absolute path
-// (`/usr/local/bin/alcoach …`), but not a substring of another token.
-const ALCOACH_INVOCATION_RE = /(^|[\s/])alcoach(\s|$)/;
+// `alcode` at a word boundary — a bare `alcode …` or an absolute path
+// (`/usr/local/bin/alcode …`), but not a substring of another token.
+const ALCODE_INVOCATION_RE = /(^|[\s/])alcode(\s|$)/;
 // A direct `claude` invocation (the agent must NOT call the coding CLI itself —
-// only alcoach may, as its subprocess, which is a cliMock, not an agent tool call).
+// only alcode may, as its subprocess, which is a cliMock, not an agent tool call).
 const CLAUDE_INVOCATION_RE = /(^|[\s/])claude(\s|$)/;
 
-/** True when the call is an `exec` that invokes the real `alcoach` CLI. */
-export function invokesAlcoach(call: AgentToolCall): boolean {
+/** True when the call is an `exec` that invokes the real `alcode` CLI. */
+export function invokesAlcode(call: AgentToolCall): boolean {
   const input = inputOf(call);
   return (
     call.toolName === "exec" &&
     typeof input.command === "string" &&
-    ALCOACH_INVOCATION_RE.test(input.command)
+    ALCODE_INVOCATION_RE.test(input.command)
   );
 }
 
-/** True when the call is an `exec` that invokes `claude` directly (not via alcoach). */
+/** True when the call is an `exec` that invokes `claude` directly (not via alcode). */
 export function invokesClaudeDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
-  return CLAUDE_INVOCATION_RE.test(input.command) && !ALCOACH_INVOCATION_RE.test(input.command);
+  return CLAUDE_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command);
 }

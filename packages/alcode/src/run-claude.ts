@@ -1,10 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
-import { appendTranscript, applyCompletion } from "./log-file.js";
+import { appendTranscript, applyCompletion, type CompletionUpdate } from "./session-file.js";
 
 export interface RunConfig {
   prompt: string;
-  logPath: string;
+  sessionFilePath: string;
   cwd: string;
   isNew: boolean;
   resume?: string;
@@ -24,15 +24,15 @@ export interface RunResult {
 }
 
 // Runs `claude` as a direct foreground child of this process: parses its NDJSON stream, mirrors a
-// human-readable transcript to both the log file and `out` as it arrives, and on exit rewrites the
-// log's terminal frontmatter and returns the outcome. OpenClaw backgrounds *alcoach* via its own
-// `exec` tool and wakes on alcoach's exit — alcoach itself never detaches.
+// human-readable transcript to both the session file and `out` as it arrives, and on exit rewrites
+// the session file's terminal frontmatter and returns the outcome. OpenClaw backgrounds *alcode*
+// via its own `exec` tool and wakes on alcode's exit — alcode itself never detaches.
 export async function runClaude(config: RunConfig, out: RunOutput): Promise<RunResult> {
   const state = createStreamState();
   const outcome = await spawnClaude(config, state, out);
   const failed = state.isError || outcome.exitCode !== 0 || state.result === undefined;
   const result = state.result ?? failureMessage(outcome);
-  applyCompletion(config.logPath, {
+  applyCompletion(config.sessionFilePath, {
     status: failed ? "failed" : "succeeded",
     endedAt: new Date().toISOString(),
     exitReason: failed ? "error" : "completed",
@@ -57,13 +57,13 @@ function spawnClaude(
     env: buildClaudeEnv(process.env, config.unset),
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const detachChildGuards = guardChildLifecycle(child);
+  const detachChildGuards = guardChildLifecycle(child, config.sessionFilePath, state);
   let buffer = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8");
   child.stdout.on("data", (chunk: string) => {
     buffer += chunk;
-    buffer = drainLines(buffer, (line) => emitEvent(config.logPath, line, state, out));
+    buffer = drainLines(buffer, (line) => emitEvent(config.sessionFilePath, line, state, out));
   });
   child.stderr.setEncoding("utf-8");
   child.stderr.on("data", (chunk: string) => {
@@ -71,7 +71,7 @@ function spawnClaude(
   });
   return new Promise((resolve) => {
     child.on("close", (code) => {
-      if (buffer.trim()) emitEvent(config.logPath, buffer, state, out);
+      if (buffer.trim()) emitEvent(config.sessionFilePath, buffer, state, out);
       detachChildGuards();
       resolve({ exitCode: code, stderr });
     });
@@ -82,11 +82,17 @@ function spawnClaude(
   });
 }
 
-// A direct `kill <alcoach>` (not a process-group kill) would otherwise orphan the foreground
-// `claude`. Forward termination signals and process exit to the child, then SIGKILL it, so alcoach
-// never leaves a dangling `claude`. Returns a teardown that removes the guards once the child is
-// gone (so alcoach can exit normally afterward).
-function guardChildLifecycle(child: ChildProcess): () => void {
+// A direct `kill <alcode>` (not a process-group kill) would otherwise orphan the foreground
+// `claude`. Forward termination signals and process exit to the child, then SIGKILL it, so alcode
+// never leaves a dangling `claude`. On a catchable signal, also seal the session file (`status:
+// failed`, `exitReason: terminated`) so it never stays frozen at `running` — a SIGKILL of alcode
+// itself remains the one uncatchable case. Returns a teardown that removes the guards once the
+// child is gone (so alcode can exit normally afterward).
+function guardChildLifecycle(
+  child: ChildProcess,
+  sessionFilePath: string,
+  state: StreamState,
+): () => void {
   const killChild = () => {
     if (child.exitCode === null && child.signalCode === null) {
       try {
@@ -98,6 +104,11 @@ function guardChildLifecycle(child: ChildProcess): () => void {
   };
   const onSignal = (signal: NodeJS.Signals) => {
     killChild();
+    try {
+      applyCompletion(sessionFilePath, buildTerminationUpdate(signal, state, new Date()));
+    } catch {
+      // Sealing the session file is best-effort; the file may be gone or malformed.
+    }
     process.exit(signal === "SIGINT" ? 130 : 143);
   };
   const onSigint = () => onSignal("SIGINT");
@@ -109,6 +120,20 @@ function guardChildLifecycle(child: ChildProcess): () => void {
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
     process.off("exit", killChild);
+  };
+}
+
+export function buildTerminationUpdate(
+  signal: NodeJS.Signals,
+  state: StreamState,
+  now: Date,
+): CompletionUpdate {
+  return {
+    status: "failed",
+    endedAt: now.toISOString(),
+    exitReason: "terminated",
+    sessionId: state.sessionId ?? null,
+    result: `Terminated by ${signal} before completion.`,
   };
 }
 
@@ -124,7 +149,7 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   return args;
 }
 
-// Strip every ALIGNFIRST_COACH_* var plus any name in the caller's ALIGNFIRST_COACH_UNSET list, so
+// Strip every ALIGNFIRST_CODE_* var plus any name in the caller's ALIGNFIRST_CODE_UNSET list, so
 // wrapper env never leaks into the claude child.
 export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, unset: string[]): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
@@ -133,7 +158,7 @@ export function buildClaudeEnv(baseEnv: NodeJS.ProcessEnv, unset: string[]): Nod
     if (trimmed) delete env[trimmed];
   }
   for (const key of Object.keys(env)) {
-    if (key.startsWith("ALIGNFIRST_COACH_")) delete env[key];
+    if (key.startsWith("ALIGNFIRST_CODE_")) delete env[key];
   }
   return env;
 }
@@ -147,10 +172,15 @@ function drainLines(buffer: string, onLine: (line: string) => void): string {
   return rest;
 }
 
-function emitEvent(logPath: string, line: string, state: StreamState, out: RunOutput): void {
+function emitEvent(
+  sessionFilePath: string,
+  line: string,
+  state: StreamState,
+  out: RunOutput,
+): void {
   const rendered = renderEvent(parseEventLine(line), state);
   if (rendered === undefined) return;
-  appendTranscript(logPath, `${rendered}\n`);
+  appendTranscript(sessionFilePath, `${rendered}\n`);
   out.write(`${rendered}\n`);
 }
 

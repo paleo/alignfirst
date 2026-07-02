@@ -10,15 +10,13 @@ export type WorkspaceCommand =
       slot?: string;
       force: boolean;
       go: boolean;
-      sessionKey?: string;
-      callbackUrl?: string;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
   | { kind: "list" }
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "finalize"; slot: string; force: boolean; sessionKey?: string; callbackUrl?: string }
+  | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "guide" }
   | { kind: "help" };
@@ -85,8 +83,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       go: { type: "boolean" },
-      "session-key": { type: "string" },
-      "callback-url": { type: "string" },
       verbose: { type: "boolean", short: "v" },
     },
     allowPositionals: true,
@@ -113,8 +109,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: values.slot,
       force: values.force ?? false,
       go,
-      sessionKey: values["session-key"],
-      callbackUrl: values["callback-url"],
     },
     verbose: values.verbose ?? false,
   };
@@ -201,25 +195,12 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: {
-      force: { type: "boolean" },
-      "session-key": { type: "string" },
-      "callback-url": { type: "string" },
-    },
+    options: { force: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   const slot = takeRequiredPositional(positionals, "__finalize", "slot");
-  return {
-    command: {
-      kind: "finalize",
-      slot,
-      force: values.force ?? false,
-      sessionKey: values["session-key"],
-      callbackUrl: values["callback-url"],
-    },
-    verbose: false,
-  };
+  return { command: { kind: "finalize", slot, force: values.force ?? false }, verbose: false };
 }
 
 function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
@@ -277,11 +258,8 @@ export function printWorkspaceHelp(): void {
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
       "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
-      "      Finalize runs detached in the background. By default this command blocks until it",
-      "      reaches READY (or FAILED). When a callback URL is configured (WORKSPACE_CALLBACK_URL",
-      "      or --callback-url, i.e. an OpenClaw caller), it returns immediately instead and a",
-      "      completion callback is fired; --session-key (from the session_status tool) is then",
-      "      required to target it.",
+      "      Finalize runs detached in the background; this command blocks until it reaches",
+      "      READY (or FAILED). Ctrl-C is safe: finalize keeps running, re-attach with `wait`.",
       "      With --go, drop into an interactive shell in the new worktree (exit to return),",
       "      entered once it is READY. Requires a branch and $SHELL.",
       "  remove [<dir>] [-s|--slot <port>] [--force]",
