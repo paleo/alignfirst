@@ -88,7 +88,13 @@ OpenClaw needs a coding tool profile that can still post to chat, and the two sk
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "openclaw-coder-playbook"]
+      "skills": ["alignfirst", "openclaw-coder-playbook"],
+      "heartbeat": {
+        // Wake safety net: OpenClaw (2026.6.11) can drop the exec-completion event text,
+        // so the wake arrives as a bare heartbeat. This prompt keeps the stock behavior
+        // and adds the pending-run check. Copy it from playbook-test/openclaw.json.
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). […] If nothing needs attention, reply HEARTBEAT_OK."
+      }
     }
   },
   "channels": {

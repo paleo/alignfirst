@@ -38,7 +38,12 @@ If the thread name is missing the TICKET_ID or the PROJECT_NAME, rename it. Form
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-First, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. `DEVELOPMENT.md` points to the project's `workspace --guide` command, which gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them — never assume the branch is new.
+First, check what already exists for `{TICKET_ID}/{WORK_TYPE}` — two checks, both required:
+
+- **Branch**: `git branch -a | grep -i {TICKET_ID}` in the project dir. A no-match exit is an answer (no branch), not a command failure.
+- **Registered workspaces**: `DEVELOPMENT.md` points to the project's `workspace --guide` command, which gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+
+Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
 Whenever a branch exists, you work from its workspace — a status request included. "Status" here means: set up the workspace, then report its state — not `git log` from the main dir. Pick one sub-path:
 

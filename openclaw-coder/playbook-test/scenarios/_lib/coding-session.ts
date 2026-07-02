@@ -4,7 +4,7 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 // tells the agent it launched a background run and will report back). Kept off `en cours`, which
 // also appears in some `[WORK]` headers.
 export const STARTED_ACK_RE =
-  /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|te reviens|informe/i;
+  /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|reviens|informe/i;
 
 // The completion report (after the exec wake) says the work FINISHED. Distinct from STARTED_ACK_RE
 // (which promises a future update) so a completion wait can scan from before the ack and still

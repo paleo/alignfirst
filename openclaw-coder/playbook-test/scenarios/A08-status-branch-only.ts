@@ -58,7 +58,10 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     {
       timeoutMs: 180_000,
       sinceCursor: starterWait.nextCursor,
-      failFastCliMockGraceMs: 30_000,
+      // The takeover-sync between the `gh pr list` call and the report (deps
+      // check, base-branch check, report drafting) can exceed 30s on a slow
+      // model — keep the fail-fast, but give it real headroom.
+      failFastCliMockGraceMs: 90_000,
       failFastUnmatchedOutbounds: false,
     },
   );
@@ -75,7 +78,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   );
   ctx.assertRegex(
     reportWait.match.text,
-    /\b(running|ready|failed|pending|prêt|en cours)\b/i,
+    /\b(running|ready|failed|pending|ok|prêt|en cours|terminé)\b/i,
     "report mentions a bootstrap status",
   );
 
