@@ -36,10 +36,13 @@ const COMPLETION_RUBRIC =
  * the background" ack lands, alcoach's log reaches `status: succeeded`, and the callback drives a
  * completion report into the originating thread.
  *
- * Detection is structural (no per-message content marker). The callback resumes the thread session
- * with `deliver: false` (hooks/transforms/coding-callback.mjs), so the completion lands as a thread
- * outbound in the SAME conversation — the first thread post after the ack. The `status: succeeded`
- * gate is the model-independent proof the delegated session actually finished.
+ * The completion callback resumes an ISOLATED turn (no thread transcript, no threadId — OpenClaw
+ * dispatches `/hooks/agent` as a fresh session). It therefore cannot thread-reply; the transform
+ * (hooks/transforms/coding-callback.mjs) announces the turn's report into the channel conversation
+ * with an explicit `to: channel:<room>`. OpenClaw lowercases the room in the session key, so the
+ * completion lands under a case-variant conversation id — hence the case-insensitive conversation
+ * match below, with no threadId requirement. The `status: succeeded` gate is the model-independent
+ * proof the delegated session actually finished.
  */
 export default async function codingSessionCallback(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -68,6 +71,11 @@ export default async function codingSessionCallback(ctx: ScenarioContext): Promi
   const threadId = requireThreadId(starter);
   ctx.log({ attachTo: starter.entry, label: `thread opened ${threadId}` });
 
+  // The callback's announce lands under a case-variant (OpenClaw lowercases the session-key room);
+  // the agent may also free-stream a channel post in the exact-case conversation. Match either.
+  const conversationMatches = (id: string): boolean =>
+    id.toLowerCase() === ctx.conversationId.toLowerCase();
+
   // Deterministic proof the agent delegated through the real alcoach CLI. Its own `claude`
   // subprocess is a cliMock, not an agent tool call, so `claude` must never appear at this level.
   const alcoachCall = await ctx.waitForAgentToolCall(invokesAlcoach, {
@@ -85,13 +93,14 @@ export default async function codingSessionCallback(ctx: ScenarioContext): Promi
   // match exactly ONE target, else a later message sharing a batch with an earlier match is skipped.
   const noFailFast = { failFastCliMockGraceMs: false, failFastUnmatchedOutbounds: false } as const;
 
-  // Immediate "started in the background" ack: a thread outbound in this conversation whose text
-  // carries a background-launch marker (only the ack matches — not the [WORK] header or worktree report).
+  // Immediate "started in the background" ack: an outbound in this conversation whose text carries a
+  // background-launch marker (only the ack matches — not the [WORK] header or worktree report). No
+  // threadId requirement: the agent usually posts this in-thread, but sometimes free-streams it to
+  // the parent channel — either surface is a valid ack, and STARTED_ACK_RE is the discriminator.
   const ack = await ctx.waitForOutbound(
     (m) =>
       m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined &&
+      conversationMatches(m.conversation.id) &&
       STARTED_ACK_RE.test(m.text),
     { timeoutMs: 150_000, sinceCursor: starter.nextCursor, ...noFailFast },
   );
@@ -109,18 +118,17 @@ export default async function codingSessionCallback(ctx: ScenarioContext): Promi
   const logPath = await waitForCodingSessionSucceeded(ctx, TICKET_ID, { timeoutMs: 120_000 });
   ctx.log(`coding-session log succeeded: ${logPath}`);
 
-  // Callback-driven completion, delivered into the ORIGINAL thread. alcoach's completion callback
-  // resumes the thread session with `deliver: false` (see hooks/transforms/coding-callback.mjs), so
-  // the agent reports through its own `message` `thread-reply` — the report lands as a thread
-  // outbound in this same conversation, after the ack. It is the first such thread outbound past the
-  // ack: the worktree/[WORK] posts precede the ack, and a verify-warning (if any) goes to the parent
-  // channel without a threadId, so a single-match wait from `ack.nextCursor` picks it cleanly.
-  // Generous timeout for the real setup turn + the mock stream delay + the callback round-trip.
+  // Callback-driven completion. alcoach's callback resumes an ISOLATED turn (no thread transcript),
+  // so it can't thread-reply; the transform announces its report with an explicit `to: channel:<room>`
+  // (see hooks/transforms/coding-callback.mjs). OpenClaw lowercases the session-key room, so the
+  // announce lands under the LOWERCASED conversation id — distinct from every main-turn post, which
+  // stays in the exact-case conversation (in-thread, or a channel free-stream like a git-verify
+  // warning). Matching that case-variant strictly is what isolates the callback from the main turn's
+  // channel noise. (Our conversationId always carries uppercase — `A10…` — so the lowercased form is
+  // genuinely distinct.) Generous timeout for the real setup turn + mock stream delay + callback.
+  const callbackConversationId = ctx.conversationId.toLowerCase();
   const completion = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
+    (m) => m.direction === "outbound" && m.conversation.id === callbackConversationId,
     { timeoutMs: 240_000, sinceCursor: ack.nextCursor, ...noFailFast },
   );
   ctx.log({ attachTo: completion.entry, label: "callback-driven completion received" });

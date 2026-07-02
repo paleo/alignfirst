@@ -12,6 +12,7 @@
         "id": "coding-callback",
         "match": { "path": "coding" },
         "action": "agent",
+        "allowUnsafeExternalContent": true,
         "transform": { "module": "coding-callback.mjs" }
       }
     ]

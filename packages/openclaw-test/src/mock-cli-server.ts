@@ -82,7 +82,15 @@ export function startMockCliServer(): MockCliServer {
       current = undefined;
       lastCallAtMs = 0;
     },
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        // Force-destroy lingering keep-alive sockets. A mocked CLI is invoked through the
+        // gateway shim over HTTP keep-alive; after the call the socket stays idle-open, and a
+        // bare `server.close()` waits for it indefinitely — the runner then hangs past the
+        // verdict instead of exiting. `closeAllConnections` lets `close()` complete at once.
+        server.closeAllConnections();
+      }),
   };
 }
 

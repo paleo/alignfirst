@@ -504,12 +504,29 @@ async function poll(
   accountId: ChannelId,
   opts: { sinceCursor: number; timeoutMs?: number },
 ): Promise<PollResult> {
-  const r: QaBusPollResult = await pollQaBus({
-    baseUrl: BUS_URL,
-    accountId,
-    cursor: opts.sinceCursor,
-    timeoutMs: opts.timeoutMs ?? 1000,
-  });
+  const timeoutMs = opts.timeoutMs ?? 1000;
+  // Client-side hard stop. The bus holds the long-poll for `timeoutMs` then answers, but a wedged
+  // bus or a half-open connection would hang this `fetch` forever — and callers loop on their own
+  // deadline (`waitForOutbound`), so a hung poll silently defeats that deadline and the runner never
+  // exits (the intermittent post-verdict hang). Abort a bit past the server hold so a stall surfaces
+  // as an empty poll and the caller's loop keeps ticking toward its real timeout.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), timeoutMs + 2_000);
+  let r: QaBusPollResult;
+  try {
+    r = await pollQaBus({
+      baseUrl: BUS_URL,
+      accountId,
+      cursor: opts.sinceCursor,
+      timeoutMs,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) return { messages: [], nextCursor: opts.sinceCursor };
+    throw err;
+  } finally {
+    clearTimeout(abortTimer);
+  }
   const messages = r.events
     .filter((e) => e.kind === "outbound-message" || e.kind === "message-edited")
     .map((e) => (e as { message: BusMessage }).message);

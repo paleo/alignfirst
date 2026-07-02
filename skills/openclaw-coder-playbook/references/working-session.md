@@ -4,11 +4,14 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 
 ## Resuming after a background coding session (completion callback)
 
-You may be resumed by an automated message like **"The coding agent finished. Its log: `<path>`."** — the completion of a background coding session a prior turn launched via `alignfirst-coaching`. When you get such a message, do exactly this and nothing else:
+You may be resumed by a short automated message telling you a **background coding session finished** and pointing at a **log file path** (e.g. _"The agent has finished. The result: `<path>`."_). A prior turn launched that session via `alignfirst-coaching`; this is its completion signal.
 
-1. Read the log at `<path>`. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. Post one concise completion update **into the current thread** (`message` `action: "thread-reply"` with your `channel` + `threadId`): whether it succeeded or failed, plus a one-line summary of the result for the audience.
-3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, inspect `git`, or re-investigate context — the coding agent already did the work. Relay the log outcome, nothing more.
+**This resume is isolated.** You do NOT have the launching thread's transcript — no threadId, no prior context, only this message and the log. So do exactly this, and nothing else:
+
+1. **Read the log** at `<path>`. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+2. **Report the outcome as your reply** — one concise message: succeeded or failed, plus a one-line summary of the result for the audience. This reply is delivered to the user's conversation for you; just make the report your response.
+3. Do **not** try to `thread-reply`, do **not** call `sessions_list`/`sessions_history` or otherwise hunt for the originating thread or session — you cannot reach it from here, and you don't need to. Reply where you are.
+4. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, inspect `git`, or re-investigate context — the coding agent already did the work and the log is authoritative. Relay the log outcome, nothing more.
 
 If the log says the run failed, report that plainly and propose the next step; don't silently retry.
 

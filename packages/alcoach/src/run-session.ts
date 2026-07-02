@@ -207,12 +207,20 @@ function failureMessage(outcome: ClaudeOutcome): string {
 
 async function runCallback(config: RunConfig, callback: CallbackConfig): Promise<void> {
   const request: CallbackRequest = buildCallbackRequest(callback, config.logPath, config.cwd);
+  // Log the attempt before firing: if the detached runner is reaped mid-callback, the absence of a
+  // following "delivered"/"failed" line is itself the diagnostic. Absence of this whole block means
+  // the runner never reached the callback at all.
+  appendTranscript(
+    config.logPath,
+    `\n---- Callback ----\n\nPOST ${request.url} sessionKey=${callback.sessionKey}\n`,
+  );
   try {
     await fireCallback(request);
+    appendTranscript(config.logPath, "Callback delivered.\n");
   } catch (err) {
     appendTranscript(
       config.logPath,
-      `\n---- Callback failed ----\n\n${err instanceof Error ? err.message : String(err)}\n`,
+      `Callback FAILED: ${err instanceof Error ? err.message : String(err)}\n`,
     );
   }
 }

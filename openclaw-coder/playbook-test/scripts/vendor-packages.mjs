@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "../../..");
+const CONSUMER_DIR = resolve(HERE, "..");
 const VENDOR_DIR = resolve(HERE, "../vendor");
 
 // Build order matters: the mock wrappers and harness resolve types from
@@ -33,7 +34,19 @@ function vendorPackages() {
   resetVendorDir();
   buildPackages();
   for (const pkg of PACKAGES) packPackage(pkg);
+  removeStaleInstalls();
   console.log(`Vendored ${PACKAGES.length} package(s) into ${VENDOR_DIR}`);
+}
+
+// A vendored tarball keeps the same version (e.g. 0.12.0) across edits, so a subsequent
+// `npm install` trusts the already-installed copy in node_modules and reuses its now-stale
+// integrity instead of re-hashing the freshly packed tarball. The lockfile then disagrees with the
+// tarball, and the image's `npm ci` fails EINTEGRITY. Removing the installed copies forces the next
+// `npm install` to re-extract and re-hash, keeping lockfile and tarball consistent.
+function removeStaleInstalls() {
+  for (const pkg of PACKAGES) {
+    rmSync(resolve(CONSUMER_DIR, "node_modules", pkg.name), { recursive: true, force: true });
+  }
 }
 
 function resetVendorDir() {

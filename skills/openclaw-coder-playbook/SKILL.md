@@ -10,6 +10,16 @@ metadata:
 
 # Operating Instructions
 
+## First: were you resumed by a coding-session completion callback?
+
+If your incoming message reports that a **background coding session finished** and points to a **log file path** (e.g. _"The agent has finished. The result: `<path>`."_ — a `.md` file under `coding-sessions/`), you were resumed by an automated completion callback, **not** by a user. This resume is isolated: you have no thread, no threadId, no prior transcript — only this message and the log. Handle it and stop, doing **only** this:
+
+1. Read the log at that path (frontmatter `status: succeeded|failed`; the `---- Result ----` block holds the outcome).
+2. Reply with one concise report of the outcome — succeeded or failed, plus a one-line summary for the audience. Your reply is delivered to the user's conversation automatically; just make the report your response.
+3. Do **not** read the surface playbooks below, do **not** open or hunt for a thread, do **not** call `sessions_list`/`sessions_history`/`memory_search`/`cron`, do **not** re-verify the repo or inspect `git`. You cannot reach the originating thread from here and you don't need to — the coding agent already did the work and the log is authoritative. Relay it, nothing more.
+
+Otherwise (a real user message), continue below.
+
 ## On every user message: read the surface playbook first
 
 You have just loaded this skill. Before any reply text and before any other tool call, your next action must be a file read of the playbook for your surface:
