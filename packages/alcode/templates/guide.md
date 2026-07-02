@@ -1,6 +1,6 @@
-# AlignFirst Delegation Guide
+# AlignFirst Delegation Guide{{TITLE-SUFFIX}}
 
-Run a coding agent through AlignFirst protocols with the `alcode` CLI. It wraps `claude` for non-interactive use: it invokes a protocol, streams the run to a session file, and returns the result.
+Run a coding agent through AlignFirst protocols with the `alcode` CLI. It wraps a coding-agent CLI for non-interactive use: it invokes a protocol, streams the run to a session file, and returns the result.
 
 **Never implement, investigate, or modify the codebase yourself while delegating. Your role is to delegate and guide the agent.**
 
@@ -8,9 +8,11 @@ Run `alcode` from the root of the target project, so the agent works in the righ
 
 ## How it runs
 
-`alcode` runs `claude` in the **foreground** and blocks until it finishes, streaming the transcript to stdout as it arrives. It never backgrounds or detaches itself.
+`alcode` runs the coding agent in the **foreground** and blocks until it finishes, streaming the transcript to stdout as it arrives. It never backgrounds or detaches itself.
 
-If your run should be a background task (so you stay free while it works), let **your caller** do the backgrounding. Under OpenClaw, run `alcode` through the `exec` tool with a disabled or generous timeout (`timeout: 0`) — OpenClaw backgrounds it automatically after a few seconds and wakes you when it exits.
+Coding runs can be long (several hours is fine): **always run `alcode` as a background task**, so you stay free while it works. The backgrounding is **your platform's** job — never alcode's own.
+
+{{RUN}}
 
 As soon as the run is backgrounded, tell the user the coding agent is now working in the background and that you will report back when it finishes (e.g. *"Le coding agent tourne en arrière-plan — je te préviens dès que c'est terminé."*). Then go available. Do **not** poll.
 
@@ -18,7 +20,7 @@ Every run writes a session file under `.plans/`: `.plans/<ticket>/coding-session
 
 ## After a background run completes
 
-Your platform wakes you when the backgrounded `alcode` exits. The wake may arrive as a **plain heartbeat poll with no message text** — do not wait for an explicit "exec finished" notice. Whenever you are woken, or receive any heartbeat, while an `alcode` run is pending, do exactly this:
+{{WAKE}}
 
 1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
 2. **Report the outcome to the user** where the work was requested — one concise message: succeeded or failed, plus a one-line summary of the result for the audience.

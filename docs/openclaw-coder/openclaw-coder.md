@@ -16,10 +16,10 @@ user message
   → openclaw-coder-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
   → references/project-workspace-setup.md (if WORK)       layer 2
-  → run `alcode --guide` (delegation manual, read last), then delegate via alcode
+  → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the exec-exit wake arrives.
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --openclaw-guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the exec-exit wake arrives.
 
 ## Reading order for maintainers
 

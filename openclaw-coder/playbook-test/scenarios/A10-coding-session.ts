@@ -1,5 +1,11 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
+import {
+  COMPLETION_RE,
+  LAUNCH_OR_SETUP_RE,
+  STARTED_ACK_RE,
+  waitForCodingSessionSucceeded,
+} from "./_lib/coding-session.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { requireThreadId } from "./_lib/outbound.ts";
@@ -8,16 +14,6 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 // A<S> → ABC-0<S>N (README convention); scenario A10 → ABC-010N, first ticket ABC-0100.
 const TICKET_ID = "ABC-0100";
 const PROJECT = "nimbus";
-
-// The "started in the background" ack reliably carries one of these markers (the playbook tells the
-// agent it launched a background run and will report back). Kept off `en cours`, which also appears
-// in some `[WORK]` headers.
-const STARTED_ACK_RE = /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|te reviens|informe/i;
-
-// The completion report (after the exec wake) says the work FINISHED. Distinct from STARTED_ACK_RE
-// (which promises a future update) so the completion wait can scan from before the ack and still
-// match only the completion — avoiding coupling to the ack wait's batch cursor.
-const COMPLETION_RE = /termin[ée]|c'est (fait|bon)|finished|succès|success|done|✅/i;
 
 const STARTED_RUBRIC =
   "A short message telling the user that a background task has been kicked off through the coding " +
@@ -113,9 +109,10 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   });
 
   // Structural, model-independent proof the delegated coding session finished: alcode rewrites its
-  // per-run session file frontmatter to `status: succeeded` when its `claude` child completes. This is the
-  // ground truth the completion wake rides on — assert it before the user-facing report.
-  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, TICKET_ID, {
+  // per-run session file frontmatter to `status: succeeded` when its coding-agent child completes.
+  // This is the ground truth the completion wake rides on — assert it before the user-facing report.
+  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, {
+    ticketId: TICKET_ID,
     timeoutMs: 120_000,
   });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
@@ -125,15 +122,17 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   // reports in the thread — the same session, so the completion carries the thread's id and lands in
   // the exact-case conversation. Scan from `starter.nextCursor` (before the ack), not `ack.nextCursor`:
   // if a slow poll lands the ack and completion in one batch, an ack-relative cursor would skip the
-  // completion. The predicate matches only the FINISHED report (COMPLETION_RE and not the forward-
-  // looking STARTED_ACK_RE), so the ack itself never matches. Generous timeout: a real LLM wake turn.
+  // completion. The predicate matches only the FINISHED report: COMPLETION_RE, not the forward-
+  // looking STARTED_ACK_RE, and not a launch/setup line (a "Bootstrap: ready ✅ | Lancement…"
+  // workspace report carries a ✅ with no ack marker). Generous timeout: a real LLM wake turn.
   const completion = await ctx.waitForOutbound(
     (m) =>
       m.direction === "outbound" &&
       m.conversation.id === ctx.conversationId &&
       m.threadId === threadId &&
       COMPLETION_RE.test(m.text) &&
-      !STARTED_ACK_RE.test(m.text),
+      !STARTED_ACK_RE.test(m.text) &&
+      !LAUNCH_OR_SETUP_RE.test(m.text),
     { timeoutMs: 240_000, sinceCursor: starter.nextCursor, ...noFailFast },
   );
   ctx.log({ attachTo: completion.entry, label: "completion-wake report received" });
@@ -146,44 +145,4 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
-}
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Poll the gateway for alcode's per-run coding-session file reaching `status: succeeded`.
- * `find` (not a shell glob) so an absent match in any single project dir does not error; alcode
- * writes the session file under `<project>/.plans/<ticket>/coding-sessions/<stamp>.md`, and worktree `.plans`
- * symlinks back to the main project so either path resolves. Returns the matching session file path.
- */
-async function waitForCodingSessionSucceeded(
-  ctx: ScenarioContext,
-  ticketId: string,
-  opts: { timeoutMs: number },
-): Promise<string> {
-  const deadline = Date.now() + opts.timeoutMs;
-  const findArgs = [
-    "find",
-    "/home/claw/projects",
-    "-path",
-    `*/.plans/${ticketId}/coding-sessions/*.md`,
-    "-exec",
-    "grep",
-    "-l",
-    "status: succeeded",
-    "{}",
-    "+",
-  ];
-  let lastStderr = "";
-  while (Date.now() < deadline) {
-    const r = await ctx.execInGateway(findArgs, { timeoutMs: 15_000 });
-    const hit = r.stdout.trim().split("\n").find(Boolean);
-    if (hit) return hit;
-    lastStderr = r.stderr.trim();
-    await delay(3_000);
-  }
-  throw new Error(
-    `alcode coding-session file for ${ticketId} never reached "status: succeeded" ` +
-      `within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
-  );
 }

@@ -4,7 +4,7 @@ You're working on a ticket inside a thread (Slack or Discord). The thread is the
 
 ## Prerequisites
 
-- run `alcode --guide` (`exec`) and follow it — how to delegate to the coding agent.
+- run `alcode --openclaw-guide` (`exec`) and follow it — how to delegate to the coding agent.
 - read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Take over a working session
@@ -26,7 +26,7 @@ Use the guidelines.
 
 ### Delegating to the coding agent
 
-Always use the coding agent via the `alcode` CLI, as its `--guide` describes. **Run from the project's directory** (`~/projects/<project>`).
+Always use the coding agent via the `alcode` CLI, as its `--openclaw-guide` describes. **Run from the project's directory** (`~/projects/<project>`).
 
 ### Interpreting requests
 

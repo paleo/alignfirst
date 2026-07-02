@@ -38,8 +38,8 @@ export async function main(options?: MainOptions): Promise<number> {
     stdout.write(renderHelp());
     return 0;
   }
-  if (parsed.guide) {
-    stdout.write(`${renderGuide()}\n`);
+  if (parsed.guide || parsed.openclawGuide) {
+    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic")}\n`);
     return 0;
   }
 
@@ -140,6 +140,7 @@ export interface AlcodeArgs {
   message?: string;
   model?: string;
   guide: boolean;
+  openclawGuide: boolean;
   help: boolean;
 }
 
@@ -154,6 +155,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
       message: { type: "string" },
       model: { type: "string" },
       guide: { type: "boolean", default: false },
+      "openclaw-guide": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     strict: true,
@@ -166,6 +168,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
     message: values.message,
     model: values.model,
     guide: values.guide === true,
+    openclawGuide: values["openclaw-guide"] === true,
     help: values.help === true,
   };
 }
@@ -200,6 +203,7 @@ Usage:
   alcode --new --message "..."
   alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode --guide
+  alcode --openclaw-guide
   alcode --help
 
 Modes:
@@ -213,13 +217,13 @@ Options:
   --model <model>   Model override.
 
 Env:
-  ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to pass --dangerously-skip-permissions to claude.
-  ALIGNFIRST_CODE_UNSET            Comma-list of env vars to strip from the claude child.
+  ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to run the coding agent with permission prompts disabled.
+  ALIGNFIRST_CODE_UNSET            Comma-list of env vars to strip from the coding agent child.
 
-alcode runs claude in the foreground and blocks until it finishes, streaming the transcript to
-stdout and to a session file under .plans/. To run it as a background task, let your caller (e.g.
-OpenClaw's exec tool) do the backgrounding; do not detach alcode yourself.
+alcode runs a coding agent in the foreground and blocks until it finishes, streaming the
+transcript to stdout and to a session file under .plans/. Coding runs can be very long: always
+run alcode as a background task. Your platform does the backgrounding; never detach alcode.
 
-Run \`alcode --guide\` for the full delegation guide.
+Run \`alcode --guide\` for the full delegation guide (\`alcode --openclaw-guide\` under OpenClaw).
 `;
 }

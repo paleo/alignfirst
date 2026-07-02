@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.7.0"
+  version: "0.8.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -32,9 +32,9 @@ Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and r
 
 ## Delegating to the coding agent
 
-To delegate, run the `alcode` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. Before your first `alcode` run of a session, run `alcode --guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
+To delegate, run the `alcode` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
 
-Coding runs are long. Run `alcode` via `exec` with `timeout: 0` so it is not killed mid-run; OpenClaw backgrounds it automatically and wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --guide` read).
+Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describes (`background: true`, `timeout: 0`), so it is not killed mid-run; OpenClaw wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --openclaw-guide` read).
 
 ## `chat_id` values
 
