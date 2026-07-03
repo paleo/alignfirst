@@ -93,7 +93,10 @@ export interface SessionCompletion {
 export function readCompletion(sessionFilePath: string): SessionCompletion {
   const content = readFileSync(sessionFilePath, "utf-8");
   const { frontmatter } = splitSessionFile(content);
-  const markerIndex = content.indexOf(RESULT_MARKER);
+  // `lastIndexOf`, not `indexOf`: `applyCompletion` always appends the real result block last, so a
+  // `---- Result ----` echoed earlier in the transcript body (e.g. the agent printing a session
+  // file) must not truncate the actual result.
+  const markerIndex = content.lastIndexOf(RESULT_MARKER);
   const result =
     markerIndex === -1 ? undefined : content.slice(markerIndex + RESULT_MARKER.length).trim();
   return { frontmatter, result };
@@ -151,7 +154,14 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
 
 function parseValue(raw: string): string | null {
   if (raw === "") return null;
-  return raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+  if (!raw.startsWith('"')) return raw;
+  try {
+    return JSON.parse(raw) as string;
+  } catch {
+    // A partially-written or hand-edited file may hold an unterminated/invalid quoted value; fall
+    // back to the raw text so the session file stays readable and sealable instead of crashing.
+    return raw;
+  }
 }
 
 // Local `YYYYMMDD-HHMMSS`.

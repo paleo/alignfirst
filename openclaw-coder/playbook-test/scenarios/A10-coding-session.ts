@@ -2,6 +2,7 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 import { invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
 import {
   COMPLETION_RE,
+  FORWARD_LOOKING_ACK_RE,
   LAUNCH_OR_SETUP_RE,
   STARTED_ACK_RE,
   waitForCodingSessionSucceeded,
@@ -122,8 +123,10 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   // reports in the thread — the same session, so the completion carries the thread's id and lands in
   // the exact-case conversation. Scan from `starter.nextCursor` (before the ack), not `ack.nextCursor`:
   // if a slow poll lands the ack and completion in one batch, an ack-relative cursor would skip the
-  // completion. The predicate matches only the FINISHED report: COMPLETION_RE, not the forward-
-  // looking STARTED_ACK_RE, and not a launch/setup line (a "Bootstrap: ready ✅ | Lancement…"
+  // completion. The predicate matches only the FINISHED report: COMPLETION_RE, minus the forward-
+  // looking FORWARD_LOOKING_ACK_RE (an ack that says "I'll tell you when done" — NOT the whole
+  // STARTED_ACK_RE, whose `arri[èe]re-plan` marker also appears in a genuine "…en arrière-plan est
+  // terminée" completion), and not a launch/setup line (a "Bootstrap: ready ✅ | Lancement…"
   // workspace report carries a ✅ with no ack marker). Generous timeout: a real LLM wake turn.
   const completion = await ctx.waitForOutbound(
     (m) =>
@@ -131,7 +134,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
       m.conversation.id === ctx.conversationId &&
       m.threadId === threadId &&
       COMPLETION_RE.test(m.text) &&
-      !STARTED_ACK_RE.test(m.text) &&
+      !FORWARD_LOOKING_ACK_RE.test(m.text) &&
       !LAUNCH_OR_SETUP_RE.test(m.text),
     { timeoutMs: 240_000, sinceCursor: starter.nextCursor, ...noFailFast },
   );

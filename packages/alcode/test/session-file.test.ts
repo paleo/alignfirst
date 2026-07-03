@@ -74,6 +74,13 @@ describe("frontmatter serialization", () => {
       .replace(/\n---\n$/, "");
     expect(parseFrontmatter(block)).toEqual(frontmatter);
   });
+
+  it("keeps a malformed quoted value as raw text instead of throwing", () => {
+    // A partially-written file may hold an unterminated quoted value; parsing must not crash.
+    const parsed = parseFrontmatter('status: running\ncommand: "unterminated');
+    expect(parsed.status).toBe("running");
+    expect(parsed.command).toBe('"unterminated');
+  });
 });
 
 describe("session file lifecycle", () => {
@@ -141,5 +148,29 @@ describe("session file lifecycle", () => {
     expect(completion.frontmatter.status).toBe("failed");
     expect(completion.frontmatter.exitReason).toBe("error");
     expect(completion.result).toBe("boom");
+  });
+
+  it("reads the terminal result even when the transcript echoes the result marker", () => {
+    writeInitialSessionFile(sessionFilePath, {
+      status: "running",
+      protocol: "aad",
+      ticket: "29",
+      model: null,
+      sessionId: null,
+      command: "alcode --new --protocol aad --ticket 29 --message go",
+      startedAt: "2026-07-01T09:15:03.000Z",
+      endedAt: null,
+      exitReason: null,
+    });
+    // The agent echoes a whole session file into the transcript, spurious marker and all.
+    appendTranscript(sessionFilePath, "here is a session file:\n---- Result ----\nold junk\n");
+    applyCompletion(sessionFilePath, {
+      status: "succeeded",
+      endedAt: "2026-07-01T09:41:20.000Z",
+      exitReason: "completed",
+      sessionId: "abc",
+      result: "the real result",
+    });
+    expect(readCompletion(sessionFilePath).result).toBe("the real result");
   });
 });

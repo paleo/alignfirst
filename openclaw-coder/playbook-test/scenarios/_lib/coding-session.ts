@@ -2,13 +2,20 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 
 // The "started in the background" ack reliably carries one of these markers (the alcode guide
 // tells the agent it launched a background run and will report back). Kept off `en cours`, which
-// also appears in some `[WORK]` headers.
+// also appears in some `[WORK]` headers. Used to DETECT the ack — not to subtract it from a
+// completion match (see FORWARD_LOOKING_ACK_RE for that).
 export const STARTED_ACK_RE =
   /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|reviens|informe/i;
 
-// The completion report (after the exec wake) says the work FINISHED. Distinct from STARTED_ACK_RE
-// (which promises a future update) so a completion wait can scan from before the ack and still
-// match only the completion — avoiding coupling to the ack wait's batch cursor.
+// The forward-looking subset of STARTED_ACK_RE — "I'll tell you when it's done". A completion wait
+// uses THIS (not STARTED_ACK_RE) to exclude the earlier ack: `background`/`arri[èe]re-plan` are not
+// tense-bearing, so a legitimate completion like "la tâche en arrière-plan est terminée ✅" would
+// otherwise be wrongly subtracted and the wait would time out on a correct run.
+export const FORWARD_LOOKING_ACK_RE = /pr[ée]vien|tiens au courant|reviens|d[èe]s que/i;
+
+// The completion report (after the exec wake) says the work FINISHED. Distinct from
+// FORWARD_LOOKING_ACK_RE (which promises a future update) so a completion wait can scan from before
+// the ack and still match only the completion — avoiding coupling to the ack wait's batch cursor.
 export const COMPLETION_RE = /termin[ée]|c'est (fait|bon)|finished|succès|success|done|✅/i;
 
 // Launch/setup wording that must never satisfy a completion or findings wait: a workspace report

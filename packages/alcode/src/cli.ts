@@ -101,7 +101,7 @@ function buildFrontmatter(parsed: AlcodeArgs, now: Date): SessionFrontmatter {
   };
 }
 
-function buildRunConfig(
+export function buildRunConfig(
   parsed: AlcodeArgs,
   cwd: string,
   sessionFilePath: string,
@@ -116,6 +116,7 @@ function buildRunConfig(
     model: parsed.model,
     skipPermissions: env.ALIGNFIRST_CODE_SKIP_PERMISSIONS === "1",
     unset: (env.ALIGNFIRST_CODE_UNSET ?? "").split(","),
+    env,
   };
 }
 
@@ -192,7 +193,20 @@ export function validateArgs(args: AlcodeArgs): string | undefined {
   if (args.ticket !== undefined && !args.isNew) {
     return "Error: --ticket is only valid with --new.";
   }
+  if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
+    return (
+      "Error: --ticket must be a single path segment " +
+      "(letters, digits, '.', '-', '_'); no path separators or '..'."
+    );
+  }
   return;
+}
+
+// The ticket becomes a `.plans/<ticket>/coding-sessions/…` path segment. Ticket formats vary by
+// consumer repo (numeric here, but e.g. `AB-123` elsewhere), so allow a permissive charset while
+// blocking path separators and `..` traversal that could escape `.plans/`.
+function isPathSafeTicket(ticket: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(ticket) && ticket !== "." && !ticket.includes("..");
 }
 
 function renderHelp(): string {

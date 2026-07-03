@@ -11,7 +11,12 @@ export interface RunConfig {
   model?: string;
   skipPermissions: boolean;
   unset: string[];
+  env: NodeJS.ProcessEnv;
 }
+
+// Grace period between the SIGTERM that lets `claude` tear down its own children and the SIGKILL
+// backstop that guarantees alcode never leaves a dangling child.
+const TERMINATION_GRACE_MS = 2000;
 
 export interface RunOutput {
   write(text: string): void;
@@ -54,7 +59,7 @@ function spawnClaude(
 ): Promise<ClaudeOutcome> {
   const child = spawn("claude", buildClaudeArgs(config), {
     cwd: config.cwd,
-    env: buildClaudeEnv(process.env, config.unset),
+    env: buildClaudeEnv(config.env, config.unset),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const detachChildGuards = guardChildLifecycle(child, config.sessionFilePath, state);
@@ -83,44 +88,65 @@ function spawnClaude(
 }
 
 // A direct `kill <alcode>` (not a process-group kill) would otherwise orphan the foreground
-// `claude`. Forward termination signals and process exit to the child, then SIGKILL it, so alcode
-// never leaves a dangling `claude`. On a catchable signal, also seal the session file (`status:
-// failed`, `exitReason: terminated`) so it never stays frozen at `running` — a SIGKILL of alcode
-// itself remains the one uncatchable case. Returns a teardown that removes the guards once the
-// child is gone (so alcode can exit normally afterward).
+// `claude`. On a catchable signal, seal the session file (`status: failed`, `exitReason:
+// terminated`) so it never stays frozen at `running`, then SIGTERM the child and give it a short
+// grace to tear down *its own* children (tool subprocesses, dev servers) before a SIGKILL backstop
+// guarantees nothing dangles. The synchronous `exit` handler can't await, so it does a last-resort
+// SIGKILL. A SIGKILL of alcode itself remains the one uncatchable case. Returns a teardown that
+// removes the guards once the child is gone (so alcode can exit normally afterward).
 function guardChildLifecycle(
   child: ChildProcess,
   sessionFilePath: string,
   state: StreamState,
 ): () => void {
-  const killChild = () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // The child is already gone; nothing to clean up.
-      }
+  const isAlive = () => child.exitCode === null && child.signalCode === null;
+  const signalChild = (signal: NodeJS.Signals) => {
+    if (!isAlive()) return;
+    try {
+      child.kill(signal);
+    } catch {
+      // The child is already gone; nothing to clean up.
     }
   };
-  const onSignal = (signal: NodeJS.Signals) => {
-    killChild();
+  const forceKill = () => signalChild("SIGKILL");
+  const onSignal = async (signal: NodeJS.Signals) => {
     try {
       applyCompletion(sessionFilePath, buildTerminationUpdate(signal, state, new Date()));
     } catch {
       // Sealing the session file is best-effort; the file may be gone or malformed.
     }
+    signalChild("SIGTERM");
+    await waitForChildExit(child, TERMINATION_GRACE_MS);
+    forceKill();
     process.exit(signal === "SIGINT" ? 130 : 143);
   };
   const onSigint = () => onSignal("SIGINT");
   const onSigterm = () => onSignal("SIGTERM");
   process.on("SIGINT", onSigint);
   process.on("SIGTERM", onSigterm);
-  process.on("exit", killChild);
+  process.on("exit", forceKill);
   return () => {
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
-    process.off("exit", killChild);
+    process.off("exit", forceKill);
   };
+}
+
+// Resolves when the child exits or the grace period elapses, whichever comes first — so a SIGTERM
+// that `claude` honors lets alcode exit promptly, while a hung child still hits the SIGKILL backstop.
+function waitForChildExit(child: ChildProcess, graceMs: number): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      child.off("exit", onExit);
+      resolve();
+    }, graceMs);
+    child.once("exit", onExit);
+  });
 }
 
 export function buildTerminationUpdate(

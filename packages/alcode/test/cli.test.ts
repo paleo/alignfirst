@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type AlcodeArgs, parseAlcodeArgs, validateArgs } from "../src/cli.js";
+import { type AlcodeArgs, buildRunConfig, parseAlcodeArgs, validateArgs } from "../src/cli.js";
 
 function parse(flags: string[]): AlcodeArgs {
   return parseAlcodeArgs(["node", "alcode", ...flags]);
@@ -78,5 +78,29 @@ describe("validateArgs — parity with the retired .mjs", () => {
 
   it("accepts a resume with no protocol and a message", () => {
     expect(validate(["--resume", "s", "--message", "answer"])).toBe(undefined);
+  });
+
+  it("accepts a non-numeric ticket format (consumer repos vary)", () => {
+    expect(validate(["--new", "--protocol", "plan", "--ticket", "AB-123_x.4"])).toBe(undefined);
+  });
+
+  it("rejects a ticket with a path separator or traversal", () => {
+    const expected =
+      "Error: --ticket must be a single path segment " +
+      "(letters, digits, '.', '-', '_'); no path separators or '..'.";
+    expect(validate(["--new", "--protocol", "plan", "--ticket", "../../etc"])).toBe(expected);
+    expect(validate(["--new", "--protocol", "plan", "--ticket", "a/b"])).toBe(expected);
+    expect(validate(["--new", "--protocol", "plan", "--ticket", ".."])).toBe(expected);
+  });
+});
+
+describe("buildRunConfig", () => {
+  it("threads the caller env into the config so the child inherits the same source", () => {
+    const parsed = parse(["--new", "--message", "go"]);
+    const env = { FOO: "bar", ALIGNFIRST_CODE_SKIP_PERMISSIONS: "1", ALIGNFIRST_CODE_UNSET: "X,Y" };
+    const config = buildRunConfig(parsed, "/proj", "/proj/.plans/_coding-sessions/s.md", env);
+    expect(config.env).toBe(env);
+    expect(config.skipPermissions).toBe(true);
+    expect(config.unset).toEqual(["X", "Y"]);
   });
 });

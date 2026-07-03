@@ -10,7 +10,7 @@ Run `alcode --guide` for the full delegation guide — or `alcode --openclaw-gui
 
 Coding runs can be very long: the caller always runs `alcode` as a background task and owns the backgrounding. Under OpenClaw the agent invokes `alcode` through the `exec` tool with `background: true` and `timeout: 0` — OpenClaw wakes the agent on exit (via `tools.exec.notifyOnExit`), which then reads the session file for the result. This keeps the run's lifecycle owned by one supervisor (the caller) instead of a detached process phoning back in. The session file is the durable result handoff: frontmatter `sessionId` + status, and the `---- Result ----` block.
 
-If `alcode` is terminated, it kills its coding-agent child (signal handlers + process-group membership), so no orphaned process is left behind, and seals the session file (`status: failed`, `exitReason: terminated`) so it never stays frozen at `running`. Only a SIGKILL of `alcode` itself can leave a stale `running` status.
+If `alcode` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`) so it never stays frozen at `running`, then send `SIGTERM` to the coding-agent child — giving it a short grace to tear down its own subprocesses — before a `SIGKILL` backstop guarantees no orphan is left behind. Only a `SIGKILL` of `alcode` itself (uncatchable) can leave a stale `running` status.
 
 ## Usage
 

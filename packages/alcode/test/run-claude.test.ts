@@ -16,6 +16,7 @@ const BASE: RunConfig = {
   isNew: true,
   skipPermissions: false,
   unset: [],
+  env: {},
 };
 
 describe("buildClaudeArgs", () => {
