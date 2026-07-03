@@ -6,11 +6,11 @@ const PROJECTS_DIR = "/home/claw/projects";
 
 /**
  * Worktree directory the `@paleo/workspace` library produces for a ticket
- * branch on the given fixture project. Branch shape is `<ticket>/<type>`; the
+ * branch on the given fixture project. Branch shape is `<ticket>/<desc>`; the
  * library's default `defaultWorktreeDirName` joins segments with `-`.
  */
-export function worktreePath(project: string, ticket: string, type: string): string {
-  return `${PROJECTS_DIR}/${project}-${ticket}-${type}`;
+export function worktreePath(project: string, ticket: string, desc: string): string {
+  return `${PROJECTS_DIR}/${project}-${ticket}-${desc}`;
 }
 
 export interface WaitForWorktreeDirOptions {
@@ -24,10 +24,10 @@ export interface WaitForWorktreeDirOptions {
 export async function waitForWorktreeDir(
   project: string,
   ticket: string,
-  type: string,
+  desc: string,
   { timeoutMs }: WaitForWorktreeDirOptions,
 ): Promise<string> {
-  const target = worktreePath(project, ticket, type);
+  const target = worktreePath(project, ticket, desc);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -43,14 +43,14 @@ export async function waitForWorktreeDir(
 
 export interface WorktreeMatch {
   dir: string;
-  type: string;
+  desc: string;
 }
 
 /**
- * Like `waitForWorktreeDir`, but work-type-agnostic: polls for any worktree
- * `<project>-<ticket>-<type>` and returns the actual `<type>` the agent chose.
- * "Make the export button bold" is legitimately a `feat` or a `fix`, so the
- * scenario must not pin the type — only that a worktree for the ticket appears.
+ * Like `waitForWorktreeDir`, but description-agnostic: polls for any worktree
+ * `<project>-<ticket>-<desc>` and returns the actual `<desc>` the agent chose.
+ * The branch suffix is a short free-form description (`{TICKET_ID}/{1-3-words}`),
+ * so the scenario must not pin it — only that a worktree for the ticket appears.
  */
 export async function waitForAnyWorktreeDir(
   project: string,
@@ -63,10 +63,10 @@ export async function waitForAnyWorktreeDir(
     const entries = await readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => []);
     const match = entries.find((e) => e.isDirectory() && e.name.startsWith(prefix));
     if (match)
-      return { dir: `${PROJECTS_DIR}/${match.name}`, type: match.name.slice(prefix.length) };
+      return { dir: `${PROJECTS_DIR}/${match.name}`, desc: match.name.slice(prefix.length) };
     await new Promise((r) => setTimeout(r, 250));
   }
-  throw new Error(`no worktree dir ${prefix}<type> appeared within ${timeoutMs}ms`);
+  throw new Error(`no worktree dir ${prefix}<desc> appeared within ${timeoutMs}ms`);
 }
 
 export function assertBranch(worktreeDir: string, expectedBranch: string): void {
@@ -99,9 +99,9 @@ export async function seedWorktree(
   ctx: ScenarioContext,
   project: string,
   ticket: string,
-  type: string,
+  desc: string,
 ): Promise<string> {
-  const branch = `${ticket}/${type}`;
+  const branch = `${ticket}/${desc}`;
   const exec = await ctx.execInGateway(
     ["sh", "-c", `cd ${PROJECTS_DIR}/${project} && pnpm workspace setup ${branch} -c --wait`],
     { timeoutMs: 120_000 },
@@ -112,20 +112,20 @@ export async function seedWorktree(
         `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}`,
     );
   }
-  return waitForWorktreeDir(project, ticket, type, { timeoutMs: 30_000 });
+  return waitForWorktreeDir(project, ticket, desc, { timeoutMs: 30_000 });
 }
 
 /**
- * Pre-seed a branch (no worktree). Runs `git branch <ticket>/<type> develop`
+ * Pre-seed a branch (no worktree). Runs `git branch <ticket>/<desc> develop`
  * in the project's main worktree.
  */
 export async function seedBranch(
   ctx: ScenarioContext,
   project: string,
   ticket: string,
-  type: string,
+  desc: string,
 ): Promise<void> {
-  const branch = `${ticket}/${type}`;
+  const branch = `${ticket}/${desc}`;
   const exec = await ctx.execInGateway(
     ["git", "-C", `${PROJECTS_DIR}/${project}`, "branch", branch, "develop"],
     { timeoutMs: 15_000 },

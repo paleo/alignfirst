@@ -61,11 +61,6 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
         command: `${ws} setup`,
         comment: "set up the current worktree (idempotent; bootstrap + retry path)",
       },
-      {
-        command: `${ws} wait ../my-worktree`,
-        comment:
-          "block until ready/failed (by path/dir name; --slot <port>; or omit the arg for the current worktree)",
-      },
     ],
     recovery: [
       {

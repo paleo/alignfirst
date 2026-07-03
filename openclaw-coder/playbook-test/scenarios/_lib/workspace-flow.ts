@@ -42,13 +42,14 @@ export async function runWorkspaceFlow(
     delegationTimeoutMs = 150_000,
   } = options;
 
-  // The agent chooses the work type (feat/fix/refactor…); don't pin it. Discover
-  // the worktree the agent actually created and derive the type from its name.
-  // The on-disk check is the deterministic proof that setup happened.
-  const { dir: worktreeDir, type: workType } = await waitForAnyWorktreeDir(project, ticketId, {
+  // The agent derives the branch description (`{TICKET_ID}/{1-3-words}`); don't
+  // pin it. Discover the worktree the agent actually created and read the
+  // description from its name. The on-disk check is the deterministic proof
+  // that setup happened.
+  const { dir: worktreeDir, desc: branchDesc } = await waitForAnyWorktreeDir(project, ticketId, {
     timeoutMs: worktreeTimeoutMs,
   });
-  assertBranch(worktreeDir, `${ticketId}/${workType}`);
+  assertBranch(worktreeDir, `${ticketId}/${branchDesc}`);
 
   // Let the agent's setup turn settle on its workspace report BEFORE nudging it
   // — firing "Vas-y" mid-turn disrupts the flow and the agent never reaches the
@@ -56,8 +57,8 @@ export async function runWorkspaceFlow(
   // not a pre-creation announcement. The report block is best-effort: assert it
   // when the agent posts it (its format is also covered by A7/A8/A9), tolerate a
   // weak model that reports readiness conversationally and skips the template.
-  const branchRe = new RegExp(`\\b${ticketId}\\/${workType}\\b`, "i");
-  const locatorRe = new RegExp(`${project}-${ticketId}-${workType}|slot\\s*\\d{3,5}`, "i");
+  const branchRe = new RegExp(`\\b${ticketId}\\/${branchDesc}\\b`, "i");
+  const locatorRe = new RegExp(`${project}-${ticketId}-${branchDesc}|slot\\s*\\d{3,5}`, "i");
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
     (m) =>

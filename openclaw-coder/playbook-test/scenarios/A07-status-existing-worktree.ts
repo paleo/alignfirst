@@ -10,8 +10,8 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-070";
-const WORK_TYPE = "feat";
-const BRANCH = `${TICKET_ID}/${WORK_TYPE}`;
+const BRANCH_DESC = "export-bold";
+const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 const PROJECTS_DIR = "/home/claw/projects";
 
 export default async function statusExistingWorktree(ctx: ScenarioContext): Promise<void> {
@@ -20,7 +20,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   setupClaudeMock(ctx);
   setupGhMock(ctx);
 
-  const seededPath = await seedWorktree(ctx, PROJECT, TICKET_ID, WORK_TYPE);
+  const seededPath = await seedWorktree(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
   ctx.log(`pre-seeded worktree at ${seededPath}`);
 
   const startCursor = await ctx.getCursor();
@@ -44,7 +44,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   // some iterations of the agent emit free-form text after thread-create which
   // auto-streams to the channel. Per the playbook-test README.md tolerance, the user still sees it.
   const branchRe = new RegExp(
-    `\\b${TICKET_ID}/${WORK_TYPE}\\b|nimbus-${TICKET_ID}-${WORK_TYPE}\\b`,
+    `\\b${TICKET_ID}/${BRANCH_DESC}\\b|nimbus-${TICKET_ID}-${BRANCH_DESC}\\b`,
   );
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
@@ -76,7 +76,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
 
 function assertOnlySeededWorktreeDir(ctx: ScenarioContext): void {
   if (!existsSync(PROJECTS_DIR)) return;
-  const expected = worktreePath(PROJECT, TICKET_ID, WORK_TYPE).slice(PROJECTS_DIR.length + 1);
+  const expected = worktreePath(PROJECT, TICKET_ID, BRANCH_DESC).slice(PROJECTS_DIR.length + 1);
   const extras = readdirSync(PROJECTS_DIR).filter(
     (entry) => (entry.startsWith("nimbus-") || entry.startsWith("lumen-")) && entry !== expected,
   );

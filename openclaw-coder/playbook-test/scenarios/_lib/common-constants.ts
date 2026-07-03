@@ -6,7 +6,7 @@
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const NEW_WORK_QUESTION_RUBRIC =
-  "A message asking the user about the new work: requests the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
+  "A message asking the user about the new work: requests the ticket id, the change scope/description, or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
 export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
 
@@ -22,7 +22,7 @@ export const statusExistingWorktreeRubric = (ticketId: string, branch: string): 
   `A status report for an existing workspace. References the ticket id (${ticketId}) or the branch (${branch}). Mentions that a worktree is already set up / registered / in place / ready (path, slot, "ready", "existe", "already exists" all count). Reporting the worktree's creation timestamp from its metadata is fine — that's data, not an action claim. Reject ONLY if the message announces, as a fresh user-facing action, that the agent itself just created a new worktree to fulfill this request (e.g. "Je viens de créer le worktree" with no prior-existence wording).`;
 
 export const statusBranchOnlyRubric = (ticketId: string, branch: string): string =>
-  `A status report after the worktree was set up. References the ticket id (${ticketId}) or branch (${branch}), the worktree path or slot, and the bootstrap status (running / ready / failed). The standard \`Worktree : … / Branche : … / Bootstrap : …\` template counts. Reject only if the message explicitly claims the branch was newly created from scratch (e.g. "j'ai créé une nouvelle branche ABC-080/fix").`;
+  `A status report after the worktree was set up. References the ticket id (${ticketId}) or branch (${branch}), the worktree path or slot, and the bootstrap status (running / ready / failed). The standard \`Worktree : … / Branche : … / Bootstrap : …\` template counts. Reject only if the message explicitly claims the branch was newly created from scratch (e.g. "j'ai créé une nouvelle branche ABC-080/retry-logic").`;
 
 export const statusNoBranchRubric = (ticketId: string): string =>
   `A short report that no workspace exists for ticket ${ticketId} — no branch, no worktree, "rien encore", "no branch yet", "pas de branche", "nothing started". Does NOT announce that a worktree was created. May offer to start a new workspace for the user.`;

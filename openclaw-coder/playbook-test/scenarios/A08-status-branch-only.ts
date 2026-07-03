@@ -8,8 +8,8 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-080";
-const WORK_TYPE = "fix";
-const BRANCH = `${TICKET_ID}/${WORK_TYPE}`;
+const BRANCH_DESC = "retry-logic";
+const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 
 export default async function statusBranchOnly(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -17,7 +17,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   setupClaudeMock(ctx);
   setupGhMock(ctx);
 
-  await seedBranch(ctx, PROJECT, TICKET_ID, WORK_TYPE);
+  await seedBranch(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
   ctx.log(`pre-seeded branch ${BRANCH} (no worktree)`);
 
   const startCursor = await ctx.getCursor();
@@ -37,7 +37,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
-  const worktreeDir = await waitForWorktreeDir(PROJECT, TICKET_ID, WORK_TYPE, {
+  const worktreeDir = await waitForWorktreeDir(PROJECT, TICKET_ID, BRANCH_DESC, {
     timeoutMs: 120_000,
   });
   assertBranch(worktreeDir, BRANCH);
@@ -47,7 +47,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   // Bootstrap : …` shape from project-workspace-setup.md Step 4. Match
   // on that — narration messages with the branch token but no template keyword
   // are skipped.
-  const reportRe = new RegExp(`nimbus-${TICKET_ID}-${WORK_TYPE}`);
+  const reportRe = new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`);
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
     (m) =>
@@ -68,12 +68,12 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
   ctx.assertRegex(
     reportWait.match.text,
-    new RegExp(`nimbus-${TICKET_ID}-${WORK_TYPE}`),
+    new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`),
     "report mentions the worktree path",
   );
   ctx.assertRegex(
     reportWait.match.text,
-    new RegExp(`\\b${TICKET_ID}/${WORK_TYPE}\\b`),
+    new RegExp(`\\b${TICKET_ID}/${BRANCH_DESC}\\b`),
     "report mentions the branch",
   );
   ctx.assertRegex(

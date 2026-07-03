@@ -442,8 +442,6 @@ async function runSetup(
   teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    // The parent auto-blocks on the slot, so this hint is the recovery path after a Ctrl-C.
-    teeLog(`Re-attach with: ${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}`);
   }
 
   const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];

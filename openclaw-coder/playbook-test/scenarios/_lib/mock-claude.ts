@@ -7,7 +7,11 @@ const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|ne
 const WORKTREE_LIST_INTENT_RE =
   /\b(list (the )?(registered )?(workspace|worktree)|enumerate (workspace|worktree)|workspace list)\b/i;
 const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing branch)\b/i;
-const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/(feat|fix|refactor|chore|docs|test|perf)\b/;
+// Branch is `{TICKET_ID}/{1-3-words}` — the suffix is a short free-form
+// description the agent derives, not a fixed work-type vocabulary. Accept any
+// slug (kebab or snake, any case), so the mock recognizes whatever the agent
+// picked.
+const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 

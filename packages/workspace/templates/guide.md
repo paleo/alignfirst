@@ -43,7 +43,7 @@ node <main-worktree>/<path-to>/workspace.mjs setup
 
 Stops the dev server (if running), tears down infrastructure, frees the slot, and removes the worktree. The local branch is always kept. Removal refuses on uncommitted changes. Pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
 
-`remove`, `status`, and `wait` pick a workspace the same way: omit to act on the current worktree, or target another by its **directory** (a path or just the basename) or `--slot <port>`. Slot also reaches an orphan whose directory is already gone.
+`remove` and `status` pick a workspace the same way: omit to act on the current worktree, or target another by its **directory** (a path or just the basename) or `--slot <port>`. Slot also reaches an orphan whose directory is already gone.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 
