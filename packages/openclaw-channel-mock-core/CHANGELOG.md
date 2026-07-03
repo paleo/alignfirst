@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.3.2
+
+### Patch Changes
+
+- aced48c: Upgraded to OpenClaw `2026.6.11` inbound API.
+
 ## 0.3.1
 
 ### Patch Changes
