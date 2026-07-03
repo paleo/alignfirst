@@ -10,21 +10,19 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: dedi
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base.
 
-The command creates the worktree, assigns a port slot, sets up symlinks, and generates config files. The remaining steps (dependency install, build, database provisioning) run **detached in the background** and stream to the setup log, ending with a `READY:` or `FAILED:` banner. `setup` **blocks** until that banner. Interrupting it is safe: finalize keeps running detached — re-attach with `wait`.
-
-To run the whole setup as a background task, background the `setup` command itself with your caller's tooling (e.g. OpenClaw's `exec` tool with `timeout: 0`, which wakes the agent when the command exits). Do not poll.
+`setup` creates the worktree (branch, port slot, symlinks, config), then installs dependencies, builds, and provisions the database. It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**.
 
 **Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
 
 ### Recovery from a failed setup
 
-If the background finalize fails (check the setup log), do **not** delete the worktree. From inside it, `setup` is idempotent — repeat until the log ends with `READY:`:
+If setup fails (check the setup log), do **not** delete the worktree. From inside it, `setup` is idempotent. Fix the issues and repeat until the log ends with `READY:`:
 
 ```sh
 {{COMMANDS:recovery}}
 ```
 
-**Edge case** — if setup errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@paleo/workspace'`, the worktree never got `node_modules/` (finalize failed before the install). Fall back to the main worktree's wrapper directly:
+**Edge case** — if setup errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@paleo/workspace'`, the worktree never got `node_modules/` (setup failed before the install). Fall back to the main worktree's wrapper directly:
 
 ```sh
 cd <failed-worktree>
@@ -43,7 +41,7 @@ node <main-worktree>/<path-to>/workspace.mjs setup
 {{COMMANDS:remove}}
 ```
 
-Stops the dev server (if running), tears down infrastructure, frees the slot, and removes the worktree. The local branch is always kept. Removal refuses on uncommitted changes — pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
+Stops the dev server (if running), tears down infrastructure, frees the slot, and removes the worktree. The local branch is always kept. Removal refuses on uncommitted changes. Pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
 
 `remove`, `status`, and `wait` pick a workspace the same way: omit to act on the current worktree, or target another by its **directory** (a path or just the basename) or `--slot <port>`. Slot also reaches an orphan whose directory is already gone.
 
@@ -71,7 +69,7 @@ When you only want a worktree (no ports, no build, no config), use the `git work
 
 **Concurrent cap.** `dev` / `dev up` cap simultaneously running dev-servers. At the cap, the start errors with a table of active servers and exits non-zero. Free a slot via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
 
-**Two-tier shutdown.** `down` (and a foreground CTRL+C) only kill dev-server processes — they leave infrastructure (Docker containers, databases) running so restarts stay fast. Full infrastructure cleanup happens via `workspace remove` when tearing the worktree down entirely.
+**Two-tier shutdown.** `down` (and a foreground CTRL+C) only kill dev-server processes. They leave infrastructure (Docker containers, databases) running so restarts stay fast. Full infrastructure cleanup happens via `workspace remove` when tearing the worktree down entirely.
 
 ### Driving the dev server in another worktree
 

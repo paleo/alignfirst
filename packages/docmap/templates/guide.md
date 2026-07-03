@@ -18,8 +18,8 @@ Targets are positional paths; the CLI classifies each by inspecting the filesyst
 
 ## Writing Guidelines
 
-- **Audience:** an experienced newcomer — technically capable but unfamiliar with this project.
-- Be brief and specific — no obvious information, no generic best practices.
+- **Audience:** an experienced newcomer, technically capable but unfamiliar with this project.
+- Be brief and specific: no obvious information, no generic best practices.
 - Typical document: 40–80 lines.
 - Prefer referencing source files over large code blocks.
 - If the title makes the purpose obvious, omit the `summary`.
@@ -35,7 +35,7 @@ Targets are positional paths; the CLI classifies each by inspecting the filesyst
 
 ## YAML Frontmatter
 
-`.md` files may start with a YAML frontmatter block. Add it when it adds value — especially when the filename or heading alone is not explicit enough. It is optional; when absent, the CLI falls back to the first `# heading` for the title.
+`.md` files may start with a YAML frontmatter block. Add it when it adds value, especially when the filename or heading alone is not explicit enough. It is optional; when absent, the CLI falls back to the first `# heading` for the title.
 
 | Field | Required | Description |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Targets are positional paths; the CLI classifies each by inspecting the filesyst
 
 ## Document Body
 
-After the closing `---`, write standard Markdown — headings, code blocks, tables, lists as needed.
+After the closing `---`, write standard Markdown: headings, code blocks, tables, lists as needed.
 
 ```markdown
 ---
