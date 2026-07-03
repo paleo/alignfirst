@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
 import {
+  isAnnouncement,
   LAUNCH_OR_SETUP_RE,
   STARTED_ACK_RE,
   waitForCodingSessionSucceeded,
@@ -21,7 +22,13 @@ const INVESTIGATION_FINDING =
 export default async function projectInvestigationQuestion(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx, { defaultResult: INVESTIGATION_FINDING });
+  // streamDelayMs keeps the mock coding run alive past the launching turn (real runs take
+  // minutes+): an exec that exits mid-turn gets its exit event consumed by the in-flight turn and
+  // the completion wake never fires as its own turn — a fixture artifact, not a product behavior.
+  const claude = setupClaudeMock(ctx, {
+    defaultResult: INVESTIGATION_FINDING,
+    streamDelayMs: 12_000,
+  });
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
@@ -94,8 +101,8 @@ async function waitForFindings(
     (m) =>
       m.direction === "outbound" &&
       m.threadId === threadId &&
-      !STARTED_ACK_RE.test(m.text) &&
-      !LAUNCH_OR_SETUP_RE.test(m.text),
+      !isAnnouncement(STARTED_ACK_RE, m.text) &&
+      !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
     {
       timeoutMs: 240_000,
       sinceCursor,

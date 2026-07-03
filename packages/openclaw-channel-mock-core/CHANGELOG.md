@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.4.0
+
+### Minor Changes
+
+- Slack-shaped channels now thread like real Slack: a root channel inbound auto-threads on the triggering message — the thread id is the message's own id, no separate thread object — and a background exec's completion wake replies in that thread instead of the channel root. Assert on observed thread ids, not on the old `thread-…` shape.
+
 ## 0.3.2
 
 ### Patch Changes

@@ -6,7 +6,7 @@ import {
   saveMediaBuffer,
   saveMediaSource,
 } from "openclaw/plugin-sdk/media-runtime";
-import { buildQaTarget, createQaBusThread, sendQaBusMessage } from "./bus-client.js";
+import { buildQaTarget, sendQaBusMessage } from "./bus-client.js";
 import {
   sanitizeQaBusToolCallArguments,
   type QaBusMessage,
@@ -96,11 +96,14 @@ export function buildDeliveryCallback(params: {
   inbound: QaBusMessage;
   target: string;
   toolCalls: QaBusToolCall[];
-  autoThread: boolean;
+  // Slack auto-thread on a root inbound: every outbound of this turn is delivered into the thread
+  // rooted on the triggering message (`autoThreadId === inbound.id`, Slack's `thread_ts = ts` — no
+  // separate thread object exists). The same id rides the inbound context as `MessageThreadId`, so
+  // OpenClaw captures it as the turn's current thread and a later background-exec wake replies back
+  // into it (the real-Slack behavior).
+  autoThreadId?: string;
 }): (payload: unknown) => Promise<void> {
-  const { account, inbound, target, toolCalls, autoThread } = params;
-  const slackAutoThread = autoThread && !inbound.threadId;
-  let autoThreadId: string | undefined;
+  const { account, inbound, target, toolCalls, autoThreadId } = params;
   let autoThreadDeliveries = 0;
 
   return async (payload: unknown) => {
@@ -108,22 +111,7 @@ export function buildDeliveryCallback(params: {
     if (!text.trim()) {
       return;
     }
-    if (slackAutoThread) {
-      if (!autoThreadId) {
-        const title =
-          inbound.threadTitle?.trim() ||
-          inbound.conversation.title?.trim() ||
-          inbound.text.slice(0, 60) ||
-          "thread";
-        const { thread } = await createQaBusThread({
-          baseUrl: account.baseUrl,
-          accountId: account.accountId,
-          conversationId: inbound.conversation.id,
-          title,
-          createdBy: account.botUserId,
-        });
-        autoThreadId = thread.id;
-      }
+    if (autoThreadId) {
       autoThreadDeliveries += 1;
       await sendQaBusMessage({
         baseUrl: account.baseUrl,
@@ -230,6 +218,15 @@ export async function handleInbound(params: {
   if (access.ingress.admission !== "dispatch") {
     return;
   }
+
+  // Slack auto-threads a root inbound on the triggering message itself: the thread id IS the root
+  // message's id (Slack's `thread_ts = ts`) and no thread object is created — exactly what the real
+  // Slack plugin does under `replyToMode: "all"` (`resolveSlackThreadContext`). The turn stays on
+  // the channel session (the session key ignores this id); the id is surfaced as `MessageThreadId`
+  // below so OpenClaw captures it as the turn's current thread — that's what lets a background-exec
+  // exit wake reply back into the thread instead of the channel root.
+  const autoThreadId = params.autoThread && !inbound.threadId ? inbound.id : undefined;
+
   const { storePath, body } = buildEnvelope({
     channel: params.channelLabel,
     from: inbound.senderName || inbound.senderId,
@@ -259,9 +256,14 @@ export async function handleInbound(params: {
       : undefined,
     GroupChannel: inbound.conversation.kind === "channel" ? inbound.conversation.id : undefined,
     NativeChannelId: inbound.conversation.id,
-    MessageThreadId: inbound.threadId,
+    // On a Slack auto-thread root this is the inbound message's own id (thread_ts = ts), mirroring
+    // the real Slack plugin under `replyToMode: "all"`: the turn is still dispatched as a channel
+    // turn, but OpenClaw captures the id as `currentThreadTs` when a background `exec` launches, so
+    // the exit wake threads its reply. The playbook dispatcher distinguishes a root turn from a
+    // thread turn by `topic_id === message_id`, exactly as on real Slack.
+    MessageThreadId: inbound.threadId ?? autoThreadId,
     ThreadLabel: inbound.threadTitle,
-    ThreadParentId: inbound.threadId ? inbound.conversation.id : undefined,
+    ThreadParentId: (inbound.threadId ?? autoThreadId) ? inbound.conversation.id : undefined,
     SenderName: inbound.senderName,
     SenderId: inbound.senderId,
     Provider: params.channelId,
@@ -293,7 +295,7 @@ export async function handleInbound(params: {
         inbound,
         target,
         toolCalls,
-        autoThread: params.autoThread,
+        autoThreadId,
       }),
       onError: (error) => {
         throw error instanceof Error

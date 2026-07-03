@@ -57,9 +57,6 @@
   "agents": {
     "defaults": {
       "skills": ["alignfirst", "openclaw-coder-playbook"],
-      "heartbeat": {
-        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. Then check for a pending coding run: if this session backgrounded an `alcode` run and has not reported its outcome yet, read the run's session file now (the path printed at launch, under `coding-sessions/`) with your file-read tool. If its frontmatter `status` is no longer `running`, follow the alcode guide's 'After a background run completes' procedure — report the outcome in the thread where the work was requested. If nothing needs attention, reply HEARTBEAT_OK."
-      },
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }

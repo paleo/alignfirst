@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.2.0
+
+### Minor Changes
+
+- New `--meta "<text>"` flag: stores an opaque handoff string verbatim in the session file's `meta:` frontmatter, for a later reader of the file; `alcode` never interprets it.
+
 ## 0.1.0
 
 ### Minor Changes

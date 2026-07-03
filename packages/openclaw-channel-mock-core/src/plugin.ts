@@ -1,3 +1,7 @@
+import type {
+  ChannelThreadingContext,
+  ChannelThreadingToolContext,
+} from "openclaw/plugin-sdk/channel-contract";
 import {
   buildChannelOutboundSessionRoute,
   buildThreadAwareOutboundSessionRoute,
@@ -181,6 +185,13 @@ export function createChannelMockPlugin(params: {
         blockStreamingCoalesceDefaults: { minChars: 1, idleMs: 100 },
       },
     },
+    // Slack-shaped channels expose the turn's thread to the tool layer (real Slack's
+    // `threading.buildToolContext`): `currentThreadTs` is what a background `exec` captures at
+    // launch, and what lets its exit wake reply into the originating thread instead of the channel
+    // root. Discord-shaped channels stay without the hook — real Discord doesn't define one.
+    ...(surface === "slack"
+      ? { threading: { buildToolContext: buildSlackShapedThreadingToolContext } }
+      : {}),
     outbound: {
       base: {
         deliveryMode: "direct",
@@ -207,4 +218,42 @@ export function createChannelMockPlugin(params: {
       },
     },
   });
+}
+
+// Mirrors `buildSlackThreadingToolContext` (extensions/slack/src/threading-tool-context.ts) on the
+// mock's target shapes. Thread ids here are plain strings (the auto-thread is rooted on the inbound
+// message id — Slack's `thread_ts = ts`), so no ts-format normalization is needed.
+function buildSlackShapedThreadingToolContext(params: {
+  context: ChannelThreadingContext;
+  hasRepliedRef?: { value: boolean };
+}): ChannelThreadingToolContext {
+  const { context, hasRepliedRef } = params;
+  const messageThreadId = normalizeThreadValue(context.MessageThreadId);
+  const transportThreadId = normalizeThreadValue(context.TransportThreadId);
+  const replyToId = normalizeThreadValue(context.ReplyToId);
+  const currentMessageId = normalizeThreadValue(context.CurrentMessageId);
+  const currentThreadTs = messageThreadId ?? transportThreadId ?? replyToId;
+  const hasExplicitThreadTarget =
+    messageThreadId != null ||
+    transportThreadId != null ||
+    (replyToId != null && currentMessageId != null && replyToId !== currentMessageId);
+  const currentMessagingTarget = normalizeThreadValue(context.To);
+  return {
+    ...(currentMessagingTarget !== undefined
+      ? { currentChannelId: currentMessagingTarget, currentMessagingTarget }
+      : {}),
+    ...(currentThreadTs !== undefined ? { currentThreadTs } : {}),
+    // The slack surface is auto-thread by construction (`replyToMode: "all"` equivalent).
+    replyToMode: "all",
+    hasRepliedRef,
+    sameChannelThreadRequired: hasExplicitThreadTarget,
+  };
+}
+
+function normalizeThreadValue(value: string | number | null | undefined): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : undefined;
 }

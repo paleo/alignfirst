@@ -3,6 +3,7 @@ import { invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts
 import {
   COMPLETION_RE,
   FORWARD_LOOKING_ACK_RE,
+  isAnnouncement,
   LAUNCH_OR_SETUP_RE,
   STARTED_ACK_RE,
   waitForCodingSessionSucceeded,
@@ -134,8 +135,8 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
       m.conversation.id === ctx.conversationId &&
       m.threadId === threadId &&
       COMPLETION_RE.test(m.text) &&
-      !FORWARD_LOOKING_ACK_RE.test(m.text) &&
-      !LAUNCH_OR_SETUP_RE.test(m.text),
+      !isAnnouncement(FORWARD_LOOKING_ACK_RE, m.text) &&
+      !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
     { timeoutMs: 240_000, sinceCursor: starter.nextCursor, ...noFailFast },
   );
   ctx.log({ attachTo: completion.entry, label: "completion-wake report received" });

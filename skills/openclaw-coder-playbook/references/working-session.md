@@ -24,10 +24,6 @@ Use the guidelines.
 
 ## Guidelines
 
-### Delegating to the coding agent
-
-Always use the coding agent via the `alcode` CLI, as its `--openclaw-guide` describes. **Run from the project's directory** (`~/projects/<project>`).
-
 ### Interpreting requests
 
 Interpret every user message in the context of the current project — something to do, investigate, challenge, or advise on inside the codebase. The user is rarely asking you to perform the action _in the chat_; they're asking about the project.
