@@ -45,6 +45,15 @@ Skill:
 
 - **`alignfirst`** — spec/plan/code workflow for coding tasks.
 
+The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`. The agent learns how to use it by running `alcode --openclaw-guide` (the delegation manual with the OpenClaw-specific run instructions) — install the CLI so the command is on the bot's PATH (there is no separate coaching skill).
+
+Optional `alcode` environment variables:
+
+```bash
+export ALIGNFIRST_CODE_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_CODE_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
+```
+
 ### Skills for OpenClaw
 
 OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst`:
@@ -58,23 +67,6 @@ Skills:
 
 - **`openclaw-coder-playbook`** — operating instructions for an OpenClaw AI coder.
 - **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
-
-The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`. The agent learns how to use it by running `alcode --openclaw-guide` (the delegation manual with the OpenClaw-specific run instructions) — install the CLI so the command is on the bot's PATH (there is no separate coaching skill).
-
-Optional `alcode` environment variables:
-
-```bash
-export ALIGNFIRST_CODE_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
-export ALIGNFIRST_CODE_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
-```
-
-#### Background runs and the completion wake
-
-Coding runs are long, but `alcode` never backgrounds itself — it runs `claude` in the foreground and blocks. OpenClaw does the backgrounding: the agent runs `alcode` through the `exec` tool with `timeout: 0`, so OpenClaw auto-backgrounds it after a few seconds (letting the agent post a "started" ack) and wakes the **same** session when it exits, via the native exec completion event (`tools.exec.notifyOnExit`). The woken agent reads alcode's session file under `.plans/` and reports the outcome. The agent goes available and waits for that wake — it does **not** poll.
-
-This keeps the run's lifecycle owned by one supervisor (OpenClaw's `exec`) instead of a detached process phoning back in. Ensure `tools.exec.notifyOnExit` stays enabled (the default) and that the agent passes `timeout: 0` (or a generous cap) so a long run is not killed mid-work.
-
-Run alcode directly (not through OpenClaw) and it simply blocks in the foreground and prints the result — useful for a human or another coding agent.
 
 ### `openclaw.json`
 

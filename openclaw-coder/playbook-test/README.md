@@ -2,7 +2,7 @@
 
 Dockerised regression-test harness for the `myclaw` reference workspace at [`workspace/`](workspace/). Local-only. Manually run.
 
-Standalone consumer of the `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). These install from **locally-built tarballs** vendored into the image, not from npmjs — see [Vendored `@paleo/openclaw-*` packages](#vendored-paleoopenclaw-packages). See upstream docs for the generic mechanics:
+Standalone consumer of the `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
 
 - [packages/openclaw-test/README.md](../../packages/openclaw-test/README.md) — install, configure, run, scenario primitives, artifact layout.
 - [docs/openclaw-test-architecture.md](../../docs/openclaw-test-architecture.md) — internals.
@@ -28,12 +28,6 @@ npm run env:down
 
 See the upstream README for all flags.
 
-> ℹ️ **Build `@paleo/alcode` before `env:up`.** The gateway runs the real `alcode` CLI
-> (live-mounted from `ALIGNFIRST_CODE_DIR`, host path to `packages/alcode`) via a `/usr/local/bin/alcode`
-> wrapper — only its own `claude` subprocess is mocked. If `packages/alcode/dist` is missing the
-> wrapper fails at runtime. alcode edits iterate live (no rebuild); a `tsc` rebuild of alcode is
-> enough.
-
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
 ## Configuration
@@ -41,14 +35,7 @@ See the upstream README for all flags.
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Not shimmed — alcode runs for real; its `claude` subprocess still resolves to the mock via PATH order. Delegation instructions come from `alcode --openclaw-guide` (rendered from the `templates/` files, so guide prose edits iterate live too).
-- [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","openclaw-coder-playbook"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
 - [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
-
-## Coding-session completion (alcode)
-
-The delegation flow runs the real `alcode` CLI. `alcode` runs `claude` in the **foreground** and blocks; the agent runs `alcode` through OpenClaw's `exec` tool with `timeout: 0`, so OpenClaw backgrounds it (letting the agent post a "started" ack) and wakes the **same** thread session when it exits, via the native exec completion event (`tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads alcode's session file under `.plans/<ticket>/coding-sessions/` and reports the outcome in the thread. No callback, no gateway RPC, no isolated turn — the completion lands in the exact-case conversation because it is the same session resuming.
-
-**Observed wake caveat (OpenClaw 2026.6.11):** the wake turn's transcript shows only a bare `[OpenClaw heartbeat poll]` — the enqueued `Exec completed …` system-event text does not surface in the session's queue at drain time, so the model gets no explicit exit notice (OpenClaw's dedicated `buildExecEventPrompt` path never fires here). Two layers compensate: the `alcode --openclaw-guide` completion section instructs the agent to check the pending run's session file on **any** wake or heartbeat, and [`openclaw.json`](openclaw.json) overrides `agents.defaults.heartbeat.prompt` to repeat that check in the wake turn itself (the lost event lands the wake on the configured-prompt fallback path — see `makeHeartbeatPrompt` upstream). The override lives in config, not `workspace/HEARTBEAT.md`: that file is OpenClaw's own mutable work file (gitignored), so instructions there would not survive deployment. When debugging a missed completion, look for a `HEARTBEAT_OK`-only turn shortly after the exec exit in the trajectory.
 
 ## Fixtures
 
