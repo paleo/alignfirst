@@ -23,6 +23,17 @@ export const COMPLETION_RE = /termin[ée]|c'est (fait|bon)|finished|succès|succ
 // no STARTED_ACK_RE marker, so COMPLETION_RE alone would match it.
 export const LAUNCH_OR_SETUP_RE = /lancement|je lance|launch|starting|d[ée]marr|bootstrap/i;
 
+// Exclusion regexes identify ANNOUNCEMENTS — short ack / launch / setup lines whose marker sits in
+// the opening. A substantive findings or completion report can mention the same wording in a
+// closing offer ("…dis-moi le ID et je lance le workflow"), which must not disqualify it: test the
+// opening only, never the full text, when a regex is used to EXCLUDE a candidate.
+const ANNOUNCEMENT_OPENING_CHARS = 120;
+
+/** True when `text` OPENS like the announcement `re` identifies (exclusion-side matching). */
+export function isAnnouncement(re: RegExp, text: string): boolean {
+  return re.test(text.slice(0, ANNOUNCEMENT_OPENING_CHARS));
+}
+
 /**
  * Poll the gateway for alcode's per-run coding-session file reaching `status: succeeded` — the
  * model-independent proof the delegated session finished, and the ground truth the completion

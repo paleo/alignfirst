@@ -95,6 +95,7 @@ function buildFrontmatter(parsed: AlcodeArgs, now: Date): SessionFrontmatter {
     model: parsed.model ?? null,
     sessionId: null,
     command: formatCommand(parsed),
+    meta: parsed.meta ?? null,
     startedAt: now.toISOString(),
     endedAt: null,
     exitReason: null,
@@ -128,6 +129,7 @@ function formatCommand(parsed: AlcodeArgs): string {
   if (parsed.ticket) parts.push("--ticket", parsed.ticket);
   if (parsed.model) parts.push("--model", parsed.model);
   if (parsed.message) parts.push("--message", JSON.stringify(parsed.message));
+  if (parsed.meta) parts.push("--meta", JSON.stringify(parsed.meta));
   return parts.join(" ");
 }
 
@@ -140,6 +142,7 @@ export interface AlcodeArgs {
   protocol?: string;
   message?: string;
   model?: string;
+  meta?: string;
   guide: boolean;
   openclawGuide: boolean;
   help: boolean;
@@ -155,6 +158,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
       protocol: { type: "string" },
       message: { type: "string" },
       model: { type: "string" },
+      meta: { type: "string" },
       guide: { type: "boolean", default: false },
       "openclaw-guide": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
@@ -168,6 +172,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
     protocol: values.protocol,
     message: values.message,
     model: values.model,
+    meta: values.meta,
     guide: values.guide === true,
     openclawGuide: values["openclaw-guide"] === true,
     help: values.help === true,
@@ -229,6 +234,9 @@ Options:
   --ticket <id>     Ticket ID. Required with --new + --protocol.
   --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>   Model override.
+  --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
+                    (\`meta:\`). alcode never interprets it; a later reader of the session file
+                    (e.g. the caller reporting the run's outcome) can use it.
 
 Env:
   ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to run the coding agent with permission prompts disabled.

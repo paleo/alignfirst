@@ -8,6 +8,10 @@ export interface SessionFrontmatter {
   model: string | null;
   sessionId: string | null;
   command: string;
+  // Opaque caller-supplied handoff string (`alcode --meta`). alcode never interprets it; it exists
+  // so the caller can stash context a later reader needs — e.g. an OpenClaw agent stashing the
+  // originating thread target so the exec-completion wake can report back in the right thread.
+  meta: string | null;
   startedAt: string;
   endedAt: string | null;
   exitReason: string | null;
@@ -146,6 +150,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     model: map.model ?? null,
     sessionId: map.sessionId ?? null,
     command: map.command ?? "",
+    meta: map.meta ?? null,
     startedAt: map.startedAt ?? "",
     endedAt: map.endedAt ?? null,
     exitReason: map.exitReason ?? null,

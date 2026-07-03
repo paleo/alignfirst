@@ -22,8 +22,8 @@ Every run writes a session file under `.plans/`: `.plans/<ticket>/coding-session
 
 {{WAKE}}
 
-1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience.
+1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
+2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. If the frontmatter `meta` carries a destination (e.g. a thread target), route this report there — a plain reply from the wake turn goes to the session's default surface, which may not be where the work was requested.
 3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git`. The coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
 
 If the session file says the run failed, report that plainly and propose the next step; don't silently retry.
@@ -44,6 +44,7 @@ alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol`. |
 | `--model <model>` | Model override. |
+| `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
 For `--new` runs, the `Session ID:` is printed to stdout and written to the session file frontmatter (the durable source of truth). Save it to resume the conversation later.
 

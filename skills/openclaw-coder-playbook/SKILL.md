@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.8.0"
+  version: "0.8.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -14,8 +14,8 @@ metadata:
 
 You have just loaded this skill. Before any reply text and before any other tool call, your next action must be a file read of the playbook for your surface:
 
-- Conversation metadata has `thread_label`, `topic_id` (Discord), or `thread_ts` (Slack) → thread session → read [`references/working-session.md`](references/working-session.md). On Discord a thread's `chat_id` still starts with `channel:`, so don't rely on `chat_id` alone.
-- None of those fields set → channel / DM session → read [`references/channel-handling.md`](references/channel-handling.md).
+- Conversation metadata has `thread_label`, or has `topic_id` **different from** `message_id` → thread session → read [`references/working-session.md`](references/working-session.md). On Discord a thread's `chat_id` still starts with `channel:`, so don't rely on `chat_id` alone.
+- Otherwise → channel / DM session → read [`references/channel-handling.md`](references/channel-handling.md). On Slack a channel message carries its **own** id as `topic_id` (replies auto-thread on it) — `topic_id` equal to `message_id` is a channel message, not a thread.
 
 The playbook tells you what to do. Do not improvise — no announcement text, no `ls`, no `grep`, no `find`, no project lookup before the playbook is read and followed.
 

@@ -80,16 +80,16 @@ describe("slack-mock buildDeliveryCallback (autoThread=true)", () => {
       inbound,
       target: "channel:sample-project",
       toolCalls: [],
-      autoThread: true,
+      autoThreadId: inbound.id,
     });
 
     await deliver({ text: "starter announcement" });
     await deliver({ text: "follow-up question?" });
 
     const snap = fixture.bus.state.getSnapshot();
-    expect(snap.threads.length).toBe(1);
-    const threadId = snap.threads[0].id;
-    const messagesInThread = snap.messages.filter((m) => m.threadId === threadId);
+    // Slack auto-thread roots on the triggering message (thread_ts = ts); no thread object exists.
+    expect(snap.threads.length).toBe(0);
+    const messagesInThread = snap.messages.filter((m) => m.threadId === inbound.id);
     expect(messagesInThread.length).toBe(2);
     expect(messagesInThread[0].replyToId).toBe(inbound.id);
     expect(messagesInThread[1].replyToId).toBe(undefined);
@@ -102,7 +102,8 @@ describe("slack-mock buildDeliveryCallback (autoThread=true)", () => {
       inbound,
       target: "thread:sample-project/T-existing",
       toolCalls: [],
-      autoThread: true,
+      // handleInbound computes autoThreadId only for a root inbound; a thread inbound leaves it unset.
+      autoThreadId: undefined,
     });
 
     await deliver({ text: "thread reply" });

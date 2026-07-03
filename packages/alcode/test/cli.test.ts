@@ -19,6 +19,15 @@ describe("parseAlcodeArgs", () => {
     expect(args.message).toBe("go");
   });
 
+  it("reads --meta as an opaque string", () => {
+    const args = parse(["--new", "--message", "go", "--meta", "thread:room/abc.def"]);
+    expect(args.meta).toBe("thread:room/abc.def");
+  });
+
+  it("leaves meta undefined when --meta is omitted", () => {
+    expect(parse(["--new", "--message", "go"]).meta).toBeUndefined();
+  });
+
   it("throws on unknown flags", () => {
     expect(() => parse(["--nope"])).toThrow();
   });
