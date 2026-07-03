@@ -1,6 +1,6 @@
 {
   "name": "@paleo/workspace",
-  "version": "0.25.5",
+  "version": "0.26.0",
   "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [
     "workspace",
@@ -21,7 +21,7 @@
   "engines": {
     "node": ">=22.11.0"
   },
-  "packageManager": "npm@11.11.0",
+  "packageManager": "npm@11.12.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

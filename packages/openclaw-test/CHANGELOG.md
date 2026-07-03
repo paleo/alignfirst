@@ -1,5 +1,15 @@
 # @paleo/openclaw-test
 
+## 0.12.1
+
+### Patch Changes
+
+- aced48c: Fix the intermittent post-verdict runner hang. The QA-bus long-poll now runs under a client-side `AbortController` (server hold + 2s) so a wedged bus or half-open connection surfaces as an empty poll and the caller's deadline loop keeps ticking instead of hanging forever. On shutdown the mock CLI server force-closes lingering keep-alive sockets (`closeAllConnections`) so `close()` resolves at once rather than waiting on an idle-open connection.
+- Updated dependencies [aced48c]
+  - @paleo/openclaw-channel-mock-core@0.3.2
+  - @paleo/openclaw-discord-mock@0.3.3
+  - @paleo/openclaw-slack-mock@0.3.3
+
 ## 0.12.0
 
 ### Minor Changes

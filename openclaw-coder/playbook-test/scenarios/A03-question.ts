@@ -1,5 +1,10 @@
 import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
+import {
+  LAUNCH_OR_SETUP_RE,
+  STARTED_ACK_RE,
+  waitForCodingSessionSucceeded,
+} from "./_lib/coding-session.ts";
 import { INVESTIGATION_SUMMARY_RUBRIC } from "./_lib/common-constants.ts";
 import { expectNoProtocolDelegation, setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -40,7 +45,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     ctx,
     claude,
     {
-      rubric: `The captured invocation is a prompt sent to a coding agent via the alignfirst-coaching wrapper, **without** an alignfirst protocol header. Expected: an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine) and signals "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject only if: the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), or the question content is missing or unrelated.`,
+      rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an alignfirst protocol header. Expected: an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine) and signals "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject only if: the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), or the question content is missing or unrelated.`,
       label: "claude-investigation-delegation",
     },
   );
@@ -57,9 +62,13 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
 
   assertNoWorktreeDirs(ctx);
 
-  // The summary post arrives *after* the claude mock returns. Wait for the
-  // first outbound in the thread strictly after the delegation completes.
-  const summary = await waitForSummary(ctx, threadId, cursorAfterDelegation);
+  // The guide makes every alcode run a background task, so the findings arrive only after the
+  // exec-exit wake: launch ack first, then the session file reaches `status: succeeded` (no-ticket
+  // run → `.plans/_coding-sessions/`), then the woken agent relays the finding in the thread.
+  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, { timeoutMs: 120_000 });
+  ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
+
+  const summary = await waitForFindings(ctx, threadId, cursorAfterDelegation);
   await ctx.judgeLLM({
     attachTo: summary.entry,
     message: summary.match.text,
@@ -71,16 +80,30 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   ctx.log("PASS");
 }
 
-async function waitForSummary(
+/**
+ * The findings message is the first thread outbound after the delegation that is neither the
+ * background-launch ack nor a launch/setup line. Fail-fasts are disabled: the finding legitimately
+ * arrives long after alcode's coding-agent child (a cliMock) returned, on the wake turn.
+ */
+async function waitForFindings(
   ctx: ScenarioContext,
   threadId: string,
   sinceCursor: number,
 ): Promise<WaitForOutboundResult> {
   const wait = await ctx.waitForOutbound(
-    (m) => m.direction === "outbound" && m.threadId === threadId,
-    { timeoutMs: 90_000, sinceCursor, failFastCliMockGraceMs: 30_000 },
+    (m) =>
+      m.direction === "outbound" &&
+      m.threadId === threadId &&
+      !STARTED_ACK_RE.test(m.text) &&
+      !LAUNCH_OR_SETUP_RE.test(m.text),
+    {
+      timeoutMs: 240_000,
+      sinceCursor,
+      failFastCliMockGraceMs: false,
+      failFastUnmatchedOutbounds: false,
+    },
   );
-  ctx.log({ attachTo: wait.entry, label: "post-delegation message received" });
+  ctx.log({ attachTo: wait.entry, label: "post-wake findings message received" });
   return wait;
 }
 

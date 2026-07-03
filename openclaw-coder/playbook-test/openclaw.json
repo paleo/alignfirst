@@ -20,14 +20,30 @@
   },
   "models": {
     "providers": {
+      "custom-anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "${ANTHROPIC_API_KEY}",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          }
+        ]
+      },
       "custom-openrouter": {
         "baseUrl": "https://openrouter.ai/api/v1",
         "apiKey": "${OPENROUTER_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen/qwen3.6-plus",
-            "name": "Qwen 3.6 Plus (OpenRouter)",
+            "id": "qwen/qwen3.7-plus",
+            "name": "Qwen 3.7 Plus (OpenRouter)",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
@@ -40,7 +56,10 @@
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "alignfirst-coaching", "openclaw-coder-playbook"],
+      "skills": ["alignfirst", "openclaw-coder-playbook"],
+      "heartbeat": {
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. Then check for a pending coding run: if this session backgrounded an `alcode` run and has not reported its outcome yet, read the run's session file now (the path printed at launch, under `coding-sessions/`) with your file-read tool. If its frontmatter `status` is no longer `running`, follow the alcode guide's 'After a background run completes' procedure — report the outcome in the thread where the work was requested. If nothing needs attention, reply HEARTBEAT_OK."
+      },
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
@@ -49,7 +68,7 @@
       {
         "id": "main",
         "name": "OpenClaw Main",
-        "model": "anthropic/claude-sonnet-4-6",
+        "model": "custom-anthropic/claude-sonnet-4-6",
         "workspace": "/home/claw/.openclaw/workspace"
       }
     ]

@@ -2,7 +2,7 @@
 
 Dockerised regression-test harness for the `myclaw` reference workspace at [`workspace/`](workspace/). Local-only. Manually run.
 
-Standalone consumer of the published `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
+Standalone consumer of the `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
 
 - [packages/openclaw-test/README.md](../../packages/openclaw-test/README.md) — install, configure, run, scenario primitives, artifact layout.
 - [docs/openclaw-test-architecture.md](../../docs/openclaw-test-architecture.md) — internals.
@@ -15,6 +15,10 @@ This README only documents what is specific to this harness.
 cp .env.local.example .env.local
 # Edit .env.local — fill ANTHROPIC_API_KEY
 
+# Build the real alcode CLI the gateway runs (packages/alcode/dist must exist).
+npm run build --workspace @paleo/alcode --prefix ../..
+
+npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first run only; env:build repeats it)
 npm install
 npm run env:build
 npm run env:up
@@ -29,28 +33,30 @@ See the upstream README for all flags.
 ## Configuration
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
-- `ALIGNFIRST_COACHING_SKILL_DIR` — host path to the `alignfirst-coaching` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
-- [`openclaw.json`](openclaw.json) — `tools.profile=coding` + `alsoAllow=["message"]`, `agents.defaults.skills=["alignfirst","alignfirst-coaching"]`, `blockStreaming*` defaults, main agent model `anthropic/claude-sonnet-4-6`, `channels.*.botDisplayName="myclaw"`.
-- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Not shimmed — alcode runs for real; its `claude` subprocess still resolves to the mock via PATH order. Delegation instructions come from `alcode --openclaw-guide` (rendered from the `templates/` files, so guide prose edits iterate live too).
+- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes two git repos on branch `develop` at `/home/claw/projects/{nimbus,lumen}`, both copied from the committed [`projects-fixture/template/`](projects-fixture/template/) — a minimal Express monorepo stand-in. Each carries `package.json` `name` `@playbook-test/<name>-fixture` and `DEVELOPMENT.md` H1 `# Developing <Name>`.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes two git repos on branch `develop` at `/home/claw/projects/{nimbus,lumen}`, both copied from the committed [`projects-fixture/template/`](projects-fixture/template/) — a minimal Express monorepo stand-in. Each carries `package.json` `name` `@playbook-test/<name>-fixture` and `DEVELOPMENT.md` H1 `# Developing <Name>`, plus an (untracked) `.plans/` directory so `alcode`'s project gate is satisfied.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A9`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the native exec completion wake).
 
-**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
-## Editable upstream packages (optional fall-back)
+## Vendored `@paleo/openclaw-*` packages
 
-`@paleo/openclaw-*` ship from npmjs. To test unreleased changes from this monorepo, swap a dependency to `file:../../packages/<pkg>`, then `npm install && npm run env:build`. Revert before committing.
+This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs — the four packages iterate in lockstep with the mocks and are frequently ahead of a publish. The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) (`npm run vendor`) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is this dir, so the tarballs must live here — `../../packages/*` is out of reach at build time.
+
+`npm run env:build` chains `vendor` → `npm install` (refreshes `package-lock.json` against the new tarballs) → `openclaw-test env build`, so a source edit in any of the four packages is picked up on the next `env:build` with no manual step. `npm pack` is byte-reproducible, so unchanged sources produce no lockfile churn. Run `npm run vendor` by hand before the first `npm install` (the tarballs must exist for it to resolve).
 
 ## Layout
 
-- [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) — committed.
-- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `ALIGNFIRST_COACHING_SKILL_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`.
+- [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) · [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) — committed.
+- `vendor/` (gitignored) — locally-built `@paleo/openclaw-*` tarballs, regenerated by `npm run vendor`.
+- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`, `ALIGNFIRST_CODE_DIR`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `trajectory/<sessionId>.jsonl` (always, provider-neutral), `raw-stream.jsonl` (opt-in).

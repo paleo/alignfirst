@@ -1,0 +1,47 @@
+{
+  "name": "@paleo/alcode",
+  "version": "0.1.0",
+  "license": "CC0-1.0",
+  "author": "Thomas MUR",
+  "description": "Run a coding agent through AlignFirst protocols, with a durable session file per run.",
+  "keywords": [
+    "ai",
+    "agent",
+    "alignfirst",
+    "cli",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/alcode"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.12.1",
+  "type": "module",
+  "bin": {
+    "alcode": "bin/alcode.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.4",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.7"
+  }
+}

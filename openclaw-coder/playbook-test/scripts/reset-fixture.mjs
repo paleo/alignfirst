@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 
 const PROJECTS = "/home/claw/projects";
 const TEMPLATE = "/opt/playbook-test/fixtures/template";
@@ -31,6 +39,11 @@ async function resetFixture(name) {
   const dst = `${PROJECTS}/${name}`;
   cpSync(TEMPLATE, dst, { recursive: true, preserveTimestamps: true });
   patchFixture(dst, name);
+  // alcode refuses to run outside a project that has a `.plans/` directory
+  // (its coaching-session logs land there). Seed an empty one — the fixture's
+  // .gitignore already ignores `.plans/`, so it stays untracked like a real
+  // repo; the agent runs alcode from this project root (~/projects/<name>).
+  mkdirSync(`${dst}/.plans`, { recursive: true });
   const gitEnv = {
     ...process.env,
     GIT_AUTHOR_NAME: "test",

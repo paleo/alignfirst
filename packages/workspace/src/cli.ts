@@ -9,7 +9,6 @@ export type WorkspaceCommand =
       from?: string;
       slot?: string;
       force: boolean;
-      wait: boolean;
       go: boolean;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
@@ -83,7 +82,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       from: { type: "string" },
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
-      wait: { type: "boolean" },
       go: { type: "boolean" },
       verbose: { type: "boolean", short: "v" },
     },
@@ -110,7 +108,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       from: values.from,
       slot: values.slot,
       force: values.force ?? false,
-      wait: values.wait ?? false,
       go,
     },
     verbose: values.verbose ?? false,
@@ -256,14 +253,15 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [-s|--slot <port>] [--force] [--wait] [--go]",
+      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [-s|--slot <port>] [--force] [--go]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
       "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
-      "      Finalize runs in the background; add --wait to block until it reaches READY.",
-      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
-      "      combine with --wait to enter only once it is READY. Requires a branch and $SHELL.",
+      "      Blocks until setup reaches READY (or FAILED). To avoid blocking, background",
+      "      the command and run `wait` to join it later.",
+      "      With --go, drop into an interactive shell in the new worktree (exit to return),",
+      "      entered once it is READY. Requires a branch and $SHELL.",
       "  remove [<dir>] [-s|--slot <port>] [--force]",
       "      Remove a workspace, selected by directory (path or basename) or --slot;",
       "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
@@ -276,7 +274,7 @@ export function printWorkspaceHelp(): void {
       "      Print a workspace summary (ports, branch, readiness, dev-server).",
       "      Selected by directory (path or basename) or --slot; the current worktree when omitted.",
       "  wait [<dir>] [-s|--slot <port>]",
-      "      Block until the background finalize reaches READY (exit 0) or FAILED (exit 1).",
+      "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
       "",
       "Global options:",
       "  -v, --verbose   Show intermediate output.",

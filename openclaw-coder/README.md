@@ -12,11 +12,11 @@ Install OpenClaw on a VPS.
 ```mermaid
 flowchart TD
   U([User]) -->|"asks via Discord / Slack"| O[OpenClaw]
-  O -->|"delegates the task<br/>(openclaw-coder-playbook + alignfirst-coaching skills)"| CC[Claude Code]
+  O -->|"delegates the task<br/>(openclaw-coder-playbook skill + alcode CLI)"| CC[Claude Code]
   CC -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
-OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** and **`alignfirst-coaching`** skills. Claude Code does the actual work with the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
+OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI (whose `--guide` is the delegation manual). Claude Code does the actual work with the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
 
 ### Supported OpenClaw channels
 
@@ -45,32 +45,32 @@ Skill:
 
 - **`alignfirst`** — spec/plan/code workflow for coding tasks.
 
+The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`. The agent learns how to use it by running `alcode --openclaw-guide` (the delegation manual with the OpenClaw-specific run instructions) — install the CLI so the command is on the bot's PATH (there is no separate coaching skill).
+
+Optional `alcode` environment variables:
+
+```bash
+export ALIGNFIRST_CODE_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
+export ALIGNFIRST_CODE_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
+```
+
 ### Skills for OpenClaw
 
-OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst-coaching`, `alignfirst`:
+OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst`:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --yes --agent universal \
-  --skill openclaw-coder-playbook --skill alignfirst-coaching --skill alignfirst
+  --skill openclaw-coder-playbook --skill alignfirst
 ```
 
 Skills:
 
 - **`openclaw-coder-playbook`** — operating instructions for an OpenClaw AI coder.
-- **`alignfirst-coaching`** — teaches the agent to delegate coding tasks to Claude Code.
 - **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
-
-Optional `alignfirst-coaching` environment variables:
-
-```bash
-export ALIGNFIRST_COACHING_DEBUG_LOG_DIR=path/to/directory # Write input/output logs
-export ALIGNFIRST_COACHING_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
-export ALIGNFIRST_COACHING_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
-```
 
 ### `openclaw.json`
 
-OpenClaw needs a coding tool profile that can still post to chat, and the three skills wired in:
+OpenClaw needs a coding tool profile that can still post to chat, and the two skills wired in:
 
 ```jsonc
 {
@@ -80,7 +80,13 @@ OpenClaw needs a coding tool profile that can still post to chat, and the three 
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "alignfirst-coaching", "openclaw-coder-playbook"]
+      "skills": ["alignfirst", "openclaw-coder-playbook"],
+      "heartbeat": {
+        // Wake safety net: OpenClaw (2026.6.11) can drop the exec-completion event text,
+        // so the wake arrives as a bare heartbeat. This prompt keeps the stock behavior
+        // and adds the pending-run check. Copy it from playbook-test/openclaw.json.
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). […] If nothing needs attention, reply HEARTBEAT_OK."
+      }
     }
   },
   "channels": {

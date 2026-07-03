@@ -8,7 +8,7 @@ import type { Step } from "./types.ts";
 // The settled report carries the worktree LOCATOR (dir name or slot) plus the
 // branch and a bootstrap-status keyword. These are language-invariant tokens,
 // asserted deterministically when the agent posts the block.
-const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|prêt|prête|en cours|échou)/i;
+const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours|échou)/i;
 
 export interface WorkspaceFlowOptions {
   project: string;
@@ -37,16 +37,19 @@ export async function runWorkspaceFlow(
     prevStep,
     worktreeTimeoutMs = 120_000,
     reportTimeoutMs = 90_000,
-    delegationTimeoutMs = 90_000,
+    // Covers the documented takeover-sync (fetch, merge, PR check) an agent may
+    // legitimately run between the go-ahead and the delegation.
+    delegationTimeoutMs = 150_000,
   } = options;
 
-  // The agent chooses the work type (feat/fix/refactor…); don't pin it. Discover
-  // the worktree the agent actually created and derive the type from its name.
-  // The on-disk check is the deterministic proof that setup happened.
-  const { dir: worktreeDir, type: workType } = await waitForAnyWorktreeDir(project, ticketId, {
+  // The agent derives the branch description (`{TICKET_ID}/{1-3-words}`); don't
+  // pin it. Discover the worktree the agent actually created and read the
+  // description from its name. The on-disk check is the deterministic proof
+  // that setup happened.
+  const { dir: worktreeDir, desc: branchDesc } = await waitForAnyWorktreeDir(project, ticketId, {
     timeoutMs: worktreeTimeoutMs,
   });
-  assertBranch(worktreeDir, `${ticketId}/${workType}`);
+  assertBranch(worktreeDir, `${ticketId}/${branchDesc}`);
 
   // Let the agent's setup turn settle on its workspace report BEFORE nudging it
   // — firing "Vas-y" mid-turn disrupts the flow and the agent never reaches the
@@ -54,8 +57,8 @@ export async function runWorkspaceFlow(
   // not a pre-creation announcement. The report block is best-effort: assert it
   // when the agent posts it (its format is also covered by A7/A8/A9), tolerate a
   // weak model that reports readiness conversationally and skips the template.
-  const branchRe = new RegExp(`\\b${ticketId}\\/${workType}\\b`, "i");
-  const locatorRe = new RegExp(`${project}-${ticketId}-${workType}|slot\\s*\\d{3,5}`, "i");
+  const branchRe = new RegExp(`\\b${ticketId}\\/${branchDesc}\\b`, "i");
+  const locatorRe = new RegExp(`${project}-${ticketId}-${branchDesc}|slot\\s*\\d{3,5}`, "i");
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
     (m) =>
@@ -93,13 +96,17 @@ export async function runWorkspaceFlow(
 
   // The setup flow's documented prerequisites (project-workspace-setup.md): the
   // agent must read the project's DEVELOPMENT.md — the worktree-setup entry
-  // point — and run `workspace --guide` to discover the setup commands. These
-  // happen during the setup turn; by now its trajectory has flushed, and
-  // waitForAgentToolCall rides out any remaining flush latency.
+  // point — and run `workspace --guide` to discover the setup commands. The
+  // trajectory snapshot flushes only when a session run ends; when queued
+  // inbounds and the exec wake coalesce the whole conversation into one run,
+  // the flush trails the completion outbound — hence timeouts well past the
+  // 30s default.
   await ctx.waitForAgentToolCall((c) => readsFile(c, `${project}/DEVELOPMENT.md`), {
     label: "agent reads the project DEVELOPMENT.md",
+    timeoutMs: 120_000,
   });
   await ctx.waitForAgentToolCall((c) => execMatches(c, /workspace\s+--guide/), {
     label: "agent runs `workspace --guide`",
+    timeoutMs: 120_000,
   });
 }

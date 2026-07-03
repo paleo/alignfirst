@@ -8,17 +8,19 @@
     "npm": ">=10"
   },
   "scripts": {
-    "env:build": "openclaw-test env build",
+    "vendor": "node scripts/vendor-packages.mjs",
+    "env:build": "npm run vendor && npm install && openclaw-test env build",
     "env:up": "openclaw-test env up",
     "env:down": "openclaw-test env down",
     "e2e": "openclaw-test run"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "^0.3.1",
-    "@paleo/openclaw-discord-mock": "^0.3.2",
-    "@paleo/openclaw-slack-mock": "^0.3.2",
-    "@paleo/openclaw-test": "^0.12.0",
-    "openclaw": "2026.5.18"
+    "@anthropic-ai/sdk": "~0.98.0",
+    "@paleo/openclaw-channel-mock-core": "file:vendor/openclaw-channel-mock-core.tgz",
+    "@paleo/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",
+    "@paleo/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
+    "@paleo/openclaw-test": "file:vendor/openclaw-test.tgz",
+    "openclaw": "2026.6.11"
   },
   "devDependencies": {
     "@types/node": "^24.12.4",

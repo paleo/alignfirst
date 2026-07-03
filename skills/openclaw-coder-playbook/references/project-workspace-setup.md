@@ -4,7 +4,7 @@ Do NOT try to handle the user's request here. We need to set up the project work
 
 ## Prerequisites
 
-- load the `alignfirst-coaching` skill — how to delegate to the coding agent.
+- run `alcode --openclaw-guide` (`exec`) and follow it — how to delegate to the coding agent.
 - read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
@@ -13,13 +13,8 @@ You need:
 
 - **PROJECT_NAME** — The directory name of the project under `~/projects/`
 - **TICKET_ID** — An identifier for the work, ideally (but not necessarily) a ticket ID from the user's tracking system.
-- **WORK_TYPE** for your branch name — a Conventional Commits prefix (`feat`, `fix`, `refactor`, `chore`, `docs`, …).
 
 If you don't have the PROJECT_NAME or TICKET_ID, do not proceed. Do not guess these values. Ask the user.
-
-If you have a clear reason to infer the WORK_TYPE, do so. Otherwise, don't guess — ask the user.
-
-The branch name will be: `{TICKET_ID}/{WORK_TYPE}`.
 
 ## Step 2 — Post the `[WORK]` header
 
@@ -38,19 +33,24 @@ If the thread name is missing the TICKET_ID or the PROJECT_NAME, rename it. Form
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-First, check what already exists for `{TICKET_ID}/{WORK_TYPE}`. `DEVELOPMENT.md` points to the project's `workspace --guide` command, which gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them — never assume the branch is new.
+First, check what already exists for the {TICKET_ID} — two checks, both required:
+
+- **Branch**: list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
+- **Registered workspaces**: `DEVELOPMENT.md` points to the project's `workspace --guide` command, which gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+
+Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
 Whenever a branch exists, you work from its workspace — a status request included. "Status" here means: set up the workspace, then report its state — not `git log` from the main dir. Pick one sub-path:
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
+3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. Bootstrap finishes in the background, so don't add your own `background` option. Inspect the workspace, never the main dir. In the user's language:
+The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir. In the user's language:
 
 ```text
 Worktree: {dirname}
-Branch: {TICKET_ID}/{WORK_TYPE}
+Branch: {branch}
 Bootstrap: {running | ready | failed}
 ```
 

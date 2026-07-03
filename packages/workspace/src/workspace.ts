@@ -325,7 +325,10 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       return;
     case "setup": {
       const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
-      if (command.wait) await waitForSlot(slot, config, registryDir, { printSummary: false });
+      // Block until the detached finalize settles (READY/FAILED). A caller that wants the whole
+      // setup in the background backgrounds this command itself (e.g. OpenClaw's exec tool, which
+      // wakes the agent when it exits).
+      await waitForSlot(slot, config, registryDir, { printSummary: false });
       if (command.go) enterWorktree(worktree);
       return;
     }
@@ -439,7 +442,6 @@ async function runSetup(
   teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
   if (status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    teeLog(`Block until ready: ${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}`);
   }
 
   const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];

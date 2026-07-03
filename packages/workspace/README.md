@@ -8,8 +8,9 @@ A **workspace** is one isolated stream of work. It is close to [Conductor's](htt
 
 - a **branch**;
 - a **git worktree** checked out to it;
-- a **port range** (a slot of ~10 contiguous ports);
-- the **config files** (`.env`, compose files, …) rewritten to that range, so the dev servers run in isolation: the backend port, the frontend port, the exposed port of a database container, and so on.
+- a **dev-server** setup:
+  - a **port range** (a slot of ~10 contiguous ports).
+  - the **config files** (`.env`, compose files, …) rewritten to that range, so the dev servers run in isolation: the backend port, the frontend port, the exposed port of a database container, and so on.
 
 Several workspaces run at once without colliding, so you can develop, test, or hand a branch to an agent in parallel.
 
@@ -24,7 +25,7 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 Then, in your project, ask your agent:
 
 ```md
-Use your **alignfirst-setup-guide** skill. Set up *workspaces* in this project.
+Use your *alignfirst-setup-guide* skill. Set up *workspaces* in this project.
 ```
 
 The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.

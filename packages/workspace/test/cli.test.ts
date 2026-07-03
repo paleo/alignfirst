@@ -26,7 +26,6 @@ describe("parseWorkspaceArgs", () => {
       "--slot",
       "8110",
       "--force",
-      "--wait",
       "--go",
       "-v",
     ]);
@@ -34,12 +33,16 @@ describe("parseWorkspaceArgs", () => {
       kind: "setup",
       branch: "feat/42",
       newBranch: false,
+      from: undefined,
       slot: "8110",
       force: true,
-      wait: true,
       go: true,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("rejects the removed `--wait` flag on setup", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--wait"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `--owner` flag on setup", () => {

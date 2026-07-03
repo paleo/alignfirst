@@ -28,7 +28,7 @@ Run `pnpm workspace --guide` for the full procedures (creating/removing workspac
 
 ```sh
 pnpm i
-pnpm workspace setup --wait
+pnpm workspace setup
 ```
 
 ## Conventions

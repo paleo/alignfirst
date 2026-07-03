@@ -71,7 +71,7 @@ No workspace.
 [`working-session.md`](./working-session.md)
 
 - **PROJECT known, no TICKET_ID** — Branch on the request:
-  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alignfirst-coaching` skill without a protocol header, **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
+  - User posed an investigation/advice question (`why X?`, `should we Y?`, `comment X ?`) → delegate the question to the coding agent via the `alcode` CLI without a protocol header (run `alcode --openclaw-guide` first — the delegation manual), **run from the project's directory** (`~/projects/<project>`) so the agent investigates the right repo. Post the agent's reply back in the thread as a summary — on Discord via a `message` `thread-reply` carrying the `threadId`, never as free-form text.
   - User signaled work intent without enough info (`on a un truc à faire sur X`, `we need to work on X`) → ask in-thread for the ticket id and the scope/type. End turn.
   - A TALK thread can later be promoted to WORK if a ticket appears.
 - **TICKET_ID known, PROJECT unknown** — Ask in-thread which project the ticket belongs to. Restate the ticket id in the question (e.g. `Pour le ticket ABC-123, sur quel projet travaille-t-on ?`). End turn.

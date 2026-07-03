@@ -99,7 +99,7 @@ async function classifyStarterRest(
   }>({
     message: rest,
     prompt:
-      "Does the message ask the user about the new work? That includes requesting the ticket id, the change scope/description, the change type (feat/fix/refactor/chore), or any combination. Answer true only when the message clearly puts a request to the user about that. A bare announcement or filler phrase is not a request.",
+      "Does the message ask the user about the new work? That includes requesting the ticket id, the change scope/description, or any combination. Answer true only when the message clearly puts a request to the user about that. A bare announcement or filler phrase is not a request.",
     returnType: `{ "asksAboutTheWork": boolean, "reason": string }`,
     label: "starter-asks-about-work",
   });

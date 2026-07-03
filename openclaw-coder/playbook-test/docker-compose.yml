@@ -2,7 +2,7 @@
 # @paleo/openclaw-test. Requires Docker Compose v2.20+.
 #
 # `.env.local` needs ANTHROPIC_API_KEY, OPENCLAW_WORKSPACE_DIR,
-# ALIGNFIRST_COACHING_SKILL_DIR, OPENCLAW_CODER_PLAYBOOK_SKILL_DIR.
+# OPENCLAW_CODER_PLAYBOOK_SKILL_DIR.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
 # CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
@@ -19,14 +19,15 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     volumes:
       - fixture-projects:/home/claw/projects
-      # Live-mount the alignfirst-coaching skill over its baked copy so playbook
-      # edits iterate without an image rebuild. Set in .env.local (relative to
-      # this dir, e.g. ../../skills/alignfirst-coaching = repo-root skills/alignfirst-coaching).
-      - ${ALIGNFIRST_COACHING_SKILL_DIR}:/home/claw/.agents/skills/alignfirst-coaching
-      # Experiment (ticket 13): procedural dispatcher skill loaded first by the
-      # workspace AGENTS.md, so the coaching alignfirst-coaching SKILL.md is no
-      # longer the agent's first body read on a turn.
+      # Live-mount the playbook skill over its baked copy so playbook edits
+      # iterate without an image rebuild. Set in .env.local (relative to this
+      # dir, e.g. ../../skills/openclaw-coder-playbook).
       - ${OPENCLAW_CODER_PLAYBOOK_SKILL_DIR}:/home/claw/.agents/skills/openclaw-coder-playbook
+      # Live-mount the built @paleo/alcode package so the /usr/local/bin/alcode
+      # wrapper resolves to it. ALIGNFIRST_CODE_DIR is the host path to packages/alcode
+      # (build it with `npm run build` first). Read-only: the CLI only reads its
+      # own dist/bin/templates and spawns `claude` from there.
+      - ${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro
 
   runner:
     environment:

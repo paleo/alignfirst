@@ -11,11 +11,22 @@ USER root
 
 # Fixture runtime deps (git for `git init` / worktree, pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted.
+# this consumer wants intercepted. Only `claude` and `gh` are shimmed —
+# `alcode` runs for real (see the wrapper below), and its own `claude`
+# subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git && \
     corepack enable && corepack prepare pnpm@latest --activate && \
     for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects
+
+# PATH wrapper for the real `@paleo/alcode` CLI. The package's built output is
+# live-mounted at /opt/alcode (`${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro` in the compose
+# overlay), so alcode edits iterate without a rebuild — mirroring the skill
+# live-mount. `/usr/local/bin` sits after `/opt/openclaw-test/mocks/bin` in
+# PATH, so this wrapper is only reached for `alcode` (never shimmed), while
+# alcode's own `claude` subprocess still hits the shim.
+RUN printf '#!/bin/sh\nexec node /opt/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
+    chmod +x /usr/local/bin/alcode
 
 # Reset / seed scripts invoked from scenarios via ctx.execInGateway(...).
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
@@ -31,7 +42,13 @@ USER claw
 RUN printf 'store-dir=/home/claw/.pnpm-store\n' > /home/claw/.pnpmrc && \
     mkdir -p /home/claw/.pnpm-store
 
+# The @paleo/openclaw-* packages install from locally-built tarballs under
+# vendor/ (see scripts/vendor-packages.mjs), not from npmjs — so the image tests
+# this checkout without a publish. `npm run env:build` repacks + relocks before
+# this build; the tarballs must sit in the build context for the `file:` deps to
+# resolve during `npm ci`.
 COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/
+COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \
@@ -49,4 +66,4 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent universal --agent claude-code \
       --skill alignfirst --skill al --skill alplan --skill alspec \
       --skill aldescription --skill alreview --skill alread \
-      --skill almerge --skill openclaw-coder-playbook --skill alignfirst-coaching
+      --skill almerge --skill openclaw-coder-playbook

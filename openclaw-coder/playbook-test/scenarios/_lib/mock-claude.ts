@@ -7,22 +7,44 @@ const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|ne
 const WORKTREE_LIST_INTENT_RE =
   /\b(list (the )?(registered )?(workspace|worktree)|enumerate (workspace|worktree)|workspace list)\b/i;
 const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing branch)\b/i;
-const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/(feat|fix|refactor|chore|docs|test|perf)\b/;
+// Branch is `{TICKET_ID}/{1-3-words}` — the suffix is a short free-form
+// description the agent derives, not a fixed work-type vocabulary. Accept any
+// slug (kebab or snake, any case), so the mock recognizes whatever the agent
+// picked.
+const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 
-function buildClaudeResponse(result: string): string {
-  return JSON.stringify({
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    result,
-    session_id: "test-stub-session",
-    total_cost_usd: 0,
-    duration_ms: 0,
-    num_turns: 0,
-    usage: { input_tokens: 0, output_tokens: 0 },
-  });
+// alcode drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
+// event stream line-by-line: it needs a system/init line carrying a session_id, optional
+// assistant/text lines, and a terminal `result` line (session_id + result + is_error). This mirrors
+// the canned stream A3's runner expects.
+function buildClaudeStreamResponse(sessionId: string, result: string): string {
+  const events: unknown[] = [
+    { type: "system", subtype: "init", session_id: sessionId },
+    { type: "assistant", message: { content: [{ type: "text", text: "Working on it…" }] } },
+    { type: "assistant", message: { content: [{ type: "text", text: result }] } },
+    {
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result,
+      session_id: sessionId,
+      total_cost_usd: 0,
+      duration_ms: 0,
+      num_turns: 1,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    },
+  ];
+  return `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+let streamSessionCounter = 0;
+function nextStreamSessionId(): string {
+  streamSessionCounter += 1;
+  return `alcode-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
 }
 
 export type ClaudeCall = { argv: string[]; cwd: string; entry?: CliMockEntry };
@@ -44,6 +66,13 @@ export interface ClaudeMockHandle {
 export interface SetupClaudeMockOptions {
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
+  /**
+   * Delay (ms) before the stream-json (alcode) branch emits its NDJSON. alcode runs `claude` in
+   * the foreground and blocks on it, so this delay is what makes the whole alcode exec long enough
+   * for OpenClaw to background it (and the agent to post a "started" ack) before it exits and the
+   * completion wake fires. Default 4000.
+   */
+  streamDelayMs?: number;
 }
 
 /**
@@ -55,6 +84,7 @@ export function setupClaudeMock(
   options: SetupClaudeMockOptions = {},
 ): ClaudeMockHandle {
   const defaultResult = options.defaultResult ?? REVEAL_TEST_RESULT;
+  const streamDelayMs = options.streamDelayMs ?? 4000;
   const claudeCalls: ClaudeCall[] = [];
   type Watcher = {
     options: WaitForCallOptions;
@@ -119,7 +149,6 @@ export function setupClaudeMock(
           "workspace",
           "setup",
           parsed.branch,
-          "--wait",
         ],
         { timeoutMs: 120_000 },
       );
@@ -150,7 +179,6 @@ export function setupClaudeMock(
           "setup",
           parsed.branch,
           "-c",
-          "--wait",
         ],
         { timeoutMs: 120_000 },
       );
@@ -165,11 +193,16 @@ export function setupClaudeMock(
     } else {
       resultText = defaultResult;
     }
-    // The mock-cli server emits this call's cliMock entry only AFTER the
-    // handler returns. Defer one macrotask: by then `ctx.currentEntry` is this
-    // call's entry, so we snapshot it onto the call before notifying watchers.
+    // alcode drives `claude` in stream-json in the foreground and blocks on it. Emulate a short run
+    // (so OpenClaw backgrounds the alcode exec and the agent's "started" ack lands first), then
+    // stream the NDJSON transcript alcode parses (init → text → result).
+    await delay(streamDelayMs);
+    stdout.write(buildClaudeStreamResponse(nextStreamSessionId(), resultText));
+    // The mock-cli server emits this call's cliMock entry only AFTER the handler returns. Defer one
+    // macrotask past the return so `ctx.currentEntry` is this call's entry, then snapshot it onto the
+    // call before notifying watchers. (Scheduled here, after the await, so the delay does not elapse
+    // before the entry exists.)
     setImmediate(() => finalizeCall(call));
-    stdout.write(buildClaudeResponse(resultText));
     return 0;
   });
 
@@ -212,9 +245,9 @@ export function setupClaudeMock(
 }
 
 /**
- * True iff the call has the argv shape produced by alignfirst-coaching's
- * `scripts/alignfirst-coaching.mjs` wrapper:
- * `claude "<prompt>" -p --output-format json … (--permission-mode|--dangerously-skip-permissions)`.
+ * True iff the call has the argv shape alcode emits when driving `claude`:
+ * `claude "<prompt>" -p --output-format stream-json --verbose … (--permission-mode auto|--dangerously-skip-permissions) [--resume <id>] [--model <m>]`.
+ * This is the only shape alcode produces, so it doubles as "this claude call came from alcode".
  */
 export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
   const a = call.argv;
@@ -223,7 +256,8 @@ export function isAlignfirstWrapperCall(call: ClaudeCall): boolean {
     a[0].length > 0 &&
     a[1] === "-p" &&
     a[2] === "--output-format" &&
-    a[3] === "json" &&
+    a[3] === "stream-json" &&
+    a[4] === "--verbose" &&
     (a.includes("--permission-mode") || a.includes("--dangerously-skip-permissions"))
   );
 }
@@ -361,7 +395,7 @@ export async function expectCodingDelegation(
   await ctx.judgeLLM({
     attachTo: target,
     message: renderClaudeCall(claudeCall),
-    rubric: `The message is a prompt sent to a coding agent (Claude) via the alignfirst-coaching skill's \`alignfirst-coaching.mjs\` wrapper. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
+    rubric: `The message is a prompt sent to a coding agent (Claude) via the \`alcode\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
     label,
   });
 

@@ -43,7 +43,7 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 Then ask your agent:
 
 ```md
-Use your **alignfirst-setup-guide** skill. What are my options for bootstrapping a `docs/` directory in this project?
+Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a `docs/` directory in this project?
 ```
 
 ## How It Works
@@ -87,18 +87,18 @@ npx @paleo/docmap --help
 npx @paleo/docmap --guide
 
 # List one or more subdirectories
-npx @paleo/docmap topic-a
-npx @paleo/docmap topic-a topic-b
+npx @paleo/docmap dir-a
+npx @paleo/docmap dir-a dir-b
 
 # List everything recursively
 npx @paleo/docmap --recursive
 
 # Read one or more documents (frontmatter stripped)
-npx @paleo/docmap docs/topic-a/doc-1.md
-npx @paleo/docmap docs/topic-a/doc-1.md docs/topic-b/doc-2.md
+npx @paleo/docmap docs/dir-a/doc-1.md
+npx @paleo/docmap docs/dir-a/doc-1.md docs/dir-b/doc-2.md
 
 # Mix directories and files in one call
-npx @paleo/docmap topic-a docs/topic-b/doc-2.md
+npx @paleo/docmap dir-a docs/dir-b/doc-2.md
 
 # Search path and frontmatter (title, summary, read_when); every term must match
 npx @paleo/docmap --search "api endpoint"
@@ -120,4 +120,4 @@ Each positional path is resolved against the docs root:
 - **Existing file** → read, frontmatter stripped.
 - **Neither** → a fuzzy basename search over `.md` files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
 
-Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/topic-a/`, `docs/topic-a`, and `topic-a` resolve identically — so listing output can be pasted straight back as arguments.
+Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/dir-a/`, `docs/dir-a`, and `dir-a` resolve identically — so listing output can be pasted straight back as arguments.

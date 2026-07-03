@@ -15,7 +15,7 @@
     "express": "5.2.1"
   },
   "devDependencies": {
-    "@paleo/docmap": "^0.6.2",
-    "@paleo/workspace": "^0.25.2"
+    "@paleo/docmap": "^0.6.4",
+    "@paleo/workspace": "^0.26.0"
   }
 }

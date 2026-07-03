@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.26.0
+
+### Minor Changes
+
+- eb16d88: `workspace setup` now always **blocks** until the detached finalize reaches READY/FAILED (the removed `--wait` opt-in is the new default and only behavior).
+
 ## 0.25.5
 
 ### Patch Changes
