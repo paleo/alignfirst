@@ -92,8 +92,9 @@ export async function fetchDevServer(slotPort: number): Promise<string> {
 
 /**
  * Pre-seed a branch + worktree for `project` so the agent finds an existing
- * registered workspace. Runs the real `pnpm workspace setup … -c --wait`
- * in the gateway. Waits until the worktree directory appears.
+ * registered workspace. Runs the real `pnpm workspace setup … -c` in the
+ * gateway (setup blocks until READY/FAILED). Waits until the worktree
+ * directory appears.
  */
 export async function seedWorktree(
   ctx: ScenarioContext,
@@ -103,7 +104,7 @@ export async function seedWorktree(
 ): Promise<string> {
   const branch = `${ticket}/${desc}`;
   const exec = await ctx.execInGateway(
-    ["sh", "-c", `cd ${PROJECTS_DIR}/${project} && pnpm workspace setup ${branch} -c --wait`],
+    ["sh", "-c", `cd ${PROJECTS_DIR}/${project} && pnpm workspace setup ${branch} -c`],
     { timeoutMs: 120_000 },
   );
   if (exec.exitCode !== 0) {

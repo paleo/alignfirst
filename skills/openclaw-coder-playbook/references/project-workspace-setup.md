@@ -46,7 +46,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. Bootstrap finishes in the background, so don't add your own `background` option. Inspect the workspace, never the main dir. In the user's language:
+The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir. In the user's language:
 
 ```text
 Worktree: {dirname}

@@ -13,21 +13,21 @@ importers:
         version: 5.2.1
     devDependencies:
       '@paleo/docmap':
-        specifier: ^0.6.2
-        version: 0.6.2
+        specifier: ^0.6.4
+        version: 0.6.4
       '@paleo/workspace':
-        specifier: ^0.25.2
-        version: 0.25.2
+        specifier: ^0.26.0
+        version: 0.26.0
 
 packages:
 
-  '@paleo/docmap@0.6.2':
-    resolution: {integrity: sha512-QdHuPqeIZfwZZSPrAsQWOWVQuOCMnNCTI9P7RIUUWiWU2pJ4tvapJNbxyUT5vS3YxItUlmWbqJ2RWj3ZnBe4qA==}
+  '@paleo/docmap@0.6.4':
+    resolution: {integrity: sha512-A+XSWo+yA7atPcDSc91tfa570WVjXWA+xi+Qh08BTcewiiPH1Qxu/V7kzh6AeiwYrzvmXGiuuxz8PkbyJMyqUA==}
     engines: {node: '>=22.11.0'}
     hasBin: true
 
-  '@paleo/workspace@0.25.2':
-    resolution: {integrity: sha512-a33rdtr+U7hZ6zvjiNLTM+l3X+nbTug8kMOS0kEag9Uf+4cDBSoK2dLfbjJE7Z0RJrKHUBrgBCPQPCgOGqs6TQ==}
+  '@paleo/workspace@0.26.0':
+    resolution: {integrity: sha512-N4of3wo/0rC7AJX87suFRZPFtAJu9wZEgU6cn1Fkc5u7NzRhh32A7PrvyobRYZY3LECMluPpJZuHDPO6KYMY3Q==}
     engines: {node: '>=22.11.0'}
 
   accepts@2.0.0:
@@ -290,9 +290,9 @@ packages:
 
 snapshots:
 
-  '@paleo/docmap@0.6.2': {}
+  '@paleo/docmap@0.6.4': {}
 
-  '@paleo/workspace@0.25.2': {}
+  '@paleo/workspace@0.26.0': {}
 
   accepts@2.0.0:
     dependencies:

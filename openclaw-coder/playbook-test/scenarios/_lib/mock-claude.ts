@@ -149,7 +149,6 @@ export function setupClaudeMock(
           "workspace",
           "setup",
           parsed.branch,
-          "--wait",
         ],
         { timeoutMs: 120_000 },
       );
@@ -180,7 +179,6 @@ export function setupClaudeMock(
           "setup",
           parsed.branch,
           "-c",
-          "--wait",
         ],
         { timeoutMs: 120_000 },
       );
