@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, readsFile } from "./agent-tool-calls.ts";
-import { assertBranchForTicket, waitForAnyWorktreeDir } from "./fixture-state.ts";
+import { assertBranchForTicket, escapeRegExp, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
 import type { Step } from "./types.ts";
@@ -113,8 +113,4 @@ export async function runWorkspaceFlow(
     label: "agent runs `workspace --guide`",
     timeoutMs: 120_000,
   });
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

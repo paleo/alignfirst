@@ -88,7 +88,7 @@ export function assertBranch(worktreeDir: string, expectedBranch: string): void 
  */
 export function assertBranchForTicket(worktreeDir: string, ticket: string): string {
   const actual = readWorktreeBranch(worktreeDir);
-  if (!new RegExp(`^${ticket}/.+`).test(actual)) {
+  if (!new RegExp(`^${escapeRegExp(ticket)}/.+`).test(actual)) {
     throw new Error(
       `branch mismatch in ${worktreeDir}: expected "${ticket}/<desc>", got "${actual}"`,
     );
@@ -100,6 +100,11 @@ function readWorktreeBranch(worktreeDir: string): string {
   return execFileSync("git", ["-C", worktreeDir, "rev-parse", "--abbrev-ref", "HEAD"], {
     encoding: "utf8",
   }).trim();
+}
+
+/** Escapes a dynamic value for safe interpolation into a `RegExp` source. */
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
