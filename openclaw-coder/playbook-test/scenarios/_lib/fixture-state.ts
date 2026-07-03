@@ -70,14 +70,36 @@ export async function waitForAnyWorktreeDir(
 }
 
 export function assertBranch(worktreeDir: string, expectedBranch: string): void {
-  const actual = execFileSync("git", ["-C", worktreeDir, "rev-parse", "--abbrev-ref", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
+  const actual = readWorktreeBranch(worktreeDir);
   if (actual !== expectedBranch) {
     throw new Error(
       `branch mismatch in ${worktreeDir}: expected "${expectedBranch}", got "${actual}"`,
     );
   }
+}
+
+/**
+ * Asserts the worktree is on a `<ticket>/<desc>` branch for the given ticket and
+ * returns the actual branch. Unlike `assertBranch`, it does not pin the
+ * description: the agent derives it (`{TICKET_ID}/{1-3-words}`), and the worktree
+ * DIRECTORY name is capped at 22 chars by `@paleo/workspace`'s
+ * `defaultWorktreeDirName`, so the dir name cannot be used to reconstruct the
+ * branch. Git is the source of truth.
+ */
+export function assertBranchForTicket(worktreeDir: string, ticket: string): string {
+  const actual = readWorktreeBranch(worktreeDir);
+  if (!new RegExp(`^${ticket}/.+`).test(actual)) {
+    throw new Error(
+      `branch mismatch in ${worktreeDir}: expected "${ticket}/<desc>", got "${actual}"`,
+    );
+  }
+  return actual;
+}
+
+function readWorktreeBranch(worktreeDir: string): string {
+  return execFileSync("git", ["-C", worktreeDir, "rev-parse", "--abbrev-ref", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
 }
 
 /**

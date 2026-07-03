@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, readsFile } from "./agent-tool-calls.ts";
-import { assertBranch, waitForAnyWorktreeDir } from "./fixture-state.ts";
+import { assertBranchForTicket, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
 import type { Step } from "./types.ts";
@@ -43,22 +43,26 @@ export async function runWorkspaceFlow(
   } = options;
 
   // The agent derives the branch description (`{TICKET_ID}/{1-3-words}`); don't
-  // pin it. Discover the worktree the agent actually created and read the
-  // description from its name. The on-disk check is the deterministic proof
-  // that setup happened.
-  const { dir: worktreeDir, desc: branchDesc } = await waitForAnyWorktreeDir(project, ticketId, {
+  // pin it. Discover the worktree the agent actually created and read the real
+  // branch from git — the worktree DIR name is capped at 22 chars by
+  // @paleo/workspace, so it can't reconstruct the branch. The on-disk check is
+  // the deterministic proof that setup happened.
+  const { dir: worktreeDir } = await waitForAnyWorktreeDir(project, ticketId, {
     timeoutMs: worktreeTimeoutMs,
   });
-  assertBranch(worktreeDir, `${ticketId}/${branchDesc}`);
+  const branch = assertBranchForTicket(worktreeDir, ticketId);
+  const dirName = worktreeDir.slice(worktreeDir.lastIndexOf("/") + 1);
 
   // Let the agent's setup turn settle on its workspace report BEFORE nudging it
   // — firing "Vas-y" mid-turn disrupts the flow and the agent never reaches the
   // delegation. Select on the worktree LOCATOR so we sync on the settled report,
-  // not a pre-creation announcement. The report block is best-effort: assert it
-  // when the agent posts it (its format is also covered by A7/A8/A9), tolerate a
-  // weak model that reports readiness conversationally and skips the template.
-  const branchRe = new RegExp(`\\b${ticketId}\\/${branchDesc}\\b`, "i");
-  const locatorRe = new RegExp(`${project}-${ticketId}-${branchDesc}|slot\\s*\\d{3,5}`, "i");
+  // not a pre-creation announcement. Match the FULL branch and the ACTUAL (possibly
+  // truncated) dir name the agent reports, not a dir-reconstructed guess. The
+  // report block is best-effort: assert it when the agent posts it (its format is
+  // also covered by A7/A8/A9), tolerate a weak model that reports readiness
+  // conversationally and skips the template.
+  const branchRe = new RegExp(`\\b${escapeRegExp(branch)}\\b`, "i");
+  const locatorRe = new RegExp(`${escapeRegExp(dirName)}|slot\\s*\\d{3,5}`, "i");
   const reportWait = await waitForOutboundSkippingNarration(
     ctx,
     (m) =>
@@ -109,4 +113,8 @@ export async function runWorkspaceFlow(
     label: "agent runs `workspace --guide`",
     timeoutMs: 120_000,
   });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
