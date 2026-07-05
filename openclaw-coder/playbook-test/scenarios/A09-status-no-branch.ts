@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusNoBranchRubric } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
@@ -73,6 +74,14 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
     message: reportText,
     rubric: statusNoBranchRubric(TICKET_ID),
     label: "status-no-branch",
+  });
+
+  // project-workspace-setup.md prerequisite: run the delegation manual on every
+  // WORK-mode turn — including the no-branch sub-path. The trajectory snapshot
+  // flushes when the session run ends, after the report — hence the generous timeout.
+  await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
+    label: "agent runs `alcode --openclaw-guide`",
+    timeoutMs: 120_000,
   });
 
   assertNoWorktreeDirs(ctx);
