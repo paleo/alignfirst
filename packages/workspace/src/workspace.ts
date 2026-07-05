@@ -15,6 +15,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import {
   parseWorkspaceArgs,
   printWorkspaceHelp,
+  printWorkspaceVersion,
   type WorkspaceCommand,
   type WorkspaceSelector,
 } from "./cli.js";
@@ -274,6 +275,11 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   if (command.kind === "help") {
     printWorkspaceHelp();
+    return;
+  }
+
+  if (command.kind === "version") {
+    printWorkspaceVersion();
     return;
   }
 

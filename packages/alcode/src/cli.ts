@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -34,6 +35,10 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
+  if (parsed.version) {
+    stdout.write(`${readPackageVersion()}\n`);
+    return 0;
+  }
   if (parsed.help) {
     stdout.write(renderHelp());
     return 0;
@@ -50,6 +55,14 @@ export async function main(options?: MainOptions): Promise<number> {
   }
 
   return runSession(parsed, { cwd, env, stdout, stderr });
+}
+
+function readPackageVersion(): string {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version?: string;
+  };
+  if (!pkg.version) throw new Error("alcode: package.json is missing 'version'");
+  return pkg.version;
 }
 
 interface RunContext {
@@ -146,6 +159,7 @@ export interface AlcodeArgs {
   guide: boolean;
   openclawGuide: boolean;
   help: boolean;
+  version: boolean;
 }
 
 export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
@@ -162,6 +176,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
       guide: { type: "boolean", default: false },
       "openclaw-guide": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
+      version: { type: "boolean", short: "v", default: false },
     },
     strict: true,
   });
@@ -176,6 +191,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
     guide: values.guide === true,
     openclawGuide: values["openclaw-guide"] === true,
     help: values.help === true,
+    version: values.version === true,
   };
 }
 
@@ -224,6 +240,7 @@ Usage:
   alcode --guide
   alcode --openclaw-guide
   alcode --help
+  alcode -v, --version
 
 Modes:
   --new                 Start a new session.

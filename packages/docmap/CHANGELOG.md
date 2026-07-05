@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.7.0
+
+### Minor Changes
+
+- Add a `-v`/`--version` flag that prints the docmap version.
+
 ## 0.6.4
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.27.0
+
+### Minor Changes
+
+- The workspace CLI now prints its version with `-v`/`--version`. To free `-v` for this, the `--verbose` flag loses its `-v` short alias — use `--verbose` in full.
+
 ## 0.26.0
 
 ### Minor Changes

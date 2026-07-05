@@ -29,7 +29,8 @@ export function main(options?: MainOptions): number {
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
 
-  const { paths, unknownFlags, recursive, root, check, help, guide, search } = parseArgs(argv);
+  const { paths, unknownFlags, recursive, root, check, help, guide, search, version } =
+    parseArgs(argv);
   const baseDir = root ? resolve(cwd, root) : resolve(cwd, "docs");
   // cwd-relative form of baseDir, prepended to every displayed path so output is copy-pasteable.
   // A `--root` outside cwd yields a `..`-leading prefix; paths still strip and resolve correctly.
@@ -39,8 +40,12 @@ export function main(options?: MainOptions): number {
 
   const pm = detectPackageManager(cwd);
 
-  // Mode precedence (each prints only its own output, then returns): help → guide → search →
-  // check → listing/read.
+  // Mode precedence (each prints only its own output, then returns): version → help → guide →
+  // search → check → listing/read.
+  if (version) {
+    stdout.write(`${readPackageVersion()}\n`);
+    return 0;
+  }
   if (help) {
     stdout.write(renderHelp(pm, { full: true }));
     return 0;
@@ -85,6 +90,14 @@ export function main(options?: MainOptions): number {
   return 0;
 }
 
+function readPackageVersion(): string {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
+    version?: string;
+  };
+  if (!pkg.version) throw new Error("docmap: package.json is missing 'version'");
+  return pkg.version;
+}
+
 export interface ParsedArgs {
   paths: string[];
   unknownFlags: string[];
@@ -94,6 +107,7 @@ export interface ParsedArgs {
   help: boolean;
   guide: boolean;
   search: string | undefined;
+  version: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -106,6 +120,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let help = false;
   let guide = false;
   let search: string | undefined;
+  let version = false;
 
   for (let i = 0; i < args.length; ++i) {
     const arg = args[i];
@@ -121,6 +136,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       help = true;
     } else if (arg === "--guide") {
       guide = true;
+    } else if (arg === "--version" || arg === "-v") {
+      version = true;
     } else if (arg.startsWith("--")) {
       unknownFlags.push(arg);
     } else {
@@ -128,7 +145,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
   }
 
-  return { paths, unknownFlags, recursive, root, check, help, guide, search };
+  return { paths, unknownFlags, recursive, root, check, help, guide, search, version };
 }
 
 interface HelpOptions {
@@ -177,6 +194,7 @@ function moreCommands(pm: PackageManagerCommands): CommandRow[] {
   return [
     { command: `${pm.withArgs} --check`, comment: "validate names and frontmatter" },
     { command: `${pm.withArgs} --root <path>`, comment: "use a custom docs root" },
+    { command: `${pm.withArgs} -v`, comment: "print the docmap version (alias: --version)" },
   ];
 }
 

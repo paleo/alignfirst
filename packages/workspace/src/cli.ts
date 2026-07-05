@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
 
@@ -19,7 +20,8 @@ export type WorkspaceCommand =
   | { kind: "finalize"; slot: string; force: boolean }
   | { kind: "migrate"; oldRegistryDir: string }
   | { kind: "guide" }
-  | { kind: "help" };
+  | { kind: "help" }
+  | { kind: "version" };
 
 /** Picks an existing workspace. Empty = the current worktree. */
 export interface WorkspaceSelector {
@@ -41,6 +43,9 @@ export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): Pars
   }
   if (subcommand === "--guide") {
     return { command: { kind: "guide" }, verbose: false };
+  }
+  if (subcommand === "--version" || subcommand === "-v") {
+    return { command: { kind: "version" }, verbose: false };
   }
   if (subcommand === undefined) throw new ConfigError("No command given.");
   try {
@@ -83,7 +88,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       go: { type: "boolean" },
-      verbose: { type: "boolean", short: "v" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -120,7 +125,7 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
-      verbose: { type: "boolean", short: "v" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -139,7 +144,7 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
 function parseList(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { verbose: { type: "boolean", short: "v" } },
+    options: { verbose: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
@@ -150,7 +155,7 @@ function parseList(tokens: string[]): ParsedWorkspaceArgs {
 function parsePrune(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { verbose: { type: "boolean", short: "v" } },
+    options: { verbose: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
@@ -163,7 +168,7 @@ function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
     args: tokens,
     options: {
       slot: { type: "string", short: "s" },
-      verbose: { type: "boolean", short: "v" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -180,7 +185,7 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
     args: tokens,
     options: {
       slot: { type: "string", short: "s" },
-      verbose: { type: "boolean", short: "v" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -206,7 +211,7 @@ function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
 function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { verbose: { type: "boolean", short: "v" } },
+    options: { verbose: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
@@ -277,11 +282,20 @@ export function printWorkspaceHelp(): void {
       "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
       "",
       "Global options:",
-      "  -v, --verbose   Show intermediate output.",
-      "      --guide     Print the full workspace + dev-server operating guide.",
-      "  -h, --help      Show this help message.",
+      "      --verbose       Show intermediate output.",
+      "      --guide         Print the full workspace + dev-server operating guide.",
+      "  -h, --help          Show this help message.",
+      "  -v, --version       Print the workspace version.",
     ].join("\n"),
   );
+}
+
+export function printWorkspaceVersion(): void {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
+    version?: string;
+  };
+  if (!pkg.version) throw new ConfigError("workspace: package.json is missing 'version'");
+  console.log(pkg.version);
 }
 
 export type DevCommand =
