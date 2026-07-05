@@ -39,6 +39,11 @@ Branch naming convention: `<ticket-id>/<1-3-words>`.
 
 Add the `top-down-typescript` skill to every plan.
 
+## Skills to read before editing
+
+- TypeScript or JavaScript file: read the `top-down-typescript` skill first.
+- Markdown file (docs, skills, any prose): read the `sharp-writing` skill first.
+
 ## Coding rules
 
 Apply the `top-down-typescript` skill.

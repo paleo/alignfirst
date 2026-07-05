@@ -10,7 +10,7 @@ import {
 } from "./_lib/coding-session.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId } from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A10 → ABC-010N, first ticket ABC-0100.
@@ -93,8 +93,9 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
 
   // Immediate "started in the background" ack: an outbound in this conversation whose text carries a
   // background-launch marker (only the ack matches — not the [WORK] header or worktree report). No
-  // threadId requirement: the agent usually posts this in-thread, but sometimes free-streams it to
-  // the parent channel — either surface is a valid ack, and STARTED_ACK_RE is the discriminator.
+  // threadId requirement here — STARTED_ACK_RE is the discriminator, and placement is enforced
+  // globally by the end-of-scenario channel-root sweep, which fails a free-streamed ack with the
+  // real cause instead of an ack-wait timeout.
   const ack = await ctx.waitForOutbound(
     (m) =>
       m.direction === "outbound" &&
@@ -146,6 +147,10 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     rubric: COMPLETION_RUBRIC,
     label: "completion-wake-report",
   });
+
+  // The wake turn may still be streaming a final answer after the completion
+  // post — the exact shape of the trailing-leak incident — so sweep longer.
+  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

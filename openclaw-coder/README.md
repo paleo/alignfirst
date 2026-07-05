@@ -82,10 +82,11 @@ OpenClaw needs a coding tool profile that can still post to chat, and the two sk
     "defaults": {
       "skills": ["alignfirst", "openclaw-coder-playbook"],
       "heartbeat": {
-        // Wake safety net: OpenClaw (2026.6.11) can drop the exec-completion event text,
-        // so the wake arrives as a bare heartbeat. This prompt keeps the stock behavior
-        // and adds the pending-run check. Copy it from playbook-test/openclaw.json.
-        "prompt": "Read HEARTBEAT.md if it exists (workspace context). […] If nothing needs attention, reply HEARTBEAT_OK."
+        // Stock heartbeat prompt with a NO_REPLY tail instead of HEARTBEAT_OK: with block
+        // streaming on, OpenClaw (2026.6.11) holds back only NO_REPLY from the stream —
+        // a HEARTBEAT_OK ack posts to the channel root as literal text before the
+        // heartbeat filter can strip it. Copy it from playbook-test/openclaw.json.
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       }
     }
   },
