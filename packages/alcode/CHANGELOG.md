@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.3.0
+
+### Minor Changes
+
+- Add a `-v`/`--version` flag that prints the alcode version.
+
 ## 0.2.0
 
 ### Minor Changes

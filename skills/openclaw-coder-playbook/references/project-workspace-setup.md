@@ -2,9 +2,11 @@
 
 Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
 
-## Prerequisites
+Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. Keep observations and intermediate findings internal; post only the banner and the reports this file prescribes.
 
-- run `alcode --openclaw-guide` (`exec`) and follow it — how to delegate to the coding agent.
+## Prerequisites — run both now, before Step 1
+
+- `alcode --openclaw-guide` (`exec`) — the delegation manual. Required on every WORK turn, status requests included; do not skip it because no coding seems planned.
 - read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
@@ -40,7 +42,7 @@ First, check what already exists for the {TICKET_ID} — two checks, both requir
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
-Whenever a branch exists, you work from its workspace — a status request included. "Status" here means: set up the workspace, then report its state — not `git log` from the main dir. Pick one sub-path:
+Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the block below), then report the work content (Step 5) — never `git log` from the main dir. Pick one sub-path:
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
@@ -67,7 +69,13 @@ Once the workspace is set up, bring the branch up to date *before* inspecting or
 7. **Check for an open MR/PR** on this branch and note its state.
 8. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
 
-## Step 5 — User's turn
+## Step 5 — Status request: the work content
+
+Only for a status request; otherwise skip to Step 6. The Step 4 block comes first — post it before delegating.
+
+The workspace block answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — delegate: `alcode`, `read` protocol, run from the worktree. Relay its answer in the thread. The sync output (`git status`, fetch) is for syncing only — never compose this report yourself from `git log`, `.plans/` reads, or code browsing.
+
+## Step 6 — User's turn
 
 When everything is ready:
 

@@ -22,7 +22,7 @@ export interface WorkspaceFlowOptions {
 /**
  * Drive the post-thread-ack phase shared by A1 / A2: wait for the worktree on
  * disk, assert its branch, let the agent settle on its workspace report, unblock
- * it past the step-5 validation gate, then expect the coding delegation. The
+ * it past the step-6 validation gate, then expect the coding delegation. The
  * scenario ends here — the coding stub returns a "test passed, just acknowledge"
  * message so the agent stops cleanly.
  */
@@ -84,7 +84,7 @@ export async function runWorkspaceFlow(
     );
   }
 
-  // Per project-workspace-setup.md Step 5, the agent may pause to ask
+  // Per project-workspace-setup.md Step 6, the agent may pause to ask
   // for validation before delegating coding work. Unblock it unconditionally.
   await ctx.sendInbound({
     senderId: "ROBIN01",

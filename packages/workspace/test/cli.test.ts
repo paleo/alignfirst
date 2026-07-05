@@ -27,7 +27,7 @@ describe("parseWorkspaceArgs", () => {
       "8110",
       "--force",
       "--go",
-      "-v",
+      "--verbose",
     ]);
     expect(command).toEqual({
       kind: "setup",
@@ -39,6 +39,15 @@ describe("parseWorkspaceArgs", () => {
       go: true,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("rejects the removed `-v` verbose short on a subcommand", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "-v"])).toThrow(ConfigError);
+  });
+
+  it("parses `-v` and `--version` as the version command", () => {
+    expect(parseWorkspaceArgs(["-v"]).command).toEqual({ kind: "version" });
+    expect(parseWorkspaceArgs(["--version"]).command).toEqual({ kind: "version" });
   });
 
   it("rejects the removed `--wait` flag on setup", () => {

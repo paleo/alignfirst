@@ -1,4 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
@@ -66,6 +67,9 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
+  // Free-form text after `thread-create` auto-streams to the parent channel —
+  // the report must land in the thread, and a leak fails here with the real cause.
+  ctx.assertEqual(reportWait.match.threadId, threadId, "status report posted in the thread");
   ctx.assertRegex(
     reportWait.match.text,
     new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`),
@@ -81,6 +85,14 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     /\b(running|ready|failed|pending|ok|prêt|en cours|terminé)\b/i,
     "report mentions a bootstrap status",
   );
+
+  // project-workspace-setup.md prerequisite: run the delegation manual on every
+  // WORK-mode turn. The trajectory snapshot flushes when the session run ends,
+  // after the report — hence the generous timeout.
+  await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
+    label: "agent runs `alcode --openclaw-guide`",
+    timeoutMs: 120_000,
+  });
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
