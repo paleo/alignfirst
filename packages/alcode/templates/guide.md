@@ -28,7 +28,7 @@ Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp
 2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. If the frontmatter `meta` carries a destination (e.g. a thread target), route this report there — a plain reply from the wake turn goes to the session's default surface, which may not be where the work was requested. When the report went out through the `message` tool, end the wake turn with a final answer of exactly `NO_REPLY` — any other final text streams to the default surface as a stray duplicate. `NO_REPLY` is the only silent ending; never improvise another token (`HEARTBEAT_OK` posts as literal text).
 3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git`. The coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
 
-If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them.
+If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
 
 ## CLI reference
 

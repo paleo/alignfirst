@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.4.1
+
+### Patch Changes
+
+- The session guide now tells the agent to start a new session after one turns bad, rather than reusing it.
+
 ## 0.4.0
 
 ### Minor Changes

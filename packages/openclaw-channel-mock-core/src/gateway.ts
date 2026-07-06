@@ -42,6 +42,7 @@ export async function startChannelMockGatewayAccount(params: {
         // Fire-and-forget, as the real monitors do ("per-session ordering is owned
         // by the message run queue"): a long agent turn must not delay the next
         // inbound, and one bad dispatch must not kill the poll loop.
+        // Always on: gateway logs are diagnostic signal for the test harness.
         console.log(
           `[${channelId}] inbound dispatch start id=${event.message.id} thread=${event.message.threadId ?? "-"}`,
         );

@@ -251,6 +251,7 @@ function takeNextCell(state: SchedulerState, loadedModelId: string | undefined):
   return cell;
 }
 
+// Linear scan is fine: `pending` is small and shrinks per take.
 function leastLoadedModelCell(state: SchedulerState): Cell {
   let best = state.pending[0];
   let bestCount = state.runningPerModel.get(best.model.id) ?? 0;
@@ -288,6 +289,8 @@ async function runCell(
   const logFile = opts.parallel > 1 ? join(opts.resultsDir, `${leaf}.log`) : undefined;
   if (opts.parallel > 1) console.log(`[w${worker.index}] ${leaf} started`);
 
+  // Refresh even on the reuse-stack no-recreate path: the live gateway reads the
+  // workspace lazily, so this is intentional despite the reuse-stack state-leak caveat.
   opts.refreshWorkspace(worker);
 
   const needRecreate = !opts.reuseStack || loadedModelId !== cell.model.id;
