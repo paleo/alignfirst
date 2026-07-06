@@ -86,15 +86,26 @@ npm run e2e -- --channel all --model claude-sonnet-4-6,qwen3.6-plus <s>  # a com
 npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
+npm run e2e -- --channel all --iterations 10 --parallel 4 <s>       # run up to 4 cells concurrently
 npm run e2e -- --channel discord-mock --reuse-stack <s>             # skip per-cell bus+gateway recreation
-npm run env:down                                                   # tear down a warm stack
+npm run env:down                                                   # tear down all worker stacks
 ```
 
-`run` auto-starts bus + gateway and tears them down after the run; an explicit `env:up` beforehand keeps the stack warm across runs.
+`run` auto-starts the worker stacks it needs and tears down the ones it started; an explicit `env:up` beforehand keeps them warm across runs.
 
 Rebuild (`npm run env:build`) after editing `openclaw.json` or the `Dockerfile`, or after bumping any `@paleo/openclaw-*` dependency.
 
-Scenarios run serially through one gateway. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
+Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
+
+### Parallel runs
+
+`--parallel K` (default `OPENCLAW_TEST_PARALLEL` from `.env.local`, fallback 1; the flag wins) runs up to K cells concurrently, each on its own worker Compose stack — project `<project>-w<i>`, all sharing one image. Iterations of one pair parallelize too, so flakiness measurements (`--iterations N`) are the primary win. With K > 1, per-cell output is captured to `artifacts/<runStamp>/cells/<leaf>.log` and the console shows one compact line per cell event.
+
+Each worker gets its own gateway logs dir (`.gateway-logs/w<i>/`) and a private workspace copy under `.workers/`, refreshed from `OPENCLAW_WORKSPACE_DIR` before every cell. Add `.workers/` to your `.gitignore` and `.dockerignore`.
+
+`env up -- --parallel K` pre-warms K workers. `env down` takes no flag: it discovers every `<project>-w<N>` stack and tears them all down, including orphans from a crashed run.
+
+**Upgrading from a pre-parallel version:** stacks now run under per-worker Compose project names, so the old un-suffixed project is orphaned. Tear it down once with `docker compose down` from the project dir.
 
 ## Channels
 

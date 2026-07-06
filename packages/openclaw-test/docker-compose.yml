@@ -19,9 +19,13 @@ x-common-volumes: &common-volumes
 volumes:
   openclaw-test-ipc:
 
+# All three services run the same image. The explicit shared `image:` keeps worker
+# Compose projects (`<base>-w<i>`) from each building/looking up their own
+# project-named image; the CLI injects OPENCLAW_TEST_CONSUMER_IMAGE.
 services:
   bus:
     build: *common-build
+    image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
     user: claw
     working_dir: /opt/openclaw-test/src
     command: ["node", "/opt/openclaw-test/src/dist/bus.js"]
@@ -34,6 +38,7 @@ services:
 
   gateway:
     build: *common-build
+    image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
     user: claw
     working_dir: /opt/openclaw-test/src
     environment:
@@ -61,6 +66,7 @@ services:
 
   runner:
     build: *common-build
+    image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
     user: claw
     working_dir: /opt/openclaw-test/src
     environment:
