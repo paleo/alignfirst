@@ -231,7 +231,7 @@ export function createQaBusState() {
       return readQaBusMessage({ messages, input });
     },
     searchMessages(input: QaBusSearchMessagesInput) {
-      return searchQaBusMessages({ messages, input });
+      return searchQaBusMessages({ messages, threads, input });
     },
     poll(input: QaBusPollInput = {}) {
       return pollQaBusEvents({ events, cursor, input });

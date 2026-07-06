@@ -121,19 +121,19 @@ export function readQaBusMessage(params: {
 
 export function searchQaBusMessages(params: {
   messages: Map<string, QaBusMessage>;
+  threads?: Map<string, QaBusThread>;
   input: QaBusSearchMessagesInput;
 }) {
-  const accountId = normalizeAccountId(params.input.accountId);
-  const limit = Math.max(1, Math.min(params.input.limit ?? 20, 100));
-  const query = normalizeOptionalLowercaseString(params.input.query);
+  const input = rescopeThreadIdAsConversation(params.input, params.threads);
+  const accountId = normalizeAccountId(input.accountId);
+  const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
+  const query = normalizeOptionalLowercaseString(input.query);
   return Array.from(params.messages.values())
     .filter((message) => message.accountId === accountId)
     .filter((message) =>
-      params.input.conversationId ? message.conversation.id === params.input.conversationId : true,
+      input.conversationId ? message.conversation.id === input.conversationId : true,
     )
-    .filter((message) =>
-      params.input.threadId ? message.threadId === params.input.threadId : true,
-    )
+    .filter((message) => (input.threadId ? message.threadId === input.threadId : true))
     .filter((message) => {
       if (!query) {
         return true;
@@ -158,6 +158,22 @@ export function searchQaBusMessages(params: {
     })
     .slice(-limit)
     .map((message) => cloneMessage(message));
+}
+
+// On Discord a thread is a channel, so agents legitimately scope a read with the
+// thread id where a conversation id is expected. Rescope to the thread when the
+// id names one.
+function rescopeThreadIdAsConversation(
+  input: QaBusSearchMessagesInput,
+  threads?: Map<string, QaBusThread>,
+): QaBusSearchMessagesInput {
+  const thread = input.conversationId ? threads?.get(input.conversationId) : undefined;
+  if (!thread) return input;
+  return {
+    ...input,
+    conversationId: thread.conversationId,
+    threadId: input.threadId ?? thread.id,
+  };
 }
 
 export function resolveQaBusPollStartCursor(params: {

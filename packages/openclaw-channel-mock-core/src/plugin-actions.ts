@@ -62,6 +62,50 @@ function readSendText(params: Record<string, unknown>) {
   );
 }
 
+export interface HistoryScope {
+  conversationId?: string;
+  threadId?: string;
+}
+
+// Agents scope `read`/`search` with whatever id shape the surface handed them: the
+// envelope's composite `thread:<conv>/<tid>` chat_id in `threadId`, a bare thread id
+// from topic_id, a thread-shaped to/target, or nothing at all — on Discord, `read`
+// without a destination reads the current channel, which in a thread session is the
+// thread itself. Resolve them all to the bus's conversation/thread scope; a bare id
+// that names a thread is rescoped bus-side.
+export function resolveHistoryScope(
+  params: Record<string, unknown>,
+  currentChannelId?: string,
+): HistoryScope {
+  const fromThreadParam = parseScopeShape(readStringParam(params, "threadId"), {
+    bareIsThread: true,
+  });
+  const destination = resolveDestination(params);
+  const fromDestination = parseScopeShape(destination, { bareIsThread: false });
+  const scope = {
+    conversationId: fromDestination.conversationId ?? fromThreadParam.conversationId,
+    threadId: fromThreadParam.threadId ?? fromDestination.threadId,
+  };
+  if (scope.conversationId !== undefined || scope.threadId !== undefined) return scope;
+  return parseScopeShape(currentChannelId, { bareIsThread: false });
+}
+
+function parseScopeShape(
+  raw: string | undefined,
+  options: { bareIsThread: boolean },
+): HistoryScope {
+  if (raw === undefined) return {};
+  if (/^(dm|channel|group|thread):/i.test(raw)) {
+    try {
+      const parsed = parseQaTarget(raw);
+      return { conversationId: parsed.conversationId, threadId: parsed.threadId };
+    } catch {
+      return {};
+    }
+  }
+  return options.bareIsThread ? { threadId: raw } : { conversationId: raw };
+}
+
 // Canonical destination fallback — `to` first, then `target`, then legacy `channelId`.
 function resolveDestination(params: Record<string, unknown>): string | undefined {
   const explicitTo = readStringParam(params, "to");
@@ -147,7 +191,7 @@ export function createChannelMockMessageActions(params: {
       return null;
     },
     handleAction: async (context) => {
-      const { action, cfg, accountId, params: actionParams } = context;
+      const { action, cfg, accountId, params: actionParams, toolContext } = context;
       if (surface === "slack" && SLACK_DISABLED_ACTIONS.has(action)) {
         throw new Error(`${channelId} slack surface does not expose action "${action}"`);
       }
@@ -270,17 +314,21 @@ export function createChannelMockMessageActions(params: {
           return jsonResult({ message });
         }
         case "read": {
-          // Bulk read prior messages — matches real Discord's `read` action
-          // (a list-channel-messages call on a channelId, which can be a
-          // thread). Single-message fetch lives under `reactions`. Without a
-          // threadId/conversationId scope we'd dump the whole account log,
-          // so require at least one.
-          const destination = resolveDestination(actionParams);
-          const conversationId = destination
-            ? parseQaTarget(destination).conversationId
-            : undefined;
-          const threadId = readStringParam(actionParams, "threadId");
-          if (!conversationId && !threadId) {
+          // Bulk read prior messages. Real Discord lists a channel's messages
+          // (a thread is a channel) via `channelId ?? to ?? currentChannelId`;
+          // real Slack requires channelId/to and honors threadId as a filter.
+          // Unlike real Discord we also honor the threadId param — the message
+          // tool's thread-read hint endorses it, and in a thread session the
+          // real currentChannelId fallback lands on the same messages. Single-
+          // message fetch lives under `reactions`.
+          if (surface === "slack" && resolveDestination(actionParams) === undefined) {
+            throw new Error(`${channelId} read requires a destination (to/channelId)`);
+          }
+          const { conversationId, threadId } = resolveHistoryScope(
+            actionParams,
+            toolContext?.currentChannelId,
+          );
+          if (conversationId === undefined && threadId === undefined) {
             throw new Error(
               `${channelId} read requires threadId or a destination (to/target/channelId)`,
             );
@@ -325,11 +373,10 @@ export function createChannelMockMessageActions(params: {
         }
         case "search": {
           const query = readStringParam(actionParams, "query");
-          const destination = resolveDestination(actionParams);
-          const conversationId = destination
-            ? parseQaTarget(destination).conversationId
-            : undefined;
-          const threadId = readStringParam(actionParams, "threadId");
+          const { conversationId, threadId } = resolveHistoryScope(
+            actionParams,
+            toolContext?.currentChannelId,
+          );
           const { messages } = await searchQaBusMessages({
             baseUrl,
             input: {

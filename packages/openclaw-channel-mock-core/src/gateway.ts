@@ -39,7 +39,13 @@ export async function startChannelMockGatewayAccount(params: {
         if (event.kind !== "inbound-message") {
           continue;
         }
-        await handleInbound({
+        // Fire-and-forget, as the real monitors do ("per-session ordering is owned
+        // by the message run queue"): a long agent turn must not delay the next
+        // inbound, and one bad dispatch must not kill the poll loop.
+        console.log(
+          `[${channelId}] inbound dispatch start id=${event.message.id} thread=${event.message.threadId ?? "-"}`,
+        );
+        void handleInbound({
           channelId,
           channelLabel,
           account,
@@ -48,7 +54,14 @@ export async function startChannelMockGatewayAccount(params: {
           surface,
           autoThread,
           getRuntime,
-        });
+        })
+          .then(() => console.log(`[${channelId}] inbound dispatch done id=${event.message.id}`))
+          .catch((error) => {
+            // Gateway shutdown rejects every in-flight turn; only silence the log noise —
+            // nothing here can (or should) affect the poll loop.
+            if (ctx.abortSignal.aborted) return;
+            console.error(`[${channelId}] inbound dispatch failed id=${event.message.id}:`, error);
+          });
       }
     }
   } catch (error) {
