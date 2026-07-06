@@ -54,7 +54,7 @@ describe("bus HTTP round-trip", () => {
       "/v1/actions/thread-create",
       { conversationId: "sample-project", title: "T" },
     );
-    expect(createResp.thread.id.startsWith("thread-")).toBe(true);
+    expect(createResp.thread.id.startsWith("sample-project-thread-")).toBe(true);
     expect(createResp.thread.conversationId).toBe("sample-project");
 
     await post<{ message: unknown }>(fixture.baseUrl, "/v1/outbound/message", {

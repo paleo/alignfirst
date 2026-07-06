@@ -38,17 +38,15 @@ export function isAnnouncement(re: RegExp, text: string): boolean {
  * Poll the gateway for alcode's per-run coding-session file reaching `status: succeeded` — the
  * model-independent proof the delegated session finished, and the ground truth the completion
  * wake rides on. `find` (not a shell glob) so an absent match in any single project dir does not
- * error; alcode writes under `<project>/.plans/<ticket>/coding-sessions/<stamp>.md` (or
- * `.plans/_coding-sessions/` without a ticket), and worktree `.plans` symlinks back to the main
+ * error; alcode writes under `<project>/.plans/<ticket>/_alcode/<stamp>.md` (or
+ * `.plans/_alcode/` without a ticket), and worktree `.plans` symlinks back to the main
  * project so either path resolves. Returns the matching session file path.
  */
 export async function waitForCodingSessionSucceeded(
   ctx: ScenarioContext,
   opts: { ticketId?: string; timeoutMs: number },
 ): Promise<string> {
-  const sessionsDir = opts.ticketId
-    ? `.plans/${opts.ticketId}/coding-sessions`
-    : ".plans/_coding-sessions";
+  const sessionsDir = opts.ticketId ? `.plans/${opts.ticketId}/_alcode` : ".plans/_alcode";
   const deadline = Date.now() + opts.timeoutMs;
   const findArgs = [
     "find",

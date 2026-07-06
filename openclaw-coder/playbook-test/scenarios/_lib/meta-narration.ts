@@ -21,7 +21,7 @@ import type {
 export async function isMetaNarration(ctx: ScenarioContext, text: string): Promise<boolean> {
   const { parsed } = await ctx.judgeLLMJson<{ isNarration: boolean; reason: string }>({
     message: text,
-    prompt: `Classify the message. Return \`isNarration: true\` ONLY when the message is purely the agent narrating its plan or intent (e.g. "Je vais poster…", "Let me first…", "Now I'll…", "Je dois vérifier…", "Checking the project then…") with no substantive user-facing payload.
+    prompt: `Classify the message. Return \`isNarration: true\` ONLY when the message is purely the agent narrating its plan or intent (e.g. "Je vais poster…", "Let me first…", "Now I'll…", "Je dois vérifier…", "Checking the project then…") with no substantive user-facing payload. A fleeting progress observation that only sets up the announced next step ("Pas de branche existante — je crée la branche", "Fetch OK. Je lance la suite") is still narration: it delivers nothing the user asked for.
 
 Return \`isNarration: false\` whenever the message carries substantive user-facing content — even if a planning sentence is appended. Substantive content includes: templated starter lines (\`Project: **X** — Ticket: **Y** — …\`), acknowledgements that restate the project + ticket, status reports with labelled fields (e.g. \`Worktree: …\`, \`Branche: …\`, \`Bootstrap: …\`), questions to the user, or summary deliveries.`,
     returnType: '{ "isNarration": boolean, "reason": string }',

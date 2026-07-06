@@ -1,5 +1,6 @@
 import { pollQaBus } from "./bus-client.js";
 import { handleInbound } from "./inbound.js";
+import type { ChannelSurface } from "./plugin-actions.js";
 import type { ChannelGatewayContext, PluginRuntime } from "./runtime-api.js";
 import type { CoreConfig, ResolvedChannelMockAccount } from "./types.js";
 
@@ -7,10 +8,11 @@ export async function startChannelMockGatewayAccount(params: {
   channelId: string;
   channelLabel: string;
   ctx: ChannelGatewayContext<ResolvedChannelMockAccount>;
+  surface: ChannelSurface;
   autoThread: boolean;
   getRuntime: () => PluginRuntime;
 }) {
-  const { channelId, channelLabel, ctx, autoThread, getRuntime } = params;
+  const { channelId, channelLabel, ctx, surface, autoThread, getRuntime } = params;
   const account = ctx.account;
   if (!account.configured) {
     throw new Error(`${channelId} is not configured for account "${account.accountId}"`);
@@ -43,6 +45,7 @@ export async function startChannelMockGatewayAccount(params: {
           account,
           config: ctx.cfg as CoreConfig,
           message: event.message,
+          surface,
           autoThread,
           getRuntime,
         });

@@ -171,6 +171,7 @@ export function createChannelMockPlugin(params: {
             channelId,
             channelLabel: meta.label,
             ctx,
+            surface,
             autoThread,
             getRuntime,
           });
