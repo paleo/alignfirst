@@ -1,8 +1,22 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
-import { discoverScenarios, expandChannelSelection, runMatrix } from "./loop.js";
+import { basename, isAbsolute, join, resolve } from "node:path";
+import {
+  discoverScenarios,
+  expandChannelSelection,
+  runMatrix,
+  type WorkerContext,
+  workerSpawnEnv,
+} from "./loop.js";
 import { resolveSelectedModels, type SelectedModel } from "./models.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's project dir so users
@@ -20,7 +34,7 @@ type EnvSubcommand = "build" | "up" | "down";
 
 const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scenario> ...] [--all]
                                    [--model <id|id,id,…|all>] [--iterations N] [--max-failures N]
-                                   [--stop-on-fail] [--reuse-stack]
+                                   [--parallel K] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
   --model <id|id,id,…|all>
@@ -30,105 +44,109 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                       provider/model refs; the bare id is the suffix after the last "/".
                       "all" (or any selected provider) needs that provider's API key.
   --iterations N      run each (scenario, channel) pair N times (default 1).
-  --max-failures N    abort a pair once failures > N (default 1).
-  --stop-on-fail      stop the whole matrix at the first failing cell — pairs with
-                      --iterations to triage one bug at a time before retrying.
+  --max-failures N    abort a pair once failures > N (default 1). Best-effort under
+                      --parallel: in-flight cells of a bailed pair still finish.
+  --parallel K        run up to K cells concurrently, each on its own worker stack
+                      (Compose project <base>-w<i>). Defaults to OPENCLAW_TEST_PARALLEL
+                      (.env.local), fallback 1. With K > 1, per-cell output is captured
+                      to <artifacts>/<runStamp>/cells/<leaf>.log.
+  --stop-on-fail      stop dispatching at the first failing cell (in-flight cells
+                      drain) — pairs with --iterations to triage one bug at a time.
   --reuse-stack       skip the per-cell bus+gateway recreation (fastest path; but
                       scenarios leak state into each other with this option).
 
-  The host owns the matrix loop: between cells it recreates the bus and gateway
-  containers (docker compose up -d --force-recreate --wait bus gateway) for fresh
-  state. Each cell is one 'docker compose run --rm runner' invocation.
+  The host owns the matrix: cells are dispatched to a pool of K worker stacks.
+  Before a cell, a worker's bus and gateway are recreated (docker compose up -d
+  --force-recreate --wait bus gateway) for fresh state; this also lazily creates
+  a worker that isn't running yet. Each cell is one 'docker compose run --rm
+  runner' invocation.
 
-  bus + gateway are auto-started via Docker Compose if not already running.
-  When auto-started, they are torn down after the run exits. Run 'openclaw-test env up'
-  beforehand to keep them warm across iterative runs.
+  Workers this run created are torn down at the end; already-running workers stay
+  up. Run 'openclaw-test env up [--parallel K]' beforehand to keep workers warm
+  across iterative runs.
 
-  If the base image needs (re)building, any already-running bus+gateway are
+  If the base image needs (re)building, every running <base>-w* worker stack is
   torn down first so the new image is picked up.`;
 
-const ENV_USAGE = "usage: openclaw-test env <build|up|down>";
+const ENV_USAGE = `usage: openclaw-test env <build|up|down>
 
-export function envCommand(packageDir: string, argv: string[]): never {
-  const sub = argv[0] as EnvSubcommand | undefined;
-  if (sub !== "build" && sub !== "up" && sub !== "down") {
-    console.error(ENV_USAGE);
-    process.exit(1);
-  }
+  build               build the base and consumer images.
+  up [--parallel K]   bring up worker stacks w1…wK warm (K defaults to
+                      OPENCLAW_TEST_PARALLEL, fallback 1).
+  down                tear down every <base>-w* worker stack, whatever K was.`;
+
+export async function envCommand(packageDir: string, argv: string[]): Promise<never> {
+  const [sub, ...rest] = argv;
+  if (sub !== "build" && sub !== "up" && sub !== "down") failEnv();
+  const parallelFlag = parseEnvArgs(sub, rest);
   setupHostEnv(packageDir);
-  if (sub === "up") renderRuntimeConfig();
   setBaseTag(packageDir);
-  if (sub !== "down") {
-    ensureHostOutputDirs();
-    ensureBaseImage(packageDir, { force: sub === "build" });
+  if (sub === "down") process.exit(sweepWorkerStacks());
+  if (sub === "build") {
+    ensureHostOutputDirs([]);
+    ensureBaseImage(packageDir, { force: true });
+    process.exit(execComposeSync([...workerComposeArgs(1), "build"]));
   }
-  const composeArgs = composeBaseArgs();
-  const subArgs =
-    sub === "build"
-      ? ["build"]
-      : sub === "up"
-        ? ["up", "-d", "--wait", "--remove-orphans", "bus", "gateway"]
-        : ["down"];
-  process.exit(execComposeSync([...composeArgs, ...subArgs]));
+  const parallel = resolveParallel(parallelFlag, readEnvVar("OPENCLAW_TEST_PARALLEL"));
+  const workers = buildWorkerContexts(parallel);
+  ensureHostOutputDirs(workers);
+  ensureBaseImage(packageDir, { force: false });
+  ensureConsumerImage(workerComposeArgs(1));
+  const configPath = renderRuntimeConfig(canonicalConfigPath());
+  for (const worker of workers) refreshWorkerWorkspace(worker);
+  const codes = await Promise.all(
+    workers.map((worker) =>
+      execCompose(
+        [...worker.composeArgs, "up", "-d", "--wait", "--remove-orphans", "bus", "gateway"],
+        workerSpawnEnv(worker, configPath),
+      ),
+    ),
+  );
+  process.exit(codes.find((code) => code !== 0) ?? 0);
 }
 
 export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
-  const { channel, model, iterations, maxFailures, stopOnFail, reuseStack, all, positionals } =
-    parseRunArgs(argv);
+  const args = parseRunArgs(argv);
   setupHostEnv(packageDir);
+  const parallel = resolveParallel(args.parallel, readEnvVar("OPENCLAW_TEST_PARALLEL"));
   const models = resolveSelectedModels({
-    selection: model,
+    selection: args.model,
     modelsEnv: readEnvVar("OPENCLAW_TEST_MODELS"),
     defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
   });
-  // Render each model's config once (its own temp file holding the expanded
-  // secret); the matrix re-points OPENCLAW_CONFIG_PATH and recreates the gateway
-  // on every model change.
+  const canonicalPath = canonicalConfigPath();
+  // Each model's config is rendered once (its own temp file holding the expanded
+  // secret); worker loops hand the path to every spawn via per-spawn env.
   const renderedConfigs = new Map<string, string>();
   const renderConfigPath = (m: SelectedModel): string => {
     const cached = renderedConfigs.get(m.id);
     if (cached) return cached;
-    const path = renderRuntimeConfig(m);
-    if (!path) throw new Error("openclaw-test: OPENCLAW_CONFIG_PATH is unset");
+    const path = renderRuntimeConfig(canonicalPath, m);
     renderedConfigs.set(m.id, path);
     return path;
   };
-  // Render the first model before the initial `up` so the gateway boots on it.
-  process.env.OPENCLAW_CONFIG_PATH = renderConfigPath(models[0]);
   setBaseTag(packageDir);
-  ensureHostOutputDirs();
   const didBuild = ensureBaseImage(packageDir, { force: false });
-
-  const compose = composeBaseArgs();
-  // A fresh base image means any running bus+gateway are on a stale image. Tear
-  // them down so the up below recreates them — and so the auto-down at the end
-  // fires (wereUpBefore is recomputed after the teardown).
-  if (didBuild && areBusAndGatewayRunning(compose)) {
-    const downCode = execComposeSync([...compose, "down"]);
-    if (downCode !== 0) process.exit(downCode);
-  }
-  const wereUpBefore = areBusAndGatewayRunning(compose);
-  if (!wereUpBefore) {
-    const upCode = execComposeSync([
-      ...compose,
-      "up",
-      "-d",
-      "--wait",
-      "--remove-orphans",
-      "bus",
-      "gateway",
-    ]);
-    if (upCode !== 0) process.exit(upCode);
+  // A fresh base image means any running worker stack is on a stale image. Sweep
+  // them all so the lazy per-cell recreate boots them on the new image — and so
+  // the auto-down at the end fires (wasRunningBefore is computed after the sweep).
+  if (didBuild) {
+    const sweepCode = sweepWorkerStacks();
+    if (sweepCode !== 0) process.exit(sweepCode);
   }
 
   const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
-  const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH as string;
   const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
 
   // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
   // order, deduped.
-  const scenarios = all ? discoverScenarios(scenariosDir) : [...new Set(positionals)];
-  const channels = expandChannelSelection(channel, openclawConfigPath);
+  const scenarios = args.all ? discoverScenarios(scenariosDir) : [...new Set(args.positionals)];
+  const channels = expandChannelSelection(args.channel, canonicalPath);
+
+  const cellCount = models.length * scenarios.length * channels.length * args.iterations;
+  const workers = buildWorkerContexts(Math.min(parallel, cellCount));
+  ensureHostOutputDirs(workers);
+  ensureConsumerImage(workerComposeArgs(1));
 
   const baseStamp = new Date().toISOString().replace(/[:.]/g, "-");
   const resultsDir = resolve(artifactsDir, baseStamp, "cells");
@@ -141,23 +159,124 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     channels,
     models,
     renderConfigPath,
-    iterations,
-    maxFailures,
-    stopOnFail,
-    reuseStack,
-    gatewayFreshOnFirstModel: !wereUpBefore,
-    composeArgs: compose,
+    iterations: args.iterations,
+    maxFailures: args.maxFailures,
+    stopOnFail: args.stopOnFail,
+    reuseStack: args.reuseStack,
+    parallel: workers.length,
+    workers,
+    refreshWorkspace: refreshWorkerWorkspace,
     artifactsDir: resolve(artifactsDir, baseStamp),
-    gatewayLogsDir: process.env.OPENCLAW_TEST_GATEWAY_LOGS_DIR as string,
     resultsDir,
     runnerResultsDir,
     baseStamp,
   });
 
-  if (!wereUpBefore) {
-    execComposeSync([...compose, "down"]);
-  }
+  const booted = workers.filter((worker) => !worker.wasRunningBefore);
+  await Promise.all(booted.map((worker) => execCompose([...worker.composeArgs, "down"])));
   process.exit(matrixExit);
+}
+
+/** Flag wins over the env var; fallback 1. Both must parse to an integer ≥ 1. */
+export function resolveParallel(flag: string | undefined, envValue: string | undefined): number {
+  if (flag !== undefined) return parseParallelValue("--parallel", flag);
+  if (envValue !== undefined) return parseParallelValue("OPENCLAW_TEST_PARALLEL", envValue);
+  return 1;
+}
+
+function parseParallelValue(source: string, raw: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`openclaw-test: ${source} expects an integer >= 1, got ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
+function canonicalConfigPath(): string {
+  const path = process.env.OPENCLAW_CONFIG_PATH;
+  if (!path) throw new Error("openclaw-test: OPENCLAW_CONFIG_PATH is unset");
+  return path;
+}
+
+function buildWorkerContexts(count: number): WorkerContext[] {
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  const logsRoot = process.env.OPENCLAW_TEST_GATEWAY_LOGS_DIR as string;
+  const contexts: WorkerContext[] = [];
+  for (let i = 1; i <= count; ++i) {
+    const composeArgs = workerComposeArgs(i);
+    contexts.push({
+      index: i,
+      composeArgs,
+      gatewayLogsDir: join(logsRoot, `w${i}`),
+      workspaceDir: join(projectDir, ".workers", `w${i}`, "workspace"),
+      wasRunningBefore: areBusAndGatewayRunning(composeArgs),
+    });
+  }
+  return contexts;
+}
+
+function workerComposeArgs(index: number): string[] {
+  return [...composeBaseArgs(), "-p", `${projectNameBase()}-w${index}`];
+}
+
+function projectNameBase(): string {
+  const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
+  return sanitizeProjectName(basename(projectDir));
+}
+
+// Compose project-name rules: lowercase, [a-z0-9_-], must start alphanumeric.
+function sanitizeProjectName(name: string): string {
+  const sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/^[^a-z0-9]+/, "");
+  return sanitized === "" ? "openclaw-test" : sanitized;
+}
+
+function refreshWorkerWorkspace(worker: WorkerContext): void {
+  const src = process.env.OPENCLAW_WORKSPACE_DIR;
+  if (!src) throw new Error("openclaw-test: OPENCLAW_WORKSPACE_DIR is unset");
+  rmSync(worker.workspaceDir, { recursive: true, force: true });
+  cpSync(src, worker.workspaceDir, { recursive: true });
+}
+
+/** Tear down every `<base>-w<N>` Compose project, whatever K was. Idempotent. */
+function sweepWorkerStacks(): number {
+  let exitCode = 0;
+  for (const name of listWorkerStackNames()) {
+    const code = execComposeSync([...composeBaseArgs(), "-p", name, "down"]);
+    if (code !== 0) exitCode = code;
+  }
+  return exitCode;
+}
+
+function listWorkerStackNames(): string[] {
+  const r = spawnSync("docker", ["compose", "ls", "--all", "--format", "json"], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0) return [];
+  let projects: { Name?: string }[];
+  try {
+    projects = JSON.parse(r.stdout) as { Name?: string }[];
+  } catch {
+    return [];
+  }
+  // The sanitized base contains no regex metacharacters (only [a-z0-9_-]).
+  const pattern = new RegExp(`^${projectNameBase()}-w\\d+$`);
+  return projects
+    .map((p) => p.Name)
+    .filter((name): name is string => typeof name === "string" && pattern.test(name));
+}
+
+// A `compose up` with both `build:` and `image:` builds the image when it is
+// missing, so K concurrent worker `up`s would race K builds onto one tag. Build
+// once up front instead. `env build` builds unconditionally.
+function ensureConsumerImage(composeArgs: string[]): void {
+  const image = process.env.OPENCLAW_TEST_CONSUMER_IMAGE as string;
+  const inspect = spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" });
+  if (inspect.status === 0) return;
+  const code = execComposeSync([...composeArgs, "build"]);
+  if (code !== 0) process.exit(code);
 }
 
 /**
@@ -165,8 +284,9 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
  * `${VAR}` itself. Walk the canonical config, replace any string value of the
  * exact form `${VAR}` with the value of `VAR` (process.env wins over `.env.local`),
  * and write the rendered JSON to a run-scoped temp dir so the expanded secret is
- * never persisted to a committed or artifact path. Returns the rendered path and
- * repoints `OPENCLAW_CONFIG_PATH` at it; the canonical file is never mutated.
+ * never persisted to a committed or artifact path. Returns the rendered path; the
+ * canonical file is never mutated and `process.env` is never repointed — callers
+ * pass the path to worker spawns via per-spawn env.
  *
  * When a `model` is given, `agents.list[id=main].model` is set to its full ref so
  * the gateway boots on the selected model. Rendered per model (own temp file).
@@ -174,15 +294,7 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
  * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
  * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
  */
-// Captured on the first render so every later render reads the real canonical
-// config, not a previously-rendered temp (renderRuntimeConfig repoints
-// OPENCLAW_CONFIG_PATH at its output).
-let canonicalConfigPath: string | undefined;
-
-function renderRuntimeConfig(model?: SelectedModel): string | undefined {
-  canonicalConfigPath ??= process.env.OPENCLAW_CONFIG_PATH;
-  const canonicalPath = canonicalConfigPath;
-  if (!canonicalPath) return;
+function renderRuntimeConfig(canonicalPath: string, model?: SelectedModel): string {
   const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
   const dotenv = readDotenvFile(projectDir);
   const config = JSON.parse(readFileSync(canonicalPath, "utf8")) as Record<string, unknown>;
@@ -195,7 +307,6 @@ function renderRuntimeConfig(model?: SelectedModel): string | undefined {
   const dir = mkdtempSync(join(tmpdir(), "openclaw-test-config-"));
   const renderedPath = join(dir, "openclaw.json");
   writeFileSync(renderedPath, JSON.stringify(rendered, null, 2));
-  process.env.OPENCLAW_CONFIG_PATH = renderedPath;
   return renderedPath;
 }
 
@@ -323,6 +434,7 @@ function setupHostEnv(packageDir: string): void {
   const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
   process.env.OPENCLAW_TEST_PROJECT_DIR = projectDir;
   process.env.OPENCLAW_TEST_PACKAGE_DIR ??= packageDir;
+  process.env.OPENCLAW_TEST_CONSUMER_IMAGE ??= `${sanitizeProjectName(basename(projectDir))}-openclaw-test:latest`;
   if (!process.env.CLAW_UID) process.env.CLAW_UID = String(process.getuid?.() ?? 1000);
   if (!process.env.CLAW_GID) process.env.CLAW_GID = String(process.getgid?.() ?? 1000);
   absolutizePathVarsFromEnvFile(projectDir);
@@ -346,16 +458,17 @@ function applyPathDefaults(projectDir: string): void {
   }
 }
 
-// Pre-create the host-side output dirs as the current user, before any
-// `docker compose up`. Otherwise the Docker daemon auto-creates a missing
-// bind-mount source (notably `.gateway-logs`) as root, which the container —
+// Pre-create the host-side output dirs (including each worker's gateway logs dir)
+// as the current user, before any `docker compose up`. Otherwise the Docker
+// daemon auto-creates a missing bind-mount source as root, which the container —
 // running as the host UID — can then neither write nor let the user delete
-// without sudo. Idempotent; safe to call on every command that brings the stack up.
-function ensureHostOutputDirs(): void {
+// without sudo. Idempotent; safe to call on every command that brings a stack up.
+function ensureHostOutputDirs(workers: WorkerContext[]): void {
   for (const key of ["OPENCLAW_TEST_ARTIFACTS_DIR", "OPENCLAW_TEST_GATEWAY_LOGS_DIR"] as const) {
     const dir = process.env[key];
     if (dir) mkdirSync(dir, { recursive: true });
   }
+  for (const worker of workers) mkdirSync(worker.gatewayLogsDir, { recursive: true });
 }
 
 /**
@@ -376,7 +489,7 @@ function absolutizePathVarsFromEnvFile(projectDir: string): void {
   }
 }
 
-// The two model vars are not path-shaped, so setupHostEnv never exports them.
+// The non-path vars (models, parallel) are never exported by setupHostEnv.
 // Read the shell env first (wins over --env-file), then fall back to .env.local.
 function readEnvVar(key: string): string | undefined {
   const fromShell = process.env[key];
@@ -446,11 +559,26 @@ function execComposeSync(args: string[]): number {
   return result.status ?? 1;
 }
 
+function execCompose(args: string[], env?: Record<string, string>): Promise<number> {
+  return new Promise((resolveExit) => {
+    const child = spawn("docker", args, {
+      stdio: "inherit",
+      env: env ? { ...process.env, ...env } : process.env,
+    });
+    child.on("exit", (code) => resolveExit(code ?? 1));
+    child.on("error", (err) => {
+      console.error(err.message);
+      resolveExit(1);
+    });
+  });
+}
+
 interface RunArgs {
   channel: string;
   model: string | undefined;
   iterations: number;
   maxFailures: number;
+  parallel: string | undefined;
   stopOnFail: boolean;
   reuseStack: boolean;
   all: boolean;
@@ -477,6 +605,7 @@ function parseRunArgs(argv: string[]): RunArgs {
   let model: string | undefined;
   let iterations = 1;
   let maxFailures = 1;
+  let parallel: string | undefined;
   let stopOnFail = false;
   let reuseStack = false;
   let all = false;
@@ -499,6 +628,8 @@ function parseRunArgs(argv: string[]): RunArgs {
       maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0);
     else if (a?.startsWith("--max-failures="))
       maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0);
+    else if (a === "--parallel") parallel = requireFlagValue("--parallel", argv[++i]);
+    else if (a?.startsWith("--parallel=")) parallel = a.slice("--parallel=".length);
     else if (a?.startsWith("--")) failRun(`error: unknown flag ${a}`);
     else if (a) positionals.push(a);
   }
@@ -514,6 +645,7 @@ function parseRunArgs(argv: string[]): RunArgs {
     model,
     iterations,
     maxFailures,
+    parallel,
     stopOnFail,
     reuseStack,
     all,
@@ -524,5 +656,29 @@ function parseRunArgs(argv: string[]): RunArgs {
 function failRun(msg?: string): never {
   if (msg) console.error(msg);
   console.error(RUN_USAGE);
+  process.exit(1);
+}
+
+/** Returns the raw `--parallel` value; only `env up` accepts it. */
+function parseEnvArgs(sub: EnvSubcommand, rest: string[]): string | undefined {
+  let parallel: string | undefined;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "--parallel") {
+      const raw = rest[++i];
+      if (raw === undefined || raw.startsWith("--")) failEnv("error: --parallel expects a value");
+      parallel = raw;
+    } else if (a.startsWith("--parallel=")) parallel = a.slice("--parallel=".length);
+    else failEnv(`error: unknown argument ${a}`);
+  }
+  if (parallel !== undefined && sub !== "up") {
+    failEnv("error: --parallel is only valid on 'env up'");
+  }
+  return parallel;
+}
+
+function failEnv(msg?: string): never {
+  if (msg) console.error(msg);
+  console.error(ENV_USAGE);
   process.exit(1);
 }

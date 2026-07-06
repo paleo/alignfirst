@@ -1,5 +1,20 @@
 # @paleo/openclaw-test
 
+## 0.13.0
+
+### Minor Changes
+
+- 1298d34: Parallel runs: `run --parallel <K>` and `env up --parallel <K>` (default `OPENCLAW_TEST_PARALLEL`) run matrix cells concurrently on K worker Compose stacks (`<project>-w<i>`); the flag-less `env down` tears them all down. Gitignore the new `.workers/` directory. One-time upgrade step: run `docker compose down` once on the legacy un-suffixed Compose project.
+
+### Patch Changes
+
+- Updated dependencies [0290042]
+- Updated dependencies [0290042]
+- Updated dependencies [53fc35d]
+  - @paleo/openclaw-channel-mock-core@0.5.0
+  - @paleo/openclaw-discord-mock@0.3.5
+  - @paleo/openclaw-slack-mock@0.3.5
+
 ## 0.12.2
 
 ### Patch Changes

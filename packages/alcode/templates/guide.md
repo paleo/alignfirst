@@ -16,17 +16,19 @@ Coding runs can be long (several hours is fine): **always run `alcode` as a back
 
 As soon as the run is backgrounded, tell the user the coding agent is now working in the background and that you will report back when it finishes (e.g. *"Le coding agent tourne en arrière-plan — je te préviens dès que c'est terminé."*). Then go available. Do **not** poll.
 
-Every run writes a session file under `.plans/`: `.plans/<ticket>/coding-sessions/<stamp>.md`, or `.plans/_coding-sessions/<stamp>.md` without a ticket. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp>.md`, or `.plans/_alcode/<stamp>.md` without a ticket. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+
+**One protocol run at a time per workspace** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
 ## After a background run completes
 
 {{WAKE}}
 
-1. **Read the run's session file** (the path `alcode` printed on its first line, under `coding-sessions/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
-2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. If the frontmatter `meta` carries a destination (e.g. a thread target), route this report there — a plain reply from the wake turn goes to the session's default surface, which may not be where the work was requested.
+1. **Read the run's session file** (the path `alcode` printed on its first line, under `_alcode/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
+2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. If the frontmatter `meta` carries a destination (e.g. a thread target), route this report there — a plain reply from the wake turn goes to the session's default surface, which may not be where the work was requested. When the report went out through the `message` tool, end the wake turn with a final answer of exactly `NO_REPLY` — any other final text streams to the default surface as a stray duplicate. `NO_REPLY` is the only silent ending; never improvise another token (`HEARTBEAT_OK` posts as literal text).
 3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git`. The coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
 
-If the session file says the run failed, report that plainly and propose the next step; don't silently retry.
+If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
 
 ## CLI reference
 
@@ -60,6 +62,8 @@ When asking a question (not executing a plan) with `--new` and no protocol, the 
 ## Spec-Plan-Execute workflow
 
 The default workflow. Always start with it, except for very insignificant tasks.
+
+For large work, do not rush. Decompose it yourself only when the concerns are truly distinct; otherwise write one big spec, iterate on discussing it with the agent, then translate it into one or several plans.
 
 1. **Spec** — `alcode --new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
 2. **Plan** — `alcode --resume <sessionId> --protocol plan`. The agent writes the plan file.

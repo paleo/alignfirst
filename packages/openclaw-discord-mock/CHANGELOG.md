@@ -1,5 +1,14 @@
 # @paleo/openclaw-discord-mock
 
+## 0.3.5
+
+### Patch Changes
+
+- Updated dependencies [0290042]
+- Updated dependencies [0290042]
+- Updated dependencies [53fc35d]
+  - @paleo/openclaw-channel-mock-core@0.5.0
+
 ## 0.3.4
 
 ### Patch Changes

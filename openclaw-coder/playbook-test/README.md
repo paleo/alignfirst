@@ -26,7 +26,7 @@ npm run e2e -- --channel all --all
 npm run env:down
 ```
 
-See the upstream README for all flags.
+See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLEL` in `.env.local`) runs cells concurrently on K worker stacks; per-worker workspace copies land in `.workers/` (gitignored). When upgrading from a pre-parallel version, tear down the legacy un-suffixed Compose project once: `docker compose down` from this dir.
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
@@ -43,7 +43,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A10`. `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the native exec completion wake).
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A11`. `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the native exec completion wake); `A11` replays the same launch from a fresh thread session (the user's go-ahead inside the thread).
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 

@@ -1,5 +1,16 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.5.0
+
+### Minor Changes
+
+- 53fc35d: Thread inbounds now activate sessions keyed exactly like the real channels (Discord: the thread's own id as a channel peer; Slack: the `:thread:<ts>` suffix on the channel session key), and bus thread ids are prefixed with their conversation id.
+
+### Patch Changes
+
+- 0290042: The `read` and `search` actions now resolve every id shape the surfaces advertise — composite `thread:<conv>/<tid>` targets in `threadId`, thread-shaped `to`/`target`, the current-channel fallback when no destination is given (Discord), and a thread id in channel position. Slack-shaped `read` now requires a destination, like the real plugin.
+- 0290042: Inbound dispatch is now fire-and-forget with per-message error containment, like the real channel monitors — a long agent turn no longer delays the next inbound, and a failed dispatch no longer kills the account's poll loop. Gateway logs gain one `inbound dispatch start/done` line per inbound.
+
 ## 0.4.0
 
 ### Minor Changes

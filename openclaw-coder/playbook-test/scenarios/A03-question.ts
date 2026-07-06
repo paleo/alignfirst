@@ -71,7 +71,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
 
   // The guide makes every alcode run a background task, so the findings arrive only after the
   // exec-exit wake: launch ack first, then the session file reaches `status: succeeded` (no-ticket
-  // run → `.plans/_coding-sessions/`), then the woken agent relays the finding in the thread.
+  // run → `.plans/_alcode/`), then the woken agent relays the finding in the thread.
   const sessionFilePath = await waitForCodingSessionSucceeded(ctx, { timeoutMs: 120_000 });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 

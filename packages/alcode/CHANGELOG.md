@@ -1,5 +1,21 @@
 # @paleo/alcode
 
+## 0.4.1
+
+### Patch Changes
+
+- The session guide now tells the agent to start a new session after one turns bad, rather than reusing it.
+
+## 0.4.0
+
+### Minor Changes
+
+- 53fc35d: Session files moved from `coding-sessions/` to `_alcode/` (`.plans/<ticket>/_alcode/` or `.plans/_alcode/`; the old directories are no longer read). alcode now fails fast on `--resume` with an unknown session id, on resuming a session that is still running, and on launching a protocol run while another run is active in the same worktree.
+
+### Patch Changes
+
+- 85e13a3: The `--openclaw-guide` completion-wake procedure now ends the wake turn with `NO_REPLY` once the report is routed via the `message` tool, preventing stray duplicates on the session's default surface.
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,12 +1,17 @@
 import { resolveStableChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
-import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk/inbound-envelope";
+import {
+  createInboundEnvelopeBuilder,
+  resolveInboundRouteEnvelopeBuilderWithRuntime,
+} from "openclaw/plugin-sdk/inbound-envelope";
 import {
   buildAgentMediaPayload,
   saveMediaBuffer,
   saveMediaSource,
 } from "openclaw/plugin-sdk/media-runtime";
+import { buildAgentSessionKey, resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { buildQaTarget, sendQaBusMessage } from "./bus-client.js";
+import type { ChannelSurface } from "./plugin-actions.js";
 import {
   sanitizeQaBusToolCallArguments,
   type QaBusMessage,
@@ -146,6 +151,7 @@ export async function handleInbound(params: {
   account: ResolvedChannelMockAccount;
   config: CoreConfig;
   message: QaBusMessage;
+  surface: ChannelSurface;
   autoThread: boolean;
   getRuntime: () => PluginRuntime;
 }) {
@@ -157,6 +163,13 @@ export async function handleInbound(params: {
     threadId: inbound.threadId,
   });
   const toolCalls: QaBusToolCall[] = [];
+  // The route resolves against the conversation ROOT, as the real plugins do (Slack routes on the
+  // channel id, Discord re-keys the thread in `resolveInboundSessionKey`) — the thread id never
+  // shapes the routing peer.
+  const rootTarget = buildQaTarget({
+    chatType: inbound.conversation.kind,
+    conversationId: inbound.conversation.id,
+  });
   const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
     cfg: params.config as OpenClawConfig,
     channel: params.channelId,
@@ -168,7 +181,7 @@ export async function handleInbound(params: {
           : inbound.conversation.kind === "group"
             ? "group"
             : "channel",
-      id: target,
+      id: rootTarget,
     },
     runtime: runtime.channel,
     sessionStore: params.config.session?.store,
@@ -227,7 +240,22 @@ export async function handleInbound(params: {
   // exit wake reply back into the thread instead of the channel root.
   const autoThreadId = params.autoThread && !inbound.threadId ? inbound.id : undefined;
 
-  const { storePath, body } = buildEnvelope({
+  const sessionKey = resolveInboundSessionKey({
+    surface: params.surface,
+    channelId: params.channelId,
+    route,
+    threadId: inbound.threadId,
+  });
+  const buildSessionEnvelope =
+    sessionKey === route.sessionKey
+      ? buildEnvelope
+      : createThreadSessionEnvelopeBuilder({
+          runtime,
+          config: params.config,
+          agentId: route.agentId,
+          sessionKey,
+        });
+  const { storePath, body } = buildSessionEnvelope({
     channel: params.channelLabel,
     from: inbound.senderName || inbound.senderId,
     timestamp: inbound.timestamp,
@@ -242,7 +270,7 @@ export async function handleInbound(params: {
     CommandBody: inbound.text,
     From: target,
     To: target,
-    SessionKey: route.sessionKey,
+    SessionKey: sessionKey,
     AccountId: route.accountId ?? params.account.accountId,
     ChatType: inbound.conversation.kind === "direct" ? "direct" : "group",
     WasMentioned: wasMentioned,
@@ -283,7 +311,7 @@ export async function handleInbound(params: {
     channel: params.channelId,
     accountId: params.account.accountId,
     agentId: route.agentId,
-    routeSessionKey: route.sessionKey,
+    routeSessionKey: sessionKey,
     storePath,
     ctxPayload,
     recordInboundSession: runtime.channel.session.recordInboundSession,
@@ -327,5 +355,56 @@ export async function handleInbound(params: {
           : new Error(`${params.channelId} session record failed: ${String(error)}`);
       },
     },
+  });
+}
+
+/**
+ * A thread inbound activates a per-thread session keyed exactly like the real channel plugin.
+ * Discord: a thread IS a channel, so the key is built from the thread's own id
+ * (`message-handler.context.ts` — `buildAgentSessionKey` with peer `{ kind: "channel" }`, then
+ * `resolveThreadSessionKeys` with `useSuffix: false`, an identity). Slack: the channel session key
+ * gets the default `:thread:<threadTs>` suffix (`prepare-routing.ts`). Root inbounds — including
+ * Slack auto-thread roots, whose `autoThreadId` never touches the session key — stay on the
+ * channel session.
+ */
+function resolveInboundSessionKey(params: {
+  surface: ChannelSurface;
+  channelId: string;
+  route: { agentId: string; sessionKey: string };
+  threadId: string | undefined;
+}): string {
+  if (params.threadId === undefined) return params.route.sessionKey;
+  if (params.surface === "discord") {
+    return buildAgentSessionKey({
+      agentId: params.route.agentId,
+      channel: params.channelId,
+      peer: { kind: "channel", id: params.threadId },
+    });
+  }
+  return resolveThreadSessionKeys({
+    baseSessionKey: params.route.sessionKey,
+    threadId: params.threadId,
+  }).sessionKey;
+}
+
+// The envelope's "previous message" timestamp must come from the session that receives the turn —
+// the real plugins re-read it with the thread-resolved key (Discord's `effectiveSessionKey`
+// re-read, Slack's `threadKeys.sessionKey`), not the raw route key. The store path itself depends
+// only on the agent id and is unaffected.
+function createThreadSessionEnvelopeBuilder(params: {
+  runtime: PluginRuntime;
+  config: CoreConfig;
+  agentId: string;
+  sessionKey: string;
+}) {
+  const channel = params.runtime.channel;
+  return createInboundEnvelopeBuilder({
+    cfg: params.config as OpenClawConfig,
+    route: { agentId: params.agentId, sessionKey: params.sessionKey },
+    sessionStore: params.config.session?.store,
+    resolveStorePath: channel.session.resolveStorePath,
+    readSessionUpdatedAt: channel.session.readSessionUpdatedAt,
+    resolveEnvelopeFormatOptions: channel.reply.resolveEnvelopeFormatOptions,
+    formatAgentEnvelope: channel.reply.formatAgentEnvelope,
   });
 }

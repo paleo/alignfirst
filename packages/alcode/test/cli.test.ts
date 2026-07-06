@@ -1,6 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type AlcodeArgs, buildRunConfig, parseAlcodeArgs, validateArgs } from "../src/cli.js";
+import {
+  type AlcodeArgs,
+  buildRunConfig,
+  checkLaunchGuards,
+  main,
+  parseAlcodeArgs,
+  validateArgs,
+} from "../src/cli.js";
+import { type SessionFrontmatter, writeInitialSessionFile } from "../src/session-file.js";
 
 function parse(flags: string[]): AlcodeArgs {
   return parseAlcodeArgs(["node", "alcode", ...flags]);
@@ -107,9 +118,128 @@ describe("buildRunConfig", () => {
   it("threads the caller env into the config so the child inherits the same source", () => {
     const parsed = parse(["--new", "--message", "go"]);
     const env = { FOO: "bar", ALIGNFIRST_CODE_SKIP_PERMISSIONS: "1", ALIGNFIRST_CODE_UNSET: "X,Y" };
-    const config = buildRunConfig(parsed, "/proj", "/proj/.plans/_coding-sessions/s.md", env);
+    const config = buildRunConfig(parsed, "/proj", "/proj/.plans/_alcode/s.md", env);
     expect(config.env).toBe(env);
     expect(config.skipPermissions).toBe(true);
     expect(config.unset).toEqual(["X", "Y"]);
+  });
+});
+
+describe("launch guards", () => {
+  let dir: string;
+  let realCwd: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "alcode-guards-"));
+    mkdirSync(join(dir, ".plans"));
+    realCwd = realpathSync(dir);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
+    return {
+      status: "running",
+      protocol: "spec",
+      ticket: "30",
+      model: null,
+      sessionId: null,
+      command: "alcode --new --protocol spec --ticket 30 --message go",
+      meta: null,
+      pid: process.pid,
+      cwd: realCwd,
+      startedAt: "2026-07-01T09:15:03.000Z",
+      endedAt: null,
+      exitReason: null,
+      ...overrides,
+    };
+  }
+
+  function seedRecord(name: string, overrides: Partial<SessionFrontmatter>): void {
+    writeInitialSessionFile(join(dir, ".plans", "30", "_alcode", name), makeFrontmatter(overrides));
+  }
+
+  function makeSink(): { write(text: string): void; text(): string } {
+    let buffer = "";
+    return {
+      write(text: string) {
+        buffer += text;
+      },
+      text: () => buffer,
+    };
+  }
+
+  async function run(flags: string[]): Promise<{ code: number; stderr: string }> {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({ argv: ["node", "alcode", ...flags], stdout, stderr, cwd: dir });
+    return { code, stderr: stderr.text() };
+  }
+
+  it("rejects an unknown resume id and lists the known recent sessions", async () => {
+    seedRecord("a.md", {
+      status: "succeeded",
+      sessionId: "aaa",
+      startedAt: "2026-07-01T09:00:00.000Z",
+    });
+    seedRecord("b.md", {
+      status: "failed",
+      sessionId: "bbb",
+      startedAt: "2026-07-01T10:00:00.000Z",
+    });
+    const { code, stderr } = await run(["--resume", "zzz", "--message", "hi"]);
+    expect(code).toBe(1);
+    expect(stderr).toContain("unknown session id zzz");
+    expect(stderr.indexOf("bbb")).toBeLessThan(stderr.indexOf("aaa")); // most recent first
+    expect(stderr).toContain("ticket 30");
+  });
+
+  it("says plainly when no session records exist at all", async () => {
+    const { code, stderr } = await run(["--resume", "zzz", "--message", "hi"]);
+    expect(code).toBe(1);
+    expect(stderr).toContain("no session records exist");
+  });
+
+  it("rejects resuming a session that is still running", async () => {
+    seedRecord("running.md", { sessionId: "abc" });
+    const { code, stderr } = await run(["--resume", "abc", "--message", "hi"]);
+    expect(code).toBe(1);
+    expect(stderr).toContain(`session abc is still running (pid ${process.pid})`);
+  });
+
+  it("rejects a protocol run while another run is active in the same worktree", async () => {
+    seedRecord("running.md", { sessionId: "abc" });
+    const { code, stderr } = await run(["--new", "--protocol", "plan", "--ticket", "31"]);
+    expect(code).toBe(1);
+    expect(stderr).toContain("a protocol run is already active in this worktree");
+    expect(stderr).toContain(`pid ${process.pid}`);
+  });
+
+  it("allows a protocol run when the active run sits in another worktree", () => {
+    const parsed = parse(["--new", "--protocol", "plan", "--ticket", "31"]);
+    const records = [
+      {
+        path: "/elsewhere/.plans/30/_alcode/r.md",
+        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
+      },
+    ];
+    expect(checkLaunchGuards(parsed, realCwd, records)).toBeUndefined();
+  });
+
+  it("exempts no-protocol invocations from the busy-worktree guard", () => {
+    const records = [
+      {
+        path: join(dir, ".plans", "30", "_alcode", "r.md"),
+        frontmatter: makeFrontmatter({ sessionId: "abc" }),
+      },
+      // A resumable (finished) record so only the busy-worktree guard is in play.
+      {
+        path: join(dir, ".plans", "30", "_alcode", "done.md"),
+        frontmatter: makeFrontmatter({ sessionId: "abc2", status: "succeeded" }),
+      },
+    ];
+    const answer = parse(["--resume", "abc2", "--message", "answer"]);
+    expect(checkLaunchGuards(answer, realCwd, records)).toBeUndefined();
+
+    const execute = parse(["--new", "--message", "Execute the plan"]);
+    expect(checkLaunchGuards(execute, realCwd, records)).toBeUndefined();
   });
 });

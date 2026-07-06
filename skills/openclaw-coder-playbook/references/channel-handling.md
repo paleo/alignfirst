@@ -45,7 +45,7 @@ Call the `message` tool (see `TOOLS.md` for the full schema) with:
 
 The tool returns the new thread's `chat_id` (which becomes our `THREAD_ID`). Capture it.
 
-**Discord thread discipline — critical.** `thread-create` must be your *first* user-facing action. After it, **every** post this turn — follow-ups, questions, and the final summary — MUST be a `message` call carrying the thread's `threadId`. Do **not** emit free-form assistant text at any point: on Discord it auto-streams to the *parent channel*, not the thread, which breaks the session. Keep your reasoning internal — the only thing the user sees is your `message` calls.
+**Discord thread discipline — critical.** `thread-create` must be your *first* user-facing action. After it, **every** post this turn — follow-ups, questions, and the final summary — MUST be a `message` call carrying the thread's `threadId`. Do **not** emit free-form assistant text at any point: on Discord it auto-streams to the *parent channel*, not the thread, which breaks the session. Planning notes between tool calls ("I have to open a thread first…", "Now let's sync the branch…") are free-form text too and land in the channel — keep them internal; the only thing the user sees is your `message` calls. Once your last `message` post is sent, end the turn with a final answer of exactly `NO_REPLY` — OpenClaw swallows it, nothing reaches the channel. Leftover observations go in the thread via `message`, or nowhere.
 
 #### Slack — just reply (Slack auto-threads)
 

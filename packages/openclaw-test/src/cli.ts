@@ -22,7 +22,7 @@ export async function dispatch(argv: string[]): Promise<void> {
       await initCommand(rest[0]);
       return;
     case "env":
-      envCommand(PACKAGE_DIR, rest);
+      await envCommand(PACKAGE_DIR, rest);
       return;
     case "run":
       await runCommand(PACKAGE_DIR, rest);

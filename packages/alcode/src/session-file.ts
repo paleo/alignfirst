@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 export interface SessionFrontmatter {
@@ -12,6 +19,12 @@ export interface SessionFrontmatter {
   // so the caller can stash context a later reader needs — e.g. an OpenClaw agent stashing the
   // originating thread target so the exec-completion wake can report back in the right thread.
   meta: string | null;
+  // alcode's own pid — lets a later scan tell a live `running` session from a stale record left by
+  // an interrupted run.
+  pid: number | null;
+  // Realpath alcode ran from. Scopes the single-protocol-run guard to the worktree (worktree
+  // `.plans/` symlinks back to the main project, so several worktrees share one `.plans/`).
+  cwd: string | null;
   startedAt: string;
   endedAt: string | null;
   exitReason: string | null;
@@ -35,9 +48,7 @@ export function resolveSessionFilePath(
   now: Date,
   fileExists: (path: string) => boolean = existsSync,
 ): string {
-  const dir = ticket
-    ? join(cwd, ".plans", ticket, "coding-sessions")
-    : join(cwd, ".plans", "_coding-sessions");
+  const dir = ticket ? join(cwd, ".plans", ticket, "_alcode") : join(cwd, ".plans", "_alcode");
   const stamp = formatStamp(now);
   let candidate = join(dir, `${stamp}.md`);
   let suffix = 2;
@@ -106,6 +117,82 @@ export function readCompletion(sessionFilePath: string): SessionCompletion {
   return { frontmatter, result };
 }
 
+export interface SessionRecord {
+  path: string;
+  frontmatter: SessionFrontmatter;
+}
+
+// Lists every session record for a project root: `.plans/_alcode/*.md` plus each ticket's
+// `.plans/<ticket>/_alcode/*.md`. The session files are the registry — no separate registry file.
+// Self-healing: a `running` record whose pid is gone is a stale leftover from an interrupted run;
+// it gets sealed in passing so the launch guards never block on dead state. The returned records
+// reflect the post-healing state.
+export function listSessionRecords(cwd: string): SessionRecord[] {
+  const plansDir = join(cwd, ".plans");
+  const sessionDirs = [join(plansDir, "_alcode")];
+  for (const entry of readEntries(plansDir)) {
+    if (entry.isDirectory() && entry.name !== "_alcode") {
+      sessionDirs.push(join(plansDir, entry.name, "_alcode"));
+    }
+  }
+  const records: SessionRecord[] = [];
+  for (const dir of sessionDirs) {
+    for (const entry of readEntries(dir)) {
+      if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+      const path = join(dir, entry.name);
+      const frontmatter = readFrontmatterOrSkip(path);
+      if (frontmatter) records.push({ path, frontmatter: sealIfStale(path, frontmatter) });
+    }
+  }
+  return records;
+}
+
+function readEntries(dir: string): Dirent[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+// A malformed file (e.g. missing its frontmatter block) must not block every future launch.
+function readFrontmatterOrSkip(path: string): SessionFrontmatter | undefined {
+  try {
+    return readCompletion(path).frontmatter;
+  } catch {
+    return;
+  }
+}
+
+function sealIfStale(path: string, frontmatter: SessionFrontmatter): SessionFrontmatter {
+  if (frontmatter.status !== "running") return frontmatter;
+  if (frontmatter.pid !== null && isPidAlive(frontmatter.pid)) return frontmatter;
+  const update: CompletionUpdate = {
+    status: "failed",
+    endedAt: new Date().toISOString(),
+    exitReason: "terminated",
+    sessionId: frontmatter.sessionId,
+    result: `Sealed as interrupted: process ${frontmatter.pid ?? "(unknown)"} is gone.`,
+  };
+  applyCompletion(path, update);
+  return {
+    ...frontmatter,
+    status: update.status,
+    endedAt: update.endedAt,
+    exitReason: update.exitReason,
+  };
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: the process exists but belongs to another user — alive. ESRCH (or anything else): dead.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 // --- Frontmatter serialization (dependency-free, round-trips with parseFrontmatter) ---
 
 export function serializeFrontmatter(frontmatter: SessionFrontmatter): string {
@@ -115,8 +202,9 @@ export function serializeFrontmatter(frontmatter: SessionFrontmatter): string {
   return `---\n${lines.join("\n")}\n---\n`;
 }
 
-function serializeValue(value: string | null): string {
+function serializeValue(value: string | number | null): string {
   if (value === null) return "";
+  if (typeof value === "number") return String(value);
   return needsQuote(value) ? JSON.stringify(value) : value;
 }
 
@@ -151,10 +239,18 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     sessionId: map.sessionId ?? null,
     command: map.command ?? "",
     meta: map.meta ?? null,
+    pid: parsePid(map.pid),
+    cwd: map.cwd ?? null,
     startedAt: map.startedAt ?? "",
     endedAt: map.endedAt ?? null,
     exitReason: map.exitReason ?? null,
   };
+}
+
+function parsePid(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined) return null;
+  const pid = Number(raw);
+  return Number.isFinite(pid) ? pid : null;
 }
 
 function parseValue(raw: string): string | null {

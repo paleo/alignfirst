@@ -169,7 +169,11 @@ export function createQaBusState() {
     createThread(input: QaBusCreateThreadInput) {
       const accountId = normalizeAccountId(input.accountId);
       const thread: QaBusThread = {
-        id: `thread-${randomUUID()}`,
+        // The conversation prefix keeps thread SESSIONS attributable to their conversation: with
+        // real-shaped Discord thread session keys the key carries only the thread id, and the
+        // runner matches trajectory sessions by `sessionKey.includes(conversationId)`. Real Discord
+        // thread ids are opaque snowflakes, so the prefix is fidelity-neutral.
+        id: `${input.conversationId}-thread-${randomUUID()}`,
         accountId,
         conversationId: input.conversationId,
         title: input.title,
@@ -227,7 +231,7 @@ export function createQaBusState() {
       return readQaBusMessage({ messages, input });
     },
     searchMessages(input: QaBusSearchMessagesInput) {
-      return searchQaBusMessages({ messages, input });
+      return searchQaBusMessages({ messages, threads, input });
     },
     poll(input: QaBusPollInput = {}) {
       return pollQaBusEvents({ events, cursor, input });

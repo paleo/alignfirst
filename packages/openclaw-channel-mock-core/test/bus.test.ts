@@ -54,7 +54,7 @@ describe("bus HTTP round-trip", () => {
       "/v1/actions/thread-create",
       { conversationId: "sample-project", title: "T" },
     );
-    expect(createResp.thread.id.startsWith("thread-")).toBe(true);
+    expect(createResp.thread.id.startsWith("sample-project-thread-")).toBe(true);
     expect(createResp.thread.conversationId).toBe("sample-project");
 
     await post<{ message: unknown }>(fixture.baseUrl, "/v1/outbound/message", {
@@ -73,6 +73,31 @@ describe("bus HTTP round-trip", () => {
     expect(kinds).toContain("outbound-message");
     const outbound = poll.events.find((e) => e.kind === "outbound-message");
     expect(outbound?.message?.threadId).toBe(createResp.thread.id);
+  });
+
+  it("search rescopes a thread id passed as conversationId (a thread is a channel)", async () => {
+    const createResp = await post<{ thread: { id: string } }>(
+      fixture.baseUrl,
+      "/v1/actions/thread-create",
+      { conversationId: "sample-project", title: "T" },
+    );
+    await post(fixture.baseUrl, "/v1/outbound/message", {
+      to: "channel:sample-project",
+      text: "root message",
+      senderId: "openclaw",
+    });
+    await post(fixture.baseUrl, "/v1/outbound/message", {
+      to: `thread:sample-project/${createResp.thread.id}`,
+      text: "thread message",
+      senderId: "openclaw",
+    });
+
+    const search = await post<{ messages: Array<{ text: string }> }>(
+      fixture.baseUrl,
+      "/v1/actions/search",
+      { conversationId: createResp.thread.id },
+    );
+    expect(search.messages.map((m) => m.text)).toEqual(["thread message"]);
   });
 
   it("GET /health and /v1/state work", async () => {

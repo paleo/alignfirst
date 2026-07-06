@@ -1,12 +1,14 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 import { parseArgs } from "node:util";
 
 import { renderGuide } from "./guide.js";
 import {
   assertPlansGate,
+  listSessionRecords,
   resolveSessionFilePath,
   type SessionFrontmatter,
+  type SessionRecord,
   writeInitialSessionFile,
 } from "./session-file.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
@@ -87,9 +89,16 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
     return 1;
   }
 
+  const realCwd = realpathSync(cwd);
+  const guardError = checkLaunchGuards(parsed, realCwd, listSessionRecords(cwd));
+  if (guardError) {
+    stderr.write(`${guardError}\n`);
+    return 1;
+  }
+
   const now = new Date();
   const sessionFilePath = resolveSessionFilePath(cwd, parsed.ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now));
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now, realCwd));
   stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
   const result = await runClaude(buildRunConfig(parsed, cwd, sessionFilePath, env), stdout);
@@ -100,7 +109,55 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
   return result.status === "succeeded" ? 0 : 1;
 }
 
-function buildFrontmatter(parsed: AlcodeArgs, now: Date): SessionFrontmatter {
+// Fail-fast launch guards, run against the (healed) session records before anything is written.
+// Returns the error to print, or `undefined` when the launch may proceed.
+export function checkLaunchGuards(
+  parsed: AlcodeArgs,
+  realCwd: string,
+  records: SessionRecord[],
+): string | undefined {
+  if (parsed.resume !== undefined) {
+    // A resumed run writes a new session file carrying the same sessionId as the original, so one
+    // id can match several records — a running status on any of them blocks.
+    const matches = records.filter((r) => r.frontmatter.sessionId === parsed.resume);
+    if (matches.length === 0) return unknownResumeError(parsed.resume, records);
+    const running = matches.find((r) => r.frontmatter.status === "running");
+    if (running) {
+      return (
+        `Error: session ${parsed.resume} is still running (pid ${running.frontmatter.pid}); ` +
+        "wait for it to finish or kill it."
+      );
+    }
+  }
+  // Protocol runs only: plain messages (answers, questions, plan executions) may run at any time.
+  if (parsed.protocol !== undefined) {
+    const busy = records.find(
+      (r) => r.frontmatter.status === "running" && r.frontmatter.cwd === realCwd,
+    );
+    if (busy) {
+      return (
+        `Error: a protocol run is already active in this worktree (${busy.path}, ` +
+        `pid ${busy.frontmatter.pid}); one protocol run at a time per worktree.`
+      );
+    }
+  }
+  return;
+}
+
+function unknownResumeError(resume: string, records: SessionRecord[]): string {
+  if (records.length === 0) {
+    return `Error: unknown session id ${resume}; no session records exist under .plans/.`;
+  }
+  const recent = [...records]
+    .sort((a, b) => b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt))
+    .slice(0, 5)
+    .map(({ frontmatter: f }) => {
+      return `  ${f.sessionId ?? "(no id)"}  ${f.status}  ${f.startedAt}  ticket ${f.ticket ?? "-"}`;
+    });
+  return `Error: unknown session id ${resume}. Known recent sessions:\n${recent.join("\n")}`;
+}
+
+function buildFrontmatter(parsed: AlcodeArgs, now: Date, realCwd: string): SessionFrontmatter {
   return {
     status: "running",
     protocol: parsed.protocol ?? null,
@@ -109,6 +166,8 @@ function buildFrontmatter(parsed: AlcodeArgs, now: Date): SessionFrontmatter {
     sessionId: null,
     command: formatCommand(parsed),
     meta: parsed.meta ?? null,
+    pid: process.pid,
+    cwd: realCwd,
     startedAt: now.toISOString(),
     endedAt: null,
     exitReason: null,
@@ -223,7 +282,7 @@ export function validateArgs(args: AlcodeArgs): string | undefined {
   return;
 }
 
-// The ticket becomes a `.plans/<ticket>/coding-sessions/…` path segment. Ticket formats vary by
+// The ticket becomes a `.plans/<ticket>/_alcode/…` path segment. Ticket formats vary by
 // consumer repo (numeric here, but e.g. `AB-123` elsewhere), so allow a permissive charset while
 // blocking path separators and `..` traversal that could escape `.plans/`.
 function isPathSafeTicket(ticket: string): boolean {

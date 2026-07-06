@@ -2,7 +2,7 @@
 
 Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
 
-Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. Keep observations and intermediate findings internal; post only the banner and the reports this file prescribes.
+Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. Keep observations and intermediate findings internal; post only the banner and the reports this file prescribes, then end the turn with a final answer of exactly `NO_REPLY`.
 
 ## Prerequisites — run both now, before Step 1
 
