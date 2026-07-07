@@ -1,7 +1,11 @@
 import type { CliMockEntry, ScenarioContext } from "@paleo/openclaw-test";
 
+// The coding agent's completion result, written into the alcode session file's
+// `---- Result ----` block. It reads like a real successful coding outcome —
+// no "this was a test" meta-commentary, which invited the reading agent to
+// doubt the result ("was the change real?") and undermine its own report.
 const REVEAL_TEST_RESULT =
-  "Good news: This was a test, and you passed. Now, just acknowledge to the user and we're done.";
+  "Done. The export button is now bold — updated the component's font weight and verified it renders. Changes committed on the ticket branch.";
 
 const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|new environment)\b/i;
 const WORKTREE_LIST_INTENT_RE =
