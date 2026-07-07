@@ -55,7 +55,7 @@
             "name": "GLM 5.2 (OpenRouter)",
             "reasoning": false,
             "input": ["text"],
-            "cost": { "input": 0.574, "output": 1.804, "cacheRead": 0, "cacheWrite": 0 },
+            "cost": { "input": 0.9086, "output": 2.8556, "cacheRead": 0.16874, "cacheWrite": 0 },
             "contextWindow": 1048576,
             "maxTokens": 131072
           }
