@@ -21,6 +21,7 @@ export interface MainOptions {
   stdout?: { write(s: string): void };
   stderr?: { write(s: string): void };
   cwd?: string;
+  userAgent?: string;
 }
 
 export function main(options?: MainOptions): number {
@@ -28,6 +29,7 @@ export function main(options?: MainOptions): number {
   const stdout = options?.stdout ?? process.stdout;
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
+  const userAgent = options?.userAgent ?? process.env.npm_config_user_agent ?? "";
 
   const { paths, unknownFlags, recursive, root, check, help, guide, search, version } =
     parseArgs(argv);
@@ -38,7 +40,7 @@ export function main(options?: MainOptions): number {
 
   for (const flag of unknownFlags) stderr.write(`Unknown option: ${flag} (ignored)\n`);
 
-  const pm = detectPackageManager(cwd);
+  const pm = detectPackageManager(cwd, userAgent);
 
   // Mode precedence (each prints only its own output, then returns): version → help → guide →
   // search → check → listing/read.
@@ -338,7 +340,16 @@ function renderReads(baseDir: string, files: FileTarget[], prefix: string): stri
   return `${blocks.join("\n\n")}\n`;
 }
 
-function detectPackageManager(cwd: string): PackageManagerCommands {
+function detectPackageManager(cwd: string, userAgent: string): PackageManagerCommands {
+  // We read the actual invocation, not the environment. `npm_config_user_agent` is set by every
+  // package-manager-mediated launch (`npm run`, `pnpm`, npx/dlx/bunx) and empty for a bare global
+  // binary. An empty agent therefore means the user ran the global `docmap` directly — so bare
+  // `docmap` is the command that just worked, and the only one we can guarantee works here. We
+  // suggest it even inside a project with a lockfile: a nearby lockfile does not imply a `docmap`
+  // script, and `npm run docmap` would then be a dead command. A user who wants the project's
+  // pinned version runs `npm run docmap` themselves, which sets the agent and takes the walk below.
+  if (userAgent === "") return sameCommand("docmap");
+
   let dir = cwd;
   while (true) {
     if (existsSync(join(dir, "package-lock.json")))
@@ -348,20 +359,19 @@ function detectPackageManager(cwd: string): PackageManagerCommands {
     if (existsSync(join(dir, "bun.lockb")) || existsSync(join(dir, "bun.lock")))
       return sameCommand("bun run docmap");
     const parent = dirname(dir);
-    if (parent === dir) return fallbackCommand();
+    if (parent === dir) return runnerCommand(userAgent);
     dir = parent;
   }
 }
 
-// No lockfile found: docmap is likely not wired as a project script, so a bare `docmap` would
-// assume a global install. Suggest the package-runner form instead, picking the runner from the
-// manager that launched this process (npm_config_user_agent) and defaulting to npx, which ships
-// with every Node install.
-function fallbackCommand(): PackageManagerCommands {
-  const agent = process.env.npm_config_user_agent ?? "";
-  if (agent.startsWith("pnpm")) return sameCommand("pnpm dlx @paleo/docmap");
-  if (agent.startsWith("yarn")) return sameCommand("yarn dlx @paleo/docmap");
-  if (agent.startsWith("bun")) return sameCommand("bunx @paleo/docmap");
+// A package manager launched us (agent is set) but no lockfile was found: docmap is not wired as a
+// project script, so suggest the manager's package-runner form, defaulting to npx (every Node
+// install ships it). A global install invoked through `npx @paleo/docmap` lands here too and
+// correctly keeps the npx suggestion.
+function runnerCommand(userAgent: string): PackageManagerCommands {
+  if (userAgent.startsWith("pnpm")) return sameCommand("pnpm dlx @paleo/docmap");
+  if (userAgent.startsWith("yarn")) return sameCommand("yarn dlx @paleo/docmap");
+  if (userAgent.startsWith("bun")) return sameCommand("bunx @paleo/docmap");
   return sameCommand("npx @paleo/docmap");
 }
 

@@ -28,6 +28,8 @@ The `--guide` text lives as Markdown in `packages/docmap/templates/guide.md` wit
 
 Help and guide command lists are built from shared `CommandRow[]` builders (`browseCommands`, `moreCommands`, `guideCommands`) and rendered through one `renderCommands()` helper that pads each command to the group's longest, so the `#` comments stay vertically aligned for any package-manager prefix. Short help, full help (`Commands:` + `More:`), and the guide's `{{COMMANDS}}` block all flow through it; each group aligns independently.
 
+`detectPackageManager()` chooses that prefix from the **actual invocation**, so every suggested command is one that works in the situation the user is in. It reads `npm_config_user_agent`, which every package-manager-mediated launch sets and a bare global binary leaves empty. An **empty** agent means the user ran the global `docmap` directly, so it suggests bare `docmap` — even inside a project with a lockfile, since a lockfile does not imply a `docmap` script and `npm run docmap` would then be a dead command. A **set** agent walks up from `cwd` for a lockfile: found → the project-script form (`npm run docmap`, `pnpm docmap`, …); none found → the manager's package-runner form (`npx @paleo/docmap`, `pnpm dlx …`, defaulting to npx). A global install invoked through `npx @paleo/docmap` sets the agent, so it keeps the npx suggestion rather than the bare one.
+
 ## CLI Flow
 
 `main()` in `src/cli.ts` drives everything:

@@ -27,7 +27,7 @@ function run(args: string[], fixtureDir: string) {
   return invoke(["node", "docmap", "--root", fixtureDir, ...args], process.cwd());
 }
 
-function invoke(argv: string[], cwd: string) {
+function invoke(argv: string[], cwd: string, userAgent?: string) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = main({
@@ -43,6 +43,7 @@ function invoke(argv: string[], cwd: string) {
       },
     },
     cwd,
+    userAgent,
   });
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
@@ -536,5 +537,53 @@ describe("extractFallbackTitle", () => {
 
   it("returns undefined when there is no heading", () => {
     expect(extractFallbackTitle("Just some text\nwithout any heading")).toBeUndefined();
+  });
+});
+
+describe("package-manager prefix in help", () => {
+  // Walk from "/" so no lockfile is found and detection falls through to the invocation-based
+  // fallback; --root still points at a real fixture so the listing renders.
+  function help(userAgent: string | undefined) {
+    return invoke(["node", "docmap", "--root", fixtures.basic, "--help"], "/", userAgent).stdout;
+  }
+
+  it("suggests the bare global binary when no runner agent is set", () => {
+    const out = help("");
+    expect(out).toContain("docmap --guide");
+    expect(out).not.toContain("npx @paleo/docmap");
+    expect(out).not.toContain("npm run docmap");
+  });
+
+  it("keeps the npx suggestion when launched through npx, even if installed globally", () => {
+    const out = help("npm/10.0.0 node/v24.0.0 linux x64 workspaces/false");
+    expect(out).toContain("npx @paleo/docmap --guide");
+  });
+
+  it("suggests pnpm dlx under a pnpm runner", () => {
+    expect(help("pnpm/9.0.0 npm/? node/v24.0.0")).toContain("pnpm dlx @paleo/docmap");
+  });
+
+  it("suggests bunx under a bun runner", () => {
+    expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @paleo/docmap");
+  });
+
+  it("suggests the npm run script when launched via npm inside a lockfile'd project", () => {
+    const out = invoke(
+      ["node", "docmap", "--root", fixtures.basic, "--help"],
+      process.cwd(),
+      "npm/10.0.0 node/v24.0.0 linux x64",
+    ).stdout;
+    expect(out).toContain("npm run docmap");
+  });
+
+  it("suggests the bare binary even inside a lockfile'd project when run as a global binary", () => {
+    const out = invoke(
+      ["node", "docmap", "--root", fixtures.basic, "--help"],
+      process.cwd(),
+      "",
+    ).stdout;
+    expect(out).toContain("docmap --guide");
+    expect(out).not.toContain("npm run docmap");
+    expect(out).not.toContain("npx @paleo/docmap");
   });
 });

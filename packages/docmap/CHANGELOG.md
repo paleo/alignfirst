@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.7.2
+
+### Patch Changes
+
+- Improve the bare `docmap` command when the CLI is run as a global binary.
+
 ## 0.7.1
 
 ### Patch Changes
