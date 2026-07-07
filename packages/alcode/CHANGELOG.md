@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.5.1
+
+### Patch Changes
+
+- The OpenClaw guide now omits `--meta` on Slack (the completion report is a plain-text reply, since Slack exposes no `send`/`thread-reply` action) and reserves it for a Discord thread you created yourself, and it no longer emits `HEARTBEAT_OK` (a wake with nothing to report ends with `NO_REPLY`).
+
 ## 0.5.0
 
 ### Minor Changes

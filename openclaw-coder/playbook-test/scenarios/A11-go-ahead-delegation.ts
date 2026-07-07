@@ -1,12 +1,9 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
 import {
-  COMPLETION_RE,
-  FORWARD_LOOKING_ACK_RE,
-  isAnnouncement,
-  LAUNCH_OR_SETUP_RE,
-  STARTED_ACK_RE,
+  waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
+  waitForCompletionReport,
 } from "./_lib/coding-session.ts";
 import {
   assertBranchForTicket,
@@ -28,20 +25,6 @@ import type { Step } from "./_lib/types.ts";
 // A<S> → ABC-0<S>N (README convention); scenario A11 → ABC-011N, first ticket ABC-0110.
 const TICKET_ID = "ABC-0110";
 const PROJECT = "nimbus";
-
-const STARTED_RUBRIC =
-  "A short message telling the user that a background task has been kicked off through the coding " +
-  "agent and is now running — e.g. 'je lance le travail', 'started', 'working on it in the " +
-  "background', 'agent lancé en background', 'je te préviens dès que c'est terminé'. A promise to " +
-  "report back when it's done still counts (the work is not finished yet). Does NOT claim the work " +
-  "is already finished.";
-
-const COMPLETION_RUBRIC =
-  "A message reporting that a previously-launched background coding-agent task has FINISHED — the " +
-  "delegated coding session completed and the agent is relaying the outcome (the change is done, or " +
-  "a summary/result of the AAD/coding session, often with a checkmark). Examples: 'c'est fait', " +
-  "'the coding agent finished successfully', 'j'ai terminé', '✅ … finished'. Does NOT merely say " +
-  "the work is still starting or in progress.";
 
 // The report block asserts a bootstrap-status keyword, as in workspace-flow.ts.
 const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours|échou)/i;
@@ -221,20 +204,13 @@ async function runThreadDelegationPhase(
   ctx.assertEqual(input.background, true, "alcode exec: background === true");
   ctx.assertEqual(input.timeout, 0, "alcode exec: timeout === 0");
 
-  const noFailFast = { failFastCliMockGraceMs: false, failFastUnmatchedOutbounds: false } as const;
-
-  const ack = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      STARTED_ACK_RE.test(m.text),
-    { timeoutMs: 150_000, sinceCursor: goAheadCursor, ...noFailFast },
-  );
-  ctx.log({ attachTo: ack.entry, label: "background-started ack received" });
-  await ctx.judgeLLM({
-    attachTo: ack.entry,
-    message: ack.match.text,
-    rubric: STARTED_RUBRIC,
+  // The started ack, classified by a batch judge over the thread's outbounds (tolerant of
+  // phrasing/language and interleaved reasoning narration).
+  await waitForBackgroundStartedAck(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor: goAheadCursor,
+    timeoutMs: 150_000,
     label: "background-started-ack",
   });
 
@@ -244,16 +220,9 @@ async function runThreadDelegationPhase(
   });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
-  // Scan from BEFORE the ack (goAheadCursor), as in A10: if a slow poll lands the ack and the
-  // completion in one batch, an ack-relative cursor would skip the completion.
-  const completion = await waitForCompletionWake(ctx, threadId, goAheadCursor, noFailFast);
-  ctx.log({ attachTo: completion.entry, label: "completion-wake report received" });
-  await ctx.judgeLLM({
-    attachTo: completion.entry,
-    message: completion.match.text,
-    rubric: COMPLETION_RUBRIC,
-    label: "completion-wake-report",
-  });
+  // Scan from BEFORE the ack (goAheadCursor): the batch judge picks the FINISHED report out of the
+  // thread window, distinguishing it from the earlier ack and any launch banner.
+  await waitForCompletionWake(ctx, threadId, goAheadCursor);
 
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
 }
@@ -263,23 +232,15 @@ async function runThreadDelegationPhase(
  * before rethrowing — a stale `ts` distinguishes a wake-scheduler wedge (the incident) from a slow
  * model turn.
  */
-async function waitForCompletionWake(
-  ctx: ScenarioContext,
-  threadId: string,
-  sinceCursor: number,
-  noFailFast: { failFastCliMockGraceMs: false; failFastUnmatchedOutbounds: false },
-) {
+async function waitForCompletionWake(ctx: ScenarioContext, threadId: string, sinceCursor: number) {
   try {
-    return await ctx.waitForOutbound(
-      (m) =>
-        m.direction === "outbound" &&
-        m.conversation.id === ctx.conversationId &&
-        m.threadId === threadId &&
-        COMPLETION_RE.test(m.text) &&
-        !isAnnouncement(FORWARD_LOOKING_ACK_RE, m.text) &&
-        !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
-      { timeoutMs: 240_000, sinceCursor, ...noFailFast },
-    );
+    return await waitForCompletionReport(ctx, {
+      conversationId: ctx.conversationId,
+      threadId,
+      sinceCursor,
+      timeoutMs: 240_000,
+      label: "completion-wake-report",
+    });
   } catch (error) {
     const hb = await ctx.execInGateway(["openclaw", "gateway", "call", "last-heartbeat"], {
       timeoutMs: 15_000,

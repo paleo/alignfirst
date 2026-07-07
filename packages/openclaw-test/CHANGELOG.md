@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.14.0
+
+### Minor Changes
+
+- Export the `BusMessage` type, so scenarios can annotate the messages returned by `poll` and `waitForOutbound`.
+
 ## 0.13.0
 
 ### Minor Changes

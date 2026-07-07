@@ -1,12 +1,9 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
 import {
-  COMPLETION_RE,
-  FORWARD_LOOKING_ACK_RE,
-  isAnnouncement,
-  LAUNCH_OR_SETUP_RE,
-  STARTED_ACK_RE,
+  waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
+  waitForCompletionReport,
 } from "./_lib/coding-session.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -16,20 +13,6 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 // A<S> → ABC-0<S>N (README convention); scenario A10 → ABC-010N, first ticket ABC-0100.
 const TICKET_ID = "ABC-0100";
 const PROJECT = "nimbus";
-
-const STARTED_RUBRIC =
-  "A short message telling the user that a background task has been kicked off through the coding " +
-  "agent and is now running — e.g. 'je lance le travail', 'started', 'working on it in the " +
-  "background', 'agent lancé en background', 'je te préviens dès que c'est terminé'. A promise to " +
-  "report back when it's done still counts (the work is not finished yet). Does NOT claim the work " +
-  "is already finished.";
-
-const COMPLETION_RUBRIC =
-  "A message reporting that a previously-launched background coding-agent task has FINISHED — the " +
-  "delegated coding session completed and the agent is relaying the outcome (the change is done, or " +
-  "a summary/result of the AAD/coding session, often with a checkmark). Examples: 'c'est fait', " +
-  "'the coding agent finished successfully', 'j'ai terminé', '✅ … finished'. Does NOT merely say " +
-  "the work is still starting or in progress.";
 
 /**
  * Regression for the real `@paleo/alcode` foreground run driven as an OpenClaw background exec. The
@@ -86,28 +69,15 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     );
   }
 
-  // Structural, single-match predicates (no per-message classifier). `waitForOutbound` returns the
-  // first match in a poll batch but advances the cursor past the whole batch, so each wait must
-  // match exactly ONE target, else a later message sharing a batch with an earlier match is skipped.
-  const noFailFast = { failFastCliMockGraceMs: false, failFastUnmatchedOutbounds: false } as const;
-
-  // Immediate "started in the background" ack: an outbound in this conversation whose text carries a
-  // background-launch marker (only the ack matches — not the [WORK] header or worktree report). No
-  // threadId requirement here — STARTED_ACK_RE is the discriminator, and placement is enforced
-  // globally by the end-of-scenario channel-root sweep, which fails a free-streamed ack with the
-  // real cause instead of an ack-wait timeout.
-  const ack = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      STARTED_ACK_RE.test(m.text),
-    { timeoutMs: 150_000, sinceCursor: starter.nextCursor, ...noFailFast },
-  );
-  ctx.log({ attachTo: ack.entry, label: "background-started ack received" });
-  await ctx.judgeLLM({
-    attachTo: ack.entry,
-    message: ack.match.text,
-    rubric: STARTED_RUBRIC,
+  // Immediate "started in the background" ack, classified by a batch judge over the thread's
+  // outbounds (see `waitForBackgroundStartedAck`) — tolerant of phrasing/language and of interleaved
+  // reasoning narration. Free-streamed placement is enforced separately by the end-of-scenario
+  // channel-root sweep, which fails a leaked ack with the real cause instead of a wait timeout.
+  await waitForBackgroundStartedAck(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor: starter.nextCursor,
+    timeoutMs: 150_000,
     label: "background-started-ack",
   });
 
@@ -121,30 +91,15 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
   // Completion wake: when the backgrounded alcode exec exits, OpenClaw wakes THIS thread session
-  // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the session file and
-  // reports in the thread — the same session, so the completion carries the thread's id and lands in
-  // the exact-case conversation. Scan from `starter.nextCursor` (before the ack), not `ack.nextCursor`:
-  // if a slow poll lands the ack and completion in one batch, an ack-relative cursor would skip the
-  // completion. The predicate matches only the FINISHED report: COMPLETION_RE, minus the forward-
-  // looking FORWARD_LOOKING_ACK_RE (an ack that says "I'll tell you when done" — NOT the whole
-  // STARTED_ACK_RE, whose `arri[èe]re-plan` marker also appears in a genuine "…en arrière-plan est
-  // terminée" completion), and not a launch/setup line (a "Bootstrap: ready ✅ | Lancement…"
-  // workspace report carries a ✅ with no ack marker). Generous timeout: a real LLM wake turn.
-  const completion = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId === threadId &&
-      COMPLETION_RE.test(m.text) &&
-      !isAnnouncement(FORWARD_LOOKING_ACK_RE, m.text) &&
-      !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
-    { timeoutMs: 240_000, sinceCursor: starter.nextCursor, ...noFailFast },
-  );
-  ctx.log({ attachTo: completion.entry, label: "completion-wake report received" });
-  await ctx.judgeLLM({
-    attachTo: completion.entry,
-    message: completion.match.text,
-    rubric: COMPLETION_RUBRIC,
+  // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the session
+  // file and reports in the thread — the same session, so the completion carries the thread's id.
+  // A batch judge picks the FINISHED report out of the thread window from `starter.nextCursor`,
+  // distinguishing it from the earlier ack and any launch banner. Generous timeout: a real LLM wake turn.
+  await waitForCompletionReport(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor: starter.nextCursor,
+    timeoutMs: 240_000,
     label: "completion-wake-report",
   });
 

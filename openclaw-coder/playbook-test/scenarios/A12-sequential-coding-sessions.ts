@@ -7,12 +7,9 @@ import {
   nthMatchingCall,
 } from "./_lib/agent-tool-calls.ts";
 import {
-  COMPLETION_RE,
-  FORWARD_LOOKING_ACK_RE,
-  isAnnouncement,
-  LAUNCH_OR_SETUP_RE,
-  STARTED_ACK_RE,
+  waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
+  waitForCompletionReport,
 } from "./_lib/coding-session.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -22,20 +19,6 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 // A<S> → ABC-0<S>N (README convention); scenario A12 → ABC-012N, first ticket ABC-0120.
 const TICKET_ID = "ABC-0120";
 const PROJECT = "nimbus";
-
-const STARTED_RUBRIC =
-  "A short message telling the user that a background task has been kicked off through the coding " +
-  "agent and is now running — e.g. 'je lance le travail', 'started', 'working on it in the " +
-  "background', 'agent lancé en background', 'je te préviens dès que c'est terminé'. A promise to " +
-  "report back when it's done still counts (the work is not finished yet). Does NOT claim the work " +
-  "is already finished.";
-
-const COMPLETION_RUBRIC =
-  "A message reporting that a previously-launched background coding-agent task has FINISHED — the " +
-  "delegated coding session completed and the agent is relaying the outcome (the change is done, or " +
-  "a summary/result of the AAD/coding session, often with a checkmark). Examples: 'c'est fait', " +
-  "'the coding agent finished successfully', 'j'ai terminé', '✅ … finished'. Does NOT merely say " +
-  "the work is still starting or in progress.";
 
 // The launch invocation, not the `alcode --openclaw-guide` read (also an alcode exec).
 const isAlcodeLaunch = (call: AgentToolCall): boolean =>
@@ -176,23 +159,14 @@ async function expectDelegationChain(
   );
   ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: wake targets a --session-key`);
 
-  // Structural, single-match predicates (no per-message classifier). `waitForOutbound` returns the
-  // first match in a poll batch but advances the cursor past the whole batch, so each wait must
-  // match exactly ONE target, else a later message sharing a batch with an earlier match is skipped.
-  const noFailFast = { failFastCliMockGraceMs: false, failFastUnmatchedOutbounds: false } as const;
-
-  const ack = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      STARTED_ACK_RE.test(m.text),
-    { timeoutMs: 150_000, sinceCursor, ...noFailFast },
-  );
-  ctx.log({ attachTo: ack.entry, label: `background-started ack #${launchIndex} received` });
-  await ctx.judgeLLM({
-    attachTo: ack.entry,
-    message: ack.match.text,
-    rubric: STARTED_RUBRIC,
+  // The started ack: a batch judge over the thread's outbounds (see `waitForBackgroundStartedAck`).
+  // Tolerant of phrasing/language and of interleaved reasoning narration — the message that tells
+  // the user the work is running qualifies whatever its exact shape.
+  await waitForBackgroundStartedAck(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor,
+    timeoutMs: 150_000,
     label: `background-started-ack-${launchIndex}`,
   });
 
@@ -203,30 +177,15 @@ async function expectDelegationChain(
   });
   ctx.log(`coding-session file #${launchIndex} succeeded: ${sessionFilePath}`);
 
-  // Phase 1 scans from BEFORE the ack (`sinceCursor`), as in A10: if a slow poll lands the ack
-  // and the completion in one batch, an ack-relative cursor would skip the completion. Later
-  // phases scan from AFTER their ack instead: a duplicate wake of an EARLIER run (the native
-  // exec-exit notice on top of the chained wake, e.g. right after a gateway start) can re-report
-  // that run's outcome before this phase's ack and would satisfy the predicate. The batch hazard
-  // does not bite here — the completion trails the ack by at least the mock's streamDelayMs.
-  // The predicate matches only the FINISHED report: COMPLETION_RE, minus the forward-looking ack
-  // and launch/setup openings (see A10 for why not the whole STARTED_ACK_RE).
-  const completionCursor = launchIndex === 1 ? sinceCursor : ack.nextCursor;
-  const completion = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId === threadId &&
-      COMPLETION_RE.test(m.text) &&
-      !isAnnouncement(FORWARD_LOOKING_ACK_RE, m.text) &&
-      !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
-    { timeoutMs: 240_000, sinceCursor: completionCursor, ...noFailFast },
-  );
-  ctx.log({ attachTo: completion.entry, label: `completion report #${launchIndex} received` });
-  await ctx.judgeLLM({
-    attachTo: completion.entry,
-    message: completion.match.text,
-    rubric: COMPLETION_RUBRIC,
+  // The completion report: a batch judge picks the FINISHED report out of the thread window,
+  // distinguishing it from the earlier ack and any launch banner — so both phases scan from
+  // `sinceCursor` (phase 2's is taken before its inbound, so a stray duplicate wake of an earlier
+  // run sits before it and is not considered). The judge, not a cursor offset, does the disambiguation.
+  await waitForCompletionReport(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor,
+    timeoutMs: 240_000,
     label: `completion-wake-report-${launchIndex}`,
   });
 }

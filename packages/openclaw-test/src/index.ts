@@ -1,4 +1,5 @@
 export type {
+  BusMessage,
   ChannelId,
   MockCliRegisterMode,
   MockCliRegisterOptions,

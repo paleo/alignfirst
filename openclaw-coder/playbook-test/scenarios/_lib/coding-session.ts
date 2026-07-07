@@ -1,39 +1,151 @@
-import type { ScenarioContext } from "@paleo/openclaw-test";
+import type { BusMessage, ScenarioContext } from "@paleo/openclaw-test";
 
-// The "started" ack reliably carries one of these markers: either a promise to report back
-// ("je te préviens", "background") or a bare launch announcement ("je lance le travail",
-// "launching now") — a terse second delegation in a thread often uses the latter without any
-// forward-looking promise (e.g. qwen's "C'est noté — je lance l'ajout de l'infobulle"). Kept off
-// `en cours`, which also appears in some `[WORK]` headers. Used to DETECT the ack — not to subtract
-// it from a completion match (see FORWARD_LOOKING_ACK_RE for that).
-export const STARTED_ACK_RE =
-  /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|reviens|informe|je lance|lancement|launch|starting/i;
+// Two agent messages carry the delegation outcome — the "started in the background" ack and the
+// "finished" completion report. Both are classified by an LLM judge, never by a lexical regex: the
+// message a capable model actually emits varies too widely (a terse "je lance l'ajout de l'infobulle"
+// vs. a promise "je te préviens dès que c'est terminé"), and a regex both misses legitimate phrasings
+// and mis-catches reasoning narration ("let me launch the coding agent first…") as if it were the ack.
+// The judge reads intent. Each thread outbound is judged as it arrives (single-message rubric — the
+// framing the judge handles reliably); interleaved narration simply judges false and is skipped rather
+// than failing the run. `waitForBackgroundStartedAck` / `waitForCompletionReport` below own this.
 
-// The forward-looking subset of STARTED_ACK_RE — "I'll tell you when it's done". A completion wait
-// uses THIS (not STARTED_ACK_RE) to exclude the earlier ack: `background`/`arri[èe]re-plan` are not
-// tense-bearing, so a legitimate completion like "la tâche en arrière-plan est terminée ✅" would
-// otherwise be wrongly subtracted and the wait would time out on a correct run.
-export const FORWARD_LOOKING_ACK_RE = /pr[ée]vien|tiens au courant|reviens|d[èe]s que/i;
+const STARTED_ACK_RUBRIC =
+  "This is a single message an assistant posted in a chat thread after a user asked it to run a coding " +
+  "task. PASS if the message tells the user the coding work has been kicked off / launched and is now " +
+  "running (in the background), OR promises to report back when it is done. Both a present-tense launch " +
+  "('je lance le travail', 'working on it in the background', 'agent lancé en background') and a " +
+  "perfective launch announcement ('Deuxième étape lancée 🚀', 'work started', 'C'est noté — je lance " +
+  "l'ajout') qualify — the key is that it tells the USER the work is now underway. FAIL if it is only " +
+  "the assistant thinking out loud with no user-facing start signal ('let me launch the coding agent " +
+  "first', 'OK, branch is clean'), a bare workspace/[WORK] setup banner with no launch statement, or a " +
+  "claim that the work is already FINISHED.";
 
-// The completion report (after the exec wake) says the work FINISHED. Distinct from
-// FORWARD_LOOKING_ACK_RE (which promises a future update) so a completion wait can scan from before
-// the ack and still match only the completion — avoiding coupling to the ack wait's batch cursor.
-export const COMPLETION_RE = /termin[ée]|c'est (fait|bon)|finished|succès|success|done|✅/i;
+const COMPLETION_RUBRIC =
+  "This is a single message an assistant posted in a chat thread while running a coding task. PASS if it " +
+  "reports to the user that the coding task FINISHED — the delegated work completed and it is relaying " +
+  "the outcome (change done, or a result summary, often with a ✅): 'c'est fait', 'the coding agent " +
+  "finished successfully', 'j'ai terminé', '✅ … terminé'. FAIL if it merely says the work is still " +
+  "starting or in progress ('je te préviens dès que c'est terminé', 'je lance le travail'), or is a " +
+  "workspace/launch announcement that carries a ✅ only for setup readiness ('Bootstrap: ready ✅ | " +
+  "Lancement…').";
 
-// Launch/setup wording that must never satisfy a completion or findings wait: a workspace report
-// or launch announcement can carry a ✅ ("Bootstrap: ready ✅ | Lancement du coding agent…") with
-// no STARTED_ACK_RE marker, so COMPLETION_RE alone would match it.
-export const LAUNCH_OR_SETUP_RE = /lancement|je lance|launch|starting|d[ée]marr|bootstrap/i;
+const FINDINGS_RUBRIC =
+  "This is a single message an assistant posted in a chat thread after delegating a read-only " +
+  "investigation (a 'look into this' task, not a code change) to a coding agent that has finished. PASS " +
+  "if it relays the investigation FINDINGS to the user — a summary or answer from the analysis (a " +
+  "paraphrase 'D'après l'analyse, …' or a direct relay 'C'est fait.' / 'It's done.'), optionally with a " +
+  "trailing question or offer about next steps (which fix to apply, whether to proceed, open a ticket). " +
+  "FAIL if it is a launch/setup announcement (a worktree was created, the work has started) or pretends " +
+  "the coding work already started.";
 
-// Exclusion regexes identify ANNOUNCEMENTS — short ack / launch / setup lines whose marker sits in
-// the opening. A substantive findings or completion report can mention the same wording in a
-// closing offer ("…dis-moi le ID et je lance le workflow"), which must not disqualify it: test the
-// opening only, never the full text, when a regex is used to EXCLUDE a candidate.
-const ANNOUNCEMENT_OPENING_CHARS = 120;
+export interface JudgedReportOptions {
+  conversationId: string;
+  /** When set, only outbounds carrying this threadId are considered. */
+  threadId?: string;
+  sinceCursor: number;
+  timeoutMs: number;
+  /** Assertion label recorded on the judged messages. */
+  label: string;
+}
 
-/** True when `text` OPENS like the announcement `re` identifies (exclusion-side matching). */
-export function isAnnouncement(re: RegExp, text: string): boolean {
-  return re.test(text.slice(0, ANNOUNCEMENT_OPENING_CHARS));
+/** A thread outbound the judge accepted as the awaited report. */
+export interface Candidate {
+  message: BusMessage;
+}
+
+/**
+ * Wait for the agent to tell the user, in the thread, that the coding work started in the background.
+ * Tolerant of phrasing and language; interleaved reasoning narration is ignored (see STARTED_ACK_RUBRIC).
+ */
+export async function waitForBackgroundStartedAck(
+  ctx: ScenarioContext,
+  opts: JudgedReportOptions,
+): Promise<Candidate> {
+  return collectAndJudge(ctx, opts, STARTED_ACK_RUBRIC, "background-started ack");
+}
+
+/**
+ * Wait for the completion report — the agent relaying to the user, in the thread, that the delegated
+ * coding run finished. Call only after the session file reached `succeeded` (the ground truth). Tolerant
+ * of phrasing and language; a still-in-progress ack or a launch banner does not satisfy it (see COMPLETION_RUBRIC).
+ */
+export async function waitForCompletionReport(
+  ctx: ScenarioContext,
+  opts: JudgedReportOptions,
+): Promise<Candidate> {
+  return collectAndJudge(ctx, opts, COMPLETION_RUBRIC, "completion report");
+}
+
+/**
+ * Wait for the investigation findings — the agent relaying, in the thread, the result of a
+ * `read`-protocol delegation (A03). Judged per message like the ack/completion waits: tolerant of
+ * phrasing and language, and it judges the earlier launch/ack lines false rather than needing a regex
+ * to exclude them.
+ */
+export async function waitForFindingsReport(
+  ctx: ScenarioContext,
+  opts: JudgedReportOptions,
+): Promise<Candidate> {
+  return collectAndJudge(ctx, opts, FINDINGS_RUBRIC, "investigation findings report");
+}
+
+/**
+ * Poll the thread's outbounds and judge each new one, in order, against `rubric` — returning the first
+ * that passes. Throws on timeout. This replaces the old regex-select-then-`judgeLLM` pattern: a broad
+ * structural predicate collects EVERY candidate (via `ctx.poll`, which returns the whole batch —
+ * `waitForOutbound` would drop the non-first messages of a batch when it advances its cursor), and the
+ * judge decides intent per message, so narration and phrasing variance judge false and are skipped
+ * rather than failing the run. Judges once per fresh outbound (bounded judge cost). `what` names the
+ * awaited message for the timeout error.
+ */
+async function collectAndJudge(
+  ctx: ScenarioContext,
+  opts: JudgedReportOptions,
+  rubric: string,
+  what: string,
+): Promise<Candidate> {
+  const { conversationId, threadId, label } = opts;
+  const deadline = Date.now() + opts.timeoutMs;
+  let cursor = opts.sinceCursor;
+  let seen = 0;
+
+  const matches = (m: BusMessage): boolean =>
+    m.direction === "outbound" &&
+    m.conversation.id === conversationId &&
+    (threadId === undefined || m.threadId === threadId) &&
+    m.text.trim().length > 0;
+
+  while (Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    const { messages, nextCursor } = await ctx.poll({
+      sinceCursor: cursor,
+      timeoutMs: Math.min(remaining, 15_000),
+    });
+    cursor = nextCursor;
+    for (const message of messages.filter(matches)) {
+      ++seen;
+      if (await judgeMatches(ctx, rubric, label, message)) return { message };
+    }
+  }
+  throw new Error(
+    `${label}: no ${what} among ${seen} thread outbound(s) within ${opts.timeoutMs}ms`,
+  );
+}
+
+/** Judge one message against `rubric`; true iff it passes. A non-match must not throw the wait. */
+async function judgeMatches(
+  ctx: ScenarioContext,
+  rubric: string,
+  label: string,
+  message: BusMessage,
+): Promise<boolean> {
+  const { parsed } = await ctx.judgeLLMJson<{ matches: boolean; reason: string }>({
+    message: message.text,
+    prompt: rubric,
+    returnType: '{ "matches": boolean, "reason": string }',
+    label,
+  });
+  return parsed.matches === true;
 }
 
 /**
@@ -81,4 +193,6 @@ export async function waitForCodingSessionSucceeded(
   );
 }
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
