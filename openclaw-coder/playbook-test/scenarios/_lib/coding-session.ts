@@ -1,11 +1,13 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 
-// The "started in the background" ack reliably carries one of these markers (the alcode guide
-// tells the agent it launched a background run and will report back). Kept off `en cours`, which
-// also appears in some `[WORK]` headers. Used to DETECT the ack — not to subtract it from a
-// completion match (see FORWARD_LOOKING_ACK_RE for that).
+// The "started" ack reliably carries one of these markers: either a promise to report back
+// ("je te préviens", "background") or a bare launch announcement ("je lance le travail",
+// "launching now") — a terse second delegation in a thread often uses the latter without any
+// forward-looking promise (e.g. qwen's "C'est noté — je lance l'ajout de l'infobulle"). Kept off
+// `en cours`, which also appears in some `[WORK]` headers. Used to DETECT the ack — not to subtract
+// it from a completion match (see FORWARD_LOOKING_ACK_RE for that).
 export const STARTED_ACK_RE =
-  /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|reviens|informe/i;
+  /background|arri[èe]re-plan|pr[ée]vien|tiens au courant|reviens|informe|je lance|lancement|launch|starting/i;
 
 // The forward-looking subset of STARTED_ACK_RE — "I'll tell you when it's done". A completion wait
 // uses THIS (not STARTED_ACK_RE) to exclude the earlier ack: `background`/`arri[èe]re-plan` are not

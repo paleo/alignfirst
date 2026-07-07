@@ -144,7 +144,7 @@ export async function seedWorktree(
 }
 
 /**
- * Pre-seed a branch (no worktree). Runs `git branch <ticket>/<desc> develop`
+ * Pre-seed a branch (no worktree). Runs `git branch <ticket>/<desc> main`
  * in the project's main worktree.
  */
 export async function seedBranch(
@@ -155,7 +155,7 @@ export async function seedBranch(
 ): Promise<void> {
   const branch = `${ticket}/${desc}`;
   const exec = await ctx.execInGateway(
-    ["git", "-C", `${PROJECTS_DIR}/${project}`, "branch", branch, "develop"],
+    ["git", "-C", `${PROJECTS_DIR}/${project}`, "branch", branch, "main"],
     { timeoutMs: 15_000 },
   );
   if (exec.exitCode !== 0) {

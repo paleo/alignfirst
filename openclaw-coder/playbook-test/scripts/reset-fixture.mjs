@@ -13,6 +13,13 @@ import {
 const PROJECTS = "/home/claw/projects";
 const TEMPLATE = "/opt/playbook-test/fixtures/template";
 const FIXTURES = ["nimbus", "lumen"];
+// Each fixture's `origin` is a bare repo alongside its working tree, so
+// `git fetch` + `git merge --ff-only origin/main` behave like a real up-to-date
+// clone (a remote-less fixture made the playbook's new-work path — fetch +
+// fast-forward the base — hard-fail with "origin/main - not something we can
+// merge"). Kept out of PROJECTS so it never reads as a project directory.
+const ORIGINS = "/home/claw/.fixture-origins";
+const BASE_BRANCH = "main";
 
 async function main() {
   // Stop dev-servers from the prior run before wiping. Configured fixtures
@@ -24,12 +31,15 @@ async function main() {
       await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
     }
   }
-  // Wipe everything under PROJECTS unconditionally. The fixture template lives
-  // in /opt/playbook-test/fixtures/ and is re-copied below. pnpm's store is
-  // pinned to /home/claw/.pnpm-store via ~/.npmrc, so nothing here is worth keeping.
+  // Wipe everything under PROJECTS and the fixture origins unconditionally. The
+  // fixture template lives in /opt/playbook-test/fixtures/ and is re-copied below.
+  // pnpm's store is pinned to /home/claw/.pnpm-store via ~/.npmrc, so nothing
+  // here is worth keeping.
   for (const entry of readdirSync(PROJECTS)) {
     rmSync(`${PROJECTS}/${entry}`, { recursive: true, force: true });
   }
+  rmSync(ORIGINS, { recursive: true, force: true });
+  mkdirSync(ORIGINS, { recursive: true });
   for (const name of FIXTURES) {
     await resetFixture(name);
   }
@@ -51,9 +61,22 @@ async function resetFixture(name) {
     GIT_COMMITTER_NAME: "test",
     GIT_COMMITTER_EMAIL: "test@local",
   };
-  runGit(dst, ["init", "-q", "-b", "develop"], gitEnv);
+  runGit(dst, ["init", "-q", "-b", BASE_BRANCH], gitEnv);
   runGit(dst, ["add", "-A"], gitEnv);
   runGit(dst, ["commit", "-q", "-m", "fixture init"], gitEnv);
+
+  // Bare `origin` seeded with the fixture's initial commit, so the working tree
+  // is an up-to-date clone: `git fetch` finds the remote and
+  // `git merge --ff-only origin/<base>` is a clean no-op. `origin/HEAD` points
+  // at the base branch so `git remote show origin` reports it as the default.
+  const origin = `${ORIGINS}/${name}.git`;
+  runGit(dst, ["init", "-q", "--bare", "-b", BASE_BRANCH, origin], gitEnv);
+  runGit(dst, ["remote", "add", "origin", origin], gitEnv);
+  runGit(dst, ["push", "-q", "-u", "origin", BASE_BRANCH], gitEnv);
+  // A `production` branch too, so the remote matches DEVELOPMENT.md's convention
+  // (base `main`, production `production`) and `git branch -a` reads realistically.
+  runGit(dst, ["push", "-q", "origin", `${BASE_BRANCH}:refs/heads/production`], gitEnv);
+  runGit(dst, ["remote", "set-head", "origin", BASE_BRANCH], gitEnv);
 }
 
 // Per-name patches applied to the materialized copy of the shared template.

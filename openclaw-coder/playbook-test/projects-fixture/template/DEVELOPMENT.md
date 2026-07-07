@@ -36,8 +36,8 @@ pnpm workspace setup
 - **Ticket ID:** `ABC-###` (`TEC-###`, etc.).
 - **Branch:** `<ticket-id>/<type>` — e.g. `ABC-123/feat`, `ABC-456/fix`, `TEC-15/refactor`.
 - **Commit:** conventional, bracketed ticket — `feat: [ABC-1234] short description`.
-- **Base branch:** `develop`. Most PRs target `develop`.
-- **Production branch:** `main`. Hotfixes go directly to `main`.
+- **Base branch:** `main`. Most PRs target `main`.
+- **Production branch:** `production`. Hotfixes go directly to `production`.
 
 ## Documentation
 
