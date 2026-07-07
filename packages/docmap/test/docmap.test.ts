@@ -87,9 +87,10 @@ describe("top-level listing for large sets (large fixture)", () => {
     expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
   });
 
-  it("does not prefix the listing with short help", () => {
+  it("still prefixes the listing with short help", () => {
     const { stdout } = run([], fixtures.large);
-    expect(stdout).not.toContain("--guide");
+    expect(stdout).toContain("--guide");
+    expect(stdout).toContain("--search");
   });
 });
 

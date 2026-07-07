@@ -68,13 +68,15 @@ export function main(options?: MainOptions): number {
     return issues.length > 0 ? 1 : 0;
   }
 
-  // A bare invocation over a small doc set lists recursively and is the only case that
-  // prefixes the listing with short help. The threshold check walks the tree (capped at
-  // SMALL_SET_THRESHOLD), and renderListing below walks it again to format — an intentional
-  // double traversal, negligible at this threshold and not worth threading a shared pass through.
+  // A bare invocation always prefixes the listing with short help, so the command vocabulary
+  // stays discoverable no matter how large the tree is. The set size governs only the listing
+  // shape: a small set lists recursively, a large one keeps the top-level listing to avoid
+  // dumping the whole tree. The threshold check walks the tree (capped at SMALL_SET_THRESHOLD),
+  // and renderListing below walks it again to format — an intentional double traversal,
+  // negligible at this threshold and not worth threading a shared pass through.
   const bare = paths.length === 0 && !recursive;
+  if (bare) stdout.write(`${renderHelp(pm, { full: false })}\n`);
   const smallSet = bare && countFilesUpTo(baseDir, SMALL_SET_THRESHOLD) < SMALL_SET_THRESHOLD;
-  if (smallSet) stdout.write(`${renderHelp(pm, { full: false })}\n`);
 
   const { dirs, files } = classifyTargets(baseDir, paths, prefix);
 
