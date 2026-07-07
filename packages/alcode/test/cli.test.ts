@@ -9,9 +9,14 @@ import {
   checkLaunchGuards,
   main,
   parseAlcodeArgs,
+  resolveTicket,
   validateArgs,
 } from "../src/cli.js";
-import { type SessionFrontmatter, writeInitialSessionFile } from "../src/session-file.js";
+import {
+  type SessionFrontmatter,
+  type SessionRecord,
+  writeInitialSessionFile,
+} from "../src/session-file.js";
 
 function parse(flags: string[]): AlcodeArgs {
   return parseAlcodeArgs(["node", "alcode", ...flags]);
@@ -84,10 +89,8 @@ describe("validateArgs — parity with the retired .mjs", () => {
     );
   });
 
-  it("rejects --ticket without --new", () => {
-    expect(validate(["--resume", "s", "--ticket", "1", "--message", "m"])).toBe(
-      "Error: --ticket is only valid with --new.",
-    );
+  it("accepts --ticket with --resume as an explicit override", () => {
+    expect(validate(["--resume", "s", "--ticket", "1", "--message", "m"])).toBe(undefined);
   });
 
   it("accepts a valid spec run", () => {
@@ -111,6 +114,75 @@ describe("validateArgs — parity with the retired .mjs", () => {
     expect(validate(["--new", "--protocol", "plan", "--ticket", "../../etc"])).toBe(expected);
     expect(validate(["--new", "--protocol", "plan", "--ticket", "a/b"])).toBe(expected);
     expect(validate(["--new", "--protocol", "plan", "--ticket", ".."])).toBe(expected);
+    expect(validate(["--resume", "s", "--ticket", "a/b", "--message", "m"])).toBe(expected);
+  });
+});
+
+describe("resolveTicket", () => {
+  function record(overrides: Partial<SessionFrontmatter>): SessionRecord {
+    return {
+      path: "/proj/.plans/30/_alcode/r.md",
+      frontmatter: {
+        status: "succeeded",
+        protocol: "spec",
+        ticket: "30",
+        model: null,
+        sessionId: "abc",
+        command: "alcode --new --protocol spec --ticket 30 --message go",
+        meta: null,
+        pid: null,
+        cwd: "/proj",
+        startedAt: "2026-07-01T09:15:03.000Z",
+        endedAt: null,
+        exitReason: null,
+        ...overrides,
+      },
+    };
+  }
+
+  it("prefers the explicit --ticket over resume inheritance and message inference", () => {
+    const withResume = parse(["--resume", "abc", "--ticket", "9", "--message", "m"]);
+    expect(resolveTicket(withResume, [record({})])).toBe("9");
+
+    const withMessage = parse(["--new", "--ticket", "9", "--message", "See .plans/2/B2-plan.md"]);
+    expect(resolveTicket(withMessage, [])).toBe("9");
+  });
+
+  it("resume inherits the latest non-null ticket among the session's records", () => {
+    const records = [
+      record({ ticket: "30", startedAt: "2026-07-01T09:00:00.000Z" }),
+      record({ ticket: "31", startedAt: "2026-07-01T10:00:00.000Z" }),
+      record({ ticket: null, startedAt: "2026-07-01T11:00:00.000Z" }),
+      record({ ticket: "99", sessionId: "other", startedAt: "2026-07-01T12:00:00.000Z" }),
+    ];
+    expect(resolveTicket(parse(["--resume", "abc", "--message", "m"]), records)).toBe("31");
+  });
+
+  it("resume without any ticketed record yields no ticket", () => {
+    const records = [record({ ticket: null })];
+    expect(resolveTicket(parse(["--resume", "abc", "--message", "m"]), records)).toBeUndefined();
+  });
+
+  it("infers the ticket from a .plans/<ticket>/ path in the message", () => {
+    const parsed = parse(["--new", "--message", "Execute the plan: .plans/2/B2-plan.md"]);
+    expect(resolveTicket(parsed, [])).toBe("2");
+  });
+
+  it("ignores _-prefixed segments such as _alcode", () => {
+    const parsed = parse(["--new", "--message", "See .plans/_alcode/20260706-122913.md"]);
+    expect(resolveTicket(parsed, [])).toBeUndefined();
+  });
+
+  it("falls back to no ticket on conflicting inferred segments", () => {
+    const parsed = parse(["--new", "--message", "Compare .plans/2/a.md with .plans/3/b.md"]);
+    expect(resolveTicket(parsed, [])).toBeUndefined();
+
+    const repeated = parse(["--new", "--message", "Read .plans/2/a.md then .plans/2/b.md"]);
+    expect(resolveTicket(repeated, [])).toBe("2");
+  });
+
+  it("yields no ticket for a --new run without a message", () => {
+    expect(resolveTicket(parse(["--new"]), [])).toBeUndefined();
   });
 });
 

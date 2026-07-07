@@ -26,10 +26,14 @@ export function readsFile(call: AgentToolCall, fileName: string): boolean {
 
 /** True when the call is an `exec` whose command matches `pattern`. */
 export function execMatches(call: AgentToolCall, pattern: RegExp): boolean {
+  const command = execCommandOf(call);
+  return command !== undefined && pattern.test(command);
+}
+
+/** The exec `command` string, or undefined when the call is not an exec. */
+export function execCommandOf(call: AgentToolCall): string | undefined {
   const input = inputOf(call);
-  return (
-    call.toolName === "exec" && typeof input.command === "string" && pattern.test(input.command)
-  );
+  return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
 // `alcode` at a word boundary — a bare `alcode …` or an absolute path
@@ -54,4 +58,25 @@ export function invokesClaudeDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
   return CLAUDE_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command);
+}
+
+/**
+ * Stateful predicate for `waitForAgentToolCall` when the same call shape recurs in one scenario:
+ * the wait matches against ALL aggregated calls, so a plain predicate would resolve again on the
+ * first occurrence. Each distinct matching call (by `toolUseId`, met in the aggregated `ts` order)
+ * gets a 1-based index on first sight; the predicate fires only on the `n`-th — the newest of the
+ * first `n` matches. Single-use: the index map lives in the closure.
+ */
+export function nthMatchingCall(
+  predicate: (call: AgentToolCall) => boolean,
+  n: number,
+): (call: AgentToolCall) => boolean {
+  const indexByToolUseId = new Map<string, number>();
+  return (call) => {
+    if (!predicate(call)) return false;
+    const known = indexByToolUseId.get(call.toolUseId);
+    const index = known ?? indexByToolUseId.size + 1;
+    if (known === undefined) indexByToolUseId.set(call.toolUseId, index);
+    return index === n;
+  };
 }

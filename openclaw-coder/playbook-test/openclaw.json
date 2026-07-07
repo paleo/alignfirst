@@ -1,6 +1,7 @@
 {
   "gateway": {
-    "mode": "local"
+    "mode": "local",
+    "auth": { "mode": "none" }
   },
   "plugins": {
     "load": {
@@ -67,6 +68,7 @@
     "defaults": {
       "skills": ["alignfirst", "openclaw-coder-playbook"],
       "heartbeat": {
+        "every": "24h",
         "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       },
       "blockStreamingDefault": "on",

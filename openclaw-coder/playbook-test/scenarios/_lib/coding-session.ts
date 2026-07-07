@@ -40,12 +40,16 @@ export function isAnnouncement(re: RegExp, text: string): boolean {
  * wake rides on. `find` (not a shell glob) so an absent match in any single project dir does not
  * error; alcode writes under `<project>/.plans/<ticket>/_alcode/<stamp>.md` (or
  * `.plans/_alcode/` without a ticket), and worktree `.plans` symlinks back to the main
- * project so either path resolves. Returns the matching session file path.
+ * project so either path resolves. Sequential delegations of one ticket share the `_alcode/`
+ * dir, so an earlier run's file matches immediately: `minCount` (default 1) requires that many
+ * distinct succeeded files. Returns the newest matching session file path (the stamp in the file
+ * name sorts chronologically).
  */
 export async function waitForCodingSessionSucceeded(
   ctx: ScenarioContext,
-  opts: { ticketId?: string; timeoutMs: number },
+  opts: { ticketId?: string; timeoutMs: number; minCount?: number },
 ): Promise<string> {
+  const minCount = opts.minCount ?? 1;
   const sessionsDir = opts.ticketId ? `.plans/${opts.ticketId}/_alcode` : ".plans/_alcode";
   const deadline = Date.now() + opts.timeoutMs;
   const findArgs = [
@@ -63,14 +67,15 @@ export async function waitForCodingSessionSucceeded(
   let lastStderr = "";
   while (Date.now() < deadline) {
     const r = await ctx.execInGateway(findArgs, { timeoutMs: 15_000 });
-    const hit = r.stdout.trim().split("\n").find(Boolean);
-    if (hit) return hit;
+    const hits = r.stdout.trim().split("\n").filter(Boolean);
+    const newest = hits.sort().at(-1);
+    if (hits.length >= minCount && newest !== undefined) return newest;
     lastStderr = r.stderr.trim();
     await delay(3_000);
   }
   throw new Error(
-    `alcode coding-session file under ${sessionsDir} never reached "status: succeeded" ` +
-      `within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
+    `fewer than ${minCount} alcode coding-session file(s) under ${sessionsDir} reached ` +
+      `"status: succeeded" within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
   );
 }
 

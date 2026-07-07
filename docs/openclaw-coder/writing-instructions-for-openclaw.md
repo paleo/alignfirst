@@ -61,4 +61,4 @@ npm run e2e -- --channel discord-mock --iterations 10 --max-failures 10 A1-new-w
 
 ## Watch out for `--iterations` matrix cost
 
-Editing a bind-mounted file propagates live (the workspace dir, the playbook skill, and the `@paleo/alcode` package — including `templates/guide.md` — are all mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.
+Editing a bind-mounted file propagates live (the workspace dir, the playbook skill, and the `@paleo/alcode` package — including its `templates/` guides — are all mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.
