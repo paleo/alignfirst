@@ -16,6 +16,7 @@ const fixtures = {
   noFrontmatter: resolve(__dirname, "fixtures/no-frontmatter"),
   classify: resolve(__dirname, "fixtures/classify"),
   large: resolve(__dirname, "fixtures/large"),
+  listable: resolve(__dirname, "fixtures/listable"),
 };
 
 // The display prefix is the root relative to cwd; mirror it to build expected paths.
@@ -221,6 +222,84 @@ describe("stat-driven classification (classify fixture)", () => {
     expect(stdout).toContain("`v1.2/`");
     expect(stdout).toContain(dp(fixtures.classify, "v1.2/guide.md"));
     expect(stdout).not.toContain("<document_file");
+  });
+});
+
+describe("listable extensions (listable fixture)", () => {
+  it("lists text, diagram, data, and schema files alongside markdown", () => {
+    const { code, stdout } = run(["--recursive"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.listable, "readme.md"));
+    expect(stdout).toContain(dp(fixtures.listable, "schema.sql"));
+    expect(stdout).toContain(dp(fixtures.listable, "config.yaml"));
+    expect(stdout).toContain(dp(fixtures.listable, "diagrams/c4-model.dsl"));
+  });
+
+  it("excludes binary and hard-to-read formats from listings", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).not.toContain("report.pdf");
+    expect(stdout).not.toContain("image.png");
+  });
+
+  it("shows a non-markdown file as a bare path with no title", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    const dsl = dp(fixtures.listable, "diagrams/c4-model.dsl");
+    expect(stdout).toContain(`- \`${dsl}\`\n`);
+  });
+
+  it("reads a non-markdown file verbatim, without stripping a leading `---`", () => {
+    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
+    );
+    expect(stdout).toContain('workspace "Example"');
+  });
+
+  it("does not flag missing frontmatter or title on non-markdown files under --check", () => {
+    const { code, stdout } = run(["--check"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).not.toContain("schema.sql");
+    expect(stdout).not.toContain("c4-model.dsl");
+    expect(stdout).not.toContain("config.yaml");
+  });
+
+  it("resolves a non-markdown file by fuzzy basename search", () => {
+    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
+    );
+  });
+});
+
+describe("env files and template suffixes (listable fixture)", () => {
+  it("lists env templates but never a live secret env file", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).toContain(dp(fixtures.listable, ".env.example"));
+    expect(stdout).toContain(dp(fixtures.listable, ".env.sample"));
+    expect(stdout).toContain(dp(fixtures.listable, ".env.production.example"));
+    expect(stdout).not.toContain(dp(fixtures.listable, ".env.local"));
+    expect(stdout).not.toContain(`${dp(fixtures.listable, ".env")}\``);
+  });
+
+  it("refuses to read a live secret env file even by explicit path", () => {
+    const { code, stdout } = run([".env"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).not.toContain("<document_file");
+    expect(stdout).toContain("⚠ Not found: .env");
+  });
+
+  it("lists a template on the format underneath its suffix", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).toContain(dp(fixtures.listable, "config.yaml.example"));
+  });
+
+  it("reads an env template verbatim", () => {
+    const { code, stdout } = run([".env.example"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(`<document_file path="${dp(fixtures.listable, ".env.example")}">`);
+    expect(stdout).toContain("DATABASE_URL=");
   });
 });
 

@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.8.0
+
+### Minor Changes
+
+- docmap now lists readable text files beyond Markdown — plain text, diagrams-as-text (`.dsl`, `.mermaid`, `.drawio`), markup (`.xml`, `.html`), data (`.json`, `.yaml`, `.csv`, `.toml`), and schemas (`.sql`, `.graphql`, `.proto`, `.prisma`, and more).
+
 ## 0.7.2
 
 ### Patch Changes

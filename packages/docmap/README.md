@@ -50,7 +50,8 @@ Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a
 
 1. Uses a `docs/` directory at your project root.
 2. All files and directories are preferably named in **kebab-case**.
-3. `.md` files can start with YAML frontmatter. Add it when it adds value (e.g. when the filename or heading alone isn't explicit enough):
+3. Lists any readable text file: Markdown, plain text, diagrams-as-text (`.dsl`, `.mermaid`, `.drawio`), markup (`.xml`, `.html`), data (`.json`, `.yaml`, `.csv`, `.toml`), and schemas (`.sql`, `.graphql`, `.proto`, `.prisma`). Binary formats such as PDF or images are excluded, so a text asset like `docs/architecture/c4-model.dsl` shows up beside your docs while a `report.pdf` does not. Config templates are included too — `.env.example` (and `.sample`/`.template`/`.dist` variants, so `config.yaml.example` lists as well) — while a live `.env` holding secrets is never listed or read.
+4. `.md` files can start with YAML frontmatter. Add it when it adds value (e.g. when the filename or heading alone isn't explicit enough):
 
 ```markdown
 ---
@@ -72,42 +73,56 @@ read_when:
 | `summary` | No | Short description. Omit if the title is self-explanatory. |
 | `read_when` | No | When to consult this document. Omit if the scope is obvious. |
 
+## Global Installation
+
+Install the CLI globally to run it from anywhere:
+
+```bash
+npm install -g @paleo/docmap
+```
+
+Then invoke it directly:
+
+```bash
+docmap -v
+```
+
 ## CLI
 
-Targets are **positional arguments**. The CLI inspects the filesystem and classifies each one itself — a directory is listed, a file is read — so you never have to pre-declare which is which.
+Run the CLI from the project directory that contains your `docs/` directory.
 
 ```bash
 # Short help, then the listing (lists recursively when the doc set is small)
-npx @paleo/docmap
+docmap
 
 # Full help
-npx @paleo/docmap --help
+docmap --help
 
 # Authoring guide (conventions for writing documents)
-npx @paleo/docmap --guide
+docmap --guide
 
 # List one or more subdirectories
-npx @paleo/docmap dir-a
-npx @paleo/docmap dir-a dir-b
+docmap dir-a
+docmap dir-a dir-b
 
 # List everything recursively
-npx @paleo/docmap --recursive
+docmap --recursive
 
 # Read one or more documents (frontmatter stripped)
-npx @paleo/docmap docs/dir-a/doc-1.md
-npx @paleo/docmap docs/dir-a/doc-1.md docs/dir-b/doc-2.md
+docmap docs/dir-a/doc-1.md
+docmap docs/dir-a/doc-1.md docs/dir-b/doc-2.md
 
 # Mix directories and files in one call
-npx @paleo/docmap dir-a docs/dir-b/doc-2.md
+docmap dir-a docs/dir-b/doc-2.md
 
 # Search path and frontmatter (title, summary, read_when); every term must match
-npx @paleo/docmap --search "api endpoint"
+docmap --search "api endpoint"
 
 # Validate all files (names, frontmatter)
-npx @paleo/docmap --check
+docmap --check
 
 # Use a custom docs root instead of docs/
-npx @paleo/docmap --root path/to/docs
+docmap --root path/to/docs
 ```
 
 A bare invocation lists recursively when the tree holds fewer than 20 documents, and falls back to a top-level listing above that threshold. An explicit `--recursive` always walks the whole tree.
@@ -117,7 +132,7 @@ A bare invocation lists recursively when the tree holds fewer than 20 documents,
 Each positional path is resolved against the docs root:
 
 - **Existing directory** → listed (honoring `--recursive`).
-- **Existing file** → read, frontmatter stripped.
-- **Neither** → a fuzzy basename search over `.md` files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
+- **Existing file** → read (Markdown files have their frontmatter stripped; other files are served verbatim).
+- **Neither** → a fuzzy basename search over listable files (so `database.md` resolves from anywhere in the tree). No match → a single `⚠ Not found: <path>` line.
 
-Listings display each path prefixed with the docs root **relative to your working directory** — `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/dir-a/`, `docs/dir-a`, and `dir-a` resolve identically — so listing output can be pasted straight back as arguments.
+Listings display each path prefixed with the docs root **relative to your working directory**: `docs/…` by default, or whatever `--root` points to (e.g. `--root config/docs` shows `config/docs/…`). That prefix is optional on input and trailing slashes are tolerated: `docs/dir-a/`, `docs/dir-a`, and `dir-a` resolve identically

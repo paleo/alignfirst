@@ -13,7 +13,7 @@ import {
   type FormatResult,
 } from "./formatter.js";
 
-// A bare invocation over fewer .md files than this lists recursively by default.
+// A bare invocation over fewer listable files than this lists recursively by default.
 const SMALL_SET_THRESHOLD = 20;
 
 export interface MainOptions {
