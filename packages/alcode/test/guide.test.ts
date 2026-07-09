@@ -18,12 +18,12 @@ describe("renderGuide", () => {
     expect(guide).toContain("`~` is not expanded there");
   });
 
-  it("shares the protocol manual across variants", () => {
+  it("shares the introduction and the CLI reference across variants", () => {
     for (const variant of ["generic", "openclaw"] as const) {
       const guide = renderGuide(variant);
+      expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
-      expect(guide).toContain("Read the run's session file");
     }
   });
 

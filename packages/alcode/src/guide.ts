@@ -2,15 +2,14 @@ import { readFileSync } from "node:fs";
 
 export type GuideVariant = "generic" | "openclaw";
 
-// templates/guide.md is the shared skeleton; the per-variant fragments fill its tags:
-//   {{TITLE-SUFFIX}} — appended to the H1 to label the variant
-//   {{RUN}}          — how to background the run on the caller's platform
-//   {{WAKE}}         — how the completion wake arrives, introducing the shared steps
+// Each variant owns a full guide (templates/<variant>-guide.md) carrying its own
+// platform-specific prose. Two shared blocks fill the tags common to every variant:
+//   {{INTRODUCTION}}  — what alcode is and how to invoke it
+//   {{CLI_REFERENCE}} — the CLI reference and the protocol workflows below it
 export function renderGuide(variant: GuideVariant): string {
-  return readTemplate("guide.md")
-    .replaceAll("{{TITLE-SUFFIX}}", variant === "openclaw" ? " (OpenClaw)" : "")
-    .replaceAll("{{RUN}}", readTemplate(`guide-run-${variant}.md`).trimEnd())
-    .replaceAll("{{WAKE}}", readTemplate(`guide-wake-${variant}.md`).trimEnd())
+  return readTemplate(`${variant}-guide.md`)
+    .replaceAll("{{INTRODUCTION}}", readTemplate("introduction.md").trimEnd())
+    .replaceAll("{{CLI_REFERENCE}}", readTemplate("cli-reference.md").trimEnd())
     .trimEnd();
 }
 

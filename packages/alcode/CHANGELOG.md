@@ -1,5 +1,25 @@
 # @paleo/alcode
 
+## 0.5.2
+
+### Patch Changes
+
+- The OpenClaw guide now marks the "started" background-run ack as a Discord `message` `thread-reply`, so it lands in the work thread instead of streaming to the parent channel.
+
+## 0.5.1
+
+### Patch Changes
+
+- The OpenClaw guide now omits `--meta` on Slack (the completion report is a plain-text reply, since Slack exposes no `send`/`thread-reply` action) and reserves it for a Discord thread you created yourself, and it no longer emits `HEARTBEAT_OK` (a wake with nothing to report ends with `NO_REPLY`).
+
+## 0.5.0
+
+### Minor Changes
+
+- bc41c8e: Resumed and plan-execution runs now inherit or infer their ticket, so session files land in `.plans/<ticket>/_alcode/`. The OpenClaw guide prescribes a chained `openclaw system event` completion wake and English delegation messages.
+
+  `--guide` is now minimal, free of OpenClaw-specific run and wake machinery.
+
 ## 0.4.1
 
 ### Patch Changes

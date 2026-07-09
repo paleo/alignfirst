@@ -1,5 +1,23 @@
 # @paleo/docmap
 
+## 0.8.0
+
+### Minor Changes
+
+- docmap now lists readable text files beyond Markdown — plain text, diagrams-as-text (`.dsl`, `.mermaid`, `.drawio`), markup (`.xml`, `.html`), data (`.json`, `.yaml`, `.csv`, `.toml`), and schemas (`.sql`, `.graphql`, `.proto`, `.prisma`, and more).
+
+## 0.7.2
+
+### Patch Changes
+
+- Improve the bare `docmap` command when the CLI is run as a global binary.
+
+## 0.7.1
+
+### Patch Changes
+
+- 592cd51: A bare `docmap` now always prints the command list, even for large doc trees. Previously the command list appeared only on projects with fewer than 20 documents, hiding it from exactly the larger projects where navigating with the CLI matters most.
+
 ## 0.7.0
 
 ### Minor Changes

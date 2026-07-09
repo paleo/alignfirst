@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-test",
-  "version": "0.13.0",
+  "version": "0.14.1",
   "description": "Dockerised regression-test framework for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
   "keywords": [
     "openclaw",

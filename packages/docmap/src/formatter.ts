@@ -1,8 +1,65 @@
 import { type Dirent, readdirSync, readFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { extractFallbackTitle, extractMetadata, stripFrontmatter } from "./parser.js";
 
 const SHELL_SAFE_NAME = /^[\w.-]+$/;
+
+// Extensions docmap lists and reads. All are plain text a human or an agent can read directly;
+// binary or hard-to-read formats (PDF, images, office documents) are deliberately excluded.
+const LISTABLE_EXTENSIONS = new Set([
+  // Markdown and prose
+  ".md",
+  ".mdx",
+  ".markdown",
+  ".txt",
+  ".text",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  // Diagrams as text
+  ".dsl",
+  ".mmd",
+  ".mermaid",
+  ".drawio",
+  ".puml",
+  ".plantuml",
+  // Markup and structured documents
+  ".xml",
+  ".html",
+  ".htm",
+  // Data and config
+  ".csv",
+  ".tsv",
+  ".json",
+  ".jsonc",
+  ".json5",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".ini",
+  // Schema and IDL formats
+  ".sql",
+  ".graphql",
+  ".gql",
+  ".proto",
+  ".prisma",
+  ".avsc",
+  ".avdl",
+  ".xsd",
+  ".cue",
+  ".thrift",
+  ".hcl",
+  ".jsonschema",
+]);
+
+// Only the Markdown family carries YAML frontmatter and a fallback `# heading` title. Other
+// listable files show as a bare path and are exempt from frontmatter/title validation.
+const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".markdown"]);
+
+// A trailing template suffix (`config.yaml.example`) is stripped before the extension lookup, so
+// the template lists on the extension underneath it. Same idea as `.example`: `.sample` and
+// `.template` are common, `.dist` survives in the PHP world (e.g. `phpunit.xml.dist`).
+const TEMPLATE_SUFFIXES = [".example", ".sample", ".template", ".dist"];
 
 export interface FileEntry {
   name: string;
@@ -30,9 +87,21 @@ export interface CheckIssue {
   message: string;
 }
 
-// Reads a `.md` file and turns its frontmatter (plus name validation) into a FileEntry. The single
-// source of the extractMetadata -> fallback-title -> validateName sequence used across the module.
+// Turns a listable file into a FileEntry. Markdown files contribute frontmatter and a fallback
+// heading title; other listable files show as a bare path with no metadata. The single source of
+// the extractMetadata -> fallback-title -> validateName sequence used across the module.
 function buildFileEntry(dirPath: string, name: string): FileEntry {
+  if (!isMarkdown(name)) {
+    return {
+      name,
+      title: undefined,
+      summary: undefined,
+      readWhen: [],
+      error: undefined,
+      nameError: validateName(name),
+    };
+  }
+
   const content = readFileSync(join(dirPath, name), "utf-8");
   const meta = extractMetadata(content);
   return {
@@ -62,9 +131,10 @@ export function checkAll(dirPath: string, relDir: string, prefix: string): Check
       if (nameWarning) issues.push({ path: rel, message: nameWarning });
       const subRel = relDir ? `${relDir}/${entry.name}` : entry.name;
       issues.push(...checkAll(join(dirPath, entry.name), subRel, prefix));
-    } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+    } else if (isListable(entry.name)) {
       const file = buildFileEntry(dirPath, entry.name);
       if (file.nameError) issues.push({ path: rel, message: file.nameError });
+      if (!isMarkdown(entry.name)) continue;
       if (file.error) issues.push({ path: rel, message: file.error });
       if (!file.title) issues.push({ path: rel, message: "Missing title" });
     }
@@ -82,18 +152,18 @@ export function listDirectory(dirPath: string): DirectoryListing {
   }
 
   const subdirs: string[] = [];
-  const mdFiles: string[] = [];
+  const fileNames: string[] = [];
 
   for (const entry of entries) {
     if (entry.isDirectory()) {
       subdirs.push(entry.name);
-    } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
-      mdFiles.push(entry.name);
+    } else if (isListable(entry.name)) {
+      fileNames.push(entry.name);
     }
   }
 
   subdirs.sort();
-  mdFiles.sort();
+  fileNames.sort();
 
   const subdirWarnings = new Map<string, string>();
   for (const sub of subdirs) {
@@ -101,7 +171,7 @@ export function listDirectory(dirPath: string): DirectoryListing {
     if (warning) subdirWarnings.set(sub, warning);
   }
 
-  const files: FileEntry[] = mdFiles.map((name) => buildFileEntry(dirPath, name));
+  const files: FileEntry[] = fileNames.map((name) => buildFileEntry(dirPath, name));
 
   return { subdirs, files, subdirWarnings };
 }
@@ -220,12 +290,17 @@ export function readDocFile(
   prefix: string,
   getAllFiles: () => string[] = () => collectAllFiles(baseDir, ""),
 ): { path: string; content: string } | undefined {
+  if (isSecretEnvFile(basename(normalized))) return;
+
   const resolvedBase = resolve(baseDir);
   const resolvedTarget = resolve(resolvedBase, normalized);
   if (isUnder(resolvedBase, resolvedTarget)) {
     try {
       const content = readFileSync(resolvedTarget, "utf-8");
-      return { path: displayPath(prefix, normalized), content: stripFrontmatter(content) };
+      return {
+        path: displayPath(prefix, normalized),
+        content: readableContent(normalized, content),
+      };
     } catch {
       // fall through to recursive search
     }
@@ -236,7 +311,13 @@ export function readDocFile(
   if (!found) return;
 
   const content = readFileSync(join(baseDir, found), "utf-8");
-  return { path: displayPath(prefix, found), content: stripFrontmatter(content) };
+  return { path: displayPath(prefix, found), content: readableContent(found, content) };
+}
+
+// Markdown files are served with their YAML frontmatter stripped; other listable files are
+// served verbatim, since frontmatter is a Markdown-only convention.
+function readableContent(name: string, content: string): string {
+  return isMarkdown(name) ? stripFrontmatter(content) : content;
 }
 
 export function searchDocs(baseDir: string, terms: string[], prefix: string): string[] {
@@ -269,14 +350,14 @@ export function collectAllFiles(dirPath: string, prefix: string): string[] {
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
       result.push(...collectAllFiles(join(dirPath, entry.name), rel));
-    } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+    } else if (isListable(entry.name)) {
       result.push(rel);
     }
   }
   return result;
 }
 
-// Counts `.md` files (recursively, CHANGELOG* excluded) but stops walking as soon as `limit`
+// Counts listable files (recursively, CHANGELOG* excluded) but stops walking as soon as `limit`
 // is reached, so a multi-thousand-file tree is not fully traversed just to compare against a
 // small threshold. The returned count is capped at `limit`.
 export function countFilesUpTo(dirPath: string, limit: number): number {
@@ -291,7 +372,7 @@ export function countFilesUpTo(dirPath: string, limit: number): number {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (walk(join(dir, entry.name))) return true;
-      } else if (entry.name.endsWith(".md") && !shouldSkipFile(entry.name)) {
+      } else if (isListable(entry.name)) {
         count++;
         if (count >= limit) return true;
       }
@@ -310,8 +391,44 @@ function validateName(name: string): string | undefined {
   return SHELL_SAFE_NAME.test(name) ? undefined : "Name contains spaces or special characters";
 }
 
-function shouldSkipFile(name: string): boolean {
-  return name.startsWith("CHANGELOG");
+function isListable(name: string): boolean {
+  if (name.startsWith("CHANGELOG")) return false;
+  if (isSecretEnvFile(name)) return false;
+  if (isEnvTemplate(name)) return true;
+  return LISTABLE_EXTENSIONS.has(extensionOf(name));
+}
+
+// A live `.env`, `.env.local`, or `.env.<stage>.local` holds secrets and must never be listed or
+// read — this denial wins over every allow rule.
+function isSecretEnvFile(name: string): boolean {
+  return name === ".env" || name === ".env.local" || /^\.env\..+\.local$/.test(name);
+}
+
+// A committed env template documents the variables a service needs: `.env.example` and its
+// `.sample`/`.template`/`.dist` variants, optionally with a stage segment (`.env.production.example`).
+function isEnvTemplate(name: string): boolean {
+  if (!name.startsWith(".env")) return false;
+  return TEMPLATE_SUFFIXES.some((suffix) => name.endsWith(suffix));
+}
+
+function isMarkdown(name: string): boolean {
+  return MARKDOWN_EXTENSIONS.has(extensionOf(name));
+}
+
+// The extension used for allowlist matching, with a trailing template suffix removed first so a
+// template lists on the format underneath it (`config.yaml.example` -> `.yaml`).
+function extensionOf(name: string): string {
+  const base = stripTemplateSuffix(name);
+  const dot = base.lastIndexOf(".");
+  return dot === -1 ? "" : base.slice(dot).toLowerCase();
+}
+
+function stripTemplateSuffix(name: string): string {
+  const lower = name.toLowerCase();
+  for (const suffix of TEMPLATE_SUFFIXES) {
+    if (lower.endsWith(suffix)) return name.slice(0, -suffix.length);
+  }
+  return name;
 }
 
 export function isUnder(base: string, target: string): boolean {

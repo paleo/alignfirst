@@ -17,6 +17,7 @@ services:
   gateway:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
     volumes:
       - fixture-projects:/home/claw/projects
       # Live-mount the playbook skill over its baked copy so playbook edits

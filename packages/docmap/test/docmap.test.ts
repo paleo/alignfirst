@@ -16,6 +16,7 @@ const fixtures = {
   noFrontmatter: resolve(__dirname, "fixtures/no-frontmatter"),
   classify: resolve(__dirname, "fixtures/classify"),
   large: resolve(__dirname, "fixtures/large"),
+  listable: resolve(__dirname, "fixtures/listable"),
 };
 
 // The display prefix is the root relative to cwd; mirror it to build expected paths.
@@ -27,7 +28,7 @@ function run(args: string[], fixtureDir: string) {
   return invoke(["node", "docmap", "--root", fixtureDir, ...args], process.cwd());
 }
 
-function invoke(argv: string[], cwd: string) {
+function invoke(argv: string[], cwd: string, userAgent?: string) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = main({
@@ -43,6 +44,7 @@ function invoke(argv: string[], cwd: string) {
       },
     },
     cwd,
+    userAgent,
   });
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
@@ -87,9 +89,10 @@ describe("top-level listing for large sets (large fixture)", () => {
     expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
   });
 
-  it("does not prefix the listing with short help", () => {
+  it("still prefixes the listing with short help", () => {
     const { stdout } = run([], fixtures.large);
-    expect(stdout).not.toContain("--guide");
+    expect(stdout).toContain("--guide");
+    expect(stdout).toContain("--search");
   });
 });
 
@@ -219,6 +222,84 @@ describe("stat-driven classification (classify fixture)", () => {
     expect(stdout).toContain("`v1.2/`");
     expect(stdout).toContain(dp(fixtures.classify, "v1.2/guide.md"));
     expect(stdout).not.toContain("<document_file");
+  });
+});
+
+describe("listable extensions (listable fixture)", () => {
+  it("lists text, diagram, data, and schema files alongside markdown", () => {
+    const { code, stdout } = run(["--recursive"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.listable, "readme.md"));
+    expect(stdout).toContain(dp(fixtures.listable, "schema.sql"));
+    expect(stdout).toContain(dp(fixtures.listable, "config.yaml"));
+    expect(stdout).toContain(dp(fixtures.listable, "diagrams/c4-model.dsl"));
+  });
+
+  it("excludes binary and hard-to-read formats from listings", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).not.toContain("report.pdf");
+    expect(stdout).not.toContain("image.png");
+  });
+
+  it("shows a non-markdown file as a bare path with no title", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    const dsl = dp(fixtures.listable, "diagrams/c4-model.dsl");
+    expect(stdout).toContain(`- \`${dsl}\`\n`);
+  });
+
+  it("reads a non-markdown file verbatim, without stripping a leading `---`", () => {
+    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
+    );
+    expect(stdout).toContain('workspace "Example"');
+  });
+
+  it("does not flag missing frontmatter or title on non-markdown files under --check", () => {
+    const { code, stdout } = run(["--check"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).not.toContain("schema.sql");
+    expect(stdout).not.toContain("c4-model.dsl");
+    expect(stdout).not.toContain("config.yaml");
+  });
+
+  it("resolves a non-markdown file by fuzzy basename search", () => {
+    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
+    );
+  });
+});
+
+describe("env files and template suffixes (listable fixture)", () => {
+  it("lists env templates but never a live secret env file", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).toContain(dp(fixtures.listable, ".env.example"));
+    expect(stdout).toContain(dp(fixtures.listable, ".env.sample"));
+    expect(stdout).toContain(dp(fixtures.listable, ".env.production.example"));
+    expect(stdout).not.toContain(dp(fixtures.listable, ".env.local"));
+    expect(stdout).not.toContain(`${dp(fixtures.listable, ".env")}\``);
+  });
+
+  it("refuses to read a live secret env file even by explicit path", () => {
+    const { code, stdout } = run([".env"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).not.toContain("<document_file");
+    expect(stdout).toContain("⚠ Not found: .env");
+  });
+
+  it("lists a template on the format underneath its suffix", () => {
+    const { stdout } = run(["--recursive"], fixtures.listable);
+    expect(stdout).toContain(dp(fixtures.listable, "config.yaml.example"));
+  });
+
+  it("reads an env template verbatim", () => {
+    const { code, stdout } = run([".env.example"], fixtures.listable);
+    expect(code).toBe(0);
+    expect(stdout).toContain(`<document_file path="${dp(fixtures.listable, ".env.example")}">`);
+    expect(stdout).toContain("DATABASE_URL=");
   });
 });
 
@@ -535,5 +616,53 @@ describe("extractFallbackTitle", () => {
 
   it("returns undefined when there is no heading", () => {
     expect(extractFallbackTitle("Just some text\nwithout any heading")).toBeUndefined();
+  });
+});
+
+describe("package-manager prefix in help", () => {
+  // Walk from "/" so no lockfile is found and detection falls through to the invocation-based
+  // fallback; --root still points at a real fixture so the listing renders.
+  function help(userAgent: string | undefined) {
+    return invoke(["node", "docmap", "--root", fixtures.basic, "--help"], "/", userAgent).stdout;
+  }
+
+  it("suggests the bare global binary when no runner agent is set", () => {
+    const out = help("");
+    expect(out).toContain("docmap --guide");
+    expect(out).not.toContain("npx @paleo/docmap");
+    expect(out).not.toContain("npm run docmap");
+  });
+
+  it("keeps the npx suggestion when launched through npx, even if installed globally", () => {
+    const out = help("npm/10.0.0 node/v24.0.0 linux x64 workspaces/false");
+    expect(out).toContain("npx @paleo/docmap --guide");
+  });
+
+  it("suggests pnpm dlx under a pnpm runner", () => {
+    expect(help("pnpm/9.0.0 npm/? node/v24.0.0")).toContain("pnpm dlx @paleo/docmap");
+  });
+
+  it("suggests bunx under a bun runner", () => {
+    expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @paleo/docmap");
+  });
+
+  it("suggests the npm run script when launched via npm inside a lockfile'd project", () => {
+    const out = invoke(
+      ["node", "docmap", "--root", fixtures.basic, "--help"],
+      process.cwd(),
+      "npm/10.0.0 node/v24.0.0 linux x64",
+    ).stdout;
+    expect(out).toContain("npm run docmap");
+  });
+
+  it("suggests the bare binary even inside a lockfile'd project when run as a global binary", () => {
+    const out = invoke(
+      ["node", "docmap", "--root", fixtures.basic, "--help"],
+      process.cwd(),
+      "",
+    ).stdout;
+    expect(out).toContain("docmap --guide");
+    expect(out).not.toContain("npm run docmap");
+    expect(out).not.toContain("npx @paleo/docmap");
   });
 });

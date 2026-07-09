@@ -2,7 +2,7 @@
 
 Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
 
-Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. Keep observations and intermediate findings internal; post only the banner and the reports this file prescribes, then end the turn with a final answer of exactly `NO_REPLY`.
+Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. This includes the **final answer that ends the turn**: a status finding like "no branch — no work for this ticket yet" is still a `message` `thread-reply`, never plain prose. The turn's final answer is always exactly `NO_REPLY` — the user-facing content already went out through `message` calls. Keep observations and intermediate findings internal; post only the banner, the reports this file prescribes, and the final finding — each via `message`.
 
 ## Prerequisites — run both now, before Step 1
 
@@ -23,11 +23,14 @@ If you don't have the PROJECT_NAME or TICKET_ID, do not proceed. Do not guess th
 The moment you enter WORK mode, your **first** user-facing post is this banner — before any other ack or prose. It's the thread's project/ticket source of truth:
 
 > [WORK] Project: {PROJECT_NAME} — Ticket: {TICKET_ID} — Audience: {AUDIENCE}. {setup signal}
+>
+> Task: {one-line restatement of the task}
 
 - `{AUDIENCE}` — `tech` / `non-tech`, carried forward from the starter (which already recorded it). If no starter recorded it yet, read the sender's `AUDIENCE` from `USER.md` — see "Who you're talking to" in the dispatcher skill.
-- Bold the values — project, ticket, audience — with your surface's bold markers (not literal `**`).
+- `{one-line restatement of the task}` — restate, in your own words, what the user asked for (e.g. "make the export button bold"). This is the thread's durable record of *what to do*: a later fresh thread session recovers the task from it, having never seen the channel message that stated it. Always include this line. When no task is defined yet (a bare ticket, no scope), write that it is still to be defined instead — never omit the line, never leave it blank.
+- Bold the values — project, ticket, audience — with your surface's bold markers (not literal `**`). Put the task on its own line, after a line break.
 - Multiple projects: join them with `+` (e.g. `proj-a+proj-b`).
-- Keep `[WORK]` and the values (including the `tech`/`non-tech` token) intact; translate the setup signal to the user's language and vary it — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
+- Keep `[WORK]` and the values (including the `tech`/`non-tech` token) intact; translate the setup signal and the task line to the user's language and vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 
 ## Step 3 — Fix the thread name if needed (Discord-only)
 

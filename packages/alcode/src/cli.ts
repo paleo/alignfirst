@@ -90,15 +90,17 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
   }
 
   const realCwd = realpathSync(cwd);
-  const guardError = checkLaunchGuards(parsed, realCwd, listSessionRecords(cwd));
+  const records = listSessionRecords(cwd);
+  const guardError = checkLaunchGuards(parsed, realCwd, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
   }
 
   const now = new Date();
-  const sessionFilePath = resolveSessionFilePath(cwd, parsed.ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now, realCwd));
+  const ticket = resolveTicket(parsed, records);
+  const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now, realCwd, ticket));
   stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
   const result = await runClaude(buildRunConfig(parsed, cwd, sessionFilePath, env), stdout);
@@ -157,11 +159,50 @@ function unknownResumeError(resume: string, records: SessionRecord[]): string {
   return `Error: unknown session id ${resume}. Known recent sessions:\n${recent.join("\n")}`;
 }
 
-function buildFrontmatter(parsed: AlcodeArgs, now: Date, realCwd: string): SessionFrontmatter {
+// The effective ticket scopes the session file to `.plans/<ticket>/_alcode/` and lands in the
+// frontmatter. Exported for tests. Precedence: explicit `--ticket`, then the resumed session's
+// records, then a `.plans/<ticket>/` path in the message.
+export function resolveTicket(parsed: AlcodeArgs, records: SessionRecord[]): string | undefined {
+  if (parsed.ticket !== undefined) return parsed.ticket;
+  if (parsed.resume !== undefined) return inheritTicketFromResume(parsed.resume, records);
+  if (parsed.isNew && parsed.message !== undefined) return inferTicketFromMessage(parsed.message);
+  return;
+}
+
+// Latest record of the resumed session that carries a ticket — the resumed run keeps writing
+// under the same ticket directory, and its frontmatter keeps the ticket for later resumes.
+function inheritTicketFromResume(resume: string, records: SessionRecord[]): string | undefined {
+  const ticketed = records.filter(
+    (r) => r.frontmatter.sessionId === resume && r.frontmatter.ticket !== null,
+  );
+  const latest = ticketed.sort((a, b) =>
+    b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt),
+  )[0];
+  return latest?.frontmatter.ticket ?? undefined;
+}
+
+// A message like `Execute the plan: .plans/2/B2-plan.md` names its ticket. `_`-prefixed segments
+// (e.g. `_alcode`) are not tickets; several distinct candidates mean the message is ambiguous.
+function inferTicketFromMessage(message: string): string | undefined {
+  const candidates = new Set<string>();
+  for (const match of message.matchAll(/\.plans\/([A-Za-z0-9._-]+)\//g)) {
+    const segment = match[1];
+    if (!segment.startsWith("_") && isPathSafeTicket(segment)) candidates.add(segment);
+  }
+  if (candidates.size !== 1) return;
+  return [...candidates][0];
+}
+
+function buildFrontmatter(
+  parsed: AlcodeArgs,
+  now: Date,
+  realCwd: string,
+  ticket: string | undefined,
+): SessionFrontmatter {
   return {
     status: "running",
     protocol: parsed.protocol ?? null,
-    ticket: parsed.ticket ?? null,
+    ticket: ticket ?? null,
     model: parsed.model ?? null,
     sessionId: null,
     command: formatCommand(parsed),
@@ -269,9 +310,6 @@ export function validateArgs(args: AlcodeArgs): string | undefined {
   }
   if (["spec", "aad"].includes(args.protocol ?? "") && !args.message) {
     return `Error: --protocol ${args.protocol} requires --message.`;
-  }
-  if (args.ticket !== undefined && !args.isNew) {
-    return "Error: --ticket is only valid with --new.";
   }
   if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
     return (

@@ -1,12 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
-import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
-import {
-  isAnnouncement,
-  LAUNCH_OR_SETUP_RE,
-  STARTED_ACK_RE,
-  waitForCodingSessionSucceeded,
-} from "./_lib/coding-session.ts";
-import { INVESTIGATION_SUMMARY_RUBRIC } from "./_lib/common-constants.ts";
+import type { ScenarioContext } from "@paleo/openclaw-test";
+import { waitForCodingSessionSucceeded, waitForFindingsReport } from "./_lib/coding-session.ts";
 import { expectNoProtocolDelegation, setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { requireThreadId } from "./_lib/outbound.ts";
@@ -75,43 +69,18 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   const sessionFilePath = await waitForCodingSessionSucceeded(ctx, { timeoutMs: 120_000 });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
-  const summary = await waitForFindings(ctx, threadId, cursorAfterDelegation);
-  await ctx.judgeLLM({
-    attachTo: summary.entry,
-    message: summary.match.text,
-    rubric: INVESTIGATION_SUMMARY_RUBRIC,
+  // The findings arrive only after the exec-exit wake; a batch judge picks the relayed finding out
+  // of the thread window, ignoring the earlier launch ack (see `waitForFindingsReport`).
+  await waitForFindingsReport(ctx, {
+    conversationId: ctx.conversationId,
+    threadId,
+    sinceCursor: cursorAfterDelegation,
+    timeoutMs: 240_000,
     label: "investigation-summary",
   });
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
-}
-
-/**
- * The findings message is the first thread outbound after the delegation that is neither the
- * background-launch ack nor a launch/setup line. Fail-fasts are disabled: the finding legitimately
- * arrives long after alcode's coding-agent child (a cliMock) returned, on the wake turn.
- */
-async function waitForFindings(
-  ctx: ScenarioContext,
-  threadId: string,
-  sinceCursor: number,
-): Promise<WaitForOutboundResult> {
-  const wait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.threadId === threadId &&
-      !isAnnouncement(STARTED_ACK_RE, m.text) &&
-      !isAnnouncement(LAUNCH_OR_SETUP_RE, m.text),
-    {
-      timeoutMs: 240_000,
-      sinceCursor,
-      failFastCliMockGraceMs: false,
-      failFastUnmatchedOutbounds: false,
-    },
-  );
-  ctx.log({ attachTo: wait.entry, label: "post-wake findings message received" });
-  return wait;
 }
 
 function assertNoWorktreeDirs(ctx: ScenarioContext): void {

@@ -1,35 +1,3 @@
-# AlignFirst Delegation Guide{{TITLE-SUFFIX}}
-
-Run a coding agent through AlignFirst protocols with the `alcode` CLI. It wraps a coding-agent CLI for non-interactive use: it invokes a protocol, streams the run to a session file, and returns the result.
-
-**Never implement, investigate, or modify the codebase yourself while delegating. Your role is to delegate and guide the agent.**
-
-Run `alcode` from the root of the target project, so the agent works in the right repo. The project must contain a `.plans/` directory.
-
-## How it runs
-
-`alcode` runs the coding agent in the **foreground** and blocks until it finishes, streaming the transcript to stdout as it arrives. It never backgrounds or detaches itself.
-
-Coding runs can be long (several hours is fine): **always run `alcode` as a background task**, so you stay free while it works. The backgrounding is **your platform's** job, never alcode's own.
-
-{{RUN}}
-
-As soon as the run is backgrounded, tell the user the coding agent is now working in the background and that you will report back when it finishes (e.g. *"Le coding agent tourne en arrière-plan — je te préviens dès que c'est terminé."*). Then go available. Do **not** poll.
-
-Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp>.md`, or `.plans/_alcode/<stamp>.md` without a ticket. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
-
-**One protocol run at a time per workspace** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
-
-## After a background run completes
-
-{{WAKE}}
-
-1. **Read the run's session file** (the path `alcode` printed on its first line, under `_alcode/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
-2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. If the frontmatter `meta` carries a destination (e.g. a thread target), route this report there — a plain reply from the wake turn goes to the session's default surface, which may not be where the work was requested. When the report went out through the `message` tool, end the wake turn with a final answer of exactly `NO_REPLY` — any other final text streams to the default surface as a stray duplicate. `NO_REPLY` is the only silent ending; never improvise another token (`HEARTBEAT_OK` posts as literal text).
-3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git`. The coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
-
-If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
-
 ## CLI reference
 
 ```
@@ -44,7 +12,7 @@ alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--resume <id>` | Continue an existing session. |
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
-| `--message "..."` | Message to send. Required for `spec`, `aad`, and when no `--protocol`. |
+| `--message "..."` | Message to send, written in English. Required for `spec`, `aad`, and when no `--protocol`. |
 | `--model <model>` | Model override. |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
@@ -89,7 +57,7 @@ Answer questions as in the spec flow. The agent implements and writes a summary 
 
 ## Answering agent questions
 
-During spec and AAD sessions the agent asks questions before proceeding. Resume **without a protocol** to answer. Answer all questions in one message, numbered to match:
+During spec and AAD sessions the agent asks questions before proceeding. Resume **without a protocol** to answer. Compose the answers in English, all questions in one message, numbered to match:
 
 ```bash
 alcode --resume <sessionId> --message \

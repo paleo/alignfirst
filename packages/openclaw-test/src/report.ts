@@ -30,10 +30,10 @@ export interface ScenarioReport {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  cost: CostBreakdown;
 
   result: ScenarioResult;
   entries: ReportEntry[];
-  cost: CostBreakdown;
 }
 
 export type ScenarioResult = PassScenarioResult | FailScenarioResult;

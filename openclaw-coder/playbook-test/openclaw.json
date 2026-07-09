@@ -1,6 +1,7 @@
 {
   "gateway": {
-    "mode": "local"
+    "mode": "local",
+    "auth": { "mode": "none" }
   },
   "plugins": {
     "load": {
@@ -49,15 +50,22 @@
             "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
             "contextWindow": 1000000,
             "maxTokens": 65536
-          },
+          }
+        ]
+      },
+      "zai": {
+        "apiKey": "${ZAI_API_KEY}",
+        "baseUrl": "https://api.z.ai/api/paas/v4",
+        "api": "openai-completions",
+        "models": [
           {
-            "id": "z-ai/glm-5.2",
-            "name": "GLM 5.2 (OpenRouter)",
-            "reasoning": false,
+            "id": "glm-5.2",
+            "name": "GLM-5.2",
+            "reasoning": true,
             "input": ["text"],
-            "cost": { "input": 0.574, "output": 1.804, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 1048576,
-            "maxTokens": 131072
+            "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
           }
         ]
       }
@@ -67,6 +75,8 @@
     "defaults": {
       "skills": ["alignfirst", "openclaw-coder-playbook"],
       "heartbeat": {
+        "every": "24h",
+        "includeSystemPromptSection": false,
         "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       },
       "blockStreamingDefault": "on",

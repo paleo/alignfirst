@@ -16,8 +16,6 @@ export const askWhichProjectRubric = (ticketId: string): string =>
 export const unknownProjectRubric = (projectName: string): string =>
   `A short follow-up message acknowledging that the project named by the user (${projectName}) is not found under \`~/projects/\`. Asks the user to confirm the name or supply the correct one. Does NOT proceed with setup, does NOT pretend the project exists.`;
 
-export const INVESTIGATION_SUMMARY_RUBRIC = `A summary or relay of an investigation finding from the coding agent. May be a paraphrase ("D'après l'analyse, …") or a direct relay ("C'est fait." / "It's done."). Any trailing question or offer about next steps is acceptable — including which fix to apply, whether to proceed, preferred direction, whether to open a ticket, or whether to start working on it. Does NOT announce that a worktree setup has happened, does NOT pretend the coding work has already started.`;
-
 export const statusExistingWorktreeRubric = (ticketId: string, branch: string): string =>
   `A status report for an existing workspace. References the ticket id (${ticketId}) or the branch (${branch}). Mentions that a worktree is already set up / registered / in place / ready (path, slot, "ready", "existe", "already exists" all count). Reporting the worktree's creation timestamp from its metadata is fine — that's data, not an action claim. Reject ONLY if the message announces, as a fresh user-facing action, that the agent itself just created a new worktree to fulfill this request (e.g. "Je viens de créer le worktree" with no prior-existence wording).`;
 

@@ -1,7 +1,34 @@
 import type { CliMockEntry, ScenarioContext } from "@paleo/openclaw-test";
 
-const REVEAL_TEST_RESULT =
-  "Good news: This was a test, and you passed. Now, just acknowledge to the user and we're done.";
+// The coding agent's completion result, written into the alcode session file's
+// `---- Result ----` block. A real coding agent's result describes the task it
+// was actually given, so the mock derives it from the prompt (see
+// `codingResultFor`) rather than returning one constant — a static result that
+// names the wrong task on a follow-up delegation reads to a diligent agent as a
+// failed run (result describes something else, no matching change), which then
+// distrusts its own report and tries to re-do or "fix" the work.
+//
+// Each entry reads like a real successful coding outcome — no "this was a test"
+// meta-commentary, which invited the reading agent to doubt the result.
+const BOLD_BUTTON_RESULT =
+  "Done. The export button is now bold — updated the component's font weight and verified it renders. Changes committed on the ticket branch.";
+const TOOLTIP_RESULT =
+  'Done. Added a "Exporter les données" tooltip to the export button — set the native `title` attribute and verified it shows on hover. Changes committed on the ticket branch.';
+const GENERIC_CODING_RESULT =
+  "Done. Implemented the requested change and verified it. Changes committed on the ticket branch.";
+
+const BOLD_INTENT_RE = /\b(bold|gras|font[-\s]?weight)\b/i;
+const TOOLTIP_INTENT_RE = /\b(tooltip|infobulle|title attribute|attribut title)\b/i;
+
+// Pick the result that matches the task described in the coding-protocol prompt,
+// mirroring how a real coding agent reports the change it actually made. Tooltip
+// is checked first: a follow-up tooltip task still names the export button (which
+// was bolded earlier), so a naive bold check would win on both.
+function codingResultFor(prompt: string): string {
+  if (TOOLTIP_INTENT_RE.test(prompt)) return TOOLTIP_RESULT;
+  if (BOLD_INTENT_RE.test(prompt)) return BOLD_BUTTON_RESULT;
+  return GENERIC_CODING_RESULT;
+}
 
 const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|new environment)\b/i;
 const WORKTREE_LIST_INTENT_RE =
@@ -83,7 +110,7 @@ export function setupClaudeMock(
   ctx: ScenarioContext,
   options: SetupClaudeMockOptions = {},
 ): ClaudeMockHandle {
-  const defaultResult = options.defaultResult ?? REVEAL_TEST_RESULT;
+  const defaultResult = options.defaultResult ?? GENERIC_CODING_RESULT;
   const streamDelayMs = options.streamDelayMs ?? 4000;
   const claudeCalls: ClaudeCall[] = [];
   type Watcher = {
@@ -110,7 +137,7 @@ export function setupClaudeMock(
     }
     let resultText: string;
     if (isCodingProtocolPrompt(prompt)) {
-      resultText = REVEAL_TEST_RESULT;
+      resultText = codingResultFor(prompt);
     } else if (looksLikeWorktreeList(prompt)) {
       const project = resolveProject(prompt, cwd);
       if (!project) {
