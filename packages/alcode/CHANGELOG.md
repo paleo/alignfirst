@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.5.2
+
+### Patch Changes
+
+- The OpenClaw guide now marks the "started" background-run ack as a Discord `message` `thread-reply`, so it lands in the work thread instead of streaming to the parent channel.
+
 ## 0.5.1
 
 ### Patch Changes
