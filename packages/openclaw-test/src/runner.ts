@@ -115,14 +115,14 @@ async function runCell(args: RunnerArgs): Promise<number> {
       startedAt: startedAtIso,
       finishedAt: finishedAtIso,
       durationMs,
-      result,
-      entries: merged.map(prepareEntryForReport),
       cost: {
         agentUsd: agentCostUsd,
         judgeUsd,
         totalUsd: agentCostUsd + judgeUsd,
         agentTurns,
       },
+      result,
+      entries: merged.map(prepareEntryForReport),
     };
 
     // Write the cell record BEFORE the artifact-dir rename, to a stable sibling path.
