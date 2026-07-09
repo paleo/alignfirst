@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.14.1
+
+### Patch Changes
+
+- Report `cost` now sits between `durationMs` and `result` in `report.json` (field order only; `schemaVersion` unchanged).
+
 ## 0.14.0
 
 ### Minor Changes
