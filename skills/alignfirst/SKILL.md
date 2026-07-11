@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Write technical specifica
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.5.4"
+  version: "3.6.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -51,6 +51,8 @@ Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
 │   └── A3-AAD.summary.md
 │   └── B1-spec.md
 ```
+
+**Shared files:** the `.plans` directory is gitignored, except for files renamed with a `.shared.md` suffix (e.g. `A1-spec.shared.md`). We use this suffix to hand work over to another team member, or to collaborate on it.
 
 ## Notes
 

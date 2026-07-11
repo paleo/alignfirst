@@ -1,5 +1,7 @@
 .local
-.plans
+.plans/**
+!.plans/**/
+!.plans/**/*.shared.md
 .env
 node_modules
 dist/
