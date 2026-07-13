@@ -1,5 +1,12 @@
 # @paleo/alcode
 
+## 0.5.3
+
+### Patch Changes
+
+- 537c8f5: Recommend allowing commits between sub-plans when executing a main plan (CLI reference template)
+- c8f0083: The OpenClaw guide's "started" ack now follows the completion-report delivery rule: plain text on a thread-bound session, `message` `thread-reply` only for a thread created this turn (`--meta`) — fixes doubled replies in Discord threads.
+
 ## 0.5.2
 
 ### Patch Changes
