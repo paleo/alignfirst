@@ -45,7 +45,13 @@ Skill:
 
 - **`alignfirst`** — spec/plan/code workflow for coding tasks.
 
-The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI, which drives Claude Code through a protocol and streams a live transcript to a session file under `.plans/`. The agent learns how to use it by running `alcode --openclaw-guide` (the delegation manual with the OpenClaw-specific run instructions) — install the CLI so the command is on the bot's PATH (there is no separate coaching skill).
+### alcode
+
+```bash
+npm i -g @paleo/alcode@latest
+```
+
+The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI.
 
 Optional `alcode` environment variables:
 
