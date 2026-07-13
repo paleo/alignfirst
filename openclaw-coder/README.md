@@ -30,22 +30,9 @@ Put your git repositories in `~/projects/`.
 
 If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
-### Claude Code
-
-Your AI developer is a modern developer. It needs the real Claude Code CLI.
-
-- Install the [Claude Code CLI](https://claude.com/product/claude-code) and authenticate it with your account. The `claude` command must work in the terminal.
-- Install the `alignfirst` skill:
-
-```bash
-npx skills add https://github.com/paleo/alignfirst --global --yes --agent claude-code --skill alignfirst
-```
-
-Skill:
-
-- **`alignfirst`** — spec/plan/code workflow for coding tasks.
-
 ### alcode
+
+Your AI developer is a modern developer. It needs a coding agent. The **alcode** CLI is a coding agent wrapper. We need to install it globally:
 
 ```bash
 npm i -g @paleo/alcode@latest
@@ -59,6 +46,19 @@ Optional `alcode` environment variables:
 export ALIGNFIRST_CODE_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
 export ALIGNFIRST_CODE_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
 ```
+
+### Claude Code
+
+- Install the [Claude Code CLI](https://claude.com/product/claude-code) and authenticate it with your account. The `claude` command must work in the terminal.
+- Install the `alignfirst` skill:
+
+```bash
+npx skills add https://github.com/paleo/alignfirst --global --yes --agent claude-code --skill alignfirst
+```
+
+Skill:
+
+- **`alignfirst`** — spec/plan/code workflow for coding tasks.
 
 ### Skills for OpenClaw
 
