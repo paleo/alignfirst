@@ -65,6 +65,10 @@ export async function assertNoChannelRootLeak(
 }
 
 // The message-tool actions that post content (vs `read`, rename, reactions…).
+// The camelCase variants mirror the mock's defensive aliases (`extractToolSend`,
+// `SLACK_DISABLED_ACTIONS` in `plugin-actions.ts`): the mock advertises only the
+// kebab-case names, so camelCase is inert today, but we track the mock's alias
+// set so a leak stays caught if it ever surfaces them.
 const SELF_POST_ACTIONS = new Set(["send", "sendMessage", "thread-reply", "threadReply"]);
 
 /**
@@ -99,6 +103,12 @@ function isSelfThreadMessagePost(call: AgentToolCall, threadId: string): boolean
   if (typeof input.action !== "string" || !SELF_POST_ACTIONS.has(input.action)) return false;
   const needle = threadId.toLowerCase();
   if (call.sessionKey?.toLowerCase().includes(needle) !== true) return false;
+  // These are exactly the params the mock reads to aim a post: `resolveDestination`
+  // (`to` → `target` → `channelId`) plus the explicit `threadId`. The `sessionKey`
+  // gate above already narrows to the per-thread session, so a `channelId` that
+  // happens to match a non-thread target can't produce a false positive here.
+  // Substring-matched against the mock's `…-thread-<id>` / `…-topic-<id>` shapes;
+  // revisit if a third channel plugin names sessions or targets differently.
   return ["threadId", "to", "target", "channelId"].some((field) => {
     const value = input[field];
     return typeof value === "string" && value.toLowerCase().includes(needle);
