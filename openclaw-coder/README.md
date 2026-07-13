@@ -32,13 +32,11 @@ If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
 ### alcode
 
-Your AI developer is a modern developer. It needs a coding agent. The **alcode** CLI is a coding agent wrapper. Install it globally:
+Your AI developer is a modern developer. It needs a coding agent. The [`alcode`](../packages/alcode/README.md) CLI is a coding agent wrapper. Install it globally:
 
 ```bash
 npm i -g @paleo/alcode@latest
 ```
-
-The playbook delegates coding to the [`alcode`](../packages/alcode/README.md) CLI.
 
 Optional `alcode` environment variables:
 
@@ -125,7 +123,7 @@ Before handing a project to OpenClaw, set it up for autonomous work:
 
 ## Contribute
 
-The `openclaw-coder-playbook` skill is developed against an internal regression-test harness: [`playbook-test/README.md`](playbook-test/README.md). Maintainer overview: [`docs/openclaw-coder.md`](../docs/openclaw-coder.md).
+The `openclaw-coder-playbook` skill is developed against an internal regression-test harness: [`playbook-test/README.md`](playbook-test/README.md).
 
 Get started:
 
