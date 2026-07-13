@@ -16,7 +16,7 @@ flowchart TD
   CC -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
-OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI (whose `--guide` is the delegation manual). Claude Code does the actual work with the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
+OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI. Claude Code does the actual work following the spec/plan/execution workflow from the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
 
 ### Supported OpenClaw channels
 
