@@ -5,13 +5,13 @@
       "source": "paleo/skills",
       "sourceType": "github",
       "skillPath": "skills/sharp-writing/SKILL.md",
-      "computedHash": "762a83b0fe50d43697358a7ead094edf2649223770795c535456401bf74745a0"
+      "computedHash": "a45f26b0ed7530f0d6aa709067dae8f3662a41f8047e2b5af10c41ccf89b76c4"
     },
     "top-down-typescript": {
       "source": "paleo/skills",
       "sourceType": "github",
       "skillPath": "skills/top-down-typescript/SKILL.md",
-      "computedHash": "a241e60b77276b7d6196b9e2c11b9d025f2d67dad40b7ac19a5e769a20fb387e"
+      "computedHash": "034e869374f8736e1ab3406bc56b10f0a89b350980b4a98667646135228f4871"
     }
   }
 }

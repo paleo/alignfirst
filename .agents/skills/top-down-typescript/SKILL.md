@@ -4,7 +4,7 @@ description: TypeScript and JavaScript coding style conventions, centered on top
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -110,6 +110,10 @@ metadata:
 ## Adding a package dependency
 
 Before adding a dependency or dev-dependency, search the codebase first and reuse the version already in use. If not found, install the latest version using the default install command.
+
+## Commit, PR/MR, and changeset messages
+
+Never add AI attribution — `Co-Authored-By: …`, "Generated with …", or similar — to a commit, PR, MR, or changeset message.
 
 ## Changeset messages
 

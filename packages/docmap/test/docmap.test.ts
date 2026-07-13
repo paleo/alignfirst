@@ -10,6 +10,7 @@ const fixtures = {
   basic: resolve(__dirname, "fixtures/basic"),
   errors: resolve(__dirname, "fixtures/errors"),
   empty: resolve(__dirname, "fixtures/empty"),
+  emptySubdirs: resolve(__dirname, "fixtures/empty-subdirs"),
   subdirsOnly: resolve(__dirname, "fixtures/subdirs-only"),
   nested: resolve(__dirname, "fixtures/nested"),
   badNames: resolve(__dirname, "fixtures/bad-names"),
@@ -389,6 +390,15 @@ describe("empty fixture", () => {
   });
 });
 
+describe("recursive listing over empty sub-directories", () => {
+  it("emits the sub-dir headings without the empty note", () => {
+    const { code, stdout } = run(["--recursive"], fixtures.emptySubdirs);
+    expect(code).toBe(0);
+    expect(stdout).toContain("## `topic-a/`");
+    expect(stdout).not.toContain("_No documents here._");
+  });
+});
+
 describe("missing root folder", () => {
   const missing = resolve(__dirname, "fixtures/does-not-exist");
 
@@ -546,6 +556,12 @@ describe("--root propagation", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("# Documentation");
     expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
+  });
+
+  it("quotes a root with spaces so the folded command stays copy-pasteable", () => {
+    const { stdout } = invoke(["node", "docmap", "--root", "my docs", "--help"], process.cwd());
+    expect(stdout).toContain("--root 'my docs'");
+    expect(stdout).not.toContain("--root my docs");
   });
 });
 

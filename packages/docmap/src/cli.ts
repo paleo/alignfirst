@@ -377,8 +377,14 @@ function commandsWithRoot(
   root: string | undefined,
 ): PackageManagerCommands {
   if (root === undefined) return pm;
-  const rooted = `${pm.withArgs} --root ${root}`;
+  const rooted = `${pm.withArgs} --root ${shellQuoteArg(root)}`;
   return { base: rooted, withArgs: rooted };
+}
+
+// Quote a root that carries spaces or shell metacharacters so the suggested command stays
+// copy-pasteable; a clean path is left bare.
+function shellQuoteArg(value: string): string {
+  return /^[\w./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function detectPackageManager(cwd: string, userAgent: string): PackageManagerCommands {
