@@ -2,6 +2,8 @@
 
 You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user.
 
+Your plain-text replies stream into the thread natively — they **are** your delivery, on Discord and Slack alike. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. `message` stays for `read`, the thread rename, cross-surface posts, and attachments.
+
 ## Prerequisites
 
 - run `alcode --openclaw-guide` (`exec`) and follow it — how to delegate to alcode.

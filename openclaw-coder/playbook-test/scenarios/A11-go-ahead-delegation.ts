@@ -17,7 +17,11 @@ import {
   type ClaudeMockHandle,
 } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  assertNoSelfThreadMessagePost,
+  requireThreadId,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import type { Step } from "./_lib/types.ts";
@@ -225,6 +229,7 @@ async function runThreadDelegationPhase(
   await waitForCompletionWake(ctx, threadId, goAheadCursor);
 
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
+  assertNoSelfThreadMessagePost(ctx, threadId);
 }
 
 /**

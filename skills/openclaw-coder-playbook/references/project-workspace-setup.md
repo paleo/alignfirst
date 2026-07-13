@@ -2,7 +2,10 @@
 
 Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
 
-Discord: every user-facing post during this procedure is a `message` call carrying the thread's `threadId` — free-form assistant text streams to the parent channel, not the thread. This includes the **final answer that ends the turn**: a status finding like "no branch — no work for this ticket yet" is still a `message` `thread-reply`, never plain prose. The turn's final answer is always exactly `NO_REPLY` — the user-facing content already went out through `message` calls. Keep observations and intermediate findings internal; post only the banner, the reports this file prescribes, and the final finding — each via `message`.
+Discord — delivery depends on which session you are:
+
+- **Channel session continuing in-turn** (you came from `channel-handling.md` and created the thread this turn): every user-facing post — the banner, the reports this file prescribes, and the final finding (e.g. "no branch — no work for this ticket yet") — is a `message` call carrying the thread's `threadId`; your free-form text streams to the parent channel, not the thread. Keep observations internal and end the turn with a final answer of exactly `NO_REPLY`.
+- **Thread session** (you came from `working-session.md`): reply in plain text — it streams into this thread natively. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
 
 ## Prerequisites — run both now, before Step 1
 

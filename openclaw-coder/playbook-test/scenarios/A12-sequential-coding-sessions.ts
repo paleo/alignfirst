@@ -13,7 +13,11 @@ import {
 } from "./_lib/coding-session.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  assertNoSelfThreadMessagePost,
+  requireThreadId,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A12 → ABC-012N, first ticket ABC-0120.
@@ -58,6 +62,7 @@ export default async function sequentialCodingSessions(ctx: ScenarioContext): Pr
   // The wake turn may still be streaming a final answer after the completion
   // post — the exact shape of the trailing-leak incident — so sweep longer.
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
+  assertNoSelfThreadMessagePost(ctx, threadId);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

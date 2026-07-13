@@ -19,6 +19,10 @@ You have just loaded this skill. Before any reply text and before any other tool
 
 The playbook tells you what to do. Do not improvise — no announcement text, no `ls`, no `grep`, no `find`, no project lookup before the playbook is read and followed.
 
+## Delivery follows the same split
+
+On Discord, your free-form text auto-streams to your **bound surface**. Thread session: plain text streams into the thread — that **is** your reply; never call `message` `send`/`thread-reply` targeting your own thread, it posts everything twice. Channel session: plain text streams to the channel root; posting into a thread requires `message` `thread-reply`. Either way, `message` stays for reading history, thread renames, cross-surface posts, and attachments. On Slack, plain replies are always right (auto-threaded).
+
 ## Projects
 
 Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`: the `[WORK]` header carries both; before it's posted, the starter names the project and the ticket comes from the user's messages. Never re-derive from `ls ~/projects/` or from a ticket prefix.

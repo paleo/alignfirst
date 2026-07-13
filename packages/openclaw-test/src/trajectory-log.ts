@@ -143,7 +143,7 @@ export function aggregateAgentToolCalls(sessions: TrajectoryEvent[]): AgentToolC
     const messages = last.data?.messagesSnapshot;
     if (!Array.isArray(messages)) continue;
     const results = collectToolResults(messages);
-    for (const call of collectToolUses(messages, results, last.ts ?? "")) {
+    for (const call of collectToolUses(messages, results, last.ts ?? "", last.sessionKey)) {
       if (seen.has(call.toolUseId)) continue;
       seen.add(call.toolUseId);
       calls.push(call);
@@ -237,6 +237,7 @@ function collectToolUses(
   messages: unknown[],
   results: Map<string, ToolResultBlock>,
   ts: string,
+  sessionKey: string | undefined,
 ): AgentToolCall[] {
   const calls: AgentToolCall[] = [];
   let turn = 0;
@@ -251,6 +252,7 @@ function collectToolUses(
       const call: AgentToolCall = {
         toolName,
         toolUseId,
+        ...(sessionKey !== undefined ? { sessionKey } : {}),
         input: block.arguments ?? null,
         startedAt: ts,
         turn,

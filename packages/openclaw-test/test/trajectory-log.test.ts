@@ -75,6 +75,8 @@ describe("aggregateAgentToolCalls", () => {
     ];
     const calls = aggregateAgentToolCalls(sessions);
     expect(calls.map((c) => c.toolUseId)).toEqual(["c1", "t1", "t2"]);
+    expect(calls.find((c) => c.toolUseId === "c1")?.sessionKey).toBe(channel);
+    expect(calls.find((c) => c.toolUseId === "t1")?.sessionKey).toBe(thread);
     expect(calls.find((c) => c.toolUseId === "t1")?.input).toEqual({
       path: "~/projects/nimbus/DEVELOPMENT.md",
     });

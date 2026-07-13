@@ -144,6 +144,11 @@ export interface CliMockCall {
 export interface AgentToolCall {
   toolName: string;
   toolUseId: string;
+  /**
+   * `sessionKey` of the trajectory snapshot the call was collected from — the
+   * OpenClaw session that made it (e.g. channel vs per-thread session).
+   */
+  sessionKey?: string;
   input: unknown;
   result?: {
     isError: boolean;

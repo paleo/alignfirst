@@ -1,4 +1,5 @@
-import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
+import type { AgentToolCall, ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
+import { inputOf } from "./agent-tool-calls.ts";
 import { isMetaNarration } from "./meta-narration.ts";
 
 // OpenClaw-emitted system notices (tool failures `⚠️ 🛠️ … failed`, generation
@@ -61,4 +62,45 @@ export async function assertNoChannelRootLeak(
       ? "no channel-root post — OK"
       : `no substantive channel-root post — OK (${tolerated} narration tolerated)`,
   );
+}
+
+// The message-tool actions that post content (vs `read`, rename, reactions…).
+const SELF_POST_ACTIONS = new Set(["send", "sendMessage", "thread-reply", "threadReply"]);
+
+/**
+ * Assert the thread-bound session never posted into its own thread via the
+ * `message` tool. Its plain text auto-streams into the thread, so a
+ * `send`/`thread-reply` at its own thread delivers every reply twice — the
+ * duplicate-replies incident (`.plans/33/from-paleoclaw/A1-diagnostic.md`).
+ * Structural detection: a call is offending when its `sessionKey` carries the
+ * thread id (only the per-thread session's key does — `…-thread-<id>` on the
+ * mock, `…-topic-<id>` on real Discord) AND its input targets that same
+ * thread; cross-surface posts stay allowed. One-shot sweep over the flushed
+ * trajectory — call it at scenario end, after the final waits resolved.
+ */
+export function assertNoSelfThreadMessagePost(ctx: ScenarioContext, threadId: string): void {
+  const offenders = ctx
+    .getAgentToolCalls()
+    .filter((call) => isSelfThreadMessagePost(call, threadId));
+  for (const call of offenders) {
+    ctx.log(
+      `thread session message-posted at its own thread: ${JSON.stringify({
+        sessionKey: call.sessionKey,
+        input: call.input,
+      }).slice(0, 300)}`,
+    );
+  }
+  ctx.assertLength(offenders, 0, "thread session: no message send/thread-reply at its own thread");
+}
+
+function isSelfThreadMessagePost(call: AgentToolCall, threadId: string): boolean {
+  if (call.toolName !== "message") return false;
+  const input = inputOf(call);
+  if (typeof input.action !== "string" || !SELF_POST_ACTIONS.has(input.action)) return false;
+  const needle = threadId.toLowerCase();
+  if (call.sessionKey?.toLowerCase().includes(needle) !== true) return false;
+  return ["threadId", "to", "target", "channelId"].some((field) => {
+    const value = input[field];
+    return typeof value === "string" && value.toLowerCase().includes(needle);
+  });
 }
