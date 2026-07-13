@@ -1,9 +1,9 @@
 {
   "name": "@paleo/alcode",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
-  "description": "Run a coding agent through AlignFirst protocols, with a durable session file per run.",
+  "description": "Run a coding agent through AlignFirst protocols.",
   "keywords": [
     "ai",
     "agent",

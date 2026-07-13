@@ -158,6 +158,13 @@ export interface ScenarioContext {
     predicate: (call: AgentToolCall) => boolean,
     opts: WaitForAgentToolCallOptions,
   ): Promise<AgentToolCall>;
+  /**
+   * One-shot parse of the conversation's agent tool calls from the trajectory
+   * log — no waiting, no assertion recorded. The trajectory flushes ~2-10s
+   * after each session's last turn, so calls from a turn still in flight may
+   * be missing: run end-of-scenario sweeps after the final waits resolved.
+   */
+  getAgentToolCalls(): AgentToolCall[];
 }
 
 export interface WaitForAgentToolCallOptions {
@@ -355,6 +362,7 @@ export function createContext(params: {
         predicate,
         opts,
       ),
+    getAgentToolCalls: () => parseAgentToolCalls({ conversationId, startedAtIso }),
   };
 
   const internals: ScenarioInternals = {

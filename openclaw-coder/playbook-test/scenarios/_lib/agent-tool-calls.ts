@@ -1,6 +1,6 @@
 import type { AgentToolCall } from "@paleo/openclaw-test";
 
-function inputOf(call: AgentToolCall): Record<string, unknown> {
+export function inputOf(call: AgentToolCall): Record<string, unknown> {
   return call.input && typeof call.input === "object"
     ? (call.input as Record<string, unknown>)
     : {};

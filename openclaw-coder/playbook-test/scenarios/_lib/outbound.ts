@@ -1,4 +1,5 @@
-import type { ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
+import type { AgentToolCall, ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
+import { inputOf } from "./agent-tool-calls.ts";
 import { isMetaNarration } from "./meta-narration.ts";
 
 // OpenClaw-emitted system notices (tool failures `⚠️ 🛠️ … failed`, generation
@@ -61,4 +62,55 @@ export async function assertNoChannelRootLeak(
       ? "no channel-root post — OK"
       : `no substantive channel-root post — OK (${tolerated} narration tolerated)`,
   );
+}
+
+// The message-tool actions that post content (vs `read`, rename, reactions…).
+// The camelCase variants mirror the mock's defensive aliases (`extractToolSend`,
+// `SLACK_DISABLED_ACTIONS` in `plugin-actions.ts`): the mock advertises only the
+// kebab-case names, so camelCase is inert today, but we track the mock's alias
+// set so a leak stays caught if it ever surfaces them.
+const SELF_POST_ACTIONS = new Set(["send", "sendMessage", "thread-reply", "threadReply"]);
+
+/**
+ * Assert the thread-bound session never posted into its own thread via the
+ * `message` tool. Its plain text auto-streams into the thread, so a
+ * `send`/`thread-reply` at its own thread delivers every reply twice — the
+ * duplicate-replies incident (`.plans/33/from-paleoclaw/A1-diagnostic.md`).
+ * Structural detection: a call is offending when its `sessionKey` carries the
+ * thread id (only the per-thread session's key does — `…-thread-<id>` on the
+ * mock, `…-topic-<id>` on real Discord) AND its input targets that same
+ * thread; cross-surface posts stay allowed. One-shot sweep over the flushed
+ * trajectory — call it at scenario end, after the final waits resolved.
+ */
+export function assertNoSelfThreadMessagePost(ctx: ScenarioContext, threadId: string): void {
+  const offenders = ctx
+    .getAgentToolCalls()
+    .filter((call) => isSelfThreadMessagePost(call, threadId));
+  for (const call of offenders) {
+    ctx.log(
+      `thread session message-posted at its own thread: ${JSON.stringify({
+        sessionKey: call.sessionKey,
+        input: call.input,
+      }).slice(0, 300)}`,
+    );
+  }
+  ctx.assertLength(offenders, 0, "thread session: no message send/thread-reply at its own thread");
+}
+
+function isSelfThreadMessagePost(call: AgentToolCall, threadId: string): boolean {
+  if (call.toolName !== "message") return false;
+  const input = inputOf(call);
+  if (typeof input.action !== "string" || !SELF_POST_ACTIONS.has(input.action)) return false;
+  const needle = threadId.toLowerCase();
+  if (call.sessionKey?.toLowerCase().includes(needle) !== true) return false;
+  // These are exactly the params the mock reads to aim a post: `resolveDestination`
+  // (`to` → `target` → `channelId`) plus the explicit `threadId`. The `sessionKey`
+  // gate above already narrows to the per-thread session, so a `channelId` that
+  // happens to match a non-thread target can't produce a false positive here.
+  // Substring-matched against the mock's `…-thread-<id>` / `…-topic-<id>` shapes;
+  // revisit if a third channel plugin names sessions or targets differently.
+  return ["threadId", "to", "target", "channelId"].some((field) => {
+    const value = input[field];
+    return typeof value === "string" && value.toLowerCase().includes(needle);
+  });
 }

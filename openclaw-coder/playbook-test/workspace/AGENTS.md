@@ -14,7 +14,7 @@ For every other question, discussion, or request from the user, always follow th
 
 ## Language
 
-Internal reasoning, messages to the coding agent, code, branches, commits, MR/PR titles — **English**. Replies to the user — **the user's language**.
+Internal reasoning, messages to alcode, code, branches, commits, MR/PR titles — **English**. Replies to the user — **the user's language**.
 
 ## Heartbeats
 

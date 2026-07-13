@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.10.1"
+  version: "0.11.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -19,6 +19,10 @@ You have just loaded this skill. Before any reply text and before any other tool
 
 The playbook tells you what to do. Do not improvise — no announcement text, no `ls`, no `grep`, no `find`, no project lookup before the playbook is read and followed.
 
+## Delivery follows the same split
+
+On Discord, your free-form text auto-streams to your **bound surface**. Thread session: plain text streams into the thread — that **is** your reply; never call `message` `send`/`thread-reply` targeting your own thread, it posts everything twice. Channel session: plain text streams to the channel root; posting into a thread requires `message` `thread-reply`. Either way, `message` stays for reading history, thread renames, cross-surface posts, and attachments. On Slack, plain replies are always right (auto-threaded).
+
 ## Projects
 
 Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`: the `[WORK]` header carries both; before it's posted, the starter names the project and the ticket comes from the user's messages. Never re-derive from `ls ~/projects/` or from a ticket prefix.
@@ -30,9 +34,9 @@ Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and r
 - **Tech** — surface technical design choices and trade-offs, ask technical questions, use precise terms.
 - **Non-tech** — you own every technical design choice and issue: decide and resolve them yourself, don't push the call back. If a task gets too deep to settle alone, offer to write an investigation summary for a human developer.
 
-## Delegating to the coding agent
+## Delegating to alcode
 
-To delegate, run the `alcode` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. That CLI **is** the coding agent — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
+`alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
 
 Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describes (`background: true`, `timeout: 0`), so it is not killed mid-run; OpenClaw wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --openclaw-guide` read).
 

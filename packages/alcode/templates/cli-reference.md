@@ -35,7 +35,7 @@ For large work, do not rush. Decompose it yourself only when the concerns are tr
 
 1. **Spec** — `alcode --new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
 2. **Plan** — `alcode --resume <sessionId> --protocol plan`. The agent writes the plan file.
-3. **Execute** — `alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file.
+3. **Execute** — `alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. When executing a main plan that spans several sub-plans and the working tree is clean, append to the message: *"Feel free to commit between each plan."*
 4. **Commit** — use the suggested commit message from the spec file.
 
 ## Light workflow (AAD)

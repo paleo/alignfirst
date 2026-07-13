@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.15.0
+
+### Minor Changes
+
+- c8f0083: Agent tool calls now carry the `sessionKey` of the session that made them, and `ScenarioContext` gains `getAgentToolCalls()` for one-shot sweeps over the trajectory.
+
 ## 0.14.1
 
 ### Patch Changes
