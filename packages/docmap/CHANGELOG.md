@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.8.1
+
+### Patch Changes
+
+- Listing an empty docs folder now keeps the title and appends an explicit `No documents here.` note, and pointing docmap at a folder that does not exist reports it instead of printing an empty title. When you pass `--root <path>`, that flag is now folded into every command suggested in the short help and the authoring guide, so each one is copy-pasteable against your custom root.
+
 ## 0.8.0
 
 ### Minor Changes

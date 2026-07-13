@@ -380,11 +380,24 @@ describe("error fixtures", () => {
 });
 
 describe("empty fixture", () => {
-  it("shows no files", () => {
+  it("keeps the title and appends an explicit empty note, with no bullets", () => {
     const { code, stdout } = run([], fixtures.empty);
     expect(code).toBe(0);
-    // Only the short help prints; no listing bullets follow.
+    expect(stdout).toContain("# Documentation");
+    expect(stdout).toContain("_No documents here._");
     expect(stdout).not.toMatch(/^- /m);
+  });
+});
+
+describe("missing root folder", () => {
+  const missing = resolve(__dirname, "fixtures/does-not-exist");
+
+  it("shows an explicit message instead of the title", () => {
+    const { code, stdout } = run([], missing);
+    expect(code).toBe(0);
+    expect(stdout).toContain("No documentation folder at");
+    expect(stdout).toContain(`${relative(process.cwd(), missing)}/`);
+    expect(stdout).not.toContain("# Documentation");
   });
 });
 
@@ -493,6 +506,46 @@ describe("--guide", () => {
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
+  });
+});
+
+describe("--root propagation", () => {
+  // The `run` helper always passes `--root <fixture>`. Assertions target the propagated
+  // `--root <value>` substring, which is independent of the package-manager prefix in front.
+  const rooted = (sub: string) => `--root ${fixtures.basic} ${sub}`;
+
+  it("still renders the short help of a bare invocation and folds the root into every command", () => {
+    const { code, stdout } = run([], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("Commands:");
+    expect(stdout).toContain(rooted("--recursive"));
+    expect(stdout).toContain(rooted('--search "term1 term2"'));
+    // The "Before writing…" line carries it too.
+    expect(stdout).toContain(rooted("--guide"));
+  });
+
+  it("folds the root into every command shown in the authoring guide", () => {
+    const { stdout } = run(["--guide"], fixtures.basic);
+    expect(stdout).toContain(rooted("--recursive"));
+    expect(stdout).toContain(rooted("--check"));
+  });
+
+  it("drops the standalone `--root <path>` help row once a root is active", () => {
+    const { stdout } = run(["--help"], fixtures.basic);
+    expect(stdout).not.toContain("--root <path>");
+    expect(stdout).toContain(rooted("--check"));
+  });
+
+  it("documents `--root <path>` in full help when no root is given", () => {
+    const { stdout } = invoke(["node", "docmap", "--help"], process.cwd());
+    expect(stdout).toContain("--root <path>");
+  });
+
+  it("is accepted alongside a bare invocation without counting as a positional", () => {
+    const { code, stdout } = run([], fixtures.basic);
+    expect(code).toBe(0);
+    expect(stdout).toContain("# Documentation");
+    expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
   });
 });
 
@@ -621,9 +674,10 @@ describe("extractFallbackTitle", () => {
 
 describe("package-manager prefix in help", () => {
   // Walk from "/" so no lockfile is found and detection falls through to the invocation-based
-  // fallback; --root still points at a real fixture so the listing renders.
+  // fallback. `--help` returns before any listing, so no `--root` is needed (and omitting it keeps
+  // the suggested commands free of a folded-in root that would sit between prefix and `--guide`).
   function help(userAgent: string | undefined) {
-    return invoke(["node", "docmap", "--root", fixtures.basic, "--help"], "/", userAgent).stdout;
+    return invoke(["node", "docmap", "--help"], "/", userAgent).stdout;
   }
 
   it("suggests the bare global binary when no runner agent is set", () => {
@@ -648,7 +702,7 @@ describe("package-manager prefix in help", () => {
 
   it("suggests the npm run script when launched via npm inside a lockfile'd project", () => {
     const out = invoke(
-      ["node", "docmap", "--root", fixtures.basic, "--help"],
+      ["node", "docmap", "--help"],
       process.cwd(),
       "npm/10.0.0 node/v24.0.0 linux x64",
     ).stdout;
@@ -656,11 +710,7 @@ describe("package-manager prefix in help", () => {
   });
 
   it("suggests the bare binary even inside a lockfile'd project when run as a global binary", () => {
-    const out = invoke(
-      ["node", "docmap", "--root", fixtures.basic, "--help"],
-      process.cwd(),
-      "",
-    ).stdout;
+    const out = invoke(["node", "docmap", "--help"], process.cwd(), "").stdout;
     expect(out).toContain("docmap --guide");
     expect(out).not.toContain("npm run docmap");
     expect(out).not.toContain("npx @paleo/docmap");
