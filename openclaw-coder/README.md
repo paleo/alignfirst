@@ -32,7 +32,7 @@ If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
 ### alcode
 
-Your AI developer is a modern developer. It needs a coding agent. The **alcode** CLI is a coding agent wrapper. We need to install it globally:
+Your AI developer is a modern developer. It needs a coding agent. The **alcode** CLI is a coding agent wrapper. Install it globally:
 
 ```bash
 npm i -g @paleo/alcode@latest
