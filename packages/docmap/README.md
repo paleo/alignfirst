@@ -129,7 +129,9 @@ docmap --check
 docmap --root path/to/docs
 ```
 
-A bare invocation lists recursively when the tree holds fewer than 20 documents, and falls back to a top-level listing above that threshold. An explicit `--recursive` always walks the whole tree.
+### 20-document threshold
+
+A bare invocation lists recursively when the tree holds fewer than 20 documents, and switchs to a top-level listing above that threshold. An explicit `--recursive` always walks the whole tree.
 
 ### Classification
 
