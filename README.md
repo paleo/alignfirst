@@ -2,22 +2,6 @@
 
 Companion products for AI-assisted software work. They can be used independently.
 
-## Setup
-
-Our `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill (globally or locally):
-
-```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
-```
-
-Then, in your project, ask your agent:
-
-```text
-Use your alignfirst-setup-guide skill. What can I set up in this project?
-```
-
-After that, feel free to uninstall the skill. It won't be used by your project anymore.
-
 ## AlignFirst skills
 
 Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
@@ -37,3 +21,20 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 ## Autonomous AI programmer (experimental)
 
 We're building an autonomous AI developer with _OpenClaw_. See [openclaw-coder/README.md](openclaw-coder/README.md).
+
+## Setup with your agent
+
+Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
+
+```bash
+npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+```
+
+Then, in your project, ask your agent:
+
+```text
+Use your alignfirst-setup-guide skill. What can I set up in this project?
+```
+
+After that, feel free to uninstall the skill. It won't be used by your project anymore.
+
