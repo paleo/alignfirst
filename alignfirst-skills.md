@@ -31,7 +31,7 @@ Then ask your agent:
 Use your *alignfirst-setup-guide* skill. Configure the `alignfirst` skills in this project.
 ```
 
-Once done, you can uninstall the setup-guide skill — it won't be used by your project anymore.
+Once done, you can uninstall the setup-guide skill, it won't be used by your project anymore.
 
 > **Note (2026-03-09):** On Cursor, to make the skills available as commands (using `/`), I had to create a symlink: `cd ~/.cursor/ && ln -s ../.agents/skills .`
 
