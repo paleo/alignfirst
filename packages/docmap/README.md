@@ -29,7 +29,7 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 ```md
 ## Docmap - Seek Documentation
 
-**Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 ```
 
 ### Bootstrapping a docs/ directory
@@ -50,19 +50,19 @@ Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a
 
 1. Uses a `docs/` directory at your project root.
 2. All files and directories are preferably named in **kebab-case**.
-3. Lists any readable text file: Markdown, plain text, diagrams-as-text (`.dsl`, `.mermaid`, `.drawio`), markup (`.xml`, `.html`), data (`.json`, `.yaml`, `.csv`, `.toml`), and schemas (`.sql`, `.graphql`, `.proto`, `.prisma`). Binary formats such as PDF or images are excluded, so a text asset like `docs/architecture/c4-model.dsl` shows up beside your docs while a `report.pdf` does not. Config templates are included too — `.env.example` (and `.sample`/`.template`/`.dist` variants, so `config.yaml.example` lists as well) — while a live `.env` holding secrets is never listed or read.
-4. `.md` files can start with YAML frontmatter. Add it when it adds value (e.g. when the filename or heading alone isn't explicit enough):
+3. Lists most of the readable text files.
+4. `.md` files can start with YAML frontmatter. Add it when it adds value:
 
 ```markdown
 ---
-title: Your Title Here
+title: Short Title Here
 summary: A short description of what this document covers.
 read_when:
   - first situation when this document is useful
   - second situation
 ---
 
-# Your Title Here
+# Your Complete Title Here
 
 ...
 ```
@@ -73,18 +73,22 @@ read_when:
 | `summary` | No | Short description. Omit if the title is self-explanatory. |
 | `read_when` | No | When to consult this document. Omit if the scope is obvious. |
 
-## Global Installation
+## Global Installation (non-JavaScript stacks)
 
-Install the CLI globally to run it from anywhere:
+Install the CLI globally to use it on non-JavaScript projects:
 
 ```bash
 npm install -g @paleo/docmap
+
+docmap -v
 ```
 
-Then invoke it directly:
+In your `AGENTS.md` or `CLAUDE.md` file:
 
-```bash
-docmap -v
+```md
+## Docmap - Seek Documentation
+
+*Before* any investigation or code exploration, run `docmap`, then read the relevant documentation. Mandatory for every task.
 ```
 
 ## CLI
