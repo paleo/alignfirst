@@ -8,15 +8,15 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 ## Docmap - Agent-discoverable documentation
 
-`@paleo/docmap` — a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
+`@paleo/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
 ## Workspaces - Local environments with worktrees
 
-`@paleo/workspace` — run multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
+`@paleo/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
 ## OpenClaw Test toolkit
 
-`@paleo/openclaw-test` and three companion channel packages — a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
+`@paleo/openclaw-test` and three companion channel packages: they are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
 ## Autonomous AI programmer (experimental)
 
@@ -36,5 +36,5 @@ Then, in your project, ask your agent:
 Use your alignfirst-setup-guide skill. What can I set up in this project?
 ```
 
-After that, feel free to uninstall the skill. It won't be used by your project anymore.
+At the end, feel free to uninstall the skill. It won't be used by your project anymore.
 
