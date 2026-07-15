@@ -14,6 +14,10 @@ import {
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import { type RunConfig, type RunOutput, runClaude } from "./run-claude.js";
 
+// Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
+// operator re-login rather than a retry.
+const EXIT_AUTH_REQUIRED = 2;
+
 export interface MainOptions {
   argv?: string[];
   stdout?: RunOutput;
@@ -107,6 +111,13 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
 
   if (parsed.isNew && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
+  }
+  if (result.authRequired) {
+    stderr.write(
+      "alcode: coding agent not authenticated — an administrator must re-login on the host " +
+        "(`claude`, then `/login`).\n",
+    );
+    return EXIT_AUTH_REQUIRED;
   }
   return result.status === "succeeded" ? 0 : 1;
 }

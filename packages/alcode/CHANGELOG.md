@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.6.0
+
+### Minor Changes
+
+- Detect when the coding agent's session is lost or expired: alcode now seals the session file with `exitReason: auth_required`, exits `2`, and prints a clear message telling an administrator to re-login on the host.
+
 ## 0.5.3
 
 ### Patch Changes

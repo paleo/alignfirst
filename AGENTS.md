@@ -27,7 +27,7 @@
 
 ## Docmap - Seek Documentation
 
-**Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
 ## AlignFirst - Ticket ID, Commit Message, Branch Name
 

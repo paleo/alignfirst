@@ -18,7 +18,7 @@ Install the docmap CLI in a consumer repo so humans and agents share one set of 
    ```markdown
    ## Docmap - Seek Documentation
 
-   **Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+   *Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
    ### Essential Documentation
 
