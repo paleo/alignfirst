@@ -90,7 +90,7 @@ If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, add 
 
 > ## Docmap - Seek Documentation
 >
-> **Before any investigation or code exploration**, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+> *Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 >
 > ### Essential Documentation
 >
