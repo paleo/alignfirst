@@ -73,7 +73,7 @@ export function writeInitialSessionFile(
 export interface CompletionUpdate {
   status: "succeeded" | "failed";
   endedAt: string;
-  exitReason: "completed" | "error" | "terminated";
+  exitReason: "completed" | "error" | "terminated" | "auth_required";
   sessionId: string | null;
   result: string;
 }

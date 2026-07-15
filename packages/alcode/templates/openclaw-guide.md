@@ -45,4 +45,6 @@ Any heartbeat received while an `alcode` run is **still pending** (running, or f
 
 If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
 
+If the frontmatter's `exitReason` is `auth_required`, the coding agent itself is not authenticated on the host (its session is missing or expired). No run can succeed until an administrator re-logs it in on the host. Tell the user exactly that, and do not retry — a retry hits the same wall.
+
 {{CLI_REFERENCE}}

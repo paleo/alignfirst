@@ -24,6 +24,10 @@ export interface RunOutput {
 
 export interface RunResult {
   status: "succeeded" | "failed";
+  // The coding-agent CLI reported an authentication failure that no run can recover from until an
+  // administrator re-authenticates on the host. Distinct from an ordinary failure so the caller
+  // reports the right remedy instead of retrying.
+  authRequired: boolean;
   sessionId: string | null;
   result: string;
 }
@@ -36,15 +40,25 @@ export async function runClaude(config: RunConfig, out: RunOutput): Promise<RunR
   const state = createStreamState();
   const outcome = await spawnClaude(config, state, out);
   const failed = state.isError || outcome.exitCode !== 0 || state.result === undefined;
-  const result = state.result ?? failureMessage(outcome);
+  // An auth signal only matters when the run actually failed: claude retries a 401, so a signal it
+  // recovered from (run still succeeded) is not a problem to report.
+  const authRequired = failed && state.authFailed;
+  const result = authRequired
+    ? authFailureMessage(state.result)
+    : (state.result ?? failureMessage(outcome));
   applyCompletion(config.sessionFilePath, {
     status: failed ? "failed" : "succeeded",
     endedAt: new Date().toISOString(),
-    exitReason: failed ? "error" : "completed",
+    exitReason: authRequired ? "auth_required" : failed ? "error" : "completed",
     sessionId: state.sessionId ?? null,
     result,
   });
-  return { status: failed ? "failed" : "succeeded", sessionId: state.sessionId ?? null, result };
+  return {
+    status: failed ? "failed" : "succeeded",
+    authRequired,
+    sessionId: state.sessionId ?? null,
+    result,
+  };
 }
 
 interface ClaudeOutcome {
@@ -216,10 +230,14 @@ export interface StreamState {
   sessionId?: string;
   result?: string;
   isError: boolean;
+  // Set once any event carries `error: "authentication_failed"` — the synthetic `assistant` event
+  // (no/expired session) or a `system`/`api_retry` event (rejected key). The structured enum is
+  // stable across CLI versions, unlike the human-readable result text.
+  authFailed: boolean;
 }
 
 export function createStreamState(): StreamState {
-  return { isError: false };
+  return { isError: false, authFailed: false };
 }
 
 export function parseEventLine(line: string): unknown {
@@ -235,6 +253,7 @@ export function parseEventLine(line: string): unknown {
 export function renderEvent(event: unknown, state: StreamState): string | undefined {
   if (!isRecord(event)) return;
   captureSessionId(event, state);
+  captureAuthFailure(event, state);
   switch (event.type) {
     case "system":
       return event.subtype === "init" ? `[init] session ${asString(event.session_id)}` : undefined;
@@ -255,6 +274,10 @@ export function renderEvent(event: unknown, state: StreamState): string | undefi
 function captureSessionId(event: Record<string, unknown>, state: StreamState): void {
   const id = asString(event.session_id);
   if (id) state.sessionId = id;
+}
+
+function captureAuthFailure(event: Record<string, unknown>, state: StreamState): void {
+  if (event.error === "authentication_failed") state.authFailed = true;
 }
 
 function captureResult(event: Record<string, unknown>, state: StreamState): void {
@@ -299,6 +322,17 @@ function renderToolResult(content: unknown): string {
 function failureMessage(outcome: ClaudeOutcome): string {
   const stderr = outcome.stderr.trim();
   return stderr || `claude exited with code ${outcome.exitCode ?? "unknown"}`;
+}
+
+// The remedy is an operator action on the host, not a retry — so the result block names it and
+// keeps claude's own reason line (e.g. "OAuth session expired…") beneath it.
+function authFailureMessage(claudeReason: string | undefined): string {
+  const base =
+    "Coding agent not authenticated (authentication_failed): the host session is missing, expired, " +
+    "or rejected. An administrator must re-login on the host (run `claude`, then `/login`) before " +
+    "alcode can run again.";
+  const detail = claudeReason?.trim();
+  return detail ? `${base}\n\n${detail}` : base;
 }
 
 // --- Shared helpers ---

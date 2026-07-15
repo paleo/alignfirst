@@ -12,6 +12,8 @@ Coding runs can be very long: the caller always runs `alcode` as a background ta
 
 If `alcode` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`) so it never stays frozen at `running`, then send `SIGTERM` to the coding-agent child, giving it a short grace to tear down its own subprocesses before a `SIGKILL` backstop guarantees no orphan is left behind. Only a `SIGKILL` of `alcode` itself (uncatchable) can leave a stale `running` status.
 
+When the coding agent's own session on the host is missing or expired, `alcode` detects the `authentication_failed` signal in its stream, seals the session file with `exitReason: auth_required`, and exits `2` (distinct from `1`) with a one-line stderr message.
+
 ## Usage
 
 ```bash

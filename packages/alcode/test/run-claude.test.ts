@@ -113,4 +113,32 @@ describe("renderEvent", () => {
     renderEvent({ type: "result", result: "boom", is_error: true }, state);
     expect(state.isError).toBe(true);
   });
+
+  it("flags an auth failure from the synthetic assistant event (no/expired session)", () => {
+    const state = createStreamState();
+    renderEvent(
+      {
+        type: "assistant",
+        message: { model: "<synthetic>", content: [{ type: "text", text: "Not logged in" }] },
+        error: "authentication_failed",
+      },
+      state,
+    );
+    expect(state.authFailed).toBe(true);
+  });
+
+  it("flags an auth failure from an api_retry event (rejected key)", () => {
+    const state = createStreamState();
+    renderEvent(
+      { type: "system", subtype: "api_retry", error_status: 401, error: "authentication_failed" },
+      state,
+    );
+    expect(state.authFailed).toBe(true);
+  });
+
+  it("leaves authFailed unset for ordinary events", () => {
+    const state = createStreamState();
+    renderEvent({ type: "result", result: "boom", is_error: true }, state);
+    expect(state.authFailed).toBe(false);
+  });
 });
