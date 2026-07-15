@@ -1,4 +1,6 @@
 node_modules/
 .local/
 .local-wt/
-.plans/
+.plans/**
+!.plans/**/
+!.plans/**/*.shared.md

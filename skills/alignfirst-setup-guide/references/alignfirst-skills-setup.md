@@ -1,10 +1,18 @@
 # AlignFirst Skills Setup
 
-Configure a consumer repo for the AlignFirst skills: add `.plans` to `.gitignore` and an AlignFirst section to the instruction file.
+Configure a consumer repo for the AlignFirst skills: add the `.plans` ignore rules to `.gitignore` and an AlignFirst section to the instruction file.
 
 ## Step 1 — Configure the project
 
-1. Create the `.plans/` directory if it doesn't exist, and add `.plans` to `.gitignore` if needed.
+1. Create the `.plans/` directory if it doesn't exist, and ensure `.gitignore` contains this block:
+
+   ```text
+   .plans/**
+   !.plans/**/
+   !.plans/**/*.shared.md
+   ```
+
+   These rules ignore the `.plans` directory but keep `*.shared.md` files tracked, so plans handed over with the `.shared.md` suffix get committed. Insert the three lines as a block — the two `!` lines depend on the first. If a bare `.plans` line already exists, replace it; left in place it shadows the un-ignore rules.
 2. Check if `AGENTS.md` or `CLAUDE.md` exists. If one exists, use it. If neither exists, create `AGENTS.md`. This file is the INSTRUCTION_FILE.
 3. Look at git branches (`git branch -a`) to detect the ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
    - If no pattern is found, ask the user:
