@@ -1,6 +1,10 @@
 import type { AgentToolCall, ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
 import { inputOf } from "./agent-tool-calls.ts";
-import { isMetaNarration } from "./meta-narration.ts";
+import {
+  isMetaNarration,
+  type OutboundMessage,
+  waitForOutboundSkippingNarration,
+} from "./meta-narration.ts";
 
 // OpenClaw-emitted system notices (tool failures `⚠️ 🛠️ … failed`, generation
 // failures `⚠️ Agent couldn't generate a response…`) stream to the channel root
@@ -37,6 +41,32 @@ export function waitForStarter(
       failFastUnmatchedOutbounds: false,
     },
   );
+}
+
+export interface WaitForReportOptions {
+  sinceCursor: number;
+  timeoutMs?: number;
+  failFastCliMockGraceMs?: number;
+}
+
+/**
+ * Wait for the status/setup report that follows the starter, skipping any
+ * pre-report meta-narration. Like the starter wait, this must NOT fail-fast on
+ * unmatched outbounds: weaker models free-stream planning notes to the channel
+ * root before the report lands (the same class `assertNoChannelRootLeak`
+ * tolerates), so `predicate` plus the timeout bound the wait instead.
+ */
+export function waitForReport(
+  ctx: ScenarioContext,
+  predicate: (m: OutboundMessage) => boolean,
+  opts: WaitForReportOptions,
+): Promise<WaitForOutboundResult> {
+  return waitForOutboundSkippingNarration(ctx, predicate, {
+    timeoutMs: opts.timeoutMs ?? 180_000,
+    sinceCursor: opts.sinceCursor,
+    failFastCliMockGraceMs: opts.failFastCliMockGraceMs,
+    failFastUnmatchedOutbounds: false,
+  });
 }
 
 /**

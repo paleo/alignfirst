@@ -30,7 +30,7 @@ Return \`isNarration: false\` whenever the message carries substantive user-faci
   return parsed.isNarration;
 }
 
-type OutboundMessage = Parameters<ScenarioContext["waitForOutbound"]>[0] extends (
+export type OutboundMessage = Parameters<ScenarioContext["waitForOutbound"]>[0] extends (
   m: infer M,
 ) => unknown
   ? M

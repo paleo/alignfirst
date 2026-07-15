@@ -3,10 +3,14 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusExistingWorktreeRubric } from "./_lib/common-constants.ts";
 import { seedWorktree, worktreePath } from "./_lib/fixture-state.ts";
-import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  requireThreadId,
+  waitForReport,
+  waitForStarter,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
@@ -42,7 +46,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   const branchRe = new RegExp(
     `\\b${TICKET_ID}/${BRANCH_DESC}\\b|nimbus-${TICKET_ID}-${BRANCH_DESC}\\b`,
   );
-  const reportWait = await waitForOutboundSkippingNarration(
+  const reportWait = await waitForReport(
     ctx,
     (m) =>
       m.direction === "outbound" &&
@@ -50,10 +54,8 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
       m.id !== starterWait.match.id &&
       branchRe.test(m.text),
     {
-      timeoutMs: 180_000,
       sinceCursor: starterWait.nextCursor,
       failFastCliMockGraceMs: 30_000,
-      failFastUnmatchedOutbounds: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
