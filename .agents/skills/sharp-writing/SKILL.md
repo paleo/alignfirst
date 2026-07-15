@@ -4,7 +4,7 @@ description: Conventions for writing sharp, concise prose and Markdown, for huma
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.2.0"
+  version: "0.4.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -33,6 +33,16 @@ Show the direct path, not your detours. Writing is like climbing an uncharted mo
 ## Prefer positive phrasing
 
 Say what is, not what is not. A negation forces the reader to invert; a double negation forces two inversions.
+
+## Stop at the last fact
+
+End when the information ends. Don't close with a sentence that restates the point, draws a moral, or justifies what you just wrote. Before keeping a final sentence, check it carries a new fact or instruction. If it only emphasizes, concludes, or reassures, cut it.
+
+## Add an example only when needed
+
+Add an example only when the rule is hard to grasp without one. Prose that stands on its own needs none.
+
+When you add one, invent a neutral case.
 
 ## Markdown
 
