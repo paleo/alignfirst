@@ -1,12 +1,16 @@
 import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { execMatches, invokesAlcode } from "./_lib/agent-tool-calls.ts";
+import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusExistingWorktreeRubric } from "./_lib/common-constants.ts";
 import { seedWorktree, worktreePath } from "./_lib/fixture-state.ts";
-import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  requireThreadId,
+  waitForReport,
+  waitForStarter,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
@@ -31,13 +35,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
@@ -48,7 +46,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   const branchRe = new RegExp(
     `\\b${TICKET_ID}/${BRANCH_DESC}\\b|nimbus-${TICKET_ID}-${BRANCH_DESC}\\b`,
   );
-  const reportWait = await waitForOutboundSkippingNarration(
+  const reportWait = await waitForReport(
     ctx,
     (m) =>
       m.direction === "outbound" &&
@@ -56,10 +54,8 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
       m.id !== starterWait.match.id &&
       branchRe.test(m.text),
     {
-      timeoutMs: 180_000,
       sinceCursor: starterWait.nextCursor,
       failFastCliMockGraceMs: 30_000,
-      failFastUnmatchedOutbounds: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
@@ -72,22 +68,17 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   });
 
   // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // WORK-mode turn. The trajectory snapshot flushes when the session run ends,
-  // after the report — hence the generous timeout.
+  // WORK-mode turn (workspace setup goes through alcode). The trajectory snapshot
+  // flushes when the session run ends, after the report — hence the generous timeout.
   await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
     label: "agent runs `alcode --openclaw-guide`",
     timeoutMs: 120_000,
   });
 
-  // Work-content status is delegated (project-workspace-setup.md Step 5): the
-  // agent must run the alcode read protocol for the ticket, never inspect the
-  // work itself. The backgrounded run and its wake report are not awaited —
-  // the delegation call is the regression target.
-  await ctx.waitForAgentToolCall((c) => invokesAlcode(c) && execMatches(c, /--protocol\s+read\b/), {
-    label: "agent delegates work-content status via `alcode read`",
-    timeoutMs: 180_000,
-  });
-
+  // A status report may be composed from repo/workflow metadata (git, gh, ls,
+  // DEVELOPMENT.md, .plans/) OR via alcode — both are fine, so we don't assert
+  // how the status was gathered, only that the report is correct (rubric above),
+  // lands in the thread, and leaves no stray worktrees / channel leak.
   assertOnlySeededWorktreeDir(ctx);
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
 

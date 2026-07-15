@@ -1,10 +1,14 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
-import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  requireThreadId,
+  waitForReport,
+  waitForStarter,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
@@ -28,13 +32,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
@@ -49,7 +47,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   // on that — narration messages with the branch token but no template keyword
   // are skipped.
   const reportRe = new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`);
-  const reportWait = await waitForOutboundSkippingNarration(
+  const reportWait = await waitForReport(
     ctx,
     (m) =>
       m.direction === "outbound" &&
@@ -57,13 +55,11 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
       m.id !== starterWait.match.id &&
       reportRe.test(m.text),
     {
-      timeoutMs: 180_000,
       sinceCursor: starterWait.nextCursor,
       // The takeover-sync between the `gh pr list` call and the report (deps
       // check, base-branch check, report drafting) can exceed 30s on a slow
-      // model — keep the fail-fast, but give it real headroom.
+      // model — give the CLI-mock grace real headroom.
       failFastCliMockGraceMs: 90_000,
-      failFastUnmatchedOutbounds: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });

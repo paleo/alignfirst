@@ -1,11 +1,73 @@
 import type { AgentToolCall, ScenarioContext, WaitForOutboundResult } from "@paleo/openclaw-test";
 import { inputOf } from "./agent-tool-calls.ts";
-import { isMetaNarration } from "./meta-narration.ts";
+import {
+  isMetaNarration,
+  type OutboundMessage,
+  waitForOutboundSkippingNarration,
+} from "./meta-narration.ts";
 
 // OpenClaw-emitted system notices (tool failures `⚠️ 🛠️ … failed`, generation
 // failures `⚠️ Agent couldn't generate a response…`) stream to the channel root
 // and are not model-controllable — exempt from the leak sweep.
 const openclawNoticeRe = /^⚠️/u;
+
+export interface WaitForStarterOptions {
+  sinceCursor: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Wait for the first thread outbound — the starter — for this conversation.
+ *
+ * Before the thread exists, some models free-stream planning notes to the
+ * channel root (thread-less outbounds); `qwen3.7`/`glm-5.2` do it in a material
+ * share of turns — an obedience ceiling, not a regression, and the same class
+ * `assertNoChannelRootLeak` already tolerates. So this wait must NOT fail-fast
+ * on those thread-less outbounds (the default cap is 3): the `threadId`
+ * predicate plus the timeout bound it, and the agent still opens the thread.
+ */
+export function waitForStarter(
+  ctx: ScenarioContext,
+  opts: WaitForStarterOptions,
+): Promise<WaitForOutboundResult> {
+  return ctx.waitForOutbound(
+    (m) =>
+      m.direction === "outbound" &&
+      m.conversation.id === ctx.conversationId &&
+      m.threadId !== undefined,
+    {
+      timeoutMs: opts.timeoutMs ?? 90_000,
+      sinceCursor: opts.sinceCursor,
+      failFastUnmatchedOutbounds: false,
+    },
+  );
+}
+
+export interface WaitForReportOptions {
+  sinceCursor: number;
+  timeoutMs?: number;
+  failFastCliMockGraceMs?: number;
+}
+
+/**
+ * Wait for the status/setup report that follows the starter, skipping any
+ * pre-report meta-narration. Like the starter wait, this must NOT fail-fast on
+ * unmatched outbounds: weaker models free-stream planning notes to the channel
+ * root before the report lands (the same class `assertNoChannelRootLeak`
+ * tolerates), so `predicate` plus the timeout bound the wait instead.
+ */
+export function waitForReport(
+  ctx: ScenarioContext,
+  predicate: (m: OutboundMessage) => boolean,
+  opts: WaitForReportOptions,
+): Promise<WaitForOutboundResult> {
+  return waitForOutboundSkippingNarration(ctx, predicate, {
+    timeoutMs: opts.timeoutMs ?? 180_000,
+    sinceCursor: opts.sinceCursor,
+    failFastCliMockGraceMs: opts.failFastCliMockGraceMs,
+    failFastUnmatchedOutbounds: false,
+  });
+}
 
 /**
  * The starter and its follow-ups always arrive inside a thread. Narrow the

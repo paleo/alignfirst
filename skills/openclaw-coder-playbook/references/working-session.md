@@ -80,8 +80,8 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 
 ### Status update
 
-- Check the workspace status.
-- Delegate to alcode, use the **read** protocol.
+- Check the workspace status (the takeover-sync in `project-workspace-setup.md` has already fetched + merged the remote branch, so you're reporting the latest state).
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state, `.plans/`), and the ticket's AlignFirst artifacts via alcode (**read** protocol — it synthesizes the `*spec.md`/`*summary.md` history). Use `alcode read` whenever that recorded intent/progress matters. Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Working and testing
 

@@ -27,12 +27,12 @@
         "api": "anthropic-messages",
         "models": [
           {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
             "reasoning": true,
             "input": ["text", "image"],
             "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
-            "contextWindow": 200000,
+            "contextWindow": 1000000,
             "maxTokens": 64000
           }
         ]
@@ -87,7 +87,7 @@
       {
         "id": "main",
         "name": "OpenClaw Main",
-        "model": "custom-anthropic/claude-sonnet-4-6",
+        "model": "custom-anthropic/claude-sonnet-5",
         "workspace": "/home/claw/.openclaw/workspace"
       }
     ]

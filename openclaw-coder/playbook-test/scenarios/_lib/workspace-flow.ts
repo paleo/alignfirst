@@ -84,7 +84,7 @@ export async function runWorkspaceFlow(
     );
   }
 
-  // Per project-workspace-setup.md Step 6, the agent may pause to ask
+  // Per project-workspace-setup.md Step 7, the agent may pause to ask
   // for validation before delegating coding work. Unblock it unconditionally.
   await ctx.sendInbound({
     senderId: "ROBIN01",

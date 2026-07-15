@@ -21,6 +21,7 @@ import {
   assertNoChannelRootLeak,
   assertNoSelfThreadMessagePost,
   requireThreadId,
+  waitForStarter,
 } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
@@ -83,13 +84,7 @@ async function runSetupPhaseWithoutDelegation(
       "sans mon feu vert.",
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
   const starter: Step = {

@@ -3,7 +3,7 @@ import { escapeRe, NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId } from "./_lib/outbound.ts";
+import { requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import type { Step } from "./_lib/types.ts";
@@ -47,15 +47,9 @@ async function sendInitialRequestAndExpectStarter(ctx: ScenarioContext): Promise
     text: "Nous avons un travail à faire sur nimbus.",
   });
 
-  // Starter wait is strict: the first thread message must be the announcement
-  // starter — no meta-narration tolerated here.
-  const wait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  // First thread outbound is the starter. Pre-thread channel narration is
+  // tolerated (see waitForStarter): the agent still opens the thread.
+  const wait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const starter = wait.match;
   const threadId = requireThreadId(wait);
   ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });

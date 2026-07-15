@@ -2,10 +2,14 @@ import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusNoBranchRubric } from "./_lib/common-constants.ts";
-import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  requireThreadId,
+  waitForReport,
+  waitForStarter,
+} from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
@@ -25,13 +29,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 
@@ -49,7 +47,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
   let reportEntry = starterWait.entry;
   let reportText = starterWait.match.text;
   if (!isNoBranchReport(reportText)) {
-    const reportWait = await waitForOutboundSkippingNarration(
+    const reportWait = await waitForReport(
       ctx,
       (m) =>
         m.direction === "outbound" &&
@@ -57,12 +55,8 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
         m.id !== starterWait.match.id &&
         isNoBranchReport(m.text),
       {
-        // Match A7/A8: a slow model can take a while to settle the report after
-        // the `[WORK]` header (it may attempt setup before concluding no branch).
-        timeoutMs: 180_000,
         sinceCursor: starterWait.nextCursor,
         failFastCliMockGraceMs: 30_000,
-        failFastUnmatchedOutbounds: false,
       },
     );
     reportEntry = reportWait.entry;

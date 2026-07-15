@@ -48,7 +48,7 @@ First, check what already exists for the {TICKET_ID} — two checks, both requir
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
-Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the block below), then report the work content (Step 5) — never `git log` from the main dir. Pick one sub-path:
+Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the block below), sync the branch (Step 5), then report the work content (Step 6) — never `git log` from the main dir. Pick one sub-path:
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
@@ -62,9 +62,9 @@ Branch: {branch}
 Bootstrap: {running | ready | failed}
 ```
 
-### Sync an existing branch on takeover (sub-paths 1 & 2)
+## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
 
-Once the workspace is set up, bring the branch up to date *before* inspecting or working. In order:
+Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 
 1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have alcode commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
@@ -75,13 +75,18 @@ Once the workspace is set up, bring the branch up to date *before* inspecting or
 7. **Check for an open MR/PR** on this branch and note its state.
 8. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
 
-## Step 5 — Status request: the work content
+## Step 6 — Status request: the work content
 
-Only for a status request; otherwise skip to Step 6. The Step 4 block comes first — post it before delegating.
+Only for a status request; otherwise skip to Step 7. The Step 4 block comes first — post it before delegating; by now the Step 5 sync has brought the branch current, so the report reflects the latest state.
 
-The workspace block answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — delegate: `alcode`, `read` protocol, run from the worktree. Relay its answer in the thread. The sync output (`git status`, fetch) is for syncing only — never compose this report yourself from `git log`, `.plans/` reads, or code browsing.
+The workspace block answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
-## Step 6 — User's turn
+- **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
+- **The ticket's AlignFirst artifacts** via `alcode` (`read` protocol, run from the worktree): it loads the ticket's `*spec.md` / `*summary.md` local files in the agent's session and returns a synthesis of them.
+
+Combine them into the report and post it in the thread; lean on `alcode read` whenever the spec/summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
+
+## Step 7 — User's turn
 
 When everything is ready:
 
