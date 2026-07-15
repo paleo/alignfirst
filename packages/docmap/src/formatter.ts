@@ -234,7 +234,7 @@ export function formatRecursive(
     if (subResult.hasFiles) hasFiles = true;
   }
 
-  return { lines, hasSubdirList: false, hasFiles };
+  return { lines, hasSubdirList: result.subdirs.length > 0, hasFiles };
 }
 
 export function formatFileBullets(files: FileEntry[], relDir: string, prefix: string): string[] {

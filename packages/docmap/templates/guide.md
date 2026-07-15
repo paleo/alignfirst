@@ -20,8 +20,6 @@ Targets are positional paths; the CLI classifies each by inspecting the filesyst
 
 - **Audience:** an experienced newcomer, technically capable but unfamiliar with this project.
 - Be brief and specific: no obvious information, no generic best practices.
-- Typical document: 40–80 lines.
-- Prefer referencing source files over large code blocks.
 - If the title makes the purpose obvious, omit the `summary`.
 
 ## File and Directory Naming
@@ -29,7 +27,7 @@ Targets are positional paths; the CLI classifies each by inspecting the filesyst
 - Use **lowercase-with-dashes** (kebab-case) for new files and directories.
 - Uppercase is allowed (e.g. `RELEASING.md`).
 - Names must be **shell-safe**: no spaces, quotes, or special characters. Verify with `{{PM_ARGS}} --check`.
-- Write prose as Markdown (`.md`). docmap also lists other readable text formats — plain text, diagrams-as-text (`.dsl`, `.mermaid`), data (`.json`, `.yaml`, `.csv`), and schemas (`.sql`, `.graphql`, `.proto`) — so a text asset like `docs/architecture/c4-model.dsl` shows up beside your docs. Config templates such as `.env.example` are included; binary formats (PDF, images) and live secret files (`.env`) are not.
+- Write prose as Markdown (`.md`). docmap also lists other readable text formats — plain text, diagrams-as-text (`.dsl`, `.mermaid`), data (`.json`, `.yaml`, `.csv`), and schemas (`.sql`, `.graphql`, `.proto`) — so a text asset like `docs/architecture/c4-model.dsl` shows up beside your docs. Config templates such as `.env.example` are included; binary formats (PDF, images) are not listed, but they may still be added and referenced from a Markdown document — that is fine.
 - Use short, descriptive names.
 - Group related documents into subdirectories; nesting is allowed.
 

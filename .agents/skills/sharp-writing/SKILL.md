@@ -4,7 +4,7 @@ description: Conventions for writing sharp, concise prose and Markdown, for huma
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.1.0"
+  version: "0.2.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -29,6 +29,10 @@ Good text is like good code:
 One idea, one sentence. One concern, one paragraph. When a concern needs several paragraphs, give it a section title; split a complex idea into sub-ideas the same way. Never pack several ideas into one sentence, or several concerns into one paragraph.
 
 Show the direct path, not your detours. Writing is like climbing an uncharted mountain: you wander and backtrack to find the way, then from the summit you see the straight route. Write that route. Readers want the direct path, not the search that found it.
+
+## Prefer positive phrasing
+
+Say what is, not what is not. A negation forces the reader to invert; a double negation forces two inversions.
 
 ## Markdown
 

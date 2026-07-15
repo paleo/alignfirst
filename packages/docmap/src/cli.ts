@@ -16,6 +16,10 @@ import {
 // A bare invocation over fewer listable files than this lists recursively by default.
 const SMALL_SET_THRESHOLD = 20;
 
+// Appended under the title when a listing target holds no documents, so an empty folder reads as
+// deliberate rather than a silent, truncated listing.
+const EMPTY_LISTING_NOTE = "_No documents here._";
+
 export interface MainOptions {
   argv?: string[];
   stdout?: { write(s: string): void };
@@ -40,7 +44,10 @@ export function main(options?: MainOptions): number {
 
   for (const flag of unknownFlags) stderr.write(`Unknown option: ${flag} (ignored)\n`);
 
-  const pm = detectPackageManager(cwd, userAgent);
+  // Fold an explicit `--root` into every suggested command so each one is copy-pasteable against the
+  // same custom root; `showRootOption` then drops the now-redundant `--root <path>` help row.
+  const pm = commandsWithRoot(detectPackageManager(cwd, userAgent), root);
+  const showRootOption = root === undefined;
 
   // Mode precedence (each prints only its own output, then returns): version → help → guide →
   // search → check → listing/read.
@@ -49,7 +56,7 @@ export function main(options?: MainOptions): number {
     return 0;
   }
   if (help) {
-    stdout.write(renderHelp(pm, { full: true }));
+    stdout.write(renderHelp(pm, { full: true, showRootOption }));
     return 0;
   }
   if (guide) {
@@ -77,7 +84,7 @@ export function main(options?: MainOptions): number {
   // and renderListing below walks it again to format — an intentional double traversal,
   // negligible at this threshold and not worth threading a shared pass through.
   const bare = paths.length === 0 && !recursive;
-  if (bare) stdout.write(`${renderHelp(pm, { full: false })}\n`);
+  if (bare) stdout.write(`${renderHelp(pm, { full: false, showRootOption })}\n`);
   const smallSet = bare && countFilesUpTo(baseDir, SMALL_SET_THRESHOLD) < SMALL_SET_THRESHOLD;
 
   const { dirs, files } = classifyTargets(baseDir, paths, prefix);
@@ -154,6 +161,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 interface HelpOptions {
   full: boolean;
+  showRootOption: boolean;
 }
 
 interface PackageManagerCommands {
@@ -194,12 +202,20 @@ function browseCommands(pm: PackageManagerCommands): CommandRow[] {
   ];
 }
 
-function moreCommands(pm: PackageManagerCommands): CommandRow[] {
-  return [
+// The `--root <path>` row documents the option only when no root is active; once a real root is
+// folded into `pm` (see `commandsWithRoot`), every command already carries it, so the row is dropped
+// to avoid a doubled `--root`.
+function moreCommands(pm: PackageManagerCommands, showRootOption: boolean): CommandRow[] {
+  const rows: CommandRow[] = [
     { command: `${pm.withArgs} --check`, comment: "validate names and frontmatter" },
-    { command: `${pm.withArgs} --root <path>`, comment: "use a custom docs root" },
-    { command: `${pm.withArgs} -v`, comment: "print the docmap version (alias: --version)" },
   ];
+  if (showRootOption)
+    rows.push({ command: `${pm.withArgs} --root <path>`, comment: "use a custom docs root" });
+  rows.push({
+    command: `${pm.withArgs} -v`,
+    comment: "print the docmap version (alias: --version)",
+  });
+  return rows;
 }
 
 // The guide shows the browse/search set plus validation.
@@ -210,7 +226,7 @@ function guideCommands(pm: PackageManagerCommands): CommandRow[] {
   ];
 }
 
-function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
+function renderHelp(pm: PackageManagerCommands, { full, showRootOption }: HelpOptions): string {
   const lines = [
     "docmap — browse and read a project's docs/ tree of Markdown files.",
     "",
@@ -227,7 +243,7 @@ function renderHelp(pm: PackageManagerCommands, { full }: HelpOptions): string {
       "",
       "More:",
       "```",
-      renderCommands(moreCommands(pm)),
+      renderCommands(moreCommands(pm, showRootOption)),
       "```",
       "",
       "Positional paths are classified by the filesystem: a directory is listed, a file is read,",
@@ -295,14 +311,27 @@ function renderListing(
   if (targets.length === 0) return "";
 
   const allLines: string[] = [];
-  for (const { targetDir, rootTitle, rootRelDir } of targets) {
-    const formatted: FormatResult = recursive
-      ? formatRecursive(targetDir, rootTitle, 1, rootRelDir, prefix)
-      : formatDirectory(targetDir, rootTitle, listDirectory(targetDir), rootRelDir, prefix);
-    allLines.push(...formatted.lines);
-  }
-
+  for (const target of targets) allLines.push(...renderListingTarget(target, recursive, prefix));
   return allLines.join("\n");
+}
+
+// The root target can point at a folder that does not exist (no `docs/`, or a `--root` never
+// created); any target can exist yet hold no documents. Each gets an explicit line so the output
+// never degrades to a bare title with nothing under it.
+function renderListingTarget(target: ListingTarget, recursive: boolean, prefix: string): string[] {
+  const { targetDir, rootTitle, rootRelDir } = target;
+  if (!existsSync(targetDir)) return [missingFolderMessage(prefix), ""];
+
+  const formatted: FormatResult = recursive
+    ? formatRecursive(targetDir, rootTitle, 1, rootRelDir, prefix)
+    : formatDirectory(targetDir, rootTitle, listDirectory(targetDir), rootRelDir, prefix);
+  if (formatted.hasFiles || formatted.hasSubdirList) return formatted.lines;
+  return [...formatted.lines, EMPTY_LISTING_NOTE, ""];
+}
+
+function missingFolderMessage(prefix: string): string {
+  const where = prefix.length > 0 ? `\`${prefix}/\`` : "the documentation root";
+  return `No documentation folder at ${where}.`;
 }
 
 interface ListingTarget {
@@ -338,6 +367,24 @@ function renderReads(baseDir: string, files: FileTarget[], prefix: string): stri
     return `<document_file path="${result.path}">\n${result.content.trimEnd()}\n</document_file>`;
   });
   return `${blocks.join("\n\n")}\n`;
+}
+
+// Fold an explicit `--root <value>` into the command prefix so every suggested command targets the
+// same custom root. Adding an argument means npm needs its `--` separator, so both forms derive from
+// `withArgs` (which already carries it), not from the argument-less `base`.
+function commandsWithRoot(
+  pm: PackageManagerCommands,
+  root: string | undefined,
+): PackageManagerCommands {
+  if (root === undefined) return pm;
+  const rooted = `${pm.withArgs} --root ${shellQuoteArg(root)}`;
+  return { base: rooted, withArgs: rooted };
+}
+
+// Quote a root that carries spaces or shell metacharacters so the suggested command stays
+// copy-pasteable; a clean path is left bare.
+function shellQuoteArg(value: string): string {
+  return /^[\w./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function detectPackageManager(cwd: string, userAgent: string): PackageManagerCommands {
