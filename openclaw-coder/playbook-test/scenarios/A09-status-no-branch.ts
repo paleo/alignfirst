@@ -5,7 +5,7 @@ import { statusNoBranchRubric } from "./_lib/common-constants.ts";
 import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { assertNoChannelRootLeak, requireThreadId } from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const PROJECT = "nimbus";
@@ -25,13 +25,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 

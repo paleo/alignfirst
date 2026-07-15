@@ -3,7 +3,7 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 import { askWhichProjectRubric } from "./_lib/common-constants.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId } from "./_lib/outbound.ts";
+import { requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 const TICKET_ID = "ABC-040";
@@ -23,13 +23,7 @@ export default async function ticketWithoutProject(ctx: ScenarioContext): Promis
     text: `Ticket ${TICKET_ID}, on doit corriger le bug d'export.`,
   });
 
-  const starterWait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starterWait);
   ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
 

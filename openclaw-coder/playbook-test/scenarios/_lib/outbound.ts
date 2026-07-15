@@ -7,6 +7,38 @@ import { isMetaNarration } from "./meta-narration.ts";
 // and are not model-controllable — exempt from the leak sweep.
 const openclawNoticeRe = /^⚠️/u;
 
+export interface WaitForStarterOptions {
+  sinceCursor: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Wait for the first thread outbound — the starter — for this conversation.
+ *
+ * Before the thread exists, some models free-stream planning notes to the
+ * channel root (thread-less outbounds); `qwen3.7`/`glm-5.2` do it in a material
+ * share of turns — an obedience ceiling, not a regression, and the same class
+ * `assertNoChannelRootLeak` already tolerates. So this wait must NOT fail-fast
+ * on those thread-less outbounds (the default cap is 3): the `threadId`
+ * predicate plus the timeout bound it, and the agent still opens the thread.
+ */
+export function waitForStarter(
+  ctx: ScenarioContext,
+  opts: WaitForStarterOptions,
+): Promise<WaitForOutboundResult> {
+  return ctx.waitForOutbound(
+    (m) =>
+      m.direction === "outbound" &&
+      m.conversation.id === ctx.conversationId &&
+      m.threadId !== undefined,
+    {
+      timeoutMs: opts.timeoutMs ?? 90_000,
+      sinceCursor: opts.sinceCursor,
+      failFastUnmatchedOutbounds: false,
+    },
+  );
+}
+
 /**
  * The starter and its follow-ups always arrive inside a thread. Narrow the
  * optional `threadId` for the type system, failing loudly if the bus ever

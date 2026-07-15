@@ -1,7 +1,7 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId } from "./_lib/outbound.ts";
+import { requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import type { Step } from "./_lib/types.ts";
@@ -43,15 +43,7 @@ async function sendRequestWithTicketAndExpectWorkHeader(ctx: ScenarioContext): P
   // message — both tolerated. We don't judge the starter's form; we scan from
   // it (inclusive) for the `[WORK]` header, the durable project/ticket carrier
   // and the real outcome.
-  const wait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    // Generous timeout: the bot may still be settling work from a prior
-    // scenario; the gateway processes the new conversation in turn.
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const wait = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(wait);
   ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
   const starter: Step = {

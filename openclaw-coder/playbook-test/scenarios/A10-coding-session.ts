@@ -11,6 +11,7 @@ import {
   assertNoChannelRootLeak,
   assertNoSelfThreadMessagePost,
   requireThreadId,
+  waitForStarter,
 } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
@@ -51,13 +52,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
       `tu as mon feu vert, ne me demande pas de validation, préviens-moi quand c'est terminé.`,
   });
 
-  const starter = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId !== undefined,
-    { timeoutMs: 90_000, sinceCursor: startCursor },
-  );
+  const starter = await waitForStarter(ctx, { sinceCursor: startCursor });
   const threadId = requireThreadId(starter);
   ctx.log({ attachTo: starter.entry, label: `thread opened ${threadId}` });
 
