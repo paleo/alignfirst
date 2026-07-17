@@ -8,9 +8,9 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: dedi
 {{COMMANDS:setup}}
 ```
 
-With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base.
+With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
-`setup` creates the worktree (branch, port slot, symlinks, config), then installs dependencies, builds, and provisions the database. It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**.
+`setup` creates the worktree (branch, port slot, symlinks, config), then installs dependencies, builds, and provisions the database. It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
 
 **Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
 

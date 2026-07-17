@@ -49,12 +49,16 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
   return {
     setup: [
       {
-        command: `${ws} setup my-branch -c`,
-        comment: "new branch + worktree (dedup: appends -2, -3…)",
+        command: `${ws} setup -c my-branch`,
+        comment: "new branch + worktree (add --dedupe to auto-suffix a taken name)",
       },
       {
-        command: `${ws} setup my-branch -c --from origin/main`,
+        command: `${ws} setup -c my-branch --from origin/main`,
         comment: "new branch based on another ref",
+      },
+      {
+        command: `${ws} setup -c my-branch -d`,
+        comment: "return immediately; join with `wait`",
       },
       { command: `${ws} setup my-branch`, comment: "new worktree on an existing branch" },
       {

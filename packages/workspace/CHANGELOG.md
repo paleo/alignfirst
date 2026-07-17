@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.28.0
+
+### Minor Changes
+
+- `workspace setup` gains `--dedupe` (append `-2`, `-3`… when the branch name is taken) and `-d`/`--detached` (return once the worktree exists and finalize in the background). A conflicting branch name now fails with a clear error instead of a raw git fatal, and blocking setup shows a progress ticker fed by a new `progress()` callback on `finalizeWorktree`.
+
 ## 0.27.0
 
 ### Minor Changes

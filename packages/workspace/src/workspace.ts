@@ -6,7 +6,9 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -27,14 +29,16 @@ import {
   removeDevServerEntryByWorktree,
   writeDevServers,
 } from "./dev-servers-registry.js";
-import { ConfigError } from "./errors.js";
+import { ConfigError, WorkspaceError } from "./errors.js";
 import { printGuide } from "./guide.js";
 import {
   copyAndPatchFile,
   formatDuration,
   type ResolvedFileSource,
   setupLogPath,
+  setupProgressPath,
 } from "./helpers.js";
+import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { findOrphanPorts } from "./orphans.js";
 import { wsCmd } from "./package-manager.js";
 import {
@@ -180,6 +184,11 @@ export interface SetupContext {
   ports: Record<string, number>;
   force: boolean;
   verbose: boolean;
+  /**
+   * Reports a step label shown by the blocking `workspace setup` / `wait` progress ticker.
+   * Optional to call; each call replaces the previously reported label.
+   */
+  progress: (label: string) => void;
 }
 
 /**
@@ -304,40 +313,51 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     process.exit(1);
   }
 
-  switch (command.kind) {
-    case "finalize":
-      await runFinalize(command, config, registryDir);
-      return;
-    case "wait":
-      await runWait(command, config, registryDir);
-      return;
-    case "status":
-      runStatus(command, config, registryDir);
-      return;
-    case "list":
-      runList(registryDir);
-      return;
-    case "prune":
-      await runPrune(config, registryDir, verbose);
-      return;
-  }
-
-  const ctx = detectWorktree();
-  const run: RunCtx = { verbose };
-
-  switch (command.kind) {
-    case "remove":
-      await handleRemove(command, ctx, run, config, registryDir);
-      return;
-    case "setup": {
-      const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
-      // Block until the detached finalize settles (READY/FAILED). A caller that wants the whole
-      // setup in the background backgrounds this command itself (e.g. OpenClaw's exec tool, which
-      // wakes the agent when it exits).
-      await waitForSlot(slot, config, registryDir, { printSummary: false });
-      if (command.go) enterWorktree(worktree);
-      return;
+  try {
+    switch (command.kind) {
+      case "finalize":
+        await runFinalize(command, config, registryDir);
+        return;
+      case "wait":
+        await runWait(command, config, registryDir, verbose);
+        return;
+      case "status":
+        runStatus(command, config, registryDir);
+        return;
+      case "list":
+        runList(registryDir);
+        return;
+      case "prune":
+        await runPrune(config, registryDir, verbose);
+        return;
     }
+
+    const ctx = detectWorktree();
+    const run: RunCtx = { verbose };
+
+    switch (command.kind) {
+      case "remove":
+        await handleRemove(command, ctx, run, config, registryDir);
+        return;
+      case "setup": {
+        const { slot, worktree } = await runSetup(command, ctx, run, config, registryDir);
+        // Default: block until the detached finalize settles (READY/FAILED), showing progress.
+        // `--detached` skips the wait and returns as soon as the worktree exists — the caller joins
+        // later with `wait`.
+        if (!command.detached) {
+          await waitForSlot(slot, config, registryDir, { printSummary: false, verbose });
+        }
+        // The worktree exists once `runSetup` returns, so `--go` can enter in either mode.
+        if (command.go) enterWorktree(worktree);
+        return;
+      }
+    }
+  } catch (err) {
+    if (err instanceof WorkspaceError) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
   }
 }
 
@@ -402,6 +422,7 @@ async function runSetup(
   // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
   // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
   writeFileSync(logPath, "");
+  rmSync(setupProgressPath(setupCtx.currentWorktree, config.runtimeDir), { force: true });
   // Opened "a" so the same fd can be inherited by the detached finalize child below.
   const logFd = openSync(logPath, "a");
   const teeLog = (message: string): void => {
@@ -446,8 +467,9 @@ async function runSetup(
   );
 
   teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch} slot=${slot}`);
-  if (status !== "ready") {
+  if (command.detached && status !== "ready") {
     teeLog(`Setup continuing in background. Tail: ${logPath}`);
+    teeLog(`Join it with \`${wsCmd("wait")}\`.`);
   }
 
   const finalizeArgs = [config.scriptPath, "__finalize", String(slot)];
@@ -498,8 +520,13 @@ async function runFinalize(
   const slot = Number(command.slot);
   const ctx = detectWorktree();
   const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
+  const progressPath = setupProgressPath(ctx.currentWorktree, config.runtimeDir);
   const appendLog = (message: string): void => {
     appendFileSync(logPath, `${message}\n`);
+  };
+  const progress = (label: string): void => {
+    writeFileSync(progressPath, label);
+    appendLog(`PROGRESS: ${label}`);
   };
 
   const registry = readSlots(ctx.mainWorktree, registryDir);
@@ -530,11 +557,13 @@ async function runFinalize(
     ports,
     force: command.force,
     verbose: false,
+    progress,
   };
 
   try {
     const result = await config.finalizeWorktree(setupContext);
     markSlotReady(ctx.mainWorktree, registryDir, slot, result?.extra);
+    rmSync(progressPath, { force: true });
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (slot ${slot})`);
     appendLog("============================================================");
@@ -542,6 +571,7 @@ async function runFinalize(
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
     markSlotFailed(ctx.mainWorktree, registryDir, slot, message);
+    rmSync(progressPath, { force: true });
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
     process.exit(1);
@@ -860,18 +890,19 @@ async function runWait(
   command: WaitCommand,
   config: WorkspaceConfig,
   registryDir: string,
+  verbose: boolean,
 ): Promise<void> {
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
   const ctx = detectWorktree();
   const target = resolveTarget(command.selector, ctx, config, registryDir);
-  await waitForSlot(target.slot, config, registryDir);
+  await waitForSlot(target.slot, config, registryDir, { verbose, replayLog: true });
 }
 
 async function waitForSlot(
   slot: number,
   config: WorkspaceConfig,
   registryDir: string,
-  options: { printSummary?: boolean } = {},
+  options: { printSummary?: boolean; verbose?: boolean; replayLog?: boolean } = {},
 ): Promise<void> {
   const printSummary = options.printSummary ?? true;
   const ctx = detectWorktree();
@@ -881,29 +912,107 @@ async function waitForSlot(
     process.exit(1);
   }
 
+  const logPath = setupLogPath(initial.worktree, config.runtimeDir);
+  const progressPath = setupProgressPath(initial.worktree, config.runtimeDir);
+  const ticker = startSetupTicker(
+    options.verbose ?? false,
+    options.replayLog ?? false,
+    logPath,
+    progressPath,
+  );
+
   const pollMs = 500;
   // Poll slots.json — the finalize child writes `status` on success or failure. Tiny file, no
   // log-tailing race.
   for (;;) {
     const entry = readSlots(ctx.mainWorktree, registryDir).slots[String(slot)];
     if (!entry) {
+      ticker.stop();
       console.error(`Error: Slot ${slot} disappeared from registry.`);
       process.exit(1);
     }
     if (entry.status === "ready") {
-      console.log("\n… ready");
+      ticker.stop();
+      console.log("… ready");
       if (printSummary) {
         printWorktreeInfo(config, registryDir, slot, entry.worktree);
       }
       return;
     }
     if (entry.status === "failed") {
-      const logPath = setupLogPath(entry.worktree, config.runtimeDir);
+      ticker.stop();
       console.error(`FAILED: ${entry.failure?.message ?? "(no message)"}`);
-      console.error(`Full log: ${logPath}`);
+      console.error(`Full log: ${setupLogPath(entry.worktree, config.runtimeDir)}`);
       process.exit(1);
     }
+    ticker.tick();
     await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
+interface SetupTicker {
+  /** Refresh the display; called once per poll. */
+  tick: () => void;
+  /** Clear the display before the settle output is printed. */
+  stop: () => void;
+}
+
+/**
+ * Progress feedback while a detached finalize runs. `--verbose` follows the setup log live —
+ * from its current size during a blocking setup (the pre-finalize content was already printed by
+ * `teeLog`), or after replaying a tail when `replayLog` is set (a standalone `wait` joins with no
+ * history). Otherwise a single status line reports the latest `progress()` label and elapsed time.
+ */
+function startSetupTicker(
+  verbose: boolean,
+  replayLog: boolean,
+  logPath: string,
+  progressPath: string,
+): SetupTicker {
+  if (verbose) {
+    const offset = replayLog
+      ? replayTail(logPath, "", LOG_TAIL_LINES)
+      : existsSync(logPath)
+        ? statSync(logPath).size
+        : 0;
+    const follower = followLogFile(logPath, "", offset);
+    return { tick: () => {}, stop: follower.stop };
+  }
+  return startStatusLineTicker(logPath, progressPath);
+}
+
+function startStatusLineTicker(logPath: string, progressPath: string): SetupTicker {
+  const isTty = process.stdout.isTTY ?? false;
+  const startedAt = Date.now();
+  let lastLabel: string | undefined;
+  let printed = false;
+  const render = (): void => {
+    const label = readProgressLabel(progressPath);
+    const labelPart = label !== undefined ? ` ${label}` : "";
+    const line = `Finalizing…${labelPart} (${formatDuration(Date.now() - startedAt)}) — tail: ${logPath}`;
+    if (isTty) {
+      process.stdout.write(`\r\x1b[2K${line}`);
+      printed = true;
+    } else if (!printed || label !== lastLabel) {
+      console.log(line);
+      printed = true;
+    }
+    lastLabel = label;
+  };
+  return {
+    tick: render,
+    stop: () => {
+      if (isTty && printed) process.stdout.write("\r\x1b[2K");
+    },
+  };
+}
+
+function readProgressLabel(progressPath: string): string | undefined {
+  try {
+    const label = readFileSync(progressPath, "utf-8").trim();
+    return label.length > 0 ? label : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -1074,7 +1183,13 @@ function ensureWorktree(
   dirNameFn: WorktreeDirNameFn | undefined,
 ): WorktreeContext {
   if (command.branch === undefined) return ctx;
-  if (command.newBranch) return createBranch(command.branch, ctx, run, dirNameFn, command.from);
+  if (command.newBranch) {
+    return createBranch(command.branch, ctx, run, {
+      dirNameFn,
+      from: command.from,
+      dedupe: command.dedupe,
+    });
+  }
   return useExistingBranch(command.branch, ctx, run, dirNameFn);
 }
 

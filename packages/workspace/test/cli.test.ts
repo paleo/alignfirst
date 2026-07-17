@@ -37,8 +37,33 @@ describe("parseWorkspaceArgs", () => {
       slot: "8110",
       force: true,
       go: true,
+      dedupe: false,
+      detached: false,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("parses `-d` / `--detached`", () => {
+    expect(parseWorkspaceArgs(["setup", "-d"]).command).toMatchObject({
+      kind: "setup",
+      detached: true,
+    });
+    expect(parseWorkspaceArgs(["setup", "--detached"]).command).toMatchObject({
+      kind: "setup",
+      detached: true,
+    });
+  });
+
+  it("parses `setup -c <branch> --dedupe`", () => {
+    expect(parseWorkspaceArgs(["setup", "feat/42", "-c", "--dedupe"]).command).toMatchObject({
+      kind: "setup",
+      newBranch: true,
+      dedupe: true,
+    });
+  });
+
+  it("rejects `--dedupe` without `-c`", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--dedupe"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `-v` verbose short on a subcommand", () => {

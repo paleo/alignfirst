@@ -30,4 +30,4 @@ export type { ResolvedSlot } from "./slots.js";
 import * as helpers from "./helpers.js";
 export { helpers };
 
-export { StartupError, ConfigError } from "./errors.js";
+export { StartupError, ConfigError, WorkspaceError } from "./errors.js";
