@@ -146,14 +146,6 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
    Use your alignfirst-setup-guide skill. Upgrade AlignFirst in this project.
    ```
 
-3. Install the new alignfirst skills:
-
-   ```bash
-   npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill almerge
-   ```
-
-> **Note:** We recommend installing the alignfirst skills globally so they're easier to update.
-
 ## License
 
 CC0 1.0 Universal.
