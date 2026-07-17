@@ -18,7 +18,7 @@ const LAYOUT: GuideLayout = { runtimeDir: ".local-wt", sharedDirs: [".local", ".
 describe("renderGuide", () => {
   it("renders npm commands with the `--` separator for forwarded args", () => {
     const guide = renderGuide(NPM, LAYOUT);
-    expect(guide).toContain("npm run workspace -- setup my-branch -c");
+    expect(guide).toContain("npm run workspace -- setup -c my-branch");
     expect(guide).toContain("npm run dev -- up");
     // Bare foreground takes no forwarded args, so no separator.
     expect(guide).toMatch(/^npm run dev {2,}#/m);
@@ -26,7 +26,7 @@ describe("renderGuide", () => {
 
   it("renders pnpm commands without a separator", () => {
     const guide = renderGuide(PNPM, LAYOUT);
-    expect(guide).toContain("pnpm workspace setup my-branch -c");
+    expect(guide).toContain("pnpm workspace setup -c my-branch");
     expect(guide).toContain("pnpm dev up");
     expect(guide).not.toContain("pnpm dev --");
   });

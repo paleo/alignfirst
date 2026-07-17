@@ -7,6 +7,10 @@ export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
   return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.log");
 }
 
+export function setupProgressPath(worktreeRoot: string, runtimeDir: string): string {
+  return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.progress");
+}
+
 export function patchEnvFile(content: string, patches: Record<string, string>): string {
   const lines = content.trimEnd().split("\n");
   for (const [key, value] of Object.entries(patches)) {

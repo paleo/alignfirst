@@ -11,6 +11,8 @@ export type WorkspaceCommand =
       slot?: string;
       force: boolean;
       go: boolean;
+      dedupe: boolean;
+      detached: boolean;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
   | { kind: "list" }
@@ -88,6 +90,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       go: { type: "boolean" },
+      dedupe: { type: "boolean" },
+      detached: { type: "boolean", short: "d" },
       verbose: { type: "boolean" },
     },
     allowPositionals: true,
@@ -96,11 +100,15 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
   const go = values.go ?? false;
+  const dedupe = values.dedupe ?? false;
   if (newBranch && branch === undefined) {
-    throw new ConfigError("`workspace setup <branch> -c` requires a branch name.");
+    throw new ConfigError("`workspace setup -c <branch>` requires a branch name.");
   }
   if (values.from !== undefined && !newBranch) {
     throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
+  }
+  if (dedupe && !newBranch) {
+    throw new ConfigError("`--dedupe` requires `-c`/`--new-branch`.");
   }
   if (go && branch === undefined) {
     throw new ConfigError("`--go` requires a branch (the worktree to enter).");
@@ -114,6 +122,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       slot: values.slot,
       force: values.force ?? false,
       go,
+      dedupe,
+      detached: values.detached ?? false,
     },
     verbose: values.verbose ?? false,
   };
@@ -258,15 +268,18 @@ export function printWorkspaceHelp(): void {
       "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
       "",
       "Commands:",
-      "  setup [<branch>] [-c|--new-branch] [--from <ref>] [-s|--slot <port>] [--force] [--go]",
+      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [-s|--slot <port>] [--force] [-d|--detached] [--go]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
       "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
-      "      Blocks until setup reaches READY (or FAILED). To avoid blocking, background",
-      "      the command and run `wait` to join it later.",
-      "      With --go, drop into an interactive shell in the new worktree (exit to return),",
-      "      entered once it is READY. Requires a branch and $SHELL.",
+      "      --dedupe: when the branch name is taken, append -2, -3… instead of failing",
+      "      (without it, a taken name is an error).",
+      "      Blocks until setup reaches READY (or FAILED), showing a progress ticker.",
+      "      -d|--detached: return once the worktree exists; setup continues in the background,",
+      "      join it with `wait`.",
+      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
+      "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
       "  remove [<dir>] [-s|--slot <port>] [--force]",
       "      Remove a workspace, selected by directory (path or basename) or --slot;",
       "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",

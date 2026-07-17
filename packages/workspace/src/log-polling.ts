@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { StartupError } from "./errors.js";
@@ -8,6 +8,7 @@ import { isProcessAlive as defaultIsAlive } from "./process-control.js";
 export const LOG_TAIL_LINES = 30;
 export const POLL_INTERVAL_MS = 500;
 export const TIMEOUT_MS = 120_000;
+export const TAIL_INTERVAL_MS = 300;
 
 export interface PollableServer {
   name: string;
@@ -80,4 +81,27 @@ async function waitForReady(
     `did not become ready within ${timeoutMs / 1000}s`,
     server.logFile,
   );
+}
+
+/** Streams new bytes appended to `path` to stdout, starting at `initialOffset`. Returns the poll
+ * timer so the caller can stop following. */
+export function followLogFile(path: string, prefix: string, initialOffset: number): NodeJS.Timeout {
+  let offset = initialOffset;
+  return setInterval(() => {
+    if (!existsSync(path)) return;
+    const size = statSync(path).size;
+    if (size < offset) offset = 0;
+    if (size <= offset) return;
+    const length = size - offset;
+    const fd = openSync(path, "r");
+    const buffer = Buffer.allocUnsafe(length);
+    const bytesRead = readSync(fd, buffer, 0, length, offset);
+    closeSync(fd);
+    offset += bytesRead;
+    writeWithPrefix(buffer.subarray(0, bytesRead).toString("utf8"), prefix);
+  }, TAIL_INTERVAL_MS);
+}
+
+export function writeWithPrefix(text: string, prefix: string): void {
+  process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
 }

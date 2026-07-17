@@ -12,6 +12,21 @@ read_when:
 
 For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [workspace setup blueprint](../skills/alignfirst-setup-guide/references/workspace-setup.md). This document covers package internals and edge-case behavior that don't belong in that guide.
 
+## Setup modes
+
+`workspace setup` creates the worktree synchronously, then runs `finalizeWorktree` (install, build, DB) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`.
+
+- **Blocking (default).** After spawning the child, `runSetup` calls `waitForSlot`, which polls `slots.json` until the finalize child marks the slot `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed).
+- **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker. `--go` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
+
+### Progress file
+
+The blocking ticker cannot call into the detached child, so they communicate through a file: `<runtimeDir>/logs/workspace-setup.progress`. `SetupContext.progress(label)` overwrites it with the current label (and appends `PROGRESS: <label>` to the log); the ticker re-reads it each poll. It is deleted when the log is truncated at the start of `setup` and when finalize settles (ready or failed), so a stale label never leaks into the next run.
+
+### Branch-name conflicts
+
+Git refs are hierarchical: `refs/heads/test` cannot coexist with anything under `refs/heads/test/`. `createBranch` treats a name as **taken** when the exact ref exists (local or `origin/`) **or** a ref exists under its namespace, and refuses with a `WorkspaceError` that names the conflict. `--dedupe` opts into the suffix loop (`test-2`, `test-3`…), preferring a candidate whose branch name and worktree directory are both free so the two stay aligned. An **ancestor** conflict (requesting `test/abc` while branch `test` exists) can never be suffixed away, so it always fails, even with `--dedupe`. The worktree-directory dedupe (`dedupeWorktreePath`) is always on and independent of `--dedupe`.
+
 ## Foreground self-exit
 
 A foreground `dev` ([`runForeground`](../packages/workspace/src/dev-server.ts)) runs the same start pipeline as `dev up`, but the servers are spawned **detached** (each in its own process group) and only their **child PIDs** are registered in `dev-servers.json`. The foreground Node parent itself is never in the registry — so nothing else can find it to signal it.
