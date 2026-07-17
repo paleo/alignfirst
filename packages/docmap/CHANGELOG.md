@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.8.2
+
+### Patch Changes
+
+- Document the 20-document listing threshold under its own README heading.
+
 ## 0.8.1
 
 ### Patch Changes

@@ -16,8 +16,8 @@ For the consumer-facing blueprint — concepts, config fields, the CLI surface, 
 
 `workspace setup` creates the worktree synchronously, then runs `finalizeWorktree` (install, build, DB) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`.
 
-- **Blocking (default).** After spawning the child, `runSetup` calls `waitForSlot`, which polls `slots.json` until the finalize child marks the slot `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed).
-- **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker. `--go` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
+- **Blocking (default).** After spawning the child, `runSetup` calls `waitForSlot`, which polls `slots.json` until the finalize child marks the slot `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed); on settle, one final drain read prints the log bytes written since the last poll.
+- **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker; its `--verbose` first replays the last 30 log lines, since the joiner saw no history. `--go` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
 
 ### Progress file
 

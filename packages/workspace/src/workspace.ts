@@ -38,7 +38,7 @@ import {
   setupLogPath,
   setupProgressPath,
 } from "./helpers.js";
-import { followLogFile } from "./log-polling.js";
+import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { findOrphanPorts } from "./orphans.js";
 import { wsCmd } from "./package-manager.js";
 import {
@@ -895,14 +895,14 @@ async function runWait(
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
   const ctx = detectWorktree();
   const target = resolveTarget(command.selector, ctx, config, registryDir);
-  await waitForSlot(target.slot, config, registryDir, { verbose });
+  await waitForSlot(target.slot, config, registryDir, { verbose, replayLog: true });
 }
 
 async function waitForSlot(
   slot: number,
   config: WorkspaceConfig,
   registryDir: string,
-  options: { printSummary?: boolean; verbose?: boolean } = {},
+  options: { printSummary?: boolean; verbose?: boolean; replayLog?: boolean } = {},
 ): Promise<void> {
   const printSummary = options.printSummary ?? true;
   const ctx = detectWorktree();
@@ -914,7 +914,12 @@ async function waitForSlot(
 
   const logPath = setupLogPath(initial.worktree, config.runtimeDir);
   const progressPath = setupProgressPath(initial.worktree, config.runtimeDir);
-  const ticker = startSetupTicker(options.verbose ?? false, logPath, progressPath);
+  const ticker = startSetupTicker(
+    options.verbose ?? false,
+    options.replayLog ?? false,
+    logPath,
+    progressPath,
+  );
 
   const pollMs = 500;
   // Poll slots.json — the finalize child writes `status` on success or failure. Tiny file, no
@@ -953,15 +958,25 @@ interface SetupTicker {
 }
 
 /**
- * Progress feedback while a detached finalize runs. `--verbose` follows the setup log live from its
- * current size (the pre-finalize content was already printed by `teeLog`); otherwise a single status
- * line reports the latest `progress()` label and elapsed time.
+ * Progress feedback while a detached finalize runs. `--verbose` follows the setup log live —
+ * from its current size during a blocking setup (the pre-finalize content was already printed by
+ * `teeLog`), or after replaying a tail when `replayLog` is set (a standalone `wait` joins with no
+ * history). Otherwise a single status line reports the latest `progress()` label and elapsed time.
  */
-function startSetupTicker(verbose: boolean, logPath: string, progressPath: string): SetupTicker {
+function startSetupTicker(
+  verbose: boolean,
+  replayLog: boolean,
+  logPath: string,
+  progressPath: string,
+): SetupTicker {
   if (verbose) {
-    const offset = existsSync(logPath) ? statSync(logPath).size : 0;
-    const timer = followLogFile(logPath, "", offset);
-    return { tick: () => {}, stop: () => clearInterval(timer) };
+    const offset = replayLog
+      ? replayTail(logPath, "", LOG_TAIL_LINES)
+      : existsSync(logPath)
+        ? statSync(logPath).size
+        : 0;
+    const follower = followLogFile(logPath, "", offset);
+    return { tick: () => {}, stop: follower.stop };
   }
   return startStatusLineTicker(logPath, progressPath);
 }

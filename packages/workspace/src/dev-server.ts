@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
@@ -17,14 +17,14 @@ import {
   unregisterDevServer,
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError, formatDuration, lastLines, setupLogPath } from "./helpers.js";
+import { detectCommonJsError, formatDuration, setupLogPath } from "./helpers.js";
 import {
   awaitAllReady,
   followLogFile,
   handleStartupFailure,
   LOG_TAIL_LINES,
   type PollableServer,
-  writeWithPrefix,
+  replayTail,
 } from "./log-polling.js";
 import {
   canonicalCwd,
@@ -428,17 +428,6 @@ function tailLogs(
     const offset = "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines);
     followLogFile(path, prefix, offset);
   }
-}
-
-// Prints the last `lines` of the log, then returns the byte offset where `followLogFile` resumes
-// (the file's current size). Reads raw bytes so the offset matches the file even if it holds
-// invalid UTF-8, which a decoded string's byte length would not.
-function replayTail(path: string, prefix: string, lines: number): number {
-  if (!existsSync(path)) return 0;
-  const buffer = readFileSync(path);
-  const tail = lastLines(buffer.toString("utf8"), lines);
-  if (tail.length > 0) writeWithPrefix(tail.endsWith("\n") ? tail : `${tail}\n`, prefix);
-  return buffer.length;
 }
 
 /**

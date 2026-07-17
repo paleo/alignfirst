@@ -4,6 +4,8 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 
+const MAX_ALIGNED_SUFFIX_ATTEMPTS = 100;
+
 export interface WorktreeContext {
   currentWorktree: string;
   mainWorktree: string;
@@ -142,8 +144,6 @@ function findNamespaceConflict(branch: string): string | undefined {
     return undefined;
   }
 }
-
-const MAX_ALIGNED_SUFFIX_ATTEMPTS = 100;
 
 /**
  * Suffix loop for `--dedupe`: prefers a candidate whose branch name is free **and** whose worktree
