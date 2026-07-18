@@ -32,7 +32,7 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 *Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 ```
 
-### Bootstrapping a docs/ directory
+### Bootstrapping a docs/ directory (optional)
 
 To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:
 
@@ -55,14 +55,13 @@ Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a
 
 ```markdown
 ---
-title: Short Title Here
 summary: A short description of what this document covers.
 read_when:
   - first situation when this document is useful
   - second situation
 ---
 
-# Your Complete Title Here
+# Your Title Here
 
 ...
 ```
