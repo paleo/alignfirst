@@ -674,6 +674,32 @@ describe("--search ranking (search fixture)", () => {
   });
 });
 
+describe("--search snippets (search fixture)", () => {
+  it("shows the best matching body line with its raw-file line number", () => {
+    const { code, stdout } = run(["--search", "forwards"], fixtures.search);
+    expect(code).toBe(0);
+    expect(stdout).toContain(dp(fixtures.search, "notes.md"));
+    expect(stdout).toContain("  > 7: The gateway forwards requests.");
+  });
+
+  it("adds no snippet when the match is metadata-only", () => {
+    const { stdout } = run(["--search", "quarantine"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "meta-only.md"));
+    expect(stdout).not.toContain("  > ");
+  });
+
+  it("clips a long line around the matched term", () => {
+    const { stdout } = run(["--search", "telemetry"], fixtures.search);
+    const snippet = stdout.split("\n").find((line) => line.startsWith("  > "));
+    expect(snippet).toBeDefined();
+    expect(snippet).toContain("> 7:");
+    expect(snippet).toContain("telemetry");
+    expect(snippet).toContain("…");
+    expect(snippet).not.toContain("start-marker");
+    expect(snippet).not.toContain("end-marker");
+  });
+});
+
 describe("--search result cap (large fixture)", () => {
   it("caps output at 20 bullets and reports the remainder", () => {
     const { code, stdout } = run(["--search", "doc"], fixtures.large);
