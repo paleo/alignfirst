@@ -18,6 +18,7 @@ const fixtures = {
   classify: resolve(__dirname, "fixtures/classify"),
   large: resolve(__dirname, "fixtures/large"),
   listable: resolve(__dirname, "fixtures/listable"),
+  search: resolve(__dirname, "fixtures/search"),
 };
 
 // The display prefix is the root relative to cwd; mirror it to build expected paths.
@@ -574,11 +575,14 @@ describe("--search", () => {
     expect(stdout).not.toContain(dp(fixtures.basic, "backend/api-guide.md"));
   });
 
-  it("requires every term to match (AND) and excludes non-matching files", () => {
+  it("matches any term (OR) and ranks the file matching more terms first", () => {
     const { code, stdout } = run(["--search", "guide api"], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).not.toContain(dp(fixtures.basic, "backend/database.md"));
+    const twoTerms = stdout.indexOf(dp(fixtures.basic, "backend/api-guide.md"));
+    const oneTerm = stdout.indexOf(dp(fixtures.basic, "backend/database.md"));
+    expect(twoTerms).toBeGreaterThan(-1);
+    expect(oneTerm).toBeGreaterThan(-1);
+    expect(twoTerms).toBeLessThan(oneTerm);
   });
 
   it("matches the file basename even when absent from frontmatter", () => {
@@ -600,6 +604,86 @@ describe("--search", () => {
     const { code, stdout } = run(["--search", "zzznomatch"], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain("No documents match: zzznomatch");
+  });
+});
+
+describe("--search ranking (search fixture)", () => {
+  function searchOrder(query: string, first: string, second: string) {
+    const { code, stdout } = run(["--search", query], fixtures.search);
+    expect(code).toBe(0);
+    const firstIdx = stdout.indexOf(dp(fixtures.search, first));
+    const secondIdx = stdout.indexOf(dp(fixtures.search, second));
+    expect(firstIdx).toBeGreaterThan(-1);
+    expect(secondIdx).toBeGreaterThan(-1);
+    expect(firstIdx).toBeLessThan(secondIdx);
+  }
+
+  it("matches an accented title with an unaccented query", () => {
+    const { stdout } = run(["--search", "specification"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "accent.md"));
+  });
+
+  it("matches plain text with an accented query", () => {
+    const { stdout } = run(["--search", "spécification"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "plain.md"));
+  });
+
+  it("folds English plurals: 'workspaces' finds 'workspace'", () => {
+    const { stdout } = run(["--search", "workspaces"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "workspace.md"));
+  });
+
+  it("folds French plurals in both directions", () => {
+    expect(run(["--search", "cheval"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "elevage.md"),
+    );
+    expect(run(["--search", "chevaux"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "elevage.md"),
+    );
+  });
+
+  it("ranks a title hit above a body-only hit", () => {
+    searchOrder("gateway", "gateway.md", "notes.md");
+  });
+
+  it("caps occurrences: body spam does not outrank a title hit", () => {
+    searchOrder("gateway", "gateway.md", "spam.md");
+  });
+
+  it("gives a word-boundary bonus over substring-only matches", () => {
+    searchOrder("log", "log.md", "logging.md");
+  });
+
+  it("drops stopwords from the query instead of broadening results", () => {
+    const { stdout } = run(["--search", "gateway the"], fixtures.search);
+    expect(stdout).not.toContain(dp(fixtures.search, "plain.md"));
+    // With "the" dropped, notes.md ("The gateway…") counts one term, not two, and stays behind.
+    const gateway = stdout.indexOf(dp(fixtures.search, "gateway.md"));
+    const notes = stdout.indexOf(dp(fixtures.search, "notes.md"));
+    expect(gateway).toBeGreaterThan(-1);
+    expect(gateway).toBeLessThan(notes);
+  });
+
+  it("keeps an all-stopwords query (safety valve)", () => {
+    const { stdout } = run(["--search", "the"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "plain.md"));
+  });
+
+  it("breaks ties deterministically by path", () => {
+    searchOrder("shared", "tie-a.md", "tie-b.md");
+  });
+});
+
+describe("--search result cap (large fixture)", () => {
+  it("caps output at 20 bullets and reports the remainder", () => {
+    const { code, stdout } = run(["--search", "doc"], fixtures.large);
+    expect(code).toBe(0);
+    const bullets = stdout.split("\n").filter((line) => line.startsWith("- `"));
+    expect(bullets).toHaveLength(20);
+    expect(stdout).toContain("… and 2 more matches");
+    // The two summary-only matches score below the 20 path/title hits and are the ones dropped.
+    expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
+    expect(stdout).not.toContain(dp(fixtures.large, "only-subs/deep/leaf.md"));
   });
 });
 

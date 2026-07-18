@@ -88,21 +88,17 @@ export interface CheckIssue {
 }
 
 // Turns a listable file into a FileEntry. Markdown files contribute frontmatter and a fallback
-// heading title; other listable files show as a bare path with no metadata. The single source of
-// the extractMetadata -> fallback-title -> validateName sequence used across the module.
+// heading title; other listable files show as a bare path with no metadata, without being read.
 function buildFileEntry(dirPath: string, name: string): FileEntry {
-  if (!isMarkdown(name)) {
-    return {
-      name,
-      title: undefined,
-      summary: undefined,
-      readWhen: [],
-      error: undefined,
-      nameError: validateName(name),
-    };
-  }
+  if (!isMarkdown(name)) return bareEntry(name);
+  return entryFromContent(name, readFileSync(join(dirPath, name), "utf-8"));
+}
 
-  const content = readFileSync(join(dirPath, name), "utf-8");
+// Builds a FileEntry from content already read — search reads each file once for both metadata
+// and body scoring. The single source of the extractMetadata -> fallback-title -> validateName
+// sequence used across the module.
+export function entryFromContent(name: string, content: string): FileEntry {
+  if (!isMarkdown(name)) return bareEntry(name);
   const meta = extractMetadata(content);
   return {
     name,
@@ -110,6 +106,17 @@ function buildFileEntry(dirPath: string, name: string): FileEntry {
     summary: meta.summary,
     readWhen: meta.readWhen,
     error: meta.error,
+    nameError: validateName(name),
+  };
+}
+
+function bareEntry(name: string): FileEntry {
+  return {
+    name,
+    title: undefined,
+    summary: undefined,
+    readWhen: [],
+    error: undefined,
     nameError: validateName(name),
   };
 }
@@ -320,24 +327,6 @@ function readableContent(name: string, content: string): string {
   return isMarkdown(name) ? stripFrontmatter(content) : content;
 }
 
-export function searchDocs(baseDir: string, terms: string[], prefix: string): string[] {
-  const needles = terms.map((term) => term.toLowerCase());
-  const lines: string[] = [];
-  for (const rel of collectAllFiles(baseDir, "")) {
-    const slash = rel.lastIndexOf("/");
-    const relDir = slash === -1 ? "" : rel.slice(0, slash);
-    const name = slash === -1 ? rel : rel.slice(slash + 1);
-    const entry = buildFileEntry(join(baseDir, relDir), name);
-    const haystack = [rel, entry.title, entry.summary, ...entry.readWhen]
-      .filter((part): part is string => part !== undefined)
-      .join(" ")
-      .toLowerCase();
-    if (!needles.every((needle) => haystack.includes(needle))) continue;
-    lines.push(...formatFileBullets([entry], relDir, prefix));
-  }
-  return lines;
-}
-
 export function collectAllFiles(dirPath: string, prefix: string): string[] {
   const result: string[] = [];
   let entries: Dirent<string>[];
@@ -411,7 +400,7 @@ function isEnvTemplate(name: string): boolean {
   return TEMPLATE_SUFFIXES.some((suffix) => name.endsWith(suffix));
 }
 
-function isMarkdown(name: string): boolean {
+export function isMarkdown(name: string): boolean {
   return MARKDOWN_EXTENSIONS.has(extensionOf(name));
 }
 

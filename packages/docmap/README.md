@@ -119,7 +119,7 @@ docmap docs/dir-a/doc-1.md docs/dir-b/doc-2.md
 # Mix directories and files in one call
 docmap dir-a docs/dir-b/doc-2.md
 
-# Search path and frontmatter (title, summary, read_when); every term must match
+# Search documents (any term matches; best matches first)
 docmap --search "api endpoint"
 
 # Validate all files (names, frontmatter)

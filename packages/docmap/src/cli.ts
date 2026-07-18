@@ -9,9 +9,9 @@ import {
   isUnder,
   listDirectory,
   readDocFile,
-  searchDocs,
   type FormatResult,
 } from "./formatter.js";
+import { searchDocs } from "./search.js";
 
 // A bare invocation over fewer listable files than this lists recursively by default.
 const SMALL_SET_THRESHOLD = 20;
@@ -197,7 +197,7 @@ function browseCommands(pm: PackageManagerCommands): CommandRow[] {
     { command: `${pm.withArgs} --recursive`, comment: "list every document" },
     {
       command: `${pm.withArgs} --search "term1 term2"`,
-      comment: "search path and frontmatter (title, summary, read_when)",
+      comment: "search documents (any term matches; best matches first)",
     },
   ];
 }
