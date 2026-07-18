@@ -81,7 +81,7 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 ### Status update
 
 - Check the workspace status (the takeover-sync in `project-workspace-setup.md` has already fetched + merged the remote branch, so you're reporting the latest state).
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state, `.plans/`), and the ticket's AlignFirst artifacts via alcode (**read** protocol — it synthesizes the `*spec.md`/`*summary.md` history). Use `alcode read` whenever that recorded intent/progress matters. Don't browse the source to describe the code; that's a separate alcode delegation.
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state, and the ticket's AlignFirst artifacts via alcode (**read** protocol — it synthesizes the `*spec.md`/`*summary.md` history). Use `alcode read` whenever that recorded intent/progress matters. Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Working and testing
 
@@ -102,11 +102,21 @@ Commit and push is how work is shared with the rest of the team. Have alcode com
 - A new package starts at version `0.0.0`; if the project uses changesets, write one along with it.
 - A major version bump always requires the user's confirmation.
 
+### Code review
+
+A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session. What to do with the review file depends on the case:
+
+- **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion.
+- **The user asks to review a PR/MR** (e.g. a teammate's branch) — set up or reuse a workspace on the PR/MR's branch ([`project-workspace-setup.md`](./project-workspace-setup.md)), then run the `review` protocol with the PR/MR's target branch as base. Do not fix anything unless the user explicitly asks. Read the review file and post its findings as comments on the PR/MR, anchored at the right file and line — a review request on a PR/MR implies the comments; no confirmation needed. Post them yourself via the platform CLI (`gh`, `glab`); delegate to alcode when navigating a huge PR would flood your context.
+- **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR case above. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments.
+
+For a teammate's branch, derive the TICKET_ID from the branch name as usual; if the branch carries no ticket, ask the user.
+
 ### Merge/Pull requests
 
 Do not create a MR/PR without the user's validation.
 
-When you're ready to create the MR/PR, check that the code compiles, passes lint, and passes all tests.
+When you're ready to create the MR/PR: check that the code compiles, passes lint, and passes all tests, then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
 After creating the MR/PR (via `alcode`):
 
