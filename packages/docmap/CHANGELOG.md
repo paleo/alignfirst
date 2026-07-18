@@ -1,5 +1,11 @@
 # @paleo/docmap
 
+## 0.9.0
+
+### Minor Changes
+
+- 23c4353: Improved the search feature: any term matches (best matches first), accent- and plural-insensitive, body text included. Results matching in the body show the matching line with its line number.
+
 ## 0.8.2
 
 ### Patch Changes

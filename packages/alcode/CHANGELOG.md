@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.7.0
+
+### Minor Changes
+
+- ff4d909: Documented the review workflow in the CLI reference: a fresh `review` session, then an optional fix step in a fresh AAD session on the review file.
+
 ## 0.6.0
 
 ### Minor Changes
