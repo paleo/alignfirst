@@ -642,6 +642,40 @@ describe("--search ranking (search fixture)", () => {
     );
   });
 
+  it("matches plural-only documents with singular queries", () => {
+    const { stdout } = run(["--search", "cache"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "plurals.md"));
+    expect(run(["--search", "dependency"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "plurals.md"),
+    );
+  });
+
+  it("matches singular-only documents with plural queries", () => {
+    const { stdout } = run(["--search", "branches"], fixtures.search);
+    expect(stdout).toContain(dp(fixtures.search, "singulars.md"));
+    expect(run(["--search", "dependencies"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "singulars.md"),
+    );
+  });
+
+  it("bridges irregular pairs in both directions", () => {
+    expect(run(["--search", "index"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "plurals.md"),
+    );
+    expect(run(["--search", "indices"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "singulars.md"),
+    );
+  });
+
+  it("bridges French irregular pairs across the œ ligature", () => {
+    expect(run(["--search", "yeux"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "ciel.md"),
+    );
+    expect(run(["--search", "cieux"], fixtures.search).stdout).toContain(
+      dp(fixtures.search, "ciel.md"),
+    );
+  });
+
   it("ranks a title hit above a body-only hit", () => {
     searchOrder("gateway", "gateway.md", "notes.md");
   });

@@ -11,8 +11,8 @@ import { locales } from "./locales/index.js";
 import { stripFrontmatter } from "./parser.js";
 
 const SEARCH_RESULT_CAP = 20;
-// Naive TF saturation: a term repeated all over a tier counts at most this many times, so body
-// spam maxes out below a single title hit.
+// Naive TF saturation: a term repeated all over a tier counts at most this many times, so
+// repetition cannot dominate the ranking.
 const OCCURRENCE_CAP = 3;
 // A snippet line is clipped to this many characters around the first matched term.
 const SNIPPET_WINDOW = 150;
@@ -43,18 +43,52 @@ export function searchDocs(baseDir: string, terms: string[], prefix: string): st
   return lines;
 }
 
+// A query word and its match variants: the word itself plus, for an irregular pair, its other
+// number — each prefix-stemmed. A document token matches when it contains any variant.
+interface QueryTerm {
+  variants: string[];
+}
+
 // Splits incoming terms with the shared tokenizer (so "code-style" becomes two terms), folds
-// them, and drops stopwords of any locale (docs trees mix languages). Stopwords are checked
-// before plural folding so the sets keep natural forms ("this", "dans").
-function prepareQueryTerms(terms: string[]): string[] {
+// accents, and drops stopwords of any locale (docs trees mix languages). Stopwords are checked
+// before stemming so the sets keep natural forms ("this", "dans").
+function prepareQueryTerms(terms: string[]): QueryTerm[] {
   const words = terms.flatMap(tokenize).map(foldAccents);
   const kept = words.filter((word) => !isStopWord(word));
   // Safety valve: an all-stopwords query still searches with its own words.
-  return (kept.length > 0 ? kept : words).map(foldPlural);
+  return (kept.length > 0 ? kept : words).map(buildQueryTerm);
+}
+
+// Only query words are stemmed — document tokens never are. Every stem is a prefix of the query
+// word, so a document containing the exact form the user typed always still matches; cross-form
+// matching (plural query, singular doc and vice versa) comes from the shared prefix. Irregular
+// pairs (index/indices), which share no usable prefix, are bridged by the counterpart variant.
+function buildQueryTerm(word: string): QueryTerm {
+  const forms = [word];
+  const counterpart = irregularOf(word);
+  if (counterpart !== undefined) forms.push(counterpart);
+  return { variants: [...new Set(forms.map(stemWord))] };
 }
 
 function isStopWord(word: string): boolean {
   return locales.some((locale) => locale.isStopWord(word));
+}
+
+function irregularOf(word: string): string | undefined {
+  for (const locale of locales) {
+    const counterpart = locale.irregularOf(word);
+    if (counterpart !== undefined) return counterpart;
+  }
+}
+
+// The first locale whose rule changes the word wins; never chain locales (en "analyses" ->
+// "analys", then fr stripping the final -s again, would give "analy").
+function stemWord(word: string): string {
+  for (const locale of locales) {
+    const stemmed = locale.stemWord(word);
+    if (stemmed !== word) return stemmed;
+  }
+  return word;
 }
 
 interface MatchedFile {
@@ -66,7 +100,7 @@ interface MatchedFile {
   bodyMatched: boolean;
 }
 
-function scoreFile(baseDir: string, rel: string, queryTerms: string[]): MatchedFile | undefined {
+function scoreFile(baseDir: string, rel: string, queryTerms: QueryTerm[]): MatchedFile | undefined {
   const slash = rel.lastIndexOf("/");
   const relDir = slash === -1 ? "" : rel.slice(0, slash);
   const name = slash === -1 ? rel : rel.slice(slash + 1);
@@ -116,18 +150,18 @@ interface TermScore {
   bodyHit: boolean;
 }
 
-// Per tier: occurrences = tokens containing the term (substring), capped. A token equal to the
-// term in any tier earns a +1 word-boundary bonus, once per term.
-function scoreTerm(term: string, tiers: Tier[]): TermScore {
+// Per tier: occurrences = tokens containing any variant (substring), capped. A token equal to a
+// variant in any tier earns a +1 word-boundary bonus, once per term.
+function scoreTerm(term: QueryTerm, tiers: Tier[]): TermScore {
   let score = 0;
   let boundary = false;
   let bodyHit = false;
   for (const tier of tiers) {
     let occurrences = 0;
     for (const token of tier.tokens) {
-      if (!token.includes(term)) continue;
+      if (!term.variants.some((variant) => token.includes(variant))) continue;
       ++occurrences;
-      if (token === term) boundary = true;
+      if (term.variants.includes(token)) boundary = true;
     }
     if (occurrences > 0 && tier.kind === "body") bodyHit = true;
     score += tier.weight * Math.min(occurrences, OCCURRENCE_CAP);
@@ -154,7 +188,7 @@ interface Snippet {
 function findBodySnippet(
   filePath: string,
   name: string,
-  queryTerms: string[],
+  queryTerms: QueryTerm[],
 ): Snippet | undefined {
   const content = readFileSync(filePath, "utf-8");
   const body = isMarkdown(name) ? stripFrontmatter(content) : content;
@@ -179,13 +213,13 @@ interface LineHit {
   matchIndex: number;
 }
 
-function matchLine(line: string, queryTerms: string[]): LineHit | undefined {
-  const found = new Set<string>();
+function matchLine(line: string, queryTerms: QueryTerm[]): LineHit | undefined {
+  const found = new Set<QueryTerm>();
   let matchIndex: number | undefined;
   for (const token of line.matchAll(TOKEN_PATTERN)) {
-    const folded = foldWord(token[0]);
+    const folded = foldAccents(token[0]);
     for (const term of queryTerms) {
-      if (!folded.includes(term)) continue;
+      if (!term.variants.some((variant) => folded.includes(variant))) continue;
       found.add(term);
       matchIndex ??= token.index;
     }
@@ -205,27 +239,19 @@ function clipAroundMatch(line: string, matchIndex: number): string {
 }
 
 function foldTokens(text: string): string[] {
-  return tokenize(text).map(foldWord);
+  return tokenize(text).map(foldAccents);
 }
 
 function tokenize(text: string): string[] {
   return Array.from(text.matchAll(TOKEN_PATTERN), (match) => match[0]);
 }
 
-function foldWord(word: string): string {
-  return foldPlural(foldAccents(word));
-}
-
+// NFD does not decompose the œ/æ ligatures, so "œil" and "oeil" need an explicit fold to meet.
 function foldAccents(word: string): string {
-  return word.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-}
-
-// The first locale whose rule changes the word wins; never chain locales (en "buses" -> "bus",
-// then fr stripping the final -s again, would give "bu").
-function foldPlural(word: string): string {
-  for (const locale of locales) {
-    const folded = locale.foldPlural(word);
-    if (folded !== word) return folded;
-  }
-  return word;
+  return word
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/œ/g, "oe")
+    .replace(/æ/g, "ae");
 }
