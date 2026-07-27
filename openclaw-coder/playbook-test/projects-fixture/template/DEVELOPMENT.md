@@ -4,11 +4,15 @@ A small full-stack product monorepo (API + frontend).
 
 ## Stack
 
-Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Single entrypoint `app.mjs`. No DB, no cloud.
+Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Entrypoint `app.mjs`. No DB, no cloud, no build step.
 
 ## Layout
 
-- [`app.mjs`](app.mjs) — Express server. Reads `PORT` from env, serves `Hello world from <branch>` on `/`.
+- [`app.mjs`](app.mjs) — Express server. Reads `PORT` from env, serves the home page on `/` and the CSV export on `/export`.
+- [`home-page.mjs`](home-page.mjs) — the HTML: region links and the export button.
+- [`comparables.mjs`](comparables.mjs) — the in-memory datastore, one row set per region.
+- [`export-handler.mjs`](export-handler.mjs) — `GET /export?region=…`, rendering the rows as CSV.
+- [`app.test.mjs`](app.test.mjs) — the test suite (`node:test`).
 
 ## Daily Commands
 
@@ -16,6 +20,8 @@ Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Single entrypoint `a
 pnpm dev up     # start in background; `pnpm dev down` to stop
 pnpm dev down   # stop the background server in this worktree
 pnpm dev        # start the app (foreground; CTRL+C to stop)
+pnpm test       # run the test suite
+pnpm lint       # syntax-check every module
 ```
 
 ## Workspaces (local environments)

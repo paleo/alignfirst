@@ -16,6 +16,7 @@ import type {
   QaBusPollInput,
   QaBusReactToMessageInput,
   QaBusReadMessageInput,
+  QaBusRenameThreadInput,
   QaBusSearchMessagesInput,
   QaBusWaitForInput,
 } from "./protocol.js";
@@ -97,6 +98,11 @@ export async function handleQaBusRequest(params: {
       case "/v1/actions/thread-create":
         writeJson(params.res, 200, {
           thread: params.state.createThread(body as unknown as QaBusCreateThreadInput),
+        });
+        return true;
+      case "/v1/actions/thread-rename":
+        writeJson(params.res, 200, {
+          thread: params.state.renameThread(body as unknown as QaBusRenameThreadInput),
         });
         return true;
       case "/v1/actions/react":

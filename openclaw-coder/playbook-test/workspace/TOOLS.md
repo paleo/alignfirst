@@ -66,6 +66,20 @@ The result contains the new thread's ID. Reuse that as `threadId` for subsequent
 
 For posting back into the parent channel from within a thread, use `action: "send"` with the channel target.
 
+### Rename an existing thread
+
+There is no rename action: the new name rides on a post, as `threadName`.
+
+```jsonc
+{
+  "action": "thread-reply",
+  "channel": "<channel>",
+  "threadId": "<thread id>",
+  "threadName": "<TICKET_ID> - <PROJECT> - <1-to-5-word description>",
+  "message": "<the line you were going to post anyway>"
+}
+```
+
 ### Read prior messages in a thread (Discord-only quirk)
 
 Discord thread sessions start with an **empty transcript** even when the thread already has messages from the channel session that opened it (this is upstream issue #52112 — Slack's `ThreadHistoryBody` injection has no Discord equivalent). When a fresh thread session activates on a user follow-up, recover context with:

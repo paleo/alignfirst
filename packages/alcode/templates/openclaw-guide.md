@@ -36,12 +36,14 @@ The chained wake fires when the backgrounded `alcode` exits: this session receiv
 Any heartbeat received while an `alcode` run is **still pending** (running, or finished but not yet reported) is the completion wake — do exactly this:
 
 1. **Read the run's session file** (the path `alcode` printed on its first line, under `_alcode/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
-2. **Report the outcome to the user** where the work was requested. Send one concise message: succeeded or failed, plus a one-line summary of the result for the audience. Two cases:
-   - The frontmatter `meta` carries a destination (a Discord thread target): send the report there with `message` `action: "thread-reply"` (never `action: "send"`), then end the wake turn with a final answer of exactly `NO_REPLY` — any other final text streams to the channel as a stray duplicate.
-   - No `meta` destination (always the case on Slack, and on a thread-bound Discord session): the work was requested on this session's own surface, so **the report itself is your plain-text final reply** — just write it, no `message` tool. On Slack it auto-threads back to the right thread. Never end such a wake turn silently.
+2. **Report the outcome to the user** — your next action after reading the file, before any other tool call: one concise message where the work was requested, succeeded or failed, plus a one-line summary of the result for the audience. Two delivery cases:
+   - The frontmatter `meta` carries a destination (a Discord thread target): post it with `message` `action: "thread-reply"` (never `action: "send"`). Free-form text would stream to the channel as a stray duplicate.
+   - No `meta` destination (always the case on Slack, and on a thread-bound Discord session): the work was requested on this session's own surface, so **your plain text is the report** — just write it, no `message` tool. On Slack it auto-threads back to the right thread. Never end such a wake turn silently.
+3. **Don't reconstruct what happened.** No re-running the coding agent, no fetch/merge, no `git` archaeology to double-check its account: the session file is authoritative for that, and relaying it is the wake turn's job.
 
-   A wake turn ends with the report or with exactly `NO_REPLY` — nothing else, ever, and never `HEARTBEAT_OK`. `NO_REPLY` is the ending after a `message`-tool report (the report is already delivered) and for any wake with nothing new to report.
-3. Do **not** re-verify the repo, re-run the coding agent, fetch/merge branches, or inspect `git`. The coding agent already did the work and the session file is authoritative. Relay its outcome, nothing more.
+End the wake turn on your last delivered post: after a `message`-tool post, the final answer is exactly `NO_REPLY`; when your plain text was the post, that text is the ending. Never `HEARTBEAT_OK` — it isn't swallowed, it posts as literal text where the user reads.
+
+Reporting the run is not the same as calling the work done. A successful run is the coding agent's claim, and the user hears "done" from you — so verify it the way your platform's instructions prescribe. That verification is its own step, after the report has been delivered: any run you launch for it is new work with its own completion wake, and the wake you were answering is already discharged.
 
 If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
 

@@ -1,18 +1,28 @@
-import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { waitForCodingSessionSucceeded, waitForFindingsReport } from "./_lib/coding-session.ts";
 import { expectNoProtocolDelegation, setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import {
+  assertNoWorktreeDirs,
+  bootstrapThreadFromChannel,
+  sendInThread,
+} from "./_lib/thread-bootstrap.ts";
 
-const PROJECTS_DIR = "/home/claw/projects";
+const PROJECT = "nimbus";
 const QUESTION_TEXT =
   "Sur nimbus, pourquoi le bouton d'export échoue quand il n'y a pas de comparables ?";
 
 const INVESTIGATION_FINDING =
-  "Investigation finding: the export handler in app.mjs early-returns when the comparables array is empty, so the response stream closes before any payload is written. The client receives a 204 and the button surfaces it as a failure. Fix would be to either render an empty-state CSV or surface a 'no comparables' message to the user.";
+  "Investigation finding: handleExport in export-handler.mjs early-returns with a 204 when the region has no comparables, so the response carries no payload at all. The browser treats the empty body as a failed download and the button surfaces it as an error. Fix would be to either render a header-only CSV or surface a 'no comparables' message to the user.";
 
+/**
+ * An investigation question hands off like any other work: the channel session
+ * opens the thread and stops, even though nothing is missing and no workspace
+ * is needed. The thread session recovers the question from the starter's task
+ * line — the channel message is invisible to it — and delegates a no-protocol
+ * investigation to alcode, in the project dir, with no worktree.
+ */
 export default async function projectInvestigationQuestion(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
@@ -25,16 +35,12 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   });
   setupGhMock(ctx);
 
-  const startCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
+  const starter = await bootstrapThreadFromChannel(ctx, {
     text: QUESTION_TEXT,
+    project: PROJECT,
+    claude,
   });
-
-  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(starterWait);
-  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
+  await sendInThread(ctx, starter.threadId, "Vas-y.");
 
   const { call: delegationCall, cursorAfterDelegation } = await expectNoProtocolDelegation(
     ctx,
@@ -67,7 +73,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   // of the thread window, ignoring the earlier launch ack (see `waitForFindingsReport`).
   await waitForFindingsReport(ctx, {
     conversationId: ctx.conversationId,
-    threadId,
+    threadId: starter.threadId,
     sinceCursor: cursorAfterDelegation,
     timeoutMs: 240_000,
     label: "investigation-summary",
@@ -75,15 +81,4 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
-}
-
-function assertNoWorktreeDirs(ctx: ScenarioContext): void {
-  if (!existsSync(PROJECTS_DIR)) return;
-  const matches = readdirSync(PROJECTS_DIR).filter(
-    (entry) => entry.startsWith("nimbus-") || entry.startsWith("lumen-"),
-  );
-  if (matches.length > 0) {
-    throw new Error(`unexpected worktree dirs under ${PROJECTS_DIR}: ${matches.join(", ")}`);
-  }
-  ctx.log("no worktree dirs created — OK");
 }

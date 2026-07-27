@@ -1,17 +1,16 @@
-import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusExistingWorktreeRubric } from "./_lib/common-constants.ts";
 import { seedWorktree, worktreePath } from "./_lib/fixture-state.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import {
-  assertNoChannelRootLeak,
-  requireThreadId,
-  waitForReport,
-  waitForStarter,
-} from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import {
+  assertWorktreeDirs,
+  bootstrapThreadFromChannel,
+  sendInThread,
+} from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-070";
@@ -19,30 +18,33 @@ const BRANCH_DESC = "export-bold";
 const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 const PROJECTS_DIR = "/home/claw/projects";
 
+/**
+ * A status request on a ticket whose workspace is already registered. The
+ * channel session hands off; the thread session attaches to the existing
+ * worktree (Step 4 sub-path 1) and reports its state, creating nothing.
+ */
 export default async function statusExistingWorktree(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  setupClaudeMock(ctx);
+  const claude = setupClaudeMock(ctx);
   setupGhMock(ctx);
 
   const seededPath = await seedWorktree(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
+  const seededDir = worktreePath(PROJECT, TICKET_ID, BRANCH_DESC).slice(PROJECTS_DIR.length + 1);
   ctx.log(`pre-seeded worktree at ${seededPath}`);
 
   const startCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
+  const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
+    project: PROJECT,
+    claude,
+    seededWorktreeDirs: [seededDir],
   });
+  await sendInThread(ctx, starter.threadId, "Vas-y.");
 
-  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(starterWait);
-  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
-
-  // The report text is matched at conversation level on purpose: free-form text
-  // after `thread-create` auto-streams to the parent channel, and a thread-scoped
-  // predicate would only reveal that leak as a timeout. Match the text, then
-  // assert placement — a leaked report fails fast with the real cause.
+  // Matched at conversation level on purpose: a report that leaked to the
+  // channel root fails on the placement assert below, with the real cause,
+  // instead of surfacing as a wait timeout.
   const branchRe = new RegExp(
     `\\b${TICKET_ID}/${BRANCH_DESC}\\b|nimbus-${TICKET_ID}-${BRANCH_DESC}\\b`,
   );
@@ -51,15 +53,19 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
     (m) =>
       m.direction === "outbound" &&
       m.conversation.id === ctx.conversationId &&
-      m.id !== starterWait.match.id &&
+      m.id !== starter.match.id &&
       branchRe.test(m.text),
     {
-      sinceCursor: starterWait.nextCursor,
+      sinceCursor: starter.nextCursor,
       failFastCliMockGraceMs: 30_000,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
-  ctx.assertEqual(reportWait.match.threadId, threadId, "status report posted in the thread");
+  ctx.assertEqual(
+    reportWait.match.threadId,
+    starter.threadId,
+    "status report posted in the thread",
+  );
   await ctx.judgeLLM({
     attachTo: reportWait.entry,
     message: reportWait.match.text,
@@ -79,21 +85,9 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   // DEVELOPMENT.md, .plans/) OR via alcode — both are fine, so we don't assert
   // how the status was gathered, only that the report is correct (rubric above),
   // lands in the thread, and leaves no stray worktrees / channel leak.
-  assertOnlySeededWorktreeDir(ctx);
+  assertWorktreeDirs(ctx, [seededDir]);
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
-}
-
-function assertOnlySeededWorktreeDir(ctx: ScenarioContext): void {
-  if (!existsSync(PROJECTS_DIR)) return;
-  const expected = worktreePath(PROJECT, TICKET_ID, BRANCH_DESC).slice(PROJECTS_DIR.length + 1);
-  const extras = readdirSync(PROJECTS_DIR).filter(
-    (entry) => (entry.startsWith("nimbus-") || entry.startsWith("lumen-")) && entry !== expected,
-  );
-  if (extras.length > 0) {
-    throw new Error(`unexpected extra worktree dirs under ${PROJECTS_DIR}: ${extras.join(", ")}`);
-  }
-  ctx.log("only the seeded worktree present — OK");
 }

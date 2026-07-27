@@ -69,6 +69,7 @@ export type QaBusEvent =
   | { cursor: number; kind: "inbound-message"; accountId: string; message: QaBusMessage }
   | { cursor: number; kind: "outbound-message"; accountId: string; message: QaBusMessage }
   | { cursor: number; kind: "thread-created"; accountId: string; thread: QaBusThread }
+  | { cursor: number; kind: "thread-renamed"; accountId: string; thread: QaBusThread }
   | { cursor: number; kind: "message-edited"; accountId: string; message: QaBusMessage }
   | { cursor: number; kind: "message-deleted"; accountId: string; message: QaBusMessage }
   | {
@@ -113,6 +114,12 @@ export type QaBusCreateThreadInput = {
   title: string;
   createdBy?: string;
   timestamp?: number;
+};
+
+export type QaBusRenameThreadInput = {
+  accountId?: string;
+  threadId: string;
+  title: string;
 };
 
 export type QaBusReactToMessageInput = {

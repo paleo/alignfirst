@@ -38,6 +38,8 @@ For large work, do not rush. Decompose it yourself only when the concerns are tr
 3. **Execute** — `alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. When executing a main plan that spans several sub-plans and the working tree is clean, append to the message: *"Feel free to commit between each plan."*
 4. **Commit** — use the suggested commit message from the spec file.
 
+Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
+
 ## Light workflow (AAD)
 
 For one-shot changes or follow-up adjustments right after executing a plan. The agent investigates, discusses, then implements in one session.

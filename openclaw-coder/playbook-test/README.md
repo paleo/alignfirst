@@ -43,7 +43,11 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A1`–`A11`. `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the native exec completion wake); `A11` replays the same launch from a fresh thread session (the user's go-ahead inside the thread).
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A12`.
+
+Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its dir name as `seededWorktreeDirs` so the check still catches anything the channel session created.
+
+`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the completion wake) from a channel message that spells out an immediate green light — which the channel session must still refuse to act on. `A11` covers an explicit user hold: the workspace gets set up with no coding call, and a second thread turn releases it. `A12` chains two delegations in one thread, the second exposing the heartbeat-cooldown wake gate.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 

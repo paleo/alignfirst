@@ -1,7 +1,7 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, readsFile } from "./agent-tool-calls.ts";
 import { assertBranchForTicket, escapeRegExp, waitForAnyWorktreeDir } from "./fixture-state.ts";
-import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
+import { isMetaNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
 import type { Step } from "./types.ts";
 
@@ -20,11 +20,13 @@ export interface WorkspaceFlowOptions {
 }
 
 /**
- * Drive the post-thread-ack phase shared by A1 / A2: wait for the worktree on
- * disk, assert its branch, let the agent settle on its workspace report, unblock
- * it past the step-6 validation gate, then expect the coding delegation. The
- * scenario ends here — the coding stub returns a "test passed, just acknowledge"
- * message so the agent stops cleanly.
+ * Drive the thread session's WORK turn: wait for the worktree on disk, assert
+ * its branch, let the agent settle on its workspace report, then expect the
+ * coding delegation. The scenario ends here — the coding stub returns a "test
+ * passed, just acknowledge" message so the agent stops cleanly.
+ *
+ * Nothing nudges the agent between the report and the delegation: the user's
+ * request is the go-ahead, so a session that pauses for validation fails here.
  */
 export async function runWorkspaceFlow(
   ctx: ScenarioContext,
@@ -38,7 +40,7 @@ export async function runWorkspaceFlow(
     worktreeTimeoutMs = 120_000,
     reportTimeoutMs = 90_000,
     // Covers the documented takeover-sync (fetch, merge, PR check) an agent may
-    // legitimately run between the go-ahead and the delegation.
+    // legitimately run before delegating.
     delegationTimeoutMs = 150_000,
   } = options;
 
@@ -51,47 +53,8 @@ export async function runWorkspaceFlow(
     timeoutMs: worktreeTimeoutMs,
   });
   const branch = assertBranchForTicket(worktreeDir, ticketId);
-  const dirName = worktreeDir.slice(worktreeDir.lastIndexOf("/") + 1);
 
-  // Let the agent's setup turn settle on its workspace report BEFORE nudging it
-  // — firing "Vas-y" mid-turn disrupts the flow and the agent never reaches the
-  // delegation. Select on the worktree LOCATOR so we sync on the settled report,
-  // not a pre-creation announcement. Match the FULL branch and the ACTUAL (possibly
-  // truncated) dir name the agent reports, not a dir-reconstructed guess. The
-  // report block is best-effort: assert it when the agent posts it (its format is
-  // also covered by A7/A8/A9), tolerate a weak model that reports readiness
-  // conversationally and skips the template.
-  const branchRe = new RegExp(`\\b${escapeRegExp(branch)}\\b`, "i");
-  const locatorRe = new RegExp(`${escapeRegExp(dirName)}|slot\\s*\\d{3,5}`, "i");
-  const reportWait = await waitForOutboundSkippingNarration(
-    ctx,
-    (m) =>
-      m.direction === "outbound" &&
-      m.threadId === prevStep.threadId &&
-      m.id !== prevStep.match.id &&
-      locatorRe.test(m.text),
-    { timeoutMs: reportTimeoutMs, sinceCursor: prevStep.nextCursor },
-  ).catch(() => null);
-  if (reportWait) {
-    const reportText = reportWait.match.text;
-    ctx.log({ attachTo: reportWait.entry, label: "workspace report received" });
-    ctx.assertRegex(reportText, locatorRe, "workspace-report: worktree locator (dir or slot)");
-    ctx.assertRegex(reportText, branchRe, "workspace-report: branch name");
-    ctx.assertRegex(reportText, bootstrapStatusRe, "workspace-report: bootstrap status");
-  } else {
-    ctx.log(
-      "workspace report: no structured block (readiness reported conversationally) — tolerated",
-    );
-  }
-
-  // Per project-workspace-setup.md Step 7, the agent may pause to ask
-  // for validation before delegating coding work. Unblock it unconditionally.
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text: "Vas-y, je te laisse faire.",
-    threadId: prevStep.threadId,
-  });
+  await settleOnWorkspaceReport(ctx, prevStep, worktreeDir, branch, reportTimeoutMs);
 
   await expectCodingDelegation(ctx, claude, {
     ticketId,
@@ -113,4 +76,47 @@ export async function runWorkspaceFlow(
     label: "agent runs `workspace --guide`",
     timeoutMs: 120_000,
   });
+}
+
+/**
+ * Best-effort check on the workspace report block: assert its shape when the
+ * agent posts it, tolerate a session that reports readiness conversationally
+ * and skips the template. Its format is pinned by A07/A08/A09, where the report
+ * IS the deliverable; on a work request the agent often goes straight to the
+ * coding delegation instead.
+ *
+ * Polls rather than `waitForOutbound`: a wait that times out records a failed
+ * entry on the report, which no amount of catching undoes — and the point here
+ * is that its absence must not fail the scenario.
+ */
+export async function settleOnWorkspaceReport(
+  ctx: ScenarioContext,
+  prevStep: Step,
+  worktreeDir: string,
+  branch: string,
+  budgetMs = 90_000,
+): Promise<void> {
+  const dirName = worktreeDir.slice(worktreeDir.lastIndexOf("/") + 1);
+  const branchRe = new RegExp(`\\b${escapeRegExp(branch)}\\b`, "i");
+  const locatorRe = new RegExp(`${escapeRegExp(dirName)}|slot\\s*\\d{3,5}`, "i");
+  const deadline = Date.now() + budgetMs;
+  let cursor = prevStep.nextCursor;
+
+  while (Date.now() < deadline) {
+    const { messages, nextCursor } = await ctx.poll({ sinceCursor: cursor, timeoutMs: 2_000 });
+    cursor = nextCursor;
+    for (const m of messages) {
+      if (m.direction !== "outbound" || m.threadId !== prevStep.threadId) continue;
+      if (m.id === prevStep.match.id || !locatorRe.test(m.text)) continue;
+      if (await isMetaNarration(ctx, m.text)) continue;
+      ctx.log(`workspace report received: ${JSON.stringify(m.text.slice(0, 160))}`);
+      ctx.assertRegex(m.text, locatorRe, "workspace-report: worktree locator (dir or slot)");
+      ctx.assertRegex(m.text, branchRe, "workspace-report: branch name");
+      ctx.assertRegex(m.text, bootstrapStatusRe, "workspace-report: bootstrap status");
+      return;
+    }
+  }
+  ctx.log(
+    "workspace report: no structured block (readiness reported conversationally) — tolerated",
+  );
 }

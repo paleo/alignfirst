@@ -11,15 +11,11 @@ import {
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupClaudeMock, type ClaudeMockHandle } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import {
-  assertNoChannelRootLeak,
-  assertNoSelfThreadMessagePost,
-  requireThreadId,
-  waitForStarter,
-} from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A12 → ABC-012N, first ticket ABC-0120.
 const TICKET_ID = "ABC-0120";
@@ -40,74 +36,70 @@ const isAlcodeLaunch = (call: AgentToolCall): boolean =>
  * chains `openclaw system event --text … --mode now --session-key <KEY>` onto every launch — a
  * targeted `immediate`-intent wake the cooldown never defers.
  *
- * Two sequential delegations in one thread. Phase 1 mirrors A10 (channel-session delegation, wake
- * report routed to the thread via `--meta`); phase 2 sends a follow-up WITH go-ahead into the
- * thread (fresh thread session, as in A11), covering both session-key shapes. Each launch exec
- * must carry the chained wake (structural pin of the guide-driven mechanism), and each run must
- * produce a started ack, a `status: succeeded` session file, and a completion report in the same
- * thread — the second completion report is the regression payload: without the chained wake it
- * never arrives.
+ * Two sequential delegations in one thread. The channel session only opens the thread, so both
+ * launches come from the thread session: phase 1 on the user's handoff message, phase 2 on a
+ * follow-up work request. Each launch exec must carry the chained wake (structural pin of the
+ * guide-driven mechanism), and each run must produce a started ack, a `status: succeeded` session
+ * file, and a completion report in the same thread — the second completion report is the
+ * regression payload: without the chained wake it never arrives.
  */
 export default async function sequentialCodingSessions(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
-  setupClaudeMock(ctx, { streamDelayMs: 12_000 });
+  const claude = setupClaudeMock(ctx, { streamDelayMs: 12_000 });
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
-  const threadId = await runFirstDelegation(ctx, startCursor);
+  const threadId = await runFirstDelegation(ctx, claude);
   await runSecondDelegation(ctx, threadId);
 
   // The wake turn may still be streaming a final answer after the completion
   // post — the exact shape of the trailing-leak incident — so sweep longer.
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
-  assertNoSelfThreadMessagePost(ctx, threadId);
+  await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
 
-/** Phase 1 — channel inbound with green light, as in A10. Returns the work thread's id. */
-async function runFirstDelegation(ctx: ScenarioContext, startCursor: number): Promise<string> {
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
+/** Phase 1 — the channel bootstrap, then the handoff message that starts the work. */
+async function runFirstDelegation(ctx: ScenarioContext, claude: ClaudeMockHandle): Promise<string> {
+  const starter = await bootstrapThreadFromChannel(ctx, {
     text:
       `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. ` +
-      `Ticket ${TICKET_ID}. Mets en place le workspace et lance directement le travail de code — ` +
-      `tu as mon feu vert, ne me demande pas de validation, préviens-moi quand c'est terminé.`,
+      `Ticket ${TICKET_ID}. Préviens-moi quand c'est terminé.`,
+    project: PROJECT,
+    ticketId: TICKET_ID,
+    audience: "tech",
+    claude,
   });
-
-  const starter = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(starter);
-  ctx.log({ attachTo: starter.entry, label: `thread opened ${threadId}` });
+  const phase1Cursor = await sendInThread(
+    ctx,
+    starter.threadId,
+    "Vas-y, préviens-moi ici quand c'est terminé.",
+  );
 
   await expectDelegationChain(ctx, {
-    threadId,
-    sinceCursor: starter.nextCursor,
+    threadId: starter.threadId,
+    sinceCursor: phase1Cursor,
     launchIndex: 1,
   });
-  return threadId;
+  return starter.threadId;
 }
 
 /**
- * Phase 2 — a small follow-up work request WITH an explicit go-ahead lands IN the thread (as in
- * A11 phase 2), activating a fresh thread session. Phase-2 waits scan from a cursor taken before
- * this inbound.
+ * Phase 2 — a small follow-up work request lands in the same thread. Its waits scan from a cursor
+ * taken before the inbound.
  */
 async function runSecondDelegation(ctx: ScenarioContext, threadId: string): Promise<void> {
-  const phase2Cursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text:
-      `Deuxième étape sur le même ticket ${TICKET_ID} : ajoute une infobulle « Exporter les ` +
-      `données » sur ce bouton d'export. Tu as mon feu vert, lance directement le travail et ` +
-      "préviens-moi ici quand c'est terminé.",
+  const phase2Cursor = await sendInThread(
+    ctx,
     threadId,
-  });
+    `Deuxième étape sur le même ticket ${TICKET_ID} : ajoute une infobulle « Exporter les ` +
+      `données » sur ce bouton d'export. Préviens-moi ici quand c'est terminé.`,
+  );
 
   await expectDelegationChain(ctx, {
     threadId,

@@ -5,47 +5,32 @@ import {
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
-import {
-  assertBranchForTicket,
-  escapeRegExp,
-  waitForAnyWorktreeDir,
-} from "./_lib/fixture-state.ts";
-import { waitForOutboundSkippingNarration } from "./_lib/meta-narration.ts";
+import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
 import {
   isCodingProtocolPrompt,
   setupClaudeMock,
   type ClaudeMockHandle,
 } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import {
-  assertNoChannelRootLeak,
-  assertNoSelfThreadMessagePost,
-  requireThreadId,
-  waitForStarter,
-} from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { waitForSetupAck } from "./_lib/setup-ack.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 import type { Step } from "./_lib/types.ts";
+import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A11 → ABC-011N, first ticket ABC-0110.
 const TICKET_ID = "ABC-0110";
 const PROJECT = "nimbus";
 
-// The report block asserts a bootstrap-status keyword, as in workspace-flow.ts.
-const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours|échou)/i;
-
 /**
- * Path-3 regression (incident `.plans/30/D1-spec.md`): a FRESH THREAD SESSION — the user's
- * follow-up inside an existing thread, not the channel session A10 covers — launches the
- * backgrounded alcode run, and the exec-exit wake must land the completion report back in the same
- * thread. On real Discord this launch path backgrounded the run and the wake never fired.
+ * An explicit hold, then the green light — two turns in the work thread.
  *
- * Phase 1 has the channel session set up the workspace WITHOUT delegating (the inbound withholds
- * the green light); the structural proof is that the claude mock sees no coding-protocol call
- * before the go-ahead. Phase 2 sends the go-ahead INTO the thread — activating a fresh thread
- * session, the only session prompted after the nudge — and asserts the A10 chain from there:
- * alcode exec with `background: true, timeout: 0`, started ack, session file `status: succeeded`,
- * completion wake in the same thread, no channel-root leak.
+ * The thread session starts work without asking for validation (that gate is gone), so the way to
+ * separate setup from coding is for the user to withhold the green light themselves. Phase 1 does
+ * exactly that: "prépare le workspace, ne lance aucun travail de code sans mon feu vert" must
+ * produce a workspace and no coding-protocol call. Phase 2 releases it and asserts the launch path
+ * from the incident `.plans/30/D1-spec.md`: a backgrounded alcode exec (`background: true`,
+ * `timeout: 0`) whose exec-exit wake lands the completion report back in the same thread.
  */
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -56,134 +41,67 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
-  const setup = await runSetupPhaseWithoutDelegation(ctx, claude);
-  await runThreadDelegationPhase(ctx, setup.threadId, startCursor);
+  const starter = await bootstrapThreadFromChannel(ctx, {
+    text:
+      `Nouvelle fonctionnalité sur ${PROJECT} : passer le bouton d'export en gras. ` +
+      `Ticket ${TICKET_ID}.`,
+    project: PROJECT,
+    ticketId: TICKET_ID,
+    audience: "tech",
+    claude,
+  });
+
+  await runSetupPhaseWithoutDelegation(ctx, claude, starter);
+  await runGoAheadPhase(ctx, starter.threadId, startCursor);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
 
 /**
- * Phase 1 — the channel session sets up the workspace, no delegation. Mirrors A02's phase 1
- * (starter → `[WORK]` header → worktree on disk → settled workspace report), but the inbound
- * withholds the green light, so the turn must END on the workspace report. `runWorkspaceFlow`
- * bundles the go-ahead nudge and the instant-stub delegation expectations, so the flow is rebuilt
- * here from the individual helpers.
+ * Phase 1 — the user asks for the workspace and withholds the green light. The structural proof is
+ * that the claude mock sees no coding-protocol call; worktree-creation calls are fine.
  */
 async function runSetupPhaseWithoutDelegation(
   ctx: ScenarioContext,
   claude: ClaudeMockHandle,
-): Promise<Step> {
-  const startCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text:
-      `Nouvelle fonctionnalité sur ${PROJECT} : passer le bouton d'export en gras. ` +
-      `Ticket ${TICKET_ID}. Prépare le workspace, mais ne lance aucun travail de code ` +
-      "sans mon feu vert.",
-  });
-
-  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(starterWait);
-  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
-  const starter: Step = {
-    match: starterWait.match,
-    entry: starterWait.entry,
-    threadId,
-    nextCursor: starterWait.nextCursor,
-  };
-
-  const ack = await waitForSetupAck(ctx, {
-    threadId,
-    prevId: starterWait.match.id,
-    sinceCursor: starterWait.nextCursor,
-    ticketId: TICKET_ID,
-    project: PROJECT,
-    audience: "tech",
-    seedCandidate: starter,
-  });
-  ctx.log({ attachTo: ack.entry, label: "[WORK] header received" });
+  starter: Step,
+): Promise<void> {
+  await sendInThread(
+    ctx,
+    starter.threadId,
+    "Prépare le workspace, mais ne lance aucun travail de code sans mon feu vert.",
+  );
 
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(PROJECT, TICKET_ID, {
     timeoutMs: 120_000,
   });
   const branch = assertBranchForTicket(worktreeDir, TICKET_ID);
-  const settled = await settleOnWorkspaceReport(ctx, ack, worktreeDir, branch);
+  await settleOnWorkspaceReport(ctx, starter, worktreeDir, branch);
 
-  // Structural proof phase 2's delegation comes from the THREAD session: before the go-ahead, the
-  // claude mock must have seen no coding-protocol call (worktree-creation calls are fine).
   const protocolCall = claude.claudeCalls.find((c) => isCodingProtocolPrompt(c.argv[0]));
   if (protocolCall) {
     throw new Error(
-      `coding-protocol claude call before the go-ahead: ${JSON.stringify(protocolCall.argv[0]?.slice(0, 200))}`,
+      `coding-protocol claude call despite the hold: ${JSON.stringify(protocolCall.argv[0]?.slice(0, 200))}`,
     );
   }
   ctx.log("no coding-protocol claude call before the go-ahead — OK");
-
-  return settled;
 }
 
 /**
- * Let the agent's setup turn settle on its workspace report BEFORE the go-ahead — nudging mid-turn
- * disrupts the flow (see `runWorkspaceFlow`). Best-effort like there: assert the block when the
- * agent posts it, tolerate a weak model that reports readiness conversationally.
+ * Phase 2 — the go-ahead releases the hold. The session must delegate through alcode as a
+ * background exec and, on the exec-exit wake, report completion in the same thread.
  */
-async function settleOnWorkspaceReport(
-  ctx: ScenarioContext,
-  prevStep: Step,
-  worktreeDir: string,
-  branch: string,
-): Promise<Step> {
-  const dirName = worktreeDir.slice(worktreeDir.lastIndexOf("/") + 1);
-  const branchRe = new RegExp(`\\b${escapeRegExp(branch)}\\b`, "i");
-  const locatorRe = new RegExp(`${escapeRegExp(dirName)}|slot\\s*\\d{3,5}`, "i");
-  const reportWait = await waitForOutboundSkippingNarration(
-    ctx,
-    (m) =>
-      m.direction === "outbound" &&
-      m.threadId === prevStep.threadId &&
-      m.id !== prevStep.match.id &&
-      locatorRe.test(m.text),
-    { timeoutMs: 90_000, sinceCursor: prevStep.nextCursor },
-  ).catch(() => null);
-  if (!reportWait) {
-    ctx.log(
-      "workspace report: no structured block (readiness reported conversationally) — tolerated",
-    );
-    return prevStep;
-  }
-  const reportText = reportWait.match.text;
-  ctx.log({ attachTo: reportWait.entry, label: "workspace report received" });
-  ctx.assertRegex(reportText, locatorRe, "workspace-report: worktree locator (dir or slot)");
-  ctx.assertRegex(reportText, branchRe, "workspace-report: branch name");
-  ctx.assertRegex(reportText, bootstrapStatusRe, "workspace-report: bootstrap status");
-  return {
-    match: reportWait.match,
-    entry: reportWait.entry,
-    threadId: prevStep.threadId,
-    nextCursor: reportWait.nextCursor,
-  };
-}
-
-/**
- * Phase 2 — the go-ahead lands IN the thread, activating a fresh thread session (the incident's
- * launch path), which must delegate through alcode as a background exec and, on the exec-exit
- * wake, report completion in the same thread. Same cursor discipline as A10: single-match
- * predicates, completion scanned from before the ack.
- */
-async function runThreadDelegationPhase(
+async function runGoAheadPhase(
   ctx: ScenarioContext,
   threadId: string,
   startCursor: number,
 ): Promise<void> {
-  const goAheadCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text: "Feu vert : lance le travail. Préviens-moi ici quand c'est terminé.",
+  const goAheadCursor = await sendInThread(
+    ctx,
     threadId,
-  });
+    "Feu vert : lance le travail. Préviens-moi ici quand c'est terminé.",
+  );
 
   // The launch invocation, not the `alcode --openclaw-guide` read (also an alcode exec, but
   // without the background fields). Its own `claude` subprocess is a cliMock, never an agent tool
@@ -224,7 +142,7 @@ async function runThreadDelegationPhase(
   await waitForCompletionWake(ctx, threadId, goAheadCursor);
 
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
-  assertNoSelfThreadMessagePost(ctx, threadId);
+  await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
 }
 
 /**

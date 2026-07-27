@@ -3,38 +3,36 @@ import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import {
-  assertNoChannelRootLeak,
-  requireThreadId,
-  waitForReport,
-  waitForStarter,
-} from "./_lib/outbound.ts";
+import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-080";
 const BRANCH_DESC = "retry-logic";
 const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 
+/**
+ * A status request on a ticket that has a branch but no workspace. The channel
+ * session hands off; the thread session sets a workspace up on the existing
+ * branch (Step 4 sub-path 2) — never a new branch — and reports its state.
+ */
 export default async function statusBranchOnly(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  setupClaudeMock(ctx);
+  const claude = setupClaudeMock(ctx);
   setupGhMock(ctx);
 
   await seedBranch(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
   ctx.log(`pre-seeded branch ${BRANCH} (no worktree)`);
 
   const startCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
+  const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
+    project: PROJECT,
+    claude,
   });
-
-  const starterWait = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(starterWait);
-  ctx.log({ attachTo: starterWait.entry, label: `starter received in thread ${threadId}` });
+  await sendInThread(ctx, starter.threadId, "Vas-y.");
 
   const worktreeDir = await waitForWorktreeDir(PROJECT, TICKET_ID, BRANCH_DESC, {
     timeoutMs: 120_000,
@@ -52,10 +50,10 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     (m) =>
       m.direction === "outbound" &&
       m.conversation.id === ctx.conversationId &&
-      m.id !== starterWait.match.id &&
+      m.id !== starter.match.id &&
       reportRe.test(m.text),
     {
-      sinceCursor: starterWait.nextCursor,
+      sinceCursor: starter.nextCursor,
       // The takeover-sync between the `gh pr list` call and the report (deps
       // check, base-branch check, report drafting) can exceed 30s on a slow
       // model — give the CLI-mock grace real headroom.
@@ -63,9 +61,11 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });
-  // Free-form text after `thread-create` auto-streams to the parent channel —
-  // the report must land in the thread, and a leak fails here with the real cause.
-  ctx.assertEqual(reportWait.match.threadId, threadId, "status report posted in the thread");
+  ctx.assertEqual(
+    reportWait.match.threadId,
+    starter.threadId,
+    "status report posted in the thread",
+  );
   ctx.assertRegex(
     reportWait.match.text,
     new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`),

@@ -10,6 +10,7 @@ import {
   parseQaTarget,
   reactToQaBusMessage,
   readQaBusMessage,
+  renameQaBusThread,
   searchQaBusMessages,
   sendQaBusMessage,
 } from "./bus-client.js";
@@ -156,6 +157,7 @@ export function createChannelMockMessageActions(params: {
           target: Type.Optional(Type.String()),
           channelId: Type.Optional(Type.String()),
           threadId: Type.Optional(Type.String()),
+          threadName: Type.Optional(Type.String()),
           messageId: Type.Optional(Type.String()),
           emoji: Type.Optional(Type.String()),
           title: Type.Optional(Type.String()),
@@ -225,7 +227,13 @@ export function createChannelMockMessageActions(params: {
               readStringParam(actionParams, "replyTo") ??
               readStringParam(actionParams, "replyToId"),
           });
-          return jsonResult({ message });
+          const threadRename = await applyThreadRename({
+            baseUrl,
+            accountId: account.accountId,
+            threadId,
+            actionParams,
+          });
+          return jsonResult({ message, ...threadRename });
         }
         case "thread-create": {
           const destination = resolveDestination(actionParams);
@@ -235,7 +243,12 @@ export function createChannelMockMessageActions(params: {
             );
           }
           const { conversationId } = parseQaTarget(destination);
-          const title = readStringParam(actionParams, "title") ?? "Test thread";
+          // Real Discord names a new thread with `threadName` (required there);
+          // `title` stays accepted for scenarios that predate the alias.
+          const title =
+            readStringParam(actionParams, "threadName") ??
+            readStringParam(actionParams, "title") ??
+            "Test thread";
           const { thread } = await createQaBusThread({
             baseUrl,
             accountId: account.accountId,
@@ -284,7 +297,13 @@ export function createChannelMockMessageActions(params: {
             senderName: account.botDisplayName,
             threadId,
           });
-          return jsonResult({ message });
+          const threadRename = await applyThreadRename({
+            baseUrl,
+            accountId: account.accountId,
+            threadId,
+            actionParams,
+          });
+          return jsonResult({ message, ...threadRename });
         }
         case "react": {
           const messageId = readStringParam(actionParams, "messageId");
@@ -393,4 +412,32 @@ export function createChannelMockMessageActions(params: {
       }
     },
   };
+}
+
+/**
+ * Real Discord has no rename-only action: an existing thread is renamed by a
+ * `threadName` param riding on the send that posts into it
+ * (`extensions/discord/src/actions/runtime.messaging.send.ts`). Mirror that,
+ * warning rather than throwing when the target isn't a thread — as Discord does.
+ */
+async function applyThreadRename(params: {
+  baseUrl: string;
+  accountId: string;
+  threadId: string | undefined;
+  actionParams: Record<string, unknown>;
+}): Promise<
+  { threadRename?: { ok: true; threadId: string; title: string } } | { warning: string }
+> {
+  const title = readStringParam(params.actionParams, "threadName");
+  if (!title) return {};
+  if (!params.threadId) {
+    return { warning: "threadName was ignored because the send target is not a thread." };
+  }
+  const { thread } = await renameQaBusThread({
+    baseUrl: params.baseUrl,
+    accountId: params.accountId,
+    threadId: params.threadId,
+    title,
+  });
+  return { threadRename: { ok: true, threadId: thread.id, title: thread.title } };
 }

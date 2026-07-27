@@ -23,6 +23,7 @@ import type {
   QaBusPollInput,
   QaBusReadMessageInput,
   QaBusReactToMessageInput,
+  QaBusRenameThreadInput,
   QaBusSearchMessagesInput,
   QaBusStateSnapshot,
   QaBusThread,
@@ -37,6 +38,7 @@ type QaBusEventSeed =
   | { kind: "inbound-message"; accountId: string; message: QaBusMessage }
   | { kind: "outbound-message"; accountId: string; message: QaBusMessage }
   | { kind: "thread-created"; accountId: string; thread: QaBusThread }
+  | { kind: "thread-renamed"; accountId: string; thread: QaBusThread }
   | { kind: "message-edited"; accountId: string; message: QaBusMessage }
   | { kind: "message-deleted"; accountId: string; message: QaBusMessage }
   | {
@@ -183,6 +185,16 @@ export function createQaBusState() {
       threads.set(thread.id, thread);
       ensureConversation({ id: input.conversationId, kind: "channel" });
       pushEvent({ kind: "thread-created", accountId, thread: { ...thread } });
+      return { ...thread };
+    },
+    renameThread(input: QaBusRenameThreadInput) {
+      const accountId = normalizeAccountId(input.accountId);
+      const thread = threads.get(input.threadId);
+      if (!thread) {
+        throw new Error(`test bus thread not found: ${input.threadId}`);
+      }
+      thread.title = input.title;
+      pushEvent({ kind: "thread-renamed", accountId, thread: { ...thread } });
       return { ...thread };
     },
     reactToMessage(input: QaBusReactToMessageInput) {

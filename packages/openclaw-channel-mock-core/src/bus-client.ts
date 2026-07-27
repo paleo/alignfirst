@@ -187,6 +187,19 @@ export async function createQaBusThread(params: {
   );
 }
 
+export async function renameQaBusThread(params: {
+  baseUrl: string;
+  accountId: string;
+  threadId: string;
+  title: string;
+}) {
+  return await postJson<{ thread: QaBusThread }>(
+    params.baseUrl,
+    "/v1/actions/thread-rename",
+    params,
+  );
+}
+
 export async function reactToQaBusMessage(params: {
   baseUrl: string;
   accountId: string;

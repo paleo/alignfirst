@@ -5,6 +5,13 @@
 
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// The channel session opens the thread and stops there, so its starter may
+// announce and ask — never act. Judged on every bootstrap.
+export const STARTER_HANDS_OFF_RUBRIC =
+  "A thread-opening message from a chat bot, handing the work over to the thread. Judge only what the BOT claims to have done — never what the user asked for. Accept an announcement of the project / ticket / audience, a one-line restatement of the user's request (including a request for a status report, which is a perfectly good task to restate), and a request to the user (a missing ticket id or project, a scope question, or an ask for a message in the thread so the work can start). Also accept saying that the work will happen in this thread. Reject only when the bot claims it already did or is right now doing something beyond opening the thread: a workspace, worktree, branch or dev server created or being created; findings about the state of the work (branch names, commits, PRs, whether anything exists yet); a codebase investigation; a coding agent launched or running.";
+
+export const HANDOFF_ASK_RUBRIC = `A message asking the user to reply in the thread — anything from them — so the bot can start working. Phrasings like "réponds ici pour que je démarre", "dis-moi quand je peux lancer", "un message ici et je m'y mets" all count. The core requirement is an explicit request for a message back. Reject when the message asks nothing of the user.`;
+
 export const NEW_WORK_QUESTION_RUBRIC =
   "A message asking the user about the new work: requests the ticket id, the change scope/description, or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
@@ -24,14 +31,3 @@ export const statusBranchOnlyRubric = (ticketId: string, branch: string): string
 
 export const statusNoBranchRubric = (ticketId: string): string =>
   `A short report that no workspace exists for ticket ${ticketId} — no branch, no worktree, "rien encore", "no branch yet", "pas de branche", "nothing started". Does NOT announce that a worktree was created. May offer to start a new workspace for the user.`;
-
-// The `[WORK]` header, posted on entering WORK mode, restates the project and
-// ticket. The values may be bolded (`**v**` on Discord, `*v*` on Slack) or
-// not, so bold markers are optional; `[WORK]` is kept literal. Tolerant
-// substring match (no ^/$ anchors), case-insensitive.
-const boldOpt = "\\*{0,2}";
-export const workHeaderRegex = (project: string, ticketId: string): RegExp =>
-  new RegExp(
-    `\\[WORK\\][\\s\\S]*${boldOpt}${escapeRe(project)}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
-    "i",
-  );

@@ -1,11 +1,6 @@
 # Project workspace setup
 
-Do NOT try to handle the user's request here. We need to set up the project workspace first, then hand off to a thread session where the actual work happens. This file covers the setup phase.
-
-Discord — delivery depends on which session you are:
-
-- **Channel session continuing in-turn** (you came from `channel-handling.md` and created the thread this turn): every user-facing post — the banner, the reports this file prescribes, and the final finding (e.g. "no branch — no work for this ticket yet") — is a `message` call carrying the thread's `threadId`; your free-form text streams to the parent channel, not the thread. Keep observations internal and end the turn with a final answer of exactly `NO_REPLY`.
-- **Thread session** (you came from `working-session.md`): reply in plain text — it streams into this thread natively. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
+The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies stream into the thread natively — they **are** your delivery. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
 
 ## Prerequisites — run both now, before Step 1
 
@@ -21,25 +16,25 @@ You need:
 
 If you don't have the PROJECT_NAME or TICKET_ID, do not proceed. Do not guess these values. Ask the user.
 
-## Step 2 — Post the `[WORK]` header
+## Step 2 — Post the setup signal
 
-The moment you enter WORK mode, your **first** user-facing post is this banner — before any other ack or prose. It's the thread's project/ticket source of truth:
+Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the project, the ticket, the audience and the task, so restating them here just repeats a message they can see.
 
-> [WORK] Project: {PROJECT_NAME} — Ticket: {TICKET_ID} — Audience: {AUDIENCE}. {setup signal}
->
-> Task: {one-line restatement of the task}
+Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 
-- `{AUDIENCE}` — `tech` / `non-tech`, carried forward from the starter (which already recorded it). If no starter recorded it yet, read the sender's `AUDIENCE` from `USER.md` — see "Who you're talking to" in the dispatcher skill.
-- `{one-line restatement of the task}` — restate, in your own words, what the user asked for (e.g. "make the export button bold"). This is the thread's durable record of *what to do*: a later fresh thread session recovers the task from it, having never seen the channel message that stated it. Always include this line. When no task is defined yet (a bare ticket, no scope), write that it is still to be defined instead — never omit the line, never leave it blank.
-- Bold the values — project, ticket, audience — with your surface's bold markers (not literal `**`). Put the task on its own line, after a line break.
-- Multiple projects: join them with `+` (e.g. `proj-a+proj-b`).
-- Keep `[WORK]` and the values (including the `tech`/`non-tech` token) intact; translate the setup signal and the task line to the user's language and vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
+When the task changed with the message that woke you — a TALK thread where a ticket just arrived, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
 
-## Step 3 — Fix the thread name if needed (Discord-only)
+## Step 3 — Name the thread (Discord-only)
 
-If the thread name is missing the TICKET_ID or the PROJECT_NAME, rename it. Format: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`.
+Rename the thread whenever its name doesn't match what you now know. Format: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, the description covering the task. A ticket that just arrived, a project that was unknown when the thread opened, a task that turned out to be something else — each one calls for the rename.
+
+Discord renames a thread through a post, so make the setup signal carry it: send that line with `message` `action: "thread-reply"`, passing the thread's `threadId`, the new name as `threadName`, and the line itself as `message`. Then don't also write the line as plain text — that posts it twice.
+
+That single call is the whole exception. The post right after it, and every one that follows, is plain text again; with nothing to rename, the tool never targets your own thread.
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
+
+The workspace tooling owns worktrees. Create, reuse, and tear them down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
 First, check what already exists for the {TICKET_ID} — two checks, both required:
 
@@ -86,9 +81,8 @@ The workspace block answers "is the env ready", not "where does the work stand".
 
 Combine them into the report and post it in the thread; lean on `alcode read` whenever the spec/summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
 
-## Step 7 — User's turn
+## Step 7 — Start the work
 
-When everything is ready:
+The workspace is ready, so get to it: announce what you're about to do in one line, then do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
 
-- If you already know what to do, announce what you plan to do. Then ask the user for validation before doing anything.
-- If something is unclear, ask the user what to do next.
+Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.
