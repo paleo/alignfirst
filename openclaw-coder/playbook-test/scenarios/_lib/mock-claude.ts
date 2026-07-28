@@ -400,7 +400,9 @@ export interface NoProtocolDelegationResult {
 export async function expectNoProtocolDelegation(
   ctx: ScenarioContext,
   handle: ClaudeMockHandle,
-  { rubric, label, timeoutMs = 90_000 }: ExpectNoProtocolDelegationOptions,
+  // 180s: slower providers (glm-5.2) burn many short turns before delegating —
+  // a valid call landed 3s past a 90s deadline (A03, artifacts 2026-07-28T09-01-38).
+  { rubric, label, timeoutMs = 180_000 }: ExpectNoProtocolDelegationOptions,
 ): Promise<NoProtocolDelegationResult> {
   const claudeCall = await handle.waitForCall({
     predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]),
@@ -444,7 +446,7 @@ export async function expectCodingDelegation(
   handle: ClaudeMockHandle,
   options: ExpectCodingDelegationOptions,
 ): Promise<ClaudeCall> {
-  const { ticketId, matches, timeoutMs = 90_000, label = "claude-coding-delegation" } = options;
+  const { ticketId, matches, timeoutMs = 180_000, label = "claude-coding-delegation" } = options;
   const claudeCall = await handle.waitForCall({
     predicate: (call) =>
       isAlignfirstWrapperCall(call) &&

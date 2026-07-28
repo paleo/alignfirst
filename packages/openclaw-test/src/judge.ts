@@ -125,7 +125,28 @@ You may write free-form prose first if useful. Then, emit the result JSON value 
 `;
 }
 
+// The SDK's own retries (see `maxRetries` below) cap out around 30s of backoff;
+// observed container DNS/network outages last minutes and have killed most of a
+// batch at once. Between them, these outer delays hold a cell alive ~2 minutes.
+const CONNECTION_RETRY_DELAYS_MS = [15_000, 30_000, 60_000];
+
 async function callAnthropic(
+  prompt: string,
+  maxTokens: number,
+): Promise<{ raw: string; usage: JudgeUsage }> {
+  for (let attempt = 0; ; ++attempt) {
+    try {
+      return await callAnthropicOnce(prompt, maxTokens);
+    } catch (err) {
+      const delayMs = CONNECTION_RETRY_DELAYS_MS[attempt];
+      if (delayMs === undefined || !(err instanceof Anthropic.APIConnectionError)) throw err;
+      console.warn(`judge connection error, retrying in ${delayMs / 1000}s: ${String(err)}`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+async function callAnthropicOnce(
   prompt: string,
   maxTokens: number,
 ): Promise<{ raw: string; usage: JudgeUsage }> {
@@ -162,7 +183,9 @@ function getJudge(): { client: Anthropic; model: string; bareModel: string } {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set — fill in your project's .env.local");
   const model = process.env.OPENCLAW_TEST_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL;
   const bareModel = parseAnthropicModelRef(model);
-  cached = { client: new Anthropic({ apiKey }), model, bareModel };
+  // Container DNS blips (EAI_AGAIN) outlast the SDK's default 2 retries and have
+  // killed whole cells at once; 5 retries ride out a multi-second outage.
+  cached = { client: new Anthropic({ apiKey, maxRetries: 5 }), model, bareModel };
   return cached;
 }
 

@@ -17,20 +17,29 @@ export interface WaitForStarterOptions {
 }
 
 /**
- * Wait for the first thread outbound — the starter — for this conversation.
+ * Wait for the first substantive thread outbound — the starter — for this
+ * conversation.
  *
- * Before the thread exists, some models free-stream planning notes to the
- * channel root (thread-less outbounds); `qwen3.7`/`glm-5.2` do it in a material
- * share of turns — an obedience ceiling, not a regression, and the same class
- * `assertNoChannelRootLeak` already tolerates. So this wait must NOT fail-fast
- * on those thread-less outbounds (the default cap is 3): the `threadId`
- * predicate plus the timeout bound it, and the agent still opens the thread.
+ * Two provider-asymmetry tolerances (see "Auto-stream delivers turn finals only
+ * on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`):
+ * `qwen3.7`/`glm-5.2` free-stream their mid-turn planning notes, an obedience
+ * ceiling, not a regression.
+ *
+ * - Thread-less planning notes land on the channel root (Discord) — the same
+ *   class `assertNoChannelRootLeak` tolerates. So no fail-fast on unmatched
+ *   outbounds: the `threadId` predicate plus the timeout bound the wait.
+ * - On Slack (auto-thread) the same notes land IN the thread, ahead of the
+ *   starter — so narration-classified matches are skipped, and the wait
+ *   re-enters until a substantive thread outbound arrives. A session that
+ *   narrates and never posts a real starter now times out instead of failing
+ *   the starter asserts on a planning note.
  */
 export function waitForStarter(
   ctx: ScenarioContext,
   opts: WaitForStarterOptions,
 ): Promise<WaitForOutboundResult> {
-  return ctx.waitForOutbound(
+  return waitForOutboundSkippingNarration(
+    ctx,
     (m) =>
       m.direction === "outbound" &&
       m.conversation.id === ctx.conversationId &&

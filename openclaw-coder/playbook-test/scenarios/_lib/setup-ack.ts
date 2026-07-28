@@ -25,11 +25,15 @@ export interface SetupAckOptions {
  * workspace."), exactly the shape the narration classifier flags — it ate the signal before
  * `commitsToSetup` could see it (A02, artifacts 2026-07-28T04-43-26). The candidate loop already
  * skips anything that doesn't commit.
+ *
+ * The candidate cap must absorb unphased providers (qwen/glm), which stream every mid-turn
+ * planning note into the thread: 5 candidates were all narration on glm-5.2 while the real ack
+ * was still coming (A01, artifacts 2026-07-28T09-01-38). The deadline is the real bound.
  */
 export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOptions): Promise<Step> {
   const { threadId, prevId } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 90_000);
-  const maxCandidates = opts.maxCandidates ?? 5;
+  const maxCandidates = opts.maxCandidates ?? 15;
   const window: string[] = [];
 
   let cursor = opts.sinceCursor;

@@ -21,9 +21,9 @@ import type {
 export async function isMetaNarration(ctx: ScenarioContext, text: string): Promise<boolean> {
   const { parsed } = await ctx.judgeLLMJson<{ isNarration: boolean; reason: string }>({
     message: text,
-    prompt: `Classify the message. Return \`isNarration: true\` ONLY when the message is purely the agent narrating its plan or intent (e.g. "Je vais poster…", "Let me first…", "Now I'll…", "Je dois vérifier…", "Checking the project then…") with no substantive user-facing payload. A fleeting progress observation that only sets up the announced next step ("Pas de branche existante — je crée la branche", "Pas de remote configuré, je passe à la création du workspace", "Fetch OK. Je lance la suite") is still narration, even when it stacks several such observations: it reports preconditions of the agent's own next action, not something the user asked for.
+    prompt: `Classify the message. Return \`isNarration: true\` ONLY when the message is purely the agent narrating its plan or intent (e.g. "Je vais poster…", "Let me first…", "Now I'll…", "Je dois vérifier…", "Checking the project then…") with no substantive user-facing payload. A fleeting progress observation that only sets up the announced next step ("Pas de branche existante — je crée la branche", "Pas de remote configuré, je passe à la création du workspace", "Fetch OK. Je lance la suite") is still narration, even when it stacks several such observations: it reports preconditions of the agent's own next action, not something the user asked for. Likewise, a recap of values the agent collected for itself (project, ticket, audience, task — labelled fields included) that ends by announcing the agent's own next action ("Now I'll open the thread", "J'ouvre le fil") and asks nothing of the user is narration: it is the agent thinking out loud before acting, not a delivery. Example, still narration despite the labelled values: "Robin (ROBIN01) — AUDIENCE: tech. Projet: nimbus, Ticket: ABC-070. Je crée le thread." A greeting or brief on-it acknowledgement attached to plan narration ("Salut Robin ! Je vais regarder ça. Laisse-moi d'abord charger mon playbook.") is also narration — addressing the user by name does not make an intent note substantive.
 
-Return \`isNarration: false\` whenever the message carries substantive user-facing content — even if a planning sentence is appended. Substantive content includes: templated starter lines (\`Project: **X** — Ticket: **Y** — …\`), acknowledgements that restate the project + ticket, status reports with labelled fields (e.g. \`Worktree: …\`, \`Branche: …\`, \`Bootstrap: …\`), questions to the user, or summary deliveries. Tie-breaker: if the observations are themselves the answer the user is waiting for (e.g. the user asked for a status and the message reports findings like an open PR or branch state), it is substantive; if they merely justify the agent's next step, it is narration.`,
+Return \`isNarration: false\` whenever the message carries substantive user-facing content — even if a planning sentence is appended. Substantive content includes: templated starter lines (\`Project: **X** — Ticket: **Y** — …\`) that address the user or end on a question or request to them, acknowledgements that restate the project + ticket for the user, status reports with labelled fields (e.g. \`Worktree: …\`, \`Branche: …\`, \`Bootstrap: …\`), questions to the user, or summary deliveries. Tie-breaker: if the observations are themselves the answer the user is waiting for (e.g. the user asked for a status and the message reports findings like an open PR or branch state), or the message asks the user for something, it is substantive; if it merely justifies the agent's next step, it is narration.`,
     returnType: '{ "isNarration": boolean, "reason": string }',
     label: "meta-narration-classifier",
   });
@@ -41,8 +41,10 @@ export type OutboundMessage = Parameters<ScenarioContext["waitForOutbound"]>[0] 
  * logged and skipped — the wait re-enters until a non-narration outbound
  * matches the predicate or the timeout elapses.
  *
- * Do NOT use this for the starter wait: a starter that's narration should
- * fail the scenario, not be silently skipped.
+ * The starter wait rides this too (via `waitForStarter`): unphased providers
+ * (qwen/glm) stream planning notes into the auto-thread ahead of the starter,
+ * so a session whose only thread output is narration times out instead of
+ * failing the starter asserts on a planning note.
  */
 export async function waitForOutboundSkippingNarration(
   ctx: ScenarioContext,

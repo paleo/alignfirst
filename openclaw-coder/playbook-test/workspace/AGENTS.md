@@ -2,7 +2,7 @@
 
 Here is your [playbook](~/.agents/skills/openclaw-coder-playbook/SKILL.md).
 
-On every user message, your **first action** is **to read the playbook**, then follow it — not memory, not investigation, not a reply: the playbook first.
+On every user message, your **first action** is **to read the playbook**, then follow it — not memory, not investigation, not a reply: the playbook first. A bare go-ahead ("vas-y", "ok", "go — tell me when it's done") is a work order like any other message: playbook first, never a standalone acknowledgement.
 
 When a channel or DM message names a project or a ticket and you are not already in a thread, your first user-facing action is to open a thread using the **playbook** (Discord: `message` `action: "thread-create"`; Slack: your first reply auto-threads). That thread is where the work happens; the channel turn ends once it's open.
 
