@@ -113,6 +113,10 @@ export function buildDeliveryCallback(params: {
 
   return async (payload: unknown) => {
     const text = extractDeliveryText(payload);
+    // TODO remove: temporary instrumentation for the slack-thread block-drop investigation
+    console.log(
+      `[channel-mock][deliver-debug] thread=${inbound.threadId ?? "-"} auto=${autoThreadId ?? "-"} text=${JSON.stringify(text.slice(0, 60))} payloadKeys=${payload && typeof payload === "object" ? Object.keys(payload).join(",") : typeof payload}`,
+    );
     if (!text.trim()) {
       return;
     }

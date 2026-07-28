@@ -1,5 +1,4 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { waitForOutboundSkippingNarration } from "./meta-narration.ts";
 import type { Step } from "./types.ts";
 
 export interface SetupAckOptions {
@@ -19,6 +18,12 @@ export interface SetupAckOptions {
  * a few messages up, and requiring them twice is what made the agent skip the
  * post entirely. So the only thing recognized here is the commitment to set the
  * workspace up; a chatty pre-ack before it is fine.
+ *
+ * No meta-narration pre-filter: the setup signal is a bare intent line by
+ * design ("Je prépare le workspace."), exactly the shape the narration
+ * classifier flags — it ate the signal before `commitsToSetup` could see it
+ * (A02, artifacts 2026-07-28T04-43-26). The candidate loop already skips
+ * anything that doesn't commit.
  */
 export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOptions): Promise<Step> {
   const { threadId, prevId } = opts;
@@ -28,8 +33,7 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
 
   let cursor = opts.sinceCursor;
   for (let i = 0; i < maxCandidates; i += 1) {
-    const wait = await waitForOutboundSkippingNarration(
-      ctx,
+    const wait = await ctx.waitForOutbound(
       (m) => m.direction === "outbound" && m.threadId === threadId && m.id !== prevId,
       { timeoutMs: Math.max(1000, deadline - Date.now()), sinceCursor: cursor },
     );

@@ -30,7 +30,9 @@ Use the guidelines.
 
 ### Thread name
 
-Keep the thread's name describing the work. As soon as you have a description of what's to be done — the channel opened the thread on a vague message, the user just supplied the ticket, the task turned out to be something else — rename it: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, dropping a leading segment you don't have yet. This applies to TALK threads too, not only WORK ones.
+Slack threads have no name — skip this section entirely there; a rename attempt is a failed `message` call whose error notice lands in the thread.
+
+On Discord, keep the thread's name describing the work. As soon as you have a description of what's to be done — the channel opened the thread on a vague message, the user just supplied the ticket, the task turned out to be something else — rename it: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, dropping a leading segment you don't have yet. This applies to TALK threads too, not only WORK ones.
 
 On Discord the rename travels with a post: `message` `action: "thread-reply"` with the thread's `threadId`, the new name as `threadName`, and your next user-facing line as `message`. Write that line only there — repeating it as plain text posts it twice.
 
@@ -103,7 +105,7 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 
 Before non-trivial code changes, like executing a plan, always stop the dev-server. Otherwise it will consume resources and might even interfere with the work.
 
-Testing is what ends a code change, not an optional extra. A coding run reporting success is a claim, and the user hears "it's done" from you. So relay the run's outcome first — that report is what the completion wake owes them — and then, as a separate step, verify:
+Testing is what ends a code change, not an optional extra. The completion wake owes the user the run's outcome first: relay it as the agent's account, verification announced, before any other tool call — the delegation guide gives the form ("the agent reports: … Verifying now."). Relaying an unverified claim in that form is honest; staying silent while you verify is not. Then verify, as its own step:
 
 1. Have alcode run the project's checks: tests, lint, build.
 2. Exercise the change yourself. Start the dev-server and drive the application with Playwright when that tooling is available to you; otherwise confirm the app still serves, and say that's as far as you could check.

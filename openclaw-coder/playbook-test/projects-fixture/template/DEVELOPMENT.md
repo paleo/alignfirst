@@ -8,7 +8,7 @@ Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Entrypoint `app.mjs`
 
 ## Layout
 
-- [`app.mjs`](app.mjs) — Express server. Reads `PORT` from env, serves the home page on `/` and the CSV export on `/export`.
+- [`app.mjs`](app.mjs) — Express server. Reads its port from the `PORT` env var or from `local.env` (written per workspace by `pnpm workspace setup`), serves the home page on `/` and the CSV export on `/export`.
 - [`home-page.mjs`](home-page.mjs) — the HTML: region links and the export button.
 - [`comparables.mjs`](comparables.mjs) — the in-memory datastore, one row set per region.
 - [`export-handler.mjs`](export-handler.mjs) — `GET /export?region=…`, rendering the rows as CSV.

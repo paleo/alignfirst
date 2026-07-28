@@ -2,10 +2,14 @@
 
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { runDevServer } from "@paleo/workspace";
+import { helpers, runDevServer } from "@paleo/workspace";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appScript = resolve(here, "..", "..", "app.mjs");
+const root = resolve(here, "..", "..");
+const appScript = resolve(root, "app.mjs");
+// This worktree's slot port, written into `local.env` by `workspace setup`.
+// The app reads the same file, so both sides agree.
+const appPort = helpers.readPortFromEnvFile(resolve(root, "local.env"), "PORT");
 
 await runDevServer({
   basePort: 6500,
@@ -16,7 +20,7 @@ await runDevServer({
       kind: "spawn",
       name: "app",
       exec: { command: "node", args: [appScript] },
-      port: 6500,
+      port: appPort,
       detectSuccess: (log) => log.includes("listening on"),
     },
   ],

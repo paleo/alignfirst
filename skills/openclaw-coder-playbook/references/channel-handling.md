@@ -30,9 +30,7 @@ A value the user didn't supply stays missing; Step 3 turns it into a question. D
 
 ### Step 2 — Open the thread
 
-Name it `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you don't have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`.
-
-**Discord** — call the `message` tool (full schema in `TOOLS.md`) with:
+**Discord** — name the thread `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you don't have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`. Then call the `message` tool (full schema in `TOOLS.md`) with:
 
 - `action`: `"thread-create"`
 - `target`: the **raw `chat_id`** from inbound metadata
@@ -43,7 +41,7 @@ Name it `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TA
 
 The tool returns the thread's `chat_id` — that's the THREAD_ID.
 
-**Slack** — your reply auto-threads (`replyToMode: "all"`), so your first reply *is* the starter. Nothing precedes it.
+**Slack** — Slack threads have no name, so there is nothing to create or rename: your reply auto-threads (`replyToMode: "all"`), and your first reply *is* the starter. Post it as plain text and call no `message` action — a `send` fails on this surface, and the failure notice lands in the thread.
 
 ### Step 3 — The starter message, then end the turn
 

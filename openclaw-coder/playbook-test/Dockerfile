@@ -9,12 +9,13 @@ FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}
 
 USER root
 
-# Fixture runtime deps (git for `git init` / worktree, pnpm via Corepack for
+# Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
+# verification step — "confirm the app still serves" — pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
 # this consumer wants intercepted. Only `claude` and `gh` are shimmed —
 # `alcode` runs for real (see the wrapper below), and its own `claude`
 # subprocess resolves back to the shim via PATH order.
-RUN apk add --no-cache git && \
+RUN apk add --no-cache git curl && \
     corepack enable && corepack prepare pnpm@latest --activate && \
     for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects

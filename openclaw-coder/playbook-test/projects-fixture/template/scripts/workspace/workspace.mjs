@@ -16,7 +16,13 @@ await runWorkspace({
   sharedDirs: [".local", ".plans"],
   runtimeDir: ".local-wt",
 
-  configFiles: [],
+  configFiles: [
+    {
+      path: "local.env",
+      source: { kind: "newWorktree", path: "local.env.example" },
+      patch: (content, { ports }) => content.replace(/^PORT=.*$/m, `PORT=${ports.frontend}`),
+    },
+  ],
 
   finalizeWorktree: async ({ currentWorktree }) => {
     execSync("pnpm install --frozen-lockfile --prod=false", {
