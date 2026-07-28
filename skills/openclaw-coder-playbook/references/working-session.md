@@ -1,8 +1,8 @@
 # Working session
 
-You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user.
+You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user. It's also where all the work happens: the channel session only opened this thread and handed you the values, so the workspace, the investigation, and the coding are yours to run.
 
-Your plain-text replies stream into the thread natively — they **are** your delivery, on Discord and Slack alike. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. `message` stays for `read`, the thread rename, cross-surface posts, and attachments.
+Your plain-text replies are your delivery, on Discord and Slack alike — but only the message that **ends your turn** is guaranteed to post. On most model providers, text written between tool calls never leaves the transcript; the user sees none of it. So the message you end a turn with must carry everything the user needs from that turn — the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. The single exception is a rename, which Discord only performs through a post — see "Thread name" below. Otherwise `message` stays for `read`, cross-surface posts, and attachments.
 
 ## Prerequisites
 
@@ -13,18 +13,28 @@ Your plain-text replies stream into the thread natively — they **are** your de
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, and the AUDIENCE from the thread: the `[WORK]` header carries all three; before it's posted, the starter names the project and records the audience, and the ticket comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; recover the audience from the thread or the sender. Branch, worktree path, and dev-server URL also live in the history.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, AUDIENCE, and the task from the thread's starter, which lists all four — the project, the ticket, the audience, and a `Task:` line. Anything still missing comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; when no starter recorded the audience, read the sender's from `USER.md`. Branch, worktree path, and dev-server URL also live in the history.
+
+The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's `Task:` line, and it's your green light.
 
 ### Step 2 — Determine the mode: WORK or TALK?
 
-- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its `[WORK]` header (Step 2), before any other ack or prose — this holds on a fresh WORK thread **and** when promoting a TALK thread the moment a ticket arrives. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK (post the `[WORK]` header then).
+- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK and run the same procedure then.
 
 ### Step 3 — Handle the actual request
 
 Use the guidelines.
 
 ## Guidelines
+
+### Thread name
+
+Slack threads have no name — skip this section entirely there; a rename attempt is a failed `message` call whose error notice lands in the thread.
+
+On Discord, keep the thread's name describing the work. As soon as you have a description of what's to be done — the channel opened the thread on a vague message, the user just supplied the ticket, the task turned out to be something else — rename it: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, dropping a leading segment you don't have yet. This applies to TALK threads too, not only WORK ones.
+
+On Discord the rename travels with a post: `message` `action: "thread-reply"` with the thread's `threadId`, the new name as `threadName`, and your next user-facing line as `message`. Write that line only there — repeating it as plain text posts it twice.
 
 ### Interpreting requests
 
@@ -44,6 +54,12 @@ Delegate to alcode: workspace/branch/worktree creation, writing code (`alignfirs
 
 Prefer delegating almost everything to alcode. But also feel free to do it yourself (except coding) when it's more practical.
 
+### The plan is not a gate
+
+Coding work follows spec → plan → implementation, as the delegation guide describes. That chain is how the agent works, not a series of checkpoints for the user: run it end to end. When the plan lands, launch the implementation in a new session right away and tell the user in one line that it started.
+
+The agent usually has no question. When it does, answer it: a technical question — architecture, existing behavior, anything the codebase answers — you settle yourself, pushing the agent to investigate. A functional or product question goes to the user, and you relay their answer back.
+
 ### Vocabulary
 
 - **project workspace** — the whole setup on your side: branch, worktree, dev server.
@@ -62,6 +78,8 @@ But you can run the dev-server from the main worktree.
 ### Linked worktrees and other branches
 
 Editing the codebase must always happen on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
+
+Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands (`workspace --guide`) — `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server slots.
 
 ### Updating a branch with the base branch
 
@@ -87,7 +105,13 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 
 Before non-trivial code changes, like executing a plan, always stop the dev-server. Otherwise it will consume resources and might even interfere with the work.
 
-After non-trivial code changes, always ensure the application still runs. Start the dev-server if it's not already running. Then take a look at the application yourself (using Playwright). Test the new behavior you just implemented, and any related behavior that could have been affected. If there is nothing to see, then at least test that you can still load the main screen. Don't ask the user to test before you check it yourself.
+Testing is what ends a code change, not an optional extra. On the completion wake, verify first — keep it quick — then report, one consolidated message that ends the turn:
+
+1. Have alcode run the project's checks: tests, lint, build.
+2. Exercise the change yourself. Start the dev-server and drive the application with Playwright when that tooling is available to you; otherwise confirm the app still serves, and say that's as far as you could check.
+3. End the turn on the report: the run's outcome as the agent's account, plus what you verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
+
+A failing check means the work isn't finished: the report states the outcome and the failing check, the fix goes to a new alcode session, then verify again. Never hand the testing back to the user, and never call something done on the coding agent's word alone.
 
 ### Improving project docs
 
@@ -96,6 +120,8 @@ When you learn something non-obvious about how to work in a project — a comman
 ### Commit & push cadence
 
 Commit and push is how work is shared with the rest of the team. Have alcode commit and push whenever a meaningful step is reached — and whenever the user asks. Frequent small commits beat long-lived dirty trees; WIP and non-compiling commits are acceptable.
+
+It's also how you show code. The user is a developer with the repository on their own machine, so pushed commits are what they read: give them the branch and what landed on it, and let them pull. Keep code out of the chat — no diffs, no patches, no snippets to copy, no file contents pasted for review.
 
 ### Versioning
 
@@ -144,3 +170,4 @@ New projects live in `~/projects/`. Don't rush into scaffolding — discuss with
 ### Forbidden
 
 - Never force push. Never cheat with the remote git history.
+- Never touch a worktree outside the workspace tooling.

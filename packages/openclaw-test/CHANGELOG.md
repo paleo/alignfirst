@@ -1,5 +1,15 @@
 # @paleo/openclaw-test
 
+## 0.15.1
+
+### Patch Changes
+
+- 705363d: The judge's Anthropic client now retries up to 5 times, riding out transient container DNS failures instead of failing the cell.
+- Updated dependencies [1470b76]
+  - @paleo/openclaw-channel-mock-core@0.6.0
+  - @paleo/openclaw-discord-mock@0.3.6
+  - @paleo/openclaw-slack-mock@0.3.6
+
 ## 0.15.0
 
 ### Minor Changes

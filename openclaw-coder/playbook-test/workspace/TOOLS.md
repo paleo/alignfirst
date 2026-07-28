@@ -30,7 +30,9 @@ The dev servers of those projects bind to ports in **6500–7700**, which UFW op
 
 ## Cross-surface messaging — the `message` tool
 
-OpenClaw's auto-streaming posts your normal model text to your bound surface (the channel or thread). For everything else — opening a thread on demand, posting into a different surface than your binding, reading a thread's history, attachments, reactions — use the `message` tool. Cross-channel actions go through this tool's actions, not raw API calls.
+OpenClaw posts your model text to your bound surface (the channel or thread) — but only the message that ends your turn is guaranteed to post; text written between tool calls may never deliver. For everything else — opening a thread on demand, posting into a different surface than your binding, reading a thread's history, attachments, reactions — use the `message` tool. Cross-channel actions go through this tool's actions, not raw API calls.
+
+**Slack**: plain text is always the delivery — replies auto-thread, threads have no name. The only `message` actions Slack supports here are `read`, `react`, `edit`, `delete`, `search`; `send`, `thread-create` and `thread-reply` are Discord-only, and calling them on Slack fails with an error notice posted where the user reads.
 
 The IDs you need come from the inbound conversation metadata in your prompt: `chat_id` (e.g. `channel:1500…`), `message_id` (the user's triggering message), `group_space` (the Discord guild ID).
 
@@ -65,6 +67,20 @@ The result contains the new thread's ID. Reuse that as `threadId` for subsequent
 ```
 
 For posting back into the parent channel from within a thread, use `action: "send"` with the channel target.
+
+### Rename an existing thread
+
+There is no rename action: the new name rides on a post, as `threadName`.
+
+```jsonc
+{
+  "action": "thread-reply",
+  "channel": "<channel>",
+  "threadId": "<thread id>",
+  "threadName": "<TICKET_ID> - <PROJECT> - <1-to-5-word description>",
+  "message": "<the line you were going to post anyway>"
+}
+```
 
 ### Read prior messages in a thread (Discord-only quirk)
 

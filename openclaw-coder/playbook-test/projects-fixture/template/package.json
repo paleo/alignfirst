@@ -9,7 +9,9 @@
   "scripts": {
     "docmap": "docmap",
     "workspace": "node scripts/workspace/workspace.mjs",
-    "dev": "node scripts/workspace/dev-server.mjs"
+    "dev": "node scripts/workspace/dev-server.mjs",
+    "test": "node --test",
+    "lint": "for f in *.mjs; do node --check \"$f\" || exit 1; done"
   },
   "dependencies": {
     "express": "5.2.1"

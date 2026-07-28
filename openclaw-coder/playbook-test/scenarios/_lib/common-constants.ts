@@ -5,16 +5,23 @@
 
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// The channel session opens the thread and stops there, so its starter may
+// announce and ask — never act. Judged on every bootstrap.
+export const STARTER_HANDS_OFF_RUBRIC =
+  "A thread-opening message from a chat bot, handing the work over to the thread. Judge only what the BOT claims to have ALREADY done or observed — never what the user asked for, and never what the bot promises to do later. Accept: an announcement of the project / ticket / audience; a one-line restatement of the user's request (including a request for a status report); a request to the user (a missing ticket id or project, a scope question, or an ask for a message in the thread so the work can start); an acknowledgement that a project the user named isn't in the bot's project list; mentions of what the projects directory listing shows (known project names, an existing worktree directory name) — checking that listing is part of collecting the handoff. Accept every promise about what happens after the user replies — setting up the workspace, launching the code immediately, examining branches / commits / PRs, investigating, reporting back: announcing the thread session's future job IS the handoff, whatever the work is. Tense tie-breaker: the message ends by asking the user for a reply, so nothing is running yet — read any sentence that could be either a present action or a plan ('je lance le travail', 'I'm setting up') as a plan. Reject only a claim of a COMPLETED or IN-PROGRESS act beyond opening the thread — a workspace / worktree / branch / dev server it says it created or has underway, a coding agent it says it launched, or concrete findings that required inspecting the repo (a branch's state, commit contents, PR status) rather than the directory listing.";
+
+export const HANDOFF_ASK_RUBRIC = `A message asking the user to reply in the thread — anything from them — so the bot can start working. Phrasings like "réponds ici pour que je démarre", "dis-moi quand je peux lancer", "un message ici et je m'y mets" all count. The core requirement is an explicit request for a message back. Reject when the message asks nothing of the user.`;
+
 export const NEW_WORK_QUESTION_RUBRIC =
   "A message asking the user about the new work: requests the ticket id, the change scope/description, or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
 export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
 
 export const askWhichProjectRubric = (ticketId: string): string =>
-  `A message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere — main clause, aside, or parenthetical all count. A thread-opening announcement or an audience note (\`tech\`/\`non-tech\`) before the question is fine. Does NOT claim a workspace/worktree/branch is being created or set up, and does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
+  `A message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere — main clause, aside, or parenthetical all count. A thread-opening announcement or an audience note (\`tech\`/\`non-tech\`) before the question is fine, and so is a promise about what follows the user's answer (the work session starting, the workspace being set up): future tense is the handoff, not an action claim. Does NOT claim a workspace/worktree/branch is already created or being created right now, and does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
 
 export const unknownProjectRubric = (projectName: string): string =>
-  `A short follow-up message acknowledging that the project named by the user (${projectName}) is not found under \`~/projects/\`. Asks the user to confirm the name or supply the correct one. Does NOT proceed with setup, does NOT pretend the project exists.`;
+  `A message acknowledging that the project named by the user (${projectName}) is not found / not known, and asking the user to confirm the name or supply the correct one. A thread-opening header before the acknowledgement — project name as given, ticket, audience (\`tech\`/\`non-tech\`), a one-line task restatement — is fine; naming ${projectName} in that header is quoting the user, not pretending the project exists. Reject only if the message proceeds with setup or treats the project as valid.`;
 
 export const statusExistingWorktreeRubric = (ticketId: string, branch: string): string =>
   `A status report for an existing workspace. References the ticket id (${ticketId}) or the branch (${branch}). Mentions that a worktree is already set up / registered / in place / ready (path, slot, "ready", "existe", "already exists" all count). Reporting the worktree's creation timestamp from its metadata is fine — that's data, not an action claim. Reject ONLY if the message announces, as a fresh user-facing action, that the agent itself just created a new worktree to fulfill this request (e.g. "Je viens de créer le worktree" with no prior-existence wording).`;
@@ -24,14 +31,3 @@ export const statusBranchOnlyRubric = (ticketId: string, branch: string): string
 
 export const statusNoBranchRubric = (ticketId: string): string =>
   `A short report that no workspace exists for ticket ${ticketId} — no branch, no worktree, "rien encore", "no branch yet", "pas de branche", "nothing started". Does NOT announce that a worktree was created. May offer to start a new workspace for the user.`;
-
-// The `[WORK]` header, posted on entering WORK mode, restates the project and
-// ticket. The values may be bolded (`**v**` on Discord, `*v*` on Slack) or
-// not, so bold markers are optional; `[WORK]` is kept literal. Tolerant
-// substring match (no ^/$ anchors), case-insensitive.
-const boldOpt = "\\*{0,2}";
-export const workHeaderRegex = (project: string, ticketId: string): RegExp =>
-  new RegExp(
-    `\\[WORK\\][\\s\\S]*${boldOpt}${escapeRe(project)}${boldOpt}[\\s\\S]*${boldOpt}${escapeRe(ticketId)}${boldOpt}`,
-    "i",
-  );

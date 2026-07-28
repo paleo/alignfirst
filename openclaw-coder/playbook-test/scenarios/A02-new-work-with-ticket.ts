@@ -1,65 +1,61 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { HANDOFF_ASK_RUBRIC } from "./_lib/common-constants.ts";
 import { setupClaudeMock } from "./_lib/mock-claude.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import { requireThreadId, waitForStarter } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 import type { Step } from "./_lib/types.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
 const TICKET_ID = "ABC-020";
 const PROJECT = "nimbus";
 
+/**
+ * Project and ticket both supplied in the channel message — nothing is missing,
+ * and the channel session still only opens the thread. With no value left to
+ * ask for, the starter asks the user for a message so the thread session can
+ * take over. That message is content-free ("Vas-y."): the task comes from the
+ * starter, and the thread session runs setup and delegation off it.
+ */
 export default async function projectDetectionWithTicket(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
   const claude = setupClaudeMock(ctx);
   setupGhMock(ctx);
 
-  const ack = await sendRequestWithTicketAndExpectWorkHeader(ctx);
-  await runWorkspaceFlow(ctx, claude, {
+  const starter = await bootstrapThreadFromChannel(ctx, {
+    text:
+      `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. ` +
+      `Ticket ${TICKET_ID}.`,
     project: PROJECT,
     ticketId: TICKET_ID,
-    prevStep: ack,
+    audience: "tech",
+    claude,
   });
+
+  await ctx.judgeLLM({
+    attachTo: starter.entry,
+    message: starter.match.text,
+    rubric: HANDOFF_ASK_RUBRIC,
+    label: "starter-handoff-ask",
+  });
+
+  const ack = await handOffAndExpectWorkHeader(ctx, starter);
+  await runWorkspaceFlow(ctx, claude, { project: PROJECT, ticketId: TICKET_ID, prevStep: ack });
 
   ctx.log({ attachTo: ack.entry, label: "[WORK] header received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
 
-async function sendRequestWithTicketAndExpectWorkHeader(ctx: ScenarioContext): Promise<Step> {
-  const startCursor = await ctx.getCursor();
-
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text: `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. Ticket ${TICKET_ID}.`,
-  });
-
-  // The thread opens with the first outbound. Under Slack auto-threading the
-  // first auto-streamed text becomes the starter, so a weak model may leak its
-  // reasoning here, or merge the announcement and the `[WORK]` header into one
-  // message — both tolerated. We don't judge the starter's form; we scan from
-  // it (inclusive) for the `[WORK]` header, the durable project/ticket carrier
-  // and the real outcome.
-  const wait = await waitForStarter(ctx, { sinceCursor: startCursor });
-  const threadId = requireThreadId(wait);
-  ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
-  const starter: Step = {
-    match: wait.match,
-    entry: wait.entry,
-    threadId,
-    nextCursor: wait.nextCursor,
-  };
+async function handOffAndExpectWorkHeader(ctx: ScenarioContext, starter: Step): Promise<Step> {
+  await sendInThread(ctx, starter.threadId, "Vas-y.");
 
   return await waitForSetupAck(ctx, {
-    threadId,
-    prevId: wait.match.id,
-    sinceCursor: wait.nextCursor,
-    ticketId: TICKET_ID,
-    project: PROJECT,
-    audience: "tech",
-    seedCandidate: starter,
+    threadId: starter.threadId,
+    prevId: starter.match.id,
+    sinceCursor: starter.nextCursor,
+    timeoutMs: 180_000,
   });
 }

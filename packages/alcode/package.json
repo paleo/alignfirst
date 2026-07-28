@@ -1,6 +1,6 @@
 {
   "name": "@paleo/alcode",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "Run a coding agent through AlignFirst protocols.",

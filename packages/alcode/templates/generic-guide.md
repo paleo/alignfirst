@@ -16,6 +16,8 @@ Read the run's session file (the path `alcode` prints on its first line, under `
 
 An `exitReason` of `auth_required` in the frontmatter (alcode also exits `2`) means the coding agent is not authenticated on the host: an administrator must re-login there before any run can succeed. Report that and do not retry.
 
-Do **not** re-verify the repo, re-run the agent, or inspect `git` — the session file is authoritative. Keep session files in place; they are the durable audit trail.
+Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. Do verify that the result works, though. Run the project's checks (tests, lint, build) and exercise the change yourself before calling it done; a failing check reopens the work in a new session.
+
+Keep session files in place; they are the durable audit trail.
 
 {{CLI_REFERENCE}}

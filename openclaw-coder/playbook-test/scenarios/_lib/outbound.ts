@@ -17,20 +17,29 @@ export interface WaitForStarterOptions {
 }
 
 /**
- * Wait for the first thread outbound — the starter — for this conversation.
+ * Wait for the first substantive thread outbound — the starter — for this
+ * conversation.
  *
- * Before the thread exists, some models free-stream planning notes to the
- * channel root (thread-less outbounds); `qwen3.7`/`glm-5.2` do it in a material
- * share of turns — an obedience ceiling, not a regression, and the same class
- * `assertNoChannelRootLeak` already tolerates. So this wait must NOT fail-fast
- * on those thread-less outbounds (the default cap is 3): the `threadId`
- * predicate plus the timeout bound it, and the agent still opens the thread.
+ * Two provider-asymmetry tolerances (see "Auto-stream delivers turn finals only
+ * on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`):
+ * `qwen3.7`/`glm-5.2` free-stream their mid-turn planning notes, an obedience
+ * ceiling, not a regression.
+ *
+ * - Thread-less planning notes land on the channel root (Discord) — the same
+ *   class `assertNoChannelRootLeak` tolerates. So no fail-fast on unmatched
+ *   outbounds: the `threadId` predicate plus the timeout bound the wait.
+ * - On Slack (auto-thread) the same notes land IN the thread, ahead of the
+ *   starter — so narration-classified matches are skipped, and the wait
+ *   re-enters until a substantive thread outbound arrives. A session that
+ *   narrates and never posts a real starter now times out instead of failing
+ *   the starter asserts on a planning note.
  */
 export function waitForStarter(
   ctx: ScenarioContext,
   opts: WaitForStarterOptions,
 ): Promise<WaitForOutboundResult> {
-  return ctx.waitForOutbound(
+  return waitForOutboundSkippingNarration(
+    ctx,
     (m) =>
       m.direction === "outbound" &&
       m.conversation.id === ctx.conversationId &&
@@ -134,35 +143,71 @@ export async function assertNoChannelRootLeak(
 const SELF_POST_ACTIONS = new Set(["send", "sendMessage", "thread-reply", "threadReply"]);
 
 /**
- * Assert the thread-bound session never posted into its own thread via the
- * `message` tool. Its plain text auto-streams into the thread, so a
- * `send`/`thread-reply` at its own thread delivers every reply twice — the
- * duplicate-replies incident (`.plans/33/from-paleoclaw/A1-diagnostic.md`).
- * Structural detection: a call is offending when its `sessionKey` carries the
- * thread id (only the per-thread session's key does — `…-thread-<id>` on the
- * mock, `…-topic-<id>` on real Discord) AND its input targets that same
- * thread; cross-surface posts stay allowed. One-shot sweep over the flushed
- * trajectory — call it at scenario end, after the final waits resolved.
+ * Assert the thread-bound session never delivered the same reply twice — the
+ * duplicate-replies incident (`.plans/33/from-paleoclaw/A1-diagnostic.md`). Its
+ * plain text auto-streams into the thread, so a `send`/`thread-reply` at its own
+ * thread posts that text a second time.
+ *
+ * The offending call is found structurally: `sessionKey` carries the thread id
+ * (only the per-thread session's key does — `…-thread-<id>` on the mock,
+ * `…-topic-<id>` on real Discord) and the input targets that same thread;
+ * cross-surface posts stay allowed. A call whose text reached the thread exactly
+ * once is not the incident, though — the playbook has the session route one line
+ * through the tool when it needs a rename, and Discord offers no other way. So
+ * the failure is a self-thread post whose text also arrived on its own.
+ *
+ * One-shot sweep over the flushed trajectory — call it at scenario end, after
+ * the final waits resolved.
  */
-export function assertNoSelfThreadMessagePost(ctx: ScenarioContext, threadId: string): void {
-  const offenders = ctx
-    .getAgentToolCalls()
-    .filter((call) => isSelfThreadMessagePost(call, threadId));
-  for (const call of offenders) {
+export async function assertNoSelfThreadMessagePost(
+  ctx: ScenarioContext,
+  threadId: string,
+  sinceCursor = 0,
+): Promise<void> {
+  const posts = ctx.getAgentToolCalls().filter((call) => isSelfThreadMessagePost(call, threadId));
+  const { messages } = await ctx.poll({ sinceCursor, timeoutMs: 1_000 });
+  const threadTexts = messages
+    .filter((m) => m.direction === "outbound" && m.threadId === threadId)
+    .map((m) => m.text.trim());
+
+  const duplicated = posts.filter((call) => {
+    const text = readPostText(call);
+    if (text === undefined) return false;
+    return threadTexts.filter((t) => t === text).length > 1;
+  });
+  for (const call of duplicated) {
     ctx.log(
-      `thread session message-posted at its own thread: ${JSON.stringify({
+      `thread session double-posted its own reply: ${JSON.stringify({
         sessionKey: call.sessionKey,
         input: call.input,
       }).slice(0, 300)}`,
     );
   }
-  ctx.assertLength(offenders, 0, "thread session: no message send/thread-reply at its own thread");
+  if (posts.length > duplicated.length) {
+    ctx.log(
+      `${posts.length - duplicated.length} self-thread message post(s) delivered once — tolerated`,
+    );
+  }
+  ctx.assertLength(duplicated, 0, "thread session: no reply delivered twice");
+}
+
+function readPostText(call: AgentToolCall): string | undefined {
+  const input = inputOf(call);
+  for (const field of ["message", "text", "content"]) {
+    const value = input[field];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return;
 }
 
 function isSelfThreadMessagePost(call: AgentToolCall, threadId: string): boolean {
   if (call.toolName !== "message") return false;
   const input = inputOf(call);
   if (typeof input.action !== "string" || !SELF_POST_ACTIONS.has(input.action)) return false;
+  // A rename is the one sanctioned self-thread post: Discord renames a thread
+  // only through a send carrying `threadName`, so the playbook has the session
+  // route one line through the tool instead of auto-streaming it.
+  if (typeof input.threadName === "string" && input.threadName.trim() !== "") return false;
   const needle = threadId.toLowerCase();
   if (call.sessionKey?.toLowerCase().includes(needle) !== true) return false;
   // These are exactly the params the mock reads to aim a post: `resolveDestination`

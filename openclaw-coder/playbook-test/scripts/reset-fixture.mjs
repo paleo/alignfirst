@@ -54,6 +54,10 @@ async function resetFixture(name) {
   // .gitignore already ignores `.plans/`, so it stays untracked like a real
   // repo; the agent runs alcode from this project root (~/projects/<name>).
   mkdirSync(`${dst}/.plans`, { recursive: true });
+  // The main worktree never runs `workspace setup`, so seed its `local.env`
+  // (gitignored) from the committed example — the base slot's port. Linked
+  // worktrees get theirs generated per slot by the workspace tooling.
+  cpSync(`${dst}/local.env.example`, `${dst}/local.env`);
   const gitEnv = {
     ...process.env,
     GIT_AUTHOR_NAME: "test",

@@ -20,10 +20,12 @@ A single labelled template plus a short list of variation tails beats four full-
 Good:
 
 ```text
-[WORK] Project: {P} — Ticket: {T} — Audience: {tech | non-tech}. {setup signal}
+Thread for {P} — Ticket: {T} — Audience: {tech | non-tech}
+Task: {task}
+{ask}
 ```
 
-Vary the setup signal — "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the agent to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.
+Then vary the parts that carry no value — the setup signal, for instance: "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the agent to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.
 
 ## Temporal anchors are required
 
@@ -35,13 +37,23 @@ Channel/DM and thread sessions behave differently; phrase as "Channel/DM: …. T
 
 ## The thread is its own source of truth
 
-Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project + ticket with `message action: "read"` on the thread: the `[WORK]` header carries both, and the starter names the project. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry the project forward; don't rely on the original message surviving. Never from `ls ~/projects/` and never from a ticket prefix (`ABC-…` is a label, not a project namespace).
+Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project + ticket with `message action: "read"` on the thread: the starter carries project, ticket, audience, and the task. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never from `ls ~/projects/` and never from a ticket prefix (`ABC-…` is a label, not a project namespace).
+
+This is why the channel session's starter is the only place the handoff values can live, and why it must state the task rather than assume the user will restate it. The message that wakes the thread session is often content-free ("vas-y", "ok").
 
 ## Don't treat a derived value as redundant
 
 When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the agent to drop X from the ack. Collapse to: "Post `<form including X>`".
 
-This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplies a ticket in-thread, the ack must restate both project and ticket (`assertRegex` on `\bABC-010\b` and `\bnimbus\b`) and announce workspace setup (`NEW_THREAD_ACK_RUBRIC` — worktree / branch / env). The agent's tool-call trace confirms it read the whole chain correctly (`dispatcher.md` → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPMENT.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
+This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPMENT.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
+
+## The other side: a value already on screen gets dropped
+
+The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the agent drops the second one — correctly, from its point of view: the user can already see them.
+
+This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, ticket, audience and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same four. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter is the thread's record, and the thread session opens with a bare setup signal that restates nothing.
+
+So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
 
 ## A nearby auto-loaded doc can crowd out the procedure
 

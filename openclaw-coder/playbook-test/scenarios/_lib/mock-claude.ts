@@ -40,6 +40,8 @@ const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing bra
 // picked.
 const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
 const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
+// A linked worktree dir: `<project>-<ticket>-<desc>`, never the project main dir.
+const WORKTREE_CWD_RE = /^\/home\/claw\/projects\/[^/]+-[^/]+-[^/]+\/?$/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
 
 // alcode drives `claude` with `-p --output-format stream-json --verbose`, reading the NDJSON
@@ -138,6 +140,7 @@ export function setupClaudeMock(
     let resultText: string;
     if (isCodingProtocolPrompt(prompt)) {
       resultText = codingResultFor(prompt);
+      await commitMockCodingChange(ctx, cwd, prompt, stderr);
     } else if (looksLikeWorktreeList(prompt)) {
       const project = resolveProject(prompt, cwd);
       if (!project) {
@@ -323,6 +326,50 @@ function parseWorktreeRequest(
 const CODING_PROTOCOL_RE =
   /^Run the _(spec|AAD|plan|description|read|review|merge)_ protocol from the \*alignfirst\* skill\./;
 
+// The edit each coding result stands behind, applied to the fixture's
+// `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
+// branch", and the agent is told to verify a completed run — so the claim has
+// to hold up: the change must be in the worktree, committed, and be the change
+// the result describes.
+const BOLD_BUTTON_EDIT = "s/font-weight: normal/font-weight: bold/";
+const TOOLTIP_EDIT = `s|<button id="export-button"|<button id="export-button" title="Exporter les données"|`;
+
+function codingEditFor(prompt: string): string {
+  if (TOOLTIP_INTENT_RE.test(prompt)) return TOOLTIP_EDIT;
+  if (BOLD_INTENT_RE.test(prompt)) return BOLD_BUTTON_EDIT;
+  return "s|<h1>Comparables</h1>|<h1>Comparables</h1><!-- updated -->|";
+}
+
+/**
+ * Apply and commit the change the result claims. Only linked worktrees are
+ * touched — a coding protocol always runs in one, and committing in a project's
+ * main dir would corrupt the shared fixture.
+ */
+async function commitMockCodingChange(
+  ctx: ScenarioContext,
+  cwd: string | undefined,
+  prompt: string,
+  stderr: { write(chunk: string): void },
+): Promise<void> {
+  if (cwd === undefined || !WORKTREE_CWD_RE.test(cwd)) return;
+  const exec = await ctx.execInGateway(
+    [
+      "sh",
+      "-c",
+      `cd "${cwd}" && sed -i '${codingEditFor(prompt)}' home-page.mjs && ` +
+        "git add home-page.mjs && " +
+        `git -c user.email=mock@local -c user.name=mock commit -q -m 'feat: apply the requested change'`,
+    ],
+    { timeoutMs: 30_000 },
+  );
+  if (exec.exitCode !== 0) {
+    stderr.write(
+      `mock-claude: commit in ${cwd} failed (exit ${exec.exitCode}).\n` +
+        `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+    );
+  }
+}
+
 /** True iff `prompt` opens with an alignfirst coding-protocol header. */
 export function isCodingProtocolPrompt(prompt: string | undefined): boolean {
   return prompt !== undefined && CODING_PROTOCOL_RE.test(prompt);
@@ -353,7 +400,9 @@ export interface NoProtocolDelegationResult {
 export async function expectNoProtocolDelegation(
   ctx: ScenarioContext,
   handle: ClaudeMockHandle,
-  { rubric, label, timeoutMs = 90_000 }: ExpectNoProtocolDelegationOptions,
+  // 180s: slower providers (glm-5.2) burn many short turns before delegating —
+  // a valid call landed 3s past a 90s deadline (A03, artifacts 2026-07-28T09-01-38).
+  { rubric, label, timeoutMs = 180_000 }: ExpectNoProtocolDelegationOptions,
 ): Promise<NoProtocolDelegationResult> {
   const claudeCall = await handle.waitForCall({
     predicate: (call) => isAlignfirstWrapperCall(call) && !isCodingProtocolPrompt(call.argv[0]),
@@ -397,7 +446,7 @@ export async function expectCodingDelegation(
   handle: ClaudeMockHandle,
   options: ExpectCodingDelegationOptions,
 ): Promise<ClaudeCall> {
-  const { ticketId, matches, timeoutMs = 90_000, label = "claude-coding-delegation" } = options;
+  const { ticketId, matches, timeoutMs = 180_000, label = "claude-coding-delegation" } = options;
   const claudeCall = await handle.waitForCall({
     predicate: (call) =>
       isAlignfirstWrapperCall(call) &&
