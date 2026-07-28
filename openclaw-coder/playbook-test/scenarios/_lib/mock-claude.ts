@@ -326,7 +326,6 @@ function parseWorktreeRequest(
 const CODING_PROTOCOL_RE =
   /^Run the _(spec|AAD|plan|description|read|review|merge)_ protocol from the \*alignfirst\* skill\./;
 
-/** True iff `prompt` opens with an alignfirst coding-protocol header. */
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
 // branch", and the agent is told to verify a completed run — so the claim has
@@ -357,7 +356,7 @@ async function commitMockCodingChange(
     [
       "sh",
       "-c",
-      `cd ${cwd} && sed -i '${codingEditFor(prompt)}' home-page.mjs && ` +
+      `cd "${cwd}" && sed -i '${codingEditFor(prompt)}' home-page.mjs && ` +
         "git add home-page.mjs && " +
         `git -c user.email=mock@local -c user.name=mock commit -q -m 'feat: apply the requested change'`,
     ],
@@ -371,6 +370,7 @@ async function commitMockCodingChange(
   }
 }
 
+/** True iff `prompt` opens with an alignfirst coding-protocol header. */
 export function isCodingProtocolPrompt(prompt: string | undefined): boolean {
   return prompt !== undefined && CODING_PROTOCOL_RE.test(prompt);
 }
