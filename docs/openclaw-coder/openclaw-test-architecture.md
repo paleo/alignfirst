@@ -149,6 +149,8 @@ Both channels register together on every gateway boot. The runner selects which 
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. `chat_id` envelope shape is **not** rewritten — scenarios assert on `conversation.id` / `threadId`, not envelope formatting.
 
+**Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
+
 Each `openclaw.plugin.json` declares a minimal `channelConfigs.<id>.schema` (`type: "object"`, `additionalProperties: true`) to silence the gateway's `channel plugin manifest declares <id> without channelConfigs metadata` warning. The static schema is intentionally permissive — the runtime plugin owns the real config schema via `buildChannelMockConfigSchema`. `label` / `selectionLabel` / `docsPath` / `blurb` still come from the runtime plugin.
 
 ## Target normalizer + plugin-action vs send

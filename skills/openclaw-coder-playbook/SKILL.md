@@ -27,6 +27,8 @@ A channel/DM session opens a thread and ends its turn. It never sets up a worksp
 
 On Discord, your free-form text auto-streams to your **bound surface**. Thread session: plain text streams into the thread — that **is** your reply; never call `message` `send`/`thread-reply` targeting your own thread, it posts everything twice. Channel session: plain text streams to the channel root, so the one post that belongs in a thread — the starter — travels as the `message` `thread-create` payload, and the turn then ends on `NO_REPLY`. Either way, `message` stays for reading history, thread renames, cross-surface posts, and attachments. On Slack, plain replies are always right (auto-threaded).
 
+One caveat everywhere: only the message that **ends your turn** is guaranteed to post — on most model providers, text written between tool calls never reaches the user. End every turn on the message the user must see; the surface playbooks say which one. Ending the turn on it IS the guarantee — never route your own surface's reply through `message` `send` to "make sure".
+
 ## Projects
 
 Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`, from the thread's starter, which carries the project, the ticket, the audience and the task. Never re-derive from `ls ~/projects/` or from a ticket prefix.

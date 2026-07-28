@@ -81,6 +81,17 @@ So a thread-bound subagent's intermediate turns produce **no** Discord posts. Th
 
 This is why "a subagent talks to the user directly" doesn't work without effort — the architecture is **subagent → parent → user**, not **subagent → user**. To get live, multi-turn thread interactivity, don't use a subagent at all (Path 3 below) — use a regular thread session, which has auto-stream.
 
+### Auto-stream delivers turn finals only on Anthropic (the commentary phase)
+
+"Auto-stream" does not mean every text the model writes becomes a post. OpenClaw phase-tags Anthropic assistant text at the `tool_use` boundary: text followed by a tool call in the same run is `phase: "commentary"` (visible as `textSignature` on the trajectory's `messagesSnapshot` blocks), and the embedded subscriber **withholds commentary from durable block replies by design** — `isPhasePendingAnthropicText` in `src/agents/embedded-agent-subscribe.handlers.messages.ts`, plus the commentary-phase suppression tests (`…withholds-anthropic-pretool-narration.test.ts`, `…suppresses-commentary-phase-output.test.ts`). The channel plugin's deliver callback is never invoked for these texts, so no plugin-side wiring can recover them.
+
+Practical consequences, verified on the harness (2026-07-28, trajectory-vs-bus diff, `claude-sonnet-5`):
+
+- With an Anthropic model, a session's durable posts are its **turn finals** (unphased text ending the run) plus explicit `message` tool-posts. A WORK turn that narrates "setting up the workspace", runs tools, then ends on a status line delivers only the status line. Instructions telling the agent to "post" a mid-turn signal produce text that reaches the transcript but never the surface.
+- The real plugins do not change this: Discord forwards commentary only in draft-preview *progress* mode (`commentaryPayloadsEnabled` in `extensions/discord/src/monitor/message-handler.process.ts`, ephemeral previews); Slack never does.
+- The one durable, production-supported outlet is the **verbose lane** (`agents.defaults.verboseDefault: "on"` or `/verbose on`): commentary items become standalone `💬 <text>` progress messages (`deliverCommentaryProgressMessage` in `src/auto-reply/reply/dispatch-from-config.ts`), at the cost of a `🛠️` summary per tool call.
+- Provider asymmetry: `openai-completions` providers (qwen, glm) emit unphased text, so their mid-turn text **does** stream at `text_end`. Delivery shape differs per provider; scenario waits and playbook promises must not depend on mid-turn posts existing (Anthropic) or on their absence (qwen/glm).
+
 ### Patterns for thread work
 
 Three viable shapes for handling a Discord thread, given the above:

@@ -10,20 +10,21 @@ export interface SetupAckOptions {
 }
 
 /**
- * Wait for the thread session's setup signal — the short line it posts on
- * entering WORK mode, before the workspace exists (project-workspace-setup.md
- * Step 2).
+ * Wait for the thread session's first post showing it has taken over the work.
  *
- * It deliberately restates none of the handoff values: the starter carries them
- * a few messages up, and requiring them twice is what made the agent skip the
- * post entirely. So the only thing recognized here is the commitment to set the
- * workspace up; a chatty pre-ack before it is fine.
+ * With an Anthropic model, mid-turn text never delivers (see "Auto-stream delivers turn finals
+ * only on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`): the WORK turn's
+ * only guaranteed post is its end-of-turn message, which may consolidate the workspace state,
+ * the delegation launch, or even the completed outcome. On Discord a `message` rename post can
+ * arrive earlier. All of these count; the judge accepts any message that shows the takeover.
  *
- * No meta-narration pre-filter: the setup signal is a bare intent line by
- * design ("Je prépare le workspace."), exactly the shape the narration
- * classifier flags — it ate the signal before `commitsToSetup` could see it
- * (A02, artifacts 2026-07-28T04-43-26). The candidate loop already skips
- * anything that doesn't commit.
+ * The delegation (a `claude` cliMock via alcode) legitimately fires BEFORE any thread post on
+ * finals-only surfaces, so the cliMock fail-fast is disabled — the deadline bounds the wait.
+ *
+ * No meta-narration pre-filter: the setup signal is a bare intent line by design ("Je prépare le
+ * workspace."), exactly the shape the narration classifier flags — it ate the signal before
+ * `commitsToSetup` could see it (A02, artifacts 2026-07-28T04-43-26). The candidate loop already
+ * skips anything that doesn't commit.
  */
 export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOptions): Promise<Step> {
   const { threadId, prevId } = opts;
@@ -35,7 +36,11 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
   for (let i = 0; i < maxCandidates; i += 1) {
     const wait = await ctx.waitForOutbound(
       (m) => m.direction === "outbound" && m.threadId === threadId && m.id !== prevId,
-      { timeoutMs: Math.max(1000, deadline - Date.now()), sinceCursor: cursor },
+      {
+        timeoutMs: Math.max(1000, deadline - Date.now()),
+        sinceCursor: cursor,
+        failFastCliMockGraceMs: false,
+      },
     );
     cursor = wait.nextCursor;
     window.push(wait.match.text);
@@ -51,14 +56,14 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
     if (Date.now() >= deadline) break;
   }
   throw new Error(
-    `setup-acknowledgement: no message committed to workspace setup across ${window.length} candidate(s): ${JSON.stringify(window)}`,
+    `setup-acknowledgement: no message committed to the work across ${window.length} candidate(s): ${JSON.stringify(window)}`,
   );
 }
 
 async function commitsToSetup(ctx: ScenarioContext, text: string): Promise<boolean> {
   const { parsed } = await ctx.judgeLLMJson<{ commits: boolean; reason: string }>({
     message: text,
-    prompt: `Does this thread message commit to setting up the project workspace — creating or preparing a worktree, branch, or dev environment? Count both present tense ("Je prépare le worktree", "Setting up the workspace") and imminent intent ("Je vais créer la branche", even when it first mentions reading the project docs). A message reporting that the workspace is now ready also counts. Do NOT count a bare process note with no setup commitment ("Je me mets en place", "Je lis le playbook", "Mode WORK").`,
+    prompt: `Does this thread message show the assistant has taken over the work? Count: committing to or reporting workspace setup — creating or preparing a worktree, branch, or dev environment ("Je prépare le worktree", "Setting up the workspace", "Worktree: … Bootstrap: ready"); telling the user the work is launched or underway, possibly in the background ("Je lance l'agent de code", "the coding agent is running — I'll report back"); or reporting the work's outcome. Count both present tense and imminent intent. Do NOT count a bare process note with no commitment ("Je me mets en place", "Je lis le playbook", "Mode WORK"), or a platform error notice ("⚠️ …").`,
     returnType: '{ "commits": boolean, "reason": string }',
     label: "ack-commits-to-setup",
   });

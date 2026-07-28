@@ -36,12 +36,13 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
   return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
-// `alcode` at a word boundary — a bare `alcode …` or an absolute path
-// (`/usr/local/bin/alcode …`), but not a substring of another token.
-const ALCODE_INVOCATION_RE = /(^|[\s/])alcode(\s|$)/;
+// `alcode` at a word boundary — bare, absolute path (`/usr/local/bin/alcode …`), or after a shell
+// separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained-wake
+// launch shape) — but not a substring of another token.
+const ALCODE_INVOCATION_RE = /(^|[\s/;(&|])alcode(\s|$)/;
 // A direct `claude` invocation (the agent must NOT call the coding CLI itself —
 // only alcode may, as its subprocess, which is a cliMock, not an agent tool call).
-const CLAUDE_INVOCATION_RE = /(^|[\s/])claude(\s|$)/;
+const CLAUDE_INVOCATION_RE = /(^|[\s/;(&|])claude(\s|$)/;
 
 /** True when the call is an `exec` that invokes the real `alcode` CLI. */
 export function invokesAlcode(call: AgentToolCall): boolean {

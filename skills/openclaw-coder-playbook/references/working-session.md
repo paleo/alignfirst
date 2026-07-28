@@ -2,7 +2,7 @@
 
 You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface; everything you post here is visible to the user. It's also where all the work happens: the channel session only opened this thread and handed you the values, so the workspace, the investigation, and the coding are yours to run.
 
-Your plain-text replies stream into the thread natively — they **are** your delivery, on Discord and Slack alike. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. The single exception is a rename, which Discord only performs through a post — see "Thread name" below. Otherwise `message` stays for `read`, cross-surface posts, and attachments.
+Your plain-text replies are your delivery, on Discord and Slack alike — but only the message that **ends your turn** is guaranteed to post. On most model providers, text written between tool calls never leaves the transcript; the user sees none of it. So the message you end a turn with must carry everything the user needs from that turn — the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. The single exception is a rename, which Discord only performs through a post — see "Thread name" below. Otherwise `message` stays for `read`, cross-surface posts, and attachments.
 
 ## Prerequisites
 
@@ -105,13 +105,13 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 
 Before non-trivial code changes, like executing a plan, always stop the dev-server. Otherwise it will consume resources and might even interfere with the work.
 
-Testing is what ends a code change, not an optional extra. The completion wake owes the user the run's outcome first: relay it as the agent's account, verification announced, before any other tool call — the delegation guide gives the form ("the agent reports: … Verifying now."). Relaying an unverified claim in that form is honest; staying silent while you verify is not. Then verify, as its own step:
+Testing is what ends a code change, not an optional extra. On the completion wake, verify first — keep it quick — then report, one consolidated message that ends the turn:
 
 1. Have alcode run the project's checks: tests, lint, build.
 2. Exercise the change yourself. Start the dev-server and drive the application with Playwright when that tooling is available to you; otherwise confirm the app still serves, and say that's as far as you could check.
-3. Post what you verified.
+3. End the turn on the report: the run's outcome as the agent's account, plus what you verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
 
-A failing check means the work isn't finished: fix it in a new alcode session, then verify again. Never hand the testing back to the user, and never call something done on the coding agent's word alone.
+A failing check means the work isn't finished: the report states the outcome and the failing check, the fix goes to a new alcode session, then verify again. Never hand the testing back to the user, and never call something done on the coding agent's word alone.
 
 ### Improving project docs
 

@@ -41,7 +41,7 @@ A value the user didn't supply stays missing; Step 3 turns it into a question. D
 
 The tool returns the thread's `chat_id` — that's the THREAD_ID.
 
-**Slack** — Slack threads have no name, so there is nothing to create or rename: your reply auto-threads (`replyToMode: "all"`), and your first reply *is* the starter. Post it as plain text and call no `message` action — a `send` fails on this surface, and the failure notice lands in the thread.
+**Slack** — Slack threads have no name, so there is nothing to create or rename: your reply auto-threads (`replyToMode: "all"`), and the message you end the turn with *is* the starter. Ending the turn on it guarantees it posts. Call no `message` action: `send` does not exist on this surface.
 
 ### Step 3 — The starter message, then end the turn
 

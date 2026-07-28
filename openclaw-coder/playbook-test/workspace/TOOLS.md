@@ -30,7 +30,7 @@ The dev servers of those projects bind to ports in **6500–7700**, which UFW op
 
 ## Cross-surface messaging — the `message` tool
 
-OpenClaw's auto-streaming posts your normal model text to your bound surface (the channel or thread). For everything else — opening a thread on demand, posting into a different surface than your binding, reading a thread's history, attachments, reactions — use the `message` tool. Cross-channel actions go through this tool's actions, not raw API calls.
+OpenClaw posts your model text to your bound surface (the channel or thread) — but only the message that ends your turn is guaranteed to post; text written between tool calls may never deliver. For everything else — opening a thread on demand, posting into a different surface than your binding, reading a thread's history, attachments, reactions — use the `message` tool. Cross-channel actions go through this tool's actions, not raw API calls.
 
 **Slack**: plain text is always the delivery — replies auto-thread, threads have no name. The only `message` actions Slack supports here are `read`, `react`, `edit`, `delete`, `search`; `send`, `thread-create` and `thread-reply` are Discord-only, and calling them on Slack fails with an error notice posted where the user reads.
 

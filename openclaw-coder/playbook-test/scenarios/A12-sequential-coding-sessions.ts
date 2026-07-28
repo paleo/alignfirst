@@ -21,9 +21,11 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 const TICKET_ID = "ABC-0120";
 const PROJECT = "nimbus";
 
-// The launch invocation, not the `alcode --openclaw-guide` read (also an alcode exec).
+// The delegation launch: an alcode PROTOCOL run. Discriminates against the other alcode execs a
+// turn legitimately makes — the `--openclaw-guide` read, and the wake turn's protocol-less
+// verification run ("Run the project's checks…"), which is foreground and chains no wake.
 const isAlcodeLaunch = (call: AgentToolCall): boolean =>
-  invokesAlcode(call) && !execMatches(call, /--openclaw-guide/);
+  invokesAlcode(call) && execMatches(call, /--protocol/);
 
 /**
  * Regression for the heartbeat-cooldown wake gate (incident `.plans/32/from-paleoclaw/

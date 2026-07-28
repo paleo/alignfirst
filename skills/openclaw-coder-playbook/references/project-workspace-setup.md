@@ -1,6 +1,6 @@
 # Project workspace setup
 
-The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies stream into the thread natively — they **are** your delivery. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
+The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies are your delivery — but only the message that **ends your turn** is guaranteed to post; mid-turn lines may never leave the transcript. The message you end the WORK turn with must carry everything the user needs: the workspace block (Step 4) and what you did or launched. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
 
 ## Prerequisites — run both now, before Step 1
 
@@ -21,6 +21,8 @@ If you don't have the PROJECT_NAME or TICKET_ID, do not proceed. Do not guess th
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the project, the ticket, the audience and the task, so restating them here just repeats a message they can see.
 
 Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
+
+On some surfaces this line never posts (mid-turn text — see the delivery note at the top). Write it anyway, and count on the end-of-turn message, not on it, for anything the user must see.
 
 When the task changed with the message that woke you — a TALK thread where a ticket just arrived, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
 
@@ -49,7 +51,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — your **first** post is this block, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir. In the user's language:
+The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — post this block, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir. In the user's language:
 
 ```text
 Worktree: {dirname}
