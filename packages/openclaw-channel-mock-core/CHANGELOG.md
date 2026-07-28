@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.6.0
+
+### Minor Changes
+
+- 1470b76: Thread renaming, matching real Discord: `thread-create` now reads the thread name from `threadName`, and a `send` / `thread-reply` carrying `threadName` renames the target thread.
+
 ## 0.5.0
 
 ### Minor Changes
