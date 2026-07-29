@@ -1,5 +1,11 @@
 # @paleo/plans-repo
 
+## 0.2.0
+
+### Minor Changes
+
+- 6d62bcf: `plans-repo setup` no longer clones the plans repository: point it at an existing clone (clone it yourself, with your own SSH configuration). The `--repo` option is removed — update the `plans:setup` npm script to `plans-repo setup --folder <name>` and document the repository URL in the instruction file.
+
 ## 0.1.0
 
 ### Minor Changes
