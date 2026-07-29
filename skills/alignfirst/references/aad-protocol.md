@@ -42,16 +42,17 @@ Do not use your question tool. Always ask in plain text. Your questions will be 
 
 ## 3. Act
 
-When you and the user agree, start implementing.
+When you and the user agree, create the summary file in TASK_DIR, then start implementing.
 
-For **complex work** only (risk of context exhaustion):
+Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
 
-- Create your summary file as you go, then update it as a working document.
-- Use subagents (your subagent tool) for distinct, isolated units of work when beneficial.
+Maintain the file as a **live report** while you work: the decisions made with the user, then progress and notable findings as they come. If the session dies, this file is what survives.
+
+Use subagents (your subagent tool) for distinct, isolated units of work when beneficial.
 
 ## 4. Summarize
 
-Write the summary file in TASK_DIR. Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
+Finalize the summary file: replace the working notes with the final content described below.
 
 Start the summary with a header, then a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). The shorter the better. Omit any field with nothing to list. Always exclude `alignfirst` from skills.
 

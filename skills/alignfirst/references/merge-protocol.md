@@ -25,6 +25,8 @@ Take the time to understand how things work in the incoming branch and in the cu
 
 ## 3. Resolve
 
+Create the summary file now: a new file `{CYCLE_LETTER}{FILE_NUMBER}-merge.summary.md` in the TASK_DIR. Log each notable resolution in it as you resolve (see step 5 for the expected content).
+
 Resolve the conflicts properly — preserve both intents whenever possible. Do not blindly accept one side.
 
 **Special case for lock files:** If a lock file has conflicts:
@@ -38,7 +40,7 @@ Finalize the merge using git's default commit message (e.g. `git commit --no-edi
 
 ## 5. Summarize
 
-Write your summary in a new file `{CYCLE_LETTER}{FILE_NUMBER}-merge.summary.md` in the TASK_DIR.
+Finalize the summary file.
 
 **Keep it lean.** Only document challenging conflicts and the choices made to resolve them. Do not list straightforward resolutions — if everything was trivial, the summary should be almost empty (just a header and a one-line note that there was nothing tricky). Do not include a commit message — git already provides one for merges.
 

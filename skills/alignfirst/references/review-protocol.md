@@ -25,7 +25,7 @@ We need:
 
 Be very concise.
 
-Write your report in a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR.
+Create your report as a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR before reviewing — start with the header and base branch, fill the sections as findings accumulate, and finalize it at the end.
 
 ## Output Format
 

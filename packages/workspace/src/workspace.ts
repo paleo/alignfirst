@@ -1193,17 +1193,27 @@ function ensureWorktree(
   return useExistingBranch(command.branch, ctx, run, dirNameFn);
 }
 
-function linkSharedDirectories(
+export function linkSharedDirectories(
   ctx: WorktreeContext,
   dirs: string[],
   log: (msg: string) => void,
 ): void {
   for (const dirName of dirs) {
-    const link = join(ctx.currentWorktree, dirName);
     const mainDir = join(ctx.mainWorktree, dirName);
     if (!existsSync(mainDir)) {
-      log(`Skipped ${dirName} symlink (not present in main worktree).`);
-    } else if (existsSync(link)) {
+      // A dead symlink (e.g. `.plans` pointing at a moved plans-repo clone) must be repaired by the
+      // user, not shadowed by a fresh directory.
+      if (lstatSync(mainDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        throw new WorkspaceError(
+          `'${dirName}' in the main worktree is a broken symlink. Repair it, then retry.`,
+        );
+      }
+      mkdirSync(mainDir, { recursive: true });
+      log(`Created ${dirName} in the main worktree (shared directory was missing).`);
+    }
+    if (ctx.isMainWorktree) continue;
+    const link = join(ctx.currentWorktree, dirName);
+    if (existsSync(link)) {
       log(`Skipped ${dirName} symlink (already exists).`);
     } else {
       const relTarget = relative(ctx.currentWorktree, mainDir);

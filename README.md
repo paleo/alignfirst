@@ -14,6 +14,10 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 `@paleo/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
+## Team plans repository
+
+`@paleo/plans-repo` shares the `.plans` directory of the AlignFirst skills among a team, through a dedicated plans repository. See [packages/plans-repo/README.md](packages/plans-repo/README.md).
+
 ## OpenClaw Test toolkit
 
 `@paleo/openclaw-test` and three companion channel packages: they are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).

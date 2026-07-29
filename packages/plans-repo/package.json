@@ -1,0 +1,46 @@
+{
+  "name": "@paleo/plans-repo",
+  "version": "0.0.0",
+  "license": "CC0-1.0",
+  "author": "Thomas MUR",
+  "description": "Share AlignFirst plans through a team plans repository.",
+  "keywords": [
+    "alignfirst",
+    "plans",
+    "ai",
+    "agent",
+    "worktree"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/plans-repo"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.12.1",
+  "type": "module",
+  "bin": {
+    "plans-repo": "bin/plans-repo.mjs"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "~24.12.4",
+    "rimraf": "~6.1.3",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.7"
+  }
+}
