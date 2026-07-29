@@ -23,6 +23,7 @@
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
 - `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
+- `@paleo/plans-repo` — share the `.plans` directory through a team plans repository
 - `@paleo/workspace` — run multiple git-worktree dev environments side by side
 
 ## Docmap - Seek Documentation

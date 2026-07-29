@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Write technical specifica
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.6.0"
+  version: "3.7.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -27,6 +27,8 @@ If you don't already know which protocol to use, read [overview.md](references/o
 
 - Create TASK_DIR if it doesn't exist
 - Or, list all existing files (do not truncate)
+
+**Work without a ticket:** when the user says there is no ticket, use `nt-{N}` as the TICKET_ID: find the highest `nt-{N}` directory in `.plans/` and take N + 1 (`nt-1` if there is none). Reuse an existing `nt-{N}` directory when the user refers to that earlier work. Omit the ticket ID from commit messages.
 
 ## File Naming Convention
 
@@ -51,8 +53,6 @@ Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
 │   └── A3-AAD.summary.md
 │   └── B1-spec.md
 ```
-
-**Shared files:** the `.plans` directory is gitignored, except for files renamed with a `.shared.md` suffix (e.g. `A1-spec.shared.md`). We use this suffix to hand work over to another team member, or to collaborate on it.
 
 ## Notes
 

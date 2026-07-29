@@ -1,0 +1,200 @@
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+
+import { main } from "../src/cli.js";
+
+let suiteDir: string;
+let fixtureDir: string;
+
+beforeAll(() => {
+  suiteDir = mkdtempSync(join(tmpdir(), "plans-repo-suite-"));
+  const gitConfig = join(suiteDir, "gitconfig");
+  writeFileSync(
+    gitConfig,
+    "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
+  );
+  process.env.GIT_CONFIG_GLOBAL = gitConfig;
+  process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+});
+
+afterAll(() => {
+  rmSync(suiteDir, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  if (fixtureDir) rmSync(fixtureDir, { recursive: true, force: true });
+});
+
+interface Fixture {
+  root: string;
+  product: string;
+  remoteUrl: string;
+}
+
+function makeFixture(): Fixture {
+  fixtureDir = mkdtempSync(join(tmpdir(), "plans-repo-"));
+  const remoteUrl = join(fixtureDir, "remote.git");
+  execGit(fixtureDir, "init", "--quiet", "--bare", remoteUrl);
+  const product = join(fixtureDir, "product");
+  execGit(fixtureDir, "init", "--quiet", product);
+  writeFileSync(join(product, "README.md"), "product\n");
+  execGit(product, "add", "-A");
+  execGit(product, "commit", "--quiet", "-m", "init");
+  return { root: fixtureDir, product, remoteUrl };
+}
+
+function execGit(dir: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", dir, ...args], { encoding: "utf-8" }).trim();
+}
+
+interface RunResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+function run(cwd: string, ...args: string[]): RunResult {
+  let stdout = "";
+  let stderr = "";
+  const code = main({
+    argv: ["node", "plans-repo", ...args],
+    cwd,
+    stdout: { write: (s) => (stdout += s) },
+    stderr: { write: (s) => (stderr += s) },
+  });
+  return { code, stdout, stderr };
+}
+
+function runSetup(fixture: Fixture, dir = join(fixture.root, "team-plans")): RunResult {
+  return run(fixture.product, "setup", dir, "--repo", fixture.remoteUrl, "--folder", "myproj");
+}
+
+describe("plans-repo setup", () => {
+  it("clones the plans repository and links .plans", () => {
+    const fixture = makeFixture();
+    const result = runSetup(fixture);
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(lstatSync(join(fixture.product, ".plans")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(join("..", "team-plans", "myproj"));
+    expect(existsSync(join(fixture.root, "team-plans", "myproj"))).toBe(true);
+  });
+
+  it("migrates existing .plans content into the clone", () => {
+    const fixture = makeFixture();
+    const ticketDir = join(fixture.product, ".plans", "123");
+    mkdirSync(ticketDir, { recursive: true });
+    writeFileSync(join(ticketDir, "A1-spec.md"), "spec\n");
+    const result = runSetup(fixture);
+    expect(result.code).toBe(0);
+    expect(existsSync(join(fixture.root, "team-plans", "myproj", "123", "A1-spec.md"))).toBe(true);
+    expect(lstatSync(join(fixture.product, ".plans")).isSymbolicLink()).toBe(true);
+  });
+
+  it("reports all migration collisions without copying anything", () => {
+    const fixture = makeFixture();
+    const cloneDir = join(fixture.root, "team-plans");
+    execGit(fixture.root, "clone", "--quiet", fixture.remoteUrl, cloneDir);
+    mkdirSync(join(cloneDir, "myproj", "123"), { recursive: true });
+    mkdirSync(join(cloneDir, "myproj", "456"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "123"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "456"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "789"), { recursive: true });
+    const result = runSetup(fixture);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("123, 456");
+    expect(existsSync(join(cloneDir, "myproj", "789"))).toBe(false);
+    expect(lstatSync(join(fixture.product, ".plans")).isDirectory()).toBe(true);
+  });
+
+  it("is idempotent once linked", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = runSetup(fixture);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("already links");
+  });
+
+  it("rejects a clone with a different origin", () => {
+    const fixture = makeFixture();
+    const otherRemote = join(fixture.root, "other.git");
+    execGit(fixture.root, "init", "--quiet", "--bare", otherRemote);
+    const dir = join(fixture.root, "team-plans");
+    execGit(fixture.root, "clone", "--quiet", otherRemote, dir);
+    const result = runSetup(fixture, dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("is a clone of");
+  });
+
+  it("re-links after the clone moved", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const movedDir = join(fixture.root, "moved-plans");
+    renameSync(join(fixture.root, "team-plans"), movedDir);
+    const result = runSetup(fixture, movedDir);
+    expect(result.code).toBe(0);
+    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(join("..", "moved-plans", "myproj"));
+  });
+
+  it("refuses to run from a linked worktree", () => {
+    const fixture = makeFixture();
+    const worktree = join(fixture.root, "product-feat");
+    execGit(fixture.product, "worktree", "add", "--quiet", worktree, "-b", "feat");
+    const result = run(
+      worktree,
+      "setup",
+      join(fixture.root, "team-plans"),
+      "--repo",
+      fixture.remoteUrl,
+      "--folder",
+      "myproj",
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("main worktree");
+  });
+});
+
+describe("plans-repo sync", () => {
+  it("publishes plan files to the remote", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "77");
+    mkdirSync(ticketDir, { recursive: true });
+    writeFileSync(join(ticketDir, "A1-spec.md"), "spec\n");
+    const result = run(fixture.product, "sync");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    const remoteFiles = execGit(fixture.remoteUrl, "ls-tree", "-r", "HEAD", "--name-only");
+    expect(remoteFiles).toContain("myproj/77/A1-spec.md");
+  });
+
+  it("succeeds when there is nothing to publish", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    run(fixture.product, "sync");
+    const result = run(fixture.product, "sync");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Plans synchronized.");
+  });
+
+  it("fails when .plans is not linked to a plans repository", () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const result = run(fixture.product, "sync");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not linked");
+  });
+});

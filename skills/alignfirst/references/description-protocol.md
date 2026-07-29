@@ -12,9 +12,10 @@ Identify and state these values before starting the protocol.
 ## Steps
 
 1. Find the current ticket plan directory.
-2. If a `*description.md` file already exists in the TASK_DIR, find the latest one. Only read `*spec.md` and `*summary.md` files that come *after* it — earlier work is already covered.
+2. Create your description as a new file `{CYCLE_LETTER}1-description.md` with the next cycle letter, containing just the header — this reserves the filename.
+3. If a previous `*description.md` file exists in the TASK_DIR, find the latest one. Only read `*spec.md` and `*summary.md` files that come *after* it — earlier work is already covered.
    Otherwise, read all `*spec.md` and `*summary.md` files.
-3. Write a new file `{CYCLE_LETTER}1-description.md` with the next cycle letter, containing a commit message and a description.
+4. Write the commit message and description into your file.
 
 ## Output Format
 

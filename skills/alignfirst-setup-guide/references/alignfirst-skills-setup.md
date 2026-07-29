@@ -4,15 +4,9 @@ Configure a consumer repo for the AlignFirst skills: add the `.plans` ignore rul
 
 ## Step 1 — Configure the project
 
-1. Create the `.plans/` directory if it doesn't exist, and ensure `.gitignore` contains this block:
+1. Create the `.plans/` directory if it doesn't exist, and ensure `.gitignore` contains `.plans`.
 
-   ```text
-   .plans/**
-   !.plans/**/
-   !.plans/**/*.shared.md
-   ```
-
-   These rules ignore the `.plans` directory but keep `*.shared.md` files tracked, so plans handed over with the `.shared.md` suffix get committed. Insert the three lines as a block — the two `!` lines depend on the first. If a bare `.plans` line already exists, replace it; left in place it shadows the un-ignore rules.
+   **Upgrading from the `.shared.md` mechanism:** if `.gitignore` carries the old block (`.plans/**`, `!.plans/**/`, `!.plans/**/*.shared.md`), replace the three lines with `.plans`, then untrack any committed `*.shared.md` files (`git rm --cached`) and tell the user about them.
 2. Check if `AGENTS.md` or `CLAUDE.md` exists. If one exists, use it. If neither exists, create `AGENTS.md`. This file is the INSTRUCTION_FILE.
 3. Look at git branches (`git branch -a`) to detect the ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
    - If no pattern is found, ask the user:
@@ -47,3 +41,7 @@ npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst -
 ```
 
 We recommend installing these skills globally. After installation, the user must restart their agent (new session) for the skills to load.
+
+## Step 3 — Team Plans Repository (Optional)
+
+By default, `.plans/` stays local to each machine. A team that wants to share plans hosts a dedicated plans repository: follow [plans-repo-setup.md](plans-repo-setup.md). Skip this step for solo use — the skills behave identically in both modes.

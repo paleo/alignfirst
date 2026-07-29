@@ -1,39 +1,33 @@
 {
-  "name": "@paleo/workspace",
-  "version": "0.29.0",
-  "description": "Run multiple git-worktree dev environments side by side.",
-  "keywords": [
-    "workspace",
-    "worktree",
-    "environment",
-    "concurrent",
-    "isolated",
-    "local",
-    "dev-server"
-  ],
+  "name": "@paleo/plans-repo",
+  "version": "0.1.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
+  "description": "Share AlignFirst plans through a team plans repository.",
+  "keywords": [
+    "alignfirst",
+    "plans",
+    "specs",
+    "repository",
+    "ai",
+    "agent"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
-    "directory": "packages/workspace"
+    "directory": "packages/plans-repo"
   },
   "engines": {
     "node": ">=22.11.0"
   },
   "packageManager": "npm@11.12.1",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
+  "bin": {
+    "plans-repo": "bin/plans-repo.mjs"
   },
   "files": [
-    "dist",
-    "templates"
+    "bin",
+    "dist"
   ],
   "publishConfig": {
     "access": "public"
@@ -42,8 +36,7 @@
     "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
     "lint": "biome check",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "~24.12.4",
