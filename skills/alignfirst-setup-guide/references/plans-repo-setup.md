@@ -7,7 +7,7 @@ Share `.plans/` among the developers of a team through a dedicated **plans repos
 The team hosts a plans repository, multi-project — one folder per code repo, ticket directories inside:
 
 ```text
-team-plans/
+myteam-plans/
   project-a/
     250/
       A1-spec.md
@@ -29,32 +29,32 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
 ## Setup, Once Per Project
 
 1. Install the tool: `npm install -D @paleo/plans-repo`.
-2. Add the npm scripts, with the remote URL and the project's folder name baked in:
+2. Add the npm scripts, with the project's folder name baked in:
 
    ```json
-   "plans:setup": "plans-repo setup --repo git@example.com:team/team-plans.git --folder project-a",
+   "plans:setup": "plans-repo setup --folder project-a",
    "plans:sync": "plans-repo sync"
    ```
 
 3. Ensure `.gitignore` contains `.plans` (the skills setup already does this).
-4. Add this section to the instruction file (`AGENTS.md` or `CLAUDE.md`), adapting the commands to the detected package manager:
+4. Add this section to the instruction file (`AGENTS.md` or `CLAUDE.md`), adapting the URL, folder, and commands to the project and the detected package manager:
 
    > ## Team Plans Repository
    >
-   > In the main worktree, `.plans` is a symlink into a clone of the team plans repository (see the `plans:setup` script for the URL). Plans are shared with the team through that repository and are never committed in this one.
+   > In the main worktree, `.plans` is a symlink into a clone of the team plans repository: `git@example.com:myteam/myteam-plans.git` (folder `project-a/`). Plans are shared with the team through that repository and are never committed in this one.
    >
    > To synchronize: `npm run plans:sync`.
    >
-   > On a new machine: `npm run plans:setup -- <clone-location>`.
+   > On a new machine: clone the plans repository anywhere (typically next to the worktrees), then run `npm run plans:setup -- <clone-location>`.
 
 ## Setup, Once Per Machine
 
-From the main worktree root, pass the clone location — an existing clone or the place to create one:
+Clone the plans repository anywhere (typically next to the worktrees) — cloning is the user's move, with their own SSH configuration. Then, from the main worktree root, pass the clone location:
 
 ```sh
-npm run plans:setup -- ../team-plans
+npm run plans:setup -- ../myteam-plans
 ```
 
-The command clones the repository there (or verifies an existing clone's origin), creates the project folder, migrates any existing `.plans` content into it, and replaces `.plans` with the symlink. A moved clone leaves a broken symlink — re-run the command with the new location.
+The command creates the project folder inside the clone, migrates any existing `.plans` content into it, and replaces `.plans` with the symlink. A moved clone leaves a broken symlink — re-run the command with the new location.
 
 Then publish any migrated content: `npm run plans:sync`.

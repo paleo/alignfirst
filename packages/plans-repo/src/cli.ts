@@ -6,12 +6,12 @@ import { runSync } from "./sync.js";
 const HELP = `plans-repo — share the .plans directory through a team plans repository.
 
 Usage:
-  plans-repo setup <dir> --repo <url> --folder <name>
+  plans-repo setup <dir> --folder <name>
   plans-repo sync
   plans-repo --help | --version
 
-setup   Clone the plans repository at <dir> (or reuse an existing clone), then link .plans
-        to <dir>/<name>/, migrating any existing .plans content. Once per machine; re-run
+setup   Link .plans to <dir>/<name>/, where <dir> is an existing clone of the plans
+        repository, migrating any existing .plans content. Once per machine; re-run
         with the new location if the clone moves.
 sync    Pull, commit, and push the plans repository.
 `;

@@ -7,7 +7,7 @@ Share the `.plans` directory of the [AlignFirst skills](https://github.com/paleo
 A team hosts a plans repository, multi-project — one folder per code repo, ticket directories inside:
 
 ```text
-team-plans/
+myteam-plans/
   project-a/
     250/
       A1-spec.md
@@ -26,24 +26,26 @@ Plan history has no value, so the plans repository only receives synchronization
 npm install -D @paleo/plans-repo
 ```
 
-Add the npm scripts, with the remote URL and project folder baked in:
+Add the npm scripts, with the project folder baked in:
 
 ```json
 {
-  "plans:setup": "plans-repo setup --repo git@example.com:team/team-plans.git --folder project-a",
+  "plans:setup": "plans-repo setup --folder project-a",
   "plans:sync": "plans-repo sync"
 }
 ```
 
+Document the plans repository URL where developers will find it (e.g. `AGENTS.md`), since cloning is theirs to do — with their own SSH configuration.
+
 ## Commands
 
-Once per machine, from the main worktree root, passing the clone location:
+Once per machine: clone the plans repository anywhere (typically next to the other repos), then, from the main worktree root, pass the clone location:
 
 ```sh
-npm run plans:setup -- ../team-plans
+npm run plans:setup -- ../myteam-plans
 ```
 
-`setup` clones the repository there (or verifies an existing clone's origin), migrates any existing `.plans` content into it, and creates the symlink. Re-run it with the new location if the clone moves.
+`setup` migrates any existing `.plans` content into the clone and creates the symlink. Re-run it with the new location if the clone moves.
 
 To synchronize, from any worktree:
 

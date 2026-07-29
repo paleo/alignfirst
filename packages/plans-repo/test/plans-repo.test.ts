@@ -48,6 +48,7 @@ function makeFixture(): Fixture {
   fixtureDir = mkdtempSync(join(tmpdir(), "plans-repo-"));
   const remoteUrl = join(fixtureDir, "remote.git");
   execGit(fixtureDir, "init", "--quiet", "--bare", remoteUrl);
+  execGit(fixtureDir, "clone", "--quiet", remoteUrl, join(fixtureDir, "team-plans"));
   const product = join(fixtureDir, "product");
   execGit(fixtureDir, "init", "--quiet", product);
   writeFileSync(join(product, "README.md"), "product\n");
@@ -79,11 +80,11 @@ function run(cwd: string, ...args: string[]): RunResult {
 }
 
 function runSetup(fixture: Fixture, dir = join(fixture.root, "team-plans")): RunResult {
-  return run(fixture.product, "setup", dir, "--repo", fixture.remoteUrl, "--folder", "myproj");
+  return run(fixture.product, "setup", dir, "--folder", "myproj");
 }
 
 describe("plans-repo setup", () => {
-  it("clones the plans repository and links .plans", () => {
+  it("links .plans to an existing clone", () => {
     const fixture = makeFixture();
     const result = runSetup(fixture);
     expect(result.stderr).toBe("");
@@ -107,7 +108,6 @@ describe("plans-repo setup", () => {
   it("reports all migration collisions without copying anything", () => {
     const fixture = makeFixture();
     const cloneDir = join(fixture.root, "team-plans");
-    execGit(fixture.root, "clone", "--quiet", fixture.remoteUrl, cloneDir);
     mkdirSync(join(cloneDir, "myproj", "123"), { recursive: true });
     mkdirSync(join(cloneDir, "myproj", "456"), { recursive: true });
     mkdirSync(join(fixture.product, ".plans", "123"), { recursive: true });
@@ -128,15 +128,20 @@ describe("plans-repo setup", () => {
     expect(result.stdout).toContain("already links");
   });
 
-  it("rejects a clone with a different origin", () => {
+  it("fails when the directory does not exist", () => {
     const fixture = makeFixture();
-    const otherRemote = join(fixture.root, "other.git");
-    execGit(fixture.root, "init", "--quiet", "--bare", otherRemote);
-    const dir = join(fixture.root, "team-plans");
-    execGit(fixture.root, "clone", "--quiet", otherRemote, dir);
-    const result = runSetup(fixture, dir);
+    const result = runSetup(fixture, join(fixture.root, "nowhere"));
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("is a clone of");
+    expect(result.stderr).toContain("does not exist");
+  });
+
+  it("fails when the directory is not a git repository", () => {
+    const fixture = makeFixture();
+    const plainDir = join(fixture.root, "plain");
+    mkdirSync(plainDir);
+    const result = runSetup(fixture, plainDir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not a git repository");
   });
 
   it("re-links after the clone moved", () => {
@@ -153,15 +158,7 @@ describe("plans-repo setup", () => {
     const fixture = makeFixture();
     const worktree = join(fixture.root, "product-feat");
     execGit(fixture.product, "worktree", "add", "--quiet", worktree, "-b", "feat");
-    const result = run(
-      worktree,
-      "setup",
-      join(fixture.root, "team-plans"),
-      "--repo",
-      fixture.remoteUrl,
-      "--folder",
-      "myproj",
-    );
+    const result = run(worktree, "setup", join(fixture.root, "team-plans"), "--folder", "myproj");
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("main worktree");
   });
