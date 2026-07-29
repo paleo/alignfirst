@@ -36,7 +36,7 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
    "plans:sync": "plans-repo sync"
    ```
 
-3. Ensure `.gitignore` contains a bare `.plans` line (the skills setup already does this).
+3. Ensure `.gitignore` contains `.plans` (the skills setup already does this).
 4. Add this section to the instruction file (`AGENTS.md` or `CLAUDE.md`), adapting the commands to the detected package manager:
 
    > ## Team Plans Repository

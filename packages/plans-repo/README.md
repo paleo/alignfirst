@@ -16,7 +16,7 @@ team-plans/
     103/
 ```
 
-Each developer clones it once per machine. In each project, `.plans` in the main worktree becomes a symlink to the project's folder inside the clone. Plans never enter the product repository: its `.gitignore` carries a bare `.plans` line.
+Each developer clones it once per machine. In each project, `.plans` in the main worktree becomes a symlink to the project's folder inside the clone. Plans never enter the product repository: its `.gitignore` contains `.plans`.
 
 Plan history has no value, so the plans repository only receives synchronization commits — pull, commit `sync`, push — at each user's discretion.
 

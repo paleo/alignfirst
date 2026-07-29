@@ -53,7 +53,7 @@ Search the entire codebase for any references to `_plans` (in source code, confi
 
 Remove all lines referencing `_plans` (e.g., `_plans/*`, `!_plans/.gitkeep`, `_plans`).
 
-Ensure a bare `.plans` line is present, replacing the old block (`.plans/**`, `!.plans/**/`, `!.plans/**/*.shared.md`) if found. If any `*.shared.md` files are committed, untrack them (`git rm --cached`) and tell the user about them.
+Ensure `.gitignore` contains `.plans`, replacing the old block (`.plans/**`, `!.plans/**/`, `!.plans/**/*.shared.md`) if found. If any `*.shared.md` files are committed, untrack them (`git rm --cached`) and tell the user about them.
 
 ## Step 6 — Clean AGENTS.md
 
