@@ -1,5 +1,11 @@
 # @paleo/plans-repo
 
+## 0.3.0
+
+### Minor Changes
+
+- 21d52a7: New `plans-repo check` command: verifies that `.plans` is linked to a team plans repository, and exits 1 with guidance otherwise.
+
 ## 0.2.0
 
 ### Minor Changes
