@@ -171,6 +171,41 @@ describe("plans-repo setup", () => {
   });
 });
 
+describe("plans-repo check", () => {
+  it("succeeds when .plans is linked to a plans repository", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = run(fixture.product, "check");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("linked to the team plans repository");
+  });
+
+  it("fails when .plans is missing", () => {
+    const fixture = makeFixture();
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Clone the team plans repository");
+  });
+
+  it("fails when .plans is a plain directory", () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not linked");
+  });
+
+  it("fails when the .plans symlink is broken", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    renameSync(join(fixture.root, "team-plans"), join(fixture.root, "moved-plans"));
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("broken");
+  });
+});
+
 describe("plans-repo sync", () => {
   it("publishes plan files to the remote", () => {
     const fixture = makeFixture();

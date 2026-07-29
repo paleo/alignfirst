@@ -53,6 +53,16 @@ To synchronize, from any worktree:
 npm run plans:sync
 ```
 
+## Enforcing the link in automation
+
+`plans-repo check` verifies that `.plans` is linked to a team plans repository and exits 1 with guidance otherwise. Call it from a bootstrap hook — e.g. the `preSetup` callback of [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace) — to make the link a prerequisite of the local environment, without hardcoding any clone location:
+
+```js
+if (isMainWorktree) {
+  execFileSync("npx", ["plans-repo", "check"], { cwd: currentWorktree, stdio: "inherit" });
+}
+```
+
 ## Archiving
 
 To keep `.plans` small, move finished tickets to `_archives/` inside the project folder — anyone, anytime:
