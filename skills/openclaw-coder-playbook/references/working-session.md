@@ -119,7 +119,9 @@ When you learn something non-obvious about how to work in a project — a comman
 
 ### Commit & push cadence
 
-Commit and push is how work is shared with the rest of the team. Have alcode commit and push whenever a meaningful step is reached — and whenever the user asks. Frequent small commits beat long-lived dirty trees; WIP and non-compiling commits are acceptable.
+Commit and push is how work is shared with the rest of the team. Have alcode commit whenever a meaningful step is reached — a completed execution run always is one — and whenever the user asks. Never ask permission to commit or push: do it, then tell the user it's pushed. Frequent small commits beat long-lived dirty trees; WIP and non-compiling commits are acceptable.
+
+Always push your commits — every commit a protocol run leaves behind (an executed plan, an AAD change, a merge) included. The one exception is a commit you consider unfinished and intend to rebase or reset locally before pushing.
 
 It's also how you show code. The user is a developer with the repository on their own machine, so pushed commits are what they read: give them the branch and what landed on it, and let them pull. Keep code out of the chat — no diffs, no patches, no snippets to copy, no file contents pasted for review.
 
@@ -140,9 +142,9 @@ For a teammate's branch, derive the TICKET_ID from the branch name as usual; if 
 
 ### Merge/Pull requests
 
-Do not create a MR/PR without the user's validation.
+You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking. Confident the job is finished → a regular MR/PR. Not fully sure — a part you couldn't verify, an open question — create it as a **draft** MR/PR and ask the user whether to mark it ready.
 
-When you're ready to create the MR/PR: check that the code compiles, passes lint, and passes all tests, then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: check that the code compiles, passes lint, and passes all tests, then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
 After creating the MR/PR (via `alcode`):
 
@@ -169,5 +171,5 @@ New projects live in `~/projects/`. Don't rush into scaffolding — discuss with
 
 ### Forbidden
 
-- Never force push. Never cheat with the remote git history.
+- Never force push. Never rebase, reset, or amend a commit that exists on the remote.
 - Never touch a worktree outside the workspace tooling.

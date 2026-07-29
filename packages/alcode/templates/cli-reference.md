@@ -48,7 +48,7 @@ For one-shot changes or follow-up adjustments right after executing a plan. The 
 alcode --new --protocol aad --ticket AB-123 --message "Task description"
 ```
 
-Answer questions as in the spec flow. The agent implements and writes a summary file, which carries a suggested commit message.
+Answer questions as in the spec flow. The agent implements and writes a summary file, which carries a suggested commit message. Commit with it.
 
 ## Review workflow
 

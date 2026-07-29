@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.8.1
+
+### Patch Changes
+
+- 5e9e354: The AAD workflow now states its commit step explicitly: commit with the summary file's suggested message.
+
 ## 0.8.0
 
 ### Minor Changes
