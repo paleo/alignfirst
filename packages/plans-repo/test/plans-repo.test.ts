@@ -104,6 +104,22 @@ describe("plans-repo setup", () => {
     expect(lstatSync(join(fixture.product, ".plans")).isSymbolicLink()).toBe(true);
   });
 
+  it("reports all migration collisions without copying anything", () => {
+    const fixture = makeFixture();
+    const cloneDir = join(fixture.root, "team-plans");
+    execGit(fixture.root, "clone", "--quiet", fixture.remoteUrl, cloneDir);
+    mkdirSync(join(cloneDir, "myproj", "123"), { recursive: true });
+    mkdirSync(join(cloneDir, "myproj", "456"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "123"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "456"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans", "789"), { recursive: true });
+    const result = runSetup(fixture);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("123, 456");
+    expect(existsSync(join(cloneDir, "myproj", "789"))).toBe(false);
+    expect(lstatSync(join(fixture.product, ".plans")).isDirectory()).toBe(true);
+  });
+
   it("is idempotent once linked", () => {
     const fixture = makeFixture();
     runSetup(fixture);

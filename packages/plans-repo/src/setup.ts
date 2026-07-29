@@ -100,14 +100,14 @@ function linkPlans(ctx: CliContext, projectDir: string): void {
 
 function migratePlansContent(ctx: CliContext, plansPath: string, projectDir: string): void {
   const entries = readdirSync(plansPath);
-  for (const entry of entries) {
-    const dest = join(projectDir, entry);
-    if (existsSync(dest))
-      throw new CliError(
-        `Cannot migrate .plans/${entry}: ${dest} already exists. Merge it manually, then re-run.`,
-      );
-    cpSync(join(plansPath, entry), dest, { recursive: true });
-  }
+  const collisions = entries.filter((entry) => existsSync(join(projectDir, entry)));
+  if (collisions.length > 0)
+    throw new CliError(
+      `Cannot migrate .plans: already in ${projectDir}: ${collisions.join(", ")}. ` +
+        "Merge them manually, then re-run.",
+    );
+  for (const entry of entries)
+    cpSync(join(plansPath, entry), join(projectDir, entry), { recursive: true });
   rmSync(plansPath, { recursive: true });
   if (entries.length > 0)
     ctx.stdout.write(`Migrated ${entries.length} entries from the local .plans directory.\n`);
