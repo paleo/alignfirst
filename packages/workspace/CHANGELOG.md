@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.29.0
+
+### Minor Changes
+
+- 60afd89: `workspace setup` now creates a missing shared directory in the main worktree instead of skipping its symlink, so directories like `.local` exist before the first linked worktree needs them. A broken symlink at a shared directory's place in the main worktree is reported as an error.
+
 ## 0.28.0
 
 ### Minor Changes
