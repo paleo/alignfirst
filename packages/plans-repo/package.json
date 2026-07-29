@@ -7,9 +7,10 @@
   "keywords": [
     "alignfirst",
     "plans",
+    "specs",
+    "repository",
     "ai",
-    "agent",
-    "worktree"
+    "agent"
   ],
   "repository": {
     "type": "git",
