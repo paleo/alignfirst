@@ -25,7 +25,7 @@ We need:
 
 Be very concise.
 
-Create your report as a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR before reviewing — start with the header and base branch, fill the sections as findings accumulate, and finalize it at the end.
+Before reviewing, create your report as a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR, containing just the header — this reserves the filename, so a concurrent protocol session takes the next one. Write the report into it at the end.
 
 ## Output Format
 

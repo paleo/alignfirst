@@ -46,7 +46,7 @@ When you and the user agree, create the summary file in TASK_DIR, then start imp
 
 Compose the filename using the current CYCLE_LETTER and the bumped FILE_NUMBER, then append `-AAD.summary.md`. For example, if the last file is `E5-plan-something.md`, create `E6-AAD.summary.md`. Do not overwrite an existing file.
 
-Maintain the file as a **live report** while you work: the decisions made with the user, then progress and notable findings as they come. If the session dies, this file is what survives.
+Maintain the file as a **live report** while you work.
 
 Use subagents (your subagent tool) for distinct, isolated units of work when beneficial.
 
