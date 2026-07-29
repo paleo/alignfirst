@@ -10,13 +10,13 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { CliError, type CliContext } from "./context.js";
-import { git, gitOutput } from "./git.js";
+import { gitOutput } from "./git.js";
 
 export function runSetup(ctx: CliContext, args: string[]): void {
   const options = parseSetupArgs(args);
   checkMainWorktreeRoot(ctx);
   const cloneDir = resolve(ctx.cwd, options.dir);
-  ensureClone(ctx, cloneDir, options.repoUrl);
+  checkClone(ctx, cloneDir);
   const projectDir = join(cloneDir, options.folder);
   mkdirSync(projectDir, { recursive: true });
   linkPlans(ctx, projectDir);
@@ -24,25 +24,22 @@ export function runSetup(ctx: CliContext, args: string[]): void {
 
 interface SetupOptions {
   dir: string;
-  repoUrl: string;
   folder: string;
 }
 
 function parseSetupArgs(args: string[]): SetupOptions {
   let dir: string | undefined;
-  let repoUrl: string | undefined;
   let folder: string | undefined;
   for (let i = 0; i < args.length; ++i) {
     const arg = args[i];
-    if (arg === "--repo") repoUrl = args[++i];
-    else if (arg === "--folder") folder = args[++i];
+    if (arg === "--folder") folder = args[++i];
     else if (arg.startsWith("-")) throw new CliError(`Unknown option: ${arg}`);
     else if (dir === undefined) dir = arg;
     else throw new CliError(`Unexpected argument: ${arg}`);
   }
-  if (dir === undefined || repoUrl === undefined || folder === undefined)
-    throw new CliError("Usage: plans-repo setup <dir> --repo <url> --folder <name>");
-  return { dir, repoUrl, folder };
+  if (dir === undefined || folder === undefined)
+    throw new CliError("Usage: plans-repo setup <dir> --folder <name>");
+  return { dir, folder };
 }
 
 function checkMainWorktreeRoot(ctx: CliContext): void {
@@ -57,25 +54,19 @@ function checkMainWorktreeRoot(ctx: CliContext): void {
     );
 }
 
-function ensureClone(ctx: CliContext, cloneDir: string, repoUrl: string): void {
-  if (existsSync(join(cloneDir, ".git"))) {
-    const origin = gitOutput(cloneDir, "remote", "get-url", "origin");
-    if (normalizeGitUrl(origin) !== normalizeGitUrl(repoUrl))
-      throw new CliError(`${cloneDir} is a clone of ${origin}, expected ${repoUrl}.`);
-    ctx.stdout.write(`Using the existing clone at ${cloneDir}.\n`);
-    return;
-  }
-  if (existsSync(cloneDir) && readdirSync(cloneDir).length > 0)
-    throw new CliError(`${cloneDir} exists and is not a git clone.`);
-  git(ctx.cwd, "clone", "--quiet", repoUrl, cloneDir);
-  ctx.stdout.write(`Cloned ${repoUrl} into ${cloneDir}.\n`);
-}
-
-function normalizeGitUrl(url: string): string {
-  return url
-    .trim()
-    .replace(/\/+$/, "")
-    .replace(/\.git$/, "");
+function checkClone(ctx: CliContext, cloneDir: string): void {
+  if (!existsSync(cloneDir))
+    throw new CliError(
+      `${cloneDir} does not exist. Clone the team plans repository there first (see the instruction file).`,
+    );
+  if (!existsSync(join(cloneDir, ".git")))
+    throw new CliError(
+      `${cloneDir} is not a git repository. Point plans:setup at a clone of the team plans repository.`,
+    );
+  if (realpathSync(cloneDir) === realpathSync(ctx.cwd))
+    throw new CliError(
+      `${cloneDir} is the product repository itself. Point plans:setup at a clone of the team plans repository.`,
+    );
 }
 
 function linkPlans(ctx: CliContext, projectDir: string): void {
