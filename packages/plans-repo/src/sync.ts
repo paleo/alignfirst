@@ -2,6 +2,7 @@ import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CliError, type CliContext } from "./context.js";
 import { git, gitOutput, gitSucceeds } from "./git.js";
+import { checkPlansIsDirectory, plansRepoToplevel } from "./plans-path.js";
 
 export function runSync(ctx: CliContext): void {
   const plansDir = resolvePlansDir(ctx);
@@ -27,7 +28,8 @@ function resolvePlansDir(ctx: CliContext): string {
       );
     throw new CliError("No .plans directory here. Run this command from a worktree root.");
   }
-  const plansToplevel = gitOutput(plansPath, "rev-parse", "--show-toplevel");
+  checkPlansIsDirectory(plansPath);
+  const plansToplevel = plansRepoToplevel(plansPath);
   const repoToplevel = gitOutput(ctx.cwd, "rev-parse", "--show-toplevel");
   if (plansToplevel === repoToplevel)
     throw new CliError(

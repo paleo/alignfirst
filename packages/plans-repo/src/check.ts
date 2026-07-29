@@ -2,6 +2,7 @@ import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CliError, type CliContext } from "./context.js";
 import { gitOutput } from "./git.js";
+import { checkPlansIsDirectory, plansRepoToplevel } from "./plans-path.js";
 
 export function runCheck(ctx: CliContext): void {
   const plansPath = join(ctx.cwd, ".plans");
@@ -14,7 +15,8 @@ export function runCheck(ctx: CliContext): void {
     throw new CliError(
       "The .plans symlink is broken. Re-run the plans:setup script with the clone location.",
     );
-  const plansToplevel = gitOutput(plansPath, "rev-parse", "--show-toplevel");
+  checkPlansIsDirectory(plansPath);
+  const plansToplevel = plansRepoToplevel(plansPath);
   const repoToplevel = gitOutput(ctx.cwd, "rev-parse", "--show-toplevel");
   if (plansToplevel === repoToplevel)
     throw new CliError(

@@ -7,6 +7,7 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -204,6 +205,23 @@ describe("plans-repo check", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("broken");
   });
+
+  it("fails when .plans is a regular file", () => {
+    const fixture = makeFixture();
+    writeFileSync(join(fixture.product, ".plans"), "oops\n");
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not a directory");
+  });
+
+  it("fails when .plans links to a directory outside any git repository", () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.root, "plain"));
+    symlinkSync(join("..", "plain"), join(fixture.product, ".plans"));
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("outside any git repository");
+  });
 });
 
 describe("plans-repo sync", () => {
@@ -235,5 +253,13 @@ describe("plans-repo sync", () => {
     const result = run(fixture.product, "sync");
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("not linked");
+  });
+
+  it("fails when .plans is a regular file", () => {
+    const fixture = makeFixture();
+    writeFileSync(join(fixture.product, ".plans"), "oops\n");
+    const result = run(fixture.product, "sync");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not a directory");
   });
 });
