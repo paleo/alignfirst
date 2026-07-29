@@ -58,3 +58,19 @@ npm run plans:setup -- ../myteam-plans
 The command creates the project folder inside the clone, migrates any existing `.plans` content into it, and replaces `.plans` with the symlink. A moved clone leaves a broken symlink — re-run the command with the new location.
 
 Then publish any migrated content: `npm run plans:sync`.
+
+## With the Workspace System (Recommended)
+
+When the project also uses the workspace system, make the link a prerequisite of the local environment:
+
+1. In the `preSetup` callback of `workspace.mjs`, add the check — the clone location stays the user's choice, nothing is hardcoded:
+
+   ```js
+   if (isMainWorktree) {
+     execFileSync("npx", ["plans-repo", "check"], { cwd: currentWorktree, stdio: "inherit" });
+   }
+   ```
+
+   A missing or broken link then fails `workspace setup`, with the check's guidance on stderr.
+
+2. Document the new-machine steps — clone the plans repository, then `npm run plans:setup -- <clone-location>` — in the project's installation documentation (e.g. `README.md`, `DEVELOPMENT.md`), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.

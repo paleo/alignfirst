@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { runCheck } from "./check.js";
 import { CliError, type CliContext } from "./context.js";
 import { runSetup } from "./setup.js";
 import { runSync } from "./sync.js";
@@ -8,12 +9,15 @@ const HELP = `plans-repo — share the .plans directory through a team plans rep
 Usage:
   plans-repo setup <dir> --folder <name>
   plans-repo sync
+  plans-repo check
   plans-repo --help | --version
 
 setup   Link .plans to <dir>/<name>/, where <dir> is an existing clone of the plans
         repository, migrating any existing .plans content. Once per machine; re-run
         with the new location if the clone moves.
 sync    Pull, commit, and push the plans repository.
+check   Verify that .plans is linked to a team plans repository; exit 1 otherwise.
+        For automation, e.g. a workspace preSetup callback.
 `;
 
 export interface MainOptions {
@@ -40,6 +44,9 @@ export function main(options?: MainOptions): number {
         return 0;
       case "sync":
         runSync(ctx);
+        return 0;
+      case "check":
+        runCheck(ctx);
         return 0;
       case "--version":
         ctx.stdout.write(`${readPackageVersion()}\n`);

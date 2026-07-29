@@ -53,6 +53,12 @@ To synchronize, from any worktree:
 npm run plans:sync
 ```
 
+To verify that `.plans` is linked to a team plans repository:
+
+```sh
+npm run plans-repo -- check
+```
+
 ## Archiving
 
 To keep `.plans` small, move finished tickets to `_archives/` inside the project folder — anyone, anytime:
