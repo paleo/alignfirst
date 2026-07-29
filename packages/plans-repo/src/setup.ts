@@ -16,7 +16,7 @@ export function runSetup(ctx: CliContext, args: string[]): void {
   const options = parseSetupArgs(args);
   checkMainWorktreeRoot(ctx);
   const cloneDir = resolve(ctx.cwd, options.dir);
-  checkClone(cloneDir);
+  checkClone(ctx, cloneDir);
   const projectDir = join(cloneDir, options.folder);
   mkdirSync(projectDir, { recursive: true });
   linkPlans(ctx, projectDir);
@@ -54,7 +54,7 @@ function checkMainWorktreeRoot(ctx: CliContext): void {
     );
 }
 
-function checkClone(cloneDir: string): void {
+function checkClone(ctx: CliContext, cloneDir: string): void {
   if (!existsSync(cloneDir))
     throw new CliError(
       `${cloneDir} does not exist. Clone the team plans repository there first (see the instruction file).`,
@@ -62,6 +62,10 @@ function checkClone(cloneDir: string): void {
   if (!existsSync(join(cloneDir, ".git")))
     throw new CliError(
       `${cloneDir} is not a git repository. Point plans:setup at a clone of the team plans repository.`,
+    );
+  if (realpathSync(cloneDir) === realpathSync(ctx.cwd))
+    throw new CliError(
+      `${cloneDir} is the product repository itself. Point plans:setup at a clone of the team plans repository.`,
     );
 }
 

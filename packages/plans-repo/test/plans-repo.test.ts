@@ -144,6 +144,13 @@ describe("plans-repo setup", () => {
     expect(result.stderr).toContain("not a git repository");
   });
 
+  it("fails when the directory is the product repository itself", () => {
+    const fixture = makeFixture();
+    const result = runSetup(fixture, fixture.product);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("product repository itself");
+  });
+
   it("re-links after the clone moved", () => {
     const fixture = makeFixture();
     runSetup(fixture);
