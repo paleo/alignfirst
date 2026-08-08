@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { parseArgs } from "node:util";
 
 import { renderGuide } from "./guide.js";
+import { resolveModels } from "./models.js";
 import {
   assertPlansGate,
   listSessionRecords,
@@ -41,20 +42,21 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
+  const models = resolveModels(env);
   if (parsed.version) {
     stdout.write(`${readPackageVersion()}\n`);
     return 0;
   }
   if (parsed.help) {
-    stdout.write(renderHelp());
+    stdout.write(renderHelp(models));
     return 0;
   }
   if (parsed.guide || parsed.openclawGuide) {
-    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic")}\n`);
+    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic", models)}\n`);
     return 0;
   }
 
-  const validationError = validateArgs(parsed);
+  const validationError = validateArgs(parsed, models);
   if (validationError) {
     stderr.write(`${validationError}\n`);
     return 1;
@@ -306,12 +308,15 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
   };
 }
 
-export function validateArgs(args: AlcodeArgs): string | undefined {
+export function validateArgs(args: AlcodeArgs, models: readonly string[]): string | undefined {
   const isResume = args.resume !== undefined;
   if (args.isNew && isResume) return "Error: --new and --resume are mutually exclusive.";
   if (!args.isNew && !isResume) return "Error: at least one of --new or --resume is required.";
   if (args.protocol !== undefined && !(PROTOCOLS as readonly string[]).includes(args.protocol)) {
     return `Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`;
+  }
+  if (args.model !== undefined && !models.includes(args.model)) {
+    return `Error: --model must be one of: ${models.join(", ")}.`;
   }
   if (!args.protocol && !args.message) {
     return "Error: --message is required when --protocol is not specified.";
@@ -338,7 +343,7 @@ function isPathSafeTicket(ticket: string): boolean {
   return /^[A-Za-z0-9._-]+$/.test(ticket) && ticket !== "." && !ticket.includes("..");
 }
 
-function renderHelp(): string {
+function renderHelp(models: readonly string[]): string {
   return `alcode — run a coding agent through AlignFirst protocols.
 
 Usage:
@@ -358,12 +363,14 @@ Options:
   --protocol <p>    One of: ${PROTOCOLS.join(", ")}.
   --ticket <id>     Ticket ID. Required with --new + --protocol.
   --message "..."   Message to send. Required for spec, aad, and when no --protocol.
-  --model <model>   Model override.
+  --model <model>   Model for a new session: one of ${models.join(", ")}. Omit to use the
+                    default model. A resumed session keeps its model.
   --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
                     (\`meta:\`). alcode never interprets it; a later reader of the session file
                     (e.g. the caller reporting the run's outcome) can use it.
 
 Env:
+  ALIGNFIRST_CODE_MODELS           Comma-list overriding the models accepted by --model.
   ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to run the coding agent with permission prompts disabled.
   ALIGNFIRST_CODE_UNSET            Comma-list of env vars to strip from the coding agent child.
 

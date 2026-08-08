@@ -12,6 +12,7 @@ import {
   resolveTicket,
   validateArgs,
 } from "../src/cli.js";
+import { DEFAULT_MODELS } from "../src/models.js";
 import {
   type SessionFrontmatter,
   type SessionRecord,
@@ -22,8 +23,8 @@ function parse(flags: string[]): AlcodeArgs {
   return parseAlcodeArgs(["node", "alcode", ...flags]);
 }
 
-function validate(flags: string[]): string | undefined {
-  return validateArgs(parse(flags));
+function validate(flags: string[], models: readonly string[] = DEFAULT_MODELS): string | undefined {
+  return validateArgs(parse(flags), models);
 }
 
 describe("parseAlcodeArgs", () => {
@@ -65,6 +66,25 @@ describe("validateArgs — parity with the retired .mjs", () => {
   it("rejects an unknown protocol", () => {
     expect(validate(["--new", "--protocol", "bogus", "--ticket", "1"])).toBe(
       "Error: --protocol must be one of: spec, plan, aad, description, read, review, merge.",
+    );
+  });
+
+  it("rejects a model outside the allowlist", () => {
+    expect(validate(["--new", "--message", "go", "--model", "claude-opus-5"])).toBe(
+      "Error: --model must be one of: fable, opus, sonnet, haiku.",
+    );
+  });
+
+  it("accepts an allowlisted model, on --new and on --resume", () => {
+    expect(validate(["--new", "--message", "go", "--model", "opus"])).toBe(undefined);
+    expect(validate(["--resume", "s", "--message", "m", "--model", "haiku"])).toBe(undefined);
+  });
+
+  it("validates against the host's model list when one is configured", () => {
+    const models = ["sonnet", "haiku"];
+    expect(validate(["--new", "--message", "go", "--model", "sonnet"], models)).toBe(undefined);
+    expect(validate(["--new", "--message", "go", "--model", "opus"], models)).toBe(
+      "Error: --model must be one of: sonnet, haiku.",
     );
   });
 

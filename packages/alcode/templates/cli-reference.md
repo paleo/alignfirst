@@ -13,7 +13,7 @@ alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send, written in English. Required for `spec`, `aad`, and when no `--protocol`. |
-| `--model <model>` | Model override. |
+| `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
 For `--new` runs, the `Session ID:` is printed to stdout and written to the session file frontmatter (the durable source of truth). Save it to resume the conversation later.
