@@ -42,8 +42,8 @@ Add the `top-down-typescript` skill to every plan.
 
 ## Skills to read before editing
 
-- TypeScript or JavaScript file: read the `top-down-typescript` skill first.
-- Markdown file (docs, skills, any prose): read the `sharp-writing` skill first.
+- TypeScript or JavaScript file: read the `top-down-typescript` skill first (`.agents/skills/top-down-typescript/SKILL.md`).
+- Markdown file (docs, skills, any prose): read the `sharp-writing` skill first (`.agents/skills/sharp-writing/SKILL.md`).
 
 ## Coding rules
 

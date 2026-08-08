@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Write technical specifica
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.8.0"
+  version: "3.9.0"
   repository: https://github.com/paleo/alignfirst
 ---
 

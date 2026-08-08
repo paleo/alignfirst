@@ -72,7 +72,8 @@ _If your environment has no subagent tool, follow the small-diff procedure regar
 1. **Dedupe**: same location and same defect reported by several reviewers → keep one, at the highest severity.
 2. **Verify**: for each 🔴 and 🟣 finding, read the cited lines yourself. Drop or downgrade a finding whose evidence does not hold.
 3. **Cap the noise**: keep the most valuable 🟡 findings, in proportion to the diff — about five for a typical diff, fewer for a small one, up to ten for a very large one — and state the number left out. A review with zero findings is a valid outcome; open the assessment with "no blocking issues" when there is no 🔴.
-4. **Reconcile the verdict**: adjust the intent reviewer's assessment and verdict to reflect the merged, verified findings. A surviving 🔴 forbids "mergeable as is".
+4. **Rewrite for the reader**: a finding states its defect first; evidence and remedy follow. Rewrite any merged finding that buries the defect or narrates commit history.
+5. **Reconcile the verdict**: adjust the intent reviewer's assessment and verdict to reflect the merged, verified findings. A surviving 🔴 forbids "mergeable as is".
 
 ## Phase 4. Output Format
 

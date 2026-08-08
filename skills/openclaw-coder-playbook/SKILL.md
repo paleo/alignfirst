@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.16.0"
+  version: "0.17.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -39,6 +39,10 @@ Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and r
 
 - **Tech** — surface technical design choices and trade-offs, ask technical questions, use precise terms.
 - **Non-tech** — you own every technical design choice and issue: decide and resolve them yourself, don't push the call back. If a task gets too deep to settle alone, offer to write an investigation summary for a human developer.
+
+## Effort estimates
+
+Never express the effort of a coding task as a duration ("two hours", "half a day"). Use a scale order — easy, low effort, high effort, or whatever fits.
 
 ## Delegating to alcode
 

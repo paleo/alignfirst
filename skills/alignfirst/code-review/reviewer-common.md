@@ -56,5 +56,7 @@ A pattern repeated N times is one finding with the count, not N findings.
 Return your report as your final message:
 
 - One line per finding: severity marker, `path:line` (or `path:start-end`), then one paragraph — what is wrong, why it matters, and the scenario that triggers it. Add a suggested fix when it is not obvious.
+- The first sentence states the defect, in present tense and plain words. Evidence, trigger, and remedy follow, in short sentences.
+- Compare the branch to the base, never commit to commit — how the code got there is noise.
 - Matter-of-fact tone. State the severity honestly; no flattery, no hedging.
 - End with `Perspective summary:` and one sentence.
