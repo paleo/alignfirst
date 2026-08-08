@@ -36,7 +36,7 @@ A standalone utility (`/aldescription`). It reads specs and summaries that have 
 
 ## Code Review
 
-A standalone utility (`/alreview`). It compares the current branch to a base branch (defaults to the repo's default branch), understands the intent, and writes a concise review report with an assessment and suggested rewrites.
+A standalone utility (`/alreview`). It compares the current branch to a base branch (defaults to the repo's default branch) and runs parallel reviewers, each with its own perspective: intent, correctness, change safety, code quality. Ecosystem modules (strict TypeScript, JavaScript, Python) sharpen the language-specific checks. The findings are merged into a concise review report.
 
 ## Merge
 
