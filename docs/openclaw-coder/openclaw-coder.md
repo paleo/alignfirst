@@ -15,7 +15,7 @@ user message
   → workspace AGENTS.md (auto-loaded)              layer 1
   → openclaw-coder-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
-  → references/project-workspace-setup.md (if WORK)       layer 2
+  → references/project-workspace-setup.md (if the thread gets its workspace)  layer 2
   → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
 ```
 
@@ -25,7 +25,7 @@ Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 
 
 A channel/DM session collects the handoff values (project, ticket, audience, a one-line task), opens a thread carrying them in its starter, and ends the turn. It never sets up a workspace, delegates to `alcode`, inspects a codebase, or reports a status — the thread session does all of that, whatever the user asked for and however explicit their green light was.
 
-The cost is one round-trip: a thread session activates on the user's next message in that thread, so the starter ends by asking for one — a missing value when there is one (ticket, project, scope), otherwise a plain request for a message. The gain is that everything substantive runs in a session whose plain text auto-streams to the right surface. The previous contract had the channel session finish the setup in-turn, which forced every post through `message`+`threadId` and made a leak to the channel root the standard failure (`playbook-test/artifacts/2026-07-15T10-31-39-655Z/`).
+The cost is one round-trip: a thread session activates on the user's next message in that thread, so the starter ends by bringing the user back — a question for a missing value when there is one (ticket, project, scope), otherwise the plain statement that the next message launches the thread session. The gain is that everything substantive runs in a session whose plain text auto-streams to the right surface. The previous contract had the channel session finish the setup in-turn, which forced every post through `message`+`threadId` and made a leak to the channel root the standard failure (`playbook-test/artifacts/2026-07-15T10-31-39-655Z/`).
 
 ## Reading order for maintainers
 

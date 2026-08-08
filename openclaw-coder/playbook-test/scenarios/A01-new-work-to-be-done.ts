@@ -15,8 +15,8 @@ const PROJECT = "nimbus";
  * Work intent with no ticket. The channel session opens a thread whose starter
  * names the project and asks for the missing details, then stops. The user's
  * answer lands in the thread, waking the session that owns the work: it posts
- * the `[WORK]` header, sets up the workspace, and delegates — with no second
- * go-ahead, since the answer itself is the request.
+ * the setup signal, sets up the workspace (the `[WORKSPACE]` banner), and
+ * delegates — with no second go-ahead, since the answer itself is the request.
  */
 export default async function projectDetectionStarter(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);

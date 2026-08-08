@@ -12,22 +12,69 @@ Identify and state these values before starting the protocol.
 
 ## Overview
 
-We need a code review for this branch, compared to the base branch.
+We need a code review for this branch, compared to the base branch. A code review, above all, guarantees that the codebase stays healthy.
 
-Review with fresh eyes: derive intent from the code and the diff. Do not read specs, plans, summaries or any file content in TASK_DIR.
+You are the orchestrator: you scope the work, run one reviewer subagent per perspective, then merge their findings into a single report. Reviewers work with fresh eyes — they derive intent from the code and the diff. Neither you nor the reviewers read specs, plans, summaries, or any file content in TASK_DIR.
 
-We need:
+The reviewer instructions live in the `code-review/` directory of this skill:
 
-- The intent
-- A short description of how it is done
-- Is it the optimal way to implement this intent?
-- If you see portions of code that could use a rewrite, the source file + start line (or range) with explanations
+- [reviewer-common.md](../code-review/reviewer-common.md) — rules shared by all reviewers
+- Perspectives: [intent-reviewer.md](../code-review/intent-reviewer.md), [correctness-reviewer.md](../code-review/correctness-reviewer.md), [safety-reviewer.md](../code-review/safety-reviewer.md), [quality-reviewer.md](../code-review/quality-reviewer.md)
+- Ecosystem modules: [module-typescript-strict.md](../code-review/module-typescript-strict.md), [module-javascript.md](../code-review/module-javascript.md), [module-python.md](../code-review/module-python.md)
 
-Be very concise.
+They are prompts for the reviewers; read them yourself only when Phase 2 has you execute the perspectives without subagents.
 
-Before reviewing, create your report as a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR, containing just the header — this reserves the filename. Write the report into it at the end.
+Before starting, create your report as a new file `{CYCLE_LETTER}1-review.md` in the TASK_DIR, containing just the header — this reserves the filename. Write the report into it at the end.
 
-## Output Format
+## Phase 1. Scoping
+
+1. Find the merge-base: `git merge-base <base_branch> HEAD`, then get the change overview: `git diff --stat <merge_base> HEAD`. The review target is the branch as committed.
+2. Select the **ecosystem modules** from the changed files and the repo configuration:
+
+   | Changed files | Condition | Module |
+   | --- | --- | --- |
+   | TypeScript | `strict` enabled in the applicable tsconfig | `module-typescript-strict.md` |
+   | TypeScript | `strict` disabled | `module-javascript.md` |
+   | JavaScript | — | `module-javascript.md` |
+   | Python | — | `module-python.md` |
+   | Other stacks | — | no module; the perspectives cover them |
+
+   A diff spanning several ecosystems gets all the applicable modules.
+
+3. Note the **active tooling**: type-checker and its strictness, linter, formatter. Reviewers use this to skip what the tooling already catches.
+4. Note the **repo coding conventions**: instruction files (CLAUDE.md, AGENTS.md) and coding-style skills that apply to the changed files. Collect paths, not content.
+
+## Phase 2. Perspective Reviews
+
+**Small diff** (roughly under 100 changed lines, outside generated files and lockfiles): skip the subagents. Execute the perspectives yourself, sequentially — intent, correctness, safety, quality — reading the same files. The rest of the protocol is unchanged.
+
+Otherwise, launch four reviewer subagents in parallel:
+
+| Reviewer | Perspective file | Ecosystem modules |
+| --- | --- | --- |
+| Intent | `intent-reviewer.md` | none |
+| Correctness | `correctness-reviewer.md` | from Phase 1 |
+| Change safety | `safety-reviewer.md` | from Phase 1 |
+| Quality | `quality-reviewer.md` | from Phase 1 |
+
+Each subagent prompt must contain:
+
+- the absolute paths of the files to read, in order: `reviewer-common.md`, its perspective file, its ecosystem module(s) — provide the paths, do not reproduce the content
+- the base branch and the merge-base
+- the tooling notes from Phase 1
+- for the intent and quality reviewers: the convention paths from Phase 1
+- the instruction that its final message is its report, in the format defined in `reviewer-common.md`
+
+_If your environment has no subagent tool, follow the small-diff procedure regardless of the diff size._
+
+## Phase 3. Merge and Verify
+
+1. **Dedupe**: same location and same defect reported by several reviewers → keep one, at the highest severity.
+2. **Verify**: for each 🔴 and 🟣 finding, read the cited lines yourself. Drop or downgrade a finding whose evidence does not hold.
+3. **Cap the noise**: keep the most valuable 🟡 findings, in proportion to the diff — about five for a typical diff, fewer for a small one, up to ten for a very large one — and state the number left out. A review with zero findings is a valid outcome; open the assessment with "no blocking issues" when there is no 🔴.
+4. **Reconcile the verdict**: adjust the intent reviewer's assessment and verdict to reflect the merged, verified findings. A surviving 🔴 forbids "mergeable as is".
+
+## Phase 4. Output Format
 
 ```md
 # Code Review - [very short title]
@@ -44,16 +91,27 @@ Before reviewing, create your report as a new file `{CYCLE_LETTER}1-review.md` i
 
 ## Assessment
 
-[Is this the optimal way to implement this intent? Be direct. If yes, say so briefly. If not, explain what a better approach would be.]
+[Is this the optimal way to implement this intent? Be direct. If yes, say so briefly. If not, explain what a better approach would be. End with the verdict: mergeable as is | mergeable after fixes | needs rework.]
 
-## Suggested Rewrites
+## Findings
 
-- `[file1.ts#10](/path/to/file1.ts#L10)`: [concise reason]
-- `[file2.ts#20](/path/to/file2.ts#L20-L25)`: [concise reason]
+### 🔴 Important
+
+- [`file1.ts#10`](/path/to/file1.ts#L10): [what is wrong, why it matters, and the scenario that triggers it]
+
+### 🟡 Nits
+
+- [`file2.ts#20`](/path/to/file2.ts#L20-L25): [concise reason]
+
+### 🟣 Pre-existing
+
+- [`file3.ts#30`](/path/to/file3.ts#L30): [concise reason]
 ```
 
 Note:
 
+- The Intent, How It's Done, and Assessment sections come from the intent reviewer; the intent reviewer's rewrite suggestions become findings.
+- Omit a severity section when it is empty. When there is no finding at all, replace the Findings section with a single line stating it.
 - Link URLs must start with `/` (absolute from workspace root, e.g. `/src/file.ts#L10`). Never include a range in the link label.
 
 ---

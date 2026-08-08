@@ -13,7 +13,7 @@ alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. Required with `--new` + `--protocol`. |
 | `--message "..."` | Message to send, written in English. Required for `spec`, `aad`, and when no `--protocol`. |
-| `--model <model>` | Model override. |
+| `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
 For `--new` runs, the `Session ID:` is printed to stdout and written to the session file frontmatter (the durable source of truth). Save it to resume the conversation later.
@@ -55,7 +55,7 @@ Answer questions as in the spec flow. The agent implements and writes a summary 
 Two fresh sessions: one reviews, one fixes.
 
 1. **Review** — `alcode --new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`.
-2. **Fix** (optional) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"` (adapt the path). The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
+2. **Fix** (optional) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
 
 Skip the fix step when the review is informational.
 

@@ -1,5 +1,15 @@
 # @paleo/alcode
 
+## 0.9.0
+
+### Minor Changes
+
+- 29bcdc5: The `--model` flag now takes a bare model name from a fixed list: `fable`, `opus`, `sonnet`, `haiku`. Set `ALIGNFIRST_CODE_MODELS` (comma-list) to replace the list, e.g. on a host whose plan lacks some tiers.
+
+### Patch Changes
+
+- Delegation guide: the review fix step now points at wherever the review lives (review file, or PR/MR comments the agent fetches itself).
+
 ## 0.8.1
 
 ### Patch Changes

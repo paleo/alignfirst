@@ -40,10 +40,10 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   assertBranch(worktreeDir, BRANCH);
   ctx.log(`worktree appeared at ${worktreeDir} on existing branch`);
 
-  // The status report uses the templated `Worktree : … / Branche : … /
-  // Bootstrap : …` shape from project-workspace-setup.md Step 4. Match
-  // on that — narration messages with the branch token but no template keyword
-  // are skipped.
+  // The status report uses the `[WORKSPACE]` banner from
+  // project-workspace-setup.md Step 4 (`Worktree : … / Branche : … /
+  // Status : …`). Match on the worktree dir — narration messages with the
+  // branch token but no template keyword are skipped.
   const reportRe = new RegExp(`nimbus-${TICKET_ID}-${BRANCH_DESC}`);
   const reportWait = await waitForReport(
     ctx,
@@ -79,11 +79,16 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   ctx.assertRegex(
     reportWait.match.text,
     /\b(running|ready|failed|pending|ok|prêt|en cours|terminé)\b/i,
-    "report mentions a bootstrap status",
+    "report mentions a workspace status",
+  );
+  ctx.assertRegex(
+    reportWait.match.text,
+    /\[WORKSPACE\]/,
+    "report carries the [WORKSPACE] banner tag",
   );
 
   // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // WORK-mode turn. The trajectory snapshot flushes when the session run ends,
+  // setup turn. The trajectory snapshot flushes when the session run ends,
   // after the report — hence the generous timeout.
   await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
     label: "agent runs `alcode --openclaw-guide`",

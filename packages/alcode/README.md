@@ -22,4 +22,12 @@ alcode --resume <sessionId> --protocol plan
 alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
 ```
 
-See `alcode --help` for all flags and environment variables.
+See `alcode --help` for all flags.
+
+## Environment variables
+
+- `ALIGNFIRST_CODE_MODELS` — comma-separated list overriding the models accepted by `--model` (default: `fable,opus,sonnet,haiku`).
+- `ALIGNFIRST_CODE_SKIP_PERMISSIONS` — `1` to run the coding agent with permission prompts disabled.
+- `ALIGNFIRST_CODE_UNSET` — comma-separated list of extra env vars to strip from the coding-agent child.
+
+Every `ALIGNFIRST_CODE_*` variable is stripped from the child's environment, so wrapper configuration never leaks into the coding agent.
