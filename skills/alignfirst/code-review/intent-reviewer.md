@@ -10,7 +10,7 @@ Evaluate the change as a whole: what it tries to accomplish, and whether the imp
    - Does it leave the codebase healthier than before?
    - Is the size proportionate to the intent? Layers, options, and generality nobody asked for cost as much as missing pieces.
    - Does the diff mix a refactor with a behavior change? If they cannot be told apart, say so — it is what makes a review reliable or not.
-4. If portions of code deserve a **rewrite**, report each as a finding: file and start line (or range), with a concise reason. A rewrite finding is 🟡; 🔴 when the flaw defeats the intent. Observations about the change as a whole belong in the assessment, not in the findings list.
+4. Report portions of code that deserve a **rewrite** as findings: 🟡, or 🔴 when the flaw defeats the intent. Observations about the change as a whole belong in the assessment, not in the findings list.
 
 ## Report
 
