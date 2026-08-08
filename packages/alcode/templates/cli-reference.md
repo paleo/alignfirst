@@ -55,7 +55,7 @@ Answer questions as in the spec flow. The agent implements and writes a summary 
 Two fresh sessions: one reviews, one fixes.
 
 1. **Review** — `alcode --new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`.
-2. **Fix** (optional) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"` (adapt the path). The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
+2. **Fix** (optional) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
 
 Skip the fix step when the review is informational.
 

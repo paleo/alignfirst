@@ -153,11 +153,13 @@ It's also how you show code. The user is a developer with the repository on thei
 
 A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session. What to do with the review file depends on the case:
 
-- **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion.
+- **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — set up or reuse a workspace on the PR/MR's branch ([`project-workspace-setup.md`](./project-workspace-setup.md)), then run the `review` protocol with the PR/MR's target branch as base. Do not fix anything unless the user explicitly asks. Read the review file and post its findings on the PR/MR — a review request on a PR/MR implies the comments; no confirmation needed. Post them yourself via the platform CLI (`gh`, `glab`); delegate to alcode when navigating a huge PR would flood your context.
 - **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR case above. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments.
 
-Posting findings on a PR/MR: one comment per finding, anchored at the file and line where the diff shows the related code — take the time to locate each one. Add one general comment for findings that are valuable yet attach to no precise spot. Avoid posting the review file as a single comment.
+The fix step is also how you process a review that arrives from outside — a teammate's review comments on your PR/MR, a review file the user points at. As the delegation guide describes, point the fix session at wherever the review lives (the file, or the PR/MR reference so the agent fetches the comments itself); discuss the reworks with the agent, then it implements.
+
+Posting findings on a PR/MR (the review-a-PR/MR case only): one comment per finding, anchored at the file and line where the diff shows the related code — take the time to locate each one. Add one general comment for findings that are valuable yet attach to no precise spot. Avoid posting the review file as a single comment.
 
 For a teammate's branch, derive the TICKET_ID from the branch name as usual; if the branch carries no ticket, ask the user.
 

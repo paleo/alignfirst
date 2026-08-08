@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.9.1
+
+### Patch Changes
+
+- Delegation guide: the review fix step now points at wherever the review lives (review file, or PR/MR comments the agent fetches itself).
+
 ## 0.9.0
 
 ### Minor Changes
