@@ -19,14 +19,14 @@ Before writing anything, find the essence of the idea. State the essence. State 
 ## Principles
 
 - Sharp, precise, concise. Straight to the point. The less, the better.
-- Plain, easy language. Prefer the common word and the short sentence.
+- Easy language. Keep sentences short and clear.
 - Don't pad. No bloated orders, no filler.
 - Respect the reader. No insistent or authoritarian tone; don't treat them like a child. Make what is important more obvious instead.
 - Keep a formal register.
 
 ## Keep a formal register
 
-Stay professional, without stiffness. Write complete sentences; don't clip the opening ("Fixed.", "Works now."). Use technical terms when they are exact; avoid slang and casual jargon. No emoticons.
+Stay professional, without stiffness. Write complete sentences; don't clip the opening. Use proper vocabulary: the precise word, even an elaborate one. Technical terms are fine when exact; slang and casual jargon are not. No emoticons.
 
 ## Structure text like code
 
