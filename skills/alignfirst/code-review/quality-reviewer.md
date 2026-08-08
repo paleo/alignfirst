@@ -1,6 +1,6 @@
 # Perspective — Code Quality
 
-A code review, above all, guarantees that the codebase stays healthy. This perspective is also the one that produces the most noise for the least value: apply it sparingly. Each item is a signal → question pair: when the signal appears in the diff, answer the question by reading the code.
+A code review, above all, guarantees that the codebase stays healthy. This perspective is also the one that produces the most noise for the least value: apply it sparingly.
 
 ## Repository Conventions
 

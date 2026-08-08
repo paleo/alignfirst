@@ -1,6 +1,6 @@
 # Perspective — Correctness
 
-Logic bugs pass linters and compilation; this perspective covers exactly what the tooling cannot. Each item is a signal → question pair: when the signal appears in the diff, answer the question by reading the code.
+Logic bugs pass linters and compilation; this perspective covers exactly what the tooling cannot.
 
 ## Logic and Edge Cases
 

@@ -1,6 +1,6 @@
 # Perspective — Change Safety
 
-What this change does to the systems around it: contracts, the database, security, data volume, dependencies. Each item is a signal → question pair: when the signal appears in the diff, answer the question by reading the code.
+What this change does to the systems around it: contracts, the database, security, data volume, dependencies.
 
 ## Contracts and Compatibility
 

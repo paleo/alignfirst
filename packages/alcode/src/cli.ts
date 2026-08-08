@@ -42,11 +42,12 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  const models = resolveModels(env);
   if (parsed.version) {
     stdout.write(`${readPackageVersion()}\n`);
     return 0;
   }
+
+  const models = resolveModels(env);
   if (parsed.help) {
     stdout.write(renderHelp(models));
     return 0;
@@ -364,7 +365,7 @@ Options:
   --ticket <id>     Ticket ID. Required with --new + --protocol.
   --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>   Model for a new session: one of ${models.join(", ")}. Omit to use the
-                    default model. A resumed session keeps its model.
+                    default model.
   --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
                     (\`meta:\`). alcode never interprets it; a later reader of the session file
                     (e.g. the caller reporting the run's outcome) can use it.

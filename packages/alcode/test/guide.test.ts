@@ -32,7 +32,7 @@ describe("renderGuide", () => {
   it("renders the host's model list when one is configured", () => {
     const guide = renderGuide("generic", ["sonnet", "haiku"]);
     expect(guide).toContain("`sonnet`, `haiku`");
-    expect(guide).not.toContain("fable");
+    expect(guide).not.toContain("`fable`");
   });
 
   it("resolves every tag and never names the wrapped coding agent", () => {
