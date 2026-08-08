@@ -46,7 +46,7 @@ Before starting, create your report as a new file `{CYCLE_LETTER}1-review.md` in
 
 ## Phase 2. Perspective Reviews
 
-**Small diff** (roughly under 50 changed lines, outside generated files and lockfiles): skip the subagents. Execute the perspectives yourself, sequentially — intent, correctness, safety, quality — reading the same files. The rest of the protocol is unchanged.
+**Small diff** (roughly under 100 changed lines, outside generated files and lockfiles): skip the subagents. Execute the perspectives yourself, sequentially — intent, correctness, safety, quality — reading the same files. The rest of the protocol is unchanged.
 
 Otherwise, launch four reviewer subagents in parallel:
 
