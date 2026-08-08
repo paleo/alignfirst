@@ -1,10 +1,10 @@
 # Project workspace setup
 
-The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies are your delivery — but only the message that **ends your turn** is guaranteed to post; mid-turn lines may never leave the transcript. The message you end the WORK turn with must carry everything the user needs: the workspace block (Step 4) and what you did or launched. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
+The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies are your delivery — but only the message that **ends your turn** is guaranteed to post; mid-turn lines may never leave the transcript. The message you end the setup turn with must carry everything the user needs: the `[WORKSPACE]` banner (Step 4) and what you did or launched. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
 
 ## Prerequisites — run both now, before Step 1
 
-- `alcode --openclaw-guide` (`exec`) — the delegation manual. Required on every WORK turn, status requests included; do not skip it because no coding seems planned.
+- `alcode --openclaw-guide` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
 - read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
@@ -24,7 +24,7 @@ Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinn
 
 On some surfaces this line never posts (mid-turn text — see the delivery note at the top). Write it anyway, and count on the end-of-turn message, not on it, for anything the user must see.
 
-When the task changed with the message that woke you — a TALK thread where a ticket just arrived, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
+When the task changed with the message that woke you — a ticket that just arrived in a conversation thread, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
 
 ## Step 3 — Name the thread (Discord-only)
 
@@ -45,19 +45,25 @@ First, check what already exists for the {TICKET_ID} — two checks, both requir
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
-Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the block below), sync the branch (Step 5), then report the work content (Step 6) — never `git log` from the main dir. Pick one sub-path:
+Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the banner below), sync the branch (Step 5), then report the work content (Step 6) — never `git log` from the main dir. Pick one sub-path:
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — post this block, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir. In the user's language:
+The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir.
+
+Bold the values with your surface's markers rather than literal `**`, and translate the labels to the user's language:
 
 ```text
-Worktree: {dirname}
-Branch: {branch}
-Bootstrap: {running | ready | failed}
+[WORKSPACE] **{PROJECT}** — Ticket: `{TICKET_ID}`
+
+Worktree: `{dirname}`
+Branch: `{branch}`
+Status: {running | ready | failed}
 ```
+
+The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on.
 
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
 
@@ -74,9 +80,9 @@ Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspac
 
 ## Step 6 — Status request: the work content
 
-Only for a status request; otherwise skip to Step 7. The Step 4 block comes first — post it before delegating; by now the Step 5 sync has brought the branch current, so the report reflects the latest state.
+Only for a status request; otherwise skip to Step 7. The Step 4 banner comes first — post it before delegating; by now the Step 5 sync has brought the branch current, so the report reflects the latest state.
 
-The workspace block answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
+The `[WORKSPACE]` banner answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
 - **The ticket's AlignFirst artifacts** via `alcode` (`read` protocol, run from the worktree): it loads the ticket's `*spec.md` / `*summary.md` local files in the agent's session and returns a synthesis of them.

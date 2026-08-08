@@ -13,14 +13,18 @@ Your plain-text replies are your delivery, on Discord and Slack alike — but on
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, AUDIENCE, and the task from the thread's starter, which lists all four (the task on its `Task:` line). Anything still missing comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; when no starter recorded the audience, read the sender's from `USER.md`. Branch, worktree path, and dev-server URL also live in the history.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, AUDIENCE, and the task from the thread's starter, which lists all four (the task on its `Task:` line). Anything still missing comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; when no starter recorded the audience, read the sender's from `USER.md`. Branch, worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
 
 The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's `Task:` line, and it's your green light.
 
-### Step 2 — Determine the mode: WORK or TALK?
+### Step 2 — The thread's state is its workspace
 
-- **WORK** — PROJECT and TICKET_ID are both known. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure handles the three cases (no branch, branch only, branch + worktree) uniformly. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **TALK** — PROJECT or TICKET_ID is missing. Skip the worktree and go to Step 3. If both become known later, promote to WORK and run the same procedure then.
+The question on every wake is not a mode but a fact: does this thread have its project workspace?
+
+- **PROJECT and TICKET_ID are both known** — the thread can have its workspace. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **A value is missing** — the thread can't have a workspace yet. Go to Step 3: converse, investigate, ask for what's missing. The moment both values are known, run the same procedure.
+
+The underlying invariant: reading never needs a workspace — questions and investigations are fine without one — while editing project files always happens inside one.
 
 ### Step 3 — Handle the actual request
 
@@ -32,7 +36,7 @@ Use the guidelines.
 
 Slack threads have no name — skip this section entirely there; a rename attempt is a failed `message` call whose error notice lands in the thread.
 
-On Discord, keep the thread's name describing the work. As soon as you have a description of what's to be done — the channel opened the thread on a vague message, the user just supplied the ticket, the task turned out to be something else — rename it: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, dropping a leading segment you don't have yet. This applies to TALK threads too.
+On Discord, keep the thread's name describing the work. As soon as you have a description of what's to be done — the channel opened the thread on a vague message, the user just supplied the ticket, the task turned out to be something else — rename it: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, dropping a leading segment you don't have yet. This applies to threads without a workspace too.
 
 On Discord the rename travels with a post: `message` `action: "thread-reply"` with the thread's `threadId`, the new name as `threadName`, and your next user-facing line as `message`. Write that line only there — repeating it as plain text posts it twice.
 

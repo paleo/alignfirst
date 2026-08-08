@@ -20,8 +20,9 @@ A single labelled template plus a short list of variation tails beats four full-
 Good:
 
 ```text
-Thread for {P} — Ticket: {T} — Audience: {tech | non-tech}
+Project: {P} — Ticket: {T} — Audience: {tech | non-tech}
 Task: {task}
+
 {ask}
 ```
 
@@ -54,6 +55,8 @@ The rule above pushes values into a required output. Push the *same* values into
 This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, ticket, audience and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same four. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter is the thread's record, and the thread session opens with a bare setup signal that restates nothing.
 
 So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
+
+The `[WORKSPACE]` banner is how a tagged header came back without reviving the failure: it rides on the workspace report the session must post anyway (worktree, branch, status, URLs — all fresh values), anchored to a concrete event (the workspace reaching `ready`/`failed`), with project and ticket as a two-value tagline on data the model cannot skip.
 
 ## A nearby auto-loaded doc can crowd out the procedure
 

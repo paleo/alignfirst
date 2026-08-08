@@ -16,7 +16,7 @@ const TICKET_ID = "ABC-090";
 
 /**
  * A status request on a ticket nobody started. The channel session hands off
- * like any other request; the thread session enters WORK mode, finds no branch
+ * like any other request; the thread session runs the setup procedure, finds no branch
  * (project-workspace-setup.md Step 4 sub-path 3) and reports that nothing
  * exists — without creating a worktree.
  */
@@ -59,7 +59,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
   });
 
   // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // WORK-mode turn — including the no-branch sub-path. The trajectory snapshot
+  // setup turn — including the no-branch sub-path. The trajectory snapshot
   // flushes when the session run ends, after the report — hence the generous timeout.
   await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
     label: "agent runs `alcode --openclaw-guide`",

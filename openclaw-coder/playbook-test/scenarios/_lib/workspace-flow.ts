@@ -20,7 +20,7 @@ export interface WorkspaceFlowOptions {
 }
 
 /**
- * Drive the thread session's WORK turn: wait for the worktree on disk, assert
+ * Drive the thread session's setup turn: wait for the worktree on disk, assert
  * its branch, let the agent settle on its workspace report, then expect the
  * coding delegation. The scenario ends here — the coding stub returns a "test
  * passed, just acknowledge" message so the agent stops cleanly.
@@ -112,7 +112,12 @@ export async function settleOnWorkspaceReport(
       ctx.log(`workspace report received: ${JSON.stringify(m.text.slice(0, 160))}`);
       ctx.assertRegex(m.text, locatorRe, "workspace-report: worktree locator (dir or slot)");
       ctx.assertRegex(m.text, branchRe, "workspace-report: branch name");
-      ctx.assertRegex(m.text, bootstrapStatusRe, "workspace-report: bootstrap status");
+      ctx.assertRegex(m.text, bootstrapStatusRe, "workspace-report: workspace status");
+      if (/\[WORKSPACE\]/.test(m.text)) {
+        ctx.log("workspace report carries the [WORKSPACE] tag");
+      } else {
+        ctx.log("workspace report without the [WORKSPACE] tag — tolerated here, pinned by A08");
+      }
       return;
     }
   }

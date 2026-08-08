@@ -13,7 +13,7 @@ export interface SetupAckOptions {
  * Wait for the thread session's first post showing it has taken over the work.
  *
  * With an Anthropic model, mid-turn text never delivers (see "Auto-stream delivers turn finals
- * only on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`): the WORK turn's
+ * only on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`): the setup turn's
  * only guaranteed post is its end-of-turn message, which may consolidate the workspace state,
  * the delegation launch, or even the completed outcome. On Discord a `message` rename post can
  * arrive earlier. All of these count; the judge accepts any message that shows the takeover.
@@ -67,7 +67,7 @@ export async function waitForSetupAck(ctx: ScenarioContext, opts: SetupAckOption
 async function commitsToSetup(ctx: ScenarioContext, text: string): Promise<boolean> {
   const { parsed } = await ctx.judgeLLMJson<{ commits: boolean; reason: string }>({
     message: text,
-    prompt: `Does this thread message show the assistant has taken over the work? Count: committing to or reporting workspace setup — creating or preparing a worktree, branch, or dev environment ("Je prépare le worktree", "Setting up the workspace", "Worktree: … Bootstrap: ready"); telling the user the work is launched or underway, possibly in the background ("Je lance l'agent de code", "the coding agent is running — I'll report back"); or reporting the work's outcome. Count both present tense and imminent intent. Do NOT count a bare process note with no commitment ("Je me mets en place", "Je lis le playbook", "Mode WORK"), or a platform error notice ("⚠️ …").`,
+    prompt: `Does this thread message show the assistant has taken over the work? Count: committing to or reporting workspace setup — creating or preparing a worktree, branch, or dev environment ("Je prépare le worktree", "Setting up the workspace", "[WORKSPACE] … Worktree: … Status: ready"); telling the user the work is launched or underway, possibly in the background ("Je lance l'agent de code", "the coding agent is running — I'll report back"); or reporting the work's outcome. Count both present tense and imminent intent. Do NOT count a bare process note with no commitment ("Je me mets en place", "Je lis le playbook"), or a platform error notice ("⚠️ …").`,
     returnType: '{ "commits": boolean, "reason": string }',
     label: "ack-commits-to-setup",
   });

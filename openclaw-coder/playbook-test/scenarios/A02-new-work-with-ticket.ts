@@ -41,15 +41,15 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
     label: "starter-handoff-ask",
   });
 
-  const ack = await handOffAndExpectWorkHeader(ctx, starter);
+  const ack = await handOffAndExpectSetupAck(ctx, starter);
   await runWorkspaceFlow(ctx, claude, { project: PROJECT, ticketId: TICKET_ID, prevStep: ack });
 
-  ctx.log({ attachTo: ack.entry, label: "[WORK] header received" });
+  ctx.log({ attachTo: ack.entry, label: "setup ack received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }
 
-async function handOffAndExpectWorkHeader(ctx: ScenarioContext, starter: Step): Promise<Step> {
+async function handOffAndExpectSetupAck(ctx: ScenarioContext, starter: Step): Promise<Step> {
   await sendInThread(ctx, starter.threadId, "Vas-y.");
 
   return await waitForSetupAck(ctx, {

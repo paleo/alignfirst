@@ -17,7 +17,7 @@ const STARTED_ACK_RUBRIC =
   "perfective launch announcement ('Deuxième étape lancée 🚀', 'work started', 'C'est noté — je lance " +
   "l'ajout') qualify — the key is that it tells the USER the work is now underway. FAIL if it is only " +
   "the assistant thinking out loud with no user-facing start signal ('let me launch the coding agent " +
-  "first', 'OK, branch is clean'), a bare workspace/[WORK] setup banner with no launch statement, or a " +
+  "first', 'OK, branch is clean'), a bare [WORKSPACE] setup banner with no launch statement, or a " +
   "claim that the work is already FINISHED.";
 
 const COMPLETION_RUBRIC =
@@ -26,7 +26,7 @@ const COMPLETION_RUBRIC =
   "the outcome (change done, or a result summary, often with a ✅): 'c'est fait', 'the coding agent " +
   "finished successfully', 'j'ai terminé', '✅ … terminé'. FAIL if it merely says the work is still " +
   "starting or in progress ('je te préviens dès que c'est terminé', 'je lance le travail'), or is a " +
-  "workspace/launch announcement that carries a ✅ only for setup readiness ('Bootstrap: ready ✅ | " +
+  "workspace/launch announcement that carries a ✅ only for setup readiness ('Status: ready ✅ | " +
   "Lancement…').";
 
 const FINDINGS_RUBRIC =

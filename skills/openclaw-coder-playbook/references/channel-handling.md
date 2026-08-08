@@ -47,11 +47,12 @@ The tool returns the thread's `chat_id` — that's the THREAD_ID.
 
 A fresh thread session inherits nothing from this channel: not the transcript, not the message that named the project. The starter is its whole inheritance and stays the thread's record of what the work is, so every value goes in it. It ends with an ask that brings the user back — the thread session activates on the user's next message in the thread, so without that ask nothing happens.
 
-Template, one line per part; bold the values with your surface's markers rather than literal `**`, and translate to the user's language:
+Template — one line per part, bold the values with your surface's markers rather than literal `**`, and translate to the user's language:
 
 ```text
-Thread for {PROJECT} — Ticket: {TICKET_ID} — Audience: {tech | non-tech}
+Project: **{PROJECT}** — Ticket: `{TICKET_ID}` — Audience: {tech | non-tech}
 Task: {TASK}
+
 {ask}
 ```
 
@@ -65,8 +66,6 @@ The `{ask}` is one sentence, and it's the truth about what you need:
 - No PROJECT → ask which project the ticket belongs to, restating the ticket id.
 - PROJECT absent from `~/projects/` → say the name isn't there, ask for the right one.
 - No TASK → ask what needs to be done.
-- Nothing missing → say plainly that a message from them in this thread is what starts the work session, and ask for one.
-
-Vary the wording; don't invent a question you don't need.
+- Nothing missing → no question: state the mechanism instead: "The thread session will be launched by the next message" (you can vary the wording).
 
 Then end the turn. On Discord your final answer is exactly `NO_REPLY`: free-form text auto-streams to the parent channel, and the starter already went out through `thread-create`.
