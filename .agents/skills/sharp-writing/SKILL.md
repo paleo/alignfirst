@@ -4,7 +4,7 @@ description: Conventions for writing sharp, concise prose and Markdown, for huma
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -76,3 +76,7 @@ Valid for both, as a visual separator:
 Valid only for AI agents, inside a sentence:
 
 > State the main idea — then add a caveat after the dash.
+
+## Reread and rework
+
+Text written in a file is not final. Reread it, then edit freely: rework, correct, tighten.
