@@ -26,7 +26,7 @@ See `alcode --help` for all flags.
 
 ## Environment variables
 
-- `ALIGNFIRST_CODE_MODELS` — comma-separated list overriding the models accepted by `--model` (default: `fable`, `opus`, `sonnet`, `haiku`).
+- `ALIGNFIRST_CODE_MODELS` — comma-separated list overriding the models accepted by `--model` (default: `fable,opus,sonnet,haiku`).
 - `ALIGNFIRST_CODE_SKIP_PERMISSIONS` — `1` to run the coding agent with permission prompts disabled.
 - `ALIGNFIRST_CODE_UNSET` — comma-separated list of extra env vars to strip from the coding-agent child.
 
