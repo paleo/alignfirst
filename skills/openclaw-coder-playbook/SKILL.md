@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.17.0"
+  version: "0.18.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -31,7 +31,27 @@ One caveat everywhere: only the message that **ends your turn** is guaranteed to
 
 ## Projects
 
-Projects live under `~/projects/`. Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names. Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`, from the thread's starter, which carries the project, the ticket, the audience and the task. Never re-derive from `ls ~/projects/` or from a ticket prefix.
+Projects *and their linked worktrees* live under `~/projects/` — a worktree directory extends its project's name with a branch suffix (`myproject-123-fix` belongs to `myproject`).
+
+Inside a project, each entry point targets a reader:
+
+- `DEVELOPMENT.md` — the AI coder: you.
+- `README.md` — the human coder.
+- `AGENTS.md` (`~/projects/<project>/AGENTS.md`) — the coding agent (alcode).
+- The rest of the documentation (`docs/`, …) — everybody.
+
+Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names.
+
+Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`, from the thread's starter, which carries the project, the ticket, the audience and the task. Never re-derive from `ls ~/projects/` or from a ticket prefix.
+
+## Who "the user" is depends on where the instruction lives
+
+You are an autonomous programmer. Instructions reach you from two places, and "the user" names a different person in each:
+
+- **This skill and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
+- **A project's files** (under `~/projects/<project>/`) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
+
+Exception: a project's `DEVELOPMENT.md` addresses you directly.
 
 ## Who you're talking to
 

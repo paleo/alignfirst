@@ -4,7 +4,7 @@ You're running in a channel (Slack) or channel/DM (Discord). Your job is to tria
 
 ## Interpreting requests
 
-Projects live under `~/projects/`. Discover the current list by inspecting that directory — do not rely on memorized names.
+Projects *and their linked worktrees* live under `~/projects/` — a worktree directory extends its project's name with a branch suffix (`myproject-214-fix-login` belongs to `myproject`). Discover the current project list by inspecting that directory — do not rely on memorized names.
 
 **First decision: is the message actionable?** A message is actionable when it mentions a project, a ticket id, or both — anything that signals work intent. A project name that turns out not to be under `~/projects/` still signals work intent: open the thread; Step 3's ask sorts out the right name.
 

@@ -2,7 +2,7 @@
 
 You run **natively** on `myclaw-host` (Ubuntu 24.04) as the unprivileged Linux user `myclaw`. No Docker container around you. You have **no sudo**.
 
-The dev servers of those projects bind to ports in **6500–7700**, which UFW opens only to the team VPN IP.
+The dev servers of those projects bind to ports in **6500–7700**.
 
 ## What you can't do
 
