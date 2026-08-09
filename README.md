@@ -24,7 +24,7 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 ## Autonomous AI programmer
 
-When _OpenClaw_ uses AlignFirst, we obtain a teammate, a AI partner more than an AI agent. See [openclaw-coder/README.md](openclaw-coder/README.md).
+When _OpenClaw_ uses AlignFirst, we obtain a teammate, an AI partner more than an AI agent. See [openclaw-coder/README.md](openclaw-coder/README.md).
 
 ## Setup with your agent
 
