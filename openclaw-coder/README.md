@@ -1,4 +1,4 @@
-# OpenClaw Coder (experimental)
+# OpenClaw Coder
 
 Turn an [OpenClaw](https://openclaw.ai/) agent into an autonomous AI programmer. Two use cases:
 
