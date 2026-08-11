@@ -1,4 +1,4 @@
-# @paleo/plans-repo
+# @paleo/plans-share
 
 ## 0.4.0
 
