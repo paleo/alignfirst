@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.22.0"
+  version: "0.22.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -50,7 +50,9 @@ Require a clean working tree first (`git status`). If it isn't clean, stop and a
 
 ## Step 4 — After setup
 
-This skill is temporary. Once setup is done, the user can uninstall it. Provide them the command:
+A local install of this skill is temporary: once setup is done, the user can uninstall it. A global install serves their other projects — leave it in place and skip this step.
+
+Look for an `alignfirst-setup-guide` entry in the project's `skills-lock.json`. When it is there, the skill is local; provide the user the command:
 
 ```sh
 npx skills remove alignfirst-setup-guide --yes
