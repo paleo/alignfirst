@@ -28,12 +28,12 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
 
 ## Setup, Once Per Project
 
-1. Install the tool: `npm install -D @paleo/plans-repo`.
+1. Install the tool: `npm install -D @paleo/plans-share`.
 2. Add the npm scripts, with the project's folder name baked in:
 
    ```json
-   "plans:setup": "plans-repo setup --folder project-a",
-   "plans:sync": "plans-repo sync"
+   "plans:setup": "plans-share setup --folder project-a",
+   "plans:sync": "plans-share sync"
    ```
 
 3. Ensure `.gitignore` contains `.plans` (the skills setup already does this).
@@ -67,7 +67,7 @@ When the project also uses the workspace system, make the link a prerequisite of
 
    ```js
    if (isMainWorktree) {
-     execFileSync("npx", ["plans-repo", "check"], { cwd: currentWorktree, stdio: "inherit" });
+     execFileSync("npx", ["plans-share", "check"], { cwd: currentWorktree, stdio: "inherit" });
    }
    ```
 

@@ -1,4 +1,10 @@
-# @paleo/plans-repo
+# @paleo/plans-share
+
+## 0.4.0
+
+### Minor Changes
+
+- Renamed from `@paleo/plans-repo`: the bin is now `plans-share`; update the `plans:setup` and `plans:sync` scripts accordingly. The `sync` command now reports whether local changes were sent.
 
 ## 0.3.0
 

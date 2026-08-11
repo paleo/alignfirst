@@ -44,4 +44,4 @@ We recommend installing these skills globally. After installation, the user must
 
 ## Step 3 — Team Plans Repository (Optional)
 
-By default, `.plans/` stays local to each machine. A team that wants to share plans hosts a dedicated plans repository: follow [plans-repo-setup.md](plans-repo-setup.md). Skip this step for solo use — the skills behave identically in both modes.
+By default, `.plans/` stays local to each machine. A team that wants to share plans hosts a dedicated plans repository: follow [plans-share-setup.md](plans-share-setup.md). Skip this step for solo use — the skills behave identically in both modes.

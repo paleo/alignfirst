@@ -8,7 +8,7 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 ### Team plans repository
 
-`@paleo/plans-repo` shares the `.plans` directory of the AlignFirst skills among a team, through a dedicated plans repository. See [packages/plans-repo/README.md](packages/plans-repo/README.md).
+`@paleo/plans-share` shares the `.plans` directory of the AlignFirst skills among a team, through a dedicated plans repository. See [packages/plans-share/README.md](packages/plans-share/README.md).
 
 ## Docmap - Agent-discoverable documentation
 

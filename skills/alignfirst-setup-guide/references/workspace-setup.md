@@ -41,7 +41,7 @@ For each gitignored directory, decide: **shared** across worktrees, or **isolate
 
 Setup symlinks the shared directories and creates fresh per-worktree ones. A shared directory missing from the main worktree is created there first, so every symlink resolves. The names are customizable.
 
-The main worktree's `.plans` may itself be a symlink — into a clone of a team plans repository (see [plans-repo-setup.md](plans-repo-setup.md)); the symlink chain resolves on its own.
+The main worktree's `.plans` may itself be a symlink — into a clone of a team plans repository (see [plans-share-setup.md](plans-share-setup.md)); the symlink chain resolves on its own.
 
 ### Contiguous port scheme
 

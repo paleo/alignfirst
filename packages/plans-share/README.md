@@ -1,4 +1,4 @@
-# @paleo/plans-repo
+# @paleo/plans-share
 
 Share the `.plans` directory of the [AlignFirst skills](https://github.com/paleo/alignfirst) through a dedicated team plans repository.
 
@@ -23,15 +23,15 @@ Plan history has no value, so the plans repository only receives synchronization
 ## Install
 
 ```sh
-npm install -D @paleo/plans-repo
+npm install -D @paleo/plans-share
 ```
 
 Add the npm scripts, with the project folder baked in:
 
 ```json
 {
-  "plans:setup": "plans-repo setup --folder project-a",
-  "plans:sync": "plans-repo sync"
+  "plans:setup": "plans-share setup --folder project-a",
+  "plans:sync": "plans-share sync"
 }
 ```
 
@@ -56,7 +56,7 @@ npm run plans:sync
 To verify that `.plans` is linked to a team plans repository:
 
 ```sh
-npm run plans-repo -- check
+npx plans-share check
 ```
 
 ## Archiving
