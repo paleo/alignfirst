@@ -1201,7 +1201,7 @@ export function linkSharedDirectories(
   for (const dirName of dirs) {
     const mainDir = join(ctx.mainWorktree, dirName);
     if (!existsSync(mainDir)) {
-      // A dead symlink (e.g. `.plans` pointing at a moved plans-repo clone) must be repaired by the
+      // A dead symlink (e.g. `.plans` pointing at a moved clone of the plans repository) must be repaired by the
       // user, not shadowed by a fresh directory.
       if (lstatSync(mainDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
         throw new WorkspaceError(

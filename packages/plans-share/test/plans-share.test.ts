@@ -21,7 +21,7 @@ let suiteDir: string;
 let fixtureDir: string;
 
 beforeAll(() => {
-  suiteDir = mkdtempSync(join(tmpdir(), "plans-repo-suite-"));
+  suiteDir = mkdtempSync(join(tmpdir(), "plans-share-suite-"));
   const gitConfig = join(suiteDir, "gitconfig");
   writeFileSync(
     gitConfig,
@@ -46,7 +46,7 @@ interface Fixture {
 }
 
 function makeFixture(): Fixture {
-  fixtureDir = mkdtempSync(join(tmpdir(), "plans-repo-"));
+  fixtureDir = mkdtempSync(join(tmpdir(), "plans-share-"));
   const remoteUrl = join(fixtureDir, "remote.git");
   execGit(fixtureDir, "init", "--quiet", "--bare", remoteUrl);
   execGit(fixtureDir, "clone", "--quiet", remoteUrl, join(fixtureDir, "team-plans"));
@@ -72,7 +72,7 @@ function run(cwd: string, ...args: string[]): RunResult {
   let stdout = "";
   let stderr = "";
   const code = main({
-    argv: ["node", "plans-repo", ...args],
+    argv: ["node", "plans-share", ...args],
     cwd,
     stdout: { write: (s) => (stdout += s) },
     stderr: { write: (s) => (stderr += s) },
@@ -84,7 +84,7 @@ function runSetup(fixture: Fixture, dir = join(fixture.root, "team-plans")): Run
   return run(fixture.product, "setup", dir, "--folder", "myproj");
 }
 
-describe("plans-repo setup", () => {
+describe("plans-share setup", () => {
   it("links .plans to an existing clone", () => {
     const fixture = makeFixture();
     const result = runSetup(fixture);
@@ -172,7 +172,7 @@ describe("plans-repo setup", () => {
   });
 });
 
-describe("plans-repo check", () => {
+describe("plans-share check", () => {
   it("succeeds when .plans is linked to a plans repository", () => {
     const fixture = makeFixture();
     runSetup(fixture);
@@ -224,7 +224,7 @@ describe("plans-repo check", () => {
   });
 });
 
-describe("plans-repo sync", () => {
+describe("plans-share sync", () => {
   it("publishes plan files to the remote", () => {
     const fixture = makeFixture();
     runSetup(fixture);
@@ -234,17 +234,34 @@ describe("plans-repo sync", () => {
     const result = run(fixture.product, "sync");
     expect(result.stderr).toBe("");
     expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Plans synchronized: local changes sent.");
     const remoteFiles = execGit(fixture.remoteUrl, "ls-tree", "-r", "HEAD", "--name-only");
     expect(remoteFiles).toContain("myproj/77/A1-spec.md");
   });
 
-  it("succeeds when there is nothing to publish", () => {
+  it("reports nothing to send when already synchronized", () => {
     const fixture = makeFixture();
     runSetup(fixture);
     run(fixture.product, "sync");
     const result = run(fixture.product, "sync");
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Plans synchronized.");
+    expect(result.stdout).toContain("Plans synchronized: nothing to send.");
+  });
+
+  it("sends commits left over from a previously failed push", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    writeFileSync(join(fixture.product, ".plans", "first.md"), "first\n");
+    run(fixture.product, "sync");
+    const plansClone = join(fixture.root, "team-plans");
+    writeFileSync(join(fixture.product, ".plans", "note.md"), "note\n");
+    execGit(plansClone, "add", "-A");
+    execGit(plansClone, "commit", "--quiet", "-m", "sync");
+    const result = run(fixture.product, "sync");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Plans synchronized: local changes sent.");
+    const remoteFiles = execGit(fixture.remoteUrl, "ls-tree", "-r", "HEAD", "--name-only");
+    expect(remoteFiles).toContain("myproj/note.md");
   });
 
   it("fails when .plans is not linked to a plans repository", () => {

@@ -44,7 +44,7 @@ Require a clean working tree first (`git status`). If it isn't clean, stop and a
 
 - [docmap-setup.md](references/docmap-setup.md) — install the docmap CLI, then optionally bootstrap or migrate docs.
 - [workspace-setup.md](references/workspace-setup.md) — implement the worktree system (adapt the [asset scripts](assets/), install `@paleo/workspace`).
-- [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md) — install the AlignFirst skills and configure the project. For a team sharing plans through a dedicated repository, continue with [plans-repo-setup.md](references/plans-repo-setup.md).
+- [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md) — install the AlignFirst skills and configure the project. For a team sharing plans through a dedicated repository, continue with [plans-share-setup.md](references/plans-share-setup.md).
 
 **Upgrading from an older AlignFirst** (v1/v2): route through [alignfirst-upgrade.md](references/alignfirst-upgrade.md), which detects the version and follows [alignfirst-upgrade-from-v1.md](references/alignfirst-upgrade-from-v1.md) or [alignfirst-upgrade-from-v2.md](references/alignfirst-upgrade-from-v2.md).
 

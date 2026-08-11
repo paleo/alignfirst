@@ -4,13 +4,13 @@ import { CliError, type CliContext } from "./context.js";
 import { runSetup } from "./setup.js";
 import { runSync } from "./sync.js";
 
-const HELP = `plans-repo — share the .plans directory through a team plans repository.
+const HELP = `plans-share — share the .plans directory through a team plans repository.
 
 Usage:
-  plans-repo setup <dir> --folder <name>
-  plans-repo sync
-  plans-repo check
-  plans-repo --help | --version
+  plans-share setup <dir> --folder <name>
+  plans-share sync
+  plans-share check
+  plans-share --help | --version
 
 setup   Link .plans to <dir>/<name>/, where <dir> is an existing clone of the plans
         repository, migrating any existing .plans content. Once per machine; re-run
@@ -81,6 +81,6 @@ function readPackageVersion(): string {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
     version?: string;
   };
-  if (pkg.version === undefined) throw new Error("plans-repo: package.json is missing 'version'");
+  if (pkg.version === undefined) throw new Error("plans-share: package.json is missing 'version'");
   return pkg.version;
 }

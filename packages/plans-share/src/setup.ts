@@ -38,7 +38,7 @@ function parseSetupArgs(args: string[]): SetupOptions {
     else throw new CliError(`Unexpected argument: ${arg}`);
   }
   if (dir === undefined || folder === undefined)
-    throw new CliError("Usage: plans-repo setup <dir> --folder <name>");
+    throw new CliError("Usage: plans-share setup <dir> --folder <name>");
   return { dir, folder };
 }
 
