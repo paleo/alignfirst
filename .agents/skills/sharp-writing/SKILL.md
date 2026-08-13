@@ -1,16 +1,20 @@
 ---
 name: sharp-writing
-description: Conventions for writing sharp, concise prose and Markdown, for human readers and AI agents. Read before writing documentation, READMEs, instructions, agent skills, or any prose text.
+description: Conventions for writing sharp, concise prose and Markdown, for human readers and AI agents. Read before writing or editing documentation, READMEs, instructions, agent skills, or any prose text.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.7.0"
+  version: "0.8.0"
   repository: https://github.com/paleo/skills
 ---
 
 # Sharp Writing
 
-Write sharp text: every word counts. These rules cover all prose and Markdown. Most hold for both human readers and AI agents; only the em-dash style differs.
+Write sharp text: every word counts. These rules cover all prose and Markdown.
+
+## Editing means rewriting
+
+Work new content into the existing sentences; append only when none can carry it. A good edit leaves the text as short as before, or shorter.
 
 ## Find the essence first
 
