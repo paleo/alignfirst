@@ -30,7 +30,7 @@ A value the user didn't supply stays missing; Step 3 turns it into a question. D
 
 ### Step 2 — Open the thread
 
-**Discord** — name the thread `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you don't have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`. Then call the `message` tool (full schema in `TOOLS.md`) with:
+**Discord** — name the thread `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you don't have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`. Then call the `message` tool with:
 
 - `action`: `"thread-create"`
 - `target`: the **raw `chat_id`** from inbound metadata

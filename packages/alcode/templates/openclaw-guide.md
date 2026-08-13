@@ -36,14 +36,14 @@ The chained wake fires when the backgrounded `alcode` exits: this session receiv
 Any heartbeat received while an `alcode` run is **still pending** (running, or finished but not yet reported) is the completion wake — do exactly this:
 
 1. **Read the run's session file** (the path `alcode` printed on its first line, under `_alcode/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
-2. **Verify, then report — one message that ends the turn.** Run the verification your platform's instructions prescribe (keep it quick), then report, in the user's language, where the work was requested:
+2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe; when it launches a coding-agent run (a manual test), the report is its launch ack and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
 
    The report must be the turn's **final message**: text written between tool calls may never post, and ending the turn on `NO_REPLY` after a completed run reports nothing at all. Two delivery cases:
    - The frontmatter `meta` carries a destination (a Discord thread target): post it with `message` `action: "thread-reply"` (never `action: "send"`), then end the turn with a final answer of exactly `NO_REPLY`. Free-form text would stream to the channel as a stray duplicate.
    - No `meta` destination (always the case on Slack, and on a thread-bound Discord session): the work was requested on this session's own surface, so **your plain text is the report** — write it as the turn's ending, no `message` tool, no tool call after it. On Slack it auto-threads back to the right thread. Never end such a wake turn silently.
-3. **Don't reconstruct what happened.** Verifying the result is the platform's prescribed step; re-deriving the run's story is not: no re-running the coding agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
+3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the coding agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
 
 Reporting the run is not calling the work done: the report relays the agent's claim plus what you verified. When your verification finds a failing check, the report says so, and the fix is new work — a fresh run with its own completion wake; the wake you were answering is discharged by your report.
 

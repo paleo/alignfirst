@@ -58,6 +58,8 @@ Delegate to alcode: workspace/branch/worktree creation, writing code (`alignfirs
 
 Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to alcode (no protocol in a fresh session, or resumed where the topic lives) and build on its answer. Never brainstorm alone: alcode grounds its ideas in the codebase; yours would come from memory.
 
+Global tools go in the prompt. alcode knows only the project's context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+
 Feel free to do the rest yourself (except coding) when it's more practical.
 
 ### The plan is not a gate
@@ -115,14 +117,14 @@ Before non-trivial code changes, like executing a plan, always stop the dev-serv
 
 The project's checks are routine hygiene. alcode sessions usually run them on their own; have alcode run the checks only when they were forgotten.
 
-### Always test your work by yourself
+### Always test the work manually
 
-Manual testing is what ends a code change: exercise the change yourself before any MR/PR and before telling the user it's finished. On the completion wake, verify first, then report, one consolidated message that ends the turn:
+Manual testing is what ends a code change: beyond the automated checks, the change gets exercised before any MR/PR and before telling the user it's finished. On the completion wake, verify first, then report, one consolidated message that ends the turn:
 
 1. Confirm the checks passed (see "Tests, lint, build").
-2. Exercise the change with the tool that reaches it. Web project: start the dev-server and check its logs stay clean; then drive the change in your browser when it shows in the UI, or with `curl`, or whatever you need. Anything else: run it the way its users would — CLI invocation, simulator, … Skip only when the project offers nothing to drive, and say so in the report.
-3. When the test shows something on screen, take screenshots and attach them to the report (`message`, attachments).
-4. End the turn on the report: the run's outcome as the agent's account, plus what you verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
+2. Have alcode exercise the change with the tool that reaches it, naming the global tools it can use (browser automation, `curl`, …). One delegation covers the whole test — web project: start the dev-server, check its logs stay clean, drive the change in the UI. Anything else: run it the way its users would — CLI invocation, simulator, … The test is a background run: this wake's message is its launch ack, and the report moves to the test run's wake. Skip only when the project offers nothing to drive, and say so in the report.
+3. When the test shows something on screen, have the test save screenshots; attach them to the report (`message`, attachments).
+4. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
 
 An error met while testing is yours to handle, even when it looks unrelated to the change. You're the developer: investigate, then decide —
 
@@ -135,7 +137,7 @@ Either way, the report states the error and your decision.
 
 When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
 
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`alcode read`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test your work by yourself".
+- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`alcode read`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
 - **The user runs it.** They only need the dev-server up with its URL.
 
 ### Improving project docs
@@ -175,9 +177,9 @@ The fix step is also how you process a review that arrives from outside — a te
 
 ### Merge/Pull requests
 
-You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking. Confident the job is finished → a regular MR/PR. Not fully sure — a part you couldn't verify, an open question — create it as a **draft** MR/PR and ask the user whether to mark it ready.
+You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking. Confident the job is finished → a regular MR/PR. Not fully sure — a part you couldn't verify, an open question, or the user didn't check the result yet — create it as a **draft** MR/PR and ask the user whether to mark it ready.
 
-Before creating it: the code compiles, lint and tests pass, and you exercised the change yourself (see "Always test your work by yourself"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
 After creating the MR/PR (via `alcode`):
 

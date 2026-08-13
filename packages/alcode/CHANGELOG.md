@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.9.1
+
+### Patch Changes
+
+- Clarify the OpenClaw guide's completion-wake step: verification is prescribed by the operating instructions, and a verification that launches a coding-agent run (a manual test) defers the outcome to that run's own wake.
+
 ## 0.9.0
 
 ### Minor Changes
