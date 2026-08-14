@@ -53,15 +53,15 @@ Docker services can remap the host port without touching the container's interna
 
 ### Slot-based allocation
 
-Each worktree gets a **slot** — identified by its primary port number (e.g. `--slot 8120`). A JSON **slot registry** in a shared directory tracks slot → worktree. The template ships 19 linked slots plus the implicit main worktree = 20 workspaces. A step of 10 between slots leaves room for several ports per environment (frontend 8110, server 8111). A single-port project can use a step of 1 (drop `PORT_STEP`, the modulo check in `isValidPort()`, and any secondary-port derivation).
+Each worktree gets a **slot** — identified by its primary port number (e.g. `--slot 8120`). A JSON **slot registry** in a shared directory tracks slot → worktree. The main worktree sits at `basePort`; linked worktrees at `basePort + portStep × k` for k ≥ 1. The defaults — `portStep` 10, `maxSlotCount` 19 — give 19 linked slots plus the implicit main worktree = 20 workspaces.
+
+`portStep` also caps the ports per environment: an environment's ports live between its slot and the next, so a step of 10 allows up to 10 ports (frontend 8110, server 8111, …). A single-port project can set `portStep: 1`, packing the 19 slots into 8101–8119; a project needing more than 10 ports per environment raises the step. The whole scheme spans `(maxSlotCount + 1) × portStep` ports from `basePort` — the 200 contiguous ports the base-port choice above must keep free.
 
 Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/slots.json`):
 
 ```json
 { "slots": { "8110": { "worktree": "/abs/path/myproject-feat-214", "status": "ready", "createdAt": "2026-01-01T00:00:00.000Z" } } }
 ```
-
-The main worktree sits at `basePort`; linked worktrees at `basePort + portStep × k` for k ≥ 1.
 
 ### Concurrent dev-server cap
 
@@ -96,7 +96,7 @@ The assets annotate every field; read them as you fill in the `ADAPT` points. Th
 Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 
 - `scriptPath` / `devServerScript` — absolute paths; leave the `import.meta.url` lines as-is (the package re-spawns the script for the detached finalize phase, and shells out to the dev-server script on removal).
-- `basePort`, `portStep` (default 10), `maxSlotCount` (default 19), and either `portNames` (consecutive ports) or `ports(slot)` (full control).
+- `basePort`, `portStep` (default 10), `maxSlotCount` (default 19), and either `portNames` (consecutive ports `slot + i`) or `ports(slot)` (full control) — at most `portStep` ports per environment either way (see [Slot-based allocation](#slot-based-allocation)).
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
 - `configFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree" }`, `{ kind: "newWorktree", path }`, or `{ kind: "content", content }`. `patch(content, { slot, ports, mainWorktree, currentWorktree })` rewrites per slot; omit it to copy verbatim.
 - `preSetup({ isMainWorktree, currentWorktree, mainWorktree, force, log })` — optional; runs **before** `configFiles` are copied. Bootstrap source files the kernel will look for — typically seed the main worktree's gitignored config from its committed `.example` so a fresh clone's first `workspace setup` works with no manual step. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree, so gate the bootstrap on `isMainWorktree` (`force` mirrors `--force` for re-seeding). Omit it when every `configFile` uses a `newWorktree` or `content` source (nothing to bootstrap).
@@ -166,6 +166,8 @@ The system only works if agents know about it. The CLI self-documents via `works
   Always ignore the `.local-wt`, `.plans` directories when searching the codebase.
   ```
 
+On a bot-driven project, repeat the workspaces section in `DEVELOPMENT.md`: the bot reads that file to learn how to create a worktree or a branch.
+
 ### Project-specific facts the guide can't know
 
 Record only repo-specific facts, in whatever entry point developers and agents already read (`README.md`, `AGENTS.md`, `DEVELOPMENT.md`):
@@ -177,7 +179,7 @@ Record only repo-specific facts, in whatever entry point developers and agents a
 ## Checklist
 
 - [ ] **Make all dev ports configurable and contiguous.** Prerequisite.
-- [ ] **Design the port scheme.** Ports per environment? Step between slots? Base port 8100 unless you have a reason.
+- [ ] **Design the port scheme.** Ports per environment? `portStep` at least that count (default 10). Base port 8100 unless you have a reason.
 - [ ] **Identify your config files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
@@ -189,4 +191,4 @@ Record only repo-specific facts, in whatever entry point developers and agents a
 - [ ] **Add the `workspace` and `dev` npm scripts** (don't reuse the app's dev name).
 - [ ] **Set `devLimit`** (default `5`).
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
-- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide`, the conventions, and the project-specific facts.
+- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPMENT.md` too on a bot-driven project), the conventions, and the project-specific facts.

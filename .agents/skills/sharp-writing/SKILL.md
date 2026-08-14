@@ -4,17 +4,13 @@ description: Conventions for writing sharp, concise prose and Markdown, for huma
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.8.0"
+  version: "0.8.1"
   repository: https://github.com/paleo/skills
 ---
 
 # Sharp Writing
 
 Write sharp text: every word counts. These rules cover all prose and Markdown.
-
-## Editing means rewriting
-
-Work new content into the existing sentences; append only when none can carry it. A good edit leaves the text as short as before, or shorter.
 
 ## Find the essence first
 
@@ -84,3 +80,7 @@ Valid only for AI agents, inside a sentence:
 ## Reread and rework
 
 Text written in a file is not final. Reread it, then edit freely: rework, correct, tighten.
+
+## Editing means rewriting
+
+Work new content into the existing sentences; append only when none can carry it. A good edit leaves the text as short as before, or shorter.

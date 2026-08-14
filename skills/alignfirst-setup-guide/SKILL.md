@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.22.1"
+  version: "0.23.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -19,6 +19,18 @@ A one-time companion for setting up a consumer repository. It installs any subse
 - **alignfirst skills** — collaborative spec/plan/AAD/review protocols.
 
 Pick any combination. Each has its own reference; this skill investigates the repo, agrees on scope, then follows the matching reference(s).
+
+## The entry-point files
+
+A project has up to three Markdown entry points, one per reader:
+
+- `README.md` — the human coder.
+- `AGENTS.md` (or `CLAUDE.md`) — the coding agent (Claude Code, alcode). The Step 3 references write their agent instructions here.
+- `DEVELOPMENT.md` — the AI coder: an autonomous bot.
+
+The rest of the documentation (`docs/`, served by docmap) addresses everybody.
+
+A project is **bot-ready** when the alignfirst skills section in `AGENTS.md` is written, and `DEVELOPMENT.md` covers: the stack, the layout, the daily commands, the conventions (ticket, branch, commit), a workspaces section pointing at the `workspace --guide` command, and how to browse the docs (docmap).
 
 Follow these four steps in order. Do not skip ahead: complete each before starting the next.
 
@@ -33,10 +45,11 @@ Then detect each tool's existing footprint:
 - **docmap**: a `docmap` script, a `@paleo/docmap` dependency, or a `docs/` directory.
 - **workspace**: a `workspace` script or a `@paleo/workspace` dependency.
 - **alignfirst skills**: an installed alignfirst skill, a `.plans/` directory, or an `## AlignFirst` section in `AGENTS.md` / `CLAUDE.md`.
+- **bot readiness**: a `DEVELOPMENT.md` at the project root.
 
 ## Step 2 — Discuss
 
-Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid.
+Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an OpenClaw coder) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files).
 
 ## Step 3 — Set up
 
@@ -45,6 +58,8 @@ Require a clean working tree first (`git status`). If it isn't clean, stop and a
 - [docmap-setup.md](references/docmap-setup.md) — install the docmap CLI, then optionally bootstrap or migrate docs.
 - [workspace-setup.md](references/workspace-setup.md) — implement the worktree system (adapt the [asset scripts](assets/), install `@paleo/workspace`).
 - [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md) — install the AlignFirst skills and configure the project. For a team sharing plans through a dedicated repository, continue with [plans-share-setup.md](references/plans-share-setup.md).
+
+**Bot-ready setup**: finish by creating or completing `DEVELOPMENT.md` ([entry-point files](#the-entry-point-files)), reusing Step 1's detections and the sections the references wrote to `AGENTS.md`.
 
 **Upgrading from an older AlignFirst** (v1/v2): route through [alignfirst-upgrade.md](references/alignfirst-upgrade.md), which detects the version and follows [alignfirst-upgrade-from-v1.md](references/alignfirst-upgrade-from-v1.md) or [alignfirst-upgrade-from-v2.md](references/alignfirst-upgrade-from-v2.md).
 

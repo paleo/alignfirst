@@ -40,6 +40,11 @@ await runWorkspace({
   // ADAPT: anchor port for the slot range. 8100 is the safe default.
   basePort: 8100,
 
+  // ADAPT (optional): distance between consecutive slots, and therefore the
+  // maximum ports per environment. Set 1 for a single-port project; raise it
+  // when an environment needs more than 10 ports.
+  // portStep: 10,
+
   // ADAPT: ports derived from the slot. Either provide `portNames` for the
   // simple `slot+i` mapping, or supply `ports(slot)` for full control.
   portNames: ["server", "frontend", "db"],
