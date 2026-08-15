@@ -128,10 +128,10 @@ The `openclaw-coder-playbook` skill is developed against an internal regression-
 Get started:
 
 ```bash
-# From this `openclaw-coder/` directory
+# From the repository root
 git clone --depth 1 https://github.com/openclaw/openclaw.git .local/openclaw
 
-cd playbook-test
+cd openclaw-coder/playbook-test
 
 cp .env.local.example .env.local
 # Set the API keys in `.env.local` as needed
