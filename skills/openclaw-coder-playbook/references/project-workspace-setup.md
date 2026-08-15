@@ -38,6 +38,8 @@ That single call is the whole exception. The post right after it, and every one 
 
 The workspace tooling owns worktrees. Create, reuse, and tear them down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
+Some projects have **no workspace tooling** — no dev server, nothing to isolate beyond the worktree itself. Their `DEVELOPMENT.md` says so and defines the worktree procedure: plain `git worktree` commands plus the post-create steps (the `.plans` symlink, config files, install). In such a project, `DEVELOPMENT.md` replaces `workspace --guide` everywhere this playbook mentions it, `git worktree list` is the registry, the prohibition above does not apply, and the workspace is `ready` once the documented steps complete.
+
 First, check what already exists for the {TICKET_ID} — two checks, both required:
 
 - **Branch**: list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.

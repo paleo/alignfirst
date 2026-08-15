@@ -42,3 +42,19 @@ Use your alignfirst-setup-guide skill. What can I set up in this project?
 
 At the end, feel free to uninstall the skill. It won't be used by your project anymore.
 
+## Working on this repository
+
+After a fresh clone:
+
+```sh
+npm install
+
+# Plans live in a separate repository, cloned wherever you like.
+git clone git@gitlab.com:paroi/private/paroi-plans.git ../paroi-plans
+npm run plans:setup -- ../paroi-plans
+```
+
+`plans:setup` replaces `.plans` with a symlink into the clone's `alignfirst/` folder. Moving the clone breaks the link; re-run the command with the new location.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the everyday workflow.
+

@@ -89,6 +89,8 @@ Editing the codebase must always happen on another branch in a linked worktree. 
 
 Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands (`workspace --guide`) — `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server slots.
 
+Exception: a project whose `DEVELOPMENT.md` declares it has no workspace tooling. There the same `DEVELOPMENT.md` defines the worktree procedure, its plain `git worktree` commands are the sanctioned ones, and `git worktree list` is the registry.
+
 ### Updating a branch with the base branch
 
 When the current branch needs to catch up:
@@ -207,4 +209,4 @@ New projects live in `~/projects/`. Discuss with the user before scaffolding any
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-- Never touch a worktree outside the workspace tooling.
+- Never touch a worktree outside the workspace tooling — or, in a project without tooling, outside the `DEVELOPMENT.md` worktree procedure.

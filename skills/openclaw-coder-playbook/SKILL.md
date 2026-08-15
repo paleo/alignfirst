@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.21.0"
+  version: "0.22.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -36,7 +36,7 @@ Projects *and their linked worktrees* live under `~/projects/` — a worktree di
 Inside a project, each entry point targets a reader:
 
 - `DEVELOPMENT.md` — the AI coder: you.
-- `README.md` — the human coder.
+- `README.md` — the human coder, and the one-time setup of a fresh clone.
 - `AGENTS.md` (`~/projects/<project>/AGENTS.md`) — the coding agent (alcode).
 - The rest of the documentation (`docs/`, …) — everybody.
 

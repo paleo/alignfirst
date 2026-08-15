@@ -12,6 +12,15 @@ The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs
 
 This document is the **setup tutorial**: the decisions you make, and how to wire the two wrappers.
 
+## No dev server? Skip this system
+
+A project with no dev server has nothing to isolate beyond the worktree itself: slots, ports and the registry would be dead weight, and `git worktree list` already lists worktrees. Don't install the system. Instead, write a worktrees section in `DEVELOPMENT.md` that declares the project has no workspace tooling and defines the procedure with plain `git worktree` commands — bots (see the openclaw-coder-playbook) treat that declaration as the sanction to use them. Cover four points:
+
+- **Create**: `git worktree add ../<project>-<branch-suffix> -b <branch>`, keeping worktrees siblings of the main worktree.
+- **Post-create steps**: symlink `.plans` to the main worktree's (`ln -s ../<project>/.plans .plans`), copy any gitignored config files, install dependencies, build if the project needs it.
+- **List**: `git worktree list`.
+- **Remove**: `git worktree remove <path>`.
+
 ## Implementation Process
 
 Apply in order. The per-project decisions live in the [checklist](#checklist); this section is the sequence and its guardrails.

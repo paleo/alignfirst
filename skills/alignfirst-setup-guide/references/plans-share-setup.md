@@ -73,4 +73,4 @@ When the project also uses the workspace system, make the link a prerequisite of
 
    A missing or broken link then fails `workspace setup`, with the check's guidance on stderr.
 
-2. Document the new-machine steps — clone the plans repository, then `npm run plans:setup -- <clone-location>` — in the project's installation documentation (e.g. `README.md`, `DEVELOPMENT.md`), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.
+2. Document the new-machine steps — clone the plans repository, then `npm run plans:setup -- <clone-location>` — in `README.md` (the entry point that owns fresh-clone setup), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.
