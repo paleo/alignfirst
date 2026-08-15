@@ -46,7 +46,7 @@ Add the `top-down-typescript` skill to every plan.
 
 In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.
 
-After every change in `.plans/`, synchronize the plans: `pnpm plans:sync`.
+After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
 
 ## Skills to read before editing
 
