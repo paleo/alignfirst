@@ -18,7 +18,7 @@ myteam-plans/
 
 On each machine, the repository is cloned once, wherever the user wants (typically next to the other repos). In each project, `.plans` in the main worktree is a symlink to the project's folder inside the clone. Plans never enter the product repository. Linked worktrees created by the workspace system keep pointing at the main worktree's `.plans`; the symlink chain resolves on its own.
 
-Plan history has no value, so the plans repository only receives synchronization commits (`sync`). Syncing is manual, at each user's discretion — a forgotten sync means a teammate sees a stale version, never pollution. The skills never trigger a sync and never detect which mode they run in.
+Plan history has no value, so the plans repository only receives synchronization commits (`sync`). The instruction file asks the agent to sync after each change in `.plans/`; a forgotten sync means a teammate sees a stale version, never pollution. The skills themselves never trigger a sync and never detect which mode they run in.
 
 To keep `.plans/` small, finished tickets are moved to `_archives/` inside the project folder — by anyone, at any time (e.g. `mv .plans/250 .plans/_archives/`).
 
@@ -37,13 +37,13 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
    ```
 
 3. Ensure `.gitignore` contains `.plans` (the skills setup already does this).
-4. Add this section to the instruction file (`AGENTS.md` or `CLAUDE.md`), adapting the URL, folder, and commands to the project and the detected package manager:
+4. Add this subsection to the instruction file (`AGENTS.md` or `CLAUDE.md`), under the AlignFirst section added by the skills setup, adapting the folder and the commands to the project and the detected package manager:
 
-   > ## Team Plans Repository
+   > ### Team Plans Repository
    >
-   > In the main worktree, `.plans` is a symlink into a clone of the team plans repository: `git@example.com:myteam/myteam-plans.git` (folder `project-a/`). Plans are shared with the team through that repository and are never committed in this one.
+   > In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `project-a/`). Plans are shared with the team through that repository and are never committed in this one.
    >
-   > To synchronize: `npm run plans:sync`.
+   > After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
    >
    > On a new machine: clone the plans repository anywhere (typically next to the worktrees), then run `npm run plans:setup -- <clone-location>`.
 

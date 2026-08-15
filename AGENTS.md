@@ -42,11 +42,11 @@ Branch naming convention: `<ticket-id>/<1-3-words>`.
 
 Add the `top-down-typescript` skill to every plan.
 
-## Team Plans Repository
+### Team Plans Repository
 
-In the main worktree, `.plans` is a symlink into a clone of the team plans repository: `git@gitlab.com:paroi/private/paroi-plans.git` (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.
+In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.
 
-To synchronize: `npm run plans:sync`.
+After every change in `.plans/`, synchronize the plans: `pnpm plans:sync`.
 
 ## Skills to read before editing
 
