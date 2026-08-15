@@ -44,8 +44,6 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
    > In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `project-a/`). Plans are shared with the team through that repository and are never committed in this one.
    >
    > After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
-   >
-   > On a new machine: clone the plans repository anywhere (typically next to the worktrees), then run `npm run plans:setup -- <clone-location>`.
 
 ## Setup, Once Per Machine
 
