@@ -2,14 +2,14 @@
 // Reference: workspace.mjs
 //
 // Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
-// project-specific field. The kernel (slot registry, port math, branch
-// lifecycle, removal flow, CLI) lives in the package; this file only carries
-// project knowledge.
+// project-specific field. The kernel (workspace registry, port allocation,
+// branch lifecycle, removal flow, CLI) lives in the package; this file only
+// carries project knowledge.
 // =============================================================================
 
 import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@paleo/workspace";
 
@@ -32,23 +32,38 @@ await runWorkspace({
   // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
   scriptPath: fileURLToPath(import.meta.url),
 
-  // Required. Absolute path to your dev-server script. On `workspace remove`, the
-  // kernel shells out to `node <devServerScript> down` with cwd set to the
-  // target worktree. Leave this line as-is.
+  // ADAPT (optional): absolute path to your dev-server script. On `workspace
+  // remove`, the kernel shells out to `node <devServerScript> down` with cwd set
+  // to the target worktree. Drop this field — and `dev-server.mjs` itself — in a
+  // setup-only project.
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
 
-  // ADAPT: anchor port for the slot range. 8100 is the safe default.
-  basePort: 8100,
+  // ADAPT (optional): the port scheme. Each workspace gets a contiguous block of
+  // `perWorkspace` ports; the main worktree's block starts at `base`.
+  // Omit the whole group for a portless project: nothing is allocated, and
+  // `ctx.ports` is empty everywhere.
+  ports: {
+    // ADAPT: first port of the main worktree's block. 8100 is the safe default.
+    base: 8100,
 
-  // ADAPT (optional): distance between consecutive slots, and therefore the
-  // maximum ports per environment. Set 1 for a single-port project; raise it
-  // when an environment needs more than 10 ports.
-  // portStep: 10,
+    // ADAPT (optional): block size and spacing, so also the maximum ports per
+    // workspace. Set 1 for a single-port project; raise it above 10 when a
+    // workspace needs more ports.
+    // perWorkspace: 10,
 
-  // ADAPT: ports derived from the slot. Either provide `portNames` for the
-  // simple `slot+i` mapping, or supply `ports(slot)` for full control.
-  portNames: ["server", "frontend", "db"],
-  // ports: (slot) => ({ server: slot, frontend: slot + 1, db: slot + 2 }),
+    // ADAPT (optional): maximum workspaces, main worktree included. The scheme
+    // spans `maxWorkspaces * perWorkspace` ports from `base`.
+    // maxWorkspaces: 20,
+
+    // ADAPT: exactly one of `names` (consecutive ports from the block's first
+    // port) or `compute` (full control over the block).
+    names: ["server", "frontend", "db"],
+    // compute: ({ index, firstPort }) => ({
+    //   server: firstPort,
+    //   frontend: firstPort + 1,
+    //   db: firstPort + 2,
+    // }),
+  },
 
   // ADAPT: directories symlinked from the main worktree.
   sharedDirs: [".local", ".plans"],
@@ -85,12 +100,10 @@ await runWorkspace({
     {
       path: "docker-compose.yml",
       source: { kind: "mainWorktree" },
-      patch: (content, { slot, ports, mainWorktree }) => {
-        const repoName = basename(mainWorktree);
-        return content
+      patch: (content, { name, ports }) =>
+        content
           .replace(/^(\s*-\s*")[^"]*:5432(")/m, `$1${ports.db}:5432$2`)
-          .replace(/^(\s*container_name:\s*).+$/m, `$1${repoName}-database-slot-${slot}`);
-      },
+          .replace(/^(\s*container_name:\s*).+$/m, `$1${name}-database`),
     },
     // ADAPT: a verbatim copy — no ports, just a gitignored file the worktree
     // needs. No `patch`. `optional: true` skips it (with a warning) when absent.
@@ -127,11 +140,11 @@ await runWorkspace({
   //
   // Run `npm install` first: any later failure then leaves a worktree with
   // usable node_modules, so `workspace setup` can re-import @paleo/workspace.
-  finalizeWorktree: async ({ currentWorktree, mainWorktree, slot, ports }) => {
-    const container = `${basename(mainWorktree)}-database-slot-${slot}`;
-    // A worktree previously at this slot, deleted out-of-band, may have leaked its container
-    // (it belongs to a different compose project, so `up` can't reuse it — it errors on the name
-    // conflict). Force-remove it by name first so `up` is idempotent across slot reuse.
+  finalizeWorktree: async ({ currentWorktree, name, ports }) => {
+    const container = `${name}-database`;
+    // A worktree of the same name, deleted out-of-band, may have leaked its container (it belongs
+    // to a different compose project, so `up` can't reuse it — it errors on the name conflict).
+    // Force-remove it by name first so `up` is idempotent when a name is reused.
     try {
       execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
     } catch {
@@ -167,8 +180,8 @@ await runWorkspace({
     // Returning is OPTIONAL — omit the two lines below entirely if you have
     // nothing to record (the common case). Return `{ extra }` ONLY for teardown
     // identifiers you can't re-derive at purge time: container/volume names are
-    // derived from slot + paths (see purgeInfrastructure), so they don't go here,
-    // but a non-derivable external resource does — e.g. a public dev tunnel
+    // derived from the workspace name (see purgeInfrastructure), so they don't go
+    // here, but a non-derivable external resource does — e.g. a public dev tunnel
     // opened now, whose provider hands back an opaque id.
     const tunnelId = openDevTunnel(ports.frontend); // ADAPT: your external resource
     return { extra: { tunnelId } };
@@ -179,18 +192,16 @@ await runWorkspace({
   // and orphan removal. Drop on a non-Docker stack.
   //
   // MUST BE IDEMPOTENT — tolerate already-absent infrastructure. May run when
-  // `worktree` is gone (orphan); the container/volume names are derived from
-  // slot + paths, so teardown works without the worktree. `extra` carries only
+  // `worktree` is gone (orphan); the container/volume names are derived from the
+  // workspace name, so teardown works without the worktree. `extra` carries only
   // the non-derivable bits (here, the external tunnel id).
-  purgeInfrastructure: ({ worktree, mainWorktree, slot, extra }) => {
-    const container = `${basename(mainWorktree)}-database-slot-${slot}`;
-    const project = basename(worktree);
+  purgeInfrastructure: ({ worktree, name, extra }) => {
     try {
       if (existsSync(worktree)) {
         execSync("docker compose down -v", { stdio: "pipe", cwd: worktree });
       } else {
-        execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
-        execFileSync("docker", ["volume", "rm", `${project}_db-data`], { stdio: "pipe" });
+        execFileSync("docker", ["rm", "-f", `${name}-database`], { stdio: "pipe" });
+        execFileSync("docker", ["volume", "rm", `${name}_db-data`], { stdio: "pipe" });
       }
       if (extra?.tunnelId) closeDevTunnel(extra.tunnelId); // ADAPT: external teardown
     } catch {
@@ -200,10 +211,10 @@ await runWorkspace({
 
   // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
   // at this point. The worktree path is the useful pointer.
-  printSummary: ({ slot, branch, currentWorktree, isMainWorktree }) => `
+  printSummary: ({ name, branch, currentWorktree, isMainWorktree }) => `
 Workspace setup complete!
   Worktree type: ${isMainWorktree ? "main" : "linked"}
-  Slot:          ${slot}
+  Workspace:     ${name}
   Branch:        ${branch}
   Path:          ${currentWorktree}
 `,

@@ -1,61 +1,70 @@
-export interface PortScheme {
-  basePort: number;
-  portStep: number;
-  maxSlotCount: number;
-  minPort: number;
-  maxPort: number;
+import { ConfigError } from "./errors.js";
+
+const DEFAULT_PER_WORKSPACE = 10;
+const DEFAULT_MAX_WORKSPACES = 20;
+
+/** Port scheme declared by the consumer. Omit it entirely for portless mode. */
+export interface PortsConfig {
+  /** First port of the main worktree's block. */
+  base: number;
+  /** Ports reserved per workspace: block size and spacing. Defaults to 10. */
+  perWorkspace?: number;
+  /** Maximum workspaces, main worktree included. Defaults to 20. */
+  maxWorkspaces?: number;
+  /** Named ports mapped to `firstPort + 0`, `firstPort + 1`, ... Exactly one of `names`/`compute`. */
+  names?: string[];
+  /** Full control over the block's ports. Exactly one of `names`/`compute`. */
+  compute?: (ctx: PortComputeContext) => Record<string, number>;
 }
 
-export interface PortSchemeOptions {
-  basePort: number;
-  portStep?: number;
-  maxSlotCount?: number;
+/** Context passed to {@link PortsConfig.compute}. */
+export interface PortComputeContext {
+  /** Workspace block index: 0 for the main worktree, 1.. for linked workspaces. */
+  index: number;
+  /** `base + perWorkspace * index`. */
+  firstPort: number;
 }
 
-export function resolvePortScheme(opts: PortSchemeOptions): PortScheme {
-  const portStep = opts.portStep ?? 10;
-  const maxSlotCount = opts.maxSlotCount ?? 19;
-  const basePort = opts.basePort;
-  return {
-    basePort,
-    portStep,
-    maxSlotCount,
-    minPort: basePort + portStep,
-    maxPort: basePort + maxSlotCount * portStep,
-  };
+/** {@link PortsConfig} with its defaults applied. */
+export interface ResolvedPortsConfig {
+  base: number;
+  perWorkspace: number;
+  maxWorkspaces: number;
+  names?: string[];
+  compute?: (ctx: PortComputeContext) => Record<string, number>;
 }
 
-export function isValidPort(port: number, scheme: PortScheme): boolean {
-  return (
-    Number.isInteger(port) &&
-    port >= scheme.minPort &&
-    port <= scheme.maxPort &&
-    (port - scheme.basePort) % scheme.portStep === 0
-  );
-}
-
-/** The base port is the main worktree's reserved slot — not an assignable sibling slot. */
-export function isReservedMainSlot(port: number, scheme: PortScheme): boolean {
-  return port === scheme.basePort;
-}
-
-export function allPorts(scheme: PortScheme): number[] {
-  const ports: number[] = [];
-  for (let p = scheme.minPort; p <= scheme.maxPort; p += scheme.portStep) {
-    ports.push(p);
+export function resolvePortsConfig(config: PortsConfig): ResolvedPortsConfig {
+  const hasNames = config.names !== undefined && config.names.length > 0;
+  const hasCompute = config.compute !== undefined;
+  if (hasNames === hasCompute) {
+    throw new ConfigError(
+      "Config error: `ports` requires exactly one of `names` (non-empty array) or `compute`.",
+    );
   }
+  const resolved: ResolvedPortsConfig = {
+    base: config.base,
+    perWorkspace: config.perWorkspace ?? DEFAULT_PER_WORKSPACE,
+    maxWorkspaces: config.maxWorkspaces ?? DEFAULT_MAX_WORKSPACES,
+  };
+  if (config.names) resolved.names = config.names;
+  if (config.compute) resolved.compute = config.compute;
+  return resolved;
+}
+
+export function portsForIndex(
+  resolved: ResolvedPortsConfig,
+  index: number,
+): Record<string, number> {
+  const firstPort = firstPortOf(resolved, index);
+  if (resolved.compute) return resolved.compute({ index, firstPort });
+  const ports: Record<string, number> = {};
+  resolved.names?.forEach((name, offset) => {
+    ports[name] = firstPort + offset;
+  });
   return ports;
 }
 
-export function defaultComputePorts(portNames: string[]): (slot: number) => Record<string, number> {
-  if (portNames.length === 0) {
-    throw new Error("portNames must not be empty");
-  }
-  return (slot: number) => {
-    const out: Record<string, number> = {};
-    portNames.forEach((name, i) => {
-      out[name] = slot + i;
-    });
-    return out;
-  };
+export function firstPortOf(resolved: ResolvedPortsConfig, index: number): number {
+  return resolved.base + resolved.perWorkspace * index;
 }

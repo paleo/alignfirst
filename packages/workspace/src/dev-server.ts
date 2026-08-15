@@ -41,21 +41,18 @@ import type {
   SpawnServer,
 } from "./server-descriptor.js";
 import {
-  readSlots,
+  readWorkspaces,
   registryDirFor,
-  resolveCurrentSlot,
-  type ResolvedSlot,
-  type SlotEntry,
-  warnLegacyRegistryDir,
-} from "./slots.js";
+  resolveCurrentWorkspace,
+  type ResolvedWorkspace,
+  type WorkspaceEntry,
+} from "./workspaces.js";
 import { detectWorktree, getWorktreeBranch } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
 /** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
-  /** Anchor port for the slot range. Used to synthesize the main worktree's slot. */
-  basePort: number;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
@@ -75,7 +72,7 @@ function logFileFor(runtimeDir: string, name: string): string {
  * `kind: "spawn"` servers; callback servers expose neither.
  */
 export interface DevServerSummaryContext {
-  slot: ResolvedSlot;
+  workspace: ResolvedWorkspace;
   servers: { server: ServerDescriptor; port?: number; pid?: number }[];
 }
 
@@ -97,7 +94,6 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     return;
   }
 
-  warnLegacyRegistryDir(config);
   const registryDir = registryDirFor(config.runtimeDir);
 
   const { mainWorktree } = detectWorktree();
@@ -145,8 +141,7 @@ function printStatus(config: DevServerConfig, mainWorktree: string, registryDir:
     return;
   }
   console.log("Dev-server status: UP.");
-  const slot = resolveCurrentSlot(config.basePort, registryDir);
-  printStartSummary(config, slot, entry.pids);
+  printStartSummary(config, resolveCurrentWorkspace(registryDir), entry.pids);
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
@@ -175,8 +170,8 @@ async function start(
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   await spawnWithRollback(config, ctx, state);
 
-  const slot = registerStartedServer(config, mainWorktree, registryDir, state.spawnPids);
-  printStartSummary(config, slot, state.spawnPids);
+  const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
+  printStartSummary(config, workspace, state.spawnPids);
 }
 
 /**
@@ -224,9 +219,9 @@ async function runForeground(
     await new Promise<never>(() => {});
   }
 
-  const slot = registerStartedServer(config, mainWorktree, registryDir, state.spawnPids);
+  const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
   started = true;
-  printStartSummary(config, slot, state.spawnPids);
+  printStartSummary(config, workspace, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -255,7 +250,7 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
     .map(([name, pid]) => `${name}=${pid}`)
     .join(", ");
   console.log(
-    `Attaching to the dev-server in this worktree (slot ${entry.slot}, pids: ${pidList}).`,
+    `Attaching to the dev-server in this worktree (workspace ${entry.name}, pids: ${pidList}).`,
   );
   console.log("Showing live logs. Press CTRL+C to detach — the dev-server keeps running.");
 
@@ -374,26 +369,25 @@ async function spawnAndAwait(
 }
 
 function registerStartedServer(
-  config: DevServerConfig,
   mainWorktree: string,
   registryDir: string,
   spawnPids: Record<string, number>,
-): ResolvedSlot {
-  const slot = resolveCurrentSlot(config.basePort, registryDir);
+): ResolvedWorkspace {
+  const workspace = resolveCurrentWorkspace(registryDir);
   const devEntry: DevServerEntry = {
-    slot: slot.slot,
-    worktree: slot.worktree,
+    name: workspace.name,
+    worktree: workspace.worktree,
     pids: spawnPids,
     startedAt: new Date().toISOString(),
   };
-  if (slot.main) devEntry.main = true;
+  if (workspace.main) devEntry.main = true;
   registerDevServer(mainWorktree, registryDir, devEntry);
-  return slot;
+  return workspace;
 }
 
 function printStartSummary(
   config: DevServerConfig,
-  slot: ResolvedSlot,
+  workspace: ResolvedWorkspace,
   spawnPids: Record<string, number>,
 ): void {
   const summaryServers = config.servers.map((server) => {
@@ -403,9 +397,9 @@ function printStartSummary(
     return { server };
   });
   if (config.printSummary) {
-    console.log(config.printSummary({ slot, servers: summaryServers }));
+    console.log(config.printSummary({ workspace, servers: summaryServers }));
   } else {
-    defaultPrintSummary(slot, summaryServers, config.runtimeDir);
+    defaultPrintSummary(workspace, summaryServers, config.runtimeDir);
   }
 }
 
@@ -476,18 +470,18 @@ async function rollbackStart(
 export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
 
 /**
- * Pure builder for the `dev` worktree-readiness gate. Returns `ok` when the slot is `ready`
+ * Pure builder for the `dev` worktree-readiness gate. Returns `ok` when the workspace is `ready`
  * or absent (synthesized main); otherwise returns the user-facing error message.
  */
 export function buildWorktreeReadyMessage(input: {
-  slotPort: number;
+  name: string;
   worktreePath: string;
   runtimeDir: string;
-  entry: SlotEntry | undefined;
+  entry: WorkspaceEntry | undefined;
   now: number;
   pm: PackageManagerCommands;
 }): WorktreeReadyCheck {
-  const { slotPort, worktreePath, runtimeDir, entry, now, pm } = input;
+  const { name, worktreePath, runtimeDir, entry, now, pm } = input;
   if (!entry || entry.status === "ready") return { ok: true };
   const ws = pm.workspace.withArgs;
   const logPath = setupLogPath(worktreePath, runtimeDir);
@@ -496,7 +490,7 @@ export function buildWorktreeReadyMessage(input: {
     return {
       ok: false,
       message:
-        `Error: Worktree setup is still in progress (slot ${slotPort}, started ${elapsed} ago).\n` +
+        `Error: Worktree setup is still in progress (workspace ${name}, started ${elapsed} ago).\n` +
         `Tail: ${logPath}\n` +
         `Run \`${ws} wait\` to block until it finishes, or retry \`${pm.dev.base}\` once ready.`,
     };
@@ -507,7 +501,7 @@ export function buildWorktreeReadyMessage(input: {
   return {
     ok: false,
     message:
-      `Error: Worktree setup failed (slot ${slotPort}, ${elapsed} ago): ${reason}\n` +
+      `Error: Worktree setup failed (workspace ${name}, ${elapsed} ago): ${reason}\n` +
       `Tail: ${logPath}\n` +
       `Re-run \`${ws} setup\` to retry the finalize.`,
   };
@@ -519,10 +513,10 @@ function checkWorktreeReady(
   registryDir: string,
   cwd: string,
 ): void {
-  const slot = resolveCurrentSlot(config.basePort, registryDir);
-  const entry = readSlots(mainWorktree, registryDir).slots[String(slot.slot)];
+  const workspace = resolveCurrentWorkspace(registryDir);
+  const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   const result = buildWorktreeReadyMessage({
-    slotPort: slot.slot,
+    name: workspace.name,
     worktreePath: cwd,
     runtimeDir: config.runtimeDir,
     entry,
@@ -559,7 +553,7 @@ async function handleAlreadyRunning(
 
   const pidList = livePids.map(([name, pid]) => `${name}=${pid}`).join(", ");
   console.log(
-    `dev-server already running for this worktree (slot ${entry.slot}, pids: ${pidList}).`,
+    `dev-server already running for this worktree (workspace ${entry.name}, pids: ${pidList}).`,
   );
   console.log(`Run \`${devCmd("down")}\` to stop it, or re-run with \`--restart\` to restart.`);
   return true;
@@ -597,7 +591,9 @@ async function enforceCap(
   });
   for (const entry of evicted) {
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-    console.log(`Evicted slot ${entry.slot} (branch=${branch}, startedAt=${entry.startedAt}).`);
+    console.log(
+      `Evicted workspace ${entry.name} (branch=${branch}, startedAt=${entry.startedAt}).`,
+    );
   }
 }
 
@@ -692,21 +688,20 @@ async function stopLocal(
 }
 
 function defaultPrintSummary(
-  slot: ResolvedSlot,
+  workspace: ResolvedWorkspace,
   servers: DevServerSummaryContext["servers"],
   runtimeDir: string,
 ): void {
   console.log("\nDev servers started!");
-  console.log(`  Workspace: slot ${slot.slot}`);
+  console.log(`  Workspace: ${workspace.name}`);
   for (const { server, port, pid } of servers) {
-    if (server.kind === "spawn") {
-      const url = `http://localhost:${port}/`;
-      const logPath = join(process.cwd(), logFileFor(runtimeDir, server.name));
-      console.log(`  ${server.name}: ${url}  (PID ${pid})`);
-      console.log(`    log: ${logPath}`);
-    } else {
+    if (server.kind !== "spawn") {
       console.log(`  ${server.name}: ready`);
+      continue;
     }
+    const target = port === undefined ? `PID ${pid}` : `http://localhost:${port}/  (PID ${pid})`;
+    console.log(`  ${server.name}: ${target}`);
+    console.log(`    log: ${join(process.cwd(), logFileFor(runtimeDir, server.name))}`);
   }
   console.log("");
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildWorktreeReadyMessage } from "../src/dev-server.js";
 import type { PackageManagerCommands } from "../src/package-manager.js";
-import type { SlotEntry } from "../src/slots.js";
+import type { WorkspaceEntry } from "../src/workspaces.js";
 
 const NOW = Date.parse("2026-05-17T00:00:00.000Z");
 
@@ -11,9 +11,9 @@ const PM: PackageManagerCommands = {
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
-function input(entry: SlotEntry | undefined): Parameters<typeof buildWorktreeReadyMessage>[0] {
+function input(entry: WorkspaceEntry | undefined): Parameters<typeof buildWorktreeReadyMessage>[0] {
   return {
-    slotPort: 8110,
+    name: "repo-feat-a",
     worktreePath: "/tmp/wt",
     runtimeDir: ".local-wt",
     entry,
@@ -28,7 +28,7 @@ describe("buildWorktreeReadyMessage", () => {
   });
 
   it("returns ok when status is ready", () => {
-    const entry: SlotEntry = {
+    const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "ready",
@@ -36,8 +36,8 @@ describe("buildWorktreeReadyMessage", () => {
     expect(buildWorktreeReadyMessage(input(entry))).toEqual({ ok: true });
   });
 
-  it("reports a pending message with slot and elapsed time", () => {
-    const entry: SlotEntry = {
+  it("reports a pending message with the workspace name and elapsed time", () => {
+    const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "pending",
@@ -46,13 +46,13 @@ describe("buildWorktreeReadyMessage", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toContain("still in progress");
-    expect(result.message).toContain("slot 8110");
+    expect(result.message).toContain("workspace repo-feat-a");
     expect(result.message).toContain("1h");
     expect(result.message).toContain("/tmp/wt/.local-wt/logs/workspace-setup.log");
   });
 
   it("reports a failed message with failure reason and elapsed", () => {
-    const entry: SlotEntry = {
+    const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
@@ -68,7 +68,7 @@ describe("buildWorktreeReadyMessage", () => {
   });
 
   it("uses (no message) when failure.message is absent", () => {
-    const entry: SlotEntry = {
+    const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",

@@ -14,6 +14,7 @@ export type {
   ContentConfigFileSource,
   PurgeContext,
 } from "./workspace.js";
+export type { PortsConfig, PortComputeContext } from "./ports.js";
 
 export { runDevServer } from "./dev-server.js";
 export type {
@@ -25,7 +26,7 @@ export type {
   CallbackServer,
 } from "./dev-server.js";
 
-export type { ResolvedSlot } from "./slots.js";
+export type { ResolvedWorkspace } from "./workspaces.js";
 
 import * as helpers from "./helpers.js";
 export { helpers };

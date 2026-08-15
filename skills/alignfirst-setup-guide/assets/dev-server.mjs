@@ -15,7 +15,6 @@
 import { helpers, runDevServer } from "@paleo/workspace";
 
 await runDevServer({
-  basePort: 8100, // ADAPT
   runtimeDir: ".local-wt", // Per-worktree runtime directory. The symlinked registry lives at `${runtimeDir}/workspace-registry`.
   devLimit: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
@@ -46,7 +45,10 @@ await runDevServer({
       kind: "spawn",                                        // ADAPT
       name: "dev",                                          // ADAPT
       exec: { command: "npm", args: ["run", "dev:app"] },   // ADAPT — must not be `dev` (recurses into this wrapper)
-      port: helpers.readPortFromEnvFile(".env", "PORT"),    // ADAPT — or helpers.readPortFromJsonFile("config.json", "server.port")
+      // ADAPT — or helpers.readPortFromJsonFile("config.json", "server.port").
+      // Optional: omit `port` for a process that listens on nothing; port-conflict
+      // checks, port sweeping and the summary URL then skip this server.
+      port: helpers.readPortFromEnvFile(".env", "PORT"),
       detectSuccess: (log) => log.includes("Server is ready on port"), // ADAPT
       // ADAPT: return the matched label, or false. Example with fatal markers:
       //   detectError: (log) => ["[ExceptionHandler]", "Node.js v"].find((m) => log.includes(m)) ?? false,

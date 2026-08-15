@@ -8,17 +8,21 @@ An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), pu
 
 ## Worktrees
 
-This repository has **no dev server**, so there is no workspace tooling: a workspace is simply a git worktree, managed with the standard git commands. Create one as a sibling of the main worktree:
+A workspace is a git worktree plus its setup: `.plans` and `.local` symlinked to the main worktree, `.vscode/settings.json` copied, then `npm install` and `npm run build`. This repository has no dev server, so the tooling runs portless: nothing to start, no `dev` script.
+
+Create a workspace on a new branch, as a sibling directory of the main worktree:
 
 ```sh
-git worktree add ../alignfirst-123-my-feature -b 123/my-feature
-cd ../alignfirst-123-my-feature
-ln -s ../alignfirst/.plans .plans
-cp ../alignfirst/.vscode/settings.json .vscode/ 2>/dev/null || true
-npm install && npm run build
+npm run workspace -- setup -c 123/my-feature
 ```
 
-The worktree is ready once these steps complete. `git worktree list` lists them; `git worktree remove <path>` tears one down. The main worktree stays on `main`.
+Tear one down, keeping its branch:
+
+```sh
+npm run workspace -- remove <worktree-dir>
+```
+
+`npm run workspace -- list` shows every workspace; `npm run workspace -- --guide` documents the full procedures. The main worktree stays on `main`.
 
 ## Conventions
 
@@ -35,4 +39,5 @@ The worktree is ready once these steps complete. `git worktree list` lists them;
 | `npm test` | Test every package (`npm test --workspace <name>` for one) |
 | `npm run lint` / `npm run lint:fix` | Check / fix with Biome |
 | `npm run docmap` | Browse the project documentation |
+| `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run plans:sync` | Publish and retrieve the task plans (`.plans`) |

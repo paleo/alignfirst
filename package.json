@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "docmap": "docmap",
+    "workspace": "node scripts/workspace.mjs",
     "plans:setup": "plans-share setup --folder alignfirst",
     "plans:sync": "plans-share sync",
     "lint": "biome check",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "~2.5.1",
-    "@changesets/cli": "~2.31.0"
+    "@changesets/cli": "~2.31.0",
+    "@paleo/workspace": "0.29.0"
   }
 }

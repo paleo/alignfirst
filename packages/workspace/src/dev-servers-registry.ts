@@ -8,7 +8,8 @@ import { getWorktreeBranch } from "./worktree.js";
 const DEV_SERVERS_FILENAME = "dev-servers.json";
 
 export interface DevServerEntry {
-  slot: number;
+  /** Workspace name: the worktree directory basename, and the workspaces-registry key. */
+  name: string;
   worktree: string;
   pids: Record<string, number>;
   startedAt: string;
@@ -28,14 +29,14 @@ export function listDevServers(mainWorktree: string, registryDir: string): void 
     console.log("No dev-servers running.");
     return;
   }
-  const sorted = [...data.servers].sort((a, b) => a.slot - b.slot);
+  const sorted = sortByName(data.servers);
   for (const entry of sorted) {
     console.log(formatEntry(entry));
   }
 }
 
 export function printActiveServers(active: DevServerEntry[]): void {
-  const sorted = [...active].sort((a, b) => a.slot - b.slot);
+  const sorted = sortByName(active);
   for (const entry of sorted) {
     process.stderr.write(`${formatEntry(entry)}\n`);
   }
@@ -57,7 +58,7 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
   }
   for (const entry of data.servers) {
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-    console.log(`Stopping slot ${entry.slot} (${branch})...`);
+    console.log(`Stopping workspace ${entry.name} (${branch})...`);
     for (const [name, pid] of Object.entries(entry.pids)) {
       if (!isProcessAlive(pid)) continue;
       console.log(`  ${name} (PID ${pid})`);
@@ -90,8 +91,8 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
     }
     await stopCallbacksForVictim(input.callbackServers, entry.worktree);
   }
-  const victimSlots = new Set(victims.map((v) => v.slot));
-  const filtered = data.servers.filter((entry) => !victimSlots.has(entry.slot));
+  const victimNames = new Set(victims.map((v) => v.name));
+  const filtered = data.servers.filter((entry) => !victimNames.has(entry.name));
   writeDevServers(input.mainWorktree, input.registryDir, { servers: filtered });
   return victims;
 }
@@ -212,21 +213,12 @@ export function writeDevServers(
   writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
 }
 
-/** Union by resolved `worktree`; `override` wins on conflict. Base-first then override-only order. */
-export function mergeDevServers(base: DevServersData, override: DevServersData): DevServersData {
-  const overrideByWorktree = new Map(override.servers.map((e) => [resolve(e.worktree), e]));
-  const merged: DevServerEntry[] = base.servers.map(
-    (entry) => overrideByWorktree.get(resolve(entry.worktree)) ?? entry,
-  );
-  const baseWorktrees = new Set(base.servers.map((e) => resolve(e.worktree)));
-  for (const entry of override.servers) {
-    if (!baseWorktrees.has(resolve(entry.worktree))) merged.push(entry);
-  }
-  return { servers: merged };
-}
-
 function filePath(mainWorktree: string, registryDir: string): string {
   return join(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
+}
+
+function sortByName(servers: DevServerEntry[]): DevServerEntry[] {
+  return [...servers].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function formatEntry(entry: DevServerEntry): string {
@@ -235,5 +227,5 @@ function formatEntry(entry: DevServerEntry): string {
     .join(",");
   const type = entry.main ? "main" : "linked";
   const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-  return `  slot ${entry.slot}  type=${type}  branch=${branch}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
+  return `  ${entry.name}  type=${type}  branch=${branch}  pids=${pids}  startedAt=${entry.startedAt}  worktree=${entry.worktree}`;
 }

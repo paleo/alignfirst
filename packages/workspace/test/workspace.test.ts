@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { matchWorktreeByDir, type PatchContext, resolveConfigSource } from "../src/workspace.js";
-import type { SlotsRegistry } from "../src/slots.js";
+import type { WorkspacesRegistry } from "../src/workspaces.js";
 
 const ctx: PatchContext = {
-  slot: 8110,
+  name: "repo-feat",
   ports: { server: 8110 },
   mainWorktree: "/repo/main",
   currentWorktree: "/repo/feat",
@@ -55,28 +55,30 @@ describe("resolveConfigSource", () => {
 });
 
 describe("matchWorktreeByDir", () => {
-  const registry: SlotsRegistry = {
-    slots: {
-      "8100": { worktree: "/home/me/repo", createdAt: "", status: "ready", main: true },
-      "8110": { worktree: "/home/me/repo-feat-a", createdAt: "", status: "ready" },
-      "8120": { worktree: "/home/me/repo-feat-b", createdAt: "", status: "ready" },
+  const registry: WorkspacesRegistry = {
+    workspaces: {
+      repo: { worktree: "/home/me/repo", createdAt: "", status: "ready", main: true },
+      "repo-feat-a": { worktree: "/home/me/repo-feat-a", createdAt: "", status: "ready" },
+      "repo-feat-b": { worktree: "/home/me/repo-feat-b", createdAt: "", status: "ready" },
     },
   };
 
   it("matches by absolute path", () => {
-    expect(matchWorktreeByDir("/home/me/repo-feat-a", registry, "/home/me/repo")).toBe("8110");
+    expect(matchWorktreeByDir("/home/me/repo-feat-a", registry, "/home/me/repo")).toBe(
+      "repo-feat-a",
+    );
   });
 
   it("matches by relative path against cwd", () => {
-    expect(matchWorktreeByDir("../repo-feat-b", registry, "/home/me/repo")).toBe("8120");
+    expect(matchWorktreeByDir("../repo-feat-b", registry, "/home/me/repo")).toBe("repo-feat-b");
   });
 
-  it("matches by bare directory basename from anywhere", () => {
-    expect(matchWorktreeByDir("repo-feat-a", registry, "/somewhere/else")).toBe("8110");
+  it("matches by workspace name from anywhere", () => {
+    expect(matchWorktreeByDir("repo-feat-a", registry, "/somewhere/else")).toBe("repo-feat-a");
   });
 
-  it("matches an orphan by basename even when its directory is gone", () => {
-    expect(matchWorktreeByDir("repo-feat-b", registry, "/tmp")).toBe("8120");
+  it("matches an orphan by name even when its directory is gone", () => {
+    expect(matchWorktreeByDir("repo-feat-b", registry, "/tmp")).toBe("repo-feat-b");
   });
 
   it("returns undefined when nothing matches", () => {

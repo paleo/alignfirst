@@ -51,7 +51,7 @@ Then detect each tool's existing footprint:
 
 Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an OpenClaw coder) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files).
 
-Recommend the workspace system only for projects with a dev server. Without one, slots and ports are dead weight: skip the install and document the plain-worktree procedure instead (see the note at the top of [workspace-setup.md](references/workspace-setup.md)).
+A project without a dev server still benefits from the workspace system: recommend its portless subset — no `ports` group, no `dev-server.mjs` — which keeps the worktree lifecycle, shared-directory symlinks, config-file seeding, and orphan healing (see [portless mode](references/workspace-setup.md#portless-mode)).
 
 ## Step 3 — Set up
 

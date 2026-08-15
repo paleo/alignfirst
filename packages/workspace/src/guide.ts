@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { type PackageManagerCommands, detectPackageManager } from "./package-manager.js";
-import { REGISTRY_SUBDIR } from "./slots.js";
+import { REGISTRY_SUBDIR } from "./workspaces.js";
 
 // One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
 // --guide` (only the `workspace` script knows the full config — `sharedDirs` included). The prose
@@ -11,12 +11,18 @@ import { REGISTRY_SUBDIR } from "./slots.js";
 //   {{WS}} / {{DEV}} / {{DEV_BASE}} — inline command prefixes
 //   {{RUNTIME_DIR}} / {{REGISTRY_SUBDIR}} — the per-worktree runtime dir + its registry sub-dir
 //   {{LAYOUT:shared}} — the shared-dirs line, listing the configured `sharedDirs` by name
+//   {{#DEV}}…{{/DEV}} / {{#PORTS}}…{{/PORTS}} — kept when the feature is configured, stripped
+//     otherwise ({{^…}} for the reverse). Markers own their line.
 
 export interface GuideLayout {
   /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
   runtimeDir: string;
   /** The shared (symlinked-from-main) dir names (config `sharedDirs`). */
   sharedDirs: string[];
+  /** `true` when the config declares `devServerScript`. */
+  hasDevServer: boolean;
+  /** `true` when the config declares `ports`. */
+  hasPorts: boolean;
 }
 
 interface CommandRow {
@@ -43,7 +49,10 @@ function renderSnippet(lines: (CommandRow | string)[]): string {
     .join("\n");
 }
 
-function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]> {
+function commandBlocks(
+  pm: PackageManagerCommands,
+  layout: GuideLayout,
+): Record<string, CommandRow[]> {
   const ws = pm.workspace.withArgs;
   const dev = pm.dev.withArgs;
   return {
@@ -75,28 +84,30 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
     inspect: [
       {
         command: `${ws} list`,
-        comment: "all registered workspaces (slot, status, branch, path, created)",
+        comment: "all registered workspaces (name, status, branch, path, created)",
       },
       {
         command: `${ws} status`,
-        comment: "current worktree summary (ports, branch, readiness, dev-server)",
+        comment: `current worktree summary (branch, readiness${summaryExtras(layout)})`,
       },
       {
         command: `${ws} status ../my-worktree`,
-        comment: "another worktree (by path or dir name; or --slot <port>)",
+        comment: "another worktree (by path or dir name)",
       },
     ],
     remove: [
       { command: `${ws} remove`, comment: "remove the current worktree (run from inside it)" },
       {
         command: `${ws} remove ../my-worktree`,
-        comment: "remove another (by path or dir name; or --slot <port>)",
+        comment: "remove another (by path or dir name)",
       },
     ],
     prune: [
       {
         command: `${ws} prune`,
-        comment: "stop orphans' dev-servers, drop registry entries, run `git worktree prune`",
+        comment: layout.hasDevServer
+          ? "stop orphans' dev-servers, drop registry entries, run `git worktree prune`"
+          : "drop orphans' registry entries, then run `git worktree prune`",
       },
     ],
     dev: [
@@ -124,6 +135,17 @@ function commandBlocks(pm: PackageManagerCommands): Record<string, CommandRow[]>
   };
 }
 
+function summaryExtras(layout: GuideLayout): string {
+  const extras = [
+    layout.hasPorts ? "ports" : undefined,
+    layout.hasDevServer ? "dev-server" : undefined,
+  ];
+  return extras
+    .filter((extra) => extra !== undefined)
+    .map((extra) => `, ${extra}`)
+    .join("");
+}
+
 function driveDevSnippet(pm: PackageManagerCommands): string {
   const dev = pm.dev.withArgs;
   return renderSnippet([
@@ -144,8 +166,9 @@ function renderSharedLayout(sharedDirs: string[]): string {
 
 export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
-  let out = template;
-  for (const [name, rows] of Object.entries(commandBlocks(pm))) {
+  let out = applySection(template, "DEV", layout.hasDevServer);
+  out = applySection(out, "PORTS", layout.hasPorts);
+  for (const [name, rows] of Object.entries(commandBlocks(pm, layout))) {
     out = out.replaceAll(`{{COMMANDS:${name}}}`, renderRows(rows));
   }
   return out
@@ -157,6 +180,17 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
     .replaceAll("{{REGISTRY_SUBDIR}}", REGISTRY_SUBDIR)
     .replaceAll("{{LAYOUT:shared}}", renderSharedLayout(layout.sharedDirs))
     .trimEnd();
+}
+
+/** Keeps or strips one `{{#NAME}}…{{/NAME}}` (or `{{^NAME}}…{{/NAME}}`) block. Markers own their line. */
+function applySection(text: string, name: string, present: boolean): string {
+  const block = new RegExp(
+    `^\\{\\{([#^])${name}\\}\\}\\n([\\s\\S]*?)^\\{\\{/${name}\\}\\}\\n`,
+    "gm",
+  );
+  return text.replace(block, (_, sigil: string, body: string) =>
+    (sigil === "#") === present ? body : "",
+  );
 }
 
 export function printGuide(layout: GuideLayout, cwd: string = process.cwd()): void {

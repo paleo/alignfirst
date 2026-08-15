@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Always ignore the `.plans` and `.local` directories when searching the codebase.
+Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
 
 ## Tooling
 
