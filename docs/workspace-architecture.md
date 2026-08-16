@@ -1,6 +1,6 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@paleo/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-block allocation, and registry liveness. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
+summary: Internals of the `@paleo/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-block allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
 read_when:
   - onboarding to the @paleo/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
@@ -88,6 +88,21 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored block index (`base + perWorkspace × index`) — never persisted. Editing `names`, `perWorkspace` or `base` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match.
 
 Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column. The main worktree is never stale — its index is 0 by definition, and never stored.
+
+## Registry migration
+
+`workspace migrate` converts a pre-`workspaces.json` registry (`slots.json`, keyed by port) in place, from the main worktree only. Every other command fails fast while `slots.json` exists, so an old registry never reads as "no workspaces". Worktrees, their gitignored content and running dev-servers are untouched.
+
+Conversion rules:
+
+- All entries describing the main worktree collapse into one, keyed by the real main worktree. Old registries accumulate stale main entries when `basePort` changes, and their recorded paths go stale when the repository moves on disk; the collapse absorbs both.
+- Linked entries are keyed by `basename(worktree)`; same-path duplicates keep the newest entry. An entry whose directory is missing migrates as-is — it is an orphan, and the healing machinery reaches it by name.
+- With `ports` configured, the block index is derived from the old slot (`(slot − base) / perWorkspace`). A slot that does not fit the scheme migrates without an index — the stale-entry state, fixed by `workspace setup --force` in that worktree.
+- `dev-servers.json` entries are rekeyed from `slot` to the workspace name; running PIDs stay valid.
+
+The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be renamed or removed manually.
+
+A `slots.json` present next to an existing `workspaces.json` was re-created after the migration, by a workspace command run on a branch that still uses the old package. `migrate` then refuses and asks for a manual delete, instead of guessing which registry is authoritative.
 
 ## Self-healing orphaned workspaces
 

@@ -196,6 +196,14 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["__finalize", "8110"])).toThrow(ConfigError);
   });
 
+  it("parses `migrate`", () => {
+    expect(parseWorkspaceArgs(["migrate"]).command).toEqual({ kind: "migrate" });
+  });
+
+  it("rejects a positional on `migrate`", () => {
+    expect(() => parseWorkspaceArgs(["migrate", ".local/registry"])).toThrow(ConfigError);
+  });
+
   it("rejects the removed `migrate-0.16` command", () => {
     expect(() => parseWorkspaceArgs(["migrate-0.16", ".local/registry"])).toThrow(ConfigError);
   });

@@ -18,6 +18,7 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
+  | { kind: "migrate" }
   | { kind: "finalize"; force: boolean }
   | { kind: "guide" }
   | { kind: "help" }
@@ -68,6 +69,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
+    case "migrate":
+      return parseMigrate(tokens);
     case "__finalize":
       return parseFinalize(tokens);
     default:
@@ -192,6 +195,17 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
   };
 }
 
+function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { verbose: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectPositionals(positionals, "migrate");
+  return { command: { kind: "migrate" }, verbose: values.verbose ?? false };
+}
+
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
@@ -250,6 +264,9 @@ export function printWorkspaceHelp(): void {
       "      Selected by directory (path or basename); the current worktree when omitted.",
       "  wait [<dir>]",
       "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
+      "  migrate",
+      "      Convert an old registry (slots.json) to workspaces.json, in place.",
+      "      Run it once from the main worktree after upgrading the package.",
       "",
       "Global options:",
       "      --verbose       Show intermediate output.",

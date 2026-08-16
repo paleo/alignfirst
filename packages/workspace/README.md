@@ -51,6 +51,7 @@ npm run dev -- list                    # active dev-servers across all worktrees
 npm run dev -- down                    # stop dev server (infrastructure stays up)
 npm run workspace -- remove ../my-wt   # full teardown (by dir path or name; omit for the current worktree)
 npm run workspace -- prune             # heal workspaces whose worktree was deleted out-of-band
+npm run workspace -- migrate           # one-time: convert a registry from an older version (slots.json)
 npm run workspace -- --guide           # full operating guide (workspace + dev-server)
 ```
 

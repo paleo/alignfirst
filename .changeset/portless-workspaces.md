@@ -6,12 +6,8 @@ Ports are now optional. The port scheme moves into a `ports` config group (`base
 
 To upgrade:
 
-- List the workspaces. List also the active remote branches. Determine which branches have to be upgraded. Ask confirmation to the user before to proceed to the next step.
-- Ensure the main worktree is on the base branch.
-- Ensure every worktree has an empty `git status` first (commit your work).
-- Run `workspace remove` for each linked worktree.
-- In the main worktree, upgrade the package and rewrite `workspace.mjs` / `dev-server.mjs` to the new config shape. Commit.
-- Propagate the change by merging the base branch back to the branches of the deleted workspaces
-- Delete the stale `.local-wt/workspace-registry/slots.json`.
-- Setup the main workspace with `workspace setup` on the main worktree.
-- Re-create the linked workspaces with `workspace setup <branch>` from the main worktree.
+1. In the main worktree, upgrade the package and rewrite `workspace.mjs` / `dev-server.mjs` to the new config shape. Keep `ports.base` and `ports.perWorkspace` equal to the old `basePort` and `portStep`, so every workspace keeps its ports. Commit.
+2. Run `workspace migrate` from the main worktree. It converts the registry in place — worktrees, their gitignored content and running dev-servers are preserved — and lists the branches to update.
+3. In each linked worktree, merge the base branch and reinstall dependencies.
+
+Until the migration runs, every command fails fast on the old registry. Contributors pulling the upgraded base branch start at step 2.

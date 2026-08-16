@@ -18,6 +18,7 @@ import {
 } from "./dev-servers-registry.js";
 import { ConfigError, StartupError } from "./errors.js";
 import { detectCommonJsError, formatDuration, setupLogPath } from "./helpers.js";
+import { refuseOldRegistry } from "./migrate.js";
 import {
   awaitAllReady,
   followLogFile,
@@ -97,6 +98,7 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
   const registryDir = registryDirFor(config.runtimeDir);
 
   const { mainWorktree } = detectWorktree();
+  refuseOldRegistry(mainWorktree, registryDir);
 
   switch (command.kind) {
     case "list":

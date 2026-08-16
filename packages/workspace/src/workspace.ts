@@ -37,6 +37,7 @@ import {
   setupProgressPath,
 } from "./helpers.js";
 import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
+import { refuseOldRegistry, runMigrate } from "./migrate.js";
 import { findOrphanNames } from "./orphans.js";
 import { wsCmd } from "./package-manager.js";
 import {
@@ -323,6 +324,18 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 
   try {
+    const ctx = detectWorktree();
+
+    if (command.kind === "migrate") {
+      runMigrate(ctx, {
+        registryDir: kernel.registryDir,
+        ports: kernel.ports,
+        hasPurgeInfrastructure: config.purgeInfrastructure !== undefined,
+      });
+      return;
+    }
+    refuseOldRegistry(ctx.mainWorktree, kernel.registryDir);
+
     switch (command.kind) {
       case "finalize":
         await runFinalize(command, kernel);
@@ -341,7 +354,6 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
         return;
     }
 
-    const ctx = detectWorktree();
     const run: RunCtx = { verbose };
 
     switch (command.kind) {

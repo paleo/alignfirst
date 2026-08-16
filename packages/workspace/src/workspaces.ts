@@ -43,8 +43,12 @@ export function registryDirFor(runtimeDir: string): string {
   return join(runtimeDir, REGISTRY_SUBDIR);
 }
 
+export function workspacesFilePath(mainWorktree: string, registryDir: string): string {
+  return join(mainWorktree, registryDir, WORKSPACES_FILENAME);
+}
+
 export function readWorkspaces(mainWorktree: string, registryDir: string): WorkspacesRegistry {
-  const filePath = join(mainWorktree, registryDir, WORKSPACES_FILENAME);
+  const filePath = workspacesFilePath(mainWorktree, registryDir);
   if (!existsSync(filePath)) return { workspaces: {} };
   return JSON.parse(readFileSync(filePath, "utf-8")) as WorkspacesRegistry;
 }
@@ -54,7 +58,7 @@ export function writeWorkspaces(
   registryDir: string,
   registry: WorkspacesRegistry,
 ): void {
-  const filePath = join(mainWorktree, registryDir, WORKSPACES_FILENAME);
+  const filePath = workspacesFilePath(mainWorktree, registryDir);
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(registry, undefined, 2)}\n`);
 }

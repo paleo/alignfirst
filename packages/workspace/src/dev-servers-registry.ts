@@ -126,7 +126,7 @@ export function unregisterDevServer(
   registryDir: string,
   worktreePath: string,
 ): void {
-  const fp = filePath(mainWorktree, registryDir);
+  const fp = devServersFilePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return;
   const data = pruneAndPersist(mainWorktree, registryDir);
   const target = resolve(worktreePath);
@@ -140,7 +140,7 @@ export function removeDevServerEntryByWorktree(
   registryDir: string,
   worktreePath: string,
 ): void {
-  const fp = filePath(mainWorktree, registryDir);
+  const fp = devServersFilePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return;
   const data = readDevServers(mainWorktree, registryDir);
   const target = resolve(worktreePath);
@@ -198,7 +198,7 @@ export function liveWorktrees(
 }
 
 export function readDevServers(mainWorktree: string, registryDir: string): DevServersData {
-  const fp = filePath(mainWorktree, registryDir);
+  const fp = devServersFilePath(mainWorktree, registryDir);
   if (!existsSync(fp)) return { servers: [] };
   return JSON.parse(readFileSync(fp, "utf-8")) as DevServersData;
 }
@@ -208,12 +208,12 @@ export function writeDevServers(
   registryDir: string,
   data: DevServersData,
 ): void {
-  const fp = filePath(mainWorktree, registryDir);
+  const fp = devServersFilePath(mainWorktree, registryDir);
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   writeFileSync(fp, `${JSON.stringify(data, undefined, 2)}\n`);
 }
 
-function filePath(mainWorktree: string, registryDir: string): string {
+export function devServersFilePath(mainWorktree: string, registryDir: string): string {
   return join(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
 }
 
