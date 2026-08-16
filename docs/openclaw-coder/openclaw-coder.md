@@ -1,12 +1,12 @@
 # OpenClaw Coder
 
-Maintainer's map of the [`openclaw-coder/`](../openclaw-coder/) subproject: a shareable packaging of OpenClaw as an autonomous AI programmer. This doc is the entry point for working *on* the subproject in this repo. For using it, see its own [`README.md`](../openclaw-coder/README.md).
+Maintainer's map of the [`openclaw-coder/`](../../openclaw-coder/) subproject: a shareable packaging of OpenClaw as an autonomous AI programmer. This doc is the entry point for working *on* the subproject in this repo. For using it, see its own [`README.md`](../../openclaw-coder/README.md).
 
 ## Three layers
 
-1. **Reference workspace** — [`openclaw-coder/playbook-test/workspace/`](../openclaw-coder/playbook-test/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`), auto-loaded into the system prompt every turn. `TOOLS.md` stays empty — the next OpenClaw release drops it; its content lives in `AGENTS.md` under `## Tools`. It lives inside the harness (its only consumer) as the test fixture, and doubles as the worked example the consumer [`README`](../openclaw-coder/README.md) points at. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `openclaw-coder-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
-2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules ("tickets are labels", projects, `chat_id`, and the channel/thread split below); the language rule lives in the workspace `AGENTS.md`. The procedures live in [`references/`](../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the `alcode` CLI; the delegation manual is its `--openclaw-guide` output ([`packages/alcode/templates/openclaw-guide.md`](../packages/alcode/templates/openclaw-guide.md)), run via `exec` at delegation time. Nothing here is auto-loaded — files are read on demand (see context engineering below).
-3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts the workspace dir, the playbook skill, and the built `@paleo/alcode` package into the gateway, so edits to layers 1 and 2 (and the guide) iterate live without rebuilding the image.
+1. **Reference workspace** — [`openclaw-coder/playbook-test/workspace/`](../../openclaw-coder/playbook-test/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`), auto-loaded into the system prompt every turn. `TOOLS.md` stays empty — the next OpenClaw release drops it; its content lives in `AGENTS.md` under `## Tools`. It lives inside the harness (its only consumer) as the test fixture, and doubles as the worked example the consumer [`README`](../../openclaw-coder/README.md) points at. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `openclaw-coder-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
+2. **Operating-instructions playbook** — the [`openclaw-coder-playbook`](../../skills/openclaw-coder-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules ("tickets are labels", projects, `chat_id`, and the channel/thread split below); the language rule lives in the workspace `AGENTS.md`. The procedures live in [`references/`](../../skills/openclaw-coder-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`). Coding is delegated to the `alcode` CLI; the delegation manual is its `--openclaw-guide` output ([`packages/alcode/templates/openclaw-guide.md`](../../packages/alcode/templates/openclaw-guide.md)), run via `exec` at delegation time. Nothing here is auto-loaded — files are read on demand (see context engineering below).
+3. **Regression-test harness** — [`openclaw-coder/playbook-test/`](../../openclaw-coder/playbook-test/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts the workspace dir, the playbook skill, and the built `@paleo/alcode` package into the gateway, so edits to layers 1 and 2 (and the guide) iterate live without rebuilding the image.
 
 ## How a turn flows
 
@@ -32,11 +32,11 @@ The cost is one round-trip: a thread session activates on the user's next messag
 - [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) — what OpenClaw auto-loads, the surface/session/subagent model, Discord thread routing, debug env vars. Read this first before touching layer 1 or 2.
 - [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics for authoring layer 1 / layer 2 files so they survive a hot model and the test suite.
 - [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) — the harness internals (topology, Dockerfiles, mocked CLIs, scenarios, artifacts, judge).
-- [`openclaw-coder/playbook-test/README.md`](../openclaw-coder/playbook-test/README.md) — running the suite, the `ABC-0<S>N` ticket convention, the gotchas.
+- [`openclaw-coder/playbook-test/README.md`](../../openclaw-coder/playbook-test/README.md) — running the suite, the `ABC-0<S>N` ticket convention, the gotchas.
 
 ## Running the suite
 
-From [`openclaw-coder/playbook-test/`](../openclaw-coder/playbook-test/):
+From [`openclaw-coder/playbook-test/`](../../openclaw-coder/playbook-test/):
 
 ```sh
 cp .env.local.example .env.local   # fill ANTHROPIC_API_KEY
@@ -54,4 +54,4 @@ Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Me
 
 ## Deployment
 
-Running a coder against real Discord/Slack (not the mock channels) is documented for consumers in [`openclaw-coder/README.md`](../openclaw-coder/README.md) — the `openclaw.json` knobs and the `AGENTS.md` template. Creating the bot itself (tokens, scopes, Socket Mode) is standard OpenClaw; defer to OpenClaw's channel docs.
+Running a coder against real Discord/Slack (not the mock channels) is documented for consumers in [`openclaw-coder/README.md`](../../openclaw-coder/README.md) — the `openclaw.json` knobs and the `AGENTS.md` template. Creating the bot itself (tokens, scopes, Socket Mode) is standard OpenClaw; defer to OpenClaw's channel docs.

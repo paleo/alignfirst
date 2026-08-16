@@ -69,12 +69,15 @@ When the project also uses the workspace system, make the link a prerequisite of
 
    ```js
    if (isMainWorktree) {
+     // `.plans` must be usable
      execFileSync("npx", ["--no", "plans-share", "check"], {
        cwd: currentWorktree,
        stdio: "inherit",
      });
    }
    ```
+
+   Copy the code, not the explanations below: they belong here, and the check prints its own guidance when it fails.
 
    An unusable `.plans` then fails `workspace setup`, with the check's guidance on stderr. `check` accepts both a symlink into the clone and a plain local directory, so a contributor without access to the plans repository still sets up.
 
