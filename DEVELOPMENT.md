@@ -6,7 +6,7 @@ The everyday workflow of this repository. Run `npm run docmap` for the design do
 
 An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), published under `@paleo/*`. Each package lives in `packages/<name>`; the OpenClaw coder material lives in `openclaw-coder/`, the agent skills in `skills/`. Lint and format with Biome, test with Vitest, release with Changesets.
 
-## Worktrees
+## Workspaces
 
 A workspace is a git worktree plus its setup: `.plans` and `.local` symlinked to the main worktree, `.vscode/settings.json` copied, then `npm install` and `npm run build`. This repository has no dev server, so the tooling runs portless: nothing to start, no `dev` script.
 

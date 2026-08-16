@@ -32,6 +32,12 @@ Always ignore the `.plans`, `.local` and `.local-wt` directories when searching 
 
 *Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
+## Workspaces
+
+A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
+
+Run `npm run workspace -- --guide` for the full procedures.
+
 ## AlignFirst - Ticket ID, Commit Message, Branch Name
 
 _Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
