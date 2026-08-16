@@ -1,14 +1,36 @@
 # @paleo/workspace
 
+## 0.30.1
+
+### Patch Changes
+
+- 349915e: Improve `migrate-registry-0.30`.
+
 ## 0.30.0
 
 ### Minor Changes
 
-- fddf1e2: Breaking: new config shape and names in the wrapper scripts, and ports are now optional. To upgrade: rewrite `workspace.mjs` / `dev-server.mjs` (keep the old `portStep` value as `ports.perWorkspace`), run `workspace migrate-registry-0.30` from the main worktree — existing workspaces are preserved — then merge the base branch in each linked worktree.
+- fddf1e2: Breaking: new config shape and names in the wrapper scripts, and ports are now optional. Existing workspaces are preserved. To upgrade, follow the steps below.
 
-Prompt for your agent, with the `alignfirst-setup-guide` skill installed (`npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide`):
+Install or upgrade the `alignfirst-setup-guide` skill first — an older copy still teaches the previous config shape:
 
-> Use the _alignfirst-setup-guide_ skill. Rewrite our workspace wrapper scripts (`workspace.mjs` / `dev-server.mjs`) to the new `@paleo/workspace` config shape, keeping the old `basePort` as `ports.base` and the old `portStep` as `ports.perWorkspace` so every workspace keeps its ports. Then run `workspace migrate-registry-0.30` from the main worktree.
+```sh
+npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+```
+
+Then give this prompt to your agent:
+
+```md
+Upgrade `@paleo/workspace` to its latest version, then use the _alignfirst-setup-guide_ skill to rewrite our workspace wrapper scripts (`workspace.mjs` / `dev-server.mjs`) to the new config shape. Keep the old `basePort` as `ports.base` and the old `portStep` as `ports.perWorkspace`, so every workspace keeps its ports.
+
+Our infrastructure names may be derived from the slot number, which no longer exists. Where that is the case, derive them from the workspace name instead, and tear down the old-named containers and volumes before migrating — after the migration their names can no longer be reconstructed. Each surviving linked worktree also keeps those old names inside its gitignored config, which merging and reinstalling does not regenerate: run `workspace setup --force` in each one.
+
+Then run `workspace migrate-registry-0.30` from the main worktree, and follow the instructions it prints.
+
+Commit, then verify the whole lifecycle on a throwaway branch: `workspace setup -c <branch>`, check that the linked worktree's gitignored files carry its own ports, start its dev server, and finish with `workspace remove`.
+```
+
+You can delete the `alignfirst-setup-guide` skill as soon as it's done.
 
 ## 0.29.0
 

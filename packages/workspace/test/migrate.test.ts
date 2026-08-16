@@ -189,7 +189,10 @@ describe("runMigrate", () => {
 
   it("warns about slot-named infrastructure only when purgeInfrastructure is declared", () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    expect(migrate(true)).toContain("no longer be derived");
+    const output = migrate(true);
+    expect(output).toContain("no longer be derived");
+    // Merging the base branch leaves the old names in the worktree's gitignored config.
+    expect(output).toContain("setup --force");
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
     rmSync(join(mainWorktree, registryDir, "workspaces.json"));
     expect(migrate(false)).not.toContain("no longer be derived");

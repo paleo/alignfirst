@@ -235,3 +235,4 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPMENT.md` too on a bot-driven project), the conventions, and the project-specific facts.
 - [ ] **Check [the bot contract](#the-bot-contract)** on a bot-driven project. Automatic with `@paleo/workspace`; a matter of verification in a reimplementation.
+- [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. A wrapper that merely loads proves nothing.

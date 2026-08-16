@@ -100,7 +100,7 @@ Conversion rules:
 - With `ports` configured, the block index is derived from the old slot (`(slot − base) / perWorkspace`). A slot that does not fit the scheme migrates without an index — the stale-entry state, fixed by `workspace setup --force` in that worktree.
 - `dev-servers.json` entries are rekeyed from `slot` to the workspace name; running PIDs stay valid.
 
-The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be renamed or removed manually.
+The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be removed manually, and that each surviving worktree needs `workspace setup --force`: its gitignored config still names them, and merging the base branch regenerates nothing.
 
 A `slots.json` present next to an existing `workspaces.json` was re-created after the migration, by a workspace command run on a branch that still uses the old package. `migrate-registry-0.30` then refuses and asks for a manual delete, instead of guessing which registry is authoritative.
 
