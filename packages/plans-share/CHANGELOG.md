@@ -1,5 +1,11 @@
 # @paleo/plans-share
 
+## 0.6.0
+
+### Minor Changes
+
+- `check` now reports the mode of `.plans` instead of requiring a plans repository. It exits 1 only when `.plans` is unusable. Breaking: `check` used to fail on a local `.plans`.
+
 ## 0.5.0
 
 ### Minor Changes

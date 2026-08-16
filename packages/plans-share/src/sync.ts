@@ -1,15 +1,14 @@
-import { existsSync, lstatSync } from "node:fs";
-import { join } from "node:path";
-import { CliError, type CliContext } from "./context.js";
+import type { CliContext } from "./context.js";
 import { git, gitOutput, gitSucceeds } from "./git.js";
-import { checkPlansIsDirectory, plansRepoToplevel } from "./plans-path.js";
+import { resolvePlansMode } from "./plans-path.js";
 
 export function runSync(ctx: CliContext): void {
-  const plansDir = resolvePlansDir(ctx);
-  if (plansDir === undefined) {
+  const mode = resolvePlansMode(ctx);
+  if (mode.kind === "local") {
     ctx.stdout.write("(local plans mode, nothing to sync)\n");
     return;
   }
+  const plansDir = mode.repoToplevel;
   // A fresh clone of an empty plans repository has no HEAD yet: nothing to rebase onto.
   if (hasHead(plansDir)) git(plansDir, "pull", "--rebase", "--autostash");
   git(plansDir, "add", "-A");
@@ -21,27 +20,6 @@ export function runSync(ctx: CliContext): void {
   } else {
     ctx.stdout.write("Plans synchronized: nothing to send.\n");
   }
-}
-
-/** `undefined` in local plans mode: `.plans` is a plain directory of the product repository. */
-function resolvePlansDir(ctx: CliContext): string | undefined {
-  const plansPath = join(ctx.cwd, ".plans");
-  if (!existsSync(plansPath)) {
-    if (isBrokenSymlink(plansPath))
-      throw new CliError(
-        "The .plans symlink is broken. Re-run the plans:setup script with the clone location.",
-      );
-    throw new CliError("No .plans directory here. Run this command from a worktree root.");
-  }
-  checkPlansIsDirectory(plansPath);
-  const plansToplevel = plansRepoToplevel(plansPath);
-  const repoToplevel = gitOutput(ctx.cwd, "rev-parse", "--show-toplevel");
-  if (plansToplevel === repoToplevel) return;
-  return plansToplevel;
-}
-
-function isBrokenSymlink(path: string): boolean {
-  return lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
 }
 
 function hasHead(dir: string): boolean {

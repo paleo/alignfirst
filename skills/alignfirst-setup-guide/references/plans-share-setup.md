@@ -18,6 +18,8 @@ myteam-plans/
 
 On each machine, the repository is cloned once, wherever the user wants (typically next to the other repos). In each project, `.plans` in the main worktree is a symlink to the project's folder inside the clone. Plans never enter the product repository. Linked worktrees created by the workspace system keep pointing at the main worktree's `.plans`; the symlink chain resolves on its own.
 
+A contributor without access to the plans repository leaves `.plans` as a plain directory. `sync` then reports local plans mode and exits successfully, and the skills work unchanged. Run `plans-share check` to report which mode a project is in.
+
 Plan history has no value, so the plans repository only receives synchronization commits (`sync`). The instruction file asks the agent to sync after each change in `.plans/`; a forgotten sync means a teammate sees a stale version, never pollution. The skills themselves never trigger a sync and never detect which mode they run in.
 
 To keep `.plans/` small, finished tickets are moved to `_archives/` inside the project folder — by anyone, at any time (e.g. `mv .plans/250 .plans/_archives/`).
@@ -61,14 +63,21 @@ Then publish any migrated content: `npm run plans:sync`.
 
 When the project also uses the workspace system, make the link a prerequisite of the local environment:
 
-1. In the `preSetup` callback of `workspace.mjs`, add the check — the clone location stays the user's choice, nothing is hardcoded:
+1. In the `preSetup` callback of `workspace.mjs`, add the check. The clone location stays the user's choice, nothing is hardcoded:
 
    ```js
    if (isMainWorktree) {
-     execFileSync("npx", ["plans-share", "check"], { cwd: currentWorktree, stdio: "inherit" });
+     execFileSync("npx", ["--no", "plans-share", "check"], {
+       cwd: currentWorktree,
+       stdio: "inherit",
+     });
    }
    ```
 
-   A missing or broken link then fails `workspace setup`, with the check's guidance on stderr.
+   An unusable `.plans` then fails `workspace setup`, with the check's guidance on stderr. `check` accepts both a symlink into the clone and a plain local directory, so a contributor without access to the plans repository still sets up.
+
+   Keep the `isMainWorktree` gate: `preSetup` runs before the kernel symlinks the shared directories, so a fresh linked worktree has no `.plans` yet.
+
+   Pass `--no` to keep npx off the registry. The bin is `plans-share`, while the package is `@paleo/plans-share`.
 
 2. Document the new-machine steps — clone the plans repository, then `npm run plans:setup -- <clone-location>` — in `README.md` (the entry point that owns fresh-clone setup), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.

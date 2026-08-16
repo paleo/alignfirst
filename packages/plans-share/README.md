@@ -55,11 +55,20 @@ npm run plans:sync
 
 A project may keep `.plans` as a plain local directory. `sync` then reports local plans mode and exits successfully.
 
-To verify that `.plans` is linked to a team plans repository:
+To verify that `.plans` is usable and report its mode:
 
 ```sh
-npx plans-share check
+npx --no plans-share check
 ```
+
+Two modes exit 0:
+
+- **shared** — a symlink into the plans repository clone.
+- **local** — a plain directory. Synchronization is disabled.
+
+It exits 1 when `.plans` is unusable: missing, a broken symlink, not a directory, or a symlink leading outside any git repository.
+
+Pass `--no` to keep npx off the registry. The bin is `plans-share`, while the package is `@paleo/plans-share`.
 
 ## Archiving
 

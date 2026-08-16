@@ -62,6 +62,12 @@ function execGit(dir: string, ...args: string[]): string {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf-8" }).trim();
 }
 
+function addWorktree(fixture: Fixture): string {
+  const worktree = join(fixture.root, "product-feat");
+  execGit(fixture.product, "worktree", "add", "--quiet", worktree, "-b", "feat");
+  return worktree;
+}
+
 interface RunResult {
   code: number;
   stdout: string;
@@ -189,12 +195,37 @@ describe("plans-share check", () => {
     expect(result.stderr).toContain("Clone the team plans repository");
   });
 
-  it("fails when .plans is a plain directory", () => {
+  it("reports local plans mode when .plans is a plain directory", () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.product, ".plans"));
     const result = run(fixture.product, "check");
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("not linked");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("local plans mode");
+  });
+
+  it("reports local plans mode identically from a linked worktree", () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const worktree = join(fixture.root, "product-feat");
+    execGit(fixture.product, "worktree", "add", "--quiet", worktree, "-b", "feat");
+    symlinkSync(join("..", "product", ".plans"), join(worktree, ".plans"));
+    const result = run(worktree, "check");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("local plans mode");
+  });
+
+  it("reports shared mode from a linked worktree", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const worktree = join(fixture.root, "product-feat");
+    execGit(fixture.product, "worktree", "add", "--quiet", worktree, "-b", "feat");
+    symlinkSync(join("..", "product", ".plans"), join(worktree, ".plans"));
+    const result = run(worktree, "check");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("team plans repository");
   });
 
   it("fails when the .plans symlink is broken", () => {
@@ -214,6 +245,8 @@ describe("plans-share check", () => {
     expect(result.stderr).toContain("not a directory");
   });
 
+  // Local mode is a plain directory, so a symlink out of any repository means the clone moved.
+  // It must stay an error.
   it("fails when .plans links to a directory outside any git repository", () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.root, "plain"));
@@ -221,6 +254,14 @@ describe("plans-share check", () => {
     const result = run(fixture.product, "check");
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("outside any git repository");
+  });
+
+  it("reports shared mode when .plans links to another repository", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = run(fixture.product, "check");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("team plans repository");
   });
 });
 
@@ -271,6 +312,34 @@ describe("plans-share sync", () => {
     expect(result.stderr).toBe("");
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("(local plans mode, nothing to sync)");
+  });
+
+  // A linked worktree has its own toplevel. Comparing against it would read this local `.plans`
+  // as shared, and sync would commit into the product repository.
+  it("is a no-op in local plans mode from a linked worktree", () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const worktree = addWorktree(fixture);
+    symlinkSync(join("..", "product", ".plans"), join(worktree, ".plans"));
+    const head = execGit(fixture.product, "rev-parse", "HEAD");
+    const result = run(worktree, "sync");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("(local plans mode, nothing to sync)");
+    expect(execGit(fixture.product, "rev-parse", "HEAD")).toBe(head);
+  });
+
+  // The worktree owns this .plans, so its toplevel is the worktree itself, never the main one.
+  it("is a no-op for a plain .plans belonging to a linked worktree", () => {
+    const fixture = makeFixture();
+    const worktree = addWorktree(fixture);
+    mkdirSync(join(worktree, ".plans"));
+    const head = execGit(worktree, "rev-parse", "HEAD");
+    const result = run(worktree, "sync");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("(local plans mode, nothing to sync)");
+    expect(execGit(worktree, "rev-parse", "HEAD")).toBe(head);
   });
 
   it("fails when .plans is a regular file", () => {
