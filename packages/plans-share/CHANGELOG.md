@@ -1,5 +1,11 @@
 # @paleo/plans-share
 
+## 0.5.0
+
+### Minor Changes
+
+- b40afe9: Local plans mode: `sync` now succeeds when `.plans` is a plain local directory.
+
 ## 0.4.0
 
 ### Minor Changes
