@@ -264,12 +264,13 @@ describe("plans-share sync", () => {
     expect(remoteFiles).toContain("myproj/note.md");
   });
 
-  it("fails when .plans is not linked to a plans repository", () => {
+  it("is a no-op in local plans mode", () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.product, ".plans"));
     const result = run(fixture.product, "sync");
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("not linked");
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("(local plans mode, nothing to sync)");
   });
 
   it("fails when .plans is a regular file", () => {

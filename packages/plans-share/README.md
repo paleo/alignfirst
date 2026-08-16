@@ -53,6 +53,8 @@ To synchronize, from any worktree:
 npm run plans:sync
 ```
 
+A project may keep `.plans` as a plain local directory. `sync` then reports local plans mode and exits successfully.
+
 To verify that `.plans` is linked to a team plans repository:
 
 ```sh
