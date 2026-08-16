@@ -13,7 +13,14 @@ const PNPM: PackageManagerCommands = {
   dev: { base: "pnpm dev", withArgs: "pnpm dev" },
 };
 
-const LAYOUT: GuideLayout = { runtimeDir: ".local-wt", sharedDirs: [".local", ".plans"] };
+const LAYOUT: GuideLayout = {
+  runtimeDir: ".local-wt",
+  sharedDirs: [".local", ".plans"],
+  hasDevServer: true,
+  hasPorts: true,
+};
+
+const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false, hasPorts: false };
 
 describe("renderGuide", () => {
   it("renders npm commands with the `--` separator for forwarded args", () => {
@@ -39,7 +46,7 @@ describe("renderGuide", () => {
   });
 
   it("states when no dirs are shared across worktrees", () => {
-    const guide = renderGuide(NPM, { runtimeDir: ".local-wt", sharedDirs: [] });
+    const guide = renderGuide(NPM, { ...LAYOUT, sharedDirs: [] });
     expect(guide).toContain("No dirs are shared across worktrees.");
     expect(guide).not.toContain("`.plans/`");
   });
@@ -53,5 +60,30 @@ describe("renderGuide", () => {
       .map((line) => line.indexOf(" # "));
     expect(commentColumns.length).toBeGreaterThan(1);
     expect(new Set(commentColumns).size).toBe(1);
+  });
+
+  it("documents ports and the dev server when both are configured", () => {
+    const guide = renderGuide(NPM, LAYOUT);
+    expect(guide).toContain("dedicated ports");
+    expect(guide).toContain("## Dev server");
+    expect(guide).toContain("**Concurrent cap.**");
+    expect(guide).toContain("Driving the dev server in another worktree");
+  });
+
+  it("drops the port and dev-server material in setup-only mode", () => {
+    const guide = renderGuide(NPM, SETUP_ONLY);
+    expect(guide).not.toContain("dedicated ports");
+    expect(guide).not.toContain("## Dev server");
+    expect(guide).not.toContain("**Concurrent cap.**");
+    expect(guide).not.toContain("npm run dev");
+    expect(guide).toContain("`setup` creates the worktree (branch, symlinks, config files)");
+  });
+
+  it("leaves no template marker and no blank-line gap in either mode", () => {
+    for (const layout of [LAYOUT, SETUP_ONLY]) {
+      const guide = renderGuide(NPM, layout);
+      expect(guide).not.toContain("{{");
+      expect(guide).not.toMatch(/\n\n\n/);
+    }
   });
 });

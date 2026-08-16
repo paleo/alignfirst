@@ -16,10 +16,14 @@ export interface SpawnServer {
   name: string;
   /** Command and arguments passed to `child_process.spawn`. */
   exec: { command: string; args: string[] };
-  /** Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile`. */
-  port: number;
+  /**
+   * Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile`.
+   * Omit it when the process listens on no port: conflict detection, port sweeping and the summary
+   * URL are then skipped for this server.
+   */
+  port?: number;
   /** Returns `true` once the log content indicates the server is ready. */
-  detectSuccess: (logContent: string) => boolean;
+  detectReady: (logContent: string) => boolean;
   /**
    * Returns a non-empty marker string when the log content indicates a fatal error, or `false`.
    * When omitted, `helpers.detectCommonJsError` is used as a default. To disable detection,

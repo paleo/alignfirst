@@ -26,6 +26,8 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 When _OpenClaw_ uses AlignFirst, we obtain a teammate, an AI partner more than an AI agent. See [openclaw-coder/README.md](openclaw-coder/README.md).
 
+---
+
 ## Setup with your agent
 
 Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
@@ -42,3 +44,14 @@ Use your alignfirst-setup-guide skill. What can I set up in this project?
 
 At the end, feel free to uninstall the skill. It won't be used by your project anymore.
 
+---
+
+## Contribute
+
+After a fresh clone:
+
+```sh
+npm i
+npm run build --workspace @paleo/workspace
+npm run workspace -- setup
+```

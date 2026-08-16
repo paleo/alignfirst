@@ -11,18 +11,20 @@ import {
   detectPortConflicts,
   findPortHolder,
   isPidOurs,
+  sweepStalePorts,
   waitForPortsFree,
 } from "../src/port-holder.js";
 import type { SpawnServer } from "../src/server-descriptor.js";
 
-function spawnServer(name: string, port: number): SpawnServer {
-  return {
+function spawnServer(name: string, port?: number): SpawnServer {
+  const server: SpawnServer = {
     kind: "spawn",
     name,
     exec: { command: "noop", args: [] },
-    port,
-    detectSuccess: () => true,
+    detectReady: () => true,
   };
+  if (port !== undefined) server.port = port;
+  return server;
 }
 
 const isUnix = platform() !== "win32";
@@ -160,6 +162,18 @@ describe.skipIf(!isUnix)("detectPortConflicts", () => {
       realpathSync(process.cwd()),
     );
     expect(conflicts).toEqual([]);
+  });
+
+  it("skips spawn servers that declare no port", async () => {
+    const conflicts = await detectPortConflicts(
+      [spawnServer("worker")],
+      realpathSync(process.cwd()),
+    );
+    expect(conflicts).toEqual([]);
+  });
+
+  it("sweeps nothing for a spawn server without a port", async () => {
+    await expect(sweepStalePorts([spawnServer("worker")], process.cwd())).resolves.toBeUndefined();
   });
 });
 

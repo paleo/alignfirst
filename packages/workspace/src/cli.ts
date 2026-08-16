@@ -8,9 +8,8 @@ export type WorkspaceCommand =
       branch?: string;
       newBranch: boolean;
       from?: string;
-      slot?: string;
       force: boolean;
-      go: boolean;
+      enter: boolean;
       dedupe: boolean;
       detached: boolean;
     }
@@ -19,8 +18,8 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "finalize"; slot: string; force: boolean }
-  | { kind: "migrate"; oldRegistryDir: string }
+  | { kind: "migrate" }
+  | { kind: "finalize"; force: boolean }
   | { kind: "guide" }
   | { kind: "help" }
   | { kind: "version" };
@@ -29,8 +28,6 @@ export type WorkspaceCommand =
 export interface WorkspaceSelector {
   /** Path to the target worktree, or just its directory basename. */
   dir?: string;
-  /** The target slot's primary port. */
-  slot?: string;
 }
 
 export interface ParsedWorkspaceArgs {
@@ -72,10 +69,10 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
+    case "migrate-registry-0.30":
+      return parseMigrate(tokens);
     case "__finalize":
       return parseFinalize(tokens);
-    case "migrate-0.16":
-      return parseMigrate(tokens);
     default:
       throw new ConfigError(`Unknown command "${subcommand}". Run \`workspace --help\`.`);
   }
@@ -87,9 +84,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
-      slot: { type: "string", short: "s" },
       force: { type: "boolean" },
-      go: { type: "boolean" },
+      enter: { type: "boolean" },
       dedupe: { type: "boolean" },
       detached: { type: "boolean", short: "d" },
       verbose: { type: "boolean" },
@@ -99,7 +95,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   });
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
-  const go = values.go ?? false;
+  const enter = values.enter ?? false;
   const dedupe = values.dedupe ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup -c <branch>` requires a branch name.");
@@ -110,8 +106,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   if (dedupe && !newBranch) {
     throw new ConfigError("`--dedupe` requires `-c`/`--new-branch`.");
   }
-  if (go && branch === undefined) {
-    throw new ConfigError("`--go` requires a branch (the worktree to enter).");
+  if (enter && branch === undefined) {
+    throw new ConfigError("`--enter` requires a branch (the worktree to enter).");
   }
   return {
     command: {
@@ -119,9 +115,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       branch,
       newBranch,
       from: values.from,
-      slot: values.slot,
       force: values.force ?? false,
-      go,
+      enter,
       dedupe,
       detached: values.detached ?? false,
     },
@@ -133,7 +128,6 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
-      slot: { type: "string", short: "s" },
       force: { type: "boolean" },
       verbose: { type: "boolean" },
     },
@@ -144,7 +138,7 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
   return {
     command: {
       kind: "remove",
-      selector: buildSelector(dir, values.slot, "remove"),
+      selector: { dir },
       force: values.force ?? false,
     },
     verbose: values.verbose ?? false,
@@ -176,16 +170,13 @@ function parsePrune(tokens: string[]): ParsedWorkspaceArgs {
 function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: {
-      slot: { type: "string", short: "s" },
-      verbose: { type: "boolean" },
-    },
+    options: { verbose: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   const dir = takeOptionalPositional(positionals, "status");
   return {
-    command: { kind: "status", selector: buildSelector(dir, values.slot, "status") },
+    command: { kind: "status", selector: { dir } },
     verbose: values.verbose ?? false,
   };
 }
@@ -193,29 +184,15 @@ function parseStatus(tokens: string[]): ParsedWorkspaceArgs {
 function parseWait(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: {
-      slot: { type: "string", short: "s" },
-      verbose: { type: "boolean" },
-    },
+    options: { verbose: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   const dir = takeOptionalPositional(positionals, "wait");
   return {
-    command: { kind: "wait", selector: buildSelector(dir, values.slot, "wait") },
+    command: { kind: "wait", selector: { dir } },
     verbose: values.verbose ?? false,
   };
-}
-
-function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
-  const { values, positionals } = parseArgs({
-    args: tokens,
-    options: { force: { type: "boolean" } },
-    allowPositionals: true,
-    strict: true,
-  });
-  const slot = takeRequiredPositional(positionals, "__finalize", "slot");
-  return { command: { kind: "finalize", slot, force: values.force ?? false }, verbose: false };
 }
 
 function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
@@ -225,31 +202,24 @@ function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  const oldRegistryDir = takeRequiredPositional(positionals, "migrate-0.16", "old-registry-dir");
-  return { command: { kind: "migrate", oldRegistryDir }, verbose: values.verbose ?? false };
+  rejectPositionals(positionals, "migrate-registry-0.30");
+  return { command: { kind: "migrate" }, verbose: values.verbose ?? false };
 }
 
-function buildSelector(
-  dir: string | undefined,
-  slot: string | undefined,
-  command: string,
-): WorkspaceSelector {
-  if (dir !== undefined && slot !== undefined) {
-    throw new ConfigError(`\`workspace ${command}\` accepts a directory or --slot, not both.`);
-  }
-  return { dir, slot };
+function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { force: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectPositionals(positionals, "__finalize");
+  return { command: { kind: "finalize", force: values.force ?? false }, verbose: false };
 }
 
 function takeOptionalPositional(positionals: string[], command: string): string | undefined {
   if (positionals.length > 1) {
     throw new ConfigError(`\`workspace ${command}\` accepts at most one positional argument.`);
-  }
-  return positionals[0];
-}
-
-function takeRequiredPositional(positionals: string[], command: string, label: string): string {
-  if (positionals.length !== 1) {
-    throw new ConfigError(`\`workspace ${command}\` requires exactly one ${label}.`);
   }
   return positionals[0];
 }
@@ -265,10 +235,11 @@ export function printWorkspaceHelp(): void {
     [
       "Usage: workspace <command> [options]",
       "",
-      "Manage workspaces: a git worktree plus its own dev setup (ports, config, database, dev server).",
+      "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
+      "ports, database, dev server).",
       "",
       "Commands:",
-      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [-s|--slot <port>] [--force] [-d|--detached] [--go]",
+      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
@@ -278,21 +249,24 @@ export function printWorkspaceHelp(): void {
       "      Blocks until setup reaches READY (or FAILED), showing a progress ticker.",
       "      -d|--detached: return once the worktree exists; setup continues in the background,",
       "      join it with `wait`.",
-      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
+      "      With --enter, drop into an interactive shell in the new worktree (exit to return);",
       "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
-      "  remove [<dir>] [-s|--slot <port>] [--force]",
-      "      Remove a workspace, selected by directory (path or basename) or --slot;",
+      "  remove [<dir>] [--force]",
+      "      Remove a workspace, selected by directory (path or basename);",
       "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
       "  list",
-      "      List all registered workspaces (slot, status, branch, path, created).",
+      "      List all registered workspaces (name, status, branch, path, created).",
       "  prune",
       "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
       "      and drop their registry entries, then run `git worktree prune`.",
-      "  status [<dir>] [-s|--slot <port>]",
-      "      Print a workspace summary (ports, branch, readiness, dev-server).",
-      "      Selected by directory (path or basename) or --slot; the current worktree when omitted.",
-      "  wait [<dir>] [-s|--slot <port>]",
+      "  status [<dir>]",
+      "      Print a workspace summary (branch, readiness, ports, dev-server).",
+      "      Selected by directory (path or basename); the current worktree when omitted.",
+      "  wait [<dir>]",
       "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
+      "  migrate-registry-0.30",
+      "      Convert an old registry (slots.json) to workspaces.json, in place.",
+      "      Run it once from the main worktree after upgrading the package.",
       "",
       "Global options:",
       "      --verbose       Show intermediate output.",

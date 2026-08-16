@@ -15,8 +15,13 @@ export interface PortHolder {
 }
 
 export type PortConflict =
-  | { kind: "ours"; server: SpawnServer; holder: PortHolder }
-  | { kind: "foreign"; server: SpawnServer; holder?: PortHolder };
+  | { kind: "ours"; server: ListeningSpawnServer; holder: PortHolder }
+  | { kind: "foreign"; server: ListeningSpawnServer; holder?: PortHolder };
+
+/** A spawn server that declares a port — the only kind port checks apply to. */
+export interface ListeningSpawnServer extends SpawnServer {
+  port: number;
+}
 
 export function canonicalCwd(cwd: string): string {
   try {
@@ -99,11 +104,13 @@ export async function sweepStalePorts(servers: ServerDescriptor[], cwd: string):
   }
 }
 
-function spawnServersOf(servers: ServerDescriptor[]): SpawnServer[] {
-  return servers.filter((s): s is SpawnServer => s.kind === "spawn");
+function spawnServersOf(servers: ServerDescriptor[]): ListeningSpawnServer[] {
+  return servers.filter(
+    (s): s is ListeningSpawnServer => s.kind === "spawn" && s.port !== undefined,
+  );
 }
 
-async function sweepOnePort(server: SpawnServer, ourCanonicalCwd: string): Promise<void> {
+async function sweepOnePort(server: ListeningSpawnServer, ourCanonicalCwd: string): Promise<void> {
   const holder = findPortHolder(server.port);
   if (holder === undefined) return;
   if (isPidOurs(holder, ourCanonicalCwd)) {

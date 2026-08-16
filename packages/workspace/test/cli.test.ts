@@ -23,10 +23,8 @@ describe("parseWorkspaceArgs", () => {
     const { command, verbose } = parseWorkspaceArgs([
       "setup",
       "feat/42",
-      "--slot",
-      "8110",
       "--force",
-      "--go",
+      "--enter",
       "--verbose",
     ]);
     expect(command).toEqual({
@@ -34,13 +32,16 @@ describe("parseWorkspaceArgs", () => {
       branch: "feat/42",
       newBranch: false,
       from: undefined,
-      slot: "8110",
       force: true,
-      go: true,
+      enter: true,
       dedupe: false,
       detached: false,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("rejects the removed `--slot` flag on setup", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--slot", "8110"])).toThrow(ConfigError);
   });
 
   it("parses `-d` / `--detached`", () => {
@@ -109,13 +110,18 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["setup", "-c"])).toThrow(ConfigError);
   });
 
-  it("parses `setup <branch> -c --go`", () => {
-    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--go"]);
-    expect(command).toMatchObject({ kind: "setup", branch: "feat/42", newBranch: true, go: true });
+  it("parses `setup <branch> -c --enter`", () => {
+    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--enter"]);
+    expect(command).toMatchObject({
+      kind: "setup",
+      branch: "feat/42",
+      newBranch: true,
+      enter: true,
+    });
   });
 
-  it("rejects `--go` without a branch", () => {
-    expect(() => parseWorkspaceArgs(["setup", "--go"])).toThrow(ConfigError);
+  it("rejects `--enter` without a branch", () => {
+    expect(() => parseWorkspaceArgs(["setup", "--enter"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown flag on setup", () => {
@@ -128,33 +134,16 @@ describe("parseWorkspaceArgs", () => {
 
   it("parses `remove` without a selector", () => {
     const { command } = parseWorkspaceArgs(["remove"]);
-    expect(command).toEqual({
-      kind: "remove",
-      selector: { dir: undefined, slot: undefined },
-      force: false,
-    });
+    expect(command).toEqual({ kind: "remove", selector: { dir: undefined }, force: false });
   });
 
   it("parses `remove <dir> --force`", () => {
     const { command } = parseWorkspaceArgs(["remove", "../my-wt", "--force"]);
-    expect(command).toEqual({
-      kind: "remove",
-      selector: { dir: "../my-wt", slot: undefined },
-      force: true,
-    });
+    expect(command).toEqual({ kind: "remove", selector: { dir: "../my-wt" }, force: true });
   });
 
-  it("parses `remove --slot <port>`", () => {
-    const { command } = parseWorkspaceArgs(["remove", "--slot", "8110"]);
-    expect(command).toEqual({
-      kind: "remove",
-      selector: { dir: undefined, slot: "8110" },
-      force: false,
-    });
-  });
-
-  it("rejects `remove <dir> --slot` together", () => {
-    expect(() => parseWorkspaceArgs(["remove", "../my-wt", "--slot", "8110"])).toThrow(ConfigError);
+  it("rejects the removed `--slot` flag on remove", () => {
+    expect(() => parseWorkspaceArgs(["remove", "--slot", "8110"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `--no-remote-check` flag", () => {
@@ -178,39 +167,52 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["prune", "feat/42"])).toThrow(ConfigError);
   });
 
-  it("parses `status`, `status <dir>` and `status --slot`", () => {
+  it("parses `status` and `status <dir>`", () => {
     expect(parseWorkspaceArgs(["status"]).command).toEqual({
       kind: "status",
-      selector: { dir: undefined, slot: undefined },
+      selector: { dir: undefined },
     });
     expect(parseWorkspaceArgs(["status", "../my-wt"]).command).toEqual({
       kind: "status",
-      selector: { dir: "../my-wt", slot: undefined },
-    });
-    expect(parseWorkspaceArgs(["status", "--slot", "8110"]).command).toEqual({
-      kind: "status",
-      selector: { dir: undefined, slot: "8110" },
+      selector: { dir: "../my-wt" },
     });
   });
 
-  it("rejects `status <dir> --slot` together", () => {
-    expect(() => parseWorkspaceArgs(["status", "../my-wt", "--slot", "8110"])).toThrow(ConfigError);
+  it("rejects the removed `--slot` flag on status", () => {
+    expect(() => parseWorkspaceArgs(["status", "--slot", "8110"])).toThrow(ConfigError);
   });
 
   it("parses `wait`", () => {
     expect(parseWorkspaceArgs(["wait"]).command).toEqual({
       kind: "wait",
-      selector: { dir: undefined, slot: undefined },
+      selector: { dir: undefined },
     });
   });
 
-  it("parses `migrate-0.16 <old-registry-dir>`", () => {
-    const { command } = parseWorkspaceArgs(["migrate-0.16", ".local/_workspace-registry"]);
-    expect(command).toEqual({ kind: "migrate", oldRegistryDir: ".local/_workspace-registry" });
+  it("parses `__finalize` without a positional", () => {
+    expect(parseWorkspaceArgs(["__finalize"]).command).toEqual({ kind: "finalize", force: false });
+    expect(parseWorkspaceArgs(["__finalize", "--force"]).command).toEqual({
+      kind: "finalize",
+      force: true,
+    });
   });
 
-  it("rejects `migrate-0.16` without a positional", () => {
-    expect(() => parseWorkspaceArgs(["migrate-0.16"])).toThrow(ConfigError);
+  it("rejects a positional on `__finalize`", () => {
+    expect(() => parseWorkspaceArgs(["__finalize", "8110"])).toThrow(ConfigError);
+  });
+
+  it("parses `migrate-registry-0.30`", () => {
+    expect(parseWorkspaceArgs(["migrate-registry-0.30"]).command).toEqual({ kind: "migrate" });
+  });
+
+  it("rejects a positional on `migrate-registry-0.30`", () => {
+    expect(() => parseWorkspaceArgs(["migrate-registry-0.30", ".local/registry"])).toThrow(
+      ConfigError,
+    );
+  });
+
+  it("rejects the removed `migrate-0.16` command", () => {
+    expect(() => parseWorkspaceArgs(["migrate-0.16", ".local/registry"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown subcommand", () => {

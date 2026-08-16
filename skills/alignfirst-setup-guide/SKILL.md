@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.23.0"
+  version: "0.24.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -24,13 +24,13 @@ Pick any combination. Each has its own reference; this skill investigates the re
 
 A project has up to three Markdown entry points, one per reader:
 
-- `README.md` — the human coder.
+- `README.md` — the human coder, and the one-time setup of a fresh clone (machine installation, plans repository link, main-worktree bootstrap).
 - `AGENTS.md` (or `CLAUDE.md`) — the coding agent (Claude Code, alcode). The Step 3 references write their agent instructions here.
-- `DEVELOPMENT.md` — the AI coder: an autonomous bot.
+- `DEVELOPMENT.md` — the AI coder: an autonomous bot. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`.
 
 The rest of the documentation (`docs/`, served by docmap) addresses everybody.
 
-A project is **bot-ready** when the alignfirst skills section in `AGENTS.md` is written, and `DEVELOPMENT.md` covers: the stack, the layout, the daily commands, the conventions (ticket, branch, commit), a workspaces section pointing at the `workspace --guide` command, and how to browse the docs (docmap).
+A project is **bot-ready** when the workspace system is installed, the alignfirst skills section in `AGENTS.md` is written, and `DEVELOPMENT.md` covers: the stack, the layout, the daily commands, the conventions (ticket, branch, commit), a workspaces section pointing at the `workspace --guide` command, and how to browse the docs (docmap).
 
 Follow these four steps in order. Do not skip ahead: complete each before starting the next.
 
@@ -49,7 +49,9 @@ Then detect each tool's existing footprint:
 
 ## Step 2 — Discuss
 
-Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an OpenClaw coder) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files).
+Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an OpenClaw coder) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files). The workspace system is mandatory there — the bot drives every worktree through it, and has no hand-made fallback (see [the bot contract](references/workspace-setup.md#the-bot-contract)).
+
+A project without a dev server still benefits from the workspace system: recommend its portless subset — no `ports` group, no `dev-server.mjs` — which keeps the worktree lifecycle, shared-directory symlinks, config-file seeding, and orphan healing (see [portless mode](references/workspace-setup.md#portless-mode)).
 
 ## Step 3 — Set up
 

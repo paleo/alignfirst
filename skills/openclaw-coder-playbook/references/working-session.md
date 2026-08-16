@@ -87,7 +87,7 @@ Running the dev-server from the main worktree is fine.
 
 Editing the codebase must always happen on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
 
-Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands (`workspace --guide`) — `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server slots.
+Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPMENT.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
 ### Updating a branch with the base branch
 
@@ -190,7 +190,7 @@ After creating the MR/PR (via `alcode`):
 
 When the user asks to tear down a project workspace (or worktree) from inside a thread:
 
-1. Have alcode remove the *workspace*. It stops the dev server, tears down Docker, frees the port slot, and deletes the worktree.
+1. Have alcode remove the *workspace*. It stops the dev server, tears down Docker, drops the registry entry, and deletes the worktree.
 2. Confirm the teardown to the user.
 3. Reset the thread session.
 

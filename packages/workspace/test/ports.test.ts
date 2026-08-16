@@ -1,80 +1,126 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  allPorts,
-  defaultComputePorts,
-  isReservedMainSlot,
-  isValidPort,
-  resolvePortScheme,
-} from "../src/ports.js";
+import { ConfigError } from "../src/errors.js";
+import { firstPortOf, type PortsConfig, portsForIndex, resolvePortsConfig } from "../src/ports.js";
 
-const scheme = resolvePortScheme({ basePort: 8100 });
-
-describe("isValidPort", () => {
-  it("accepts in-range step-aligned ports", () => {
-    expect(isValidPort(8110, scheme)).toBe(true);
-    expect(isValidPort(8200, scheme)).toBe(true);
-    expect(isValidPort(8290, scheme)).toBe(true);
+describe("resolvePortsConfig", () => {
+  it("defaults `perWorkspace` to the number of names", () => {
+    const resolved = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web", "db"] });
+    expect(resolved.perWorkspace).toBe(2);
   });
 
-  it("rejects below min and above max", () => {
-    expect(isValidPort(8100, scheme)).toBe(false);
-    expect(isValidPort(8300, scheme)).toBe(false);
-  });
-
-  it("rejects off-step ports", () => {
-    expect(isValidPort(8115, scheme)).toBe(false);
-    expect(isValidPort(8111, scheme)).toBe(false);
-  });
-
-  it("rejects non-integers", () => {
-    expect(isValidPort(8110.5, scheme)).toBe(false);
-    expect(isValidPort(Number.NaN, scheme)).toBe(false);
-  });
-});
-
-describe("isReservedMainSlot", () => {
-  it("accepts only the base port (the main worktree's reserved slot)", () => {
-    expect(isReservedMainSlot(8100, scheme)).toBe(true);
-    expect(isReservedMainSlot(8110, scheme)).toBe(false);
-    expect(isReservedMainSlot(8090, scheme)).toBe(false);
-  });
-
-  it("matches the slot isValidPort excludes, so the base port stays out of the assignable pool", () => {
-    expect(isValidPort(scheme.basePort, scheme)).toBe(false);
-    expect(isReservedMainSlot(scheme.basePort, scheme)).toBe(true);
-    expect(allPorts(scheme)).not.toContain(scheme.basePort);
-  });
-});
-
-describe("allPorts", () => {
-  it("returns inclusive bounds with the right length", () => {
-    const ports = allPorts(scheme);
-    expect(ports.length).toBe(scheme.maxSlotCount);
-    expect(ports[0]).toBe(8110);
-    expect(ports.at(-1)).toBe(8290);
-  });
-
-  it("respects custom step and slot count", () => {
-    const custom = resolvePortScheme({ basePort: 9000, portStep: 5, maxSlotCount: 3 });
-    expect(allPorts(custom)).toEqual([9005, 9010, 9015]);
-  });
-});
-
-describe("defaultComputePorts", () => {
-  it("works for a single name", () => {
-    expect(defaultComputePorts(["server"])(8110)).toEqual({ server: 8110 });
-  });
-
-  it("works for multiple names", () => {
-    expect(defaultComputePorts(["server", "frontend", "db"])(8110)).toEqual({
-      server: 8110,
-      frontend: 8111,
-      db: 8112,
+  it("keeps explicit values", () => {
+    const resolved = resolvePortsConfig({
+      base: 9000,
+      perWorkspace: 5,
+      maxWorkspaces: 3,
+      names: ["web"],
     });
+    expect(resolved).toMatchObject({ base: 9000, perWorkspace: 5, maxWorkspaces: 3 });
   });
 
-  it("throws for empty names", () => {
-    expect(() => defaultComputePorts([])).toThrow();
+  it("rejects a config with neither `names` nor `compute`", () => {
+    expect(() => resolvePortsConfig({ base: 8100, maxWorkspaces: 20 })).toThrow(ConfigError);
+    expect(() => resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: [] })).toThrow(
+      ConfigError,
+    );
+  });
+
+  it("rejects a config with both `names` and `compute`", () => {
+    expect(() =>
+      resolvePortsConfig({
+        base: 8100,
+        maxWorkspaces: 20,
+        names: ["web"],
+        compute: () => ({ web: 1 }),
+      }),
+    ).toThrow(ConfigError);
+  });
+
+  it("requires `base`", () => {
+    // Plain-JS consumers bypass the type, so the guard is a runtime check.
+    expect(() => resolvePortsConfig({ maxWorkspaces: 20, names: ["web"] } as PortsConfig)).toThrow(
+      /base/,
+    );
+  });
+
+  it("requires `maxWorkspaces`", () => {
+    expect(() => resolvePortsConfig({ base: 8100, names: ["web"] } as PortsConfig)).toThrow(
+      /maxWorkspaces/,
+    );
+  });
+
+  it("requires `perWorkspace` with `compute`", () => {
+    expect(() =>
+      resolvePortsConfig({ base: 8100, maxWorkspaces: 20, compute: () => ({ web: 8100 }) }),
+    ).toThrow(/perWorkspace/);
+  });
+
+  it("rejects more names than `perWorkspace`", () => {
+    expect(() =>
+      resolvePortsConfig({
+        base: 8100,
+        perWorkspace: 2,
+        maxWorkspaces: 20,
+        names: ["a", "b", "c"],
+      }),
+    ).toThrow(/more than/);
+  });
+});
+
+describe("portsForIndex", () => {
+  const named = resolvePortsConfig({
+    base: 8100,
+    perWorkspace: 10,
+    maxWorkspaces: 20,
+    names: ["server", "frontend", "db"],
+  });
+
+  it("maps names to consecutive ports from the block's first port", () => {
+    expect(portsForIndex(named, 0)).toEqual({ server: 8100, frontend: 8101, db: 8102 });
+    expect(portsForIndex(named, 2)).toEqual({ server: 8120, frontend: 8121, db: 8122 });
+  });
+
+  it("spaces blocks by `perWorkspace`", () => {
+    const spaced = resolvePortsConfig({
+      base: 9000,
+      perWorkspace: 5,
+      maxWorkspaces: 20,
+      names: ["web"],
+    });
+    expect(portsForIndex(spaced, 3)).toEqual({ web: 9015 });
+  });
+
+  it("hands the index and first port to `compute`", () => {
+    const computed = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      compute: ({ index, firstPort }) => ({ web: firstPort, debug: firstPort + 5 + (index % 2) }),
+    });
+    expect(portsForIndex(computed, 2)).toEqual({ web: 8120, debug: 8125 });
+  });
+
+  it("rejects a computed port outside the workspace's block", () => {
+    const escaping = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      compute: ({ index, firstPort }) => ({ web: firstPort, debug: 9000 + index }),
+    });
+    expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's block/);
+  });
+});
+
+describe("firstPortOf", () => {
+  it("returns the base port for the main worktree's block", () => {
+    const resolved = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      names: ["web"],
+    });
+    expect(firstPortOf(resolved, 0)).toBe(8100);
+    expect(firstPortOf(resolved, 4)).toBe(8140);
   });
 });

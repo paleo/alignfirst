@@ -6,6 +6,10 @@ import { checkPlansIsDirectory, plansRepoToplevel } from "./plans-path.js";
 
 export function runSync(ctx: CliContext): void {
   const plansDir = resolvePlansDir(ctx);
+  if (plansDir === undefined) {
+    ctx.stdout.write("(local plans mode, nothing to sync)\n");
+    return;
+  }
   // A fresh clone of an empty plans repository has no HEAD yet: nothing to rebase onto.
   if (hasHead(plansDir)) git(plansDir, "pull", "--rebase", "--autostash");
   git(plansDir, "add", "-A");
@@ -19,7 +23,8 @@ export function runSync(ctx: CliContext): void {
   }
 }
 
-function resolvePlansDir(ctx: CliContext): string {
+/** `undefined` in local plans mode: `.plans` is a plain directory of the product repository. */
+function resolvePlansDir(ctx: CliContext): string | undefined {
   const plansPath = join(ctx.cwd, ".plans");
   if (!existsSync(plansPath)) {
     if (isBrokenSymlink(plansPath))
@@ -31,10 +36,7 @@ function resolvePlansDir(ctx: CliContext): string {
   checkPlansIsDirectory(plansPath);
   const plansToplevel = plansRepoToplevel(plansPath);
   const repoToplevel = gitOutput(ctx.cwd, "rev-parse", "--show-toplevel");
-  if (plansToplevel === repoToplevel)
-    throw new CliError(
-      ".plans is not linked to a team plans repository. Run the plans:setup script first.",
-    );
+  if (plansToplevel === repoToplevel) return;
   return plansToplevel;
 }
 
