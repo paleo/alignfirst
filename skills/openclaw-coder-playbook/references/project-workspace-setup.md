@@ -38,12 +38,12 @@ That single call is the whole exception. The post right after it, and every one 
 
 The workspace tooling owns worktrees. Create, reuse, and tear them down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
-Some projects have **no workspace tooling** installed. Their `DEVELOPMENT.md` says so and defines the worktree procedure: plain `git worktree` commands plus the post-create steps (the `.plans` symlink, config files, install). In such a project, `DEVELOPMENT.md` replaces `workspace --guide` everywhere this playbook mentions it, `git worktree list` is the registry, the prohibition above does not apply, and the workspace is `ready` once the documented steps complete.
+A project whose `DEVELOPMENT.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
 
 First, check what already exists for the {TICKET_ID} — two checks, both required:
 
 - **Branch**: list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
-- **Registered workspaces**: `DEVELOPMENT.md` points to the project's `workspace --guide` command, which gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+- **Registered workspaces**: `DEVELOPMENT.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 

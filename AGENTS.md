@@ -40,8 +40,6 @@ Commit message convention: we use conventional commit, e.g., `feat: add new feat
 
 Branch naming convention: `<ticket-id>/<1-3-words>`.
 
-Add the `top-down-typescript` skill to every plan.
-
 ### Team Plans Repository
 
 In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.

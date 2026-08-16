@@ -4,7 +4,7 @@ Blueprint for a **workspace** system — multiple git-worktree dev environments 
 
 **Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained.
+**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project driven by an OpenClaw bot must also meet [the bot contract](#the-bot-contract).
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -200,6 +200,22 @@ Record only repo-specific facts, in whatever entry point developers and agents a
 2. **Release process** if it lives near the dev workflow (changeset rules, PR/MR target).
 3. **Any project quirk** — extra build steps, a non-obvious log path.
 
+## The bot contract
+
+An OpenClaw bot creates every worktree through the workspace system; its playbook offers no hand-made fallback, so a project it drives must have the system installed. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation must provide the same behavior, whatever its language and runner: the playbook reads the invocation from `DEVELOPMENT.md`, so the command's name and prefix are free while its behavior is fixed.
+
+| Requirement | Why the bot needs it |
+| --- | --- |
+| A `--guide` flag printing the full operating procedures | The playbook points the bot at the guide instead of restating the commands. |
+| A command listing **registered** workspaces, runnable from any worktree | The bot checks whether the ticket already has a workspace before creating one. |
+| `setup` on an existing branch **and** on a new one | It handles three entry cases: no branch, branch only, branch plus worktree. |
+| `setup` blocking in the foreground until a terminal state, with an opt-in background mode | The bot runs it in the foreground and reports the state it returns. |
+| The states named `running`, `ready` and `failed` | They go verbatim into the bot's `[WORKSPACE]` banner. |
+| `remove` performing the whole teardown in one command: dev server, infrastructure, registry entry, worktree directory | The bot delegates a cleanup request as a single step. |
+| `setup` seeding the shared-directory symlinks (`.plans`) and the gitignored config files | The bot runs no post-create step by hand. |
+
+A project with a dev server adds its start, stop and status commands, and the URL to report to the user.
+
 ## Checklist
 
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
@@ -218,3 +234,4 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPMENT.md` too on a bot-driven project), the conventions, and the project-specific facts.
+- [ ] **Check [the bot contract](#the-bot-contract)** on a bot-driven project. Automatic with `@paleo/workspace`; a matter of verification in a reimplementation.
