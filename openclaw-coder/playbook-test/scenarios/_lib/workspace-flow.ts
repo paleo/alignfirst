@@ -5,9 +5,10 @@ import { isMetaNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
 import type { Step } from "./types.ts";
 
-// The settled report carries the worktree LOCATOR (dir name or slot) plus the
-// branch and a bootstrap-status keyword. These are language-invariant tokens,
-// asserted deterministically when the agent posts the block.
+// The settled report carries the worktree LOCATOR (its directory name, which is
+// also the workspace name) plus the branch and a bootstrap-status keyword. These
+// are language-invariant tokens, asserted deterministically when the agent posts
+// the block.
 const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours|échou)/i;
 
 export interface WorkspaceFlowOptions {
@@ -98,7 +99,7 @@ export async function settleOnWorkspaceReport(
 ): Promise<void> {
   const dirName = worktreeDir.slice(worktreeDir.lastIndexOf("/") + 1);
   const branchRe = new RegExp(`\\b${escapeRegExp(branch)}\\b`, "i");
-  const locatorRe = new RegExp(`${escapeRegExp(dirName)}|slot\\s*\\d{3,5}`, "i");
+  const locatorRe = new RegExp(escapeRegExp(dirName), "i");
   const deadline = Date.now() + budgetMs;
   let cursor = prevStep.nextCursor;
 
@@ -110,7 +111,7 @@ export async function settleOnWorkspaceReport(
       if (m.id === prevStep.match.id || !locatorRe.test(m.text)) continue;
       if (await isMetaNarration(ctx, m.text)) continue;
       ctx.log(`workspace report received: ${JSON.stringify(m.text.slice(0, 160))}`);
-      ctx.assertRegex(m.text, locatorRe, "workspace-report: worktree locator (dir or slot)");
+      ctx.assertRegex(m.text, locatorRe, "workspace-report: worktree locator (workspace name)");
       ctx.assertRegex(m.text, branchRe, "workspace-report: branch name");
       ctx.assertRegex(m.text, bootstrapStatusRe, "workspace-report: workspace status");
       if (/\[WORKSPACE\]/.test(m.text)) {

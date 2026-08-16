@@ -108,16 +108,6 @@ export function escapeRegExp(value: string): string {
 }
 
 /**
- * Fetches the dev-server HTTP response body from the **runner** side. The
- * dev-server process runs in the gateway PID namespace, so its port is
- * reachable at `gateway:<slotPort>` via the compose network.
- */
-export async function fetchDevServer(slotPort: number): Promise<string> {
-  const res = await fetch(`http://gateway:${slotPort}/`);
-  return res.text();
-}
-
-/**
  * Pre-seed a branch + worktree for `project` so the agent finds an existing
  * registered workspace. Runs the real `pnpm workspace setup … -c` in the
  * gateway (setup blocks until READY/FAILED). Waits until the worktree
