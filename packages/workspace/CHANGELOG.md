@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.30.1
+
+### Patch Changes
+
+- 349915e: Improve `migrate-registry-0.30`.
+
 ## 0.30.0
 
 ### Minor Changes
