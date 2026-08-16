@@ -174,7 +174,7 @@ The system only works if agents know about it. The CLI self-documents via `works
   Commit message convention: conventional commits, e.g., `feat: [#123] add new feature`.
   ```
 
-- **A workspaces section** pointing at the guide. Take the definition from the first paragraph of `workspace --guide`, which already matches the project's config:
+- **A workspaces section** pointing at the guide. Take the definition from the first paragraph of `workspace --guide`, which already matches the project's config — it names ports, a database and a dev server on a port-based project, and the shared directories and seeded config files in [portless mode](#portless-mode). Add the repo-specific facts the CLI can't know, such as a portless project having no `dev` script:
 
   ```markdown
   ## Workspaces
@@ -184,13 +184,15 @@ The system only works if agents know about it. The CLI self-documents via `works
   Run `npm run workspace -- --guide` for the full procedures.
   ```
 
+  Keep it to those two parts. Restating the CLI — `setup`, `remove`, `list` — duplicates `--guide` and goes stale when the commands change.
+
 - **A search-ignore line** so agents skip gitignored runtime dirs. List `runtimeDir` (e.g. `.local-wt`), and `.local` only if your repo uses it. Extend an existing line rather than duplicate:
 
   ```markdown
   Always ignore the `.local-wt`, `.plans` directories when searching the codebase.
   ```
 
-On a bot-driven project, repeat the workspaces section in `DEVELOPMENT.md`: the bot reads that file to learn how to create a worktree or a branch.
+On a bot-driven project, `DEVELOPMENT.md` carries the same workspaces section: the bot reads that file to learn how to create a worktree or a branch. Same two parts, same limit — the definition and the pointer to `--guide`, never the command list.
 
 ### Project-specific facts the guide can't know
 

@@ -10,19 +10,7 @@ An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), pu
 
 A workspace is a git worktree plus its setup: `.plans` and `.local` symlinked to the main worktree, `.vscode/settings.json` copied, then `npm install` and `npm run build`. This repository has no dev server, so the tooling runs portless: nothing to start, no `dev` script.
 
-Create a workspace on a new branch, as a sibling directory of the main worktree:
-
-```sh
-npm run workspace -- setup -c 123/my-feature
-```
-
-Tear one down, keeping its branch:
-
-```sh
-npm run workspace -- remove <worktree-dir>
-```
-
-`npm run workspace -- list` shows every workspace; `npm run workspace -- --guide` documents the full procedures. The main worktree stays on `main`.
+Run `npm run workspace -- --guide` to learn the full procedures.
 
 ## Conventions
 
