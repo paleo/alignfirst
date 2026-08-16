@@ -16,8 +16,9 @@ setup   Link .plans to <dir>/<name>/, where <dir> is an existing clone of the pl
         repository, migrating any existing .plans content. Once per machine; re-run
         with the new location if the clone moves.
 sync    Pull, commit, and push the plans repository.
-check   Verify that .plans is linked to a team plans repository; exit 1 otherwise.
-        For automation, e.g. a workspace preSetup callback.
+check   Report whether .plans is shared through a team plans repository or a plain
+        local directory; exit 1 when it is unusable. For automation, e.g. a
+        workspace preSetup callback.
 `;
 
 export interface MainOptions {

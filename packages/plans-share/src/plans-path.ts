@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { CliError, type CliContext } from "./context.js";
 import { gitOutput } from "./git.js";
 
@@ -25,10 +25,9 @@ export interface LocalPlans {
 /**
  * Classifies `.plans`, or throws when it is unusable: missing, broken symlink, not a directory.
  *
- * Shared means `.plans` resolves into a git repository other than this project's own. The
- * comparison runs against the main worktree, never the current one. A linked worktree has its own
- * toplevel, so comparing against it would read a local `.plans` as shared, and `sync` would commit
- * into the product repository.
+ * Shared means `.plans` resolves into a git repository other than this project's own. A worktree
+ * root cannot answer that question: every worktree has its own, so a plain local `.plans` would
+ * read as shared, and `sync` would commit into the product repository.
  */
 export function resolvePlansMode(ctx: CliContext): PlansMode {
   const plansPath = join(ctx.cwd, ".plans");
@@ -46,21 +45,19 @@ export function resolvePlansMode(ctx: CliContext): PlansMode {
     throw new CliError(
       ".plans is not a directory. Remove it, then run the plans:setup script (see the project documentation).",
     );
-  const plansToplevel = plansRepoToplevel(plansPath, stats.isSymbolicLink());
   // Inside this project's own repository: a plain local directory, kept on this machine.
-  if (realpathSync(plansToplevel) === realpathSync(mainWorktree(ctx))) return { kind: "local" };
-  return { kind: "shared", repoToplevel: plansToplevel };
+  if (plansRepositoryId(plansPath, stats.isSymbolicLink()) === repositoryId(ctx.cwd))
+    return { kind: "local" };
+  return { kind: "shared", repoToplevel: gitOutput(plansPath, "rev-parse", "--show-toplevel") };
 }
 
 /**
- * The plans directory's own git toplevel.
- *
  * A symlink leading outside any git repository stays an error. Local mode is a plain directory,
  * so such a link means the clone moved away, and reading it as local would bury the breakage.
  */
-function plansRepoToplevel(plansPath: string, isSymlink: boolean): string {
+function plansRepositoryId(plansPath: string, isSymlink: boolean): string {
   try {
-    return gitOutput(plansPath, "rev-parse", "--show-toplevel");
+    return repositoryId(plansPath);
   } catch {
     if (isSymlink)
       throw new CliError(
@@ -72,11 +69,7 @@ function plansRepoToplevel(plansPath: string, isSymlink: boolean): string {
   }
 }
 
-/**
- * The main worktree's root, from any worktree of the project. `--git-common-dir` is the shared
- * `.git` directory, whose parent is the main worktree. `--show-toplevel` gives the current one.
- */
-function mainWorktree(ctx: CliContext): string {
-  const commonDir = gitOutput(ctx.cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
-  return dirname(resolve(ctx.cwd, commonDir));
+/** Identifies a repository across all its worktrees: they share one git common directory. */
+function repositoryId(dir: string): string {
+  return realpathSync(gitOutput(dir, "rev-parse", "--path-format=absolute", "--git-common-dir"));
 }
