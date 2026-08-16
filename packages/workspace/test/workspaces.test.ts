@@ -18,7 +18,7 @@ import {
 } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
-const ports = resolvePortsConfig({ base: 8100, names: ["web"] });
+const ports = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web"] });
 
 let mainWorktree: string;
 
@@ -90,15 +90,15 @@ describe("registerWorkspace", () => {
     expect(message).toContain("already taken by /elsewhere/myrepo-feat-a");
   });
 
-  it("keeps createdAt, extra and a ready status across a re-register", () => {
+  it("keeps createdAt, purgeData and a ready status across a re-register", () => {
     writeWorkspaces(mainWorktree, registryDir, {
-      workspaces: { "wt-a": { ...entry("/repo/wt-a"), extra: { container: "db-wt-a" } } },
+      workspaces: { "wt-a": { ...entry("/repo/wt-a"), purgeData: { container: "db-wt-a" } } },
     });
     const registered = register("/repo/wt-a");
     expect(registered.status).toBe("ready");
     const stored = readWorkspaces(mainWorktree, registryDir).workspaces["wt-a"];
     expect(stored.createdAt).toBe("2026-05-10T00:00:00.000Z");
-    expect(stored.extra).toEqual({ container: "db-wt-a" });
+    expect(stored.purgeData).toEqual({ container: "db-wt-a" });
   });
 
   it("resets a ready workspace to pending with `force`", () => {
@@ -136,22 +136,22 @@ describe("registerWorkspace", () => {
 });
 
 describe("markWorkspaceReady", () => {
-  it("marks the entry ready and persists the extra blob", () => {
+  it("marks the entry ready and persists the purgeData blob", () => {
     writeWorkspaces(mainWorktree, registryDir, {
       workspaces: { "wt-a": entry("/repo/wt-a", "pending") },
     });
     markWorkspaceReady(mainWorktree, registryDir, "wt-a", { container: "db-wt-a" });
     const stored = readWorkspaces(mainWorktree, registryDir).workspaces["wt-a"];
     expect(stored.status).toBe("ready");
-    expect(stored.extra).toEqual({ container: "db-wt-a" });
+    expect(stored.purgeData).toEqual({ container: "db-wt-a" });
   });
 
-  it("leaves a pre-existing extra untouched when none is passed", () => {
+  it("leaves a pre-existing purgeData untouched when none is passed", () => {
     writeWorkspaces(mainWorktree, registryDir, {
-      workspaces: { "wt-a": { ...entry("/repo/wt-a", "pending"), extra: { volume: "v1" } } },
+      workspaces: { "wt-a": { ...entry("/repo/wt-a", "pending"), purgeData: { volume: "v1" } } },
     });
     markWorkspaceReady(mainWorktree, registryDir, "wt-a");
-    expect(readWorkspaces(mainWorktree, registryDir).workspaces["wt-a"].extra).toEqual({
+    expect(readWorkspaces(mainWorktree, registryDir).workspaces["wt-a"].purgeData).toEqual({
       volume: "v1",
     });
   });

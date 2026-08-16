@@ -2,7 +2,7 @@
 
 Blueprint for a **workspace** system — multiple git-worktree dev environments side by side. Requires git. The templates are Node.js, but the approach fits any runtime.
 
-**Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorktree`, `printSummary`, optional `purgeInfrastructure`) plus a `configFiles` list.
+**Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
 **Non-Node consumers** reimplement the system from this design; the concept sections are self-contained.
 
@@ -16,7 +16,7 @@ This document is the **setup tutorial**: the decisions you make, and how to wire
 
 A project with no dev server — or one whose servers need no port — installs the same system without the port scheme: no `ports` group in `workspace.mjs`, no `dev-server.mjs`, no `dev` npm script. `ctx.ports` is empty everywhere, nothing is allocated, and no config file is patched with a port.
 
-Everything else stands: the worktree lifecycle (`setup`, `remove`, `--go`), shared-directory symlinks, config-file seeding, the idempotent detached finalize and its progress ticker, `list` / `status` / `wait`, and orphan healing (`prune`).
+Everything else stands: the worktree lifecycle (`setup`, `remove`, `--enter`), shared-directory symlinks, gitignored-file seeding, the idempotent detached finalize and its progress ticker, `list` / `status` / `wait`, and orphan healing (`prune`).
 
 Reading this document in portless mode, skip [Contiguous port scheme](#contiguous-port-scheme), [Concurrent dev-server cap](#concurrent-dev-server-cap), [`dev-server.mjs`](#dev-servermjs), and the port-block paragraphs of [The workspace registry](#the-workspace-registry).
 
@@ -69,7 +69,7 @@ A workspace is identified by its **name**: the basename of its worktree director
 
 With a `ports` group configured, an entry also carries a **block index** (`portIndex`): `0` for the main worktree — implicit, never stored — and 1.. for linked workspaces. The block starts at `firstPort = base + perWorkspace × index`. Setup takes the lowest free index, and a re-registered worktree keeps the one it had; when every index is taken, setup fails and points at `workspace remove`.
 
-`perWorkspace` (default 10) is both the block size and its spacing, so it caps the ports one workspace can declare. A single-port project sets `perWorkspace: 1`, packing 20 workspaces into 8100–8119; a project needing more than 10 ports raises it. The scheme spans `maxWorkspaces × perWorkspace` contiguous ports from `base` — 20 × 10 = 200 with the defaults, the range the base-port choice above must keep free.
+`perWorkspace` is both the block size and its spacing, so it caps the ports one workspace can declare. It defaults to `names.length` — the block is exactly the ports you declared — and is required with `compute`. Adding a port later shifts every workspace's block under the default; set `perWorkspace` explicitly to reserve headroom. The scheme spans `maxWorkspaces × perWorkspace` contiguous ports from `base` — e.g. 20 × 10 = 200, the range the base-port choice above must keep free.
 
 Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/workspaces.json`):
 
@@ -88,16 +88,16 @@ Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-regi
 
 ### Concurrent dev-server cap
 
-Host RAM is shared; parallel dev-servers can exhaust it. Pass `devLimit` to `runDevServer` (omit for no limit). `5` is a sensible default — bump it for a light stack, lower it for a heavy one. A second registry, `dev-servers.json`, tracks live servers; at the cap, `dev` / `dev up` aborts and lists the active servers (re-run with `--evict` to stop the oldest and proceed).
+Host RAM is shared; parallel dev-servers can exhaust it. Pass `maxConcurrentDevServers` to `runDevServer` (omit for no limit). `5` is a sensible default — bump it for a light stack, lower it for a heavy one. A second registry, `dev-servers.json`, tracks live servers; at the cap, `dev` / `dev up` aborts and lists the active servers (re-run with `--evict` to stop the oldest and proceed).
 
-### Config files: gitignored, and **all** of them
+### Gitignored files: **all** of them
 
 Config files carrying ports (`.env`, `docker-compose.yml`, …) **must be gitignored**: worktrees share one git history, so a tracked config would be identical everywhere, defeating per-worktree ports.
 
-`configFiles` seeds a gitignored file into each new worktree, then patches it per workspace. It is **not only for port-bearing files** — it is for **every gitignored file a worktree needs to function**. Each entry declares where its initial content comes from via `source.kind`:
+`gitignoredFiles` seeds a gitignored file into each new worktree, then patches it per workspace. It is **not only for port-bearing files** — it is for **every gitignored file a worktree needs to function**. Each entry declares where its initial content comes from via `source.kind`:
 
 - `{ kind: "mainWorktree" }` — copy the file at the same path from the main worktree. The common case: the developer's customized config flows into every sibling.
-- `{ kind: "newWorktree", path }` — copy a committed template (e.g. an `.example`) from the new worktree's own checkout, so it tracks the branch.
+- `{ kind: "committed", path }` — copy a committed template (e.g. an `.example`) from the new worktree's own checkout, so it tracks the branch.
 - `{ kind: "content", content }` — an inline string, or a sync/async function returning one.
 
 `patch(content, { name, ports, mainWorktree, currentWorktree })` rewrites the content per workspace; **omit it to copy verbatim**:
@@ -106,9 +106,9 @@ Config files carrying ports (`.env`, `docker-compose.yml`, …) **must be gitign
 - **Verbatim** files need no `patch`. These are the easy ones to forget, and the usual cause of a half-broken linked worktree: editor settings (`.vscode/settings.json`), a secondary `.env`, a private-registry token (`.npmrc`), a package's own env file, etc. **List every one** — a missing entry means the linked worktree silently lacks that file.
 - Set `optional: true` for a file that may legitimately be absent at its source; it then warns and skips instead of aborting.
 
-**Two-stage flow** (the `mainWorktree` source). (1) Once per repo, the main worktree's actual config is created from its `.example` and customized. (2) For every sibling, setup copies the main worktree's config and patches it — so main-worktree customizations (a public dev IP, secrets, feature flags) flow in for free. Trade-off: mistakes in the main config propagate too; keep it clean. A consumer who prefers example-derived configs uses a `newWorktree` source (`{ kind: "newWorktree", path: "...example" }`), usually behind a developer-local toggle so the choice stays per-developer.
+**Two-stage flow** (the `mainWorktree` source). (1) Once per repo, the main worktree's actual config is created from its `.example` and customized. (2) For every sibling, setup copies the main worktree's config and patches it — so main-worktree customizations (a public dev IP, secrets, feature flags) flow in for free. Trade-off: mistakes in the main config propagate too; keep it clean. A consumer who prefers example-derived configs uses a `committed` source (`{ kind: "committed", path: "...example" }`), usually behind a developer-local toggle so the choice stays per-developer.
 
-**Automate stage 1 with `preSetup`** (see the [field contract](#workspacemjs)). Done by hand, stage 1 is the step a fresh clone has never run — so its first `workspace setup` aborts with `config source … not found` the moment a `mainWorktree`-sourced config is missing. The `preSetup` hook runs before `configFiles` are copied: on `isMainWorktree`, seed each gitignored config from its committed `.example` when absent. A fresh clone then sets up with zero manual steps, and siblings still inherit the customized main config through `configFiles`.
+**Automate stage 1 with `preSetup`** (see the [field contract](#workspacemjs)). Done by hand, stage 1 is the step a fresh clone has never run — so its first `workspace setup` aborts with `config source … not found` the moment a `mainWorktree`-sourced config is missing. The `preSetup` hook runs before `gitignoredFiles` are copied: on `isMainWorktree`, seed each gitignored config from its committed `.example` when absent. A fresh clone then sets up with zero manual steps, and siblings still inherit the customized main config through `gitignoredFiles`.
 
 ## Writing the Wrappers
 
@@ -118,21 +118,21 @@ The assets annotate every field; read them as you fill in the `ADAPT` points. Th
 
 Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 
-- `scriptPath` — absolute path; leave the `import.meta.url` line as-is (the package re-spawns the script for the detached finalize phase).
+- `workspaceScript` — absolute path; leave the `import.meta.url` line as-is (the package re-spawns the script for the detached finalize phase).
 - `devServerScript` — absolute path to `dev-server.mjs`, so removal can shell out to it. Omit it when the project has no dev-server script.
-- `ports` — optional group: `base` (first port of the main worktree's block), `perWorkspace` (default 10), `maxWorkspaces` (main included, default 20), and exactly one of `names` (consecutive ports from `firstPort`) or `compute({ index, firstPort })` (full control). Omit the whole group for [portless mode](#portless-mode). See [The workspace registry](#the-workspace-registry).
+- `ports` — optional group: `base` (first port of the main worktree's block), `maxWorkspaces` (main included, required), `perWorkspace` (defaults to `names.length`; required with `compute`), and exactly one of `names` (consecutive ports from `firstPort`) or `compute({ index, firstPort })` (full control; computed ports must stay within the block). Omit the whole group for [portless mode](#portless-mode). See [The workspace registry](#the-workspace-registry).
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
-- `configFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree" }`, `{ kind: "newWorktree", path }`, or `{ kind: "content", content }`. `patch(content, { name, ports, mainWorktree, currentWorktree })` rewrites per workspace; omit it to copy verbatim.
-- `preSetup({ isMainWorktree, currentWorktree, mainWorktree, force, log })` — optional; runs **before** `configFiles` are copied. Bootstrap source files the kernel will look for — typically seed the main worktree's gitignored config from its committed `.example` so a fresh clone's first `workspace setup` works with no manual step. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree, so gate the bootstrap on `isMainWorktree` (`force` mirrors `--force` for re-seeding). Omit it when every `configFile` uses a `newWorktree` or `content` source (nothing to bootstrap).
-- `finalizeWorktree(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@paleo/workspace`. May `return { extra }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
-- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.extra` for non-derivable ids. Swallow errors.
-- `printSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
+- `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree" }`, `{ kind: "committed", path }`, or `{ kind: "content", content }`. `patch(content, { name, ports, mainWorktree, currentWorktree })` rewrites per workspace; omit it to copy verbatim.
+- `preSetup({ isMainWorktree, currentWorktree, mainWorktree, force, log })` — optional; runs **before** `gitignoredFiles` are copied. Bootstrap source files the kernel will look for — typically seed the main worktree's gitignored config from its committed `.example` so a fresh clone's first `workspace setup` works with no manual step. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree, so gate the bootstrap on `isMainWorktree` (`force` mirrors `--force` for re-seeding). Omit it when every `gitignoredFiles` entry uses a `committed` or `content` source (nothing to bootstrap).
+- `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@paleo/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
+- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.purgeData` for non-derivable ids. Swallow errors.
+- `formatSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
 
 ### `dev-server.mjs`
 
 Builds a `DevServerConfig` and calls `runDevServer`. `servers: ServerDescriptor[]` — one entry per server, conceptually one dev server. Discriminated on `kind`:
 
-- `kind: "spawn"` — `{ name, exec, port?, detectSuccess, detectError? }`. The runner spawns the process, logs to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID. Read `port` from your config with `helpers.readPortFromEnvFile(file, varName)` / `helpers.readPortFromJsonFile(file, jsonPath)`. Omit `port` for a process that listens on nothing; conflict detection, port sweeping and the summary URL then skip that server. `detectError` (optional) fails fast on a known fatal log pattern.
+- `kind: "spawn"` — `{ name, exec, port?, detectReady, detectError? }`. The runner spawns the process, logs to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID. Read `port` from your config with `helpers.readPortFromEnvFile(file, varName)` / `helpers.readPortFromJsonFile(file, jsonPath)`. Omit `port` for a process that listens on nothing; conflict detection, port sweeping and the summary URL then skip that server. `detectError` (optional) fails fast on a known fatal log pattern.
 - `kind: "callback"` — `{ name, start(ctx), stop(ctx) }`. You own the lifecycle; declare infrastructure (Docker, DB) here, typically first. Servers start in array order, stop in reverse.
 
 `kind: "callback"` rules (not type-enforced — read carefully):
@@ -142,14 +142,14 @@ Builds a `DevServerConfig` and calls `runDevServer`. `servers: ServerDescriptor[
 - Thread `ctx.cwd` into every child process and resolve every path against it. Never call bare `execSync("docker compose …")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Resolve everything inside the callback, not at module load.
 
-Also: `devLimit` (the cap), optional `printSummary({ workspace, servers })` — `workspace` being `{ name, worktree, main? }`.
+Also: `maxConcurrentDevServers` (the cap), optional `formatSummary({ workspace, servers })` — `workspace` being `{ name, worktree, main? }`.
 
 ### Database provisioning
 
 Each worktree needs its own database; how is project-specific. The setup must end with a working DB.
 
 - **File-based (SQLite, etc.):** copy the data directory from the main worktree — the simplest case.
-- **Docker (PostgreSQL, MySQL, etc.):** copy `docker-compose.yml` (as a `configFile`, patching the host port and a workspace-scoped `container_name` so containers don't collide), `docker compose up -d`, wait for readiness, run migrations, run the seed.
+- **Docker (PostgreSQL, MySQL, etc.):** copy `docker-compose.yml` (as a `gitignoredFiles` entry, patching the host port and a workspace-scoped `container_name` so containers don't collide), `docker compose up -d`, wait for readiness, run migrations, run the seed.
 
 **Postgres readiness gotcha:** poll `pg_isready -h 127.0.0.1` (a TCP check), not a plain probe. On a fresh volume, Postgres first runs a throwaway Unix-socket-only server for `initdb` that answers a socket-side `pg_isready` too early; gating on TCP — which that init server doesn't listen on — stops the next step from connecting to it and losing the connection on handoff.
 
@@ -205,8 +205,8 @@ Record only repo-specific facts, in whatever entry point developers and agents a
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` at least that count (default 10). Base port 8100 unless you have a reason.
-- [ ] **Identify your config files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
+- [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason.
+- [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
 - [ ] **Decide the dev-server ready marker** and **fatal markers** (or leave empty) for fast-fail. *(dev server)*
@@ -215,6 +215,6 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Write `workspace.mjs`** from the asset — adapt the `ADAPT` points, then strip the scaffolding.
 - [ ] **Write `dev-server.mjs`** from the asset — same approach. *(dev server)*
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
-- [ ] **Set `devLimit`** (default `5`). *(dev server)*
+- [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPMENT.md` too on a bot-driven project), the conventions, and the project-specific facts.

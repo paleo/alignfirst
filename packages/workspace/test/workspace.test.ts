@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { matchWorktreeByDir, type PatchContext, resolveConfigSource } from "../src/workspace.js";
+import { matchWorktreeByDir, type PatchContext, resolveFileSource } from "../src/workspace.js";
 import type { WorkspacesRegistry } from "../src/workspaces.js";
 
 const ctx: PatchContext = {
@@ -12,25 +12,22 @@ const ctx: PatchContext = {
   currentWorktree: "/repo/feat",
 };
 
-describe("resolveConfigSource", () => {
+describe("resolveFileSource", () => {
   it("reads a `mainWorktree` source at the entry's path in the main worktree", async () => {
-    const source = await resolveConfigSource(
-      { path: ".env", source: { kind: "mainWorktree" } },
-      ctx,
-    );
+    const source = await resolveFileSource({ path: ".env", source: { kind: "mainWorktree" } }, ctx);
     expect(source).toEqual({ path: join("/repo/main", ".env") });
   });
 
-  it("reads a `newWorktree` source at the template path in the current worktree", async () => {
-    const source = await resolveConfigSource(
-      { path: ".env", source: { kind: "newWorktree", path: ".env.example" } },
+  it("reads a `committed` source at the template path in the current worktree", async () => {
+    const source = await resolveFileSource(
+      { path: ".env", source: { kind: "committed", path: ".env.example" } },
       ctx,
     );
     expect(source).toEqual({ path: join("/repo/feat", ".env.example") });
   });
 
   it("returns a `content` string verbatim", async () => {
-    const source = await resolveConfigSource(
+    const source = await resolveFileSource(
       { path: ".env", source: { kind: "content", content: "A=1\n" } },
       ctx,
     );
@@ -38,7 +35,7 @@ describe("resolveConfigSource", () => {
   });
 
   it("resolves a synchronous `content` function", async () => {
-    const source = await resolveConfigSource(
+    const source = await resolveFileSource(
       { path: ".env", source: { kind: "content", content: () => "A=1\n" } },
       ctx,
     );
@@ -46,7 +43,7 @@ describe("resolveConfigSource", () => {
   });
 
   it("awaits an asynchronous `content` function", async () => {
-    const source = await resolveConfigSource(
+    const source = await resolveFileSource(
       { path: ".env", source: { kind: "content", content: async () => "A=1\n" } },
       ctx,
     );

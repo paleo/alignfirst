@@ -82,7 +82,7 @@ export interface WorkspaceConfig {
    * file as a detached child for the finalize phase, so it must point at a runnable Node entrypoint
    * — typically `fileURLToPath(import.meta.url)` from your `workspace.mjs`.
    */
-  scriptPath: string;
+  workspaceScript: string;
   /**
    * Absolute path to your dev-server script (the file that calls `runDevServer`). On
    * `workspace remove`, the kernel shells out to `node <devServerScript> down` with
@@ -101,9 +101,9 @@ export interface WorkspaceConfig {
    */
   runtimeDir: string;
   /** Gitignored files seeded into each worktree (from main, a committed template, or content) and patched per workspace. */
-  configFiles: ConfigFileEntry[];
+  gitignoredFiles: GitignoredFileEntry[];
   /**
-   * Runs before `configFiles` are copied. Use this to bootstrap source files the kernel expects
+   * Runs before `gitignoredFiles` are copied. Use this to bootstrap source files the kernel expects
    * to find (e.g. seed `config.json` from `config.example.json` on the main worktree, decrypt
    * an env file). MUST be idempotent. On a linked-worktree setup, MUST NOT mutate the main
    * worktree — bootstrap the main worktree first via `workspace setup`.
@@ -118,25 +118,25 @@ export interface WorkspaceConfig {
    * Runs in a detached child whose stdout/stderr are already redirected to
    * `<runtimeDir>/logs/workspace-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
    *
-   * May return `{ extra }` — an opaque blob persisted on the registry entry and handed back to
+   * May return `{ purgeData }` — an opaque blob persisted on the registry entry and handed back to
    * {@link purgeInfrastructure}, so an orphaned worktree can still be torn down after its config is gone.
    * Store only teardown identifiers you cannot re-derive at purge time (e.g. a random external resource
    * id). Deterministic names — containers, volumes — derive from `name` + paths, so they don't belong here.
    */
-  finalizeWorktree: (
-    ctx: SetupContext,
+  finalizeWorkspace: (
+    ctx: FinalizeContext,
   ) => Promise<FinalizeResult | undefined> | FinalizeResult | undefined;
   /**
    * Destructive infrastructure teardown (e.g. `docker compose down -v` to wipe volumes). Runs after
    * the dev-server stop on `workspace remove`, and on `workspace prune` / removing an orphaned
    * worktree. MUST be idempotent and tolerate already-absent infrastructure: it may run when the
-   * worktree directory is gone (`ctx.extra` carries the recorded teardown identifiers; `ctx.worktree`
+   * worktree directory is gone (`ctx.purgeData` carries the recorded teardown identifiers; `ctx.worktree`
    * no longer exists), so branch on the worktree's presence and tear down by name in that case.
    * Best-effort; errors should be swallowed.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
-  printSummary: (ctx: SummaryContext) => string;
+  formatSummary: (ctx: SummaryContext) => string;
   /**
    * Optional override for the worktree directory basename. Receives `{ branch, repoName }` and
    * returns the basename (e.g. `myrepo-feat-ABC-123`). Defaults to {@link defaultWorktreeDirName},
@@ -158,13 +158,13 @@ export interface PreSetupContext {
   log: (msg: string) => void;
 }
 
-/** Return value of {@link WorkspaceConfig.finalizeWorktree}. */
+/** Return value of {@link WorkspaceConfig.finalizeWorkspace}. */
 export interface FinalizeResult {
-  extra: unknown;
+  purgeData: unknown;
 }
 
-/** Context passed to {@link WorkspaceConfig.finalizeWorktree}. */
-export interface SetupContext {
+/** Context passed to {@link WorkspaceConfig.finalizeWorkspace}. */
+export interface FinalizeContext {
   currentWorktree: string;
   mainWorktree: string;
   /** `true` when finalizing the main worktree. Gate "copy from main" steps with `!isMainWorktree`. */
@@ -185,7 +185,7 @@ export interface SetupContext {
 }
 
 /**
- * Context passed to {@link WorkspaceConfig.printSummary}.
+ * Context passed to {@link WorkspaceConfig.formatSummary}.
  *
  * Called after worktree creation; the dev-server is not running yet.
  */
@@ -200,63 +200,60 @@ export interface SummaryContext {
   mainWorktree: string;
   /** `true` when the summary describes the main worktree. */
   isMainWorktree: boolean;
-  /** Finalize status. `"pending"` until `finalizeWorktree` succeeds, then `"ready"`. */
+  /** Finalize status. `"pending"` until `finalizeWorkspace` succeeds, then `"ready"`. */
   status: WorkspaceStatus;
 }
 
 /** Context passed to {@link WorkspaceConfig.purgeInfrastructure}. */
 export interface PurgeContext {
   /** The target worktree. May no longer exist on disk when purging an orphan — check before
-   * running cwd-bound commands; tear down by name (from {@link extra}) in that case. */
+   * running cwd-bound commands; tear down by name (from {@link purgeData}) in that case. */
   worktree: string;
   mainWorktree: string;
   /** Workspace name: the registry key, which outlives the deleted worktree directory. */
   name: string;
-  /** The blob the consumer returned from `finalizeWorktree`, if any. */
-  extra?: unknown;
+  /** The blob the consumer returned from `finalizeWorkspace`, if any. */
+  purgeData?: unknown;
   verbose: boolean;
 }
 
-/** One config file seeded from its source and patched per workspace. */
-export interface ConfigFileEntry {
+/** One gitignored file seeded from its source and patched per workspace. */
+export interface GitignoredFileEntry {
   /** Path relative to the worktree root. Written to the current worktree. */
   path: string;
   /** Where the initial content comes from. */
-  source: ConfigFileSource;
+  source: GitignoredFileSource;
   /** Rewrites the source content per workspace. Omit to copy the content verbatim. */
   patch?: (content: string, ctx: PatchContext) => string;
   /**
    * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
-   * Applies to `mainWorktree` and `newWorktree` sources; ignored for `content`.
+   * Applies to `mainWorktree` and `committed` sources; ignored for `content`.
    */
   optional?: boolean;
 }
 
-/** Where a {@link ConfigFileEntry}'s initial content comes from. */
-export type ConfigFileSource =
-  | MainWorktreeConfigFileSource
-  | NewWorktreeConfigFileSource
-  | ContentConfigFileSource;
+/** Where a {@link GitignoredFileEntry}'s initial content comes from. */
+export type GitignoredFileSource = MainWorktreeSource | CommittedSource | ContentSource;
 
 /** Copies the gitignored file at the entry's `path` from the main worktree. */
-export interface MainWorktreeConfigFileSource {
+export interface MainWorktreeSource {
   kind: "mainWorktree";
 }
 
-/** Copies a committed template from the new worktree's own checkout. */
-export interface NewWorktreeConfigFileSource {
-  kind: "newWorktree";
+/** Copies a committed template from the worktree's own checkout, so it tracks the branch. */
+export interface CommittedSource {
+  kind: "committed";
   /** Path of the template, relative to the worktree root (e.g. a committed `.example` file). */
   path: string;
 }
 
 /** Uses the given content verbatim. The function form may be async. */
-export interface ContentConfigFileSource {
+export interface ContentSource {
   kind: "content";
   content: string | (() => string | Promise<string>);
 }
 
-/** Context passed to {@link ConfigFileEntry.patch}. */
+/** Context passed to {@link GitignoredFileEntry.patch}. */
 export interface PatchContext {
   /** Workspace name: the worktree directory basename. */
   name: string;
@@ -315,9 +312,9 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     ports: resolveConfigPorts(config),
   };
 
-  if (!existsSync(config.scriptPath)) {
+  if (!existsSync(config.workspaceScript)) {
     console.error(
-      `Error: scriptPath does not exist: ${config.scriptPath}. ` +
+      `Error: workspaceScript does not exist: ${config.workspaceScript}. ` +
         "Pass `fileURLToPath(import.meta.url)` from your wrapper script.",
     );
     process.exit(1);
@@ -366,10 +363,10 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
         // `--detached` skips the wait and returns as soon as the worktree exists — the caller joins
         // later with `wait`.
         if (!command.detached) {
-          await waitForWorkspace(name, kernel, { printSummary: false, verbose });
+          await waitForWorkspace(name, kernel, { formatSummary: false, verbose });
         }
-        // The worktree exists once `runSetup` returns, so `--go` can enter in either mode.
-        if (command.go) enterWorktree(worktree);
+        // The worktree exists once `runSetup` returns, so `--enter` can enter in either mode.
+        if (command.enter) enterWorktree(worktree);
         return;
       }
     }
@@ -397,7 +394,7 @@ function resolveConfigPorts(config: WorkspaceConfig): ResolvedPortsConfig | unde
 }
 
 /**
- * `--go`: open an interactive shell in the freshly set-up worktree (exit to return). Falls back to
+ * `--enter`: open an interactive shell in the freshly set-up worktree (exit to return). Falls back to
  * printing a `cd` hint when there is no `$SHELL` or stdin is not a tty (scripts, pipes) — dropping
  * into an interactive shell there would hang.
  */
@@ -478,10 +475,17 @@ async function runSetup(
 
   linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
   linkWorkspaceRegistry(setupCtx, config.runtimeDir, verboseLog);
-  await generateConfigFiles(setupCtx, config.configFiles, name, ports, command.force, verboseLog);
+  await seedGitignoredFiles(
+    setupCtx,
+    config.gitignoredFiles,
+    name,
+    ports,
+    command.force,
+    verboseLog,
+  );
 
   teeLog(
-    config.printSummary({
+    config.formatSummary({
       name,
       branch,
       ports,
@@ -498,7 +502,7 @@ async function runSetup(
     teeLog(`Join it with \`${wsCmd("wait")}\`.`);
   }
 
-  const finalizeArgs = [config.scriptPath, "__finalize"];
+  const finalizeArgs = [config.workspaceScript, "__finalize"];
   if (command.force) finalizeArgs.push("--force");
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
@@ -572,7 +576,7 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
 
   appendLog(`--- finalizing workspace ${name} at ${new Date().toISOString()} ---`);
 
-  const setupContext: SetupContext = {
+  const setupContext: FinalizeContext = {
     currentWorktree: ctx.currentWorktree,
     mainWorktree: ctx.mainWorktree,
     isMainWorktree: ctx.isMainWorktree,
@@ -585,8 +589,8 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
   };
 
   try {
-    const result = await config.finalizeWorktree(setupContext);
-    markWorkspaceReady(ctx.mainWorktree, registryDir, name, result?.extra);
+    const result = await config.finalizeWorkspace(setupContext);
+    markWorkspaceReady(ctx.mainWorktree, registryDir, name, result?.purgeData);
     rmSync(progressPath, { force: true });
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (workspace ${name})`);
@@ -664,7 +668,7 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
   const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
   const branch = getWorktreeBranch(targetWorktree) ?? "(detached)";
   console.log(
-    config.printSummary({
+    config.formatSummary({
       name: target.name,
       branch,
       ports,
@@ -841,7 +845,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
       worktree: entry.worktree,
       mainWorktree: ctx.mainWorktree,
       name,
-      extra: entry.extra,
+      purgeData: entry.purgeData,
       verbose,
     });
     delete registry.workspaces[name];
@@ -869,7 +873,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
  * Stop a gone worktree's dev-server the only way left: its dir (and `dev-server.mjs`) is deleted, so
  * we can't shell out to `dev down` to run callback stop() — we kill the recorded spawn PIDs directly
  * and drop the dev-server entry. Returns the count of live PIDs stopped. The caller separately runs
- * `purgeInfrastructure` (by name, from the entry's `extra`) to tear down callback-managed infra.
+ * `purgeInfrastructure` (by name, from the entry's `purgeData`) to tear down callback-managed infra.
  */
 async function stopOrphanedDevServer(
   mainWorktree: string,
@@ -910,10 +914,10 @@ async function runWait(command: WaitCommand, kernel: Kernel, verbose: boolean): 
 async function waitForWorkspace(
   name: string,
   kernel: Kernel,
-  options: { printSummary?: boolean; verbose?: boolean; replayLog?: boolean } = {},
+  options: { formatSummary?: boolean; verbose?: boolean; replayLog?: boolean } = {},
 ): Promise<void> {
   const { config, registryDir } = kernel;
-  const printSummary = options.printSummary ?? true;
+  const formatSummary = options.formatSummary ?? true;
   const ctx = detectWorktree();
   const initial = readWorkspaces(ctx.mainWorktree, registryDir).workspaces[name];
   if (!initial) {
@@ -943,7 +947,7 @@ async function waitForWorkspace(
     if (entry.status === "ready") {
       ticker.stop();
       console.log("… ready");
-      if (printSummary) {
+      if (formatSummary) {
         const target: ResolvedTarget = {
           name,
           worktree: entry.worktree,
@@ -1068,7 +1072,7 @@ async function handleRemove(
       worktree,
       mainWorktree: ctx.mainWorktree,
       name,
-      extra: registry.workspaces[name]?.extra,
+      purgeData: registry.workspaces[name]?.purgeData,
       verbose: run.verbose,
     });
     delete registry.workspaces[name];
@@ -1098,7 +1102,7 @@ async function handleRemove(
     worktree,
     mainWorktree: ctx.mainWorktree,
     name,
-    extra: registry.workspaces[name]?.extra,
+    purgeData: registry.workspaces[name]?.purgeData,
     verbose: run.verbose,
   });
 
@@ -1199,9 +1203,9 @@ function linkWorkspaceRegistry(
   log("Created workspace-registry symlink → main worktree.");
 }
 
-async function generateConfigFiles(
+async function seedGitignoredFiles(
   ctx: WorktreeContext,
-  entries: ConfigFileEntry[],
+  entries: GitignoredFileEntry[],
   name: string,
   ports: Record<string, number>,
   force: boolean,
@@ -1221,7 +1225,7 @@ async function generateConfigFiles(
     copyAndPatchFile(
       { currentWorktree: ctx.currentWorktree, log },
       entry.path,
-      await resolveConfigSource(entry, patchCtx),
+      await resolveFileSource(entry, patchCtx),
       patchFn,
       entry.path,
       force,
@@ -1230,15 +1234,15 @@ async function generateConfigFiles(
   }
 }
 
-export async function resolveConfigSource(
-  entry: ConfigFileEntry,
+export async function resolveFileSource(
+  entry: GitignoredFileEntry,
   ctx: PatchContext,
 ): Promise<ResolvedFileSource> {
   const { source } = entry;
   switch (source.kind) {
     case "mainWorktree":
       return { path: join(ctx.mainWorktree, entry.path) };
-    case "newWorktree":
+    case "committed":
       return { path: join(ctx.currentWorktree, source.path) };
     case "content":
       return {

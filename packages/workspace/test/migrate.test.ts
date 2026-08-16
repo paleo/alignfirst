@@ -18,7 +18,12 @@ import type { WorktreeContext } from "../src/worktree.js";
 import { readWorkspaces, registryDirFor } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
-const ports = resolvePortsConfig({ base: 8100, names: ["web"] });
+const ports = resolvePortsConfig({
+  base: 8100,
+  perWorkspace: 10,
+  maxWorkspaces: 20,
+  names: ["web"],
+});
 
 let mainWorktree: string;
 
@@ -51,7 +56,7 @@ describe("convertSlotsRegistry", () => {
       createdAt: "2026-05-10T00:00:00.000Z",
       status: "failed",
       failure,
-      extra: { container: "db-a" },
+      purgeData: { container: "db-a" },
       portIndex: 1,
     });
   });
@@ -70,7 +75,7 @@ describe("convertSlotsRegistry", () => {
     expect(entry.main).toBe(true);
     expect(entry.worktree).toBe(mainWorktree);
     expect(entry.createdAt).toBe("2026-08-01T00:00:00.000Z");
-    expect(entry.extra).toEqual({ volume: "v1" });
+    expect(entry.purgeData).toEqual({ volume: "v1" });
     expect(entry.portIndex).toBeUndefined();
   });
 
@@ -231,7 +236,7 @@ describe("refuseOldRegistry", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       expect(() => refuseOldRegistry(mainWorktree, registryDir)).toThrow("EXIT");
-      expect(error.mock.calls.join("\n")).toContain("migrate");
+      expect(error.mock.calls.join("\n")).toContain("migrate-registry-0.30");
     } finally {
       exit.mockRestore();
       error.mockRestore();

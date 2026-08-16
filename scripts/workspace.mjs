@@ -3,19 +3,19 @@ import { fileURLToPath } from "node:url";
 import { runWorkspace } from "@paleo/workspace";
 
 await runWorkspace({
-  scriptPath: fileURLToPath(import.meta.url),
+  workspaceScript: fileURLToPath(import.meta.url),
   sharedDirs: [".plans", ".local"],
   runtimeDir: ".local-wt",
-  configFiles: [
+  gitignoredFiles: [
     { path: ".vscode/settings.json", source: { kind: "mainWorktree" }, optional: true },
   ],
-  finalizeWorktree: ({ currentWorktree, progress }) => {
+  finalizeWorkspace: ({ currentWorktree, progress }) => {
     progress("npm install");
     execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
     progress("npm run build");
     execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
   },
-  printSummary: ({ name, branch, currentWorktree, isMainWorktree, status }) => `
+  formatSummary: ({ name, branch, currentWorktree, isMainWorktree, status }) => `
 Workspace ${name} — ${status}
   Type:   ${isMainWorktree ? "main" : "linked"}
   Branch: ${branch}

@@ -13,7 +13,7 @@ export const TAIL_INTERVAL_MS = 300;
 export interface PollableServer {
   name: string;
   logFile: string;
-  detectSuccess: (logContent: string) => boolean;
+  detectReady: (logContent: string) => boolean;
   detectError?: (logContent: string) => string | false;
 }
 
@@ -66,7 +66,7 @@ async function waitForReady(
 
     if (existsSync(server.logFile)) {
       const logContent = readFileSync(server.logFile, "utf-8");
-      if (server.detectSuccess(logContent)) return;
+      if (server.detectReady(logContent)) return;
       const matched = server.detectError?.(logContent);
       if (matched) {
         throw new StartupError(server.name, `error detected (${matched})`, server.logFile);

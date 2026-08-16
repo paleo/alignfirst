@@ -83,10 +83,10 @@ describe("workspace setup (e2e)", () => {
   );
 
   it(
-    "detached --go prints the cd hint immediately on non-TTY",
+    "detached --enter prints the cd hint immediately on non-TTY",
     () => {
       const { repo } = fixture();
-      const result = runCli(repo, ["setup", "-c", "feat-g", "-d", "--go"]);
+      const result = runCli(repo, ["setup", "-c", "feat-g", "-d", "--enter"]);
       const output = result.stdout + result.stderr;
 
       expect(result.status).toBe(0);

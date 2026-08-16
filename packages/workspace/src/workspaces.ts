@@ -24,9 +24,9 @@ export interface WorkspaceEntry {
   main?: boolean;
   /** Port block index, stored only for linked workspaces when the config declares `ports`. */
   portIndex?: number;
-  /** Opaque blob the consumer returns from `finalizeWorktree`, handed back to `purgeInfrastructure`
+  /** Opaque blob the consumer returns from `finalizeWorkspace`, handed back to `purgeInfrastructure`
    * so an orphan's infrastructure can be torn down by name after its worktree (and config) is gone. */
-  extra?: unknown;
+  purgeData?: unknown;
 }
 
 export type WorkspaceStatus = "pending" | "ready" | "failed";
@@ -99,7 +99,7 @@ export function registerWorkspace(input: RegisterWorkspaceInput): RegisteredWork
   if (input.ports && !input.isMainWorktree) {
     entry.portIndex = existing?.portIndex ?? lowestFreePortIndex(registry, input.ports);
   }
-  if (existing?.extra !== undefined) entry.extra = existing.extra;
+  if (existing?.purgeData !== undefined) entry.purgeData = existing.purgeData;
   registry.workspaces[name] = entry;
   writeWorkspaces(input.mainWorktree, input.registryDir, registry);
   return { name, status: entry.status, portIndex: entry.portIndex };
@@ -139,14 +139,14 @@ export function markWorkspaceReady(
   mainWorktree: string,
   registryDir: string,
   name: string,
-  extra?: unknown,
+  purgeData?: unknown,
 ): void {
   const registry = readWorkspaces(mainWorktree, registryDir);
   const entry = registry.workspaces[name];
   if (!entry) return;
   entry.status = "ready";
   delete entry.failure;
-  if (extra !== undefined) entry.extra = extra;
+  if (purgeData !== undefined) entry.purgeData = purgeData;
   writeWorkspaces(mainWorktree, registryDir, registry);
 }
 

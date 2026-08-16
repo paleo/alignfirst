@@ -48,7 +48,7 @@ function workspaceMjsSource(portless: boolean): string {
   const devSetup = portless
     ? ""
     : `  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
-  ports: { base: 8100, names: ["web"] },
+  ports: { base: 8100, maxWorkspaces: 20, names: ["web"] },
 `;
   return `import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,12 +57,12 @@ import { fileURLToPath } from "node:url";
 import { runWorkspace } from "${distIndexUrl}";
 
 await runWorkspace({
-  scriptPath: fileURLToPath(import.meta.url),
+  workspaceScript: fileURLToPath(import.meta.url),
 ${devSetup}  sharedDirs: [],
-  configFiles: [],
+  gitignoredFiles: [],
   runtimeDir: ".wt",
-  printSummary: () => "Workspace ready.",
-  finalizeWorktree: (ctx) => {
+  formatSummary: () => "Workspace ready.",
+  finalizeWorkspace: (ctx) => {
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");
     writeFileSync(join(ctx.currentWorktree, "finalized.txt"), "finalized\\n");

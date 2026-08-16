@@ -57,11 +57,11 @@ export interface DevServerConfig {
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
-  devLimit?: number;
+  maxConcurrentDevServers?: number;
   /** One entry per server to start. Started in array order; stopped in reverse order. */
   servers: ServerDescriptor[];
   /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
-  printSummary?: (ctx: DevServerSummaryContext) => string;
+  formatSummary?: (ctx: DevServerSummaryContext) => string;
 }
 
 function logFileFor(runtimeDir: string, name: string): string {
@@ -69,7 +69,7 @@ function logFileFor(runtimeDir: string, name: string): string {
 }
 
 /**
- * Context passed to {@link DevServerConfig.printSummary}. `port` and `pid` are present only for
+ * Context passed to {@link DevServerConfig.formatSummary}. `port` and `pid` are present only for
  * `kind: "spawn"` servers; callback servers expose neither.
  */
 export interface DevServerSummaryContext {
@@ -363,7 +363,7 @@ async function spawnAndAwait(
   const pollables: PollableServer[] = spawnEntries.map((s) => ({
     name: s.name,
     logFile: logFileFor(config.runtimeDir, s.name),
-    detectSuccess: s.detectSuccess,
+    detectReady: s.detectReady,
     detectError: s.detectError ?? detectCommonJsError,
   }));
   const pollPids = spawnEntries.map((s) => state.spawnPids[s.name]);
@@ -398,8 +398,8 @@ function printStartSummary(
     }
     return { server };
   });
-  if (config.printSummary) {
-    console.log(config.printSummary({ workspace, servers: summaryServers }));
+  if (config.formatSummary) {
+    console.log(config.formatSummary({ workspace, servers: summaryServers }));
   } else {
     defaultPrintSummary(workspace, summaryServers, config.runtimeDir);
   }
@@ -570,7 +570,7 @@ async function enforceCap(
   registryDir: string,
   evict: boolean,
 ): Promise<void> {
-  const limit = config.devLimit;
+  const limit = config.maxConcurrentDevServers;
   if (limit === undefined) return;
   const active = pruneAndPersist(mainWorktree, registryDir).servers;
   if (active.length < limit) return;

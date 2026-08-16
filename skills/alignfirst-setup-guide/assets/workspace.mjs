@@ -14,12 +14,12 @@ import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@paleo/workspace";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
-// `finalizeWorktree` and the `docker-compose.yml` configFile entry with a
+// `finalizeWorkspace` and the `docker-compose.yml` gitignoredFiles entry with a
 // copy from the main worktree:
 //
 //   import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 //   import { join } from "node:path";
-//   // inside finalizeWorktree, before install/build:
+//   // inside finalizeWorkspace, before install/build:
 //   const localData = join(currentWorktree, ".local-wt/data");
 //   const mainData = join(mainWorktree, ".local-wt/data");
 //   mkdirSync(localData, { recursive: true });
@@ -30,7 +30,7 @@ import { runWorkspace, helpers } from "@paleo/workspace";
 await runWorkspace({
   // Required. The package re-spawns this script for the detached finalize phase, so it must know
   // where it lives. Leave this line as-is — `import.meta.url` always resolves to this file.
-  scriptPath: fileURLToPath(import.meta.url),
+  workspaceScript: fileURLToPath(import.meta.url),
 
   // ADAPT (optional): absolute path to your dev-server script. On `workspace
   // remove`, the kernel shells out to `node <devServerScript> down` with cwd set
@@ -46,14 +46,15 @@ await runWorkspace({
     // ADAPT: first port of the main worktree's block. 8100 is the safe default.
     base: 8100,
 
-    // ADAPT (optional): block size and spacing, so also the maximum ports per
-    // workspace. Set 1 for a single-port project; raise it above 10 when a
-    // workspace needs more ports.
-    // perWorkspace: 10,
+    // ADAPT: maximum workspaces, main worktree included. The scheme spans
+    // `maxWorkspaces * perWorkspace` ports from `base`.
+    maxWorkspaces: 20,
 
-    // ADAPT (optional): maximum workspaces, main worktree included. The scheme
-    // spans `maxWorkspaces * perWorkspace` ports from `base`.
-    // maxWorkspaces: 20,
+    // ADAPT (optional): block size and spacing, so also the maximum ports per
+    // workspace. Defaults to `names.length` (required with `compute`); set it
+    // explicitly to reserve headroom, since adding a name later shifts every
+    // workspace's block under the default.
+    // perWorkspace: 10,
 
     // ADAPT: exactly one of `names` (consecutive ports from the block's first
     // port) or `compute` (full control over the block).
@@ -74,13 +75,13 @@ await runWorkspace({
 
   // ADAPT: EVERY gitignored file a linked worktree needs — not only the
   // port-bearing ones. Each entry declares a `source`:
-  //   { kind: "mainWorktree" }              copy the file from the main worktree
-  //   { kind: "newWorktree", path: "..." }  copy a committed template (e.g. an
-  //                                         .example) from the new worktree
-  //   { kind: "content", content }          inline string, or a (async) function
+  //   { kind: "mainWorktree" }            copy the file from the main worktree
+  //   { kind: "committed", path: "..." }  copy a committed template (e.g. an
+  //                                       .example) from the worktree's checkout
+  //   { kind: "content", content }        inline string, or a (async) function
   // `patch` is optional — omit it to copy verbatim (see ".vscode/settings.json").
   // Omitting an entry leaves the linked worktree silently missing that file.
-  configFiles: [
+  gitignoredFiles: [
     {
       path: ".env",
       source: { kind: "mainWorktree" },
@@ -114,14 +115,14 @@ await runWorkspace({
     },
   ],
 
-  // ADAPT (optional): runs BEFORE configFiles are copied. Seed gitignored files
+  // ADAPT (optional): runs BEFORE gitignoredFiles are copied. Seed gitignored files
   // the kernel will look for — typically the main worktree's config, from its
   // committed .example — so a fresh clone's first `workspace setup` works with no
   // manual step (otherwise a mainWorktree-sourced config has no initial content
   // and setup aborts). MUST be idempotent; on a linked-worktree setup it MUST NOT
   // touch the main worktree, so gate on isMainWorktree. List one [template, target]
   // per mainWorktree-sourced config that has a committed template. Drop this field
-  // when every configFile uses a newWorktree or content source.
+  // when every gitignoredFiles entry uses a committed or content source.
   preSetup: ({ isMainWorktree, currentWorktree, force, log }) => {
     if (!isMainWorktree) return;
     for (const [template, target] of [[".env.example", ".env"]]) {
@@ -140,7 +141,7 @@ await runWorkspace({
   //
   // Run `npm install` first: any later failure then leaves a worktree with
   // usable node_modules, so `workspace setup` can re-import @paleo/workspace.
-  finalizeWorktree: async ({ currentWorktree, name, ports }) => {
+  finalizeWorkspace: async ({ currentWorktree, name, ports }) => {
     const container = `${name}-database`;
     // A worktree of the same name, deleted out-of-band, may have leaked its container (it belongs
     // to a different compose project, so `up` can't reuse it — it errors on the name conflict).
@@ -178,13 +179,13 @@ await runWorkspace({
     execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
     execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
     // Returning is OPTIONAL — omit the two lines below entirely if you have
-    // nothing to record (the common case). Return `{ extra }` ONLY for teardown
+    // nothing to record (the common case). Return `{ purgeData }` ONLY for teardown
     // identifiers you can't re-derive at purge time: container/volume names are
     // derived from the workspace name (see purgeInfrastructure), so they don't go
     // here, but a non-derivable external resource does — e.g. a public dev tunnel
     // opened now, whose provider hands back an opaque id.
     const tunnelId = openDevTunnel(ports.frontend); // ADAPT: your external resource
-    return { extra: { tunnelId } };
+    return { purgeData: { tunnelId } };
   },
 
   // ADAPT: destructive infrastructure teardown — typically `docker compose
@@ -193,9 +194,9 @@ await runWorkspace({
   //
   // MUST BE IDEMPOTENT — tolerate already-absent infrastructure. May run when
   // `worktree` is gone (orphan); the container/volume names are derived from the
-  // workspace name, so teardown works without the worktree. `extra` carries only
+  // workspace name, so teardown works without the worktree. `purgeData` carries only
   // the non-derivable bits (here, the external tunnel id).
-  purgeInfrastructure: ({ worktree, name, extra }) => {
+  purgeInfrastructure: ({ worktree, name, purgeData }) => {
     try {
       if (existsSync(worktree)) {
         execSync("docker compose down -v", { stdio: "pipe", cwd: worktree });
@@ -203,7 +204,7 @@ await runWorkspace({
         execFileSync("docker", ["rm", "-f", `${name}-database`], { stdio: "pipe" });
         execFileSync("docker", ["volume", "rm", `${name}_db-data`], { stdio: "pipe" });
       }
-      if (extra?.tunnelId) closeDevTunnel(extra.tunnelId); // ADAPT: external teardown
+      if (purgeData?.tunnelId) closeDevTunnel(purgeData.tunnelId); // ADAPT: external teardown
     } catch {
       // infra may already be gone
     }
@@ -211,7 +212,7 @@ await runWorkspace({
 
   // ADAPT. Do not list dev-server URLs here — the dev-server is not running yet
   // at this point. The worktree path is the useful pointer.
-  printSummary: ({ name, branch, currentWorktree, isMainWorktree }) => `
+  formatSummary: ({ name, branch, currentWorktree, isMainWorktree }) => `
 Workspace setup complete!
   Worktree type: ${isMainWorktree ? "main" : "linked"}
   Workspace:     ${name}

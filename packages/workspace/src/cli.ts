@@ -9,7 +9,7 @@ export type WorkspaceCommand =
       newBranch: boolean;
       from?: string;
       force: boolean;
-      go: boolean;
+      enter: boolean;
       dedupe: boolean;
       detached: boolean;
     }
@@ -69,7 +69,7 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
-    case "migrate":
+    case "migrate-registry-0.30":
       return parseMigrate(tokens);
     case "__finalize":
       return parseFinalize(tokens);
@@ -85,7 +85,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
       force: { type: "boolean" },
-      go: { type: "boolean" },
+      enter: { type: "boolean" },
       dedupe: { type: "boolean" },
       detached: { type: "boolean", short: "d" },
       verbose: { type: "boolean" },
@@ -95,7 +95,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   });
   const branch = takeOptionalPositional(positionals, "setup");
   const newBranch = values["new-branch"] ?? false;
-  const go = values.go ?? false;
+  const enter = values.enter ?? false;
   const dedupe = values.dedupe ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup -c <branch>` requires a branch name.");
@@ -106,8 +106,8 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   if (dedupe && !newBranch) {
     throw new ConfigError("`--dedupe` requires `-c`/`--new-branch`.");
   }
-  if (go && branch === undefined) {
-    throw new ConfigError("`--go` requires a branch (the worktree to enter).");
+  if (enter && branch === undefined) {
+    throw new ConfigError("`--enter` requires a branch (the worktree to enter).");
   }
   return {
     command: {
@@ -116,7 +116,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       newBranch,
       from: values.from,
       force: values.force ?? false,
-      go,
+      enter,
       dedupe,
       detached: values.detached ?? false,
     },
@@ -202,7 +202,7 @@ function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
     allowPositionals: true,
     strict: true,
   });
-  rejectPositionals(positionals, "migrate");
+  rejectPositionals(positionals, "migrate-registry-0.30");
   return { command: { kind: "migrate" }, verbose: values.verbose ?? false };
 }
 
@@ -239,7 +239,7 @@ export function printWorkspaceHelp(): void {
       "ports, database, dev server).",
       "",
       "Commands:",
-      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--go]",
+      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter]",
       "      Set up the workspace. With <branch>, create a sibling worktree for it",
       "      (add -c to create the branch first). Without, set up the current worktree",
       "      (idempotent; bootstrap and retry path).",
@@ -249,7 +249,7 @@ export function printWorkspaceHelp(): void {
       "      Blocks until setup reaches READY (or FAILED), showing a progress ticker.",
       "      -d|--detached: return once the worktree exists; setup continues in the background,",
       "      join it with `wait`.",
-      "      With --go, drop into an interactive shell in the new worktree (exit to return);",
+      "      With --enter, drop into an interactive shell in the new worktree (exit to return);",
       "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
       "  remove [<dir>] [--force]",
       "      Remove a workspace, selected by directory (path or basename);",
@@ -264,7 +264,7 @@ export function printWorkspaceHelp(): void {
       "      Selected by directory (path or basename); the current worktree when omitted.",
       "  wait [<dir>]",
       "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
-      "  migrate",
+      "  migrate-registry-0.30",
       "      Convert an old registry (slots.json) to workspaces.json, in place.",
       "      Run it once from the main worktree after upgrading the package.",
       "",

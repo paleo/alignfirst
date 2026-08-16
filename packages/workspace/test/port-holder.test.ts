@@ -21,7 +21,7 @@ function spawnServer(name: string, port?: number): SpawnServer {
     kind: "spawn",
     name,
     exec: { command: "noop", args: [] },
-    detectSuccess: () => true,
+    detectReady: () => true,
   };
   if (port !== undefined) server.port = port;
   return server;

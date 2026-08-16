@@ -46,7 +46,7 @@ export interface MigrateInput {
 export function runMigrate(ctx: WorktreeContext, input: MigrateInput): void {
   if (!ctx.isMainWorktree) {
     throw new WorkspaceError(
-      `\`workspace migrate\` must run from the main worktree: ${ctx.mainWorktree}`,
+      `\`workspace migrate-registry-0.30\` must run from the main worktree: ${ctx.mainWorktree}`,
     );
   }
   const slotsPath = join(ctx.mainWorktree, input.registryDir, SLOTS_FILENAME);
@@ -154,7 +154,7 @@ function refuseDuplicateName(
   throw new WorkspaceError(
     `Two worktrees share the directory name "${name}": ${existing.worktree} and ${worktree}. ` +
       "Worktree directory names must be unique. Remove one of the worktrees, delete its entry " +
-      `from slots.json, then re-run \`${wsCmd("migrate")}\`.`,
+      `from slots.json, then re-run \`${wsCmd("migrate-registry-0.30")}\`.`,
   );
 }
 
@@ -165,7 +165,7 @@ function migratedEntry(old: OldSlotEntry): WorkspaceEntry {
     status: old.status,
   };
   if (old.failure) entry.failure = old.failure;
-  if (old.extra !== undefined) entry.extra = old.extra;
+  if (old.extra !== undefined) entry.purgeData = old.extra;
   return entry;
 }
 
@@ -266,7 +266,7 @@ export function refuseOldRegistry(mainWorktree: string, registryDir: string): vo
   const slotsPath = join(mainWorktree, registryDir, SLOTS_FILENAME);
   if (!existsSync(slotsPath)) return;
   console.error(
-    `Error: Old registry found at ${slotsPath}. Run \`${wsCmd("migrate")}\` from the main worktree.`,
+    `Error: Old registry found at ${slotsPath}. Run \`${wsCmd("migrate-registry-0.30")}\` from the main worktree.`,
   );
   process.exit(1);
 }

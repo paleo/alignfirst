@@ -14,16 +14,16 @@ For the consumer-facing blueprint — concepts, config fields, the CLI surface, 
 
 ## Setup modes
 
-`workspace setup` creates the worktree synchronously, then runs `finalizeWorktree` (install, build, DB) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`.
+`workspace setup` creates the worktree synchronously, then runs `finalizeWorkspace` (install, build, DB) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`.
 
 The child is spawned as `__finalize` with no target argument and `cwd` set to the new worktree. It re-detects that worktree and takes its basename as the workspace name — the registry key — so parent and child agree on the target with nothing passed between them. Only `--force` is forwarded.
 
 - **Blocking (default).** After spawning the child, `runSetup` calls `waitForWorkspace`, which polls `workspaces.json` until the finalize child marks the workspace `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed); on settle, one final drain read prints the log bytes written since the last poll.
-- **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker; its `--verbose` first replays the last 30 log lines, since the joiner saw no history. `--go` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
+- **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker; its `--verbose` first replays the last 30 log lines, since the joiner saw no history. `--enter` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
 
 ### Progress file
 
-The blocking ticker cannot call into the detached child, so they communicate through a file: `<runtimeDir>/logs/workspace-setup.progress`. `SetupContext.progress(label)` overwrites it with the current label (and appends `PROGRESS: <label>` to the log); the ticker re-reads it each poll. It is deleted when the log is truncated at the start of `setup` and when finalize settles (ready or failed), so a stale label never leaks into the next run.
+The blocking ticker cannot call into the detached child, so they communicate through a file: `<runtimeDir>/logs/workspace-setup.progress`. `FinalizeContext.progress(label)` overwrites it with the current label (and appends `PROGRESS: <label>` to the log); the ticker re-reads it each poll. It is deleted when the log is truncated at the start of `setup` and when finalize settles (ready or failed), so a stale label never leaks into the next run.
 
 ### Branch-name conflicts
 
@@ -60,7 +60,7 @@ So on external stop the foreground's only job is to stop hanging on dead servers
 
 - `dev down` (`stopLocal`) — for the current worktree's entry: `stopProcessGroup` each live spawn PID, run callback `stop()` in reverse array order, unregister, sweep stale ports.
 - `dev down --all` (`stopAllRegistered`) — the same per entry across **every** worktree, then clears the whole registry.
-- Eviction — stops the oldest live entries (by `startedAt`) to free room under `devLimit`, using the same primitives.
+- Eviction — stops the oldest live entries (by `startedAt`) to free room under `maxConcurrentDevServers`, using the same primitives.
 
 ## Cross-worktree callback dispatch
 
@@ -77,7 +77,7 @@ Consequences for callback authors:
 
 ## Concurrency-cap TOCTOU race
 
-The cap check and the subsequent register in `enforceCap` are not atomic. Two concurrent `dev up --evict` from different worktrees can both pass the check and both register, leaving `devLimit + 1` live servers. This is accepted: the window is narrow and the consequence is bounded to one extra server. Resolve manually with `dev list` + `dev down`.
+The cap check and the subsequent register in `enforceCap` are not atomic. Two concurrent `dev up --evict` from different worktrees can both pass the check and both register, leaving `maxConcurrentDevServers + 1` live servers. This is accepted: the window is narrow and the consequence is bounded to one extra server. Resolve manually with `dev list` + `dev down`.
 
 ## Registry liveness
 
@@ -91,7 +91,7 @@ Indexes are allocated only when `ports` is configured. A workspace registered wh
 
 ## Registry migration
 
-`workspace migrate` converts a pre-`workspaces.json` registry (`slots.json`, keyed by port) in place, from the main worktree only. Every other command fails fast while `slots.json` exists, so an old registry never reads as "no workspaces". Worktrees, their gitignored content and running dev-servers are untouched.
+`workspace migrate-registry-0.30` converts a pre-`workspaces.json` registry (`slots.json`, keyed by port) in place, from the main worktree only. Every other command fails fast while `slots.json` exists, so an old registry never reads as "no workspaces". Worktrees, their gitignored content and running dev-servers are untouched.
 
 Conversion rules:
 
@@ -102,7 +102,7 @@ Conversion rules:
 
 The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be renamed or removed manually.
 
-A `slots.json` present next to an existing `workspaces.json` was re-created after the migration, by a workspace command run on a branch that still uses the old package. `migrate` then refuses and asks for a manual delete, instead of guessing which registry is authoritative.
+A `slots.json` present next to an existing `workspaces.json` was re-created after the migration, by a workspace command run on a branch that still uses the old package. `migrate-registry-0.30` then refuses and asks for a manual delete, instead of guessing which registry is authoritative.
 
 ## Self-healing orphaned workspaces
 
@@ -117,7 +117,7 @@ Healing splits by destructiveness:
 
 `workspace remove` against an already-deleted worktree dir takes the same direct-kill path (shared `stopOrphanedDevServer` helper): it can't shell out to `node <devServerScript> down` (the worktree and its `dev-server.mjs` are gone), so it kills the recorded spawn PIDs, runs `purgeInfrastructure`, drops both registry entries, and runs `git worktree prune` — same full cleanup as `workspace prune`.
 
-**Tearing down an orphan's infrastructure (`extra`).** The kernel still can't run a deleted worktree's callback `stop()` — its dev-server config is gone. Instead, `finalizeWorktree` may return `{ extra }`, an opaque blob persisted on the registry entry (in `workspaces.json`, which lives in the main worktree and so **outlives** the deleted worktree). On the orphan `prune`/`remove` paths the kernel hands `PurgeContext` (`worktree`, `mainWorktree`, `name`, `extra`) to `config.purgeInfrastructure` (the workspace config — not the dev-server config — is loaded, so the callback is in scope), with `ctx.worktree` pointing at the now-missing dir. A cwd-independent `purgeInfrastructure` tears down by name: deterministic names (containers, volumes) are *derived* from `ctx.name` + the paths, so they need no `extra`; `extra` carries only what can't be re-derived (an external resource id, a random container id). The kernel stays infra-agnostic: it never reads `extra`, only couriers it. Two residual gaps: a consumer that defines no `extra`/`purgeInfrastructure` still leaks (prune prints the generic caveat then), and the side-effect-free `list` auto-prune purges nothing — consumers cover that by making `finalizeWorktree` idempotent against leftover infra (force-remove the container named after the workspace before `docker compose up`).
+**Tearing down an orphan's infrastructure (`purgeData`).** The kernel still can't run a deleted worktree's callback `stop()` — its dev-server config is gone. Instead, `finalizeWorkspace` may return `{ purgeData }`, an opaque blob persisted on the registry entry (in `workspaces.json`, which lives in the main worktree and so **outlives** the deleted worktree). On the orphan `prune`/`remove` paths the kernel hands `PurgeContext` (`worktree`, `mainWorktree`, `name`, `purgeData`) to `config.purgeInfrastructure` (the workspace config — not the dev-server config — is loaded, so the callback is in scope), with `ctx.worktree` pointing at the now-missing dir. A cwd-independent `purgeInfrastructure` tears down by name: deterministic names (containers, volumes) are *derived* from `ctx.name` + the paths, so they need no `purgeData`; `purgeData` carries only what can't be re-derived (an external resource id, a random container id). The kernel stays infra-agnostic: it never reads `purgeData`, only couriers it. Two residual gaps: a consumer that defines no `purgeData`/`purgeInfrastructure` still leaks (prune prints the generic caveat then), and the side-effect-free `list` auto-prune purges nothing — consumers cover that by making `finalizeWorkspace` idempotent against leftover infra (force-remove the container named after the workspace before `docker compose up`).
 
 ## Rendering `--guide`
 

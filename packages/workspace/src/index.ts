@@ -1,17 +1,26 @@
+import {
+  detectCommonJsError,
+  extractHost,
+  patchEnvFile,
+  readPortFromEnvFile,
+  readPortFromJsonFile,
+} from "./helpers.js";
+
 export { runWorkspace } from "./workspace.js";
 export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   WorkspaceConfig,
-  SetupContext,
+  PreSetupContext,
+  FinalizeContext,
   FinalizeResult,
   SummaryContext,
   PatchContext,
-  ConfigFileEntry,
-  ConfigFileSource,
-  MainWorktreeConfigFileSource,
-  NewWorktreeConfigFileSource,
-  ContentConfigFileSource,
+  GitignoredFileEntry,
+  GitignoredFileSource,
+  MainWorktreeSource,
+  CommittedSource,
+  ContentSource,
   PurgeContext,
 } from "./workspace.js";
 export type { PortsConfig, PortComputeContext } from "./ports.js";
@@ -28,7 +37,12 @@ export type {
 
 export type { ResolvedWorkspace } from "./workspaces.js";
 
-import * as helpers from "./helpers.js";
-export { helpers };
+export const helpers = {
+  patchEnvFile,
+  extractHost,
+  readPortFromEnvFile,
+  readPortFromJsonFile,
+  detectCommonJsError,
+};
 
 export { StartupError, ConfigError, WorkspaceError } from "./errors.js";

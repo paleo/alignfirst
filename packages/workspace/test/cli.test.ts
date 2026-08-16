@@ -24,7 +24,7 @@ describe("parseWorkspaceArgs", () => {
       "setup",
       "feat/42",
       "--force",
-      "--go",
+      "--enter",
       "--verbose",
     ]);
     expect(command).toEqual({
@@ -33,7 +33,7 @@ describe("parseWorkspaceArgs", () => {
       newBranch: false,
       from: undefined,
       force: true,
-      go: true,
+      enter: true,
       dedupe: false,
       detached: false,
     });
@@ -110,13 +110,18 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["setup", "-c"])).toThrow(ConfigError);
   });
 
-  it("parses `setup <branch> -c --go`", () => {
-    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--go"]);
-    expect(command).toMatchObject({ kind: "setup", branch: "feat/42", newBranch: true, go: true });
+  it("parses `setup <branch> -c --enter`", () => {
+    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--enter"]);
+    expect(command).toMatchObject({
+      kind: "setup",
+      branch: "feat/42",
+      newBranch: true,
+      enter: true,
+    });
   });
 
-  it("rejects `--go` without a branch", () => {
-    expect(() => parseWorkspaceArgs(["setup", "--go"])).toThrow(ConfigError);
+  it("rejects `--enter` without a branch", () => {
+    expect(() => parseWorkspaceArgs(["setup", "--enter"])).toThrow(ConfigError);
   });
 
   it("rejects an unknown flag on setup", () => {
@@ -196,12 +201,12 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["__finalize", "8110"])).toThrow(ConfigError);
   });
 
-  it("parses `migrate`", () => {
-    expect(parseWorkspaceArgs(["migrate"]).command).toEqual({ kind: "migrate" });
+  it("parses `migrate-registry-0.30`", () => {
+    expect(parseWorkspaceArgs(["migrate-registry-0.30"]).command).toEqual({ kind: "migrate" });
   });
 
-  it("rejects a positional on `migrate`", () => {
-    expect(() => parseWorkspaceArgs(["migrate", ".local/registry"])).toThrow(ConfigError);
+  it("rejects a positional on `migrate-registry-0.30`", () => {
+    expect(() => parseWorkspaceArgs(["migrate-registry-0.30", ".local/registry"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `migrate-0.16` command", () => {

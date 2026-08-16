@@ -23,7 +23,7 @@ export interface SpawnServer {
    */
   port?: number;
   /** Returns `true` once the log content indicates the server is ready. */
-  detectSuccess: (logContent: string) => boolean;
+  detectReady: (logContent: string) => boolean;
   /**
    * Returns a non-empty marker string when the log content indicates a fatal error, or `false`.
    * When omitted, `helpers.detectCommonJsError` is used as a default. To disable detection,
