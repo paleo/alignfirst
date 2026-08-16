@@ -20,8 +20,27 @@ Group related knowledge into potential documents. If docs already exist, focus o
 - **Testing** — how to run tests, write new tests, test conventions.
 - **Component-specific guides** — one per major module or subsystem.
 - **Setup / getting started** — environment setup, first run, prerequisites.
+- **Procedures** — a task an agent performs occasionally, in several ordered steps: creating a merge request, writing a changeset, cutting a release, running a migration.
 
 Aim for 40–80 lines per document. If a topic is too broad, split it.
+
+### Procedures belong in `docs/`, not in an entry point
+
+An entry point is read every session; `docs/` is read on demand. A procedure earns a document when it is followed occasionally and has several steps — the reader pays for it only when the task comes up, and there is room to write it properly.
+
+Left in `AGENTS.md` or `DEVELOPMENT.md`, the same procedure gets compressed to a command or two, which is the useless half: the agent learns that a changeset exists, but not which packages to declare, which bump to pick, or what the CI rejects. It also tends to reappear in `README.md` in a third wording, and the three copies drift.
+
+So move the whole procedure into `docs/` and leave nothing behind — no summary line, no pointer. Docmap already indexes the document, and the `read_when` entries fire when the task arises.
+
+### Write for the agent, not for the human's tooling
+
+A procedure document describes the end state, not the interactive command a human would use to reach it. An agent writing a changeset file directly is faster and more accurate than an agent driving `changeset`'s prompts. Give the file format and where it goes; mention the interactive command only to say it is the human equivalent.
+
+Include what the tooling will reject. When CI validates the artifact, state the exact constraint — a hand-written file has to satisfy a format that an interactive CLI would have produced on its own.
+
+### Adapt every procedure to its repository
+
+A procedure is repo-specific even when the shape is shared. Read the real values rather than copying a sibling: the git host and its CLI (`glab` vs `gh`), the base branch, the actual package names and how paths map to them, the commit convention, the pre-flight scripts that exist in `package.json`, and what CI enforces. A copied procedure that names another repository's packages is worse than no document.
 
 ## 3. Discuss with the User
 

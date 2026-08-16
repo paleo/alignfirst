@@ -199,8 +199,9 @@ On a bot-driven project, `DEVELOPMENT.md` carries the same workspaces section: t
 Record only repo-specific facts, in whatever entry point developers and agents already read (`README.md`, `AGENTS.md`, `DEVELOPMENT.md`):
 
 1. **URLs to open after `dev` starts** (admin UI, auto-login), with the dynamic port.
-2. **Release process** if it lives near the dev workflow (changeset rules, PR/MR target).
-3. **Any project quirk** — extra build steps, a non-obvious log path.
+2. **Any project quirk** — extra build steps, a non-obvious log path.
+
+The release process is not one of them: a multi-step procedure followed occasionally belongs in `docs/`, read on demand — see [Procedures belong in `docs/`](docmap-bootstrapping.md#procedures-belong-in-docs-not-in-an-entry-point).
 
 ## The bot contract
 
