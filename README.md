@@ -26,6 +26,8 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 When _OpenClaw_ uses AlignFirst, we obtain a teammate, an AI partner more than an AI agent. See [openclaw-coder/README.md](openclaw-coder/README.md).
 
+---
+
 ## Setup with your agent
 
 Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
@@ -42,19 +44,14 @@ Use your alignfirst-setup-guide skill. What can I set up in this project?
 
 At the end, feel free to uninstall the skill. It won't be used by your project anymore.
 
-## Working on this repository
+---
+
+## Contribute
 
 After a fresh clone:
 
 ```sh
-npm install
-
-# Plans live in a separate repository, cloned wherever you like.
-git clone git@gitlab.com:paroi/private/paroi-plans.git ../paroi-plans
-npm run plans:setup -- ../paroi-plans
+npm i
+npm run build --workspace @paleo/workspace
+npm run workspace -- setup
 ```
-
-`plans:setup` replaces `.plans` with a symlink into the clone's `alignfirst/` folder. Moving the clone breaks the link; re-run the command with the new location.
-
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the everyday workflow.
-

@@ -371,7 +371,8 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       }
     }
   } catch (err) {
-    if (err instanceof WorkspaceError) {
+    // `ConfigError` too: `ports.compute` is only validated per index, inside the command flows.
+    if (err instanceof WorkspaceError || err instanceof ConfigError) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }

@@ -37,8 +37,14 @@ describe("resolvePortsConfig", () => {
     ).toThrow(ConfigError);
   });
 
-  it("requires `maxWorkspaces`", () => {
+  it("requires `base`", () => {
     // Plain-JS consumers bypass the type, so the guard is a runtime check.
+    expect(() => resolvePortsConfig({ maxWorkspaces: 20, names: ["web"] } as PortsConfig)).toThrow(
+      /base/,
+    );
+  });
+
+  it("requires `maxWorkspaces`", () => {
     expect(() => resolvePortsConfig({ base: 8100, names: ["web"] } as PortsConfig)).toThrow(
       /maxWorkspaces/,
     );

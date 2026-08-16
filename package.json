@@ -21,7 +21,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "~2.5.1",
-    "@changesets/cli": "~2.31.0",
-    "@paleo/workspace": "0.29.0"
+    "@changesets/cli": "~2.31.0"
   }
 }

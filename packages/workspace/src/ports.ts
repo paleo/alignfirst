@@ -43,13 +43,19 @@ export function resolvePortsConfig(config: PortsConfig): ResolvedPortsConfig {
       "Config error: `ports` requires exactly one of `names` (non-empty array) or `compute`.",
     );
   }
-  if (typeof config.maxWorkspaces !== "number") {
-    throw new ConfigError("Config error: `ports.maxWorkspaces` is required.");
+  if (!Number.isInteger(config.base)) {
+    throw new ConfigError("Config error: `ports.base` is required, as an integer.");
+  }
+  if (!Number.isInteger(config.maxWorkspaces)) {
+    throw new ConfigError("Config error: `ports.maxWorkspaces` is required, as an integer.");
   }
   if (hasCompute && config.perWorkspace === undefined) {
     throw new ConfigError("Config error: `ports.perWorkspace` is required with `compute`.");
   }
-  const perWorkspace = config.perWorkspace ?? config.names?.length ?? 0;
+  const perWorkspace = config.perWorkspace ?? config.names?.length;
+  if (perWorkspace === undefined) {
+    throw new ConfigError("Config error: `ports.perWorkspace` is required.");
+  }
   if (config.names && config.names.length > perWorkspace) {
     throw new ConfigError(
       `Config error: \`ports.names\` declares ${config.names.length} ports, ` +

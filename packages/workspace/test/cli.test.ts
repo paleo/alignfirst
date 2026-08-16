@@ -206,7 +206,9 @@ describe("parseWorkspaceArgs", () => {
   });
 
   it("rejects a positional on `migrate-registry-0.30`", () => {
-    expect(() => parseWorkspaceArgs(["migrate-registry-0.30", ".local/registry"])).toThrow(ConfigError);
+    expect(() => parseWorkspaceArgs(["migrate-registry-0.30", ".local/registry"])).toThrow(
+      ConfigError,
+    );
   });
 
   it("rejects the removed `migrate-0.16` command", () => {
