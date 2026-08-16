@@ -237,7 +237,9 @@ function printInfrastructureWarning(hasPurgeInfrastructure: boolean, linkedCount
   if (!hasPurgeInfrastructure || linkedCount === 0) return;
   console.log(
     "\nWarning: infrastructure names (containers, volumes) previously derived from the slot can " +
-      "no longer be derived. Rename or remove the old-named resources manually, or they will leak.",
+      "no longer be derived. Remove the old-named resources manually, or they will leak. Each " +
+      "surviving worktree's gitignored config still carries those names, and merging the base " +
+      `branch does not regenerate it: run \`${wsCmd("setup --force")}\` in each one.`,
   );
 }
 
