@@ -51,7 +51,7 @@ At the end, feel free to uninstall the skill. It won't be used by your project a
 After a fresh clone:
 
 ```sh
-npm i
+npm install
 npm run build --workspace @paleo/workspace
 npm run workspace -- setup
 ```

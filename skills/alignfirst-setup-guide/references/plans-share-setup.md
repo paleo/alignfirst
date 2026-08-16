@@ -59,6 +59,8 @@ The command creates the project folder inside the clone, migrates any existing `
 
 Then publish any migrated content: `npm run plans:sync`.
 
+A contributor without access to the clone creates the directory instead: `mkdir .plans`. Either way `.plans` must exist before the workspace bootstrap, which fails on a missing one.
+
 ## With the Workspace System (Recommended)
 
 When the project also uses the workspace system, make the link a prerequisite of the local environment:
@@ -76,8 +78,18 @@ When the project also uses the workspace system, make the link a prerequisite of
 
    An unusable `.plans` then fails `workspace setup`, with the check's guidance on stderr. `check` accepts both a symlink into the clone and a plain local directory, so a contributor without access to the plans repository still sets up.
 
-   Keep the `isMainWorktree` gate: `preSetup` runs before the kernel symlinks the shared directories, so a fresh linked worktree has no `.plans` yet.
+   Keep the `isMainWorktree` gate: `preSetup` runs before the kernel symlinks the shared directories, so a fresh linked worktree has no `.plans` yet. The main worktree is subject to the same ordering — nothing creates `.plans` before the check — so a fresh clone must get it beforehand, which is what the README step below documents.
 
    Pass `--no` to keep npx off the registry. The bin is `plans-share`, while the package is `@paleo/plans-share`.
 
-2. Document the new-machine steps — clone the plans repository, then `npm run plans:setup -- <clone-location>` — in `README.md` (the entry point that owns fresh-clone setup), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.
+2. Document the new-machine steps in `README.md` (the entry point that owns fresh-clone setup), before the workspace bootstrap command. Then drop the "On a new machine" line from the instruction-file section: machine setup is covered where machines get installed.
+
+   In a **public repository**, write the local mode as the default and name no private repository:
+
+   ```sh
+   npm install
+   mkdir .plans   # or use plans:setup if you have a team plans repository
+   npm run workspace -- setup
+   ```
+
+   An outside contributor then reads a step that works for them, and the inline comment points teammates at `plans:setup -- <clone-location>` without exposing where the clone lives. A private repository can spell the clone step out instead.
