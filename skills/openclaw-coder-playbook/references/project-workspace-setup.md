@@ -75,8 +75,8 @@ Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspac
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have alcode commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
 3. **Fetch.** `git fetch`.
 4. **Merge the remote branch.** If the branch has a remote counterpart, merge it into the local branch to catch up. Delegate to alcode (`merge` protocol) when it doesn't fast-forward or conflicts.
-5. **Catch up with the base branch.** If the freshly-fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow from [`working-session.md`](./working-session.md) — without asking; step 8 tells the user what came in.
-6. **Reinstall deps (and rebuild) if commits came in.** If the merge brought in new commits, reinstall dependencies with the project's package manager, then rebuild if the project needs it. Delegate both to alcode.
+5. **Catch up with the base branch.** If the freshly-fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 8 tells the user what came in.
+6. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
 7. **Check for an open MR/PR** on this branch and note its state.
 8. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
 
