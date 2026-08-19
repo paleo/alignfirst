@@ -195,7 +195,7 @@ The fix step is also how you process a review that arrives from outside — a te
 
 ### Merge/Pull requests
 
-You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking. Confident the job is finished → a regular MR/PR. Not fully sure — a part you couldn't verify, an open question, or the user didn't check the result yet — create it as a **draft** MR/PR and ask the user whether to mark it ready.
+You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking — as a **draft**, unless the user asked for a ready one. Mark it ready when the user says so.
 
 Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
