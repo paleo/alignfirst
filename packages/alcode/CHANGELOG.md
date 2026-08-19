@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.9.2
+
+### Patch Changes
+
+- Tightened the delegation guides: the fix step after a code review always runs in a fresh session, and plan files are never read by the delegator — it reads the sibling spec for context and passes the plan's path to the agent.
+
 ## 0.9.1
 
 ### Patch Changes

@@ -68,6 +68,14 @@ Coding work follows spec → plan → implementation, as the delegation guide de
 
 The agent usually has no question. When it does, answer it: a technical question — architecture, existing behavior, anything the codebase answers — you settle yourself, pushing the agent to investigate. A functional or product question goes to the user, and you relay their answer back.
 
+### Plan files are alcode's material
+
+Never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
+
+### Hand-written changes in `.plans/`
+
+Some projects share `.plans/` through a sync command, documented in `DEVELOPMENT.md`. After writing or editing a file there yourself, run the sync. A change written by alcode needs nothing — alcode syncs its own.
+
 ### The project's documentation
 
 A project can have documentation files. List them all, the full tree. Most of the time, knowing that a document exists is enough. Its content is alcode's material, and alcode reads what its task needs. Open one yourself only when it settles a decision of yours.
@@ -169,7 +177,7 @@ It's also how you show code. The user is a developer with the repository on thei
 
 ### Code review
 
-A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session. What to do with the review file depends on the case:
+A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
 - **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.

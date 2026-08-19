@@ -203,6 +203,8 @@ Record only repo-specific facts, in whatever entry point developers and agents a
 
 The release process is not one of them: a multi-step procedure followed occasionally belongs in `docs/`, read on demand — see [Procedures belong in `docs/`](docmap-bootstrapping.md#procedures-belong-in-docs-not-in-an-entry-point).
 
+The port layout is not one of them either: the block table, what raising `perWorkspace` costs elsewhere in the repo, which config file each port reaches. That reference material belongs in `docs/`, with nothing left behind in the entry points. Point at the document from the `ports` group in `workspace.mjs`. Entry points keep only what a reader needs every session: the ports are printed at startup, read them from the log.
+
 ## The bot contract
 
 An OpenClaw bot creates every worktree through the workspace system; its playbook offers no hand-made fallback, so a project it drives must have the system installed. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation must provide the same behavior, whatever its language and runner: the playbook reads the invocation from `DEVELOPMENT.md`, so the command's name and prefix are free while its behavior is fixed.
@@ -224,7 +226,7 @@ A project with a dev server adds its start, stop and status commands, and the UR
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason.
+- [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.

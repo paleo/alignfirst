@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.25.2"
+  version: "0.25.3"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -29,6 +29,8 @@ A project has up to three Markdown entry points, one per reader:
 - `DEVELOPMENT.md` — the AI coder: an autonomous bot. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`.
 
 The rest of the documentation (`docs/`, served by docmap) addresses everybody. The entry points are read every session, `docs/` on demand — so anything consulted occasionally goes there, including multi-step procedures such as creating a merge request or writing a changeset. Move the whole procedure and leave no summary behind in an entry point.
+
+Inside an entry point, add each new fact to the line that already describes its subject, rather than opening a section for it.
 
 A project is **bot-ready** when the workspace system is installed, the alignfirst skills section in `AGENTS.md` is written, and `DEVELOPMENT.md` covers: the stack, the layout, the daily commands, the conventions (ticket, branch, commit), a workspaces section pointing at the `workspace --guide` command, and how to browse the docs (docmap).
 

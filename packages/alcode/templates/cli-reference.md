@@ -40,6 +40,8 @@ For large work, do not rush. Decompose it yourself only when the concerns are tr
 
 Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
 
+Plan files are the executing agent's material: never read one, main plans included. When the user hands you a plan to execute, pass its path in the message as-is; for context, read the spec that shares the plan's leading letter in the same directory (`A1-spec.md` for `A2-plan.md`), when there is one.
+
 ## Light workflow (AAD)
 
 For one-shot changes or follow-up adjustments right after executing a plan. The agent investigates, discusses, then implements in one session.
@@ -55,7 +57,7 @@ Answer questions as in the spec flow. The agent implements and writes a summary 
 Two fresh sessions: one reviews, one fixes.
 
 1. **Review** — `alcode --new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`.
-2. **Fix** (optional) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
+2. **Fix** (optional, always in a fresh session — never in the review session) — `alcode --new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
 
 Skip the fix step when the review is informational.
 
