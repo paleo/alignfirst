@@ -4,10 +4,10 @@ import type { CodingAgent } from "./coding-agent.js";
 
 export const CLAUDE_DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
 export const CODEX_DEFAULT_MODELS = ["sol", "terra", "luna"] as const;
-export const DEFAULT_MODELS = CLAUDE_DEFAULT_MODELS;
 
 const CODEX_ALIASES = new Set<string>(CODEX_DEFAULT_MODELS);
 const CODEX_CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
+const CODEX_CATALOG_TIMEOUT_MS = 30_000;
 
 export function resolveModels(agent: CodingAgent, env: NodeJS.ProcessEnv): readonly string[] {
   const override = (env.ALIGNFIRST_CODE_MODELS ?? "")
@@ -95,6 +95,7 @@ function runCodexModelCatalog(context: ModelDiscoveryContext): Promise<string> {
         env: context.env,
         encoding: "utf8",
         maxBuffer: CODEX_CATALOG_MAX_BUFFER,
+        timeout: CODEX_CATALOG_TIMEOUT_MS,
       },
       (error, stdout, stderr) => {
         if (error) {

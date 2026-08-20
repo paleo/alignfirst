@@ -10,8 +10,7 @@ export interface RunConfig {
   cwd: string;
   isNew: boolean;
   resume?: string;
-  model?: string;
-  executableModel?: string;
+  executableModel: string | undefined;
   skipPermissions: boolean;
   unset: string[];
   env: NodeJS.ProcessEnv;
@@ -76,6 +75,8 @@ export async function runAgent(
   const outcome = await spawnAgent(config, adapter, state, out, spawnProcess);
   const assessment = adapter.assess(state);
   const failed = outcome.exitCode !== 0 || !assessment.succeeded;
+  // Authentication evidence matters only when the run failed. Claude can recover after retrying
+  // a 401, so evidence from a successful run must not produce an auth_required result.
   const authRequired =
     failed && (assessment.authEvidence || adapter.isAuthenticationError(outcome.stderr));
   const result = selectResult(adapter, state, assessment, outcome, authRequired);
@@ -211,6 +212,8 @@ function guardChildLifecycle(
   sessionFilePath: string,
   state: AgentProtocolState,
 ): () => void {
+  // Seal the session, ask the child to stop, then force-kill it after a short grace period so
+  // interrupted runs leave neither a stale session record nor an orphaned child process.
   const isAlive = () => child.exitCode === null && child.signalCode === null;
   const signalChild = (signal: NodeJS.Signals) => {
     if (!isAlive()) return;

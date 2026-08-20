@@ -41,6 +41,7 @@ describe("renderGuide", () => {
       expect(guide).not.toContain("{{");
       expect(guide).toContain("`sol`, `terra`, `luna`");
       expect(guide).not.toContain("`fable`");
+      expect(guide).not.toContain("claude");
     }
   });
 });

@@ -12,11 +12,12 @@ import {
   resolveTicket,
   validateArgs,
 } from "../src/cli.js";
-import { DEFAULT_MODELS } from "../src/models.js";
+import { CLAUDE_DEFAULT_MODELS } from "../src/models.js";
 import {
   type SessionFrontmatter,
   type SessionRecord,
   listSessionRecords,
+  readCompletion,
   writeInitialSessionFile,
 } from "../src/session-file.js";
 
@@ -24,7 +25,10 @@ function parse(flags: string[]): AlcodeArgs {
   return parseAlcodeArgs(["node", "alcode", ...flags]);
 }
 
-function validate(flags: string[], models: readonly string[] = DEFAULT_MODELS): string | undefined {
+function validate(
+  flags: string[],
+  models: readonly string[] = CLAUDE_DEFAULT_MODELS,
+): string | undefined {
   return validateArgs(parse(flags), models);
 }
 
@@ -255,8 +259,9 @@ describe("buildRunConfig", () => {
   it("threads the caller env into the config so the child inherits the same source", () => {
     const parsed = parse(["--new", "--message", "go"]);
     const env = { FOO: "bar", ALIGNFIRST_CODE_SKIP_PERMISSIONS: "1", ALIGNFIRST_CODE_UNSET: "X,Y" };
-    const config = buildRunConfig(parsed, "/proj", "/proj/.plans/_alcode/s.md", env);
+    const config = buildRunConfig(parsed, "/proj", "/proj/.plans/_alcode/s.md", env, undefined);
     expect(config.env).toBe(env);
+    expect(config.executableModel).toBeUndefined();
     expect(config.skipPermissions).toBe(true);
     expect(config.unset).toEqual(["X", "Y"]);
   });
@@ -378,6 +383,31 @@ describe("launch guards", () => {
     expect(stderr.text()).toContain("belongs to agent codex");
     expect(modelResolver).not.toHaveBeenCalled();
     expect(listSessionRecords(dir)).toHaveLength(before);
+  });
+
+  it("seals model-discovery failures in the session file", async () => {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "alcode", "--new", "--message", "go", "--model", "terra"],
+      cwd: dir,
+      env: { ALIGNFIRST_CODE_AGENT: "codex" },
+      stdout,
+      stderr,
+      modelResolver: async () => {
+        throw new Error("catalog unavailable");
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(stdout.text()).toContain("Session file:");
+    expect(stderr.text()).toContain("catalog unavailable");
+    const records = listSessionRecords(dir);
+    expect(records).toHaveLength(1);
+    expect(readCompletion(records[0].path)).toMatchObject({
+      frontmatter: { status: "failed", exitReason: "error", sessionId: null },
+      result: "catalog unavailable",
+    });
   });
 
   it("rejects a protocol run while another run is active in the same worktree", async () => {

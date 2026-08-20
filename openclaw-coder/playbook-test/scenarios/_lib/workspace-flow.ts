@@ -109,7 +109,6 @@ export async function settleOnWorkspaceReport(
     for (const m of messages) {
       if (m.direction !== "outbound" || m.threadId !== prevStep.threadId) continue;
       if (m.id === prevStep.match.id || !locatorRe.test(m.text)) continue;
-      if (!branchRe.test(m.text) || !bootstrapStatusRe.test(m.text)) continue;
       if (await isMetaNarration(ctx, m.text)) continue;
       ctx.log(`workspace report received: ${JSON.stringify(m.text.slice(0, 160))}`);
       ctx.assertRegex(m.text, locatorRe, "workspace-report: worktree locator (workspace name)");

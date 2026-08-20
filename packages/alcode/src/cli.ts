@@ -7,6 +7,7 @@ import { renderGuide } from "./guide.js";
 import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
 import {
   assertPlansGate,
+  applyCompletion,
   listSessionRecords,
   resolveSessionFilePath,
   type SessionFrontmatter,
@@ -125,6 +126,12 @@ async function runSession(
     return 1;
   }
 
+  const now = new Date();
+  const ticket = resolveTicket(parsed, records);
+  const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, agent, now, realCwd, ticket));
+  stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
+
   let executableModel: string | undefined;
   try {
     executableModel = await modelResolver(agent, parsed.model, {
@@ -132,15 +139,17 @@ async function runSession(
       env: buildAgentEnv(env, (env.ALIGNFIRST_CODE_UNSET ?? "").split(",")),
     });
   } catch (error) {
-    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    const message = error instanceof Error ? error.message : String(error);
+    applyCompletion(sessionFilePath, {
+      status: "failed",
+      endedAt: new Date().toISOString(),
+      exitReason: "error",
+      sessionId: null,
+      result: message,
+    });
+    stderr.write(`${message}\n`);
     return 1;
   }
-
-  const now = new Date();
-  const ticket = resolveTicket(parsed, records);
-  const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, agent, now, realCwd, ticket));
-  stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
   const result = await runAgent(
     buildRunConfig(parsed, cwd, sessionFilePath, env, executableModel),
@@ -288,7 +297,7 @@ export function buildRunConfig(
   cwd: string,
   sessionFilePath: string,
   env: NodeJS.ProcessEnv,
-  executableModel: string | undefined = parsed.model,
+  executableModel: string | undefined,
 ): RunConfig {
   return {
     prompt: buildPrompt(parsed),
@@ -296,7 +305,6 @@ export function buildRunConfig(
     cwd,
     isNew: parsed.isNew,
     resume: parsed.resume,
-    model: parsed.model,
     executableModel,
     skipPermissions: env.ALIGNFIRST_CODE_SKIP_PERMISSIONS === "1",
     unset: (env.ALIGNFIRST_CODE_UNSET ?? "").split(","),

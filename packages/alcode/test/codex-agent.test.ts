@@ -14,6 +14,7 @@ const BASE: RunConfig = {
   sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
   isNew: true,
+  executableModel: undefined,
   skipPermissions: false,
   unset: [],
   env: {},
@@ -54,7 +55,7 @@ describe("Codex argv", () => {
 });
 
 describe("Codex protocol", () => {
-  it("captures identity, ordered messages, and the latest result while ignoring noise", () => {
+  it("captures messages as the transcript and intentionally omits tool lifecycle items", () => {
     const state = createCodexState();
     const rendered = [
       event(state, { type: "thread.started", thread_id: "thread-1" }),

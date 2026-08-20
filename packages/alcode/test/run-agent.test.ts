@@ -124,6 +124,7 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
       sessionFilePath,
       cwd: dir,
       isNew: true,
+      executableModel: undefined,
       skipPermissions: false,
       unset: [],
       env: {},

@@ -210,136 +210,135 @@ export function setupCodingAgentMock(
     ctx.mockCli(agent, async ({ argv, cwd, stdout, stderr }) => {
       const call: CodingAgentCall = { agent, argv, cwd };
       codingAgentCalls.push(call);
-      if (agent === "codex" && isCodexCatalogCall(call)) {
-        stdout.write(`${JSON.stringify(CODEX_MODEL_CATALOG)}\n`);
-        setImmediate(() => finalizeCall(call));
-        return 0;
-      }
-      const prompt = extractCodingPrompt(call);
-      if (agent === "claude" && (prompt === "--version" || prompt === "-v")) {
-        stdout.write("2.0.0 (Claude Code)\n");
-        setImmediate(() => finalizeCall(call));
-        return 0;
-      }
-      if (agent === "claude" && (prompt === "--help" || prompt === "-h")) {
-        stdout.write(
-          "Usage: claude <prompt> [-p] [--output-format json] [--permission-mode <mode>]\n",
-        );
-        setImmediate(() => finalizeCall(call));
-        return 0;
-      }
-      if (prompt === undefined || !isAlignfirstWrapperCall(call)) {
-        stderr.write(`mock-coding-agent: malformed ${agent} invocation: ${JSON.stringify(argv)}\n`);
-        setImmediate(() => finalizeCall(call));
-        return 1;
-      }
-      let resultText: string;
-      if (isCodingProtocolPrompt(prompt)) {
-        resultText = codingResultFor(prompt);
-        await commitMockCodingChange(ctx, cwd, prompt, stderr);
-      } else if (looksLikeWorktreeList(prompt)) {
-        const project = resolveProject(prompt, cwd);
-        if (!project) {
+      try {
+        if (agent === "codex" && isCodexCatalogCall(call)) {
+          stdout.write(`${JSON.stringify(CODEX_MODEL_CATALOG)}\n`);
+          return 0;
+        }
+        const prompt = extractCodingPrompt(call);
+        if (agent === "claude" && (prompt === "--version" || prompt === "-v")) {
+          stdout.write("2.0.0 (Claude Code)\n");
+          return 0;
+        }
+        if (agent === "claude" && (prompt === "--help" || prompt === "-h")) {
+          stdout.write(
+            "Usage: claude <prompt> [-p] [--output-format json] [--permission-mode <mode>]\n",
+          );
+          return 0;
+        }
+        if (prompt === undefined || !isAlignfirstWrapperCall(call)) {
           stderr.write(
-            "mock-coding-agent: could not resolve project for worktree list.\n" +
-              `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+            `mock-coding-agent: malformed ${agent} invocation: ${JSON.stringify(argv)}\n`,
           );
           return 1;
         }
-        const exec = await ctx.execInGateway(
-          ["pnpm", "--dir", `/home/claw/projects/${project}`, "workspace", "list"],
-          { timeoutMs: 30_000 },
-        );
-        if (exec.exitCode !== 0) {
-          stderr.write(
-            `mock-coding-agent: pnpm workspace list failed (exit ${exec.exitCode}).\n` +
-              `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+        let resultText: string;
+        if (isCodingProtocolPrompt(prompt)) {
+          resultText = codingResultFor(prompt);
+          await commitMockCodingChange(ctx, cwd, prompt, stderr);
+        } else if (looksLikeWorktreeList(prompt)) {
+          const project = resolveProject(prompt, cwd);
+          if (!project) {
+            stderr.write(
+              "mock-coding-agent: could not resolve project for worktree list.\n" +
+                `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+            );
+            return 1;
+          }
+          const exec = await ctx.execInGateway(
+            ["pnpm", "--dir", `/home/claw/projects/${project}`, "workspace", "list"],
+            { timeoutMs: 30_000 },
           );
-          return exec.exitCode;
-        }
-        resultText = exec.stdout.trim() || `No worktrees registered for ${project}.`;
-      } else if (looksLikeWorktreeAttach(prompt)) {
-        const parsed = parseWorktreeRequest(prompt, cwd);
-        if (!parsed) {
-          stderr.write(
-            "mock-coding-agent: could not resolve project+branch for worktree attach.\n" +
-              `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+          if (exec.exitCode !== 0) {
+            stderr.write(
+              `mock-coding-agent: pnpm workspace list failed (exit ${exec.exitCode}).\n` +
+                `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+            );
+            return exec.exitCode;
+          }
+          resultText = exec.stdout.trim() || `No worktrees registered for ${project}.`;
+        } else if (looksLikeWorktreeAttach(prompt)) {
+          const parsed = parseWorktreeRequest(prompt, cwd);
+          if (!parsed) {
+            stderr.write(
+              "mock-coding-agent: could not resolve project+branch for worktree attach.\n" +
+                `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+            );
+            return 1;
+          }
+          const exec = await ctx.execInGateway(
+            [
+              "pnpm",
+              "--dir",
+              `/home/claw/projects/${parsed.project}`,
+              "workspace",
+              "setup",
+              parsed.branch,
+            ],
+            { timeoutMs: 120_000 },
           );
-          return 1;
-        }
-        const exec = await ctx.execInGateway(
-          [
-            "pnpm",
-            "--dir",
-            `/home/claw/projects/${parsed.project}`,
-            "workspace",
-            "setup",
-            parsed.branch,
-          ],
-          { timeoutMs: 120_000 },
-        );
-        if (exec.exitCode !== 0) {
-          stderr.write(
-            `mock-coding-agent: pnpm workspace setup ${parsed.branch} failed (exit ${exec.exitCode}).\n` +
-              `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+          if (exec.exitCode !== 0) {
+            stderr.write(
+              `mock-coding-agent: pnpm workspace setup ${parsed.branch} failed (exit ${exec.exitCode}).\n` +
+                `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+            );
+            return exec.exitCode;
+          }
+          resultText =
+            exec.stdout.trim() || `Worktree attached to ${parsed.branch} on ${parsed.project}.`;
+        } else if (looksLikeWorktreeCreation(prompt)) {
+          const parsed = parseWorktreeRequest(prompt, cwd);
+          if (!parsed) {
+            stderr.write(
+              "mock-coding-agent: could not resolve project+branch for worktree creation.\n" +
+                `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+            );
+            return 1;
+          }
+          const exec = await ctx.execInGateway(
+            [
+              "pnpm",
+              "--dir",
+              `/home/claw/projects/${parsed.project}`,
+              "workspace",
+              "setup",
+              parsed.branch,
+              "-c",
+            ],
+            { timeoutMs: 120_000 },
           );
-          return exec.exitCode;
+          if (exec.exitCode !== 0) {
+            stderr.write(
+              `mock-coding-agent: pnpm workspace setup ${parsed.branch} -c failed (exit ${exec.exitCode}).\n` +
+                `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
+            );
+            return exec.exitCode;
+          }
+          resultText =
+            exec.stdout.trim() || `Worktree ${parsed.branch} ready for ${parsed.project}.`;
+        } else {
+          resultText = defaultResult;
         }
-        resultText =
-          exec.stdout.trim() || `Worktree attached to ${parsed.branch} on ${parsed.project}.`;
-      } else if (looksLikeWorktreeCreation(prompt)) {
-        const parsed = parseWorktreeRequest(prompt, cwd);
-        if (!parsed) {
-          stderr.write(
-            "mock-coding-agent: could not resolve project+branch for worktree creation.\n" +
-              `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
+        await delay(streamDelayMs);
+        const sessionId = resumeSessionId(call) ?? nextStreamSessionId();
+        if (agent === "claude") {
+          stdout.write(buildClaudeStreamResponse(sessionId, resultText));
+        } else {
+          const response = buildCodexStreamResponse(
+            sessionId,
+            resultText,
+            codexResponses.shift() ?? "success",
           );
-          return 1;
+          stdout.write(response.stdout);
+          if (response.stderr !== undefined) stderr.write(response.stderr);
+          return response.exitCode;
         }
-        const exec = await ctx.execInGateway(
-          [
-            "pnpm",
-            "--dir",
-            `/home/claw/projects/${parsed.project}`,
-            "workspace",
-            "setup",
-            parsed.branch,
-            "-c",
-          ],
-          { timeoutMs: 120_000 },
-        );
-        if (exec.exitCode !== 0) {
-          stderr.write(
-            `mock-coding-agent: pnpm workspace setup ${parsed.branch} -c failed (exit ${exec.exitCode}).\n` +
-              `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
-          );
-          return exec.exitCode;
-        }
-        resultText = exec.stdout.trim() || `Worktree ${parsed.branch} ready for ${parsed.project}.`;
-      } else {
-        resultText = defaultResult;
-      }
-      await delay(streamDelayMs);
-      const sessionId = resumeSessionId(call) ?? nextStreamSessionId();
-      if (agent === "claude") {
-        stdout.write(buildClaudeStreamResponse(sessionId, resultText));
-      } else {
-        const response = buildCodexStreamResponse(
-          sessionId,
-          resultText,
-          codexResponses.shift() ?? "success",
-        );
-        stdout.write(response.stdout);
-        if (response.stderr !== undefined) stderr.write(response.stderr);
+        return 0;
+      } finally {
+        // The mock-cli server emits the cliMock entry after the handler returns. Defer finalization
+        // by one macrotask so every exit path can attach that entry before notifying watchers.
         setImmediate(() => finalizeCall(call));
-        return response.exitCode;
       }
-      // The mock-cli server emits this call's cliMock entry only AFTER the handler returns. Defer one
-      // macrotask past the return so `ctx.currentEntry` is this call's entry, then snapshot it onto the
-      // call before notifying watchers. (Scheduled here, after the await, so the delay does not elapse
-      // before the entry exists.)
-      setImmediate(() => finalizeCall(call));
-      return 0;
     });
   }
 

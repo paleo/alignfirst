@@ -13,6 +13,7 @@ const BASE: RunConfig = {
   sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
   isNew: true,
+  executableModel: undefined,
   skipPermissions: false,
   unset: [],
   env: {},
@@ -88,5 +89,22 @@ describe("Claude adapter", () => {
     interpretClaudeLine(JSON.stringify({ type: "system", error: "authentication_failed" }), state);
     expect(state.authEvidence).toBe(true);
     expect(assessClaudeState(state).succeeded).toBe(false);
+  });
+
+  it("propagates an error result as the failure", () => {
+    const state = createClaudeState();
+    interpretClaudeLine(
+      JSON.stringify({
+        type: "result",
+        result: "Claude could not complete the task",
+        is_error: true,
+      }),
+      state,
+    );
+    expect(assessClaudeState(state)).toMatchObject({
+      succeeded: false,
+      result: "Claude could not complete the task",
+      error: "Claude could not complete the task",
+    });
   });
 });
