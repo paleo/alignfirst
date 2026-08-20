@@ -37,7 +37,7 @@ inbound ──▶ │   bus   │ ◀── outbound (every channel plugin)
    └───┬───┘           └───┬────┘
        │ exec()            │ POST :43124 /mock-cli/invoke
        ▼                   ▲
-   /opt/openclaw-test/mocks/bin ──────┘   (gateway-side shim)
+   /opt/openclaw-test/mocks/bin ──────┘   (gateway-side claude/codex/gh shims)
 ```
 
 - **`bus`** — in-memory state store. Conversations, threads, messages, events, cursors. Exposes a small HTTP API consumed by `bus-client.ts` in `channel-mock-core`.
@@ -81,7 +81,7 @@ The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `CLAW_
 
 ## Mocked-CLI shim
 
-The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks (e.g. `claude`, `gh`) point at one Node shim. The base image ships only the shim binary; each consumer adds the per-command symlinks it wants intercepted (typical line in the consumer Dockerfile: `RUN for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`). The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays the JSON response (`{ stdout, stderr, exitCode }`).
+The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The OpenClaw coder consumer links `claude`, `codex`, and `gh`: `alcode` runs live and selects its child through gateway `ALIGNFIRST_CODE_AGENT`, while either coding-agent executable remains intercepted. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
 
 The sh wrapper at `/opt/openclaw-test/mocks/bin/mock-cli-shim` invokes the shim as `node mock-cli-shim.js "$0" "$@"`. The JS reads the symlink name from `argv[2]` (`/opt/openclaw-test/mocks/bin/git` → `git`). Without `"$0"`, the shim would see only the script path and reject every call as `unexpected call to mock-cli-shim.js`.
 

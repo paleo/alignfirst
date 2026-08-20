@@ -18,7 +18,7 @@ export interface SetupAckOptions {
  * the delegation launch, or even the completed outcome. On Discord a `message` rename post can
  * arrive earlier. All of these count; the judge accepts any message that shows the takeover.
  *
- * The delegation (a `claude` cliMock via alcode) legitimately fires BEFORE any thread post on
+ * The delegation (a coding-agent cliMock via alcode) legitimately fires before any thread post on
  * finals-only surfaces, so the cliMock fail-fast is disabled — the deadline bounds the wait.
  *
  * No meta-narration pre-filter: the setup signal is a bare intent line by design ("Je prépare le

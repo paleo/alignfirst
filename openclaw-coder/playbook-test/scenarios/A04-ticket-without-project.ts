@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { askWhichProjectRubric } from "./_lib/common-constants.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
@@ -15,12 +15,12 @@ const TICKET_ID = "ABC-040";
 export default async function ticketWithoutProject(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Ticket ${TICKET_ID}, on doit corriger le bug d'export.`,
-    claude,
+    codingAgent,
   });
 
   await ctx.judgeLLM({

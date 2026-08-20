@@ -40,9 +40,9 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
 // separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained-wake
 // launch shape) — but not a substring of another token.
 const ALCODE_INVOCATION_RE = /(^|[\s/;(&|])alcode(\s|$)/;
-// A direct `claude` invocation (the agent must NOT call the coding CLI itself —
-// only alcode may, as its subprocess, which is a cliMock, not an agent tool call).
-const CLAUDE_INVOCATION_RE = /(^|[\s/;(&|])claude(\s|$)/;
+// Only alcode may launch a coding agent. Its subprocess appears as a cliMock entry rather than an
+// OpenClaw agent tool call.
+const CODING_AGENT_INVOCATION_RE = /(^|[\s/;(&|])(claude|codex)(\s|$)/;
 
 /** True when the call is an `exec` that invokes the real `alcode` CLI. */
 export function invokesAlcode(call: AgentToolCall): boolean {
@@ -54,11 +54,13 @@ export function invokesAlcode(call: AgentToolCall): boolean {
   );
 }
 
-/** True when the call is an `exec` that invokes `claude` directly (not via alcode). */
-export function invokesClaudeDirectly(call: AgentToolCall): boolean {
+/** True when the call is an `exec` that invokes Claude or Codex directly. */
+export function invokesCodingAgentDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
-  return CLAUDE_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command);
+  return (
+    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command)
+  );
 }
 
 /**

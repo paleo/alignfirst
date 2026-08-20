@@ -1,13 +1,13 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { OFF_PROJECTS_CHAT_RUBRIC } from "./_lib/common-constants.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
 export default async function offProjectsChat(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
@@ -23,10 +23,10 @@ export default async function offProjectsChat(ctx: ScenarioContext): Promise<voi
     await assertSlackReply(ctx, startCursor);
   }
 
-  if (claude.claudeCalls.length > 0) {
+  if (codingAgent.codingAgentCalls.length > 0) {
     throw new Error(
-      `expected no claude call; got ${claude.claudeCalls.length}: ${JSON.stringify(
-        claude.claudeCalls.map((c) => c.argv[0]?.slice(0, 60)),
+      `expected no coding-agent call; got ${codingAgent.codingAgentCalls.length}: ${JSON.stringify(
+        codingAgent.codingAgentCalls.map((call) => ({ agent: call.agent, argv: call.argv })),
       )}`,
     );
   }

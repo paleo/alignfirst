@@ -3,7 +3,7 @@ import {
   execCommandOf,
   execMatches,
   invokesAlcode,
-  invokesClaudeDirectly,
+  invokesCodingAgentDirectly,
   nthMatchingCall,
 } from "./_lib/agent-tool-calls.ts";
 import {
@@ -11,7 +11,7 @@ import {
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
-import { setupClaudeMock, type ClaudeMockHandle } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock, type CodingAgentMockHandle } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -50,11 +50,11 @@ export default async function sequentialCodingSessions(ctx: ScenarioContext): Pr
   await resetFixtures(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
-  const claude = setupClaudeMock(ctx, { streamDelayMs: 12_000 });
+  const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
-  const threadId = await runFirstDelegation(ctx, claude);
+  const threadId = await runFirstDelegation(ctx, codingAgent);
   await runSecondDelegation(ctx, threadId);
 
   // The wake turn may still be streaming a final answer after the completion
@@ -67,7 +67,10 @@ export default async function sequentialCodingSessions(ctx: ScenarioContext): Pr
 }
 
 /** Phase 1 — the channel bootstrap, then the handoff message that starts the work. */
-async function runFirstDelegation(ctx: ScenarioContext, claude: ClaudeMockHandle): Promise<string> {
+async function runFirstDelegation(
+  ctx: ScenarioContext,
+  codingAgent: CodingAgentMockHandle,
+): Promise<string> {
   const starter = await bootstrapThreadFromChannel(ctx, {
     text:
       `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. ` +
@@ -75,7 +78,7 @@ async function runFirstDelegation(ctx: ScenarioContext, claude: ClaudeMockHandle
     project: PROJECT,
     ticketId: TICKET_ID,
     audience: "tech",
-    claude,
+    codingAgent,
   });
   const phase1Cursor = await sendInThread(
     ctx,
@@ -131,15 +134,15 @@ async function expectDelegationChain(
   const { threadId, sinceCursor, launchIndex } = opts;
 
   // `waitForAgentToolCall` matches against all aggregated calls, so a plain predicate would
-  // re-match phase 1's launch: discriminate by count and take the newest. Its own `claude`
-  // subprocess is a cliMock, not an agent tool call, so `claude` must never appear at this level.
+  // re-match phase 1's launch: discriminate by count and take the newest. The coding-agent
+  // subprocess is a cliMock, not an OpenClaw agent tool call.
   const launch = await ctx.waitForAgentToolCall(nthMatchingCall(isAlcodeLaunch, launchIndex), {
     label: `agent delegates to the alcode CLI (launch #${launchIndex})`,
     timeoutMs: 180_000,
   });
-  if (invokesClaudeDirectly(launch)) {
+  if (invokesCodingAgentDirectly(launch)) {
     throw new Error(
-      `agent invoked claude directly instead of alcode: ${JSON.stringify(launch.input)}`,
+      `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(launch.input)}`,
     );
   }
   // Structural pin of the chained completion wake — the outcome-level asserts below would also

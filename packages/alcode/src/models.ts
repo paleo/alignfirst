@@ -87,7 +87,7 @@ export function selectNewestCodexModel(
 
 function runCodexModelCatalog(context: ModelDiscoveryContext): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       "codex",
       ["debug", "models", "--bundled"],
       {
@@ -104,6 +104,7 @@ function runCodexModelCatalog(context: ModelDiscoveryContext): Promise<string> {
         resolve(stdout);
       },
     );
+    child.stdin?.end();
   });
 }
 

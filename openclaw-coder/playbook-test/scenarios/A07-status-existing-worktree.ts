@@ -2,7 +2,7 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusExistingWorktreeRubric } from "./_lib/common-constants.ts";
 import { seedWorktree, worktreePath } from "./_lib/fixture-state.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -26,7 +26,7 @@ const PROJECTS_DIR = "/home/claw/projects";
 export default async function statusExistingWorktree(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const seededPath = await seedWorktree(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
@@ -37,7 +37,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
     project: PROJECT,
-    claude,
+    codingAgent,
     seededWorktreeDirs: [seededDir],
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
