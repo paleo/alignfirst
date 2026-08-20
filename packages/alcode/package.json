@@ -9,7 +9,8 @@
     "agent",
     "alignfirst",
     "cli",
-    "claude"
+    "claude",
+    "codex"
   ],
   "repository": {
     "type": "git",

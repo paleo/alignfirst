@@ -17,16 +17,27 @@ When the coding agent's own session on the host is missing or expired, `alcode` 
 ## Usage
 
 ```bash
-alcode --new --protocol spec --ticket AB-123 --message "Feature description"
-alcode --resume <sessionId> --protocol plan
-alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
+ALIGNFIRST_CODE_AGENT=claude alcode --new --protocol spec --ticket AB-123 --message "Feature description"
+ALIGNFIRST_CODE_AGENT=codex alcode --resume <sessionId> --protocol plan
+ALIGNFIRST_CODE_AGENT=codex alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
 ```
 
 See `alcode --help` for all flags.
 
+## Coding agents
+
+`ALIGNFIRST_CODE_AGENT` is required and accepts `claude` or `codex`. Install the selected CLI and authenticate it on the host: run `claude`, then `/login`, for Claude Code; run `codex login` for Codex.
+
+Normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `ALIGNFIRST_CODE_SKIP_PERMISSIONS=1` selects each CLI's dangerous permission-bypass flag.
+
+Claude's default model list is `fable,opus,sonnet,haiku`. Codex's is `sol,terra,luna`; alcode resolves a selected Codex alias against `codex debug models --bundled`. Set `ALIGNFIRST_CODE_MODELS` to narrow the selected agent's list or to advertise an explicit Codex slug such as `gpt-5.6-terra`.
+
+New session files record `agent`. A session can only be resumed with the same selected agent. Agentless legacy sessions remain readable but require a new session.
+
 ## Environment variables
 
-- `ALIGNFIRST_CODE_MODELS` — comma-separated list overriding the models accepted by `--model` (default: `fable,opus,sonnet,haiku`).
+- `ALIGNFIRST_CODE_AGENT` — required coding agent: `claude` or `codex`.
+- `ALIGNFIRST_CODE_MODELS` — comma-separated list replacing the selected agent's accepted models.
 - `ALIGNFIRST_CODE_SKIP_PERMISSIONS` — `1` to run the coding agent with permission prompts disabled.
 - `ALIGNFIRST_CODE_UNSET` — comma-separated list of extra env vars to strip from the coding-agent child.
 

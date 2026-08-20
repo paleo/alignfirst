@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type AlcodeArgs,
@@ -16,6 +16,7 @@ import { DEFAULT_MODELS } from "../src/models.js";
 import {
   type SessionFrontmatter,
   type SessionRecord,
+  listSessionRecords,
   writeInitialSessionFile,
 } from "../src/session-file.js";
 
@@ -26,6 +27,49 @@ function parse(flags: string[]): AlcodeArgs {
 function validate(flags: string[], models: readonly string[] = DEFAULT_MODELS): string | undefined {
   return validateArgs(parse(flags), models);
 }
+
+function makeSink(): { write(text: string): void; text(): string } {
+  let buffer = "";
+  return {
+    write(text: string) {
+      buffer += text;
+    },
+    text: () => buffer,
+  };
+}
+
+describe("coding-agent selection", () => {
+  it("keeps --version agent-independent", async () => {
+    const stdout = makeSink();
+    expect(await main({ argv: ["node", "alcode", "--version"], env: {}, stdout })).toBe(0);
+    expect(stdout.text()).toMatch(/^\d+\.\d+\.\d+\n$/);
+  });
+
+  it("rejects missing and invalid selectors before help", async () => {
+    for (const env of [{}, { ALIGNFIRST_CODE_AGENT: "other" }]) {
+      const stderr = makeSink();
+      expect(await main({ argv: ["node", "alcode", "--help"], env, stderr })).toBe(1);
+      expect(stderr.text()).toContain("claude, codex");
+    }
+  });
+
+  it("renders only the selected agent's models without discovery", async () => {
+    const stdout = makeSink();
+    const modelResolver = async () => {
+      throw new Error("help must not discover models");
+    };
+    expect(
+      await main({
+        argv: ["node", "alcode", "--help"],
+        env: { ALIGNFIRST_CODE_AGENT: "codex" },
+        stdout,
+        modelResolver,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toContain("sol, terra, luna");
+    expect(stdout.text()).not.toContain("fable");
+  });
+});
 
 describe("parseAlcodeArgs", () => {
   it("reads the flags into camelCase fields", () => {
@@ -144,6 +188,7 @@ describe("resolveTicket", () => {
       path: "/proj/.plans/30/_alcode/r.md",
       frontmatter: {
         status: "succeeded",
+        agent: "claude",
         protocol: "spec",
         ticket: "30",
         model: null,
@@ -230,6 +275,7 @@ describe("launch guards", () => {
   function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
     return {
       status: "running",
+      agent: "claude",
       protocol: "spec",
       ticket: "30",
       model: null,
@@ -249,20 +295,16 @@ describe("launch guards", () => {
     writeInitialSessionFile(join(dir, ".plans", "30", "_alcode", name), makeFrontmatter(overrides));
   }
 
-  function makeSink(): { write(text: string): void; text(): string } {
-    let buffer = "";
-    return {
-      write(text: string) {
-        buffer += text;
-      },
-      text: () => buffer,
-    };
-  }
-
   async function run(flags: string[]): Promise<{ code: number; stderr: string }> {
     const stdout = makeSink();
     const stderr = makeSink();
-    const code = await main({ argv: ["node", "alcode", ...flags], stdout, stderr, cwd: dir });
+    const code = await main({
+      argv: ["node", "alcode", ...flags],
+      stdout,
+      stderr,
+      cwd: dir,
+      env: { ALIGNFIRST_CODE_AGENT: "claude" },
+    });
     return { code, stderr: stderr.text() };
   }
 
@@ -297,6 +339,47 @@ describe("launch guards", () => {
     expect(stderr).toContain(`session abc is still running (pid ${process.pid})`);
   });
 
+  it("rejects legacy and cross-agent resumes", () => {
+    const parsed = parse(["--resume", "abc", "--message", "continue"]);
+    const legacy = [
+      {
+        path: "legacy.md",
+        frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: null }),
+      },
+    ];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, legacy)).toContain(
+      "predates agent-aware sessions",
+    );
+
+    const codex = [
+      {
+        path: "codex.md",
+        frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: "codex" }),
+      },
+    ];
+    const mismatch = checkLaunchGuards(parsed, "claude", realCwd, codex);
+    expect(mismatch).toContain("belongs to agent codex");
+    expect(mismatch).toContain("selected agent is claude");
+  });
+
+  it("rejects a cross-agent resume before discovery or session creation", async () => {
+    seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
+    const before = listSessionRecords(dir).length;
+    const modelResolver = vi.fn(async () => "gpt-5.6-terra");
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "alcode", "--resume", "abc", "--message", "go", "--model", "terra"],
+      cwd: dir,
+      env: { ALIGNFIRST_CODE_AGENT: "claude", ALIGNFIRST_CODE_MODELS: "terra" },
+      stderr,
+      modelResolver,
+    });
+    expect(code).toBe(1);
+    expect(stderr.text()).toContain("belongs to agent codex");
+    expect(modelResolver).not.toHaveBeenCalled();
+    expect(listSessionRecords(dir)).toHaveLength(before);
+  });
+
   it("rejects a protocol run while another run is active in the same worktree", async () => {
     seedRecord("running.md", { sessionId: "abc" });
     const { code, stderr } = await run(["--new", "--protocol", "plan", "--ticket", "31"]);
@@ -313,7 +396,7 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
       },
     ];
-    expect(checkLaunchGuards(parsed, realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(parsed, "claude", realCwd, records)).toBeUndefined();
   });
 
   it("exempts no-protocol invocations from the busy-worktree guard", () => {
@@ -329,9 +412,9 @@ describe("launch guards", () => {
       },
     ];
     const answer = parse(["--resume", "abc2", "--message", "answer"]);
-    expect(checkLaunchGuards(answer, realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(answer, "claude", realCwd, records)).toBeUndefined();
 
     const execute = parse(["--new", "--message", "Execute the plan"]);
-    expect(checkLaunchGuards(execute, realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(execute, "claude", realCwd, records)).toBeUndefined();
   });
 });

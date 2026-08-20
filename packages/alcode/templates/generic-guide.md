@@ -14,7 +14,7 @@ Running under OpenClaw? Read `alcode --openclaw-guide` instead — the same manu
 
 Read the run's session file (the path `alcode` prints on its first line, under `_alcode/`): its frontmatter carries `status` (`succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Report it to the user where the work was requested. If the run failed, say so plainly and propose the next step.
 
-An `exitReason` of `auth_required` in the frontmatter (alcode also exits `2`) means the coding agent is not authenticated on the host: an administrator must re-login there before any run can succeed. Report that and do not retry.
+An `exitReason` of `auth_required` in the frontmatter (alcode also exits `2`) means the coding agent is not authenticated on the host. An administrator must authenticate with {{AUTH_COMMAND}} before another run.
 
 Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. Do verify that the result works, though. Run the project's checks (tests, lint, build) and exercise the change yourself before calling it done; a failing check reopens the work in a new session.
 
