@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.15.2
+
+### Patch Changes
+
+- e86c527: Clarified that model runs require provider credentials, including non-API-key authentication.
+
 ## 0.15.1
 
 ### Patch Changes
