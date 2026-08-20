@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { escapeRe, STARTER_HANDS_OFF_RUBRIC } from "./common-constants.ts";
-import type { ClaudeMockHandle } from "./mock-claude.ts";
+import type { CodingAgentMockHandle } from "./mock-coding-agent.ts";
 import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./outbound.ts";
 import type { Step } from "./types.ts";
 
@@ -17,7 +17,7 @@ export interface ChannelBootstrapOptions {
   ticketId?: string;
   /** Asserted as a literal `tech` / `non-tech` token in the starter. */
   audience?: "tech" | "non-tech";
-  claude?: ClaudeMockHandle;
+  codingAgent?: CodingAgentMockHandle;
   /** Worktree dir names seeded before the run; anything else on disk is the channel session's. */
   seededWorktreeDirs?: string[];
   starterTimeoutMs?: number;
@@ -63,7 +63,7 @@ export async function bootstrapThreadFromChannel(
     sinceCursor: wait.nextCursor,
     startCursor,
     quietMs: opts.quietMs,
-    claude: opts.claude,
+    codingAgent: opts.codingAgent,
     seededWorktreeDirs: opts.seededWorktreeDirs,
   });
 
@@ -121,7 +121,7 @@ interface ChannelSessionStoppedOptions {
   sinceCursor: number;
   startCursor: number;
   quietMs?: number;
-  claude?: ClaudeMockHandle;
+  codingAgent?: CodingAgentMockHandle;
   seededWorktreeDirs?: string[];
 }
 
@@ -135,7 +135,7 @@ async function assertChannelSessionStopped(
   });
   await assertNoChannelRootLeak(ctx, { sinceCursor: opts.startCursor });
   assertWorktreeDirs(ctx, opts.seededWorktreeDirs ?? []);
-  if (opts.claude) assertNoClaudeCalls(opts.claude);
+  if (opts.codingAgent) assertNoCodingAgentCalls(opts.codingAgent);
   ctx.log("channel session stopped at the starter — OK");
 }
 
@@ -175,11 +175,11 @@ export function assertNoWorktreeDirs(ctx: ScenarioContext): void {
   assertWorktreeDirs(ctx, []);
 }
 
-export function assertNoClaudeCalls(claude: ClaudeMockHandle): void {
-  if (claude.claudeCalls.length === 0) return;
+export function assertNoCodingAgentCalls(codingAgent: CodingAgentMockHandle): void {
+  if (codingAgent.codingAgentCalls.length === 0) return;
   throw new Error(
-    `expected no claude call; got ${claude.claudeCalls.length}: ${JSON.stringify(
-      claude.claudeCalls.map((c) => c.argv[0]?.slice(0, 60)),
+    `expected no coding-agent call; got ${codingAgent.codingAgentCalls.length}: ${JSON.stringify(
+      codingAgent.codingAgentCalls.map((call) => ({ agent: call.agent, argv: call.argv })),
     )}`,
   );
 }

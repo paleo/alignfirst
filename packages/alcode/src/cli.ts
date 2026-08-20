@@ -2,10 +2,12 @@ import { readFileSync, realpathSync } from "node:fs";
 import { relative } from "node:path";
 import { parseArgs } from "node:util";
 
+import { createAgentAdapter, type CodingAgent, resolveCodingAgent } from "./coding-agent.js";
 import { renderGuide } from "./guide.js";
-import { resolveModels } from "./models.js";
+import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
 import {
   assertPlansGate,
+  applyCompletion,
   listSessionRecords,
   resolveSessionFilePath,
   type SessionFrontmatter,
@@ -13,7 +15,7 @@ import {
   writeInitialSessionFile,
 } from "./session-file.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
-import { type RunConfig, type RunOutput, runClaude } from "./run-claude.js";
+import { buildAgentEnv, type RunConfig, type RunOutput, runAgent } from "./run-agent.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
@@ -25,6 +27,7 @@ export interface MainOptions {
   stderr?: RunOutput;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  modelResolver?: ExecutableModelResolver;
 }
 
 export async function main(options?: MainOptions): Promise<number> {
@@ -47,13 +50,21 @@ export async function main(options?: MainOptions): Promise<number> {
     return 0;
   }
 
-  const models = resolveModels(env);
+  let agent: CodingAgent;
+  try {
+    agent = resolveCodingAgent(env);
+  } catch (error) {
+    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+
+  const models = resolveModels(agent, env);
   if (parsed.help) {
-    stdout.write(renderHelp(models));
+    stdout.write(renderHelp(agent, models));
     return 0;
   }
   if (parsed.guide || parsed.openclawGuide) {
-    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic", models)}\n`);
+    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic", agent, models)}\n`);
     return 0;
   }
 
@@ -63,7 +74,13 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  return runSession(parsed, { cwd, env, stdout, stderr });
+  return runSession(parsed, agent, {
+    cwd,
+    env,
+    stdout,
+    stderr,
+    modelResolver: options?.modelResolver ?? resolveExecutableModel,
+  });
 }
 
 function readPackageVersion(): string {
@@ -79,16 +96,21 @@ interface RunContext {
   env: NodeJS.ProcessEnv;
   stdout: RunOutput;
   stderr: RunOutput;
+  modelResolver: ExecutableModelResolver;
 }
 
-// alcode always runs `claude` in the foreground and blocks until it exits. When OpenClaw drives
-// alcode, it wraps this call in its own `exec` tool (which backgrounds after `yieldMs` and wakes
+// alcode always runs the selected coding agent in the foreground and blocks until it exits. When
+// OpenClaw drives alcode, it wraps this call in its own `exec` tool (which backgrounds and wakes
 // the agent on exit) — alcode owns no backgrounding or callback of its own. The per-run session
 // file under `.plans/` is the durable result handoff: on completion the frontmatter carries the
 // session id and status, and the `---- Result ----` block carries the outcome for a waking agent
 // (or a human).
-async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> {
-  const { cwd, env, stdout, stderr } = ctx;
+async function runSession(
+  parsed: AlcodeArgs,
+  agent: CodingAgent,
+  ctx: RunContext,
+): Promise<number> {
+  const { cwd, env, stdout, stderr, modelResolver } = ctx;
 
   const gateError = assertPlansGate(cwd);
   if (gateError) {
@@ -98,7 +120,7 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
 
   const realCwd = realpathSync(cwd);
   const records = listSessionRecords(cwd);
-  const guardError = checkLaunchGuards(parsed, realCwd, records);
+  const guardError = checkLaunchGuards(parsed, agent, realCwd, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
@@ -107,10 +129,33 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
   const now = new Date();
   const ticket = resolveTicket(parsed, records);
   const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, now, realCwd, ticket));
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, agent, now, realCwd, ticket));
   stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
-  const result = await runClaude(buildRunConfig(parsed, cwd, sessionFilePath, env), stdout);
+  let executableModel: string | undefined;
+  try {
+    executableModel = await modelResolver(agent, parsed.model, {
+      cwd,
+      env: buildAgentEnv(env, (env.ALIGNFIRST_CODE_UNSET ?? "").split(",")),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    applyCompletion(sessionFilePath, {
+      status: "failed",
+      endedAt: new Date().toISOString(),
+      exitReason: "error",
+      sessionId: null,
+      result: message,
+    });
+    stderr.write(`${message}\n`);
+    return 1;
+  }
+
+  const result = await runAgent(
+    buildRunConfig(parsed, cwd, sessionFilePath, env, executableModel),
+    createAgentAdapter(agent),
+    stdout,
+  );
 
   if (parsed.isNew && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
@@ -118,7 +163,7 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
   if (result.authRequired) {
     stderr.write(
       "alcode: coding agent not authenticated — an administrator must re-login on the host " +
-        "(`claude`, then `/login`).\n",
+        `${agent === "claude" ? "(`claude`, then `/login`)" : "(`codex login`)"}.\n`,
     );
     return EXIT_AUTH_REQUIRED;
   }
@@ -129,6 +174,7 @@ async function runSession(parsed: AlcodeArgs, ctx: RunContext): Promise<number> 
 // Returns the error to print, or `undefined` when the launch may proceed.
 export function checkLaunchGuards(
   parsed: AlcodeArgs,
+  agent: CodingAgent,
   realCwd: string,
   records: SessionRecord[],
 ): string | undefined {
@@ -142,6 +188,21 @@ export function checkLaunchGuards(
       return (
         `Error: session ${parsed.resume} is still running (pid ${running.frontmatter.pid}); ` +
         "wait for it to finish or kill it."
+      );
+    }
+    const latest = [...matches].sort((a, b) =>
+      b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt),
+    )[0];
+    if (latest.frontmatter.agent === null) {
+      return (
+        `Error: session ${parsed.resume} predates agent-aware sessions and cannot be resumed; ` +
+        "start a new session."
+      );
+    }
+    if (latest.frontmatter.agent !== agent) {
+      return (
+        `Error: session ${parsed.resume} belongs to agent ${latest.frontmatter.agent}, but the ` +
+        `selected agent is ${agent}.`
       );
     }
   }
@@ -209,12 +270,14 @@ function inferTicketFromMessage(message: string): string | undefined {
 
 function buildFrontmatter(
   parsed: AlcodeArgs,
+  agent: CodingAgent,
   now: Date,
   realCwd: string,
   ticket: string | undefined,
 ): SessionFrontmatter {
   return {
     status: "running",
+    agent,
     protocol: parsed.protocol ?? null,
     ticket: ticket ?? null,
     model: parsed.model ?? null,
@@ -234,6 +297,7 @@ export function buildRunConfig(
   cwd: string,
   sessionFilePath: string,
   env: NodeJS.ProcessEnv,
+  executableModel: string | undefined,
 ): RunConfig {
   return {
     prompt: buildPrompt(parsed),
@@ -241,7 +305,7 @@ export function buildRunConfig(
     cwd,
     isNew: parsed.isNew,
     resume: parsed.resume,
-    model: parsed.model,
+    executableModel,
     skipPermissions: env.ALIGNFIRST_CODE_SKIP_PERMISSIONS === "1",
     unset: (env.ALIGNFIRST_CODE_UNSET ?? "").split(","),
     env,
@@ -344,7 +408,15 @@ function isPathSafeTicket(ticket: string): boolean {
   return /^[A-Za-z0-9._-]+$/.test(ticket) && ticket !== "." && !ticket.includes("..");
 }
 
-function renderHelp(models: readonly string[]): string {
+function renderHelp(agent: CodingAgent, models: readonly string[]): string {
+  const permissionMode =
+    agent === "claude"
+      ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
+      : "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
+  const modelBehavior =
+    agent === "codex"
+      ? "Codex aliases sol, terra, and luna resolve on demand; configured full slugs pass through."
+      : "Claude model values pass through unchanged.";
   return `alcode — run a coding agent through AlignFirst protocols.
 
 Usage:
@@ -371,9 +443,13 @@ Options:
                     (e.g. the caller reporting the run's outcome) can use it.
 
 Env:
+  ALIGNFIRST_CODE_AGENT            Required coding agent: claude or codex (selected: ${agent}).
   ALIGNFIRST_CODE_MODELS           Comma-list overriding the models accepted by --model.
   ALIGNFIRST_CODE_SKIP_PERMISSIONS 1 to run the coding agent with permission prompts disabled.
   ALIGNFIRST_CODE_UNSET            Comma-list of env vars to strip from the coding agent child.
+
+Selected-agent permissions: ${permissionMode}
+${modelBehavior}
 
 alcode runs a coding agent in the foreground and blocks until it finishes, streaming the
 transcript to stdout and to a session file under .plans/. Coding runs can be very long: always

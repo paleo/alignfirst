@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
@@ -21,14 +21,14 @@ const PROJECT = "nimbus";
 export default async function projectDetectionStarter(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: "Nous avons un travail à faire sur nimbus.",
     project: PROJECT,
     audience: "tech",
-    claude,
+    codingAgent,
   });
 
   // The starter is the channel session's only post, so the ask for the ticket
@@ -41,7 +41,11 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
   });
 
   const ack = await sendTicketAndExpectSetupSignal(ctx, starter);
-  await runWorkspaceFlow(ctx, claude, { project: PROJECT, ticketId: TICKET_ID, prevStep: ack });
+  await runWorkspaceFlow(ctx, codingAgent, {
+    project: PROJECT,
+    ticketId: TICKET_ID,
+    prevStep: ack,
+  });
   await expectThreadRenamedWithTicket(ctx);
 
   ctx.log({ attachTo: ack.entry, label: "setup signal received" });

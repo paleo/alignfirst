@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { execMatches, invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
+import { execMatches, invokesAlcode, invokesCodingAgentDirectly } from "./_lib/agent-tool-calls.ts";
 import {
   waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
@@ -7,10 +7,11 @@ import {
 } from "./_lib/coding-session.ts";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
 import {
+  extractCodingPrompt,
   isCodingProtocolPrompt,
-  setupClaudeMock,
-  type ClaudeMockHandle,
-} from "./_lib/mock-claude.ts";
+  setupCodingAgentMock,
+  type CodingAgentMockHandle,
+} from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -37,7 +38,7 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
   await resetFixtures(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
-  const claude = setupClaudeMock(ctx, { streamDelayMs: 12_000 });
+  const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
@@ -48,10 +49,10 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
     project: PROJECT,
     ticketId: TICKET_ID,
     audience: "tech",
-    claude,
+    codingAgent,
   });
 
-  await runSetupPhaseWithoutDelegation(ctx, claude, starter);
+  await runSetupPhaseWithoutDelegation(ctx, codingAgent, starter);
   await runGoAheadPhase(ctx, starter.threadId, startCursor);
 
   ctx.markScenarioAsEnded("PASS");
@@ -60,11 +61,11 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
 
 /**
  * Phase 1 — the user asks for the workspace and withholds the green light. The structural proof is
- * that the claude mock sees no coding-protocol call; worktree-creation calls are fine.
+ * that the coding-agent mock sees no coding-protocol call; worktree-creation calls are fine.
  */
 async function runSetupPhaseWithoutDelegation(
   ctx: ScenarioContext,
-  claude: ClaudeMockHandle,
+  codingAgent: CodingAgentMockHandle,
   starter: Step,
 ): Promise<void> {
   await sendInThread(
@@ -79,13 +80,15 @@ async function runSetupPhaseWithoutDelegation(
   const branch = assertBranchForTicket(worktreeDir, TICKET_ID);
   await settleOnWorkspaceReport(ctx, starter, worktreeDir, branch);
 
-  const protocolCall = claude.claudeCalls.find((c) => isCodingProtocolPrompt(c.argv[0]));
+  const protocolCall = codingAgent.codingAgentCalls.find((call) =>
+    isCodingProtocolPrompt(extractCodingPrompt(call)),
+  );
   if (protocolCall) {
     throw new Error(
-      `coding-protocol claude call despite the hold: ${JSON.stringify(protocolCall.argv[0]?.slice(0, 200))}`,
+      `coding-protocol coding-agent call despite the hold: ${JSON.stringify(extractCodingPrompt(protocolCall)?.slice(0, 200))}`,
     );
   }
-  ctx.log("no coding-protocol claude call before the go-ahead — OK");
+  ctx.log("no coding-protocol coding-agent call before the go-ahead — OK");
 }
 
 /**
@@ -104,15 +107,15 @@ async function runGoAheadPhase(
   );
 
   // The launch invocation, not the `alcode --openclaw-guide` read (also an alcode exec, but
-  // without the background fields). Its own `claude` subprocess is a cliMock, never an agent tool
-  // call, so a direct `claude` exec at this level is the incident's wrong path.
+  // without the background fields). Its coding-agent subprocess is a cliMock, never an OpenClaw
+  // agent tool call, so a direct coding-agent exec at this level is the incident's wrong path.
   const alcodeCall = await ctx.waitForAgentToolCall(
     (c) => invokesAlcode(c) && !execMatches(c, /--openclaw-guide/),
     { label: "thread session delegates to the alcode CLI", timeoutMs: 180_000 },
   );
-  if (invokesClaudeDirectly(alcodeCall)) {
+  if (invokesCodingAgentDirectly(alcodeCall)) {
     throw new Error(
-      `agent invoked claude directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
+      `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
     );
   }
   // The incident's regression: the agent passed a finite `timeout` (300/600) instead of the

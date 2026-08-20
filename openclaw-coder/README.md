@@ -12,11 +12,11 @@ Install OpenClaw on a VPS.
 ```mermaid
 flowchart TD
   U([User]) -->|"asks via Discord / Slack"| O[OpenClaw]
-  O -->|"delegates the task<br/>(openclaw-coder-playbook skill + alcode CLI)"| CC[Claude Code]
-  CC -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
+  O -->|"delegates the task<br/>(openclaw-coder-playbook skill + alcode CLI)"| CA[Selected coding agent]
+  CA -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
-OpenClaw runs the conversation and, when there's code to write, hands the task to Claude Code through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI. Claude Code does the actual work following the spec/plan/execution workflow from the **`alignfirst`** skill, then returns the result for OpenClaw to relay back to the user.
+OpenClaw runs the conversation and hands coding tasks to Claude Code or Codex through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI. The selected coding agent follows the **`alignfirst`** spec/plan/execution workflow and returns the result for OpenClaw to relay.
 
 ### Supported OpenClaw channels
 
@@ -38,20 +38,25 @@ Your AI developer is a modern developer. It needs a coding agent. The [`alcode`]
 npm i -g @paleo/alcode@latest
 ```
 
-Optional `alcode` environment variables:
+Select the coding agent explicitly:
 
 ```bash
-export ALIGNFIRST_CODE_SKIP_PERMISSIONS=1        # Use --dangerously-skip-permissions instead of --permission-mode auto
-export ALIGNFIRST_CODE_UNSET=ANTHROPIC_API_KEY   # Unset listed vars (comma-separated) before calling claude, e.g. to force an SSO/plan account
+export ALIGNFIRST_CODE_AGENT=codex # or claude
 ```
 
-### Claude Code
+Install and authenticate the selected CLI. Run `claude`, then `/login`, for Claude Code. Run `codex login` for Codex. The selected command must work for the OpenClaw service account.
 
-- Install the [Claude Code CLI](https://claude.com/product/claude-code) and authenticate it with your account. The `claude` command must work in the terminal.
-- Install the `alignfirst` skill:
+Normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `ALIGNFIRST_CODE_SKIP_PERMISSIONS=1` selects Claude's `--dangerously-skip-permissions` or Codex's `--dangerously-bypass-approvals-and-sandbox`.
+
+Claude models default to `fable,opus,sonnet,haiku`. Codex models default to the stable alcode aliases `sol,terra,luna`, resolved against the installed CLI's bundled catalog. `ALIGNFIRST_CODE_MODELS` replaces the selected list and can pin an explicit Codex slug. `ALIGNFIRST_CODE_UNSET` strips additional variables from the coding-agent child.
+
+Sessions record their coding agent. Resume requires the same selector; legacy agentless sessions require a new run.
+
+Install the `alignfirst` skill for the selected coding agent:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --yes --agent claude-code --skill alignfirst
+npx skills add https://github.com/paleo/alignfirst --global --yes --agent codex --skill alignfirst
 ```
 
 Skill:
@@ -134,7 +139,7 @@ git clone --depth 1 https://github.com/openclaw/openclaw.git .local/openclaw
 cd openclaw-coder/playbook-test
 
 cp .env.local.example .env.local
-# Set the API keys in `.env.local` as needed
+# Set the API keys and ALIGNFIRST_CODE_AGENT in `.env.local`
 
 npm install && npm run env:build
 

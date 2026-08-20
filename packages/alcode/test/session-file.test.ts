@@ -22,6 +22,7 @@ const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
 function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
   return {
     status: "running",
+    agent: "claude",
     protocol: "spec",
     ticket: "29",
     model: null,
@@ -99,6 +100,10 @@ describe("frontmatter serialization", () => {
     expect(parsed.cwd).toBeNull();
   });
 
+  it("parses an omitted legacy agent as null", () => {
+    expect(parseFrontmatter("status: succeeded").agent).toBeNull();
+  });
+
   it("parses an invalid or absent pid as null", () => {
     expect(parseFrontmatter("status: running\npid: not-a-number").pid).toBeNull();
     expect(parseFrontmatter("status: running").pid).toBeNull();
@@ -138,6 +143,7 @@ describe("session file lifecycle", () => {
 
     const completion = readCompletion(sessionFilePath);
     expect(completion.frontmatter.status).toBe("succeeded");
+    expect(completion.frontmatter.agent).toBe("claude");
     expect(completion.frontmatter.sessionId).toBe("abc");
     expect(completion.frontmatter.endedAt).toBe("2026-07-01T09:41:20.000Z");
     expect(completion.frontmatter.pid).toBe(4242);
@@ -237,6 +243,7 @@ describe("listSessionRecords", () => {
     const sealed = readCompletion(path);
     expect(sealed.frontmatter.status).toBe("failed");
     expect(sealed.frontmatter.exitReason).toBe("terminated");
+    expect(sealed.frontmatter.agent).toBe("claude");
     expect(sealed.result).toContain("is gone");
   });
 

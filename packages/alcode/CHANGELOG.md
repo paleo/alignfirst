@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.10.0
+
+### Minor Changes
+
+- 3454532: Added explicit selection between Claude Code and Codex.
+
 ## 0.9.2
 
 ### Patch Changes

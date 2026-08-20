@@ -12,12 +12,11 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. Only `claude` and `gh` are shimmed —
-# `alcode` runs for real (see the wrapper below), and its own `claude`
-# subprocess resolves back to the shim via PATH order.
+# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `alcode` runs for real,
+# and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl && \
     corepack enable && corepack prepare pnpm@latest --activate && \
-    for name in claude gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
+    for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects
 
 # PATH wrapper for the real `@paleo/alcode` CLI. The package's built output is
@@ -25,7 +24,7 @@ RUN apk add --no-cache git curl && \
 # overlay), so alcode edits iterate without a rebuild — mirroring the skill
 # live-mount. `/usr/local/bin` sits after `/opt/openclaw-test/mocks/bin` in
 # PATH, so this wrapper is only reached for `alcode` (never shimmed), while
-# alcode's own `claude` subprocess still hits the shim.
+# alcode's own coding-agent subprocess still hits the shim.
 RUN printf '#!/bin/sh\nexec node /opt/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
     chmod +x /usr/local/bin/alcode
 
@@ -62,6 +61,8 @@ COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \
+    OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
+      npx openclaw plugins install /opt/openclaw-test/src/node_modules/@openclaw/codex && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies

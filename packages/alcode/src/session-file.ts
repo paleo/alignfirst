@@ -8,8 +8,11 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import type { CodingAgent } from "./coding-agent.js";
+
 export interface SessionFrontmatter {
   status: "running" | "succeeded" | "failed";
+  agent: CodingAgent | null;
   protocol: string | null;
   ticket: string | null;
   model: string | null;
@@ -233,6 +236,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
   }
   return {
     status: (map.status as SessionFrontmatter["status"]) ?? "running",
+    agent: parseAgent(map.agent),
     protocol: map.protocol ?? null,
     ticket: map.ticket ?? null,
     model: map.model ?? null,
@@ -245,6 +249,10 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     endedAt: map.endedAt ?? null,
     exitReason: map.exitReason ?? null,
   };
+}
+
+function parseAgent(raw: string | null | undefined): CodingAgent | null {
+  return raw === "claude" || raw === "codex" ? raw : null;
 }
 
 function parsePid(raw: string | null | undefined): number | null {

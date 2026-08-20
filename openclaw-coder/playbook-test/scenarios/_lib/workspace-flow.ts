@@ -2,7 +2,7 @@ import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, readsFile } from "./agent-tool-calls.ts";
 import { assertBranchForTicket, escapeRegExp, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { isMetaNarration } from "./meta-narration.ts";
-import { expectCodingDelegation, type ClaudeMockHandle } from "./mock-claude.ts";
+import { expectCodingDelegation, type CodingAgentMockHandle } from "./mock-coding-agent.ts";
 import type { Step } from "./types.ts";
 
 // The settled report carries the worktree LOCATOR (its directory name, which is
@@ -31,7 +31,7 @@ export interface WorkspaceFlowOptions {
  */
 export async function runWorkspaceFlow(
   ctx: ScenarioContext,
-  claude: ClaudeMockHandle,
+  codingAgent: CodingAgentMockHandle,
   options: WorkspaceFlowOptions,
 ): Promise<void> {
   const {
@@ -57,7 +57,7 @@ export async function runWorkspaceFlow(
 
   await settleOnWorkspaceReport(ctx, prevStep, worktreeDir, branch, reportTimeoutMs);
 
-  await expectCodingDelegation(ctx, claude, {
+  await expectCodingDelegation(ctx, codingAgent, {
     ticketId,
     timeoutMs: delegationTimeoutMs,
   });

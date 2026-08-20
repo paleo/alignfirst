@@ -11,6 +11,7 @@ include:
   - ./node_modules/@paleo/openclaw-test/docker-compose.yml
 
 volumes:
+  openclaw-codex-home:
   fixture-projects:
 
 services:
@@ -18,7 +19,10 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
+      ALIGNFIRST_CODE_MODELS: ${ALIGNFIRST_CODE_MODELS:-}
     volumes:
+      - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/claw/.codex:ro
       - fixture-projects:/home/claw/projects
       # Live-mount the playbook skill over its baked copy so playbook edits
       # iterate without an image rebuild. Set in .env.local (relative to this
@@ -27,11 +31,12 @@ services:
       # Live-mount the built @paleo/alcode package so the /usr/local/bin/alcode
       # wrapper resolves to it. ALIGNFIRST_CODE_DIR is the host path to packages/alcode
       # (build it with `npm run build` first). Read-only: the CLI only reads its
-      # own dist/bin/templates and spawns `claude` from there.
+      # own dist/bin/templates and spawns the selected coding agent from there.
       - ${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro
 
   runner:
     environment:
       OPENCLAW_TEST_JUDGE_MODEL: anthropic/claude-haiku-4-5
+      ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
     volumes:
       - fixture-projects:/home/claw/projects

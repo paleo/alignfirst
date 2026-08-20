@@ -5,7 +5,7 @@ Dockerised regression-test harness for the `myclaw` reference workspace at [`wor
 Standalone consumer of the `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
 
 - [packages/openclaw-test/README.md](../../packages/openclaw-test/README.md) — install, configure, run, scenario primitives, artifact layout.
-- [docs/openclaw-test-architecture.md](../../docs/openclaw-test-architecture.md) — internals.
+- [docs/openclaw-coder/openclaw-test-architecture.md](../../docs/openclaw-coder/openclaw-test-architecture.md) — internals.
 
 This README only documents what is specific to this harness.
 
@@ -13,7 +13,7 @@ This README only documents what is specific to this harness.
 
 ```sh
 cp .env.local.example .env.local
-# Edit .env.local — fill ANTHROPIC_API_KEY
+# Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
 
 # Build the real alcode CLI the gateway runs (packages/alcode/dist must exist).
 npm run build --workspace @paleo/alcode --prefix ../..
@@ -33,8 +33,18 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 ## Configuration
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
+- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and uses the ChatGPT/Codex subscription; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
+
+  ```sh
+  mkdir -p .codex-home
+  CODEX_HOME="$PWD/.codex-home" codex login --device-auth
+  CODEX_HOME="$PWD/.codex-home" codex login status
+  ```
+
+  Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
-- `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Not shimmed — alcode runs for real; its `claude` subprocess still resolves to the mock via PATH order. Delegation instructions come from `alcode --openclaw-guide` (rendered from the `templates/` files, so guide prose edits iterate live too).
+- `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `templates/`, so guide edits iterate live).
+- `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
 - [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
 ## Fixtures
@@ -43,11 +53,23 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A12`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A13`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its dir name as `seededWorktreeDirs` so the check still catches anything the channel session created.
 
-`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec (asserts the agent delegates to `alcode`, not `claude`, then rides the completion wake) from a channel message that spells out an immediate green light — which the channel session must still refuse to act on. `A11` covers an explicit user hold: the workspace gets set up with no coding call, and a second thread turn releases it. `A12` chains two delegations in one thread, the second exposing the heartbeat-cooldown wake gate.
+`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, exposing the heartbeat-cooldown wake gate. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
+
+Rebuild the alcode package and harness image before focused coverage:
+
+```sh
+npm run build --workspace @paleo/alcode --prefix ../..
+npm run env:build
+
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A10-coding-session A12-sequential-coding-sessions
+ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
+npm run e2e -- --model gpt-5.6-terra --channel all --all
+```
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
@@ -61,6 +83,6 @@ This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs
 
 - [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) · [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) — committed.
 - `vendor/` (gitignored) — locally-built `@paleo/openclaw-*` tarballs, regenerated by `npm run vendor`.
-- `.env.local` (gitignored) — `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (only for a Qwen run), `OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR`, `ALIGNFIRST_CODE_DIR`.
+- `.env.local` (gitignored) — API keys, workspace/skill/alcode paths, and `ALIGNFIRST_CODE_AGENT`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `trajectory/<sessionId>.jsonl` (always, provider-neutral), `raw-stream.jsonl` (opt-in).

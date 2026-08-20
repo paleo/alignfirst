@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { HANDOFF_ASK_RUBRIC } from "./_lib/common-constants.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
@@ -21,7 +21,7 @@ const PROJECT = "nimbus";
 export default async function projectDetectionWithTicket(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const starter = await bootstrapThreadFromChannel(ctx, {
@@ -31,7 +31,7 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
     project: PROJECT,
     ticketId: TICKET_ID,
     audience: "tech",
-    claude,
+    codingAgent,
   });
 
   await ctx.judgeLLM({
@@ -42,7 +42,11 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
   });
 
   const ack = await handOffAndExpectSetupAck(ctx, starter);
-  await runWorkspaceFlow(ctx, claude, { project: PROJECT, ticketId: TICKET_ID, prevStep: ack });
+  await runWorkspaceFlow(ctx, codingAgent, {
+    project: PROJECT,
+    ticketId: TICKET_ID,
+    prevStep: ack,
+  });
 
   ctx.log({ attachTo: ack.entry, label: "setup ack received" });
   ctx.markScenarioAsEnded("PASS");

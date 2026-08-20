@@ -1,7 +1,7 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -20,7 +20,7 @@ const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 export default async function statusBranchOnly(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const claude = setupClaudeMock(ctx);
+  const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   await seedBranch(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
@@ -30,7 +30,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
     project: PROJECT,
-    claude,
+    codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
 

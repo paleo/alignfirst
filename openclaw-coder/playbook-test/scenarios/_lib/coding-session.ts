@@ -183,7 +183,10 @@ export async function waitForCodingSessionSucceeded(
     const r = await ctx.execInGateway(findArgs, { timeoutMs: 15_000 });
     const hits = r.stdout.trim().split("\n").filter(Boolean);
     const newest = hits.sort().at(-1);
-    if (hits.length >= minCount && newest !== undefined) return newest;
+    if (hits.length >= minCount && newest !== undefined) {
+      await assertSessionAgent(ctx, newest);
+      return newest;
+    }
     lastStderr = r.stderr.trim();
     await delay(3_000);
   }
@@ -191,6 +194,17 @@ export async function waitForCodingSessionSucceeded(
     `fewer than ${minCount} alcode coding-session file(s) under ${sessionsDir} reached ` +
       `"status: succeeded" within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
   );
+}
+
+async function assertSessionAgent(ctx: ScenarioContext, path: string): Promise<void> {
+  const selectedAgent = process.env.ALIGNFIRST_CODE_AGENT;
+  if (selectedAgent !== "claude" && selectedAgent !== "codex") {
+    throw new Error("ALIGNFIRST_CODE_AGENT must be set to claude or codex for playbook scenarios");
+  }
+  const result = await ctx.execInGateway(["grep", "-q", `^agent: ${selectedAgent}$`, path]);
+  if (result.exitCode !== 0) {
+    throw new Error(`session ${path} does not record selected agent ${selectedAgent}`);
+  }
 }
 
 function delay(ms: number): Promise<void> {

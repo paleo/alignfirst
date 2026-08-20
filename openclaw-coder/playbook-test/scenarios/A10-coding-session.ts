@@ -1,11 +1,11 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { execMatches, invokesAlcode, invokesClaudeDirectly } from "./_lib/agent-tool-calls.ts";
+import { execMatches, invokesAlcode, invokesCodingAgentDirectly } from "./_lib/agent-tool-calls.ts";
 import {
   waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
-import { setupClaudeMock } from "./_lib/mock-claude.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -21,8 +21,8 @@ const PROJECT = "nimbus";
  * ("lance directement, ne me demande pas de validation") and the channel session must still do
  * nothing but open the thread.
  *
- * The thread session then runs the whole chain. It delegates to the `alcode` CLI (never `claude`
- * directly) through the `exec` tool with `timeout: 0`. alcode runs `claude` in the foreground and
+ * The thread session then runs the whole chain. It delegates to the `alcode` CLI, never to the
+ * selected coding agent directly. Alcode runs its child in the foreground and
  * blocks; OpenClaw backgrounds the exec, lets the agent post a "started" ack, and — when alcode
  * exits — wakes the SAME thread session. The woken agent reads alcode's session file and reports
  * the outcome in the thread, no `--meta` needed since the session owns the surface.
@@ -37,7 +37,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   await resetFixtures(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
-  const claude = setupClaudeMock(ctx, { streamDelayMs: 12000 });
+  const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12000 });
   setupGhMock(ctx);
 
   const startCursor = await ctx.getCursor();
@@ -49,7 +49,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     project: PROJECT,
     ticketId: TICKET_ID,
     audience: "tech",
-    claude,
+    codingAgent,
   });
   const threadId = starter.threadId;
   const goAheadCursor = await sendInThread(
@@ -58,15 +58,14 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     "Vas-y, préviens-moi ici quand c'est terminé.",
   );
 
-  // Deterministic proof the agent delegated through the real alcode CLI. Its own `claude`
-  // subprocess is a cliMock, not an agent tool call, so `claude` must never appear at this level.
+  // The coding-agent subprocess is a cliMock, not an OpenClaw agent tool call.
   const alcodeCall = await ctx.waitForAgentToolCall(
     (c) => invokesAlcode(c) && !execMatches(c, /--openclaw-guide/),
     { label: "agent delegates to the alcode CLI", timeoutMs: 180_000 },
   );
-  if (invokesClaudeDirectly(alcodeCall)) {
+  if (invokesCodingAgentDirectly(alcodeCall)) {
     throw new Error(
-      `agent invoked claude directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
+      `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
     );
   }
 

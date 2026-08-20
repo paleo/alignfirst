@@ -1,6 +1,10 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { waitForCodingSessionSucceeded, waitForFindingsReport } from "./_lib/coding-session.ts";
-import { expectNoProtocolDelegation, setupClaudeMock } from "./_lib/mock-claude.ts";
+import {
+  expectNoProtocolDelegation,
+  extractCodingPrompt,
+  setupCodingAgentMock,
+} from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import {
@@ -29,7 +33,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   // streamDelayMs keeps the mock coding run alive past the launching turn (real runs take
   // minutes+): an exec that exits mid-turn gets its exit event consumed by the in-flight turn and
   // the completion wake never fires as its own turn — a fixture artifact, not a product behavior.
-  const claude = setupClaudeMock(ctx, {
+  const codingAgent = setupCodingAgentMock(ctx, {
     defaultResult: INVESTIGATION_FINDING,
     streamDelayMs: 12_000,
   });
@@ -38,16 +42,16 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: QUESTION_TEXT,
     project: PROJECT,
-    claude,
+    codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
 
   const { call: delegationCall, cursorAfterDelegation } = await expectNoProtocolDelegation(
     ctx,
-    claude,
+    codingAgent,
     {
       rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an alignfirst protocol header. Expected: an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine) and signals "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject only if: the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), or the question content is missing or unrelated.`,
-      label: "claude-investigation-delegation",
+      label: "coding-agent-investigation-delegation",
     },
   );
   // The delegation must run in the project dir so the coding agent investigates
@@ -58,7 +62,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     "delegation runs from the nimbus project directory",
   );
   ctx.log(
-    `no-protocol delegation captured (argv[0] length=${delegationCall.argv[0]?.length ?? 0})`,
+    `no-protocol delegation captured (prompt length=${extractCodingPrompt(delegationCall)?.length ?? 0})`,
   );
 
   assertNoWorktreeDirs(ctx);
