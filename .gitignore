@@ -10,6 +10,7 @@ dist/
 !.vscode/settings.example.json
 
 openclaw-coder/playbook-test/.env.local
+openclaw-coder/playbook-test/.codex-home/
 openclaw-coder/playbook-test/artifacts/
 openclaw-coder/playbook-test/.gateway-logs/
 # Per-worker workspace copies, refreshed by `openclaw-test run`.

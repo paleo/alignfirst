@@ -42,7 +42,7 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                       comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
                       The catalog is OPENCLAW_TEST_MODELS (.env.local), a comma list of full
                       provider/model refs; the bare id is the suffix after the last "/".
-                      "all" (or any selected provider) needs that provider's API key.
+                      "all" needs credentials for every selected provider.
   --iterations N      run each (scenario, channel) pair N times (default 1).
   --max-failures N    abort a pair once failures > N (default 1). Best-effort under
                       --parallel: in-flight cells of a bailed pair still finish.

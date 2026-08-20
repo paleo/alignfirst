@@ -11,6 +11,7 @@ include:
   - ./node_modules/@paleo/openclaw-test/docker-compose.yml
 
 volumes:
+  openclaw-codex-home:
   fixture-projects:
 
 services:
@@ -21,6 +22,7 @@ services:
       ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
       ALIGNFIRST_CODE_MODELS: ${ALIGNFIRST_CODE_MODELS:-}
     volumes:
+      - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/claw/.codex:ro
       - fixture-projects:/home/claw/projects
       # Live-mount the playbook skill over its baked copy so playbook edits
       # iterate without an image rebuild. Set in .env.local (relative to this

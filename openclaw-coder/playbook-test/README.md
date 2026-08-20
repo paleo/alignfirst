@@ -33,6 +33,15 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 ## Configuration
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myclaw` workspace, bind-mounted into the gateway. Workspace edits iterate live.
+- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and uses the ChatGPT/Codex subscription; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
+
+  ```sh
+  mkdir -p .codex-home
+  CODEX_HOME="$PWD/.codex-home" codex login --device-auth
+  CODEX_HOME="$PWD/.codex-home" codex login status
+  ```
+
+  Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
@@ -59,6 +68,7 @@ npm run env:build
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A10-coding-session A12-sequential-coding-sessions
 ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
+npm run e2e -- --model gpt-5.6-terra --channel all --all
 ```
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).

@@ -61,6 +61,8 @@ COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \
+    OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
+      npx openclaw plugins install /opt/openclaw-test/src/node_modules/@openclaw/codex && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
