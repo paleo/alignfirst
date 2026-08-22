@@ -1,5 +1,12 @@
 # @paleo/openclaw-slack-mock
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [801309f]
+  - @paleo/openclaw-channel-mock-core@0.6.1
+
 ## 0.3.6
 
 ### Patch Changes

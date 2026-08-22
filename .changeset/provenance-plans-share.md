@@ -1,5 +1,0 @@
----
-"@paleo/plans-share": patch
----
-
-Published from CI with an npm provenance attestation, verifiable with `npm audit signatures`.

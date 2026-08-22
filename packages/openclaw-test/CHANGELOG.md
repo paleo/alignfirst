@@ -1,5 +1,15 @@
 # @paleo/openclaw-test
 
+## 0.15.3
+
+### Patch Changes
+
+- 801309f: Updated `@anthropic-ai/sdk` to 0.120.0, pinned to the exact version.
+- Updated dependencies [801309f]
+  - @paleo/openclaw-channel-mock-core@0.6.1
+  - @paleo/openclaw-discord-mock@0.3.7
+  - @paleo/openclaw-slack-mock@0.3.7
+
 ## 0.15.2
 
 ### Patch Changes

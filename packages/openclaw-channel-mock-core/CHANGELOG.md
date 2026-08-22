@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.6.1
+
+### Patch Changes
+
+- 801309f: Updated `typebox` to 1.3.16.
+
 ## 0.6.0
 
 ### Minor Changes

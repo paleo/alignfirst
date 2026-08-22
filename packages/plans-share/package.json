@@ -1,6 +1,6 @@
 {
   "name": "@paleo/plans-share",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "Share AlignFirst plans through a team plans repository.",

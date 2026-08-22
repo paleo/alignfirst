@@ -1,5 +1,11 @@
 # @paleo/plans-share
 
+## 0.6.1
+
+### Patch Changes
+
+- 801309f: Published from CI with an npm provenance attestation, verifiable with `npm audit signatures`.
+
 ## 0.6.0
 
 ### Minor Changes
