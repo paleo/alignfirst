@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pending: ${{ steps.pending.outputs.pending }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - id: pending
+        run: |
+          pending=$(node scripts/release-pending.mjs)
+          echo "Unpublished versions: $pending"
+          if [ "$pending" = "[]" ]; then
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: npm ci
+      - uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          version-script: npm run ci:version
+          pr-title: "release: version packages"
+
+  publish:
+    needs: check
+    if: needs.check.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      published-packages: ${{ steps.changesets.outputs.published-packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@11.12.1
+      - run: npm ci
+      - id: changesets
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          publish-script: npm run ci:publish
+
+  verify:
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install published packages and verify signatures
+        shell: bash
+        env:
+          PUBLISHED: ${{ needs.publish.outputs.published-packages }}
+        run: |
+          pkgs=$(node -e 'console.log(JSON.parse(process.env.PUBLISHED).map((p) => `${p.name}@${p.version}`).join(" "))')
+          echo "Verifying: $pkgs"
+          cd "$(mktemp -d)"
+          npm init -y > /dev/null
+          for i in 1 2 3 4 5; do
+            if npm install $pkgs; then break; fi
+            if [ "$i" = 5 ]; then echo "Install failed after 5 attempts"; exit 1; fi
+            echo "Registry not ready, retrying in 30s"
+            sleep 30
+          done
+          npm audit signatures | tee audit.txt
+          grep -q "verified attestations" audit.txt

@@ -16,11 +16,11 @@
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
-    "changeset:bump": "changeset version && npm i",
-    "changeset:publish": "npm i && npm run clear && npm run build && npm run lint && npm run test && changeset publish"
+    "ci:version": "changeset version && npm i",
+    "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.5.1",
-    "@changesets/cli": "~2.31.0"
+    "@biomejs/biome": "~2.5.10",
+    "@changesets/cli": "~3.0.1"
   }
 }
