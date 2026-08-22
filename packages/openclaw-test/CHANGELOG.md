@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.15.4
+
+### Patch Changes
+
+- a0cf80e: No functional change. Released to exercise the publishing pipeline.
+
 ## 0.15.3
 
 ### Patch Changes
