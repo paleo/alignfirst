@@ -89,6 +89,6 @@ Applied per package with:
 npm access set mfa=publish "@paleo/docmap"
 ```
 
-`publish` is the mode that disallows tokens. `automation` also requires 2FA but lets automation tokens bypass it.
+In the npmjs.com UI, `publish` is the option "Require two-factor authentication and disallow bypass 2fa tokens (recommended)". The alternative, `automation`, is "Require two-factor authentication or a granular access token with bypass 2fa enabled".
 
 The command prints nothing on success, and the setting cannot be read back — `GET /-/package/<pkg>/access` returns `405`. To check it, use Settings → Publishing access on npmjs.com.
