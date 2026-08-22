@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.30.2
+
+### Patch Changes
+
+- 801309f: Published from CI with an npm provenance attestation, verifiable with `npm audit signatures`.
+
 ## 0.30.1
 
 ### Patch Changes
