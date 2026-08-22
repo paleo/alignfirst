@@ -18,6 +18,8 @@ Always ignore the `.plans`, `.local` and `.local-wt` directories when searching 
 
 **Workspace scripts** (root): `build`, `test`, `clear`, `lint`, `lint:fix` — all fan out to packages via `npm run <name> --workspaces --if-present`.
 
+This repository is on *GitHub*.
+
 ## Packages
 
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans
