@@ -17,7 +17,7 @@ Packages publish from GitHub Actions through npm trusted publishing (OIDC). Ther
 2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs.
 3. Merging that PR pushes the bumped versions to `main`. The `check` job now finds versions absent from the registry and enables the `publish` job.
 4. `publish` is bound to the `release` environment, so it waits for one approval. After approval it builds, tests, strips the `scripts` field from the workspace manifests, and runs `changeset publish`. npm attaches a provenance attestation to each tarball. The action then pushes git tags and creates the GitHub releases.
-5. `verify` installs the freshly published versions in an empty directory and asserts that `npm audit signatures` reports verified attestations.
+5. `verify` installs the freshly published versions in an empty directory, runs `npm audit signatures`, then asserts that each version carries a provenance attestation.
 
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
@@ -30,6 +30,14 @@ npm audit signatures
 ```
 
 Each package must report a verified registry signature and a verified attestation. The attestation links the tarball to the `main` commit and the workflow run that built it.
+
+The command reports *invalid* signatures; it exits 0 when a package has no attestation at all. To check that one exists, read it directly:
+
+```bash
+npm view <package>@<version> dist.attestations.provenance.predicateType
+```
+
+npm attaches provenance only when the repository and the package are both public and no `provenance` config overrides the default. A failure of any of those conditions is logged at verbose level and leaves the publish green, which is what the `verify` job guards against.
 
 ## Trusted-publisher bindings
 

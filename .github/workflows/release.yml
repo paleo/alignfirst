@@ -81,7 +81,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - name: Install published packages and verify signatures
+      - name: Verify signatures and provenance
         shell: bash
         env:
           PUBLISHED: ${{ needs.publish.outputs.published-packages }}
@@ -90,11 +90,17 @@ jobs:
           echo "Verifying: $pkgs"
           cd "$(mktemp -d)"
           npm init -y > /dev/null
+          # --omit=peer: auto-installed peers drag unrelated trees into the audit
           for i in 1 2 3 4 5; do
-            if npm install $pkgs; then break; fi
+            if npm install --omit=peer $pkgs; then break; fi
             if [ "$i" = 5 ]; then echo "Install failed after 5 attempts"; exit 1; fi
             echo "Registry not ready, retrying in 30s"
             sleep 30
           done
-          npm audit signatures | tee audit.txt
-          grep -q "verified attestations" audit.txt
+          npm audit signatures
+          # npm audit signatures reports invalid signatures, never absent ones
+          for spec in $pkgs; do
+            predicate=$(npm view "$spec" dist.attestations.provenance.predicateType)
+            echo "$spec -> ${predicate:-MISSING}"
+            [ -n "$predicate" ] || { echo "No provenance attestation for $spec"; exit 1; }
+          done
