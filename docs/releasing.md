@@ -79,8 +79,16 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
 
 3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
 
-## Follow-up after the first successful CI release
+## Two-factor authentication and tokens
 
-On npmjs.com, for each of the 8 packages: Settings → Publishing access → **Require two-factor authentication and disallow tokens**. This closes the token path; the OIDC flow is unaffected.
+Every package requires 2FA and disallows tokens, applied on 2026-08-22. This closes the token path; the OIDC flow is unaffected, because trusted publishing satisfies the 2FA requirement.
 
-Done on: _pending_.
+Applied per package with:
+
+```bash
+npm access set mfa=publish "@paleo/docmap"
+```
+
+In the npmjs.com UI, `publish` is the option "Require two-factor authentication and disallow bypass 2fa tokens (recommended)". The alternative, `automation`, is "Require two-factor authentication or a granular access token with bypass 2fa enabled".
+
+The command prints nothing on success, and the setting cannot be read back — `GET /-/package/<pkg>/access` returns `405`. To check it, use Settings → Publishing access on npmjs.com.
