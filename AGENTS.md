@@ -14,7 +14,7 @@ Always ignore the `.plans`, `.local` and `.local-wt` directories when searching 
 
 **Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`.
 
-**Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`.
+**Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Publishing runs from CI through npm trusted publishing — see `docs/releasing.md`.
 
 **Workspace scripts** (root): `build`, `test`, `clear`, `lint`, `lint:fix` — all fan out to packages via `npm run <name> --workspaces --if-present`.
 
