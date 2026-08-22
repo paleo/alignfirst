@@ -66,7 +66,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm install -g npm@11.12.1
+      - run: npm install -g npm@11.19.0
       - run: npm ci
       - id: changesets
         uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1

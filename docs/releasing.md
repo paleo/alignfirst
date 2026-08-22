@@ -44,15 +44,15 @@ Renaming the workflow file or the environment breaks every binding; re-register 
 
 ## Owner setup (one-time)
 
-Requires the package owner's npm account and repository admin rights.
+Done on 2026-08-22. Requires the package owner's npm account and repository admin rights; kept here for re-registration and for a fresh repository.
 
-1. Register the trusted publisher for each package, with npm CLI ≥ 11.5 and logged in as the owner:
+1. Register the trusted publisher for each package, with npm CLI ≥ 11.19 and logged in as the owner. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 
    ```bash
    for pkg in @paleo/alcode @paleo/docmap @paleo/openclaw-channel-mock-core \
               @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock \
               @paleo/openclaw-test @paleo/plans-share @paleo/workspace; do
-     npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release
+     npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
    done
    npm trust list @paleo/docmap   # spot-check
    ```
