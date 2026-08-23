@@ -1,0 +1,52 @@
+# @paleo/alproject
+
+Discover local Git projects, track explicit registrations, and allocate non-overlapping port ranges.
+
+## Installation
+
+```sh
+npm install --global @paleo/alproject
+```
+
+## Configuration
+
+Create `~/.alproject.json` before running commands:
+
+```json
+{
+  "root": "~/projects",
+  "projectParents": ["~/projects", "~/work/projects"],
+  "firstPort": 8000,
+  "lastPort": 9999
+}
+```
+
+`root` is the base for relative command paths and stores `alproject-registry.json`. `projectParents` lists the directories whose direct children may be discovered and registered. It defaults to `[root]`. All configured directories must exist. Alproject reads this configuration but never changes it.
+
+## Commands
+
+```text
+alproject list [--json]
+alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
+alproject unregister <path>
+```
+
+Run `alproject --guide` for the agent-facing operating guide. When `<root>/alproject-guide.md` exists, the command appends it verbatim after the generic guide — use it to describe how the project parents are organized. An unreadable custom guide is an error.
+
+## Discovery and statuses
+
+Discovery inspects direct child directories only. A `.git` directory identifies a main worktree. A linked worktree is associated only when both sides of its Git metadata relationship are valid and its main worktree is under an allowed parent. Other child directories appear as additional directories.
+
+`list` merges discovery with the registry and reports:
+
+- `registered` — present on the filesystem and in the registry;
+- `unregistered on filesystem` — discovered without a registry entry;
+- `registered but missing from filesystem` — retained in the registry after a move or deletion.
+
+Discrepancies are informational. Listing never changes files or registrations.
+
+## Registry ownership and recovery
+
+Alproject owns `<root>/alproject-registry.json` and its short-lived lock and temporary sibling files. Edit project files and immutable configuration through their own workflows.
+
+Concurrent mutations wait briefly for a live lock and then fail with an actionable error. Retry after the other command finishes. Alproject reclaims locks whose recorded process identity no longer exists. If registry validation fails, correct the reported field or restore a valid registry before retrying. Failed registration, allocation, locking, and writes preserve the previous registry.

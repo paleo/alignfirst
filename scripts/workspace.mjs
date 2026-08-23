@@ -1,13 +1,18 @@
+import { runWorkspace } from "@paleo/workspace";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { runWorkspace } from "@paleo/workspace";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-  sharedDirs: [".plans", ".local"],
+  sharedDirs: [".plans", ".local", "alignfirst-developer-tests/artifacts"],
   runtimeDir: ".local-wt",
   gitignoredFiles: [
     { path: ".vscode/settings.json", source: { kind: "mainWorktree" }, optional: true },
+    {
+      path: "alignfirst-developer-tests/.env.local",
+      source: { kind: "mainWorktree" },
+      optional: true,
+    },
   ],
   finalizeWorkspace: ({ currentWorktree, progress }) => {
     progress("npm install");

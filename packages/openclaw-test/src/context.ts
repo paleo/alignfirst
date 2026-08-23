@@ -180,6 +180,14 @@ export interface WaitForOutboundOptions {
   sinceCursor: number;
   timeoutMs?: number;
   failFastUnmatchedOutbounds?: number | false;
+  /**
+   * Liveness fail-fast: throw when a mocked CLI invoked *during this wait* is
+   * followed by neither a CLI call nor any outbound for this long (default
+   * 30s). CLI calls from before the wait never arm it; any outbound disarms it
+   * until the next CLI call. `false` disables it — for waits where long
+   * non-CLI agent work (exec calls, delegation) legitimately follows a CLI
+   * call with no post in between.
+   */
   failFastCliMockGraceMs?: number | false;
 }
 
@@ -566,10 +574,16 @@ export async function waitForOutbound(
 ): Promise<WaitForOutboundResult> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const maxUnmatched = opts.failFastUnmatchedOutbounds ?? 3;
-  const cliMockGraceMs = opts.failFastCliMockGraceMs ?? 10_000;
+  const cliMockGraceMs = opts.failFastCliMockGraceMs ?? 30_000;
   const pollFn = opts.pollImpl ?? poll;
   const now = opts.nowImpl ?? Date.now;
   const deadline = now() + timeoutMs;
+  // The grace fail-fast is a liveness heuristic: it fires only when the newest
+  // activity this wait has observed is a mocked-CLI call that then went quiet.
+  // A CLI call from before the wait started never arms it, and any outbound
+  // observed after the call disarms it (the unmatched fail-fast polices those).
+  const baselineCliSeq = deps.getLastCliMock()?.entry.entrySeq ?? -1;
+  let lastOutboundAtMs: number | undefined;
   let cursor = opts.sinceCursor;
   let unmatched = 0;
   let lastUnmatched: BusMessage | undefined;
@@ -589,6 +603,7 @@ export async function waitForOutbound(
     }
 
     if (messages.length > 0) {
+      lastOutboundAtMs = now();
       unmatched += messages.length;
       lastUnmatched = messages[messages.length - 1];
       if (maxUnmatched !== false && unmatched >= maxUnmatched) {
@@ -598,7 +613,11 @@ export async function waitForOutbound(
 
     if (cliMockGraceMs !== false) {
       const last = deps.getLastCliMock();
-      if (last && now() - last.atMs >= cliMockGraceMs) {
+      const armed =
+        last !== undefined &&
+        last.entry.entrySeq > baselineCliSeq &&
+        (lastOutboundAtMs === undefined || lastOutboundAtMs < last.atMs);
+      if (armed && now() - last.atMs >= cliMockGraceMs) {
         throw cliMockGraceFastFailError(cliMockGraceMs, last.entry);
       }
     }
@@ -631,8 +650,8 @@ function cliMockGraceFastFailError(graceMs: number, entry: CliMockEntry): Assert
   const cli = entry.call.cli;
   const argvHead = truncate(entry.call.argv.join(" "));
   return new AssertionError(
-    `waitForOutbound: agent invoked a mocked CLI and did not produce a matching outbound within ${graceMs}ms\n` +
-      `  observed: cliMock ${cli} (argv head: ${JSON.stringify(argvHead)}), no outbound followed`,
+    `waitForOutbound: agent invoked a mocked CLI during this wait and posted no outbound for ${graceMs}ms\n` +
+      `  observed: cliMock ${cli} (argv head: ${JSON.stringify(argvHead)}), then silence`,
   );
 }
 

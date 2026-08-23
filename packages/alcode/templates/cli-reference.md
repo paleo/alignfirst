@@ -56,6 +56,16 @@ alcode --new --protocol aad --ticket AB-123 --message "Task description"
 
 Answer questions as in the spec flow. The agent implements and writes a summary file, which carries a suggested commit message. Commit with it.
 
+### Escalation to a spec
+
+If the discussion reveals that the work needs a specification, stop AAD and switch within the same session. Resume without a protocol, and begin the message exactly as follows before giving the discussion answer:
+
+```text
+Stop AAD now. Start a spec instead (alignfirst).
+
+<discussion answer>
+```
+
 ## Review workflow
 
 Two fresh sessions: one reviews, one fixes.

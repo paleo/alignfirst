@@ -1,0 +1,5 @@
+node_modules/
+.local
+.local-wt
+.plans
+local.env

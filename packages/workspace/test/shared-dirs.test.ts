@@ -1,14 +1,17 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readlinkSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -62,7 +65,8 @@ describe("linkSharedDirectories", () => {
     symlinkSync(join("..", "main", ".local"), join(linked, ".local"));
     const messages: string[] = [];
     linkSharedDirectories(linkedCtx(main, linked), [".local"], (msg) => messages.push(msg));
-    expect(messages).toEqual(["Skipped .local symlink (already exists)."]);
+    expect(messages[0]).toBe("Skipped .local symlink (already exists).");
+    expect(messages.some((msg) => msg.startsWith("Created"))).toBe(false);
   });
 
   it("follows a valid symlink in the main worktree (team plans repo layout)", () => {
@@ -74,6 +78,18 @@ describe("linkSharedDirectories", () => {
     expect(readlinkSync(join(linked, ".plans"))).toBe(join("..", "main", ".plans"));
   });
 
+  it("creates nested link parents and resolves the target from the link directory", () => {
+    const { main, linked } = makeWorktrees();
+
+    linkSharedDirectories(linkedCtx(main, linked), ["nested/artifacts"], () => {});
+
+    const link = join(linked, "nested", "artifacts");
+    expect(resolve(dirname(link), readlinkSync(link))).toBe(join(main, "nested", "artifacts"));
+    expect(() =>
+      linkSharedDirectories(linkedCtx(main, linked), ["nested/artifacts"], () => {}),
+    ).not.toThrow();
+  });
+
   it("fails on a broken symlink in the main worktree instead of shadowing it", () => {
     const { main, linked } = makeWorktrees();
     symlinkSync(join("..", "gone"), join(main, ".plans"));
@@ -81,5 +97,69 @@ describe("linkSharedDirectories", () => {
       WorkspaceError,
     );
     expect(existsSync(join(linked, ".plans"))).toBe(false);
+  });
+
+  it("excludes the created symlinks so a real linked worktree stays clean", () => {
+    tempRoot = mkdtempSync(join(tmpdir(), "shared-dirs-git-"));
+    const main = join(tempRoot, "main");
+    mkdirSync(main);
+    const git = (cwd: string, ...args: string[]): string =>
+      execFileSync("git", args, { cwd, encoding: "utf-8", stdio: "pipe" });
+    git(main, "init", "-b", "main");
+    git(
+      main,
+      "-c",
+      "user.email=t@local",
+      "-c",
+      "user.name=t",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "i",
+    );
+    const linked = join(tempRoot, "wt");
+    git(main, "worktree", "add", linked, "-b", "b1");
+    const inheritedExclude = join(tempRoot, "inherited-exclude");
+    writeFileSync(inheritedExclude, "*.private\n");
+    git(main, "config", "core.excludesFile", inheritedExclude);
+
+    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
+    writeFileSync(join(main, ".local", "main-note"), "main\n");
+    writeFileSync(join(linked, "kept.private"), "private\n");
+
+    expect(git(linked, "status", "--porcelain").trim()).toBe("");
+    expect(git(main, "status", "--porcelain")).toContain("?? .local/");
+    const excludePath = git(
+      linked,
+      "config",
+      "--worktree",
+      "--path",
+      "--get",
+      "core.excludesFile",
+    ).trim();
+    expect(excludePath).toContain("/.git/worktrees/");
+    expect(readFileSync(excludePath, "utf-8")).toContain("/.plans");
+    expect(readFileSync(excludePath, "utf-8")).toContain("*.private");
+
+    const sibling = join(tempRoot, "sibling");
+    git(main, "worktree", "add", sibling, "-b", "b2");
+    mkdirSync(join(sibling, ".local"));
+    writeFileSync(join(sibling, ".local", "sibling-note"), "sibling\n");
+    expect(git(sibling, "status", "--porcelain")).toContain("?? .local/");
+
+    // Idempotent: a re-run appends nothing.
+    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
+    const lines = readFileSync(excludePath, "utf-8").split("\n").filter(Boolean);
+    expect(lines.filter((line) => line === "/.local")).toHaveLength(1);
+
+    rmSync(excludePath);
+    mkdirSync(excludePath);
+    const messages: string[] = [];
+    expect(() =>
+      linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], (message) =>
+        messages.push(message),
+      ),
+    ).not.toThrow();
+    expect(messages.some((message) => message.startsWith("Skipped shared-symlink"))).toBe(true);
   });
 });

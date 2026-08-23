@@ -74,18 +74,16 @@ export function readTrajectoryCostFor(opts: { startTsIso: string; conversationId
   cost: number;
   turns: number;
 } {
-  const sessions = latestCompletedPerSession(
-    conversationCompletedEvents({
-      conversationId: opts.conversationId ?? "",
-      startedAtIso: opts.startTsIso,
-    }),
-  );
-  if (sessions.some((e) => e.data?.truncated === true)) {
+  const events = conversationCompletedEvents({
+    conversationId: opts.conversationId ?? "",
+    startedAtIso: opts.startTsIso,
+  });
+  if (pickNewestPerSession(events).some((e) => e.data?.truncated === true)) {
     console.warn(
       "openclaw-test: a model.completed snapshot is truncated (~256 KB cap); reported cost may be undercounted.",
     );
   }
-  return aggregateCost(sessions);
+  return aggregateCost(latestCompletedPerSession(events));
 }
 
 /** Sum assistant-message cost and count turns across the given snapshots. */
@@ -124,9 +122,9 @@ function assistantCostTotal(msg: Record<string, unknown>): number | undefined {
  * `toolUseId`.
  *
  * Events are byte-capped by OpenClaw (~256 KB); a large snapshot can be
- * truncated to an unusable shape. `data.usage` is tiny and unaffected, so cost
- * and sync survive. A session whose snapshot is not a usable array contributes
- * nothing; the others still do.
+ * truncated to an unusable shape. When a session's newest event is capped, its
+ * newest *usable* snapshot stands in (see `latestCompletedPerSession`), so only
+ * the calls past the cap are lost rather than the whole session.
  */
 export function parseAgentToolCalls(opts: {
   conversationId: string;
@@ -208,11 +206,22 @@ function conversationCompletedEvents(opts: {
 }
 
 /**
- * The latest `model.completed` per session (`sessionKey`). Within one session
- * the snapshot is cumulative, so the latest event is the fullest; across
- * sessions each contributes its own. Pure — operates on the given events.
+ * The newest usable `model.completed` per session (`sessionKey`). Within one
+ * session the snapshot is cumulative, so newer is fuller — but OpenClaw
+ * byte-caps events (~256 KB), and a capped event's snapshot parses to an
+ * unusable shape. Falling back to the newest event whose snapshot is a real
+ * array keeps the session's earlier calls visible instead of dropping the
+ * whole session; only the tail past the cap is lost. A session with no usable
+ * snapshot contributes its newest event, which the aggregators skip.
  */
 export function latestCompletedPerSession(events: TrajectoryEvent[]): TrajectoryEvent[] {
+  const usableBySession = new Map(
+    pickNewestPerSession(events.filter(hasUsableSnapshot)).map((e) => [e.sessionKey ?? "", e]),
+  );
+  return pickNewestPerSession(events).map((e) => usableBySession.get(e.sessionKey ?? "") ?? e);
+}
+
+function pickNewestPerSession(events: TrajectoryEvent[]): TrajectoryEvent[] {
   const bySession = new Map<string, TrajectoryEvent>();
   for (const e of events) {
     const key = e.sessionKey ?? "";
@@ -220,6 +229,10 @@ export function latestCompletedPerSession(events: TrajectoryEvent[]): Trajectory
     if (!prev || (prev.ts ?? "") < (e.ts ?? "")) bySession.set(key, e);
   }
   return [...bySession.values()];
+}
+
+function hasUsableSnapshot(e: TrajectoryEvent): boolean {
+  return Array.isArray(e.data?.messagesSnapshot);
 }
 
 function collectToolResults(messages: unknown[]): Map<string, ToolResultBlock> {

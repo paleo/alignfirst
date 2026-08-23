@@ -1,0 +1,114 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": { "mode": "none" }
+  },
+  "plugins": {
+    "load": {
+      "paths": [
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock",
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"
+      ]
+    },
+    "entries": {
+      "codex": { "enabled": true },
+      "discord-mock": { "enabled": true },
+      "slack-mock": { "enabled": true }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "alsoAllow": ["message"]
+  },
+  "models": {
+    "providers": {
+      "openai": {
+        "agentRuntime": { "id": "codex" }
+      },
+      "custom-anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "${ANTHROPIC_API_KEY}",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+            "contextWindow": 1000000,
+            "maxTokens": 64000
+          }
+        ]
+      },
+      "custom-openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "apiKey": "${OPENROUTER_API_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen/qwen3.7-plus",
+            "name": "Qwen 3.7 Plus (OpenRouter)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          }
+        ]
+      },
+      "zai": {
+        "apiKey": "${ZAI_API_KEY}",
+        "baseUrl": "https://api.z.ai/api/paas/v4",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "glm-5.2",
+            "name": "GLM-5.2",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "skills": ["alignfirst", "alignfirst-developer-openclaw-playbook"],
+      "heartbeat": {
+        "every": "24h",
+        "includeSystemPromptSection": false,
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
+      },
+      "blockStreamingDefault": "on",
+      "blockStreamingBreak": "text_end",
+      "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
+    },
+    "list": [
+      {
+        "id": "main",
+        "name": "OpenClaw Main",
+        "model": "custom-anthropic/claude-sonnet-5",
+        "workspace": "/home/claw/.openclaw/workspace"
+      }
+    ]
+  },
+  "channels": {
+    "discord-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "myclaw",
+      "allowFrom": ["*"]
+    },
+    "slack-mock": {
+      "baseUrl": "http://bus:43123",
+      "botUserId": "openclaw",
+      "botDisplayName": "myclaw",
+      "allowFrom": ["*"],
+      "blockStreaming": true
+    }
+  }
+}

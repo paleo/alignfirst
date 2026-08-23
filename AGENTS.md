@@ -23,6 +23,7 @@ This repository is on *GitHub*.
 ## Packages
 
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans
+- `@paleo/alproject` — local Git project inventory and port-range allocator
 - `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios

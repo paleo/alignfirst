@@ -10,7 +10,7 @@ read_when:
 
 Write the file directly. `npm run changeset` is the interactive equivalent, for humans.
 
-1. **Identify modified packages.** Map changed file paths to their workspace packages: `packages/<name>/` → `@paleo/<name>`. Only include packages with actual source changes. Changes confined to `skills/`, `openclaw-coder/` or `docs/` release nothing and need no changeset.
+1. **Identify modified packages.** Map changed file paths to their workspace packages: `packages/<name>/` → `@paleo/<name>`. Only include packages with actual source changes. Changes confined to `skills/`, `alignfirst-developer-tests/`, `alignfirst-developer.md`, or `docs/` release nothing and need no changeset.
 
    ```sh
    git diff main --name-only
