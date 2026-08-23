@@ -67,6 +67,10 @@ Global tools go in the prompt. Run alcode from the linked workspace for changes 
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 
+### A background run moves the report
+
+Launching a background run ends the turn: the closing message is the launch ack, and the report moves to the run's completion wake. Each further run launched from that wake moves the report again.
+
 ### The plan is not a gate
 
 Coding work follows spec → plan → implementation, as the delegation guide describes. That chain is how the agent works, not a series of checkpoints for the user: run it end to end. When the plan lands, launch the implementation in a new session right away and tell the user in one line that it started.
@@ -76,6 +80,8 @@ The agent usually has no question. When it does, answer it: a technical question
 ### Plan files are alcode's material
 
 Never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
+
+For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, read the `alignfirst` skill. Project instructions only define whether and how the directory is shared.
 
 ### Hand-written changes in `.plans/`
 
@@ -145,9 +151,10 @@ The project's checks are routine hygiene. alcode sessions usually run them on th
 Manual testing is what ends a code change: beyond the automated checks, the change gets exercised before any MR/PR and before telling the user it's finished. On the completion wake, verify first, then report, one consolidated message that ends the turn:
 
 1. Confirm the checks passed (see "Tests, lint, build").
-2. Have alcode exercise the change with the tool that reaches it, naming the global tools it can use (browser automation, `curl`, …). One delegation covers the whole test — web project: start the dev-server, check its logs stay clean, drive the change in the UI. Anything else: run it the way its users would — CLI invocation, simulator, … The test is a background run: this wake's message is its launch ack, and the report moves to the test run's wake. Skip only when the project offers nothing to drive, and say so in the report.
+2. Exercise the change the way its users would, through alcode or yourself, with the tool that reaches it (browser automation, `curl`, …). On a project with a dev-server, start it and drive the change in the UI. Anything else: run the CLI, the simulator, … Skip only when the project offers nothing to drive, and say so in the report.
 3. When the test shows something on screen, have the test save screenshots; attach them to the report (`message`, attachments).
-4. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
+4. When the project uses a dev-server, complete the log review below.
+5. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a wake turn that ends on `NO_REPLY` after a completed run reports nothing at all.
 
 An error met while testing is yours to handle, even when it looks unrelated to the change. You're the developer: investigate, then decide —
 
@@ -155,6 +162,12 @@ An error met while testing is yours to handle, even when it looks unrelated to t
 - Too large or too far from the ticket: leave the code alone; when a ticketing platform (Jira, Linear, …) is available to you, look for an existing ticket, and propose to create one when there is none.
 
 Either way, the report states the error and your decision.
+
+#### Dev-server log review
+
+After using a dev-server, always inspect the dev-server logs through a separate, no-protocol alcode run with the smallest available model. Give it the log locations. Ask it to identify errors or unusual behavior.
+
+Clean logs are required for the manual test to pass.
 
 ### Acceptance testing
 
@@ -169,7 +182,7 @@ When you learn something non-obvious about how to work in a project — a comman
 
 ### Commit & push cadence
 
-Commit and push is how work is shared with the rest of the team. Have alcode commit whenever a meaningful step is reached — a completed execution run always is one — and whenever the user asks. Never ask permission to commit or push: do it, then tell the user it's pushed. Frequent small commits beat long-lived dirty trees; WIP and non-compiling commits are acceptable.
+Commit and push is how work is shared with the rest of the team. Have alcode commit whenever a meaningful step is reached — a completed execution run always is one — and whenever the user asks. Never ask permission to commit or push. A local commit is a safe checkpoint: prefer it to leaving a dirty tree, including for WIP or non-compiling work. Push finished work, then tell the user what is available.
 
 Always push your commits — every commit a protocol run leaves behind (an executed plan, an AAD change, a merge) included. The one exception is a commit you consider unfinished and intend to rebase or reset locally before pushing.
 

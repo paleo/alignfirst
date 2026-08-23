@@ -21,7 +21,7 @@ The playbook tells you what to do. Do not improvise — no announcement text, no
 
 ## The work happens in the thread
 
-A channel/DM session opens a thread and ends its turn. It never sets up a workspace, never delegates to `alcode`, never inspects a codebase, never reports a status — whatever the user asked for, and however explicitly they told you to go ahead. A thread session does all of it.
+A channel/DM session is only a dispatcher: every actionable request opens a thread and ends the turn, including a request with no recognized project or ticket. It never performs the requested work, sets up a workspace, delegates to `alcode`, inspects a codebase, or reports a status — whatever the user asked for, and however explicitly they told you to go ahead. A thread session does all of it.
 
 ## Delivery follows the same split
 

@@ -25,6 +25,7 @@ describe("renderGuide", () => {
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
+      expect(guide).toContain("Stop AAD now. Start a spec instead (alignfirst).");
       expect(guide).toContain("`fable`, `opus`, `sonnet`, `haiku`");
     }
   });
