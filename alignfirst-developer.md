@@ -50,7 +50,7 @@ alproject register /absolute/path/to/project
 alproject list
 ```
 
-Add both port options when the project needs isolated workspace ports. Run `alproject --guide` for configuration, registration, allocation, and recovery procedures. An optional `<root>/alproject-guide.md` can append host-specific project-creation rules to that guide.
+Add both port options when the project needs isolated workspace ports. Run `alproject --guide` for the command reference; the [package README](packages/alproject/README.md) covers configuration, discovery statuses, and recovery. An optional `<root>/alproject-guide.md` can append host-specific project-creation rules to that guide.
 
 If your bot needs access to a git platform (GitHub, GitLab), set it up.
 

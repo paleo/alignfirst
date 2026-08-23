@@ -23,31 +23,27 @@ describe("renderGuide", () => {
 
     expect(guide).toMatch(/^# alproject guide\n/);
     for (const content of [
-      "~/.alproject.json",
-      "## Discovery and statuses",
       "alproject list",
       "--json",
       "alproject register <path>",
       "alproject unregister <path>",
       "--ports-per-workspace",
-      "registered but missing from filesystem",
       "does not delete",
-      "reclaims locks",
     ]) {
       expect(guide).toContain(content);
     }
     expect(guide).not.toMatch(/\{\{[^}]+\}\}/u);
   });
 
-  it("appends custom Markdown verbatim behind a separator", () => {
+  it("appends custom Markdown verbatim after an empty line", () => {
     const root = makeRoot();
     const custom = "# Team procedure\n\nKeep {{consumer-marker}} and trailing space. \n";
     writeFileSync(join(root, "alproject-guide.md"), custom);
 
     const guide = renderGuide(root);
 
-    expect(guide).toContain("\n\n---\n\n# Project-specific guide\n\n");
-    expect(guide.endsWith(custom)).toBe(true);
+    expect(guide.endsWith(`\n\n${custom}`)).toBe(true);
+    expect(guide).not.toContain("\n\n\n");
   });
 
   it("treats unreadable custom-guide content as an error", () => {

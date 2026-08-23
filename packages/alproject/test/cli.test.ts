@@ -105,7 +105,7 @@ describe("main", () => {
 
     expect(await run(["--guide"], { home: fixture.home, stdout })).toBe(0);
     expect(stdout.text()).toContain("# alproject guide");
-    expect(stdout.text()).toContain("# Project-specific guide\n\n# Local rules\n\nPreserve me.\n");
+    expect(stdout.text().endsWith("\n\n# Local rules\n\nPreserve me.\n")).toBe(true);
   });
 
   it("prints the generic guide without configuration", async () => {
@@ -114,7 +114,7 @@ describe("main", () => {
 
     expect(await run(["--guide"], { home, stdout })).toBe(0);
     expect(stdout.text()).toContain("# alproject guide");
-    expect(stdout.text()).toContain("Create `~/.alproject.json` before running commands");
+    expect(stdout.text()).toContain("## Commands");
   });
 
   it("writes custom-guide read failures only to stderr", async () => {
