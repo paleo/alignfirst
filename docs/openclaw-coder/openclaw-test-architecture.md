@@ -81,7 +81,7 @@ The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `CLAW_
 
 ## Mocked-CLI shim
 
-The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The OpenClaw coder consumer links `claude`, `codex`, and `gh`: `alcode` runs live and selects its child through gateway `ALIGNFIRST_CODE_AGENT`, while either coding-agent executable remains intercepted. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
+The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The OpenClaw coder consumer links `claude`, `codex`, `gh`, and `alproject`: `alcode` runs live and selects its child through gateway `ALIGNFIRST_CODE_AGENT`, while either coding-agent executable remains intercepted. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. Playbook scenarios mock `alproject list` with deterministic labelled records and reject every other invocation. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex gh alproject; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
 
 The sh wrapper at `/opt/openclaw-test/mocks/bin/mock-cli-shim` invokes the shim as `node mock-cli-shim.js "$0" "$@"`. The JS reads the symlink name from `argv[2]` (`/opt/openclaw-test/mocks/bin/git` → `git`). Without `"$0"`, the shim would see only the script path and reject every call as `unexpected call to mock-cli-shim.js`.
 
@@ -97,7 +97,7 @@ Cross-cell hygiene is enforced at the container level (see "Per-cell hygiene" be
 
 The mock-cli `release()` quiet-drain is no longer load-bearing across cells (the host destroys the gateway container between them); it remains as a small belt-and-braces for the post-`markScenarioAsEnded` window inside one cell.
 
-The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. a project tree under `/home/claw/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. The harness owns only the transport.
+The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. the harness fixture tree under `/home/claw/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. This is a physical test-fixture path, not a playbook location contract. The harness owns only the transport.
 
 ## Per-cell hygiene
 

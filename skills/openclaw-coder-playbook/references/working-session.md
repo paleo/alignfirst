@@ -1,32 +1,37 @@
 # Working session
 
-You're working on a ticket inside a thread (Slack or Discord). The thread is the user-facing surface and where all the work happens: the channel session only opened it and handed you the values, so the workspace, the investigation, and the coding are yours to run.
+You're handling project work inside a thread (Slack or Discord). The thread is the user-facing surface and where all the work happens: the channel session only opened it and handed you the values, so the lifecycle, workspace, investigation, and coding are yours to run.
 
 Your plain-text replies are your delivery, on Discord and Slack alike — but only the message that **ends your turn** is guaranteed to post. On most model providers, text written between tool calls never leaves the transcript. So the message you end a turn with must carry everything the user needs from that turn — the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. The single exception is a rename, which Discord only performs through a post — see "Thread name" below. Otherwise `message` stays for `read`, cross-surface posts, and attachments.
 
 ## Prerequisites
 
-- run `alcode --openclaw-guide` (`exec`) and follow it — how to delegate to alcode.
-- read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
+Recover the thread context in Step 1 first. Ordinary project work then loads its delegation and project guides through [`project-workspace-setup.md`](./project-workspace-setup.md). Project creation or removal loads its guides through [`project-lifecycle.md`](./project-lifecycle.md).
 
 ## Take over a working session
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, TICKET_ID, AUDIENCE, and the task from the thread's starter, which lists all four (the task on its `Task:` line). Anything still missing comes from the user's messages. Never derive PROJECT or TICKET_ID from a ticket prefix or `ls ~/projects/`; when no starter recorded the audience, read the sender's from `USER.md`. Branch, worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, PROJECT_PATH, TICKET_ID, AUDIENCE, and the task from the thread's starter. Anything still missing comes from the user's messages. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix; when no starter recorded the audience, read the sender's from `USER.md`. Branch, linked-worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
 
 The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's `Task:` line, and it's your green light.
 
-### Step 2 — The thread's state is its workspace
+### Step 2 — Route project lifecycle work
+
+When the request creates or physically removes a project, open [`project-lifecycle.md`](./project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
+
+Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
+
+### Step 3 — The thread's state is its workspace
 
 The question on every wake is not a mode but a fact: does this thread have its project workspace?
 
-- **PROJECT and TICKET_ID are both known** — the thread can have its workspace. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **A value is missing** — the thread can't have a workspace yet. Go to Step 3: converse, investigate, ask for what's missing. The moment both values are known, run the same procedure.
+- **PROJECT, PROJECT_PATH, and TICKET_ID are known** — the thread can have its workspace. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **A value is missing** — the thread cannot have a workspace yet. Go to Step 4: converse, investigate, ask for what is missing. The moment all three values are known, run the same procedure.
 
-The underlying invariant: reading never needs a workspace — questions and investigations are fine without one — while editing project files always happens inside one.
+The underlying invariant for an existing project: reading never needs a workspace, while editing project files happens inside a linked workspace. New-project bootstrap follows the explicit main-worktree exception in `project-lifecycle.md`.
 
-### Step 3 — Handle the actual request
+### Step 4 — Handle the actual request
 
 Use the guidelines.
 
@@ -58,7 +63,7 @@ Delegate to alcode: workspace/branch/worktree creation, writing code (`alignfirs
 
 Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to alcode (no protocol in a fresh session, or resumed where the topic lives) and build on its answer. Never brainstorm alone: alcode grounds its ideas in the codebase; yours would come from memory.
 
-Global tools go in the prompt. alcode knows only the project's context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Global tools go in the prompt. Run alcode from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. alcode knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 
@@ -78,7 +83,7 @@ Some projects share `.plans/` through a sync command, documented in `DEVELOPMENT
 
 ### The project's documentation
 
-A project can have documentation files. List them all, the full tree. Most of the time, knowing that a document exists is enough. Its content is alcode's material, and alcode reads what its task needs. Open one yourself only when it settles a decision of yours.
+A project can have documentation files. List them all from PROJECT_PATH, the full tree. Most of the time, knowing that a document exists is enough. Its content is alcode's material, and alcode reads what its task needs. Open one yourself only when it settles a decision of yours.
 
 ### Vocabulary
 
@@ -89,15 +94,15 @@ A project can have documentation files. List them all, the full tree. Most of th
 
 ### Main worktree and base branch
 
-The main worktree must always stay on the base branch. Never switch it — it's shared across sessions.
+The main worktree at PROJECT_PATH must always stay on the base branch. Never switch it — it is shared across sessions.
 
-Never edit files while the base branch is checked out.
+Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `project-lifecycle.md`.
 
 Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-Editing the codebase must always happen on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
+After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
 
 Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPMENT.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
@@ -124,7 +129,7 @@ Delegate the sequence to alcode.
 
 ### Status update
 
-- Check the workspace status (the takeover-sync in `project-workspace-setup.md` has already fetched + merged the remote branch, so you're reporting the latest state).
+- Check status from the recorded linked-worktree path. The takeover sync in `project-workspace-setup.md` has already fetched and merged the remote branch, so you are reporting the latest state.
 - Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`read` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Dev-server while working
@@ -208,7 +213,7 @@ After creating the MR/PR (via `alcode`):
 
 When the user asks to tear down a project workspace (or worktree) from inside a thread:
 
-1. Have alcode remove the *workspace*. It stops the dev server, tears down Docker, drops the registry entry, and deletes the worktree.
+1. Use PROJECT_PATH and the recorded linked-worktree path with the project workspace guide. Have alcode remove the *workspace*. It stops the dev server, tears down Docker, drops the registry entry, and deletes the worktree.
 2. Confirm the teardown to the user.
 3. Reset the thread session.
 
@@ -218,9 +223,9 @@ After tearing down the project workspace, reset the thread session so the next m
 
 Run the reset **after** the final reply — it clears the session you're in.
 
-### Creating a new project
+### Project lifecycle requests
 
-New projects live in `~/projects/`. Discuss with the user before scaffolding anything; they may know which stack they want. Settle the stack and shape together.
+Creating or physically removing a project follows [`project-lifecycle.md`](./project-lifecycle.md). Route there before workspace setup.
 
 ### Forbidden
 

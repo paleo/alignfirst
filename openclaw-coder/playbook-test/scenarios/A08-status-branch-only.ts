@@ -1,10 +1,12 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
@@ -20,21 +22,23 @@ const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 export default async function statusBranchOnly(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
-  await seedBranch(ctx, PROJECT, TICKET_ID, BRANCH_DESC);
+  await seedBranch(ctx, NIMBUS_PROJECT_PATH, TICKET_ID, BRANCH_DESC);
   ctx.log(`pre-seeded branch ${BRANCH} (no worktree)`);
 
   const startCursor = await ctx.getCursor();
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
 
-  const worktreeDir = await waitForWorktreeDir(PROJECT, TICKET_ID, BRANCH_DESC, {
+  const worktreeDir = await waitForWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, BRANCH_DESC, {
     timeoutMs: 120_000,
   });
   assertBranch(worktreeDir, BRANCH);
@@ -96,6 +100,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   });
 
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  alproject.assertListCallCount(1);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

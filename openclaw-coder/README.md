@@ -26,7 +26,31 @@ The playbook is designed for **Slack** and **Discord**.
 
 ### Your projects
 
-Put your git repositories in `~/projects/`.
+Install the project registry CLI globally:
+
+```bash
+npm i -g @paleo/alproject@latest
+```
+
+Create `~/.alproject.json` for the OpenClaw service account. `root` stores the registry and resolves relative command paths. `projectParents` lists every directory whose direct child repositories the bot may use.
+
+```json
+{
+  "root": "~/projects",
+  "projectParents": ["~/projects", "~/work/projects"],
+  "firstPort": 6500,
+  "lastPort": 7700
+}
+```
+
+Create the configured directories, then register each existing Git main worktree:
+
+```bash
+alproject register /absolute/path/to/project
+alproject list
+```
+
+Add both port options when the project needs isolated workspace ports. Run `alproject --guide` for configuration, registration, allocation, and recovery procedures. An optional `<root>/alproject-guide.md` can append host-specific project-creation rules to that guide.
 
 If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
@@ -125,6 +149,7 @@ Before handing a project to OpenClaw, set it up for autonomous work:
 
 - **Install [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace)** so the agent runs each task in its own isolated git-worktree environment, several branches in parallel. See its [README](../packages/workspace/README.md) for setup.
 - **Add a `DEVELOPMENT.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPMENT.md`](playbook-test/projects-fixture/template/DEVELOPMENT.md).
+- **Register the main worktree with `alproject`** after its `.git` directory exists. Use both port-allocation options when its workspace setup requires them.
 
 ## Contribute
 

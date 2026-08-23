@@ -12,12 +12,14 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `alcode` runs for real,
+# this consumer wants intercepted. `claude`, `codex`, `gh`, and `alproject` are shimmed. `alcode` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl && \
     corepack enable && corepack prepare pnpm@latest --activate && \
-    for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
-    mkdir -p /home/claw/projects && chown claw:claw /home/claw/projects
+    for name in claude codex gh alproject; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
+    mkdir -p /home/claw/projects /home/claw/external-projects /home/claw/lifecycle-projects && \
+    chown claw:claw /home/claw/projects /home/claw/external-projects \
+      /home/claw/lifecycle-projects
 
 # PATH wrapper for the real `@paleo/alcode` CLI. The package's built output is
 # live-mounted at /opt/alcode (`${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro` in the compose
@@ -66,8 +68,8 @@ RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
-# from here to /home/claw/projects/<name> at scenario start, materializing the
-# distinct projects (nimbus, lumen) with per-name patches.
+# from here to each configured fixture parent at scenario start, materializing the
+# distinct projects (nimbus, lumen, and external-parent orion) with per-name patches.
 COPY --chown=claw:claw projects-fixture/template/ /opt/playbook-test/fixtures/template/
 RUN cd /opt/playbook-test/fixtures/template && \
     pnpm install --frozen-lockfile --prod=false

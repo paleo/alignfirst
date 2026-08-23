@@ -5,16 +5,17 @@ The setup phase of a working session: get the workspace ready before handling th
 ## Prerequisites — run both now, before Step 1
 
 - `alcode --openclaw-guide` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
-- read `~/projects/{PROJECT_NAME}/DEVELOPMENT.md` — how to create a worktree or a branch.
+- read `{PROJECT_PATH}/DEVELOPMENT.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
 
 You need:
 
-- **PROJECT_NAME** — The directory name of the project under `~/projects/`
+- **PROJECT** — The main-worktree directory name shown to the user.
+- **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
 - **TICKET_ID** — An identifier for the work, ideally (but not necessarily) a ticket ID from the user's tracking system.
 
-If you don't have the PROJECT_NAME or TICKET_ID, do not proceed. Do not guess these values. Ask the user.
+If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess or reconstruct these values. Ask the user.
 
 ## Step 2 — Post the setup signal
 
@@ -36,13 +37,13 @@ That single call is the whole exception. The post right after it, and every one 
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-The workspace tooling owns worktrees. Create, reuse, and tear them down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
+The workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
 A project whose `DEVELOPMENT.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
 
 First, check what already exists for the {TICKET_ID} — two checks, both required:
 
-- **Branch**: list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
+- **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
 - **Registered workspaces**: `DEVELOPMENT.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
@@ -51,9 +52,9 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → new-work intent: pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A pull that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
+3. **No branch** → new-work intent: in PROJECT_PATH, pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A pull that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
 
-The moment you have the workspace — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Inspect the workspace, never the main dir.
+The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `alcode` from that linked workspace, never PROJECT_PATH.
 
 Bold the values with your surface's markers rather than literal `**`, and translate the labels to the user's language:
 

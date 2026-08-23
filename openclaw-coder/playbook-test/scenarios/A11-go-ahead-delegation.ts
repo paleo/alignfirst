@@ -6,6 +6,7 @@ import {
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import {
   extractCodingPrompt,
   isCodingProtocolPrompt,
@@ -15,6 +16,7 @@ import {
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 import type { Step } from "./_lib/types.ts";
 import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
@@ -36,6 +38,7 @@ const PROJECT = "nimbus";
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
   const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
@@ -47,6 +50,7 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
       `Nouvelle fonctionnalité sur ${PROJECT} : passer le bouton d'export en gras. ` +
       `Ticket ${TICKET_ID}.`,
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
     audience: "tech",
     codingAgent,
@@ -54,6 +58,7 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
 
   await runSetupPhaseWithoutDelegation(ctx, codingAgent, starter);
   await runGoAheadPhase(ctx, starter.threadId, startCursor);
+  alproject.assertListCallCount(1);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
@@ -74,7 +79,7 @@ async function runSetupPhaseWithoutDelegation(
     "Prépare le workspace, mais ne lance aucun travail de code sans mon feu vert.",
   );
 
-  const { dir: worktreeDir } = await waitForAnyWorktreeDir(PROJECT, TICKET_ID, {
+  const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
     timeoutMs: 120_000,
   });
   const branch = assertBranchForTicket(worktreeDir, TICKET_ID);

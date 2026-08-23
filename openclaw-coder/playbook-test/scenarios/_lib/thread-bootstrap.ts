@@ -1,11 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { escapeRe, STARTER_HANDS_OFF_RUBRIC } from "./common-constants.ts";
 import type { CodingAgentMockHandle } from "./mock-coding-agent.ts";
 import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./outbound.ts";
+import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 import type { Step } from "./types.ts";
 
-const PROJECTS_DIR = "/home/claw/projects";
 const SENDER_ID = "ROBIN01";
 
 export interface ChannelBootstrapOptions {
@@ -13,13 +14,15 @@ export interface ChannelBootstrapOptions {
   text: string;
   /** Asserted to appear in the starter on Discord — the fresh thread session's only carrier. */
   project?: string;
+  /** Asserted as a labelled canonical path in every resolved-project starter. */
+  projectPath?: string;
   /** Asserted to appear in the starter, when the channel message supplied one. */
   ticketId?: string;
   /** Asserted as a literal `tech` / `non-tech` token in the starter. */
   audience?: "tech" | "non-tech";
   codingAgent?: CodingAgentMockHandle;
-  /** Worktree dir names seeded before the run; anything else on disk is the channel session's. */
-  seededWorktreeDirs?: string[];
+  /** Worktree paths seeded before the run; anything else on disk is the channel session's. */
+  seededWorktreePaths?: string[];
   starterTimeoutMs?: number;
   /** How long the channel session must stay silent after the starter. */
   quietMs?: number;
@@ -64,7 +67,7 @@ export async function bootstrapThreadFromChannel(
     startCursor,
     quietMs: opts.quietMs,
     codingAgent: opts.codingAgent,
-    seededWorktreeDirs: opts.seededWorktreeDirs,
+    seededWorktreePaths: opts.seededWorktreePaths,
   });
 
   return { match: wait.match, entry: wait.entry, threadId, nextCursor: wait.nextCursor };
@@ -81,6 +84,11 @@ function assertStarterValues(
   text: string,
   opts: ChannelBootstrapOptions,
 ): void {
+  ctx.assertRegex(
+    text,
+    /^Project path:\s+\S.*$/im,
+    "starter carries the labelled project-path field",
+  );
   // On Discord the starter is the ONLY carrier — the channel message is the
   // thread's parent, excluded from its message list.
   if (ctx.channel === "discord-mock" && opts.project !== undefined) {
@@ -88,6 +96,13 @@ function assertStarterValues(
       text,
       new RegExp(escapeRe(opts.project), "i"),
       "starter names the project (thread-session recovery carrier)",
+    );
+  }
+  if (opts.projectPath !== undefined) {
+    ctx.assertRegex(
+      text,
+      new RegExp(`^Project path:\\s+.*${escapeRe(opts.projectPath)}.*$`, "im"),
+      "starter carries the labelled canonical project path",
     );
   }
   if (opts.ticketId !== undefined) {
@@ -122,7 +137,7 @@ interface ChannelSessionStoppedOptions {
   startCursor: number;
   quietMs?: number;
   codingAgent?: CodingAgentMockHandle;
-  seededWorktreeDirs?: string[];
+  seededWorktreePaths?: string[];
 }
 
 async function assertChannelSessionStopped(
@@ -134,7 +149,7 @@ async function assertChannelSessionStopped(
     sinceCursor: opts.sinceCursor,
   });
   await assertNoChannelRootLeak(ctx, { sinceCursor: opts.startCursor });
-  assertWorktreeDirs(ctx, opts.seededWorktreeDirs ?? []);
+  assertWorktreePaths(ctx, opts.seededWorktreePaths ?? []);
   if (opts.codingAgent) assertNoCodingAgentCalls(opts.codingAgent);
   ctx.log("channel session stopped at the starter — OK");
 }
@@ -155,14 +170,11 @@ export async function sendInThread(
  * — the ones the fixture seeded. Anything else was created by the session under
  * test, which is how a channel session that ran setup gets caught.
  */
-export function assertWorktreeDirs(ctx: ScenarioContext, expected: string[]): void {
-  if (!existsSync(PROJECTS_DIR)) return;
-  const found = readdirSync(PROJECTS_DIR)
-    .filter((entry) => entry.startsWith("nimbus-") || entry.startsWith("lumen-"))
-    .sort();
-  const extras = found.filter((entry) => !expected.includes(entry));
+export function assertWorktreePaths(ctx: ScenarioContext, expected: string[]): void {
+  const found = findFixtureWorktreePaths();
+  const extras = found.filter((path) => !expected.includes(path));
   if (extras.length > 0) {
-    throw new Error(`unexpected worktree dirs under ${PROJECTS_DIR}: ${extras.join(", ")}`);
+    throw new Error(`unexpected fixture worktree dirs: ${extras.join(", ")}`);
   }
   ctx.log(
     expected.length === 0
@@ -172,7 +184,18 @@ export function assertWorktreeDirs(ctx: ScenarioContext, expected: string[]): vo
 }
 
 export function assertNoWorktreeDirs(ctx: ScenarioContext): void {
-  assertWorktreeDirs(ctx, []);
+  assertWorktreePaths(ctx, []);
+}
+
+function findFixtureWorktreePaths(): string[] {
+  return FIXTURE_PROJECT_PATHS.flatMap((projectPath) => {
+    const parent = dirname(projectPath);
+    if (!existsSync(parent)) return [];
+    const prefix = `${basename(projectPath)}-`;
+    return readdirSync(parent)
+      .filter((entry) => entry.startsWith(prefix))
+      .map((entry) => `${parent}/${entry}`);
+  }).sort();
 }
 
 export function assertNoCodingAgentCalls(codingAgent: CodingAgentMockHandle): void {

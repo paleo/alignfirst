@@ -1,7 +1,9 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { NEW_WORK_QUESTION_RUBRIC } from "./_lib/common-constants.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
@@ -21,12 +23,14 @@ const PROJECT = "nimbus";
 export default async function projectDetectionStarter(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: "Nous avons un travail à faire sur nimbus.",
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     audience: "tech",
     codingAgent,
   });
@@ -42,11 +46,12 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
 
   const ack = await sendTicketAndExpectSetupSignal(ctx, starter);
   await runWorkspaceFlow(ctx, codingAgent, {
-    project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
     prevStep: ack,
   });
   await expectThreadRenamedWithTicket(ctx);
+  alproject.assertListCallCount(1);
 
   ctx.log({ attachTo: ack.entry, label: "setup signal received" });
   ctx.markScenarioAsEnded("PASS");

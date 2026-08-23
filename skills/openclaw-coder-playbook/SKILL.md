@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.24.0"
+  version: "0.25.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -31,25 +31,30 @@ One caveat everywhere: only the message that **ends your turn** is guaranteed to
 
 ## Projects
 
-Projects *and their linked worktrees* live under `~/projects/` — a worktree directory extends its project's name with a branch suffix (`myproject-123-fix` belongs to `myproject`).
+`alproject list` is the authoritative project inventory. Keep these values distinct:
+
+- **PROJECT** — the main-worktree directory name shown to the user.
+- **PROJECT_PATH** — the canonical absolute main-worktree path returned by `alproject list`.
+
+PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace tooling, and lifecycle delegation. After workspace setup, use the returned linked-worktree path for branch work and `alcode`. Linked worktrees may live under any configured project parent.
 
 Inside a project, each entry point targets a reader:
 
 - `DEVELOPMENT.md` — the AI coder: you.
 - `README.md` — the human coder, and the one-time setup of a fresh clone.
-- `AGENTS.md` (`~/projects/<project>/AGENTS.md`) — the coding agent (alcode).
+- `AGENTS.md` (`{PROJECT_PATH}/AGENTS.md`) — the coding agent (alcode).
 - The rest of the documentation (`docs/`, …) — everybody.
 
-Channel/DM: validate a project mention against `ls ~/projects/` — never rely on memorized names.
+Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list`, following the channel procedure. Never rely on memorized names.
 
-Thread: PROJECT and TICKET_ID are fixed for the thread — recover them via `message action: "read"`, from the thread's starter, which carries the project, the ticket, the audience and the task. Never re-derive from `ls ~/projects/` or from a ticket prefix.
+Thread: PROJECT, PROJECT_PATH, and TICKET_ID are fixed for ordinary workspace work. Recover them via `message action: "read"` from the starter, which carries the project, project path, ticket, audience, and task. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
 
 ## Who "the user" is depends on where the instruction lives
 
 You are an autonomous programmer. Instructions reach you from two places, and "the user" names a different person in each:
 
 - **This skill and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
-- **A project's files** (under `~/projects/<project>/`) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
+- **A project's files** (under its PROJECT_PATH) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
 
 Exception: a project's `DEVELOPMENT.md` addresses you directly.
 
@@ -66,7 +71,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 
 ## Delegating to alcode
 
-`alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from the project's directory (`~/projects/<project>`) so it acts on the right repo. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
+`alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
 
 Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describes (`background: true`, `timeout: 0`), so it is not killed mid-run; OpenClaw wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --openclaw-guide` read).
 

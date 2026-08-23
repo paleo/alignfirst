@@ -10,15 +10,17 @@ import {
   writeFileSync,
 } from "node:fs";
 
-const PROJECTS = "/home/claw/projects";
 const TEMPLATE = "/opt/playbook-test/fixtures/template";
 // Each fixture gets its own port block so two of them can run a dev server at
 // the same time. The template declares `maxWorkspaces: 10` over `perWorkspace: 2`,
 // so a fixture spans 20 ports from its base.
 const FIXTURES = [
-  { name: "nimbus", basePort: 6500 },
-  { name: "lumen", basePort: 6520 },
+  { name: "nimbus", parent: "/home/claw/projects", basePort: 6500 },
+  { name: "lumen", parent: "/home/claw/projects", basePort: 6520 },
+  { name: "orion", parent: "/home/claw/external-projects", basePort: 6540 },
 ];
+const FIXTURE_PARENTS = [...new Set(FIXTURES.map(({ parent }) => parent))];
+const EMPTY_FIXTURE_PARENTS = ["/home/claw/lifecycle-projects"];
 // Each fixture's `origin` is a bare repo alongside its working tree, so
 // `git fetch` + `git merge --ff-only origin/main` behave like a real up-to-date
 // clone (a remote-less fixture made the playbook's new-work path — fetch +
@@ -31,18 +33,20 @@ async function main() {
   // Stop dev-servers from the prior run before wiping. Configured fixtures
   // know their `dev down --all`; for any stray dir we kill anything still
   // listening best-effort.
-  for (const { name } of FIXTURES) {
-    const dst = `${PROJECTS}/${name}`;
+  for (const { name, parent } of FIXTURES) {
+    const dst = `${parent}/${name}`;
     if (existsSync(dst)) {
       await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
     }
   }
-  // Wipe everything under PROJECTS and the fixture origins unconditionally. The
+  // Wipe everything under the fixture parents and origins unconditionally. The
   // fixture template lives in /opt/playbook-test/fixtures/ and is re-copied below.
   // pnpm's store is pinned to /home/claw/.pnpm-store via ~/.npmrc, so nothing
   // here is worth keeping.
-  for (const entry of readdirSync(PROJECTS)) {
-    rmSync(`${PROJECTS}/${entry}`, { recursive: true, force: true });
+  for (const parent of [...FIXTURE_PARENTS, ...EMPTY_FIXTURE_PARENTS]) {
+    for (const entry of readdirSync(parent)) {
+      rmSync(`${parent}/${entry}`, { recursive: true, force: true });
+    }
   }
   rmSync(ORIGINS, { recursive: true, force: true });
   mkdirSync(ORIGINS, { recursive: true });
@@ -51,14 +55,14 @@ async function main() {
   }
 }
 
-async function resetFixture({ name, basePort }) {
-  const dst = `${PROJECTS}/${name}`;
+async function resetFixture({ name, parent, basePort }) {
+  const dst = `${parent}/${name}`;
   cpSync(TEMPLATE, dst, { recursive: true, preserveTimestamps: true });
   patchFixture(dst, name, basePort);
   // alcode refuses to run outside a project that has a `.plans/` directory
   // (its coaching-session logs land there). Seed an empty one — the fixture's
   // .gitignore already ignores `.plans/`, so it stays untracked like a real
-  // repo; the agent runs alcode from this project root (~/projects/<name>).
+  // repo; the agent runs alcode from this project's canonical main path.
   mkdirSync(`${dst}/.plans`, { recursive: true });
   // The main worktree never runs `workspace setup`, so seed its `local.env`
   // (gitignored) from the committed example — the first port of its block.

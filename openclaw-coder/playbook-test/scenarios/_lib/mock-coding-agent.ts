@@ -1,4 +1,6 @@
+import { basename, dirname } from "node:path";
 import type { CliMockEntry, ScenarioContext } from "@paleo/openclaw-test";
+import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 
 // The coding agent's completion result, written into the alcode session file's
 // `---- Result ----` block. A real coding agent's result describes the task it
@@ -39,10 +41,7 @@ const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing bra
 // slug (kebab or snake, any case), so the mock recognizes whatever the agent
 // picked.
 const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
-const PROJECT_CWD_RE = /^\/home\/claw\/projects\/([^/]+)$/;
-// A linked worktree dir: `<project>-<ticket>-<desc>`, never the project main dir.
-const WORKTREE_CWD_RE = /^\/home\/claw\/projects\/[^/]+-[^/]+-[^/]+\/?$/;
-const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen)\b/i;
+const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
 function buildClaudeStreamResponse(sessionId: string, result: string): string {
   const events: unknown[] = [
@@ -184,6 +183,11 @@ export interface SetupCodingAgentMockOptions {
    * completion wake fires. Default 4000.
    */
   streamDelayMs?: number;
+  onCodingProtocol?: (
+    ctx: ScenarioContext,
+    cwd: string,
+    prompt: string,
+  ) => Promise<string | undefined>;
 }
 
 /**
@@ -234,11 +238,14 @@ export function setupCodingAgentMock(
         }
         let resultText: string;
         if (isCodingProtocolPrompt(prompt)) {
-          resultText = codingResultFor(prompt);
-          await commitMockCodingChange(ctx, cwd, prompt, stderr);
+          resultText =
+            (await options.onCodingProtocol?.(ctx, cwd, prompt)) ?? codingResultFor(prompt);
+          if (options.onCodingProtocol === undefined) {
+            await commitMockCodingChange(ctx, cwd, prompt, stderr);
+          }
         } else if (looksLikeWorktreeList(prompt)) {
-          const project = resolveProject(prompt, cwd);
-          if (!project) {
+          const projectPath = resolveProjectPath(prompt, cwd);
+          if (!projectPath) {
             stderr.write(
               "mock-coding-agent: could not resolve project for worktree list.\n" +
                 `cwd=${cwd}\nprompt(first 200 chars)=${prompt.slice(0, 200)}\n`,
@@ -246,7 +253,7 @@ export function setupCodingAgentMock(
             return 1;
           }
           const exec = await ctx.execInGateway(
-            ["pnpm", "--dir", `/home/claw/projects/${project}`, "workspace", "list"],
+            ["pnpm", "--dir", projectPath, "workspace", "list"],
             { timeoutMs: 30_000 },
           );
           if (exec.exitCode !== 0) {
@@ -256,7 +263,8 @@ export function setupCodingAgentMock(
             );
             return exec.exitCode;
           }
-          resultText = exec.stdout.trim() || `No worktrees registered for ${project}.`;
+          resultText =
+            exec.stdout.trim() || `No worktrees registered for ${basename(projectPath)}.`;
         } else if (looksLikeWorktreeAttach(prompt)) {
           const parsed = parseWorktreeRequest(prompt, cwd);
           if (!parsed) {
@@ -267,14 +275,7 @@ export function setupCodingAgentMock(
             return 1;
           }
           const exec = await ctx.execInGateway(
-            [
-              "pnpm",
-              "--dir",
-              `/home/claw/projects/${parsed.project}`,
-              "workspace",
-              "setup",
-              parsed.branch,
-            ],
+            ["pnpm", "--dir", parsed.projectPath, "workspace", "setup", parsed.branch],
             { timeoutMs: 120_000 },
           );
           if (exec.exitCode !== 0) {
@@ -285,7 +286,8 @@ export function setupCodingAgentMock(
             return exec.exitCode;
           }
           resultText =
-            exec.stdout.trim() || `Worktree attached to ${parsed.branch} on ${parsed.project}.`;
+            exec.stdout.trim() ||
+            `Worktree attached to ${parsed.branch} on ${basename(parsed.projectPath)}.`;
         } else if (looksLikeWorktreeCreation(prompt)) {
           const parsed = parseWorktreeRequest(prompt, cwd);
           if (!parsed) {
@@ -296,15 +298,7 @@ export function setupCodingAgentMock(
             return 1;
           }
           const exec = await ctx.execInGateway(
-            [
-              "pnpm",
-              "--dir",
-              `/home/claw/projects/${parsed.project}`,
-              "workspace",
-              "setup",
-              parsed.branch,
-              "-c",
-            ],
+            ["pnpm", "--dir", parsed.projectPath, "workspace", "setup", parsed.branch, "-c"],
             { timeoutMs: 120_000 },
           );
           if (exec.exitCode !== 0) {
@@ -315,7 +309,8 @@ export function setupCodingAgentMock(
             return exec.exitCode;
           }
           resultText =
-            exec.stdout.trim() || `Worktree ${parsed.branch} ready for ${parsed.project}.`;
+            exec.stdout.trim() ||
+            `Worktree ${parsed.branch} ready for ${basename(parsed.projectPath)}.`;
         } else {
           resultText = defaultResult;
         }
@@ -459,23 +454,26 @@ function looksLikeWorktreeCreation(prompt: string): boolean {
   return WORKTREE_INTENT_RE.test(prompt) && BRANCH_TOKEN_RE.test(prompt);
 }
 
-function resolveProject(prompt: string, cwd: string): string | undefined {
-  const cwdMatch = cwd.match(PROJECT_CWD_RE);
-  if (cwdMatch?.[1]) return cwdMatch[1];
+function resolveProjectPath(prompt: string, cwd: string): string | undefined {
+  const normalizedCwd = cwd.replace(/\/$/, "");
+  const cwdProject = FIXTURE_PROJECT_PATHS.find((projectPath) => projectPath === normalizedCwd);
+  if (cwdProject !== undefined) return cwdProject;
   const promptProject = prompt.match(FIXTURE_PROJECT_RE);
-  return promptProject?.[0].toLowerCase();
+  if (promptProject === null) return;
+  const name = promptProject[0].toLowerCase();
+  return FIXTURE_PROJECT_PATHS.find((projectPath) => basename(projectPath) === name);
 }
 
 function parseWorktreeRequest(
   prompt: string,
   cwd: string,
-): { project: string; branch: string } | undefined {
+): { projectPath: string; branch: string } | undefined {
   const branchMatch = prompt.match(BRANCH_TOKEN_RE);
   if (!branchMatch) return undefined;
   const branch = `${branchMatch[1]}/${branchMatch[2]}`;
-  const project = resolveProject(prompt, cwd);
-  if (!project) return undefined;
-  return { project, branch };
+  const projectPath = resolveProjectPath(prompt, cwd);
+  if (!projectPath) return;
+  return { projectPath, branch };
 }
 
 const CODING_PROTOCOL_RE =
@@ -506,7 +504,7 @@ async function commitMockCodingChange(
   prompt: string,
   stderr: { write(chunk: string): void },
 ): Promise<void> {
-  if (cwd === undefined || !WORKTREE_CWD_RE.test(cwd)) return;
+  if (cwd === undefined || !isFixtureWorktreePath(cwd)) return;
   const exec = await ctx.execInGateway(
     [
       "sh",
@@ -523,6 +521,14 @@ async function commitMockCodingChange(
         `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
     );
   }
+}
+
+function isFixtureWorktreePath(path: string): boolean {
+  const normalizedPath = path.replace(/\/$/, "");
+  return FIXTURE_PROJECT_PATHS.some((projectPath) => {
+    const prefix = `${dirname(projectPath)}/${basename(projectPath)}-`;
+    return normalizedPath.startsWith(prefix);
+  });
 }
 
 /** True iff `prompt` opens with an alignfirst coding-protocol header. */

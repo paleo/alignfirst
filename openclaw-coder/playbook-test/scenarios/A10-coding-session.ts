@@ -5,10 +5,12 @@ import {
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A10 → ABC-010N, first ticket ABC-0100.
@@ -35,6 +37,7 @@ const PROJECT = "nimbus";
 export default async function codingSession(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
   const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12000 });
@@ -47,6 +50,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
       `Ticket ${TICKET_ID}. Mets en place le workspace et lance directement le travail de code — ` +
       `tu as mon feu vert, ne me demande pas de validation, préviens-moi quand c'est terminé.`,
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
     audience: "tech",
     codingAgent,
@@ -107,6 +111,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   // post — the exact shape of the trailing-leak incident — so sweep longer.
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
   await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
+  alproject.assertListCallCount(1);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

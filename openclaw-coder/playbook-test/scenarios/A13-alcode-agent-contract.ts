@@ -1,4 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import {
   type CodingAgent,
@@ -8,7 +9,7 @@ import {
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
 
-const PROJECT_DIR = "/home/claw/projects/nimbus";
+const PROJECT_DIR = NIMBUS_PROJECT_PATH;
 const TICKET_ID = "ABC-0130";
 const NEW_MESSAGE = "Inspect the fixture and report the result.";
 const RESUME_MESSAGE = "Continue and confirm the result.";

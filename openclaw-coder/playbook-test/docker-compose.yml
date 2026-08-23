@@ -13,6 +13,8 @@ include:
 volumes:
   openclaw-codex-home:
   fixture-projects:
+  fixture-external-projects:
+  fixture-lifecycle-projects:
 
 services:
   gateway:
@@ -24,6 +26,8 @@ services:
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/claw/.codex:ro
       - fixture-projects:/home/claw/projects
+      - fixture-external-projects:/home/claw/external-projects
+      - fixture-lifecycle-projects:/home/claw/lifecycle-projects
       # Live-mount the playbook skill over its baked copy so playbook edits
       # iterate without an image rebuild. Set in .env.local (relative to this
       # dir, e.g. ../../skills/openclaw-coder-playbook).
@@ -40,3 +44,5 @@ services:
       ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
     volumes:
       - fixture-projects:/home/claw/projects
+      - fixture-external-projects:/home/claw/external-projects
+      - fixture-lifecycle-projects:/home/claw/lifecycle-projects

@@ -45,19 +45,27 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 - `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
-- [`docker-compose.yml`](docker-compose.yml) — `fixture-projects` named volume on gateway + runner at `/home/claw/projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`docker-compose.yml`](docker-compose.yml) — shared fixture volumes on gateway + runner at `/home/claw/projects`, `/home/claw/external-projects`, and `/home/claw/lifecycle-projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes two git repos on branch `main` at `/home/claw/projects/{nimbus,lumen}`, both copied from the committed [`projects-fixture/template/`](projects-fixture/template/) — a minimal Express monorepo stand-in. Each carries `package.json` `name` `@playbook-test/<name>-fixture`, `DEVELOPMENT.md` H1 `# Developing <Name>` and its own port block (`nimbus` from 6500, `lumen` from 6520), plus an (untracked) `.plans/` directory so `alcode`'s project gate is satisfied.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](projects-fixture/template/). `nimbus` and `lumen` live under `/home/claw/projects`; `orion` lives under the second explicit fixture parent `/home/claw/external-projects`. Each carries a project-specific package name, `DEVELOPMENT.md` heading, port block (6500, 6520, and 6540), and an untracked `.plans/` directory for alcode's project gate.
+
+`/home/claw/lifecycle-projects` resets to an empty allowed parent. The creation scenario uses it for `nova`, isolated from the standard projects. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
+
+The absolute parents are harness storage details. Scenarios obtain canonical main paths from the mocked `alproject list` result and pass those paths through starter, workspace, and coding-agent assertions. The `alproject` shim emits the CLI's labelled list format, supports per-scenario project records and additional-directory groups, and records argv, cwd, and call order. Lifecycle scenarios configure guide, registration, and unregistration responses; successful mutations update subsequent list output.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A13`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A19`.
 
-Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its dir name as `seededWorktreeDirs` so the check still catches anything the channel session created.
+Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its absolute path as `seededWorktreePaths` so the check still catches anything the channel session created.
 
 `A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, exposing the heartbeat-cooldown wake gate. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
+
+`A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
+
+`A17` creates and registers `nova`, bootstraps it on `main`, and checks the initial commit and refreshed inventory. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
 
 Rebuild the alcode package and harness image before focused coverage:
 
@@ -66,6 +74,8 @@ npm run build --workspace @paleo/alcode --prefix ../..
 npm run env:build
 
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A06-off-projects A14-sole-project-inference A15-duplicate-project-name A16-external-project-path
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A17-project-creation A18-project-removal A19-project-removal-failure
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A10-coding-session A12-sequential-coding-sessions
 ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
 npm run e2e -- --model gpt-5.6-terra --channel all --all

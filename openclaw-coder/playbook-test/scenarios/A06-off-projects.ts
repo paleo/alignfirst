@@ -1,5 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { OFF_PROJECTS_CHAT_RUBRIC } from "./_lib/common-constants.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -7,6 +8,7 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 export default async function offProjectsChat(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -22,6 +24,19 @@ export default async function offProjectsChat(ctx: ScenarioContext): Promise<voi
   } else {
     await assertSlackReply(ctx, startCursor);
   }
+
+  const secondCursor = await ctx.getCursor();
+  await ctx.sendInbound({
+    senderId: "ROBIN01",
+    senderName: "ROBIN01",
+    text: "Et sinon, tu passes une bonne journée ?",
+  });
+  if (ctx.channel === "discord-mock") {
+    await assertDiscordChannelReply(ctx, secondCursor);
+  } else {
+    await assertSlackReply(ctx, secondCursor);
+  }
+  alproject.assertListCallCount(1);
 
   if (codingAgent.codingAgentCalls.length > 0) {
     throw new Error(

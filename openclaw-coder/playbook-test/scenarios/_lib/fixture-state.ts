@@ -1,16 +1,15 @@
 import { execFileSync } from "node:child_process";
+import { basename, dirname } from "node:path";
 import { readdir, stat } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
-
-const PROJECTS_DIR = "/home/claw/projects";
 
 /**
  * Worktree directory the `@paleo/workspace` library produces for a ticket
  * branch on the given fixture project. Branch shape is `<ticket>/<desc>`; the
  * library's default `defaultWorktreeDirName` joins segments with `-`.
  */
-export function worktreePath(project: string, ticket: string, desc: string): string {
-  return `${PROJECTS_DIR}/${project}-${ticket}-${desc}`;
+export function worktreePath(projectPath: string, ticket: string, desc: string): string {
+  return `${dirname(projectPath)}/${basename(projectPath)}-${ticket}-${desc}`;
 }
 
 export interface WaitForWorktreeDirOptions {
@@ -18,16 +17,15 @@ export interface WaitForWorktreeDirOptions {
 }
 
 /**
- * Polls the shared `/home/claw/projects/` volume until the expected worktree
- * directory exists.
+ * Polls the fixture parent's shared volume until the expected worktree directory exists.
  */
 export async function waitForWorktreeDir(
-  project: string,
+  projectPath: string,
   ticket: string,
   desc: string,
   { timeoutMs }: WaitForWorktreeDirOptions,
 ): Promise<string> {
-  const target = worktreePath(project, ticket, desc);
+  const target = worktreePath(projectPath, ticket, desc);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -53,17 +51,17 @@ export interface WorktreeMatch {
  * so the scenario must not pin it — only that a worktree for the ticket appears.
  */
 export async function waitForAnyWorktreeDir(
-  project: string,
+  projectPath: string,
   ticket: string,
   { timeoutMs }: WaitForWorktreeDirOptions,
 ): Promise<WorktreeMatch> {
-  const prefix = `${project}-${ticket}-`;
+  const parent = dirname(projectPath);
+  const prefix = `${basename(projectPath)}-${ticket}-`;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const entries = await readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => []);
+    const entries = await readdir(parent, { withFileTypes: true }).catch(() => []);
     const match = entries.find((e) => e.isDirectory() && e.name.startsWith(prefix));
-    if (match)
-      return { dir: `${PROJECTS_DIR}/${match.name}`, desc: match.name.slice(prefix.length) };
+    if (match) return { dir: `${parent}/${match.name}`, desc: match.name.slice(prefix.length) };
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`no worktree dir ${prefix}<desc> appeared within ${timeoutMs}ms`);
@@ -115,13 +113,13 @@ export function escapeRegExp(value: string): string {
  */
 export async function seedWorktree(
   ctx: ScenarioContext,
-  project: string,
+  projectPath: string,
   ticket: string,
   desc: string,
 ): Promise<string> {
   const branch = `${ticket}/${desc}`;
   const exec = await ctx.execInGateway(
-    ["sh", "-c", `cd ${PROJECTS_DIR}/${project} && pnpm workspace setup ${branch} -c`],
+    ["pnpm", "--dir", projectPath, "workspace", "setup", branch, "-c"],
     { timeoutMs: 120_000 },
   );
   if (exec.exitCode !== 0) {
@@ -130,7 +128,7 @@ export async function seedWorktree(
         `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}`,
     );
   }
-  return waitForWorktreeDir(project, ticket, desc, { timeoutMs: 30_000 });
+  return waitForWorktreeDir(projectPath, ticket, desc, { timeoutMs: 30_000 });
 }
 
 /**
@@ -139,15 +137,14 @@ export async function seedWorktree(
  */
 export async function seedBranch(
   ctx: ScenarioContext,
-  project: string,
+  projectPath: string,
   ticket: string,
   desc: string,
 ): Promise<void> {
   const branch = `${ticket}/${desc}`;
-  const exec = await ctx.execInGateway(
-    ["git", "-C", `${PROJECTS_DIR}/${project}`, "branch", branch, "main"],
-    { timeoutMs: 15_000 },
-  );
+  const exec = await ctx.execInGateway(["git", "-C", projectPath, "branch", branch, "main"], {
+    timeoutMs: 15_000,
+  });
   if (exec.exitCode !== 0) {
     throw new Error(
       `seedBranch: git branch ${branch} failed (exit ${exec.exitCode}).\n` +

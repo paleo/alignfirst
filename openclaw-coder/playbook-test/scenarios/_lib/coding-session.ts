@@ -1,4 +1,5 @@
 import type { BusMessage, ScenarioContext } from "@paleo/openclaw-test";
+import { EXTERNAL_PROJECT_PARENT, PRIMARY_PROJECT_PARENT } from "./project-fixtures.ts";
 
 // Two agent messages carry the delegation outcome — the "started in the background" ack and the
 // "finished" completion report. Both are classified by an LLM judge, never by a lexical regex: the
@@ -168,7 +169,8 @@ export async function waitForCodingSessionSucceeded(
   const deadline = Date.now() + opts.timeoutMs;
   const findArgs = [
     "find",
-    "/home/claw/projects",
+    PRIMARY_PROJECT_PARENT,
+    EXTERNAL_PROJECT_PARENT,
     "-path",
     `*/${sessionsDir}/*.md`,
     "-exec",

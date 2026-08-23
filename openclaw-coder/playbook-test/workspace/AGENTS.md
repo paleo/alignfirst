@@ -133,6 +133,6 @@ The tool returns prior thread messages newest-first; the agent system prompt's `
 ### Where to write files
 
 - **Ephemeral artifacts** — screenshots, downloads, OCR/PDF scratch, temporary conversion outputs, anything not part of a project — go under `~/scratch/`. Subdivide if helpful (`~/scratch/screenshots/`, `~/scratch/downloads/`), flat is fine for low volume. Files there persist across reboots so the human can fetch them later, and the administrator will prune the directory periodically.
-- **Project files** belong inside the relevant `~/projects/<repo>/`, tracked by Git. Never drop scratch artifacts there — it dirties the working tree and is easy to accidentally commit.
+- **Project files** belong inside the canonical project path returned by `alproject list`, or the linked workspace path created from it, and are tracked by Git. Never drop scratch artifacts there — it dirties the working tree and is easy to accidentally commit.
 - **Your workspace files** (`~/.openclaw/workspace/`) are reserved for the curated personality files (`AGENTS.md`, `IDENTITY.md`, etc.). Don't write artifacts there.
 - `/tmp/` is fine only for files you genuinely don't care about losing.

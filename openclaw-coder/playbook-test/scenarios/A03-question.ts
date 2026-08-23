@@ -5,8 +5,10 @@ import {
   extractCodingPrompt,
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import {
   assertNoWorktreeDirs,
   bootstrapThreadFromChannel,
@@ -30,6 +32,7 @@ const INVESTIGATION_FINDING =
 export default async function projectInvestigationQuestion(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   // streamDelayMs keeps the mock coding run alive past the launching turn (real runs take
   // minutes+): an exec that exits mid-turn gets its exit event consumed by the in-flight turn and
   // the completion wake never fires as its own turn — a fixture artifact, not a product behavior.
@@ -42,6 +45,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: QUESTION_TEXT,
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
@@ -58,7 +62,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   // the right repo — checked structurally (deterministic), not by the judge.
   ctx.assertRegex(
     delegationCall.cwd,
-    /^\/home\/claw\/projects\/nimbus\/?$/,
+    new RegExp(`^${NIMBUS_PROJECT_PATH}/?$`),
     "delegation runs from the nimbus project directory",
   );
   ctx.log(
@@ -82,6 +86,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     timeoutMs: 240_000,
     label: "investigation-summary",
   });
+  alproject.assertListCallCount(1);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

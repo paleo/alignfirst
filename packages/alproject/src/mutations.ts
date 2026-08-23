@@ -1,0 +1,240 @@
+import {
+  closeSync,
+  lstatSync,
+  openSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+  fsyncSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
+import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
+
+import type { AlprojectConfig } from "./config.js";
+import { AlprojectError } from "./errors.js";
+import { canonicalizePath } from "./paths.js";
+import {
+  allocateProjectPorts,
+  allocationEnd,
+  projectPortCount,
+  type PortRequest,
+} from "./ports.js";
+import { readRegistry, type Registry, registryPath } from "./registry.js";
+import { type RegistryLockOptions, withRegistryLock } from "./registry-lock.js";
+
+const atomicWriteOperations: AtomicWriteOperations = {
+  close: closeSync,
+  fsync: fsyncSync,
+  open: openSync,
+  rename: renameSync,
+  unlink: unlinkSync,
+  write: writeFileSync,
+};
+
+export interface RegistrationOptions {
+  maxWorkspaces?: number;
+  portsPerWorkspace?: number;
+}
+
+export interface RegistrationResult {
+  path: string;
+  ports?: RegistrationPorts;
+}
+
+export interface RegistrationPorts extends PortRequest {
+  basePort: number;
+  endPort: number;
+}
+
+export interface MutationOptions {
+  atomicWriteOperations?: Partial<AtomicWriteOperations>;
+  lock?: RegistryLockOptions;
+}
+
+export interface AtomicWriteOperations {
+  close: typeof closeSync;
+  fsync: typeof fsyncSync;
+  open: typeof openSync;
+  rename: typeof renameSync;
+  unlink: typeof unlinkSync;
+  write: typeof writeFileSync;
+}
+
+export async function registerProject(
+  config: AlprojectConfig,
+  inputPath: string,
+  options: RegistrationOptions = {},
+  mutationOptions: MutationOptions = {},
+): Promise<RegistrationResult> {
+  const path = registrationPath(config, inputPath);
+  const request = portRequest(options);
+  if (request !== undefined) assertRequestFitsConfiguredRange(config, request);
+
+  return mutateRegistry(config, mutationOptions, (registry) => {
+    if (registry.projects.some((project) => project.path === path)) {
+      throw new AlprojectError("registry", `Project is already registered: ${path}`);
+    }
+    const ports =
+      request === undefined
+        ? undefined
+        : allocateProjectPorts(registry.projects, request, config.firstPort, config.lastPort);
+    registry.projects.push(ports === undefined ? { path } : { path, ports });
+    return {
+      path,
+      ...(ports === undefined ? {} : { ports: { ...ports, endPort: allocationEnd(ports) } }),
+    };
+  });
+}
+
+export async function unregisterProject(
+  config: AlprojectConfig,
+  inputPath: string,
+  mutationOptions: MutationOptions = {},
+): Promise<string> {
+  const path = mutationPath(config, inputPath);
+  return mutateRegistry(config, mutationOptions, (registry) => {
+    const index = registry.projects.findIndex((project) => project.path === path);
+    if (index < 0) throw new AlprojectError("registry", `Project is not registered: ${path}`);
+    registry.projects.splice(index, 1);
+    return path;
+  });
+}
+
+function registrationPath(config: AlprojectConfig, inputPath: string): string {
+  const path = mutationPath(config, inputPath);
+  assertMainWorktree(path);
+  if (!config.projectParents.includes(dirname(path))) {
+    throw new AlprojectError(
+      "filesystem",
+      `Project must be a direct child of an allowed project parent: ${path}`,
+    );
+  }
+  return path;
+}
+
+function mutationPath(config: Pick<AlprojectConfig, "root">, inputPath: string): string {
+  if (inputPath.length === 0) throw new AlprojectError("filesystem", "Project path is required");
+  const absolutePath = isAbsolute(inputPath)
+    ? normalize(inputPath)
+    : resolve(config.root, inputPath);
+  return canonicalizePath(absolutePath);
+}
+
+function assertMainWorktree(path: string): void {
+  try {
+    if (!statSync(path).isDirectory()) throw new Error("path is not a directory");
+    if (!lstatSync(join(path, ".git")).isDirectory()) {
+      throw new Error(".git is not a directory");
+    }
+  } catch (error) {
+    throw new AlprojectError(
+      "filesystem",
+      `Project must be an existing Git main worktree: ${path} (${errorMessage(error)})`,
+      { cause: error },
+    );
+  }
+}
+
+function portRequest(options: RegistrationOptions): PortRequest | undefined {
+  const hasPortsPerWorkspace = options.portsPerWorkspace !== undefined;
+  const hasMaxWorkspaces = options.maxWorkspaces !== undefined;
+  if (hasPortsPerWorkspace !== hasMaxWorkspaces) {
+    throw new AlprojectError(
+      "registry",
+      "portsPerWorkspace and maxWorkspaces must be provided together",
+    );
+  }
+  if (
+    !hasPortsPerWorkspace ||
+    options.portsPerWorkspace === undefined ||
+    options.maxWorkspaces === undefined
+  ) {
+    return;
+  }
+  const request = {
+    maxWorkspaces: options.maxWorkspaces,
+    portsPerWorkspace: options.portsPerWorkspace,
+  };
+  projectPortCount(request);
+  return request;
+}
+
+function assertRequestFitsConfiguredRange(config: AlprojectConfig, request: PortRequest): void {
+  const available = config.lastPort - config.firstPort + 1;
+  const requested = projectPortCount(request);
+  if (requested > available) {
+    throw new AlprojectError(
+      "registry",
+      `Requested block of ${requested} ports exceeds configured range ${config.firstPort}..${config.lastPort}`,
+    );
+  }
+}
+
+async function mutateRegistry<T>(
+  config: AlprojectConfig,
+  options: MutationOptions,
+  mutation: (registry: Registry) => T,
+): Promise<T> {
+  const path = registryPath(config);
+  return withRegistryLock(
+    path,
+    () => {
+      const registry = readRegistry(config);
+      const result = mutation(registry);
+      writeRegistryAtomically(path, registry, options.atomicWriteOperations);
+      return result;
+    },
+    options.lock,
+  );
+}
+
+function writeRegistryAtomically(
+  path: string,
+  registry: Registry,
+  operationOverrides: Partial<AtomicWriteOperations> = {},
+): void {
+  const operations = { ...atomicWriteOperations, ...operationOverrides };
+  const temporaryPath = `${path}.tmp-${process.pid}-${randomUUID()}`;
+  let descriptor: number | undefined;
+  try {
+    descriptor = operations.open(temporaryPath, "wx", 0o600);
+    operations.write(descriptor, `${JSON.stringify(registry, undefined, 2)}\n`, "utf8");
+    operations.fsync(descriptor);
+    operations.close(descriptor);
+    descriptor = undefined;
+    operations.rename(temporaryPath, path);
+  } catch (error) {
+    if (descriptor !== undefined) tryClose(descriptor, operations.close);
+    removeTemporaryFile(temporaryPath, operations.unlink);
+    throw new AlprojectError(
+      "registry",
+      `Cannot atomically replace registry ${path}: ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+function tryClose(descriptor: number, close: typeof closeSync): void {
+  try {
+    close(descriptor);
+  } catch {
+    // Preserve the write error.
+  }
+}
+
+function removeTemporaryFile(path: string, unlink: typeof unlinkSync): void {
+  try {
+    unlink(path);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}

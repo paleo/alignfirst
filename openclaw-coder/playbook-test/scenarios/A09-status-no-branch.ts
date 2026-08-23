@@ -1,10 +1,12 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusNoBranchRubric } from "./_lib/common-constants.ts";
+import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import {
   assertNoWorktreeDirs,
   bootstrapThreadFromChannel,
@@ -23,6 +25,7 @@ const TICKET_ID = "ABC-090";
 export default async function statusNoBranch(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
+  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -30,6 +33,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
     project: PROJECT,
+    projectPath: NIMBUS_PROJECT_PATH,
     codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
@@ -68,6 +72,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
 
   assertNoWorktreeDirs(ctx);
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  alproject.assertListCallCount(1);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

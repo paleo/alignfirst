@@ -12,7 +12,7 @@ import type { Step } from "./types.ts";
 const bootstrapStatusRe = /\b(ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours|échou)/i;
 
 export interface WorkspaceFlowOptions {
-  project: string;
+  projectPath: string;
   ticketId: string;
   prevStep: Step;
   worktreeTimeoutMs?: number;
@@ -33,9 +33,9 @@ export async function runWorkspaceFlow(
   ctx: ScenarioContext,
   codingAgent: CodingAgentMockHandle,
   options: WorkspaceFlowOptions,
-): Promise<void> {
+): Promise<string> {
   const {
-    project,
+    projectPath,
     ticketId,
     prevStep,
     worktreeTimeoutMs = 120_000,
@@ -50,7 +50,7 @@ export async function runWorkspaceFlow(
   // branch from git — the worktree DIR name is capped at 22 chars by
   // @paleo/workspace, so it can't reconstruct the branch. The on-disk check is
   // the deterministic proof that setup happened.
-  const { dir: worktreeDir } = await waitForAnyWorktreeDir(project, ticketId, {
+  const { dir: worktreeDir } = await waitForAnyWorktreeDir(projectPath, ticketId, {
     timeoutMs: worktreeTimeoutMs,
   });
   const branch = assertBranchForTicket(worktreeDir, ticketId);
@@ -69,7 +69,7 @@ export async function runWorkspaceFlow(
   // inbounds and the exec wake coalesce the whole conversation into one run,
   // the flush trails the completion outbound — hence timeouts well past the
   // 30s default.
-  await ctx.waitForAgentToolCall((c) => readsFile(c, `${project}/DEVELOPMENT.md`), {
+  await ctx.waitForAgentToolCall((c) => readsFile(c, `${projectPath}/DEVELOPMENT.md`), {
     label: "agent reads the project DEVELOPMENT.md",
     timeoutMs: 120_000,
   });
@@ -77,6 +77,7 @@ export async function runWorkspaceFlow(
     label: "agent runs `workspace --guide`",
     timeoutMs: 120_000,
   });
+  return worktreeDir;
 }
 
 /**
