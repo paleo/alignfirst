@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { resolveParallel } from "../src/env-cli.js";
+import { buildConsumerImageArgs, resolveParallel } from "../src/env-cli.js";
+
+describe("buildConsumerImageArgs", () => {
+  it("builds one service for the shared consumer image", () => {
+    expect(buildConsumerImageArgs(["compose", "-p", "worker-1"])).toEqual([
+      "compose",
+      "-p",
+      "worker-1",
+      "build",
+      "bus",
+    ]);
+  });
+});
 
 describe("resolveParallel", () => {
   it("defaults to 1 when neither flag nor env var is set", () => {

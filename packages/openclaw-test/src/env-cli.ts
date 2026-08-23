@@ -85,7 +85,7 @@ export async function envCommand(packageDir: string, argv: string[]): Promise<ne
   if (sub === "build") {
     ensureHostOutputDirs([]);
     ensureBaseImage(packageDir, { force: true });
-    process.exit(execComposeSync([...workerComposeArgs(1), "build"]));
+    process.exit(execComposeSync(buildConsumerImageArgs(workerComposeArgs(1))));
   }
   const parallel = resolveParallel(parallelFlag, readEnvVar("OPENCLAW_TEST_PARALLEL"));
   const workers = buildWorkerContexts(parallel);
@@ -103,6 +103,10 @@ export async function envCommand(packageDir: string, argv: string[]): Promise<ne
     ),
   );
   process.exit(codes.find((code) => code !== 0) ?? 0);
+}
+
+export function buildConsumerImageArgs(composeArgs: string[]): string[] {
+  return [...composeArgs, "build", "bus"];
 }
 
 export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
@@ -268,14 +272,13 @@ function listWorkerStackNames(): string[] {
     .filter((name): name is string => typeof name === "string" && pattern.test(name));
 }
 
-// A `compose up` with both `build:` and `image:` builds the image when it is
-// missing, so K concurrent worker `up`s would race K builds onto one tag. Build
-// once up front instead. `env build` builds unconditionally.
+// Every service declares the same build and image. Target one representative service so Compose
+// does not build bus, gateway and runner concurrently onto the shared tag.
 function ensureConsumerImage(composeArgs: string[]): void {
   const image = process.env.OPENCLAW_TEST_CONSUMER_IMAGE as string;
   const inspect = spawnSync("docker", ["image", "inspect", image], { stdio: "ignore" });
   if (inspect.status === 0) return;
-  const code = execComposeSync([...composeArgs, "build"]);
+  const code = execComposeSync(buildConsumerImageArgs(composeArgs));
   if (code !== 0) process.exit(code);
 }
 

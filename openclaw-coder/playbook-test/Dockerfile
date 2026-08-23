@@ -6,6 +6,7 @@
 
 ARG OPENCLAW_TEST_BASE_TAG=__SET_VIA_OPENCLAW_TEST_CLI__
 FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}
+ARG TARGETARCH
 
 USER root
 
@@ -63,9 +64,19 @@ COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \
+    case "${TARGETARCH}" in \
+      amd64) codex_platform=codex-linux-x64 ;; \
+      arm64) codex_platform=codex-linux-arm64 ;; \
+      *) echo "Unsupported Docker architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    find /opt/openclaw-test/src/node_modules/@openclaw/codex/node_modules/@openai \
+      -mindepth 1 -maxdepth 1 -type d ! -name codex ! -name "${codex_platform}" \
+      -exec rm -rf {} + && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install /opt/openclaw-test/src/node_modules/@openclaw/codex && \
-    OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
+    OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
+      npx openclaw plugins registry --refresh && \
+    npm cache clean --force
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
 # from here to each configured fixture parent at scenario start, materializing the
