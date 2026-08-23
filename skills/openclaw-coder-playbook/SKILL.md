@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for the openclaw-coder autonomou
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.25.0"
+  version: "0.25.2"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -45,7 +45,7 @@ Inside a project, each entry point targets a reader:
 - `AGENTS.md` (`{PROJECT_PATH}/AGENTS.md`) — the coding agent (alcode).
 - The rest of the documentation (`docs/`, …) — everybody.
 
-Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list`, following the channel procedure. Never rely on memorized names.
+Channel/DM: on the first turn whose transcript has no successful `alproject list` result, the first action after reading the channel procedure MUST be an `exec` call for `alproject list`. Do not decide whether the message is actionable first. This mandatory call applies even when the message is only a greeting or unrelated chatter. Retain the result for later turns. Never rely on memorized names.
 
 Thread: PROJECT, PROJECT_PATH, and TICKET_ID are fixed for ordinary workspace work. Recover them via `message action: "read"` from the starter, which carries the project, project path, ticket, audience, and task. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
 

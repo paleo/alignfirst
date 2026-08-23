@@ -118,10 +118,10 @@ export async function seedWorktree(
   desc: string,
 ): Promise<string> {
   const branch = `${ticket}/${desc}`;
-  const exec = await ctx.execInGateway(
-    ["pnpm", "--dir", projectPath, "workspace", "setup", branch, "-c"],
-    { timeoutMs: 120_000 },
-  );
+  const exec = await ctx.execInGateway(["pnpm", "workspace", "setup", branch, "-c"], {
+    cwd: projectPath,
+    timeoutMs: 120_000,
+  });
   if (exec.exitCode !== 0) {
     throw new Error(
       `seedWorktree: pnpm workspace setup ${branch} -c failed (exit ${exec.exitCode}).\n` +

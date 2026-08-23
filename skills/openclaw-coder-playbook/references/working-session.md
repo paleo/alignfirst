@@ -27,7 +27,7 @@ Project-workspace cleanup is not physical project removal; follow "Cleanup reque
 The question on every wake is not a mode but a fact: does this thread have its project workspace?
 
 - **PROJECT, PROJECT_PATH, and TICKET_ID are known** — the thread can have its workspace. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **A value is missing** — the thread cannot have a workspace yet. Go to Step 4: converse, investigate, ask for what is missing. The moment all three values are known, run the same procedure.
+- **A value is missing** — the thread cannot have a workspace yet. Go to Step 4. PROJECT and PROJECT_PATH are enough for an investigation, question, or advice: delegate from PROJECT_PATH without requiring TICKET_ID. Ask for missing values only when the current request needs a workspace. The moment all three values are known for workspace work, run the same procedure.
 
 The underlying invariant for an existing project: reading never needs a workspace, while editing project files happens inside a linked workspace. New-project bootstrap follows the explicit main-worktree exception in `project-lifecycle.md`.
 

@@ -15,7 +15,7 @@ USER root
 # this consumer wants intercepted. `claude`, `codex`, `gh`, and `alproject` are shimmed. `alcode` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl && \
-    corepack enable && corepack prepare pnpm@latest --activate && \
+    corepack enable && corepack prepare pnpm@10.18.0 --activate && \
     for name in claude codex gh alproject; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/claw/projects /home/claw/external-projects /home/claw/lifecycle-projects && \
     chown claw:claw /home/claw/projects /home/claw/external-projects \
@@ -80,3 +80,7 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --skill alignfirst --skill al --skill alplan --skill alspec \
       --skill aldescription --skill alreview --skill alread \
       --skill almerge --skill openclaw-coder-playbook
+
+USER root
+RUN corepack install --global pnpm@10.18.0
+USER claw

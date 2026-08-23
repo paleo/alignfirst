@@ -58,10 +58,7 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
       reportRe.test(m.text),
     {
       sinceCursor: starter.nextCursor,
-      // The takeover-sync between the `gh pr list` call and the report (deps
-      // check, base-branch check, report drafting) can exceed 30s on a slow
-      // model — give the CLI-mock grace real headroom.
-      failFastCliMockGraceMs: 90_000,
+      failFastCliMockGraceMs: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });

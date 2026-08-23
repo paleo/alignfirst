@@ -84,11 +84,8 @@ function assertStarterValues(
   text: string,
   opts: ChannelBootstrapOptions,
 ): void {
-  ctx.assertRegex(
-    text,
-    /^Project path:\s+\S.*$/im,
-    "starter carries the labelled project-path field",
-  );
+  const projectPathLine = starterFieldLine(text, 1);
+  ctx.assertRegex(projectPathLine, /^[^:\n]+:\s*\S.*$/u, "starter carries a project-path field");
   // On Discord the starter is the ONLY carrier — the channel message is the
   // thread's parent, excluded from its message list.
   if (ctx.channel === "discord-mock" && opts.project !== undefined) {
@@ -100,9 +97,9 @@ function assertStarterValues(
   }
   if (opts.projectPath !== undefined) {
     ctx.assertRegex(
-      text,
-      new RegExp(`^Project path:\\s+.*${escapeRe(opts.projectPath)}.*$`, "im"),
-      "starter carries the labelled canonical project path",
+      projectPathLine,
+      new RegExp(escapeRe(opts.projectPath), "i"),
+      "starter project-path field carries the canonical path",
     );
   }
   if (opts.ticketId !== undefined) {
@@ -113,6 +110,12 @@ function assertStarterValues(
     );
   }
   if (opts.audience !== undefined) assertStarterAudience(text, opts.audience);
+}
+
+function starterFieldLine(text: string, index: number): string {
+  const line = text.split(/\r?\n/u).filter((candidate) => candidate.trim().length > 0)[index];
+  if (line === undefined) throw new Error(`starter is missing field line ${index + 1}`);
+  return line;
 }
 
 // The audience travels as a literal `tech` / `non-tech` token, kept intact

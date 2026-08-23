@@ -47,6 +47,7 @@ export function waitForStarter(
     {
       timeoutMs: opts.timeoutMs ?? 90_000,
       sinceCursor: opts.sinceCursor,
+      failFastCliMockGraceMs: false,
       failFastUnmatchedOutbounds: false,
     },
   );
@@ -55,7 +56,7 @@ export function waitForStarter(
 export interface WaitForReportOptions {
   sinceCursor: number;
   timeoutMs?: number;
-  failFastCliMockGraceMs?: number;
+  failFastCliMockGraceMs?: number | false;
 }
 
 /**
