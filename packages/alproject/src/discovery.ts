@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { AlprojectConfig } from "./config.js";
+import { isNodeError } from "./errors.js";
 import type { PortAllocation, Registry } from "./registry.js";
 
 export interface ProjectList {
@@ -119,8 +120,17 @@ export function discoverProjects(
 function readDirectoryCandidates(parent: string): DirectoryCandidate[] {
   return readdirSync(parent, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => ({ name: entry.name, parent, path: realpathSync(join(parent, entry.name)) }))
+    .flatMap((entry) => readDirectoryCandidate(parent, entry.name))
     .toSorted((left, right) => left.name.localeCompare(right.name));
+}
+
+function readDirectoryCandidate(parent: string, name: string): DirectoryCandidate[] {
+  try {
+    return [{ name, parent, path: realpathSync(join(parent, name)) }];
+  } catch (error) {
+    if (isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) return [];
+    throw error;
+  }
 }
 
 function existingGitDirectory(projectPath: string): string | undefined {

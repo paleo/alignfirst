@@ -13,7 +13,7 @@ Create `~/.alproject.json` with the primary root, allowed project parents, and p
 ## Commands
 
 ```text
-alproject list
+alproject list [--json]
 alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
 alproject unregister <path>
 ```

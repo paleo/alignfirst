@@ -11,6 +11,7 @@ await runWorkspace({
     {
       path: "alignfirst-developer-tests/.env.local",
       source: { kind: "mainWorktree" },
+      optional: true,
     },
   ],
   finalizeWorkspace: ({ currentWorktree, progress }) => {

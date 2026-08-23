@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 
-import { AlprojectError } from "./errors.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 
 export function expandHomePath(path: string, home: string): string {
   if (!path.startsWith("~/")) return path;
@@ -42,12 +42,4 @@ export function canonicalizeParentPaths(paths: readonly string[], home: string):
 
 function isMissingPathError(error: unknown): boolean {
   return isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR");
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

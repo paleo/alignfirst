@@ -44,6 +44,19 @@ describe("withRegistryLock", () => {
     expect(existsSync(registryLockPath(path))).toBe(false);
   });
 
+  it("reclaims an owner whose PID was reused by another process", async () => {
+    const path = makeRegistryPath();
+    writeOwner(path, 123, "original-process");
+
+    await expect(
+      withRegistryLock(path, () => "done", {
+        isProcessAlive: () => true,
+        processStartMarker: () => "reused-pid-process",
+      }),
+    ).resolves.toBe("done");
+    expect(existsSync(registryLockPath(path))).toBe(false);
+  });
+
   it("reclaims incomplete metadata only after its grace interval", async () => {
     const path = makeRegistryPath();
     const lockPath = registryLockPath(path);
@@ -132,12 +145,12 @@ function makeRegistryPath(): string {
   return join(fixtureDir, "registry.json");
 }
 
-function writeOwner(registryFile: string, pid: number): void {
+function writeOwner(registryFile: string, pid: number, startMarker?: string): void {
   const lockPath = registryLockPath(registryFile);
   mkdirSync(lockPath);
   writeFileSync(
     join(lockPath, `claim-${pid}-owner.json`),
-    `${JSON.stringify({ pid, ticket: 1, token: "owner" })}\n`,
+    `${JSON.stringify({ pid, ticket: 1, token: "owner", startMarker })}\n`,
   );
 }
 

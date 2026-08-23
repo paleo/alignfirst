@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 
 import type { AlprojectConfig } from "./config.js";
-import { AlprojectError } from "./errors.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { canonicalizePath } from "./paths.js";
 import {
   allocateProjectPorts,
@@ -204,6 +204,7 @@ function writeRegistryAtomically(
     operations.close(descriptor);
     descriptor = undefined;
     operations.rename(temporaryPath, path);
+    syncDirectory(dirname(path), operations);
   } catch (error) {
     if (descriptor !== undefined) tryClose(descriptor, operations.close);
     removeTemporaryFile(temporaryPath, operations.unlink);
@@ -212,6 +213,20 @@ function writeRegistryAtomically(
       `Cannot atomically replace registry ${path}: ${errorMessage(error)}`,
       { cause: error },
     );
+  }
+}
+
+function syncDirectory(path: string, operations: AtomicWriteOperations): void {
+  try {
+    const descriptor = operations.open(path, "r");
+    try {
+      operations.fsync(descriptor);
+    } finally {
+      operations.close(descriptor);
+    }
+  } catch {
+    // Best-effort: the rename has already succeeded, and some platforms cannot
+    // open (Windows) or fsync (some filesystems) a directory.
   }
 }
 
@@ -229,12 +244,4 @@ function removeTemporaryFile(path: string, unlink: typeof unlinkSync): void {
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") return;
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }

@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 
 import { readConfig, readConfigIfPresent } from "./config.js";
 import { buildProjectList, type ProjectList, type ProjectStatus } from "./discovery.js";
+import { errorMessage } from "./errors.js";
 import { renderGuide } from "./guide.js";
 import { registerProject, unregisterProject } from "./mutations.js";
 import { readRegistry } from "./registry.js";
@@ -30,6 +31,7 @@ export interface AlprojectArgs {
   command?: string;
   guide: boolean;
   help: boolean;
+  json: boolean;
   maxWorkspaces?: number;
   path?: string;
   portsPerWorkspace?: number;
@@ -47,7 +49,7 @@ export async function main(options: MainOptions = {}): Promise<number> {
   try {
     args = parseAlprojectArgs(argv);
   } catch (error) {
-    stderr.write(`${errorMessage(error)}\n`);
+    stderr.write(`${escapeControlCharacters(errorMessage(error))}\n`);
     return 1;
   }
 
@@ -72,7 +74,8 @@ export async function main(options: MainOptions = {}): Promise<number> {
     }
     const config = readConfig(home);
     if (args.command === "list") {
-      stdout.write(renderProjectList(buildProjectList(config, readRegistry(config))));
+      const list = buildProjectList(config, readRegistry(config));
+      stdout.write(args.json ? renderProjectListJson(list) : renderProjectList(list));
       return 0;
     }
     if (args.command === "register" && args.path !== undefined) {
@@ -85,12 +88,12 @@ export async function main(options: MainOptions = {}): Promise<number> {
     }
     if (args.command === "unregister" && args.path !== undefined) {
       const path = await unregisterProject(config, args.path);
-      stdout.write(`Unregistered project: ${path}\n`);
+      stdout.write(`Unregistered project: ${renderOutputValue(path)}\n`);
       return 0;
     }
     throw new Error(`Unknown command: ${args.command}`);
   } catch (error) {
-    stderr.write(`${errorMessage(error)}\n`);
+    stderr.write(`${escapeControlCharacters(errorMessage(error))}\n`);
     return 1;
   }
 }
@@ -102,6 +105,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     options: {
       guide: { default: false, type: "boolean" },
       help: { default: false, short: "h", type: "boolean" },
+      json: { default: false, type: "boolean" },
       "max-workspaces": { type: "string" },
       "ports-per-workspace": { type: "string" },
       version: { default: false, short: "v", type: "boolean" },
@@ -118,23 +122,35 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   }
   if (selectedModes.length === 1) {
     if (positionals.length > 0) throw new Error(`${selectedModes[0]} does not accept a command`);
-    if (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined) {
-      throw new Error(`${selectedModes[0]} does not accept port options`);
+    if (
+      values.json === true ||
+      values["ports-per-workspace"] !== undefined ||
+      values["max-workspaces"] !== undefined
+    ) {
+      throw new Error(`${selectedModes[0]} does not accept command options`);
     }
     return {
       guide: values.guide === true,
       help: values.help === true,
+      json: false,
       version: values.version === true,
     };
   }
 
   const [command, path, ...extraPaths] = positionals;
   if (command === undefined) {
-    return { guide: false, help: false, version: false };
+    if (values.json === true) throw new Error("--json is valid only with list");
+    if (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined) {
+      throw new Error("Port options are valid only with register");
+    }
+    return { guide: false, help: false, json: false, version: false };
   }
   if (!isCommand(command)) throw new Error(`Unknown command: ${command}`);
   validateCommandPaths(command, path, extraPaths);
   validatePortOptionPlacement(command, values);
+  if (values.json === true && command !== "list") {
+    throw new Error("--json is valid only with list");
+  }
   const portsPerWorkspace = parsePositiveInteger(
     "--ports-per-workspace",
     values["ports-per-workspace"],
@@ -147,6 +163,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     command,
     guide: false,
     help: false,
+    json: values.json === true,
     maxWorkspaces,
     path,
     portsPerWorkspace,
@@ -207,7 +224,7 @@ function renderHelp(): string {
   return `alproject — discover and manage local Git projects.
 
 Usage:
-  alproject list
+  alproject list [--json]
   alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
   alproject unregister <path>
 
@@ -225,11 +242,15 @@ export function renderProjectList(list: ProjectList): string {
   if (list.projects.length === 0) lines.push("  (none)");
   for (const project of list.projects) {
     lines.push(
-      `- Name: ${project.name}`,
-      `  Main path: ${project.path}`,
-      `  Parent: ${project.parent}`,
+      `- Name: ${renderOutputValue(project.name)}`,
+      `  Main path: ${renderOutputValue(project.path)}`,
+      `  Parent: ${renderOutputValue(project.parent)}`,
       `  Status: ${statusLabels[project.status]}`,
-      `  Workspaces: ${project.workspaces.length === 0 ? "(none)" : project.workspaces.join(", ")}`,
+      `  Workspaces: ${
+        project.workspaces.length === 0
+          ? "(none)"
+          : project.workspaces.map(renderOutputValue).join(", ")
+      }`,
     );
     if (project.ports !== undefined) {
       lines.push(
@@ -241,17 +262,23 @@ export function renderProjectList(list: ProjectList): string {
   lines.push("", "Additional directories:");
   if (list.additionalDirectories.length === 0) lines.push("  (none)");
   for (const group of list.additionalDirectories) {
-    lines.push(`- Parent: ${group.parent}`);
-    for (const directory of group.directories) lines.push(`  - ${directory}`);
+    lines.push(`- Parent: ${renderOutputValue(group.parent)}`);
+    for (const directory of group.directories) {
+      lines.push(`  - ${renderOutputValue(directory)}`);
+    }
   }
   return `${lines.join("\n")}\n`;
+}
+
+export function renderProjectListJson(list: ProjectList): string {
+  return `${escapeAdditionalJsonCharacters(JSON.stringify(list, undefined, 2))}\n`;
 }
 
 function renderRegistration(result: {
   path: string;
   ports?: { basePort: number; endPort: number };
 }): string {
-  const lines = [`Registered project: ${result.path}`];
+  const lines = [`Registered project: ${renderOutputValue(result.path)}`];
   if (result.ports !== undefined) {
     lines.push(
       `Base port: ${result.ports.basePort}`,
@@ -265,6 +292,38 @@ function ensureTrailingNewline(value: string): string {
   return value.endsWith("\n") ? value : `${value}\n`;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function renderOutputValue(value: string): string {
+  return escapeAdditionalJsonCharacters(JSON.stringify(value));
+}
+
+function escapeControlCharacters(value: string): string {
+  return Array.from(value, (character) => {
+    if (!isControlCharacter(character, true)) return character;
+    const jsonEscape = JSON.stringify(character).slice(1, -1);
+    if (jsonEscape !== character) return jsonEscape;
+    return unicodeEscape(character);
+  }).join("");
+}
+
+function escapeAdditionalJsonCharacters(value: string): string {
+  return Array.from(value, (character) =>
+    isControlCharacter(character, false) ? unicodeEscape(character) : character,
+  ).join("");
+}
+
+function isControlCharacter(character: string, includeC0: boolean): boolean {
+  const codePoint = character.codePointAt(0);
+  if (codePoint === undefined) return false;
+  return (
+    (includeC0 && codePoint <= 0x1f) ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0x2028 ||
+    codePoint === 0x2029
+  );
+}
+
+function unicodeEscape(character: string): string {
+  const codePoint = character.codePointAt(0);
+  if (codePoint === undefined) throw new Error("Cannot escape an empty character");
+  return `\\u${codePoint.toString(16).padStart(4, "0")}`;
 }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { type } from "arktype";
 
-import { AlprojectError } from "./errors.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { canonicalizeParentPaths, resolveConfiguredPath } from "./paths.js";
 
 export const CONFIG_FILENAME = ".alproject.json";
@@ -131,12 +131,4 @@ function assertAccessibleDirectory(path: string, configPath: string, field: stri
 
 function configurationError(path: string, detail: string, cause?: unknown): AlprojectError {
   return new AlprojectError("configuration", `Invalid configuration ${path}: ${detail}`, { cause });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }

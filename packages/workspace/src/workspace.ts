@@ -7,9 +7,11 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -1160,10 +1162,13 @@ export function linkSharedDirectories(
     }
     if (ctx.isMainWorktree) continue;
     const link = join(ctx.currentWorktree, dirName);
-    if (existsSync(link)) {
+    const linkStat = lstatSync(link, { throwIfNoEntry: false });
+    if (linkStat !== undefined && !linkNeedsRepair(link, linkStat.isSymbolicLink(), mainDir)) {
       log(`Skipped ${dirName} symlink (already exists).`);
     } else {
-      const relTarget = relative(ctx.currentWorktree, mainDir);
+      if (linkStat !== undefined) unlinkSync(link);
+      mkdirSync(dirname(link), { recursive: true });
+      const relTarget = relative(dirname(link), mainDir);
       symlinkSync(relTarget, link);
       log(`Created ${dirName} symlink → main worktree.`);
     }
@@ -1171,37 +1176,72 @@ export function linkSharedDirectories(
   if (!ctx.isMainWorktree) excludeSharedLinks(ctx.currentWorktree, dirs, log);
 }
 
+function linkNeedsRepair(link: string, symbolicLink: boolean, mainDir: string): boolean {
+  if (!symbolicLink) return false;
+  return resolve(dirname(link), readlinkSync(link)) !== resolve(mainDir);
+}
+
 /**
  * A shared directory materializes as a symlink in the linked worktree, and a
  * directory-shaped gitignore pattern (`.plans/`, `.plans/**`) does not match a
  * symlink — the worktree would read as dirty from birth and `workspace remove`
- * would refuse the tooling's own creation. The tooling excludes its links
- * itself, in the worktree-private exclude file, never the shared .gitignore.
+ * would refuse the tooling's own creation. The tooling configures a private
+ * excludes file for this worktree, never the shared `.git/info/exclude`.
  */
 function excludeSharedLinks(worktree: string, dirs: string[], log: (msg: string) => void): void {
   if (dirs.length === 0) return;
-  let relExclude: string;
   try {
-    relExclude = execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], {
+    const gitDirectory = execFileSync("git", ["rev-parse", "--absolute-git-dir"], {
       cwd: worktree,
       encoding: "utf-8",
       stdio: "pipe",
     }).trim();
+    const excludePath = join(gitDirectory, "workspace-shared-exclude");
+    const inheritedExcludeFiles = configuredExcludeFiles(worktree, excludePath);
+    writeSharedExcludes(excludePath, inheritedExcludeFiles, dirs);
+    execFileSync("git", ["config", "extensions.worktreeConfig", "true"], {
+      cwd: worktree,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["config", "--worktree", "core.excludesFile", excludePath], {
+      cwd: worktree,
+      stdio: "pipe",
+    });
+    log(`Excluded shared symlinks in this worktree (${dirs.map((dir) => `/${dir}`).join(", ")}).`);
   } catch {
-    // The exclusion is a convenience; without it the worktree merely reads
-    // dirty, so a setup must not abort here.
-    log(`Skipped shared-symlink exclusion (git unavailable in ${worktree}).`);
-    return;
+    log(`Skipped shared-symlink exclusion (unavailable in ${worktree}).`);
   }
-  const excludePath = resolve(worktree, relExclude);
-  const existing = existsSync(excludePath) ? readFileSync(excludePath, "utf-8") : "";
-  const lines = new Set(existing.split("\n"));
+}
+
+function configuredExcludeFiles(worktree: string, managedPath: string): string[] {
+  const result = spawnSync(
+    "git",
+    ["config", "--null", "--path", "--get-all", "core.excludesFile"],
+    {
+      cwd: worktree,
+      encoding: "utf-8",
+      stdio: "pipe",
+    },
+  );
+  if (result.status === 1) return [];
+  if (result.status !== 0)
+    throw new Error(result.stderr.trim() || "cannot read Git excludes files");
+  return result.stdout.split("\0").filter((path) => path !== "" && path !== managedPath);
+}
+
+function writeSharedExcludes(excludePath: string, inheritedFiles: string[], dirs: string[]): void {
+  const inherited = inheritedFiles
+    .filter((path) => existsSync(path))
+    .map((path) => readFileSync(path, "utf-8").trimEnd())
+    .filter((content) => content !== "")
+    .join("\n");
+  const lines = new Set(inherited.split("\n"));
   const missing = dirs.map((dirName) => `/${dirName}`).filter((entry) => !lines.has(entry));
-  if (missing.length === 0) return;
   mkdirSync(dirname(excludePath), { recursive: true });
-  const separator = existing === "" || existing.endsWith("\n") ? "" : "\n";
-  writeFileSync(excludePath, `${existing}${separator}${missing.join("\n")}\n`);
-  log(`Excluded shared symlinks in the worktree's info/exclude (${missing.join(", ")}).`);
+  writeFileSync(
+    excludePath,
+    `${[inherited, ...missing].filter((part) => part !== "").join("\n")}\n`,
+  );
 }
 
 /**

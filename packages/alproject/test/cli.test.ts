@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { main, parseAlprojectArgs, renderProjectList } from "../src/cli.js";
+import { main, parseAlprojectArgs, renderProjectList, renderProjectListJson } from "../src/cli.js";
 
 let fixtureDir: string | undefined;
 
@@ -17,6 +17,7 @@ afterEach(() => {
 describe("parseAlprojectArgs", () => {
   it("parses every command and global mode", () => {
     expect(parse(["list"])).toMatchObject({ command: "list" });
+    expect(parse(["list", "--json"])).toMatchObject({ command: "list", json: true });
     expect(parse(["register", "project"])).toMatchObject({
       command: "register",
       path: "project",
@@ -48,6 +49,9 @@ describe("parseAlprojectArgs", () => {
   });
 
   it("requires paired positive integer port options only on register", () => {
+    expect(() => parse(["--ports-per-workspace", "2", "--max-workspaces", "2"])).toThrow(
+      /only with register/,
+    );
     expect(() => parse(["register", "project", "--ports-per-workspace", "2"])).toThrow(
       /provided together/,
     );
@@ -66,8 +70,10 @@ describe("parseAlprojectArgs", () => {
     expect(() => parse(["--guide", "--help"])).toThrow(/mutually exclusive/);
     expect(() => parse(["list", "--guide"])).toThrow(/does not accept a command/);
     expect(() => parse(["--guide", "--ports-per-workspace", "2"])).toThrow(
-      /does not accept port options/,
+      /does not accept command options/,
     );
+    expect(() => parse(["register", "project", "--json"])).toThrow(/only with list/);
+    expect(() => parse(["--json"])).toThrow(/only with list/);
   });
 });
 
@@ -130,6 +136,14 @@ describe("main", () => {
     expect(stderr.text()).toMatch(/Unknown option/);
   });
 
+  it("keeps control characters in errors on one physical line", async () => {
+    const stderr = makeSink();
+
+    expect(await run(["list"], { home: "/missing\nhome", stderr })).toBe(1);
+    expect(stderr.text()).toContain("/missing\\nhome");
+    expect(stderr.text().split("\n")).toHaveLength(2);
+  });
+
   it("registers, lists, and unregisters through the package APIs", async () => {
     const fixture = makeFixture();
     const project = makeRepository(fixture.root, "project");
@@ -141,14 +155,14 @@ describe("main", () => {
       }),
     ).toBe(0);
     expect(registerOutput.text()).toBe(
-      `Registered project: ${project}\nBase port: 8000\nPort range: 8000..8009\n`,
+      `Registered project: ${JSON.stringify(project)}\nBase port: 8000\nPort range: 8000..8009\n`,
     );
 
     const listOutput = makeSink();
     expect(await run(["list"], { home: fixture.home, stdout: listOutput })).toBe(0);
-    expect(listOutput.text()).toContain("- Name: project");
-    expect(listOutput.text()).toContain(`  Main path: ${project}`);
-    expect(listOutput.text()).toContain(`  Parent: ${fixture.root}`);
+    expect(listOutput.text()).toContain('- Name: "project"');
+    expect(listOutput.text()).toContain(`  Main path: ${JSON.stringify(project)}`);
+    expect(listOutput.text()).toContain(`  Parent: ${JSON.stringify(fixture.root)}`);
     expect(listOutput.text()).toContain("  Status: registered");
     expect(listOutput.text()).toContain("  Workspaces: (none)");
     expect(listOutput.text()).toContain("  Base port: 8000");
@@ -161,7 +175,15 @@ describe("main", () => {
         stdout: unregisterOutput,
       }),
     ).toBe(0);
-    expect(unregisterOutput.text()).toBe(`Unregistered project: ${project}\n`);
+    expect(unregisterOutput.text()).toBe(`Unregistered project: ${JSON.stringify(project)}\n`);
+
+    const jsonOutput = makeSink();
+    expect(await run(["list", "--json"], { home: fixture.home, stdout: jsonOutput })).toBe(0);
+    expect(JSON.parse(jsonOutput.text()).projects[0]).toMatchObject({
+      name: "project",
+      path: project,
+      status: "unregistered",
+    });
   });
 
   it("reports duplicate and exhaustion errors only to stderr", async () => {
@@ -236,10 +258,30 @@ describe("renderProjectList", () => {
     });
 
     expect(output).toContain("Status: unregistered on filesystem");
-    expect(output).toContain("Workspaces: a-workspace, z-workspace");
+    expect(output).toContain('Workspaces: "a-workspace", "z-workspace"');
     expect(output).toContain("Status: registered but missing from filesystem");
     expect(output).toContain("Base port: 8010");
     expect(output.indexOf("a-extra")).toBeLessThan(output.indexOf("z-extra"));
+  });
+
+  it("escapes control characters in labelled output and preserves them in JSON", () => {
+    const list = {
+      additionalDirectories: [],
+      projects: [
+        {
+          name: "evil\n  Main path: /injected",
+          parent: "/parents/a",
+          path: "/parents/a/evil\nname",
+          status: "registered" as const,
+          workspaces: [],
+        },
+      ],
+    };
+
+    const labelled = renderProjectList(list);
+    expect(labelled).toContain('Name: "evil\\n  Main path: /injected"');
+    expect(labelled.match(/\n {2}Main path:/gu)).toHaveLength(1);
+    expect(JSON.parse(renderProjectListJson(list)).projects[0].name).toBe(list.projects[0].name);
   });
 });
 

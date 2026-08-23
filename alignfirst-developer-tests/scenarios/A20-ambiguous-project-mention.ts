@@ -13,7 +13,7 @@ const PROJECT = "orion";
  * A casual message naming a registered project with no work framing. The
  * off-projects contract exempts only messages with no possible project
  * reference, and "orion" is exactly the word the bot cannot classify from
- * memory: it must consult `alproject list`, recognize the project, and open a
+ * memory: it must consult `alproject list --json`, recognize the project, and open a
  * thread whose starter carries the canonical path. Misclassifying the message
  * as small talk is the failure this scenario exists to catch.
  */
@@ -36,8 +36,8 @@ export default async function ambiguousProjectMention(ctx: ScenarioContext): Pro
     rubric: HANDOFF_ASK_RUBRIC,
     label: "ambiguous-mention-handoff-ask",
   });
-  if (!alproject.calls.some((call) => call.argv.length === 1 && call.argv[0] === "list")) {
-    throw new Error("the session routed the project mention without running alproject list");
+  if (!alproject.calls.some((call) => call.argv[0] === "list" && call.argv[1] === "--json")) {
+    throw new Error("the session routed the project mention without structured inventory lookup");
   }
 
   ctx.markScenarioAsEnded("PASS");

@@ -17,6 +17,7 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
+const ALLOCATED_PORT_RANGE = "6600..6607";
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
 // runs this scenario never exceeded 50% on Discord (Slack ended 2/2). Creation
@@ -126,7 +127,9 @@ async function waitForCreationReport(
         m.direction === "outbound" &&
         m.threadId === starter.threadId &&
         m.id !== starter.match.id &&
-        /\bnova\b/iu.test(m.text),
+        /\bnova\b/iu.test(m.text) &&
+        m.text.includes("6600") &&
+        m.text.includes("6607"),
       { sinceCursor: cursor, timeoutMs: Math.max(1_000, deadline - Date.now()) },
     );
     cursor = wait.nextCursor;
@@ -135,8 +138,8 @@ async function waitForCreationReport(
       message: wait.match.text,
       prompt:
         `Does this thread message report that the ${PROJECT} project has been CREATED and is ` +
-        "ready — the bootstrap or initial commit done, or the project registered — and anchor " +
-        "it concretely (path, parent directory, base port, or port range)? Any language " +
+        "ready — the bootstrap or initial commit done, or the project registered — and report " +
+        `the full allocated port range ${ALLOCATED_PORT_RANGE}? Any equivalent range notation ` +
         'counts. A launch or in-progress announcement ("the agent is working in the ' +
         'background", "je te fais signe") is NOT done.',
       returnType: '{ "done": boolean, "reason": string }',

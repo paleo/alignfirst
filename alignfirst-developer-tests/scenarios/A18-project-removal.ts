@@ -9,6 +9,7 @@ import {
   waitForLifecycle,
 } from "./_lib/project-lifecycle.ts";
 import {
+  ADDITIONAL_DIRECTORY_NAME,
   ADDITIONAL_DIRECTORY_PATH,
   seedRemovalFixture,
   waitForPathConfirmation,
@@ -31,7 +32,7 @@ export default async function projectRemoval(ctx: ScenarioContext): Promise<void
       },
     ],
     additionalDirectories: [
-      { parent: PRIMARY_PROJECT_PARENT, directories: [ADDITIONAL_DIRECTORY_PATH] },
+      { parent: PRIMARY_PROJECT_PARENT, directories: [ADDITIONAL_DIRECTORY_NAME] },
     ],
   });
 
@@ -75,7 +76,6 @@ export default async function projectRemoval(ctx: ScenarioContext): Promise<void
     alproject.calls,
     (call) => call.argv[0] === "unregister",
     (call) =>
-      call.argv.length === 1 &&
       call.argv[0] === "list" &&
       call.order > (unregisterOrder(alproject.calls) ?? Number.POSITIVE_INFINITY),
     "unregistration must precede the final inventory",

@@ -1,7 +1,9 @@
 import {
   existsSync,
+  fsyncSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -154,6 +156,54 @@ describe("atomic registry mutation", () => {
     const content = readFileSync(registryPath(fixture.config), "utf8");
     expect(content.endsWith("\n")).toBe(true);
     expect(JSON.parse(content)).toEqual({ projects: [{ path: project }], version: 1 });
+  });
+
+  it("syncs the registry file and its parent directory", async () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture.root, "project");
+    const syncedDescriptors: number[] = [];
+
+    await registerProject(
+      fixture.config,
+      project,
+      {},
+      {
+        atomicWriteOperations: {
+          fsync: (descriptor) => {
+            syncedDescriptors.push(descriptor);
+            fsyncSync(descriptor);
+          },
+        },
+      },
+    );
+
+    expect(syncedDescriptors).toHaveLength(2);
+  });
+
+  it("ignores a directory sync failure after the rename", async () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture.root, "project");
+
+    await expect(
+      registerProject(
+        fixture.config,
+        project,
+        {},
+        {
+          atomicWriteOperations: {
+            open: (path, flags, mode) => {
+              if (flags === "r") {
+                throw Object.assign(new Error("EISDIR: illegal operation on a directory"), {
+                  code: "EISDIR",
+                });
+              }
+              return openSync(path, flags, mode);
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual({ path: project });
+    expect(readRegistry(fixture.config).projects).toEqual([{ path: project }]);
   });
 
   it("cleans temporary state, releases the lock, and preserves the registry on failure", async () => {

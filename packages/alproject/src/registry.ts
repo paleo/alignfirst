@@ -4,7 +4,7 @@ import { isAbsolute, join, normalize } from "node:path";
 import { type } from "arktype";
 
 import type { AlprojectConfig } from "./config.js";
-import { AlprojectError } from "./errors.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { canonicalizePath } from "./paths.js";
 import { allocationEnd } from "./ports.js";
 
@@ -145,12 +145,4 @@ function validateNonOverlappingRanges(ranges: PortRange[], registryFile: string)
 
 function registryError(path: string, detail: string, cause?: unknown): AlprojectError {
   return new AlprojectError("registry", `Invalid registry ${path}: ${detail}`, { cause });
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

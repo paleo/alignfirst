@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { AlprojectError } from "./errors.js";
+import { CONFIG_FILENAME } from "./config.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 
 const CUSTOM_GUIDE_FILENAME = "alproject-guide.md";
 
@@ -16,7 +17,7 @@ export function renderGuide(root?: string): string {
 function renderGenericGuide(): string {
   const guide = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf8").replaceAll(
     "{{CONFIG_FILENAME}}",
-    ".alproject.json",
+    CONFIG_FILENAME,
   );
   const unresolved = guide.match(/\{\{[^}]+\}\}/u)?.[0];
   if (unresolved !== undefined) {
@@ -37,12 +38,4 @@ function readCustomGuide(root: string): string | undefined {
       { cause: error },
     );
   }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -19,10 +19,12 @@ export interface AlprojectRecord {
   name: string;
   mainPath: string;
   parent: string;
-  status?: "registered" | "unregistered on filesystem" | "registered but missing from filesystem";
+  status?: "registered" | "unregistered" | "missing";
   workspaces?: string[];
   basePort?: number;
   endPort?: number;
+  maxWorkspaces?: number;
+  portsPerWorkspace?: number;
 }
 
 export interface AdditionalDirectoryGroup {
@@ -68,6 +70,10 @@ export function setupAlprojectMock(
 
   ctx.mockCli("alproject", async ({ argv, cwd, stdout, stderr }) => {
     calls.push({ argv: [...argv], cwd, order: calls.length + 1 });
+    if (argv.length === 2 && argv[0] === "list" && argv[1] === "--json") {
+      stdout.write(renderAlprojectJson(projects, additionalDirectories));
+      return 0;
+    }
     if (argv.length === 1 && argv[0] === "list") {
       stdout.write(renderAlprojectList(projects, additionalDirectories));
       return 0;
@@ -102,7 +108,7 @@ export function setupAlprojectMock(
     calls,
     projects,
     assertListCallCount(expected) {
-      const listCalls = calls.filter((call) => call.argv.length === 1 && call.argv[0] === "list");
+      const listCalls = calls.filter((call) => call.argv[0] === "list");
       if (listCalls.length !== expected) {
         throw new Error(
           `expected ${expected} alproject list call(s), got ${listCalls.length}: ${JSON.stringify(calls)}`,
@@ -152,12 +158,15 @@ function registerProject(
       : {
           basePort,
           endPort: basePort + reservedPorts - 1,
+          maxWorkspaces,
+          portsPerWorkspace,
         }),
   });
   const defaultOutput =
     basePort === undefined
-      ? `Registered project: ${path}\n`
-      : `Registered project: ${path}\nBase port: ${basePort}\n`;
+      ? `Registered project: ${JSON.stringify(path)}\n`
+      : `Registered project: ${JSON.stringify(path)}\nBase port: ${basePort}\n` +
+        `Port range: ${basePort}..${basePort + reservedPorts - 1}\n`;
   return writeResponse({ stdout: response?.stdout ?? defaultOutput }, stdout, stderr);
 }
 
@@ -177,7 +186,7 @@ function unregisterProject(
   }
   projects.splice(index, 1);
   return writeResponse(
-    { stdout: response?.stdout ?? `Unregistered project: ${path}\n` },
+    { stdout: response?.stdout ?? `Unregistered project: ${JSON.stringify(path)}\n` },
     stdout,
     stderr,
   );
@@ -204,7 +213,7 @@ function helpText(): string {
   return `alproject — project registry and port allocator
 
 Commands:
-  alproject list
+  alproject list [--json]
   alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
   alproject unregister <path>
 
@@ -238,14 +247,14 @@ function renderAlprojectList(
   if (projects.length === 0) lines.push("  (none)");
   for (const project of projects) {
     lines.push(
-      `- Name: ${project.name}`,
-      `  Main path: ${project.mainPath}`,
-      `  Parent: ${project.parent}`,
-      `  Status: ${project.status ?? "registered"}`,
+      `- Name: ${JSON.stringify(project.name)}`,
+      `  Main path: ${JSON.stringify(project.mainPath)}`,
+      `  Parent: ${JSON.stringify(project.parent)}`,
+      `  Status: ${statusLabel(project.status ?? "registered")}`,
       `  Workspaces: ${
         project.workspaces === undefined || project.workspaces.length === 0
           ? "(none)"
-          : project.workspaces.join(", ")
+          : project.workspaces.map((workspace) => JSON.stringify(workspace)).join(", ")
       }`,
     );
     if (project.basePort !== undefined) lines.push(`  Base port: ${project.basePort}`);
@@ -255,8 +264,44 @@ function renderAlprojectList(
   lines.push("", "Additional directories:");
   if (additionalDirectories.length === 0) lines.push("  (none)");
   for (const group of additionalDirectories) {
-    lines.push(`- Parent: ${group.parent}`);
-    for (const directory of group.directories) lines.push(`  - ${directory}`);
+    lines.push(`- Parent: ${JSON.stringify(group.parent)}`);
+    for (const directory of group.directories) lines.push(`  - ${JSON.stringify(directory)}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+function statusLabel(status: NonNullable<AlprojectRecord["status"]>): string {
+  if (status === "missing") return "registered but missing from filesystem";
+  if (status === "unregistered") return "unregistered on filesystem";
+  return "registered";
+}
+
+function renderAlprojectJson(
+  projects: AlprojectRecord[],
+  additionalDirectories: AdditionalDirectoryGroup[],
+): string {
+  return `${JSON.stringify(
+    {
+      projects: projects.map((project) => ({
+        name: project.name,
+        parent: project.parent,
+        path: project.mainPath,
+        status: project.status ?? "registered",
+        workspaces: project.workspaces ?? [],
+        ...(project.basePort === undefined
+          ? {}
+          : {
+              ports: {
+                basePort: project.basePort,
+                endPort: project.endPort,
+                maxWorkspaces: project.maxWorkspaces,
+                portsPerWorkspace: project.portsPerWorkspace,
+              },
+            }),
+      })),
+      additionalDirectories,
+    },
+    undefined,
+    2,
+  )}\n`;
 }

@@ -4,7 +4,8 @@ import { seedWorktree } from "./fixture-state.ts";
 import { NIMBUS_PROJECT_PATH, PRIMARY_PROJECT_PARENT } from "./project-fixtures.ts";
 import type { Step } from "./types.ts";
 
-export const ADDITIONAL_DIRECTORY_PATH = `${PRIMARY_PROJECT_PARENT}/shared-notes`;
+export const ADDITIONAL_DIRECTORY_NAME = "shared-notes";
+export const ADDITIONAL_DIRECTORY_PATH = `${PRIMARY_PROJECT_PARENT}/${ADDITIONAL_DIRECTORY_NAME}`;
 
 export interface RemovalFixture {
   worktreePath: string;

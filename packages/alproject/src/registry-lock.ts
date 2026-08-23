@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   closeSync,
   mkdirSync,
@@ -12,7 +13,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { AlprojectError } from "./errors.js";
+import { AlprojectError, isNodeError } from "./errors.js";
 
 const DEFAULT_TIMEOUT_MS = 500;
 const DEFAULT_RETRY_INTERVAL_MS = 25;
@@ -25,6 +26,7 @@ export interface RegistryLockOptions {
   isProcessAlive?: (pid: number) => boolean;
   now?: () => number;
   pid?: number;
+  processStartMarker?: (pid: number) => string | undefined;
   retryIntervalMs?: number;
   sleep?: (milliseconds: number) => Promise<void>;
   timeoutMs?: number;
@@ -38,6 +40,7 @@ interface LockContext {
   lockPath: string;
   now: () => number;
   owner: LockOwner;
+  processStartMarker: (pid: number) => string | undefined;
   retryIntervalMs: number;
   sleep: (milliseconds: number) => Promise<void>;
   timeoutMs: number;
@@ -45,6 +48,7 @@ interface LockContext {
 
 interface LockOwner {
   pid: number;
+  startMarker?: string;
   token: string;
 }
 
@@ -76,7 +80,14 @@ export function registryLockPath(registryFile: string): string {
 }
 
 function lockContext(registryFile: string, options: RegistryLockOptions): LockContext {
-  const owner = { pid: options.pid ?? process.pid, token: randomUUID() };
+  const pid = options.pid ?? process.pid;
+  const processStartMarker = options.processStartMarker ?? readProcessStartMarker;
+  const startMarker = processStartMarker(pid);
+  const owner = {
+    pid,
+    token: randomUUID(),
+    ...(startMarker === undefined ? {} : { startMarker }),
+  };
   const lockPath = registryLockPath(registryFile);
   return {
     claimPath: join(lockPath, contenderName(CLAIM_PREFIX, owner)),
@@ -86,6 +97,7 @@ function lockContext(registryFile: string, options: RegistryLockOptions): LockCo
     lockPath,
     now: options.now ?? Date.now,
     owner,
+    processStartMarker,
     retryIntervalMs: options.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS,
     sleep: options.sleep ?? delay,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
@@ -177,10 +189,19 @@ function readContenderValue(context: LockContext, contender: ContenderFile): unk
   if (owner?.pid === context.owner.pid && owner.token === context.owner.token) {
     return value ?? owner;
   }
-  if (owner !== undefined && context.isProcessAlive(owner.pid)) return value ?? owner;
+  if (owner !== undefined && contenderProcessMatches(context, owner)) {
+    return isLockOwner(value) ? value : owner;
+  }
   if (owner === undefined && !incompleteGraceElapsed(context, contender.path)) return value;
   removeContender(contender.path);
   return;
+}
+
+function contenderProcessMatches(context: LockContext, owner: LockOwner): boolean {
+  if (!context.isProcessAlive(owner.pid)) return false;
+  if (owner.startMarker === undefined) return true;
+  const currentMarker = context.processStartMarker(owner.pid);
+  return currentMarker === undefined || currentMarker === owner.startMarker;
 }
 
 function isFirstClaim(context: LockContext, claims: LockClaim[]): boolean {
@@ -198,7 +219,7 @@ function isFirstClaim(context: LockContext, claims: LockClaim[]): boolean {
     (claim) =>
       claim === ownClaim ||
       ownClaim.ticket < claim.ticket ||
-      (ownClaim.ticket === claim.ticket && ownClaim.token.localeCompare(claim.token) < 0),
+      (ownClaim.ticket === claim.ticket && ownClaim.token < claim.token),
   );
 }
 
@@ -284,7 +305,9 @@ function contenderName(prefix: string, owner: LockOwner): string {
 function isLockOwner(value: unknown): value is LockOwner {
   if (typeof value !== "object" || value === null) return false;
   if (!("pid" in value) || !("token" in value)) return false;
+  const validStartMarker = !("startMarker" in value) || typeof value.startMarker === "string";
   return (
+    validStartMarker &&
     Number.isSafeInteger(value.pid) &&
     Number(value.pid) > 0 &&
     typeof value.token === "string" &&
@@ -314,6 +337,57 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+function readProcessStartMarker(pid: number): string | undefined {
+  return readProcStartMarker(pid) ?? readPsStartMarker(pid) ?? readPowerShellStartMarker(pid);
+}
+
+function readProcStartMarker(pid: number): string | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = stat.lastIndexOf(")");
+    if (commandEnd < 0) return;
+    const fieldsAfterCommand = stat
+      .slice(commandEnd + 1)
+      .trim()
+      .split(/\s+/u);
+    const startTime = fieldsAfterCommand[19];
+    return startTime === undefined ? undefined : `linux:${startTime}`;
+  } catch {
+    return;
+  }
+}
+
+function readPsStartMarker(pid: number): string | undefined {
+  try {
+    const startTime = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8",
+      env: { ...process.env, LANG: "C", LC_ALL: "C" },
+      stdio: "pipe",
+    }).trim();
+    return startTime === "" ? undefined : `ps:${startTime}`;
+  } catch {
+    return;
+  }
+}
+
+function readPowerShellStartMarker(pid: number): string | undefined {
+  try {
+    const startTime = execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `(Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks`,
+      ],
+      { encoding: "utf8", stdio: "pipe" },
+    ).trim();
+    return startTime === "" ? undefined : `powershell:${startTime}`;
+  } catch {
+    return;
+  }
+}
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -336,8 +410,4 @@ function busyError(path: string): AlprojectError {
 function lockError(path: string, action: string, cause: unknown): AlprojectError {
   const detail = cause instanceof Error ? cause.message : String(cause);
   return new AlprojectError("lock", `Registry lock ${path} ${action}: ${detail}`, { cause });
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }

@@ -31,9 +31,11 @@ Discrepancies are informational. Listing never changes files or registrations.
 
 ## Commands
 
-### `alproject list`
+### `alproject list [--json]`
 
 Print every project with its name, main path, parent, status, workspace names, and optional port allocation. Additional directories are grouped by parent.
+
+Pass `--json` for structured output consumed by tools and agents. The labelled output quotes every filesystem-derived value so control characters cannot create false fields.
 
 ### `alproject register <path>`
 
@@ -65,6 +67,6 @@ A bare invocation prints help.
 
 Alproject owns `<root>/alproject-registry.json` and its short-lived lock and temporary sibling files. Edit project files and immutable configuration through their own workflows.
 
-Concurrent mutations wait briefly for a live lock and then fail with an actionable error. Retry after the other command finishes. Alproject reclaims locks whose recorded process no longer exists. If registry validation fails, correct the reported field or restore a valid registry before retrying. Failed registration, allocation, locking, and writes preserve the previous registry.
+Concurrent mutations wait briefly for a live lock and then fail with an actionable error. Retry after the other command finishes. Alproject reclaims locks whose recorded process identity no longer exists. If registry validation fails, correct the reported field or restore a valid registry before retrying. Failed registration, allocation, locking, and writes preserve the previous registry.
 
 When `<root>/alproject-guide.md` exists, `alproject --guide` appends it verbatim after this generic guide. An unreadable custom guide is an error.

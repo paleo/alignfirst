@@ -26,6 +26,7 @@ describe("renderGuide", () => {
       "~/.alproject.json",
       "## Discovery and statuses",
       "alproject list",
+      "--json",
       "alproject register <path>",
       "alproject unregister <path>",
       "--ports-per-workspace",

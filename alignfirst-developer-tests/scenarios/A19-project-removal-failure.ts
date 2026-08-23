@@ -3,6 +3,7 @@ import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { registeredProject, setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { pathExists } from "./_lib/project-lifecycle.ts";
 import {
+  ADDITIONAL_DIRECTORY_NAME,
   ADDITIONAL_DIRECTORY_PATH,
   seedRemovalFixture,
   waitForPathConfirmation,
@@ -25,7 +26,7 @@ export default async function projectRemovalFailure(ctx: ScenarioContext): Promi
       },
     ],
     additionalDirectories: [
-      { parent: PRIMARY_PROJECT_PARENT, directories: [ADDITIONAL_DIRECTORY_PATH] },
+      { parent: PRIMARY_PROJECT_PARENT, directories: [ADDITIONAL_DIRECTORY_NAME] },
     ],
   });
 

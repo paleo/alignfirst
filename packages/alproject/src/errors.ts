@@ -9,3 +9,11 @@ export class AlprojectError extends Error {
 }
 
 export type AlprojectErrorCode = "configuration" | "filesystem" | "lock" | "registry";
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
