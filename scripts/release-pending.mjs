@@ -4,12 +4,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packagesDir = join(dirname(dirname(fileURLToPath(import.meta.url))), "packages");
+// A package awaiting its first release sits at this placeholder until Changesets bumps it.
+// The registry has no such version, so without this guard it reads as a pending release.
+const UNRELEASED_VERSION = "0.0.0";
 
 console.log(JSON.stringify(findPendingReleases()));
 
 function findPendingReleases() {
   const pending = [];
   for (const { name, version } of readPublicManifests()) {
+    if (version === UNRELEASED_VERSION) continue;
     if (!publishedVersions(name).includes(version)) pending.push(`${name}@${version}`);
   }
   return pending;
