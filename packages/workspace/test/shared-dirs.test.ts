@@ -1,14 +1,16 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readlinkSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -62,7 +64,8 @@ describe("linkSharedDirectories", () => {
     symlinkSync(join("..", "main", ".local"), join(linked, ".local"));
     const messages: string[] = [];
     linkSharedDirectories(linkedCtx(main, linked), [".local"], (msg) => messages.push(msg));
-    expect(messages).toEqual(["Skipped .local symlink (already exists)."]);
+    expect(messages[0]).toBe("Skipped .local symlink (already exists).");
+    expect(messages.some((msg) => msg.startsWith("Created"))).toBe(false);
   });
 
   it("follows a valid symlink in the main worktree (team plans repo layout)", () => {
@@ -81,5 +84,41 @@ describe("linkSharedDirectories", () => {
       WorkspaceError,
     );
     expect(existsSync(join(linked, ".plans"))).toBe(false);
+  });
+
+  it("excludes the created symlinks so a real linked worktree stays clean", () => {
+    tempRoot = mkdtempSync(join(tmpdir(), "shared-dirs-git-"));
+    const main = join(tempRoot, "main");
+    mkdirSync(main);
+    const git = (cwd: string, ...args: string[]): string =>
+      execFileSync("git", args, { cwd, encoding: "utf-8", stdio: "pipe" });
+    git(main, "init", "-b", "main");
+    git(
+      main,
+      "-c",
+      "user.email=t@local",
+      "-c",
+      "user.name=t",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "i",
+    );
+    const linked = join(tempRoot, "wt");
+    git(main, "worktree", "add", linked, "-b", "b1");
+
+    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
+
+    expect(git(linked, "status", "--porcelain").trim()).toBe("");
+    const excludePath = resolve(
+      linked,
+      git(linked, "rev-parse", "--git-path", "info/exclude").trim(),
+    );
+    expect(readFileSync(excludePath, "utf-8")).toContain("/.plans");
+
+    // Idempotent: a re-run appends nothing.
+    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
+    const lines = readFileSync(excludePath, "utf-8").split("\n").filter(Boolean);
+    expect(lines.filter((line) => line === "/.local")).toHaveLength(1);
   });
 });

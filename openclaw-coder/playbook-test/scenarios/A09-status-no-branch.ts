@@ -51,7 +51,6 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
       absenceRe.test(m.text),
     {
       sinceCursor: starter.nextCursor,
-      failFastCliMockGraceMs: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "no-branch report received" });

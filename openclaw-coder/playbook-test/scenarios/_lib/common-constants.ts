@@ -15,8 +15,6 @@ export const HANDOFF_ASK_RUBRIC = `A message bringing the user back to the threa
 export const NEW_WORK_QUESTION_RUBRIC =
   "A message asking the user about the new work: requests the ticket id, the change scope/description, or any combination. The core requirement is that it asks the user for the missing work details. A brief announcement clause or a leading planning/reasoning note alongside is fine. No off-topic content, no offers to do something unrelated.";
 
-export const OFF_PROJECTS_CHAT_RUBRIC = `A short conversational reply to a non-project message ("Salut, ça va ?" or similar). Tone matches the inbound (greeting / small talk). Does NOT mention any project, ticket, branch, worktree, thread, setup, environment, or coding work. Does NOT ask the user to pick a project or describe a task. Pure off-projects chat.`;
-
 export const askWhichProjectRubric = (ticketId: string): string =>
   `A message asking the user **which project** the ticket belongs to. The ticket id (${ticketId}) appears somewhere — main clause, aside, or parenthetical all count. A thread-opening announcement or an audience note (\`tech\`/\`non-tech\`) before the question is fine, and so is a promise about what follows the user's answer (the work session starting, the workspace being set up): future tense is the handoff, not an action claim. Does NOT claim a workspace/worktree/branch is already created or being created right now, and does NOT name a specific project as if it were assumed. May be in the user's language (French expected here).`;
 

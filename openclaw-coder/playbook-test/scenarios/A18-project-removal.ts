@@ -1,4 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { execMatches } from "./_lib/agent-tool-calls.ts";
+import { escapeRe } from "./_lib/common-constants.ts";
 import { registeredProject, setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import {
   assertAgentCommandOrder,
@@ -78,10 +80,20 @@ export default async function projectRemoval(ctx: ScenarioContext): Promise<void
       call.order > (unregisterOrder(alproject.calls) ?? Number.POSITIVE_INFINITY),
     "unregistration must precede the final inventory",
   );
+  // waitForLifecycle proved the removal on the filesystem, but the trajectory
+  // flushes seconds after the turn — ride it out on the later of the two
+  // ordered commands before the one-shot ordering parse.
+  await ctx.waitForAgentToolCall(
+    (call) =>
+      execMatches(call, /\brm\b/) && execMatches(call, new RegExp(escapeRe(NIMBUS_PROJECT_PATH))),
+    { label: "main-worktree removal visible in the trajectory", timeoutMs: 60_000 },
+  );
+  // The workspace name matches both path forms the bot uses (absolute, or
+  // `../<name>` relative to the main worktree).
   assertAgentCommandOrder(
     ctx.getAgentToolCalls(),
-    (command) => /workspace\s+remove/.test(command) && command.includes(fixture.worktreePath),
-    (command) => /\brm\b/.test(command) && command.includes(NIMBUS_PROJECT_PATH),
+    new RegExp(String.raw`workspace\s+remove[^\n]*${escapeRe(fixture.workspaceName)}`),
+    new RegExp(String.raw`\brm\b[^\n]*${escapeRe(NIMBUS_PROJECT_PATH)}`),
     "workspace tooling must remove the linked worktree before the main worktree",
   );
 

@@ -54,6 +54,37 @@ describe("latestCompletedPerSession", () => {
     const threadEvent = latest.find((e) => e.sessionKey === thread);
     expect(threadEvent?.ts).toBe("2026-01-01T00:00:09Z");
   });
+
+  it("falls back to the newest usable snapshot when the latest event is capped", () => {
+    const usable = completed({
+      sessionKey: thread,
+      ts: "2026-01-01T00:00:05Z",
+      turns: [{ calls: [["t1", "exec", { command: "alcode …" }]] }],
+    });
+    const capped: TrajectoryEvent = {
+      type: "model.completed",
+      sessionKey: thread,
+      ts: "2026-01-01T00:00:09Z",
+      data: { messagesSnapshot: "…[truncated]", truncated: true } as TrajectoryEvent["data"],
+    };
+    const latest = latestCompletedPerSession([usable, capped]);
+    expect(latest).toHaveLength(1);
+    expect(latest[0].ts).toBe("2026-01-01T00:00:05Z");
+    expect(aggregateAgentToolCalls(latest)).toHaveLength(1);
+  });
+
+  it("keeps the newest event when a session has no usable snapshot", () => {
+    const capped: TrajectoryEvent = {
+      type: "model.completed",
+      sessionKey: thread,
+      ts: "2026-01-01T00:00:09Z",
+      data: { messagesSnapshot: "…[truncated]", truncated: true } as TrajectoryEvent["data"],
+    };
+    const latest = latestCompletedPerSession([capped]);
+    expect(latest).toHaveLength(1);
+    expect(latest[0].ts).toBe("2026-01-01T00:00:09Z");
+    expect(aggregateAgentToolCalls(latest)).toHaveLength(0);
+  });
 });
 
 describe("aggregateAgentToolCalls", () => {

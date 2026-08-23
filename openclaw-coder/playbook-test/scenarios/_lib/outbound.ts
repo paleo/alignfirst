@@ -47,7 +47,6 @@ export function waitForStarter(
     {
       timeoutMs: opts.timeoutMs ?? 90_000,
       sinceCursor: opts.sinceCursor,
-      failFastCliMockGraceMs: false,
       failFastUnmatchedOutbounds: false,
     },
   );
@@ -56,7 +55,6 @@ export function waitForStarter(
 export interface WaitForReportOptions {
   sinceCursor: number;
   timeoutMs?: number;
-  failFastCliMockGraceMs?: number | false;
 }
 
 /**
@@ -65,6 +63,12 @@ export interface WaitForReportOptions {
  * unmatched outbounds: weaker models free-stream planning notes to the channel
  * root before the report lands (the same class `assertNoChannelRootLeak`
  * tolerates), so `predicate` plus the timeout bound the wait instead.
+ *
+ * The CLI grace fail-fast is off for the same reason as `waitForSetupAck`: the
+ * report turn runs mocked CLIs mid-composition (`gh`, an alcode delegation),
+ * and on finals-only surfaces the report legitimately follows such a call by
+ * more than any reasonable grace, with no outbound in between. The deadline
+ * bounds the wait.
  */
 export function waitForReport(
   ctx: ScenarioContext,
@@ -74,7 +78,7 @@ export function waitForReport(
   return waitForOutboundSkippingNarration(ctx, predicate, {
     timeoutMs: opts.timeoutMs ?? 180_000,
     sinceCursor: opts.sinceCursor,
-    failFastCliMockGraceMs: opts.failFastCliMockGraceMs,
+    failFastCliMockGraceMs: false,
     failFastUnmatchedOutbounds: false,
   });
 }

@@ -28,9 +28,9 @@ function makeOutboundEntry(id: string, entrySeq: number, text: string): Outbound
   };
 }
 
-function makeCliMockEntry(cli: string, argv: string[]): CliMockEntry {
+function makeCliMockEntry(cli: string, argv: string[], entrySeq = 0): CliMockEntry {
   return {
-    entrySeq: 0,
+    entrySeq,
     ts: new Date().toISOString(),
     kind: "cliMock",
     call: {
@@ -88,40 +88,133 @@ describe("waitForOutbound fail-fast", () => {
     ).rejects.toThrow(/posted 3 outbounds but none matched/);
   });
 
-  it("throws on cliMock-grace expiry", async () => {
-    const cliMockEntry = makeCliMockEntry("claude", ["Run the _AAD_ protocol"]);
+  it("throws when an in-wait cliMock goes quiet past the grace", async () => {
+    let now = 1000;
+    let last: { atMs: number; entry: CliMockEntry } | undefined;
     const deps: WaitForOutboundDeps = {
       accountId: "ch",
       awaitEntry: async (id) => makeOutboundEntry(id, 1, ""),
-      getLastCliMock: () => ({ atMs: 1000, entry: cliMockEntry }),
+      getLastCliMock: () => last,
     };
-    let now = 1000;
-    let polls = 0;
     await expect(
       waitForOutbound(deps, () => false, {
         sinceCursor: 0,
+        timeoutMs: 60_000,
         failFastCliMockGraceMs: 10_000,
         nowImpl: () => now,
         pollImpl: async () => {
-          polls += 1;
+          last ??= { atMs: now, entry: makeCliMockEntry("claude", ["Run the _AAD_ protocol"], 1) };
           now += 11_000;
           return { messages: [], nextCursor: 1 };
         },
       }),
-    ).rejects.toThrow(
-      /invoked a mocked CLI and did not produce a matching outbound within 10000ms/,
-    );
-    expect(polls).toBeGreaterThan(0);
+    ).rejects.toThrow(/invoked a mocked CLI during this wait and posted no outbound for 10000ms/);
   });
 
-  it("cliMock-grace resets when a fresh cliMock is observed", async () => {
-    let now = 1000;
-    let lastCliMockAt = 1000;
-    const cliMockEntry = makeCliMockEntry("claude", ["foo"]);
+  it("ignores a cliMock from before the wait started", async () => {
+    // Regression: a completed channel-phase CLI call must not trip a later wait.
+    const stale = { atMs: 1000, entry: makeCliMockEntry("alproject", ["list"]) };
+    let now = 60_000;
     const deps: WaitForOutboundDeps = {
       accountId: "ch",
       awaitEntry: async (id) => makeOutboundEntry(id, 1, ""),
-      getLastCliMock: () => ({ atMs: lastCliMockAt, entry: cliMockEntry }),
+      getLastCliMock: () => stale,
+    };
+    await expect(
+      waitForOutbound(deps, () => false, {
+        sinceCursor: 0,
+        timeoutMs: 20_000,
+        failFastCliMockGraceMs: 10_000,
+        nowImpl: () => now,
+        pollImpl: async () => {
+          now += 6_000;
+          return { messages: [], nextCursor: 1 };
+        },
+      }),
+    ).rejects.toThrow(/timed out after 20000ms/);
+  });
+
+  it("an outbound after the cliMock disarms the grace", async () => {
+    let now = 1000;
+    let last: { atMs: number; entry: CliMockEntry } | undefined;
+    const deps: WaitForOutboundDeps = {
+      accountId: "ch",
+      awaitEntry: async (id) => makeOutboundEntry(id, 1, ""),
+      getLastCliMock: () => last,
+    };
+    let pollIdx = 0;
+    await expect(
+      waitForOutbound(deps, (m) => m.text === "DONE", {
+        sinceCursor: 0,
+        timeoutMs: 30_000,
+        failFastCliMockGraceMs: 10_000,
+        failFastUnmatchedOutbounds: false,
+        nowImpl: () => now,
+        pollImpl: async () => {
+          ++pollIdx;
+          if (pollIdx === 1) {
+            last = { atMs: now, entry: makeCliMockEntry("claude", ["work"], 1) };
+            now += 5_000;
+            return { messages: [], nextCursor: 1 };
+          }
+          if (pollIdx === 2) {
+            now += 1_000;
+            return { messages: [makeMessage("n1", "planning note")], nextCursor: 2 };
+          }
+          now += 8_000;
+          return { messages: [], nextCursor: 99 };
+        },
+      }),
+    ).rejects.toThrow(/timed out after 30000ms/);
+  });
+
+  it("re-arms on the next cliMock after a disarming outbound", async () => {
+    let now = 1000;
+    let last: { atMs: number; entry: CliMockEntry } | undefined;
+    const deps: WaitForOutboundDeps = {
+      accountId: "ch",
+      awaitEntry: async (id) => makeOutboundEntry(id, 1, ""),
+      getLastCliMock: () => last,
+    };
+    let pollIdx = 0;
+    await expect(
+      waitForOutbound(deps, (m) => m.text === "DONE", {
+        sinceCursor: 0,
+        timeoutMs: 60_000,
+        failFastCliMockGraceMs: 10_000,
+        failFastUnmatchedOutbounds: false,
+        nowImpl: () => now,
+        pollImpl: async () => {
+          ++pollIdx;
+          if (pollIdx === 1) {
+            last = { atMs: now, entry: makeCliMockEntry("claude", ["a"], 1) };
+            now += 2_000;
+            return { messages: [], nextCursor: 1 };
+          }
+          if (pollIdx === 2) {
+            now += 1_000;
+            return { messages: [makeMessage("n1", "planning note")], nextCursor: 2 };
+          }
+          if (pollIdx === 3) {
+            now += 1_000;
+            last = { atMs: now, entry: makeCliMockEntry("codex", ["b"], 2) };
+            now += 11_000;
+            return { messages: [], nextCursor: 3 };
+          }
+          now += 5_000;
+          return { messages: [], nextCursor: 99 };
+        },
+      }),
+    ).rejects.toThrow(/invoked a mocked CLI during this wait and posted no outbound for 10000ms/);
+  });
+
+  it("a fresh cliMock resets the grace timer", async () => {
+    let now = 1000;
+    let last: { atMs: number; entry: CliMockEntry } | undefined;
+    const deps: WaitForOutboundDeps = {
+      accountId: "ch",
+      awaitEntry: async (id) => makeOutboundEntry(id, 1, ""),
+      getLastCliMock: () => last,
     };
     let pollIdx = 0;
     const result = waitForOutbound(deps, (m) => m.text === "DONE", {
@@ -130,18 +223,18 @@ describe("waitForOutbound fail-fast", () => {
       failFastCliMockGraceMs: 10_000,
       nowImpl: () => now,
       pollImpl: async () => {
-        pollIdx += 1;
+        ++pollIdx;
         if (pollIdx === 1) {
-          // ~5s into the wait — reset the cliMock timer.
-          now += 5_000;
-          lastCliMockAt = now;
+          last = { atMs: now, entry: makeCliMockEntry("claude", ["a"], 1) };
+          now += 8_000;
           return { messages: [], nextCursor: 1 };
         }
         if (pollIdx === 2) {
-          now += 5_000;
-          return { messages: [makeMessage("a", "DONE")], nextCursor: 2 };
+          last = { atMs: now, entry: makeCliMockEntry("claude", ["b"], 2) };
+          now += 8_000;
+          return { messages: [], nextCursor: 2 };
         }
-        return { messages: [], nextCursor: 99 };
+        return { messages: [makeMessage("a", "DONE")], nextCursor: 3 };
       },
     });
     await expect(result).resolves.toMatchObject({ match: { id: "a" } });

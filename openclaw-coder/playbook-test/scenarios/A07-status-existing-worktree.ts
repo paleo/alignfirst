@@ -60,7 +60,6 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
       branchRe.test(m.text),
     {
       sinceCursor: starter.nextCursor,
-      failFastCliMockGraceMs: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });

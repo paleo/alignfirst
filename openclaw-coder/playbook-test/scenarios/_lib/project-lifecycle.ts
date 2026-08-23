@@ -45,17 +45,26 @@ export function assertAlprojectCallOrder(
   }
 }
 
+/**
+ * Assert `first` matches before `second` across the exec commands, in call
+ * order. Positions are taken in the joined command text: an agent may batch
+ * both steps into one compound command (`git init && … && git commit`), which
+ * is correct as long as the order holds within it.
+ */
 export function assertAgentCommandOrder(
   calls: AgentToolCall[],
-  first: (command: string) => boolean,
-  second: (command: string) => boolean,
+  first: RegExp,
+  second: RegExp,
   label: string,
 ): void {
-  const commands = calls.map(execCommandOf).filter((command) => command !== undefined);
-  const firstIndex = commands.findIndex(first);
-  const secondIndex = commands.findIndex(second);
+  const text = calls
+    .map(execCommandOf)
+    .filter((command): command is string => command !== undefined)
+    .join("\n");
+  const firstIndex = text.search(first);
+  const secondIndex = text.search(second);
   if (firstIndex === -1 || secondIndex === -1 || firstIndex >= secondIndex) {
-    throw new Error(`${label}: ${JSON.stringify(commands)}`);
+    throw new Error(`${label}: ${JSON.stringify(text.slice(0, 2000))}`);
   }
 }
 

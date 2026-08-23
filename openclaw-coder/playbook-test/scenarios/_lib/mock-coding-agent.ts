@@ -22,6 +22,21 @@ const GENERIC_CODING_RESULT =
 const BOLD_INTENT_RE = /\b(bold|gras|font[-\s]?weight)\b/i;
 const TOOLTIP_INTENT_RE = /\b(tooltip|infobulle|title attribute|attribut title)\b/i;
 
+// A verification delegation ("manually test the recent change…") answered with a
+// coding result reads as a failed run: the agent distrusts it and re-delegates
+// verification with escalating methods (dev server → curl → Playwright), never
+// posting its completion report (A12 Slack, artifacts 2026-08-23T12-46-49). So
+// verification prompts get a verification-shaped answer, like a real alcode.
+const BOLD_VERIFY_RESULT =
+  "Verified. Started the dev server cleanly (no errors in the logs) and checked the home page: the export button renders bold. No regressions found.";
+const TOOLTIP_VERIFY_RESULT =
+  'Verified. Started the dev server cleanly (no errors in the logs) and checked the home page: the export button shows the "Exporter les données" tooltip on hover. No regressions found.';
+const GENERIC_VERIFY_RESULT =
+  "Verified. Started the dev server cleanly (no errors in the logs) and manually checked the change: it behaves as described. No regressions found.";
+
+const VERIFICATION_INTENT_RE =
+  /(manual(?:ly)?\s+(?:test|verify|check)|\b(?:test|verify)\b[\s\S]*\b(?:change|button|page|fix|feature)\b)/i;
+
 // Pick the result that matches the task described in the coding-protocol prompt,
 // mirroring how a real coding agent reports the change it actually made. Tooltip
 // is checked first: a follow-up tooltip task still names the export button (which
@@ -30,6 +45,12 @@ function codingResultFor(prompt: string): string {
   if (TOOLTIP_INTENT_RE.test(prompt)) return TOOLTIP_RESULT;
   if (BOLD_INTENT_RE.test(prompt)) return BOLD_BUTTON_RESULT;
   return GENERIC_CODING_RESULT;
+}
+
+function verificationResultFor(prompt: string): string {
+  if (TOOLTIP_INTENT_RE.test(prompt)) return TOOLTIP_VERIFY_RESULT;
+  if (BOLD_INTENT_RE.test(prompt)) return BOLD_VERIFY_RESULT;
+  return GENERIC_VERIFY_RESULT;
 }
 
 const WORKTREE_INTENT_RE = /\b(workspace|worktree|local env|local environment|new environment)\b/i;
@@ -183,11 +204,13 @@ export interface SetupCodingAgentMockOptions {
    * completion wake fires. Default 4000.
    */
   streamDelayMs?: number;
-  onCodingProtocol?: (
-    ctx: ScenarioContext,
-    cwd: string,
-    prompt: string,
-  ) => Promise<string | undefined>;
+  /**
+   * Consulted for every wrapper prompt before the built-in branches. A string
+   * short-circuits the built-ins (no mock commit side effect); `undefined`
+   * falls through. A delegation is not always protocol-shaped — a new-project
+   * bootstrap has no repo to run a protocol in — so the hook sees them all.
+   */
+  onPrompt?: (ctx: ScenarioContext, cwd: string, prompt: string) => Promise<string | undefined>;
 }
 
 /**
@@ -236,13 +259,15 @@ export function setupCodingAgentMock(
           );
           return 1;
         }
+        const hooked = await options.onPrompt?.(ctx, cwd, prompt);
         let resultText: string;
-        if (isCodingProtocolPrompt(prompt)) {
-          resultText =
-            (await options.onCodingProtocol?.(ctx, cwd, prompt)) ?? codingResultFor(prompt);
-          if (options.onCodingProtocol === undefined) {
-            await commitMockCodingChange(ctx, cwd, prompt, stderr);
-          }
+        if (hooked !== undefined) {
+          resultText = hooked;
+        } else if (isCodingProtocolPrompt(prompt)) {
+          resultText = codingResultFor(prompt);
+          await commitMockCodingChange(ctx, cwd, prompt, stderr);
+        } else if (VERIFICATION_INTENT_RE.test(prompt)) {
+          resultText = verificationResultFor(prompt);
         } else if (looksLikeWorktreeList(prompt)) {
           const projectPath = resolveProjectPath(prompt, cwd);
           if (!projectPath) {

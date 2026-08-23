@@ -31,4 +31,4 @@ Removal requires the registered PROJECT_PATH selected before the thread opened o
 6. After the main path is absent, run `alproject unregister <PROJECT_PATH>` to release the registration and port range.
 7. Refresh `alproject list`. Report any remaining workspace, registration, or filesystem discrepancy.
 
-Apply the host-specific and project-specific constraints read earlier. They remain in force during the whole sequence.
+Apply the host-specific and project-specific constraints read earlier throughout the sequence.

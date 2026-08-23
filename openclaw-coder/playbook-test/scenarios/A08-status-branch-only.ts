@@ -58,7 +58,6 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
       reportRe.test(m.text),
     {
       sinceCursor: starter.nextCursor,
-      failFastCliMockGraceMs: false,
     },
   );
   ctx.log({ attachTo: reportWait.entry, label: "status report received" });

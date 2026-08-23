@@ -79,6 +79,16 @@ export function setupAlprojectMock(
         stderr,
       );
     }
+    // Read-only modes the real CLI serves; rejecting them would fail a scenario
+    // over a harmless orienting call (A17 Discord ran `--help` before `--guide`).
+    if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) {
+      stdout.write(helpText());
+      return 0;
+    }
+    if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
+      stdout.write("0.1.0\n");
+      return 0;
+    }
     if (argv[0] === "register" && argv[1] !== undefined) {
       return registerProject(argv, projects, options, stdout, stderr);
     }
@@ -113,6 +123,15 @@ function registerProject(
   stderr: { write(chunk: string): void },
 ): number {
   const path = argv[1];
+  // The real CLI rejects a global mode or option where <path> belongs
+  // ("invalid combinations print a concise error and exit non-zero").
+  if (path?.startsWith("-")) {
+    stderr.write(
+      "alproject: register requires <path> first. " +
+        "Usage: alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]\n",
+    );
+    return 1;
+  }
   if (!existsSync(`${path}/.git`)) {
     stderr.write(`mock-alproject: register before .git exists: ${path}\n`);
     return 1;
@@ -179,6 +198,18 @@ function numericOption(argv: string[], name: string): number | undefined {
   if (index === -1 || argv[index + 1] === undefined) return;
   const value = Number(argv[index + 1]);
   return Number.isInteger(value) ? value : undefined;
+}
+
+function helpText(): string {
+  return `alproject — project registry and port allocator
+
+Commands:
+  alproject list
+  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
+  alproject unregister <path>
+
+Modes: --guide (complete procedures), --help, -v/--version
+`;
 }
 
 function defaultLifecycleGuide(): string {
