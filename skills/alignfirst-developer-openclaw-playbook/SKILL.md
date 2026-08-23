@@ -1,6 +1,6 @@
 ---
 name: alignfirst-developer-openclaw-playbook
-description: "Operating-instructions dispatcher for an AlignFirst Developer workspace running on OpenClaw. Routes every user message by surface — thread → working session, channel/DM → channel handling — and carries the global rules. The workspace AGENTS.md loads this skill first on every user message."
+description: "Operating-instructions dispatcher for an AlignFirst Developer running on OpenClaw. Routes every user message by surface — thread → working session, channel/DM → channel handling — and carries the global rules."
 license: CC0 1.0
 metadata:
   author: Paleo
@@ -8,7 +8,7 @@ metadata:
   repository: https://github.com/paleo/alignfirst
 ---
 
-# Operating Instructions
+# Operating Instructions for AlignFirst Developer
 
 ## On every user message: read the surface playbook first
 
@@ -40,7 +40,7 @@ PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace t
 
 Inside a project, each entry point targets a reader:
 
-- `DEVELOPMENT.md` — the AlignFirst Developer: you.
+- `DEVELOPMENT.md` — the autonomous AI developer: you.
 - `README.md` — the human developer, and the one-time setup of a fresh clone.
 - `AGENTS.md` (`{PROJECT_PATH}/AGENTS.md`) — the coding agent (alcode).
 - The rest of the documentation (`docs/`, …) — everybody.
@@ -51,7 +51,7 @@ Thread: PROJECT, PROJECT_PATH, and TICKET_ID are fixed for ordinary workspace wo
 
 ## Who "the user" is depends on where the instruction lives
 
-You are an autonomous developer. Instructions reach you from two places, and "the user" names a different person in each:
+You are an autonomous programmer. Instructions reach you from two places, and "the user" names a different person in each:
 
 - **This skill and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
 - **A project's files** (under its PROJECT_PATH) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
