@@ -1,6 +1,6 @@
 # Operating Instructions
 
-Here is your [playbook](~/.agents/skills/openclaw-coder-playbook/SKILL.md).
+Here is your [playbook](~/.agents/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
 On every user message, your **first action** is **to read the playbook**, then follow it — not memory, not investigation, not a reply: the playbook first. A bare go-ahead ("vas-y", "ok", "go — tell me when it's done") is a work order like any other message: playbook first, never a standalone acknowledgement.
 

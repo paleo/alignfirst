@@ -1,7 +1,7 @@
 // Each scenario A<S> uses ticket ids in the ABC-0<S>0..ABC-0<S>9 range
 // (e.g. A1 → ABC-010, ABC-011, …; A4 → ABC-040). Mechanical mapping gives an
 // unambiguous leak signal: while running A<S>, any ABC-0<X>N with X ≠ S is
-// bleed from another scenario. See the playbook-test README.md.
+// bleed from another scenario. See the alignfirst-developer-tests README.md.
 
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

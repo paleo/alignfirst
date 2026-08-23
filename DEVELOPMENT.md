@@ -4,7 +4,7 @@ The everyday workflow of this repository. Run `npm run docmap` for the design do
 
 ## Stack and layout
 
-An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), published under `@paleo/*`. Each package lives in `packages/<name>`; the OpenClaw coder material lives in `openclaw-coder/`, the agent skills in `skills/`. Lint and format with Biome, test with Vitest, release with Changesets.
+An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), published under `@paleo/*`. Each package lives in `packages/<name>`; the AlignFirst Developer guide and tests live at the repository root, and agent skills live in `skills/`. Lint and format with Biome, test with Vitest, release with Changesets.
 
 ## Workspaces
 

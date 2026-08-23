@@ -13,7 +13,7 @@ export interface SetupAckOptions {
  * Wait for the thread session's first post showing it has taken over the work.
  *
  * With an Anthropic model, mid-turn text never delivers (see "Auto-stream delivers turn finals
- * only on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`): the setup turn's
+ * only on Anthropic" in `docs/alignfirst-developer/openclaw-context-engineering.md`): the setup turn's
  * only guaranteed post is its end-of-turn message, which may consolidate the workspace state,
  * the delegation launch, or even the completed outcome. On Discord a `message` rename post can
  * arrive earlier. All of these count; the judge accepts any message that shows the takeover.

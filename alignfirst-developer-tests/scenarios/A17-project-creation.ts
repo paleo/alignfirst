@@ -178,7 +178,7 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
     [
       "sh",
       "-c",
-      `cp -R /opt/playbook-test/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
+      `cp -R /opt/alignfirst-developer-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
         `sed -i -e 's/base: 6500/base: 6600/' ` +
         // Match the registration the bot performed (2 ports × 4 workspaces) —
         // a verifying bot treats a mismatched template as a bootstrap defect

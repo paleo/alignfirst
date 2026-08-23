@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 
-const TEMPLATE = "/opt/playbook-test/fixtures/template";
+const TEMPLATE = "/opt/alignfirst-developer-tests/fixtures/template";
 // Each fixture gets its own port block so two of them can run a dev server at
 // the same time. The template declares `maxWorkspaces: 10` over `perWorkspace: 2`,
 // so a fixture spans 20 ports from its base.
@@ -40,7 +40,7 @@ async function main() {
     }
   }
   // Wipe everything under the fixture parents and origins unconditionally. The
-  // fixture template lives in /opt/playbook-test/fixtures/ and is re-copied below.
+  // fixture template lives in /opt/alignfirst-developer-tests/fixtures/ and is re-copied below.
   // pnpm's store is pinned to /home/claw/.pnpm-store via ~/.npmrc, so nothing
   // here is worth keeping.
   for (const parent of [...FIXTURE_PARENTS, ...EMPTY_FIXTURE_PARENTS]) {
@@ -101,7 +101,7 @@ async function resetFixture({ name, parent, basePort }) {
 function patchFixture(dst, name, basePort) {
   const pkgPath = `${dst}/package.json`;
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-  pkg.name = `@playbook-test/${name}-fixture`;
+  pkg.name = `@alignfirst-developer-tests/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
   const devDocPath = `${dst}/DEVELOPMENT.md`;

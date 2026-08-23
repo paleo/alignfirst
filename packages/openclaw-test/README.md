@@ -71,7 +71,7 @@ Project fixtures and their reset logic are consumer concerns — ship a reset sc
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
 
-Examples: [openclaw-coder/playbook-test/scenarios](https://github.com/paleo/alignfirst/tree/main/openclaw-coder/playbook-test/scenarios).
+Examples: [alignfirst-developer-tests/scenarios](https://github.com/paleo/alignfirst/tree/main/alignfirst-developer-tests/scenarios).
 
 ## Run
 

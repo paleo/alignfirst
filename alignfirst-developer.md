@@ -1,6 +1,6 @@
-# OpenClaw Coder
+# AlignFirst Developer
 
-Turn an [OpenClaw](https://openclaw.ai/) agent into an autonomous AI programmer. Two use cases:
+AlignFirst Developer is an AI teammate for software work. This guide deploys it on the [OpenClaw](https://openclaw.ai/) runtime for two use cases:
 
 1. **For developers** — a programming partner instead of a programming tool.
 2. **For non-developers** — a teammate who handles simple coding tasks.
@@ -12,11 +12,11 @@ Install OpenClaw on a VPS.
 ```mermaid
 flowchart TD
   U([User]) -->|"asks via Discord / Slack"| O[OpenClaw]
-  O -->|"delegates the task<br/>(openclaw-coder-playbook skill + alcode CLI)"| CA[Selected coding agent]
+  O -->|"delegates the task<br/>(alignfirst-developer-openclaw-playbook skill + alcode CLI)"| CA[Selected coding agent]
   CA -->|"does the work<br/>(alignfirst skill)"| FS[(Your codebase)]
 ```
 
-OpenClaw runs the conversation and hands coding tasks to Claude Code or Codex through the **`openclaw-coder-playbook`** skill and the **`alcode`** CLI. The selected coding agent follows the **`alignfirst`** spec/plan/execution workflow and returns the result for OpenClaw to relay.
+OpenClaw runs the conversation and hands coding tasks to Claude Code or Codex through the **`alignfirst-developer-openclaw-playbook`** skill and the **`alcode`** CLI. The selected coding agent follows the **`alignfirst`** spec/plan/execution workflow and returns the result for the AlignFirst Developer to relay.
 
 ### Supported OpenClaw channels
 
@@ -56,7 +56,7 @@ If your bot needs access to a git platform (GitHub, GitLab), set it up.
 
 ### alcode
 
-Your AI developer is a modern developer. It needs a coding agent. The [`alcode`](../packages/alcode/README.md) CLI is a coding agent wrapper. Install it globally:
+An AlignFirst Developer needs a coding agent. The [`alcode`](packages/alcode/README.md) CLI is a coding agent wrapper. Install it globally:
 
 ```bash
 npm i -g @paleo/alcode@latest
@@ -89,16 +89,16 @@ Skill:
 
 ### Skills for OpenClaw
 
-OpenClaw will need these skills: `openclaw-coder-playbook`, `alignfirst`:
+OpenClaw will need these skills: `alignfirst-developer-openclaw-playbook`, `alignfirst`:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --yes --agent universal \
-  --skill openclaw-coder-playbook --skill alignfirst
+  --skill alignfirst-developer-openclaw-playbook --skill alignfirst
 ```
 
 Skills:
 
-- **`openclaw-coder-playbook`** — operating instructions for an OpenClaw AI coder.
+- **`alignfirst-developer-openclaw-playbook`** — operating instructions for an AlignFirst Developer running on OpenClaw.
 - **`alignfirst`** — not strictly needed, but it helps the bot understand its coding tool.
 
 ### `openclaw.json`
@@ -113,12 +113,12 @@ OpenClaw needs a coding tool profile that can still post to chat, and the two sk
   },
   "agents": {
     "defaults": {
-      "skills": ["alignfirst", "openclaw-coder-playbook"],
+      "skills": ["alignfirst", "alignfirst-developer-openclaw-playbook"],
       "heartbeat": {
         // Stock heartbeat prompt with a NO_REPLY tail instead of HEARTBEAT_OK: with block
         // streaming on, OpenClaw (2026.6.11) holds back only NO_REPLY from the stream —
         // a HEARTBEAT_OK ack posts to the channel root as literal text before the
-        // heartbeat filter can strip it. Copy it from playbook-test/openclaw.json.
+        // heartbeat filter can strip it. Copy it from alignfirst-developer-tests/openclaw.json.
         "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       }
     }
@@ -139,21 +139,21 @@ The playbook expects each task to run in its **own thread session**. With Slack,
 
 ### `workspace/AGENTS.md`
 
-Here is an example of a [workspace's `AGENTS.md`](playbook-test/workspace/AGENTS.md). The only required part is the first section.
+Here is an example of a [workspace's `AGENTS.md`](alignfirst-developer-tests/workspace/AGENTS.md). The only required part is the first section.
 
 Feel free to adapt the other sections. In particular, replace the instructions related to tickets with your own instructions on how to access your Linear, Jira, or GitHub/GitLab issues.
 
 ## Preparing a project
 
-Before handing a project to OpenClaw, set it up for autonomous work:
+Before handing a project to an AlignFirst Developer, set it up for autonomous work:
 
-- **Install [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace)** so the agent runs each task in its own isolated git-worktree environment, several branches in parallel. See its [README](../packages/workspace/README.md) for setup.
-- **Add a `DEVELOPMENT.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPMENT.md`](playbook-test/projects-fixture/template/DEVELOPMENT.md).
+- **Install [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace)** so the agent runs each task in its own isolated git-worktree environment, several branches in parallel. See its [README](packages/workspace/README.md) for setup.
+- **Add a `DEVELOPMENT.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPMENT.md`](alignfirst-developer-tests/projects-fixture/template/DEVELOPMENT.md).
 - **Register the main worktree with `alproject`** after its `.git` directory exists. Use both port-allocation options when its workspace setup requires them.
 
 ## Contribute
 
-The `openclaw-coder-playbook` skill is developed against an internal regression-test harness: [`playbook-test/README.md`](playbook-test/README.md).
+The `alignfirst-developer-openclaw-playbook` skill is developed against an internal regression-test harness: [`alignfirst-developer-tests/README.md`](alignfirst-developer-tests/README.md).
 
 Get started:
 
@@ -161,7 +161,7 @@ Get started:
 # From the repository root
 git clone --depth 1 https://github.com/openclaw/openclaw.git .local/openclaw
 
-cd openclaw-coder/playbook-test
+cd alignfirst-developer-tests
 
 cp .env.local.example .env.local
 # Set the API keys and ALIGNFIRST_CODE_AGENT in `.env.local`

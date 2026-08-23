@@ -1,5 +1,5 @@
 {
-  "name": "@playbook-test/fixture-template",
+  "name": "@alignfirst-developer-tests/fixture-template",
   "private": true,
   "type": "module",
   "engines": {

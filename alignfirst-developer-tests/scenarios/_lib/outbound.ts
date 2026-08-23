@@ -21,7 +21,7 @@ export interface WaitForStarterOptions {
  * conversation.
  *
  * Two provider-asymmetry tolerances (see "Auto-stream delivers turn finals only
- * on Anthropic" in `docs/openclaw-coder/openclaw-context-engineering.md`):
+ * on Anthropic" in `docs/alignfirst-developer/openclaw-context-engineering.md`):
  * `qwen3.7`/`glm-5.2` free-stream their mid-turn planning notes, an obedience
  * ceiling, not a regression.
  *

@@ -22,9 +22,9 @@ Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfi
 
 `@paleo/openclaw-test` and three companion channel packages: they are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
-## Autonomous AI programmer
+## AlignFirst Developer
 
-When _OpenClaw_ uses AlignFirst, we obtain a teammate, an AI partner more than an AI agent. See [openclaw-coder/README.md](openclaw-coder/README.md).
+AlignFirst Developer is an AI teammate for software work, currently packaged on OpenClaw. See [alignfirst-developer.md](alignfirst-developer.md).
 
 ---
 

@@ -81,8 +81,8 @@ RUN npm ci --include=dev && \
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
 # from here to each configured fixture parent at scenario start, materializing the
 # distinct projects (nimbus, lumen, and external-parent orion) with per-name patches.
-COPY --chown=claw:claw projects-fixture/template/ /opt/playbook-test/fixtures/template/
-RUN cd /opt/playbook-test/fixtures/template && \
+COPY --chown=claw:claw projects-fixture/template/ /opt/alignfirst-developer-tests/fixtures/template/
+RUN cd /opt/alignfirst-developer-tests/fixtures/template && \
     pnpm install --frozen-lockfile --prod=false
 
 # Install AlignFirst skills under /home/claw/.agents/skills/ (the path OpenClaw scans).
@@ -90,7 +90,7 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent universal --agent claude-code \
       --skill alignfirst --skill al --skill alplan --skill alspec \
       --skill aldescription --skill alreview --skill alread \
-      --skill almerge --skill openclaw-coder-playbook
+      --skill almerge --skill alignfirst-developer-openclaw-playbook
 
 USER root
 RUN corepack install --global pnpm@10.18.0

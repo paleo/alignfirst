@@ -1,11 +1,11 @@
-# playbook-test
+# alignfirst-developer-tests
 
 Dockerised regression-test harness for the `myclaw` reference workspace at [`workspace/`](workspace/). Local-only. Manually run.
 
 Standalone consumer of the `@paleo/openclaw-*` packages (own `package-lock.json`, not part of the root npm workspaces). See upstream docs for the generic mechanics:
 
-- [packages/openclaw-test/README.md](../../packages/openclaw-test/README.md) — install, configure, run, scenario primitives, artifact layout.
-- [docs/openclaw-coder/openclaw-test-architecture.md](../../docs/openclaw-coder/openclaw-test-architecture.md) — internals.
+- [packages/openclaw-test/README.md](../packages/openclaw-test/README.md) — install, configure, run, scenario primitives, artifact layout.
+- [docs/alignfirst-developer/openclaw-test-architecture.md](../docs/alignfirst-developer/openclaw-test-architecture.md) — internals.
 
 This README only documents what is specific to this harness.
 
@@ -16,7 +16,7 @@ cp .env.local.example .env.local
 # Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
 
 # Build the real alcode CLI the gateway runs (packages/alcode/dist must exist).
-npm run build --workspace @paleo/alcode --prefix ../..
+npm run build --workspace @paleo/alcode --prefix ..
 
 npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first run only; env:build repeats it)
 npm install
@@ -42,7 +42,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
   ```
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
-- `OPENCLAW_CODER_PLAYBOOK_SKILL_DIR` — host path to the `openclaw-coder-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
+- `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-developer-openclaw-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
 - [`docker-compose.yml`](docker-compose.yml) — shared fixture volumes on gateway + runner at `/home/claw/projects`, `/home/claw/external-projects`, and `/home/claw/lifecycle-projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
@@ -57,7 +57,7 @@ The absolute parents are harness storage details. Scenarios obtain canonical mai
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A19`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A20`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its absolute path as `seededWorktreePaths` so the check still catches anything the channel session created.
 
@@ -70,7 +70,7 @@ Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstra
 Rebuild the alcode package and harness image before focused coverage:
 
 ```sh
-npm run build --workspace @paleo/alcode --prefix ../..
+npm run build --workspace @paleo/alcode --prefix ..
 npm run env:build
 
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
@@ -85,7 +85,7 @@ npm run e2e -- --model gpt-5.6-terra --channel all --all
 
 ## Vendored `@paleo/openclaw-*` packages
 
-This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs — the four packages iterate in lockstep with the mocks and are frequently ahead of a publish. The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) (`npm run vendor`) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is this dir, so the tarballs must live here — `../../packages/*` is out of reach at build time.
+This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs — the four packages iterate in lockstep with the mocks and are frequently ahead of a publish. The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) (`npm run vendor`) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is this dir, so the tarballs must live here — `../packages/*` is out of reach at build time.
 
 `npm run env:build` chains `vendor` → `npm install` (refreshes `package-lock.json` against the new tarballs) → `openclaw-test env build`, so a source edit in any of the four packages is picked up on the next `env:build` with no manual step. `npm pack` is byte-reproducible, so unchanged sources produce no lockfile churn. Run `npm run vendor` by hand before the first `npm install` (the tarballs must exist for it to resolve).
 

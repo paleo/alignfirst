@@ -24,9 +24,9 @@ Pick any combination. Each has its own reference; this skill investigates the re
 
 A project has up to three Markdown entry points, one per reader:
 
-- `README.md` — the human coder, and the one-time setup of a fresh clone (machine installation, plans repository link, main-worktree bootstrap).
+- `README.md` — the human developer, and the one-time setup of a fresh clone (machine installation, plans repository link, main-worktree bootstrap).
 - `AGENTS.md` (or `CLAUDE.md`) — the coding agent (Claude Code, alcode). The Step 3 references write their agent instructions here.
-- `DEVELOPMENT.md` — the AI coder: an autonomous bot. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`.
+- `DEVELOPMENT.md` — the AI developer: an autonomous bot. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`.
 
 The rest of the documentation (`docs/`, served by docmap) addresses everybody. The entry points are read every session, `docs/` on demand — so anything consulted occasionally goes there, including multi-step procedures such as creating a merge request or writing a changeset. Move the whole procedure and leave no summary behind in an entry point.
 
@@ -51,7 +51,7 @@ Then detect each tool's existing footprint:
 
 ## Step 2 — Discuss
 
-Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an OpenClaw coder) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files). The workspace system is mandatory there — the bot drives every worktree through it, and has no hand-made fallback (see [the bot contract](references/workspace-setup.md#the-bot-contract)).
+Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an AlignFirst Developer) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files). The workspace system is mandatory there — the bot drives every worktree through it, and has no hand-made fallback (see [the bot contract](references/workspace-setup.md#the-bot-contract)).
 
 A project without a dev server still benefits from the workspace system: recommend its portless subset — no `ports` group, no `dev-server.mjs` — which keeps the worktree lifecycle, shared-directory symlinks, config-file seeding, and orphan healing (see [portless mode](references/workspace-setup.md#portless-mode)).
 

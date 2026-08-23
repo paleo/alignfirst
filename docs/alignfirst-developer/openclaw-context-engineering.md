@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `openclaw-coder-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
+This is the mechanism the `alignfirst-developer-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
 
 ## Character budgets
 
@@ -100,7 +100,7 @@ Three viable shapes for handling a Discord thread, given the above:
 2. **Subagent uses `message` with explicit target** (against OpenClaw guidance). Pass the thread channel ID into the subagent's bootstrap; have it call `message` for each progress step. Supports live progress, fragile, fights the system prompt.
 3. **Auto-thread routing — no subagent**. Configure the Discord channel so the bot's reply auto-opens a thread and subsequent thread messages route to a fresh thread session (the Slack model). Channel and thread sessions are siblings, each owning its surface. Loses subagent isolation; matches the per-surface session model naturally.
 
-**Chosen for openclaw-coder:** Path 3, with a Discord twist. Slack uses the built-in auto-thread (`replyToMode: "all"`), so every reply auto-threads. On Discord, that knob (`autoThread`) would thread *every* channel message, which we don't want — the channel session decides when to open a thread via `message` `action: "thread-create"`, and follow-up thread messages route to a fresh per-thread session.
+**Chosen for AlignFirst Developer:** Path 3, with a Discord twist. Slack uses the built-in auto-thread (`replyToMode: "all"`), so every reply auto-threads. On Discord, that knob (`autoThread`) would thread *every* channel message, which we don't want — the channel session decides when to open a thread via `message` `action: "thread-create"`, and follow-up thread messages route to a fresh per-thread session.
 
 ### Wiring it up
 
@@ -123,7 +123,7 @@ Without `alsoAllow`, the channel session falls back to raw Discord REST via `exe
 
 When a fresh thread session activates on Discord on the user's follow-up, its transcript starts **empty** — Slack injects a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100) prior messages, but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-Workaround: the thread playbook ([`working-session.md`](../../skills/openclaw-coder-playbook/references/working-session.md)) instructs the agent to call `message` `action: "read"` with its bound `threadId` whenever its transcript is empty. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) is written for this case.
+Workaround: the thread playbook ([`working-session.md`](../../skills/alignfirst-developer-openclaw-playbook/references/working-session.md)) instructs the agent to call `message` `action: "read"` with its bound `threadId` whenever its transcript is empty. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) is written for this case.
 
 ## `expectsCompletionMessage` — let a thread subagent speak for itself
 
@@ -163,6 +163,6 @@ The agent is otherwise a black box. A handful of env vars unlock raw introspecti
 
 Trajectories are written by default under `~/.openclaw/logs/trajectory/` and can be extracted with `openclaw export-trajectory --sessionKey <key>`.
 
-In the test harness, the gateway's `~/.openclaw/logs/` is bind-mounted to `playbook-test/.gateway-logs/`. The scenario runner parses the per-session `trajectory/*.jsonl` from there to attribute per-turn tool calls and cost (provider-neutral — works under any LiteLLM provider); if the dir is absent (logging disabled, or the dir is unwritable) the runner logs `agentToolCall parsing skipped: … trajectory not found` and reports `agentTurns: 0`. The trajectory log is default-on (disable with `OPENCLAW_TRAJECTORY=0`); ensure `.gateway-logs/` is writable by your user when you need the trace.
+In the test harness, the gateway's `~/.openclaw/logs/` is bind-mounted to `alignfirst-developer-tests/.gateway-logs/`. The scenario runner parses the per-session `trajectory/*.jsonl` from there to attribute per-turn tool calls and cost (provider-neutral — works under any LiteLLM provider); if the dir is absent (logging disabled, or the dir is unwritable) the runner logs `agentToolCall parsing skipped: … trajectory not found` and reports `agentTurns: 0`. The trajectory log is default-on (disable with `OPENCLAW_TRAJECTORY=0`); ensure `.gateway-logs/` is writable by your user when you need the trace.
 
 Disable the debug vars once done — the JSONL files grow per turn.

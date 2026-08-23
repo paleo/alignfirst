@@ -2,7 +2,7 @@
 # @paleo/openclaw-test. Requires Docker Compose v2.20+.
 #
 # `.env.local` needs ANTHROPIC_API_KEY, OPENCLAW_WORKSPACE_DIR,
-# OPENCLAW_CODER_PLAYBOOK_SKILL_DIR.
+# ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
 # CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
@@ -30,8 +30,8 @@ services:
       - fixture-lifecycle-projects:/home/claw/lifecycle-projects
       # Live-mount the playbook skill over its baked copy so playbook edits
       # iterate without an image rebuild. Set in .env.local (relative to this
-      # dir, e.g. ../../skills/openclaw-coder-playbook).
-      - ${OPENCLAW_CODER_PLAYBOOK_SKILL_DIR}:/home/claw/.agents/skills/openclaw-coder-playbook
+      # dir, e.g. ../skills/alignfirst-developer-openclaw-playbook).
+      - ${ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR}:/home/claw/.agents/skills/alignfirst-developer-openclaw-playbook
       # Live-mount the built @paleo/alcode package so the /usr/local/bin/alcode
       # wrapper resolves to it. ALIGNFIRST_CODE_DIR is the host path to packages/alcode
       # (build it with `npm run build` first). Read-only: the CLI only reads its

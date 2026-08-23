@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Build and pack the local @paleo/openclaw-* workspace packages into ./vendor/*.tgz.
 //
-// playbook-test is a standalone consumer (not a root workspace member) whose
+// alignfirst-developer-tests is a standalone consumer (not a root workspace member) whose
 // Docker image installs these packages via `npm ci` at build time. Pulling them
 // from npmjs means the harness always lags a publish — a recurring problem while
 // iterating on the mocks (e.g. an OpenClaw SDK port that isn't released yet).
@@ -15,7 +15,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, "../../..");
+const REPO_ROOT = resolve(HERE, "../..");
 const CONSUMER_DIR = resolve(HERE, "..");
 const VENDOR_DIR = resolve(HERE, "../vendor");
 
