@@ -94,7 +94,7 @@ describe("main", () => {
     for (const option of ["-v", "--version"]) {
       const stdout = makeSink();
       expect(await run([option], { stdout })).toBe(0);
-      expect(stdout.text()).toBe("0.0.0\n");
+      expect(stdout.text()).toBe(`${packageVersion()}\n`);
     }
   });
 
@@ -340,4 +340,11 @@ function run(
   },
 ) {
   return main({ argv: ["node", "alproject", ...args], ...options });
+}
+
+function packageVersion(): string {
+  const packageFile = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version: string };
+  return packageFile.version;
 }
