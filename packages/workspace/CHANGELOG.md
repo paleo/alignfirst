@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.30.3
+
+### Patch Changes
+
+- 2877daa: `workspace setup` now creates nested shared-directory links correctly and excludes them only in the linked worktree.
+
 ## 0.30.2
 
 ### Patch Changes

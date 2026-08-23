@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.10.2
+
+### Patch Changes
+
+- 2877daa: Documented how to switch an AAD discussion to a specification.
+
 ## 0.10.1
 
 ### Patch Changes

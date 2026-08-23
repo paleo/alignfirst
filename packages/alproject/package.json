@@ -1,6 +1,6 @@
 {
   "name": "@paleo/alproject",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "Discover and manage local Git projects.",
