@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.31.0
+
+### Minor Changes
+
+- 214ee98: Added fallback templates for main-worktree file sources and workspace context for generated content.
+
 ## 0.30.3
 
 ### Patch Changes
