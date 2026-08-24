@@ -1,6 +1,6 @@
 ---
 name: aldescription
-description: "Write a description summarizing implemented work. Generates PR/MR descriptions from completed changes."
+description: "Execute the AlignFirst description protocol."
 disable-model-invocation: true
 ---
 

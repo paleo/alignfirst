@@ -1,6 +1,6 @@
 ---
 name: alplan
-description: "Create implementation plan(s) from a technical specification."
+description: "Execute the AlignFirst planning protocol."
 disable-model-invocation: true
 ---
 

@@ -1,10 +1,10 @@
 ---
 name: alignfirst
-description: "Collaborative problem-solving protocols. Write technical specifications (spec, or alspec), create implementation plans (plan, or alplan), or use Align-and-Do Protocol (AAD). Also generates PR/MR descriptions (aldescription) and code review reports (alreview)."
+description: "Collaborative problem-solving protocols. Read only when the user explicitely names AlignFirst or its protocols aliases: alspec, alplan, al, almerge, alreview, or aldescription."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.9.2"
+  version: "3.10.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -17,9 +17,9 @@ If you don't already know which protocol to use, read [overview.md](references/o
 - **Technical Specification** (_spec_, or _alspec_): [spec-protocol.md](references/spec-protocol.md)
 - **Implementation Plans** (_plan_, or _alplan_): [plan-protocol.md](references/plan-protocol.md)
 - **Align-and-Do Protocol** (_AAD_): [aad-protocol.md](references/aad-protocol.md)
-- **Description** (_aldescription_): [description-protocol.md](references/description-protocol.md)
-- **Code Review** (_alreview_): [review-protocol.md](references/review-protocol.md)
 - **Merge** (_merge_, or _almerge_): [merge-protocol.md](references/merge-protocol.md)
+- **Code Review** (_alreview_): [review-protocol.md](references/review-protocol.md)
+- **Description** (_aldescription_): [description-protocol.md](references/description-protocol.md)
 
 ## TASK_DIR Location
 

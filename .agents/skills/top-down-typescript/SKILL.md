@@ -4,7 +4,7 @@ description: TypeScript and JavaScript coding style conventions, centered on top
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.3.0"
+  version: "0.4.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -124,6 +124,10 @@ Write for someone already using the project who wants to know what changed, in a
 - Nothing actionable (for example documentation or refactoring): stay succinct, like "Improved documentation about {topic}."
 
 When a version mixes actionable and non-actionable changes (for example a big refactoring plus a small feature), mention only the actionable one. Mention non-actionable changes only when there is nothing else for the user.
+
+## Version bumps
+
+Never bump a package from `0.x.x` to `1.0.0` unless explicitly instructed. Breaking changes are accepted while the major version is `0`.
 
 ## Improving code quality
 

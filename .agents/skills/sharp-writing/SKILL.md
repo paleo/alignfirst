@@ -4,7 +4,7 @@ description: Conventions for writing sharp, concise prose and Markdown, for huma
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.8.1"
+  version: "0.9.0"
   repository: https://github.com/paleo/skills
 ---
 
@@ -24,9 +24,13 @@ Before writing anything, find the essence of the idea. State the essence. State 
 - Respect the reader. No insistent or authoritarian tone; don't treat them like a child. Make what is important more obvious instead.
 - Keep a formal register.
 
+## Weigh every word
+
+Pick the word that says exactly what you mean. Prefer the common word; use an elaborate or technical one only when it is more precise.
+
 ## Keep a formal register
 
-Stay professional, without stiffness. Write complete sentences; don't clip the opening. Use proper vocabulary: the precise word, even an elaborate one. Technical terms are fine when exact; slang and casual jargon are not. No emoticons.
+Stay professional, without stiffness. Write complete sentences; don't clip the opening. No slang, no casual jargon, no emoticons.
 
 ## Structure text like code
 

@@ -1,6 +1,6 @@
 ---
 name: almerge
-description: "Resolve merge or rebase conflicts. Investigates both sides, resolves the conflicts (with a special case for lock files), and writes a brief summary."
+description: "Execute the AlignFirst merge protocol."
 disable-model-invocation: true
 ---
 

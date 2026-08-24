@@ -1,6 +1,6 @@
 ---
 name: alspec
-description: "Create a technical specification (spec) for a feature or task."
+description: "Execute the AlignFirst specification protocol."
 disable-model-invocation: true
 ---
 

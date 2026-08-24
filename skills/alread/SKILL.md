@@ -1,6 +1,6 @@
 ---
 name: alread
-description: "Read all specs and summaries in the current task directory to prepare context."
+description: "Read all specifications and summaries in the current AlignFirst task directory."
 disable-model-invocation: true
 ---
 
