@@ -102,13 +102,12 @@ export interface WorkspaceConfig {
    * Holds the setup log and dev-server logs.
    */
   runtimeDir: string;
-  /** Gitignored files seeded into each worktree (from main, a committed template, or content) and patched per workspace. */
+  /** Gitignored files seeded from main, a committed fallback/template, or content and patched per workspace. */
   gitignoredFiles: GitignoredFileEntry[];
   /**
-   * Runs before `gitignoredFiles` are copied. Use this to bootstrap source files the kernel expects
-   * to find (e.g. seed `config.json` from `config.example.json` on the main worktree, decrypt
-   * an env file). MUST be idempotent. On a linked-worktree setup, MUST NOT mutate the main
-   * worktree — bootstrap the main worktree first via `workspace setup`.
+   * Runs before `gitignoredFiles` are copied. Use this for setup work outside file-source
+   * resolution, such as validating shared resources, creating directories, or configuring hooks.
+   * MUST be idempotent. On a linked-worktree setup, MUST NOT mutate the main worktree.
    */
   preSetup?: (ctx: PreSetupContext) => Promise<void> | void;
   /**
@@ -229,7 +228,7 @@ export interface GitignoredFileEntry {
   patch?: (content: string, ctx: PatchContext) => string;
   /**
    * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
-   * Applies to `mainWorktree` and `committed` sources; ignored for `content`.
+   * Applies to the selected path for `mainWorktree` and `committed` sources; ignored for `content`.
    */
   optional?: boolean;
 }
@@ -237,9 +236,11 @@ export interface GitignoredFileEntry {
 /** Where a {@link GitignoredFileEntry}'s initial content comes from. */
 export type GitignoredFileSource = MainWorktreeSource | CommittedSource | ContentSource;
 
-/** Copies the gitignored file at the entry's `path` from the main worktree. */
+/** Copies the entry path from the main worktree, or a committed fallback when it is absent. */
 export interface MainWorktreeSource {
   kind: "mainWorktree";
+  /** Optional template path relative to the current worktree. */
+  fallback?: string;
 }
 
 /** Copies a committed template from the worktree's own checkout, so it tracks the branch. */
@@ -249,13 +250,13 @@ export interface CommittedSource {
   path: string;
 }
 
-/** Uses the given content verbatim. The function form may be async. */
+/** Uses the given content verbatim. The function form receives patch context and may be async. */
 export interface ContentSource {
   kind: "content";
-  content: string | (() => string | Promise<string>);
+  content: string | ((ctx: PatchContext) => string | Promise<string>);
 }
 
-/** Context passed to {@link GitignoredFileEntry.patch}. */
+/** Context passed to functional content sources and {@link GitignoredFileEntry.patch}. */
 export interface PatchContext {
   /** Workspace name: the worktree directory basename. */
   name: string;
@@ -263,6 +264,8 @@ export interface PatchContext {
   ports: Record<string, number>;
   mainWorktree: string;
   currentWorktree: string;
+  /** `true` when seeding the main worktree. */
+  isMainWorktree: boolean;
 }
 
 /** Per-invocation state shared by every command flow. */
@@ -1286,13 +1289,14 @@ async function seedGitignoredFiles(
   force: boolean,
   log: (msg: string) => void,
 ): Promise<void> {
+  const patchCtx: PatchContext = {
+    name,
+    ports,
+    mainWorktree: ctx.mainWorktree,
+    currentWorktree: ctx.currentWorktree,
+    isMainWorktree: ctx.isMainWorktree,
+  };
   for (const entry of entries) {
-    const patchCtx: PatchContext = {
-      name,
-      ports,
-      mainWorktree: ctx.mainWorktree,
-      currentWorktree: ctx.currentWorktree,
-    };
     const { patch } = entry;
     const patchFn = patch
       ? (content: string) => patch(content, patchCtx)
@@ -1315,13 +1319,16 @@ export async function resolveFileSource(
 ): Promise<ResolvedFileSource> {
   const { source } = entry;
   switch (source.kind) {
-    case "mainWorktree":
-      return { path: join(ctx.mainWorktree, entry.path) };
+    case "mainWorktree": {
+      const mainPath = join(ctx.mainWorktree, entry.path);
+      if (existsSync(mainPath) || source.fallback === undefined) return { path: mainPath };
+      return { path: join(ctx.currentWorktree, source.fallback) };
+    }
     case "committed":
       return { path: join(ctx.currentWorktree, source.path) };
     case "content":
       return {
-        content: typeof source.content === "function" ? await source.content() : source.content,
+        content: typeof source.content === "function" ? await source.content(ctx) : source.content,
       };
   }
 }

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -102,6 +102,28 @@ describe("workspace setup (e2e)", () => {
       const { repo } = fixture();
       runCli(repo, ["setup", "-c", "feat-p"]);
       expect(entryFor(repo, "fixrepo-feat-p").portIndex).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "seeds from a fallback on main and a customized main file on linked setup",
+    () => {
+      const { repo } = fixture({ fallbackSeeding: true });
+
+      const mainSetup = runCli(repo, ["setup"]);
+      expect(mainSetup.status).toBe(0);
+      expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe(
+        "committed-template\nworktree=main\n",
+      );
+
+      writeFileSync(join(repo, "workspace.local"), "customized-main\n");
+      const linkedSetup = runCli(repo, ["setup", "-c", "feat-fallback"]);
+      expect(linkedSetup.status).toBe(0);
+      expect(
+        readFileSync(join(repo, "..", "fixrepo-feat-fallback", "workspace.local"), "utf-8"),
+      ).toBe("customized-main\nworktree=linked\n");
+      expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe("customized-main\n");
     },
     TEST_TIMEOUT_MS,
   );

@@ -8,8 +8,7 @@
 // =============================================================================
 
 import { execFileSync, execSync } from "node:child_process";
-import { copyFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@paleo/workspace";
 
@@ -75,16 +74,18 @@ await runWorkspace({
 
   // ADAPT: EVERY gitignored file a linked worktree needs — not only the
   // port-bearing ones. Each entry declares a `source`:
-  //   { kind: "mainWorktree" }            copy the file from the main worktree
+  //   { kind: "mainWorktree", fallback } copy the main-worktree file when it exists,
+  //                                       otherwise a committed fallback from this branch
   //   { kind: "committed", path: "..." }  copy a committed template (e.g. an
   //                                       .example) from the worktree's checkout
-  //   { kind: "content", content }        inline string, or a (async) function
+  //   { kind: "content", content }        inline string, or a sync/async function
+  //                                       receiving the same context as `patch`
   // `patch` is optional — omit it to copy verbatim (see ".vscode/settings.json").
   // Omitting an entry leaves the linked worktree silently missing that file.
   gitignoredFiles: [
     {
       path: ".env",
-      source: { kind: "mainWorktree" },
+      source: { kind: "mainWorktree", fallback: ".env.example" },
       patch: (content, { ports }) => {
         // Use extractHost to preserve a non-localhost API_URL configured in the
         // main worktree (e.g. a public dev-server IP).
@@ -100,7 +101,7 @@ await runWorkspace({
     // worktrees don't collide. Drop this entry on a non-Docker stack.
     {
       path: "docker-compose.yml",
-      source: { kind: "mainWorktree" },
+      source: { kind: "mainWorktree", fallback: "docker-compose.example.yml" },
       patch: (content, { name, ports }) =>
         content
           .replace(/^(\s*-\s*")[^"]*:5432(")/m, `$1${ports.db}:5432$2`)
@@ -110,28 +111,13 @@ await runWorkspace({
     // needs. No `patch`. `optional: true` skips it (with a warning) when absent.
     {
       path: ".vscode/settings.json",
-      source: { kind: "mainWorktree" },
+      source: {
+        kind: "mainWorktree",
+        fallback: ".vscode/settings.example.json",
+      },
       optional: true,
     },
   ],
-
-  // ADAPT (optional): runs BEFORE gitignoredFiles are copied. Seed gitignored files
-  // the kernel will look for — typically the main worktree's config, from its
-  // committed .example — so a fresh clone's first `workspace setup` works with no
-  // manual step (otherwise a mainWorktree-sourced config has no initial content
-  // and setup aborts). MUST be idempotent; on a linked-worktree setup it MUST NOT
-  // touch the main worktree, so gate on isMainWorktree. List one [template, target]
-  // per mainWorktree-sourced config that has a committed template. Drop this field
-  // when every gitignoredFiles entry uses a committed or content source.
-  preSetup: ({ isMainWorktree, currentWorktree, force, log }) => {
-    if (!isMainWorktree) return;
-    for (const [template, target] of [[".env.example", ".env"]]) {
-      const targetPath = join(currentWorktree, target);
-      if (existsSync(targetPath) && !force) continue;
-      copyFileSync(join(currentWorktree, template), targetPath);
-      log(`Bootstrapped ${target} from ${template}.`);
-    }
-  },
 
   // ADAPT: Detached finalization step. Runs in the background after the
   // worktree is created and the foreground command has returned.

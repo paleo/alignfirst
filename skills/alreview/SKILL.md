@@ -1,6 +1,6 @@
 ---
 name: alreview
-description: "Write a code review report comparing the current branch to a base branch."
+description: "Execute the AlignFirst review protocol."
 disable-model-invocation: true
 ---
 

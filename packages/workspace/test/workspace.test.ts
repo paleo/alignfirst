@@ -1,21 +1,67 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { matchWorktreeByDir, type PatchContext, resolveFileSource } from "../src/workspace.js";
 import type { WorkspacesRegistry } from "../src/workspaces.js";
 
-const ctx: PatchContext = {
-  name: "repo-feat",
-  ports: { server: 8110 },
-  mainWorktree: "/repo/main",
-  currentWorktree: "/repo/feat",
-};
-
 describe("resolveFileSource", () => {
+  let root: string;
+  let ctx: PatchContext;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "workspace-source-test-"));
+    const mainWorktree = join(root, "main");
+    const currentWorktree = join(root, "feat");
+    mkdirSync(mainWorktree);
+    mkdirSync(currentWorktree);
+    ctx = {
+      name: "repo-feat",
+      ports: { server: 8110 },
+      mainWorktree,
+      currentWorktree,
+      isMainWorktree: false,
+    };
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
   it("reads a `mainWorktree` source at the entry's path in the main worktree", async () => {
     const source = await resolveFileSource({ path: ".env", source: { kind: "mainWorktree" } }, ctx);
-    expect(source).toEqual({ path: join("/repo/main", ".env") });
+    expect(source).toEqual({ path: join(ctx.mainWorktree, ".env") });
+  });
+
+  it("prefers an existing main-worktree file over a declared fallback", async () => {
+    writeFileSync(join(ctx.mainWorktree, ".env"), "MAIN=1\n");
+    writeFileSync(join(ctx.currentWorktree, ".env.example"), "FALLBACK=1\n");
+
+    const source = await resolveFileSource(
+      {
+        path: ".env",
+        source: { kind: "mainWorktree", fallback: ".env.example" },
+      },
+      ctx,
+    );
+
+    expect(source).toEqual({ path: join(ctx.mainWorktree, ".env") });
+  });
+
+  it("uses a fallback from the current worktree when the main file is absent", async () => {
+    writeFileSync(join(ctx.currentWorktree, ".env.example"), "FALLBACK=1\n");
+
+    const source = await resolveFileSource(
+      {
+        path: ".env",
+        source: { kind: "mainWorktree", fallback: ".env.example" },
+      },
+      ctx,
+    );
+
+    expect(source).toEqual({ path: join(ctx.currentWorktree, ".env.example") });
   });
 
   it("reads a `committed` source at the template path in the current worktree", async () => {
@@ -23,7 +69,7 @@ describe("resolveFileSource", () => {
       { path: ".env", source: { kind: "committed", path: ".env.example" } },
       ctx,
     );
-    expect(source).toEqual({ path: join("/repo/feat", ".env.example") });
+    expect(source).toEqual({ path: join(ctx.currentWorktree, ".env.example") });
   });
 
   it("returns a `content` string verbatim", async () => {
@@ -36,7 +82,17 @@ describe("resolveFileSource", () => {
 
   it("resolves a synchronous `content` function", async () => {
     const source = await resolveFileSource(
-      { path: ".env", source: { kind: "content", content: () => "A=1\n" } },
+      {
+        path: ".env",
+        source: {
+          kind: "content",
+          content: (contentCtx) => {
+            expect(contentCtx).toBe(ctx);
+            expect(contentCtx.isMainWorktree).toBe(false);
+            return "A=1\n";
+          },
+        },
+      },
       ctx,
     );
     expect(source).toEqual({ content: "A=1\n" });
@@ -44,7 +100,17 @@ describe("resolveFileSource", () => {
 
   it("awaits an asynchronous `content` function", async () => {
     const source = await resolveFileSource(
-      { path: ".env", source: { kind: "content", content: async () => "A=1\n" } },
+      {
+        path: ".env",
+        source: {
+          kind: "content",
+          content: async (contentCtx) => {
+            expect(contentCtx).toBe(ctx);
+            expect(contentCtx.isMainWorktree).toBe(false);
+            return "A=1\n";
+          },
+        },
+      },
       ctx,
     );
     expect(source).toEqual({ content: "A=1\n" });

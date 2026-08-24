@@ -22,14 +22,24 @@ export interface FixtureRepo {
 export interface FixtureOptions {
   /** Setup-only variant: no `ports` group, no dev-server script. */
   portless?: boolean;
+  /** Seeds a gitignored file from a committed fallback or the customized main file. */
+  fallbackSeeding?: boolean;
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   const portless = options.portless ?? false;
+  const fallbackSeeding = options.fallbackSeeding ?? false;
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
   const repo = join(root, "fixrepo");
   mkdirSync(join(repo, "scripts"), { recursive: true });
-  writeFileSync(join(repo, "scripts", "workspace.mjs"), workspaceMjsSource(portless));
+  writeFileSync(
+    join(repo, "scripts", "workspace.mjs"),
+    workspaceMjsSource(portless, fallbackSeeding),
+  );
+  if (fallbackSeeding) {
+    writeFileSync(join(repo, ".gitignore"), "workspace.local\n");
+    writeFileSync(join(repo, "workspace.template"), "committed-template\n");
+  }
   if (!portless) {
     writeFileSync(
       join(repo, "scripts", "dev-server.mjs"),
@@ -44,12 +54,22 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   return { root, repo };
 }
 
-function workspaceMjsSource(portless: boolean): string {
+function workspaceMjsSource(portless: boolean, fallbackSeeding: boolean): string {
   const devSetup = portless
     ? ""
     : `  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
   ports: { base: 8100, maxWorkspaces: 20, names: ["web"] },
 `;
+  const gitignoredFiles = fallbackSeeding
+    ? `[
+    {
+      path: "workspace.local",
+      source: { kind: "mainWorktree", fallback: "workspace.template" },
+      patch: (content, ctx) =>
+        content.trim() + "\\nworktree=" + (ctx.isMainWorktree ? "main" : "linked") + "\\n",
+    },
+  ]`
+    : "[]";
   return `import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,7 +79,7 @@ import { runWorkspace } from "${distIndexUrl}";
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
 ${devSetup}  sharedDirs: [],
-  gitignoredFiles: [],
+  gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
   formatSummary: () => "Workspace ready.",
   finalizeWorkspace: (ctx) => {

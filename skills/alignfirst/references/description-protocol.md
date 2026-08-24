@@ -24,7 +24,7 @@ Identify and state these values before starting the protocol.
 
 **Suggested commit message:** `<commit message>`
 
-## Description for PR/MR
+## PR/MR Description
 
 [description body]
 ```
