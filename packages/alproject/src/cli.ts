@@ -282,7 +282,7 @@ export function renderProjectListJson(list: ProjectList): string {
   return `${escapeAdditionalJsonCharacters(JSON.stringify(list, undefined, 2))}\n`;
 }
 
-export function renderProjectStatus(status: ProjectDetails): string {
+function renderProjectStatus(status: ProjectDetails): string {
   const lines = [
     "Project:",
     `  Name: ${renderOutputValue(status.name)}`,
@@ -312,7 +312,7 @@ export function renderProjectStatus(status: ProjectDetails): string {
   return `${lines.join("\n")}\n`;
 }
 
-export function renderProjectStatusJson(status: ProjectDetails): string {
+function renderProjectStatusJson(status: ProjectDetails): string {
   return `${escapeAdditionalJsonCharacters(JSON.stringify(status, undefined, 2))}\n`;
 }
 

@@ -76,6 +76,26 @@ describe("getProjectStatus", () => {
     );
   });
 
+  it("reads a remote whose name starts with a hyphen", () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    execGit(project, "remote", "add", "--", "--push", "https://github.com/team/project.git");
+
+    expect(getProjectStatus(fixture.config, emptyRegistry(), project).remoteHost).toBe(
+      "github.com",
+    );
+  });
+
+  it("reads the host from SCP syntax without a user", () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    execGit(project, "remote", "add", "origin", "github.com:team/project.git");
+
+    expect(getProjectStatus(fixture.config, emptyRegistry(), project).remoteHost).toBe(
+      "github.com",
+    );
+  });
+
   it("reports a registered project missing from the filesystem", () => {
     const fixture = makeFixture();
     const project = join(fixture.root, "missing");

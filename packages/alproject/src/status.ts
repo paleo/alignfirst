@@ -67,18 +67,22 @@ function readRemoteHost(projectPath: string): string | null {
     ? ["origin", ...remotes.filter((remote) => remote !== "origin")]
     : remotes;
   for (const remote of orderedRemotes) {
-    const host = remoteHost(runGit(projectPath, "remote", "get-url", remote).trim());
+    const host = remoteHost(runGit(projectPath, "remote", "get-url", "--", remote).trim());
     if (host !== null) return host;
   }
   return null;
 }
 
 function remoteHost(remoteUrl: string): string | null {
+  return urlRemoteHost(remoteUrl) ?? scpRemoteHost(remoteUrl);
+}
+
+function urlRemoteHost(remoteUrl: string): string | null {
   try {
     const host = new URL(remoteUrl).hostname;
     return host.length === 0 ? null : host;
   } catch {
-    return scpRemoteHost(remoteUrl);
+    return null;
   }
 }
 
