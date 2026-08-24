@@ -1,6 +1,6 @@
 ---
 name: alignfirst
-description: "Collaborative problem-solving protocols. Read only when the user explicitely names AlignFirst or its protocols aliases: alspec, alplan, al, almerge, alreview, or aldescription."
+description: "Collaborative problem-solving protocols. Read only when the user explicitly names AlignFirst or a protocol alias: spec, alspec, plan, alplan, AAD, al, merge, almerge, alreview, or aldescription."
 license: CC0 1.0
 metadata:
   author: Paleo

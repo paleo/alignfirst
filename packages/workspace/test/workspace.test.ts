@@ -7,29 +7,29 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { matchWorktreeByDir, type PatchContext, resolveFileSource } from "../src/workspace.js";
 import type { WorkspacesRegistry } from "../src/workspaces.js";
 
-let root: string;
-let ctx: PatchContext;
-
-beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "workspace-source-test-"));
-  const mainWorktree = join(root, "main");
-  const currentWorktree = join(root, "feat");
-  mkdirSync(mainWorktree);
-  mkdirSync(currentWorktree);
-  ctx = {
-    name: "repo-feat",
-    ports: { server: 8110 },
-    mainWorktree,
-    currentWorktree,
-    isMainWorktree: false,
-  };
-});
-
-afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
-});
-
 describe("resolveFileSource", () => {
+  let root: string;
+  let ctx: PatchContext;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "workspace-source-test-"));
+    const mainWorktree = join(root, "main");
+    const currentWorktree = join(root, "feat");
+    mkdirSync(mainWorktree);
+    mkdirSync(currentWorktree);
+    ctx = {
+      name: "repo-feat",
+      ports: { server: 8110 },
+      mainWorktree,
+      currentWorktree,
+      isMainWorktree: false,
+    };
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
   it("reads a `mainWorktree` source at the entry's path in the main worktree", async () => {
     const source = await resolveFileSource({ path: ".env", source: { kind: "mainWorktree" } }, ctx);
     expect(source).toEqual({ path: join(ctx.mainWorktree, ".env") });
