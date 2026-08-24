@@ -1,6 +1,6 @@
 # @paleo/alproject
 
-Discover local Git projects, track explicit registrations, and allocate non-overlapping port ranges.
+Local project registry for the AlignFirst developer. Discover local Git projects, track explicit registrations, and allocate non-overlapping port ranges.
 
 ## Installation
 
