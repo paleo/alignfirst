@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.32.0
+
+### Minor Changes
+
+- 01074ee: Added `--profile <name>` to `workspace setup`.
+
 ## 0.31.0
 
 ### Minor Changes
