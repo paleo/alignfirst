@@ -10,6 +10,14 @@ Print every project with its name, main path, parent, status, workspace names, a
 
 Pass `--json` for structured output consumed by tools and agents. The labelled output quotes every filesystem-derived value so control characters cannot create false fields.
 
+### `alproject status <path> [--json]`
+
+Print one discovered or registered project with its canonical main path, status, port allocation, remote host, and Git worktrees. Each worktree includes its name, path, and branch. Missing optional values are explicit.
+
+Relative paths resolve from `root`; absolute paths are accepted directly. Pass the main-worktree path. Linked-worktree paths and paths that are neither discovered nor registered produce an actionable error.
+
+Pass `--json` for structured output. Absent port allocations, remote hosts, and detached-worktree branches are `null`.
+
 ### `alproject register <path>`
 
 Register an existing Git main worktree that is a direct child of an allowed parent. Relative paths resolve from `root`; absolute paths are accepted directly.

@@ -9,11 +9,11 @@ import {
   fsyncSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { AlprojectConfig } from "./config.js";
 import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
-import { canonicalizePath } from "./paths.js";
+import { resolveProjectPath } from "./paths.js";
 import {
   allocateProjectPorts,
   allocationEnd,
@@ -114,11 +114,7 @@ function registrationPath(config: AlprojectConfig, inputPath: string): string {
 }
 
 function mutationPath(config: Pick<AlprojectConfig, "root">, inputPath: string): string {
-  if (inputPath.length === 0) throw new AlprojectError("filesystem", "Project path is required");
-  const absolutePath = isAbsolute(inputPath)
-    ? normalize(inputPath)
-    : resolve(config.root, inputPath);
-  return canonicalizePath(absolutePath);
+  return resolveProjectPath(inputPath, config.root);
 }
 
 function assertMainWorktree(path: string): void {

@@ -27,9 +27,12 @@ Create `~/.alproject.json` before running commands:
 
 ```text
 alproject list [--json]
+alproject status <path> [--json]
 alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
 alproject unregister <path>
 ```
+
+`status` reports one discovered or registered project. It includes the canonical main path, registration and filesystem status, optional port allocation, preferred remote host, and every Git worktree with its path and branch. Relative paths resolve from `root`; absolute paths are accepted directly. Pass the main-worktree path.
 
 Run `alproject --guide` for the agent-facing operating guide. When `<root>/alproject-guide.md` exists, the command appends it verbatim after the generic guide — use it to describe how the project parents are organized. An unreadable custom guide is an error.
 

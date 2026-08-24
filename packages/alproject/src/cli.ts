@@ -8,6 +8,7 @@ import { errorMessage } from "./errors.js";
 import { renderGuide } from "./guide.js";
 import { registerProject, unregisterProject } from "./mutations.js";
 import { readRegistry } from "./registry.js";
+import { getProjectStatus, type ProjectDetails } from "./status.js";
 
 const statusLabels: Record<ProjectStatus, string> = {
   missing: "registered but missing from filesystem",
@@ -78,6 +79,11 @@ export async function main(options: MainOptions = {}): Promise<number> {
       stdout.write(args.json ? renderProjectListJson(list) : renderProjectList(list));
       return 0;
     }
+    if (args.command === "status" && args.path !== undefined) {
+      const status = getProjectStatus(config, readRegistry(config), args.path);
+      stdout.write(args.json ? renderProjectStatusJson(status) : renderProjectStatus(status));
+      return 0;
+    }
     if (args.command === "register" && args.path !== undefined) {
       const result = await registerProject(config, args.path, {
         maxWorkspaces: args.maxWorkspaces,
@@ -139,7 +145,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
 
   const [command, path, ...extraPaths] = positionals;
   if (command === undefined) {
-    if (values.json === true) throw new Error("--json is valid only with list");
+    if (values.json === true) throw new Error("--json is valid only with list or status");
     if (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined) {
       throw new Error("Port options are valid only with register");
     }
@@ -148,8 +154,8 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   if (!isCommand(command)) throw new Error(`Unknown command: ${command}`);
   validateCommandPaths(command, path, extraPaths);
   validatePortOptionPlacement(command, values);
-  if (values.json === true && command !== "list") {
-    throw new Error("--json is valid only with list");
+  if (values.json === true && command !== "list" && command !== "status") {
+    throw new Error("--json is valid only with list or status");
   }
   const portsPerWorkspace = parsePositiveInteger(
     "--ports-per-workspace",
@@ -171,8 +177,8 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   };
 }
 
-function isCommand(value: string): value is "list" | "register" | "unregister" {
-  return value === "list" || value === "register" || value === "unregister";
+function isCommand(value: string): value is "list" | "register" | "status" | "unregister" {
+  return value === "list" || value === "register" || value === "status" || value === "unregister";
 }
 
 function validateCommandPaths(
@@ -225,12 +231,14 @@ function renderHelp(): string {
 
 Usage:
   alproject list [--json]
+  alproject status <path> [--json]
   alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
   alproject unregister <path>
 
 Options:
   --guide              Print the complete guide
   -h, --help           Print this help
+  --json               Print structured list or status output
   -v, --version        Print the alproject version
 
 Run \`alproject --guide\` for configuration and operational procedures.
@@ -272,6 +280,40 @@ export function renderProjectList(list: ProjectList): string {
 
 export function renderProjectListJson(list: ProjectList): string {
   return `${escapeAdditionalJsonCharacters(JSON.stringify(list, undefined, 2))}\n`;
+}
+
+export function renderProjectStatus(status: ProjectDetails): string {
+  const lines = [
+    "Project:",
+    `  Name: ${renderOutputValue(status.name)}`,
+    `  Main path: ${renderOutputValue(status.path)}`,
+    `  Status: ${statusLabels[status.status]}`,
+    `  Remote host: ${status.remoteHost === null ? "(none)" : renderOutputValue(status.remoteHost)}`,
+  ];
+  if (status.ports === null) {
+    lines.push("  Port allocation: (none)");
+  } else {
+    lines.push(
+      `  Base port: ${status.ports.basePort}`,
+      `  Port range: ${status.ports.basePort}..${status.ports.endPort}`,
+      `  Ports per workspace: ${status.ports.portsPerWorkspace}`,
+      `  Maximum workspaces: ${status.ports.maxWorkspaces}`,
+    );
+  }
+  lines.push("  Worktrees:");
+  if (status.worktrees.length === 0) lines.push("    (none)");
+  for (const worktree of status.worktrees) {
+    lines.push(
+      `  - Name: ${renderOutputValue(worktree.name)}`,
+      `    Path: ${renderOutputValue(worktree.path)}`,
+      `    Branch: ${worktree.branch === null ? "(detached)" : renderOutputValue(worktree.branch)}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderProjectStatusJson(status: ProjectDetails): string {
+  return `${escapeAdditionalJsonCharacters(JSON.stringify(status, undefined, 2))}\n`;
 }
 
 function renderRegistration(result: {

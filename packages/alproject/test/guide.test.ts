@@ -24,11 +24,13 @@ describe("renderGuide", () => {
     expect(guide).toMatch(/^# alproject guide\n/);
     for (const content of [
       "alproject list",
+      "alproject status <path>",
       "--json",
       "alproject register <path>",
       "alproject unregister <path>",
       "--ports-per-workspace",
       "does not delete",
+      "remote host",
     ]) {
       expect(guide).toContain(content);
     }

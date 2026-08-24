@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, join, normalize } from "node:path";
+import { isAbsolute, join, normalize, resolve } from "node:path";
 
 import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 
@@ -30,6 +30,12 @@ export function canonicalizePath(path: string): string {
       },
     );
   }
+}
+
+export function resolveProjectPath(path: string, root: string): string {
+  if (path.length === 0) throw new AlprojectError("filesystem", "Project path is required");
+  const absolutePath = isAbsolute(path) ? normalize(path) : resolve(root, path);
+  return canonicalizePath(absolutePath);
 }
 
 export function resolveConfiguredPath(path: string, home: string): string {
