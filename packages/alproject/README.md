@@ -45,11 +45,13 @@ An optional parent `portRange` reserves part of the global range for projects un
 ```text
 alproject list [--json]
 alproject status <path> [--json]
-alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]]
+alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n> [--allow-outside-port-range]]]
 alproject unregister <path>
 ```
 
 `status` reports one discovered or registered project. It includes the canonical main path, registration and filesystem status, optional port allocation, preferred remote host, and every Git worktree with its path and branch. Relative paths resolve from `root`; absolute paths are accepted directly. Pass the main-worktree path.
+
+Port options reserve `ports-per-workspace * max-workspaces` ports. `--base-port` claims an exact available range. Add `--allow-outside-port-range` to permit that explicit allocation outside the configured root and parent ranges. The complete allocation must remain within ports 1 through 65535 and cannot overlap another registration.
 
 Run `alproject --guide` for the agent-facing operating guide. When `<root>/alproject-guide.md` exists, the command appends it verbatim after the generic guide — use it to describe how the project parents are organized. An unreadable custom guide is an error.
 

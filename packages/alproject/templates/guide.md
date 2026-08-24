@@ -47,12 +47,14 @@ Register an existing Git main worktree that is a direct child of an allowed pare
 Use both port options to reserve a range:
 
 ```sh
-alproject register <path> --ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]
+alproject register <path> --ports-per-workspace <n> --max-workspaces <n> [--base-port <n> [--allow-outside-port-range]]
 ```
 
 The sizing values must be positive integers. `max-workspaces` includes the main worktree. Alproject reserves `ports-per-workspace * max-workspaces` ports and selects the lowest contiguous free block available to the project's parent. It considers registry reservations rather than listening processes.
 
 Pass `--base-port` to claim an exact range instead. Registration fails when the claimed range is outside the ports available to the project's parent or overlaps an existing reservation.
+
+Add `--allow-outside-port-range` to permit an explicit allocation outside the configured root and parent ranges. The complete allocation must remain within ports 1 through 65535. Existing reservations remain unavailable.
 
 To change a registration, unregister it first.
 

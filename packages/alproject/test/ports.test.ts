@@ -6,7 +6,7 @@ import {
   claimProjectPorts,
   projectPortCount,
 } from "../src/ports.js";
-import type { ProjectEntry } from "../src/registry.js";
+import type { PortAllocation, ProjectEntry } from "../src/registry.js";
 
 describe("project port allocation", () => {
   it("allocates the lowest free range independent of registry order", () => {
@@ -63,6 +63,19 @@ describe("project port allocation", () => {
     expect(() => claimProjectPorts([], claim, [range(8030, 8099)])).toThrow(/outside/);
   });
 
+  it("claims a range outside configured ranges only with an override", () => {
+    const claim: PortAllocation = {
+      allowOutsidePortRange: true,
+      basePort: 9000,
+      ...request(10),
+    };
+
+    expect(claimProjectPorts([], claim, [range(8000, 8099)])).toEqual(claim);
+    expect(() =>
+      claimProjectPorts([allocated("/a", 9005, 10)], claim, [range(8000, 8099)]),
+    ).toThrow(/overlaps/);
+  });
+
   it("validates multiplication and inclusive-end arithmetic", () => {
     expect(() =>
       projectPortCount({ maxWorkspaces: 2, portsPerWorkspace: Number.MAX_SAFE_INTEGER }),
@@ -77,6 +90,9 @@ describe("project port allocation", () => {
     expect(() => projectPortCount({ maxWorkspaces: 0, portsPerWorkspace: 1 })).toThrow(
       /positive integer/,
     );
+    expect(() =>
+      allocationEnd({ basePort: 65_535, maxWorkspaces: 1, portsPerWorkspace: 2 }),
+    ).toThrow(/exceeds port 65535/);
   });
 });
 

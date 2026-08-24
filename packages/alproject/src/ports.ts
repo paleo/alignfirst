@@ -2,6 +2,8 @@ import { AlprojectError } from "./errors.js";
 import type { PortRange } from "./config.js";
 import type { PortAllocation, ProjectEntry } from "./registry.js";
 
+const MAX_PORT = 65_535;
+
 export interface PortRequest {
   maxWorkspaces: number;
   portsPerWorkspace: number;
@@ -37,7 +39,10 @@ export function claimProjectPorts(
   availableRanges: readonly PortRange[],
 ): PortAllocation {
   const claimedRange = allocationRange(claim);
-  if (!availableRanges.some((range) => containsRange(range, claimedRange))) {
+  if (
+    claim.allowOutsidePortRange !== true &&
+    !availableRanges.some((range) => containsRange(range, claimedRange))
+  ) {
     throw new AlprojectError(
       "registry",
       `Claimed port range ${formatAllocatedRange(claimedRange)} is outside ${formatPortRanges(availableRanges)}`,
@@ -72,7 +77,11 @@ export function allocationEnd(allocation: PortAllocation): number {
   if (allocation.basePort > Number.MAX_SAFE_INTEGER - size + 1) {
     throw new AlprojectError("registry", "Requested port allocation end exceeds safe arithmetic");
   }
-  return allocation.basePort + size - 1;
+  const end = allocation.basePort + size - 1;
+  if (end > MAX_PORT) {
+    throw new AlprojectError("registry", `Requested port allocation exceeds port ${MAX_PORT}`);
+  }
+  return end;
 }
 
 function lowestFreeBase(

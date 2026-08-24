@@ -12,6 +12,7 @@ export const REGISTRY_FILENAME = "alproject-registry.json";
 
 const portsSchema = type({
   "+": "reject",
+  "allowOutsidePortRange?": "true",
   basePort: "number.integer >= 1",
   maxWorkspaces: "number.integer >= 1",
   portsPerWorkspace: "number.integer >= 1",
@@ -102,17 +103,11 @@ function portRange(
 ): PortRange {
   const ports = project.ports;
   if (ports === undefined) throw new Error("Port allocation is required");
-  for (const [field, value] of Object.entries(ports)) {
+  for (const field of ["basePort", "maxWorkspaces", "portsPerWorkspace"] as const) {
+    const value = ports[field];
     if (!Number.isSafeInteger(value)) {
       throw registryError(registryFile, `${field} must be a safe integer for ${project.path}`);
     }
-  }
-  const rootRange = config.root.portRange;
-  if (ports.basePort < rootRange.first || ports.basePort > rootRange.last) {
-    throw registryError(
-      registryFile,
-      `basePort for ${project.path} must be within ${rootRange.first}..${rootRange.last}`,
-    );
   }
 
   let end: number;
@@ -121,20 +116,39 @@ function portRange(
   } catch (error) {
     throw registryError(registryFile, errorMessage(error), error);
   }
+  if (ports.allowOutsidePortRange !== true) {
+    validateConfiguredPortRange(ports, project.path, config, registryFile, end);
+  }
+  return { end, path: project.path, start: ports.basePort };
+}
+
+function validateConfiguredPortRange(
+  ports: PortAllocation,
+  projectPath: string,
+  config: AlprojectConfig,
+  registryFile: string,
+  end: number,
+): void {
+  const rootRange = config.root.portRange;
+  if (ports.basePort < rootRange.first || ports.basePort > rootRange.last) {
+    throw registryError(
+      registryFile,
+      `basePort for ${projectPath} must be within ${rootRange.first}..${rootRange.last}`,
+    );
+  }
   if (end > rootRange.last) {
     throw registryError(
       registryFile,
-      `port allocation for ${project.path} exceeds configured range ending at ${rootRange.last}`,
+      `port allocation for ${projectPath} exceeds configured range ending at ${rootRange.last}`,
     );
   }
-  const availableRanges = availablePortRanges(config, project.path);
+  const availableRanges = availablePortRanges(config, projectPath);
   if (!availableRanges.some((range) => ports.basePort >= range.first && end <= range.last)) {
     throw registryError(
       registryFile,
-      `port allocation for ${project.path} is outside its available parent port range`,
+      `port allocation for ${projectPath} is outside its available parent port range`,
     );
   }
-  return { end, path: project.path, start: ports.basePort };
 }
 
 function validateNonOverlappingRanges(ranges: PortRange[], registryFile: string): void {

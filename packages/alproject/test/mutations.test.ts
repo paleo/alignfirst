@@ -75,6 +75,9 @@ describe("registerProject", () => {
     await expect(registerProject(fixture.config, project, { basePort: 8000 })).rejects.toThrow(
       /requires portsPerWorkspace and maxWorkspaces/,
     );
+    await expect(
+      registerProject(fixture.config, project, { allowOutsidePortRange: true }),
+    ).rejects.toThrow(/requires basePort/);
     expect(existsSync(registryPath(fixture.config))).toBe(false);
   });
 
@@ -110,6 +113,46 @@ describe("registerProject", () => {
     const before = readFileSync(registryPath(fixture.config), "utf8");
     await expect(registerProject(fixture.config, b, options)).rejects.toThrow(/not available/);
     expect(readFileSync(registryPath(fixture.config), "utf8")).toBe(before);
+  });
+
+  it("claims and persists an exact range outside configured ranges only with an override", async () => {
+    const fixture = makeFixture(8000, 8009);
+    fixture.config.projectParents[1].portRange = { first: 8000, last: 8009 };
+    const project = makeProject(fixture.parent, "external");
+    const request = { basePort: 9000, maxWorkspaces: 2, portsPerWorkspace: 5 };
+
+    await expect(registerProject(fixture.config, project, request)).rejects.toThrow(/outside/);
+    await expect(
+      registerProject(fixture.config, project, {
+        allowOutsidePortRange: true,
+        ...request,
+      }),
+    ).resolves.toEqual({
+      path: project,
+      ports: {
+        allowOutsidePortRange: true,
+        basePort: 9000,
+        endPort: 9009,
+        maxWorkspaces: 2,
+        portsPerWorkspace: 5,
+      },
+    });
+    expect(readRegistry(fixture.config).projects[0].ports?.allowOutsidePortRange).toBe(true);
+  });
+
+  it("keeps overlap checks for allocations outside configured ranges", async () => {
+    const fixture = makeFixture(8000, 8009);
+    const a = makeProject(fixture.root, "a");
+    const b = makeProject(fixture.root, "b");
+    const options = {
+      allowOutsidePortRange: true,
+      basePort: 9000,
+      maxWorkspaces: 1,
+      portsPerWorkspace: 10,
+    };
+
+    await registerProject(fixture.config, a, options);
+    await expect(registerProject(fixture.config, b, options)).rejects.toThrow(/overlaps/);
   });
 
   it("reserves dedicated parent ranges from the shared allocation pool", async () => {

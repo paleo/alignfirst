@@ -56,6 +56,23 @@ describe("readRegistry", () => {
     ["non-string project path", { projects: [{ path: 42 }], version: 1 }],
     ["non-object ports", { projects: [{ path: "/project", ports: 42 }], version: 1 }],
     [
+      "false port-range override",
+      {
+        projects: [
+          {
+            path: "/project",
+            ports: {
+              allowOutsidePortRange: false,
+              basePort: 8000,
+              maxWorkspaces: 1,
+              portsPerWorkspace: 1,
+            },
+          },
+        ],
+        version: 1,
+      },
+    ],
+    [
       "unknown port field",
       {
         projects: [
@@ -139,6 +156,50 @@ describe("readRegistry", () => {
     };
     writeRegistry(fixture, registry);
     expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("accepts a marked allocation outside configured ranges", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "external");
+    fixture.config.projectParents[0].portRange = { first: 8500, last: 8599 };
+    const registry = {
+      projects: [
+        {
+          path: project,
+          ports: {
+            allowOutsidePortRange: true,
+            basePort: 9001,
+            maxWorkspaces: 1,
+            portsPerWorkspace: 10,
+          },
+        },
+      ],
+      version: 1,
+    };
+    writeRegistry(fixture, registry);
+
+    expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("rejects an override allocation beyond the TCP port range", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "external");
+    writeRegistry(fixture, {
+      projects: [
+        {
+          path: project,
+          ports: {
+            allowOutsidePortRange: true,
+            basePort: 65_535,
+            maxWorkspaces: 1,
+            portsPerWorkspace: 2,
+          },
+        },
+      ],
+      version: 1,
+    });
+
+    expect(() => readRegistry(fixture.config)).toThrow(/exceeds port 65535/);
   });
 
   it("rejects an allocation outside its parent-specific port range", () => {
