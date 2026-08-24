@@ -111,6 +111,12 @@ export interface WorkspaceConfig {
    */
   preSetup?: (ctx: PreSetupContext) => Promise<void> | void;
   /**
+   * Setup profiles selectable with `setup --profile <name>`; the key is the name. The kernel checks
+   * the name and lists the profiles in `--help` and `--guide`. The selection is never stored: linked
+   * worktrees inherit the rewritten main files through their `mainWorktree` sources.
+   */
+  setupProfiles?: Record<string, SetupProfile>;
+  /**
    * MUST be idempotent. After a failure, the user re-runs `workspace setup` from inside
    * the worktree — this callback will be invoked again with the same context. Re-runs must not
    * error on pre-existing state (created directories, started containers, ran migrations,
@@ -147,14 +153,48 @@ export interface WorkspaceConfig {
   worktreeDirName?: WorktreeDirNameFn;
 }
 
-/** Context passed to {@link WorkspaceConfig.preSetup}. */
-export interface PreSetupContext {
+/** Shared core of the setup-side callback contexts. */
+export interface SetupContextBase {
+  /** Workspace name: the worktree directory basename. */
+  name: string;
   currentWorktree: string;
   mainWorktree: string;
-  /** `true` when running on the main worktree (i.e. `workspace setup` from the main checkout). */
+  /** `true` when operating on the main worktree (i.e. `workspace setup` from the main checkout). */
   isMainWorktree: boolean;
+}
+
+/** Context passed to {@link WorkspaceConfig.preSetup}. */
+export interface PreSetupContext extends SetupContextBase {
   /** Mirrors `--force`. Hooks may use it to overwrite previously bootstrapped files. */
   force: boolean;
+  /**
+   * The `--profile <name>` selection, set only during `setup --profile`. This is where a profile
+   * checks its external requirements (an environment variable, a reachable host): seeding has not
+   * written any file yet.
+   */
+  profile?: string;
+  /** Writes to stdout and the setup log. */
+  log: (msg: string) => void;
+}
+
+/** One entry of {@link WorkspaceConfig.setupProfiles}. */
+export interface SetupProfile {
+  /** One line, shown in `--help` and `--guide`. */
+  description: string;
+  /**
+   * Rewrites the main worktree's ignored files for this environment. Runs only on the main worktree,
+   * after `gitignoredFiles` are seeded; never forwarded to the finalize child.
+   *
+   * Contract: check every computed change before the first write; be idempotent — reapplying the
+   * same profile produces the same files; leave unrelated files untouched.
+   */
+  apply: (ctx: ApplyProfileContext) => Promise<void> | void;
+}
+
+/** Context passed to {@link SetupProfile.apply}. */
+export interface ApplyProfileContext extends SetupContextBase {
+  /** Empty in portless mode. */
+  ports: Record<string, number>;
   /** Writes to stdout and the setup log. */
   log: (msg: string) => void;
 }
@@ -164,14 +204,11 @@ export interface FinalizeResult {
   purgeData: unknown;
 }
 
-/** Context passed to {@link WorkspaceConfig.finalizeWorkspace}. */
-export interface FinalizeContext {
-  currentWorktree: string;
-  mainWorktree: string;
-  /** `true` when finalizing the main worktree. Gate "copy from main" steps with `!isMainWorktree`. */
-  isMainWorktree: boolean;
-  /** Workspace name: the worktree directory basename. */
-  name: string;
+/**
+ * Context passed to {@link WorkspaceConfig.finalizeWorkspace}. Gate "copy from main" steps with
+ * `!isMainWorktree`.
+ */
+export interface FinalizeContext extends SetupContextBase {
   /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
   branch: string;
   /** Empty in portless mode. */
@@ -190,17 +227,11 @@ export interface FinalizeContext {
  *
  * Called after worktree creation; the dev-server is not running yet.
  */
-export interface SummaryContext {
-  /** Workspace name: the worktree directory basename. */
-  name: string;
+export interface SummaryContext extends SetupContextBase {
   /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
   branch: string;
   /** Empty in portless mode. */
   ports: Record<string, number>;
-  currentWorktree: string;
-  mainWorktree: string;
-  /** `true` when the summary describes the main worktree. */
-  isMainWorktree: boolean;
   /** Finalize status. `"pending"` until `finalizeWorkspace` succeeds, then `"ready"`. */
   status: WorkspaceStatus;
 }
@@ -257,15 +288,9 @@ export interface ContentSource {
 }
 
 /** Context passed to functional content sources and {@link GitignoredFileEntry.patch}. */
-export interface PatchContext {
-  /** Workspace name: the worktree directory basename. */
-  name: string;
+export interface PatchContext extends SetupContextBase {
   /** Empty in portless mode. */
   ports: Record<string, number>;
-  mainWorktree: string;
-  currentWorktree: string;
-  /** `true` when seeding the main worktree. */
-  isMainWorktree: boolean;
 }
 
 /** Per-invocation state shared by every command flow. */
@@ -285,14 +310,14 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(`Warning: ${err.message}`);
-      printWorkspaceHelp();
+      printWorkspaceHelp(profileDescriptions(config));
       process.exit(1);
     }
     throw err;
   }
 
   if (command.kind === "help") {
-    printWorkspaceHelp();
+    printWorkspaceHelp(profileDescriptions(config));
     return;
   }
 
@@ -307,6 +332,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       sharedDirs: config.sharedDirs,
       hasDevServer: config.devServerScript !== undefined,
       hasPorts: config.ports !== undefined,
+      profiles: profileDescriptions(config),
     });
     return;
   }
@@ -385,6 +411,16 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 }
 
+/** The declared setup profiles as name → description; empty when the config declares none. */
+function profileDescriptions(config: WorkspaceConfig): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(config.setupProfiles ?? {}).map(([name, profile]) => [
+      name,
+      profile.description,
+    ]),
+  );
+}
+
 /** Validates the `ports` group eagerly, on every command, so a broken config fails fast. */
 function resolveConfigPorts(config: WorkspaceConfig): ResolvedPortsConfig | undefined {
   if (config.ports === undefined) return;
@@ -431,6 +467,7 @@ async function runSetup(
   kernel: Kernel,
 ): Promise<{ name: string; worktree: string }> {
   const { config, registryDir } = kernel;
+  const profile = selectProfile(command, ctx, config);
   const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
   refuseIfFinalizePending(setupCtx, registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
@@ -443,81 +480,153 @@ async function runSetup(
     force: command.force,
   });
   const ports = kernel.ports ? portsForIndex(kernel.ports, portIndex ?? 0) : {};
+  const log = openSetupLog(setupCtx.currentWorktree, config.runtimeDir, run.verbose);
 
-  const logPath = setupLogPath(setupCtx.currentWorktree, config.runtimeDir);
-  mkdirSync(dirname(logPath), { recursive: true });
-  // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
-  // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
-  writeFileSync(logPath, "");
-  rmSync(setupProgressPath(setupCtx.currentWorktree, config.runtimeDir), { force: true });
-  // Opened "a" so the same fd can be inherited by the detached finalize child below.
-  const logFd = openSync(logPath, "a");
-  const teeLog = (message: string): void => {
-    console.log(message);
-    appendFileSync(logFd, `${message}\n`);
-  };
-  const verboseLog = (msg: string): void => {
-    if (run.verbose) teeLog(msg);
-    else appendFileSync(logFd, `${msg}\n`);
-  };
-
-  if (kernel.ports) {
-    verboseLog(
-      `Using ports (${Object.entries(ports)
-        .map(([portName, port]) => `${portName}: ${port}`)
-        .join(", ")})`,
-    );
+  // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
+  try {
+    await prepareWorktree({ command, setupCtx, kernel, name, ports, profile, log });
+    log.tee(config.formatSummary({ ...setupCtx, name, branch, ports, status }));
+  } catch (err) {
+    const message = (err as Error).message;
+    log.append(`FAILED: ${message}`);
+    closeSync(log.fd);
+    markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
+    throw err;
   }
 
-  if (config.preSetup) {
-    await config.preSetup({
-      currentWorktree: setupCtx.currentWorktree,
-      mainWorktree: setupCtx.mainWorktree,
-      isMainWorktree: setupCtx.isMainWorktree,
-      force: command.force,
-      log: teeLog,
-    });
-  }
-
-  linkSharedDirectories(setupCtx, config.sharedDirs, verboseLog);
-  linkWorkspaceRegistry(setupCtx, config.runtimeDir, verboseLog);
-  await seedGitignoredFiles(
-    setupCtx,
-    config.gitignoredFiles,
-    name,
-    ports,
-    command.force,
-    verboseLog,
-  );
-
-  teeLog(
-    config.formatSummary({
-      name,
-      branch,
-      ports,
-      currentWorktree: setupCtx.currentWorktree,
-      mainWorktree: setupCtx.mainWorktree,
-      isMainWorktree: setupCtx.isMainWorktree,
-      status,
-    }),
-  );
-
-  teeLog(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch}`);
+  log.tee(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch}`);
   if (command.detached && status !== "ready") {
-    teeLog(`Setup continuing in background. Tail: ${logPath}`);
-    teeLog(`Join it with \`${wsCmd("wait")}\`.`);
+    log.tee(`Setup continuing in background. Tail: ${log.path}`);
+    log.tee(`Join it with \`${wsCmd("wait")}\`.`);
   }
 
   const finalizeArgs = [config.workspaceScript, "__finalize"];
   if (command.force) finalizeArgs.push("--force");
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
-    stdio: ["ignore", logFd, logFd],
+    stdio: ["ignore", log.fd, log.fd],
     cwd: setupCtx.currentWorktree,
   });
   child.unref();
-  closeSync(logFd);
+  closeSync(log.fd);
   return { name, worktree: setupCtx.currentWorktree };
+}
+
+/** The `--profile` selection, checked against the config and the worktree before any write. */
+interface SelectedProfile {
+  profile: string;
+  apply: (ctx: ApplyProfileContext) => Promise<void> | void;
+}
+
+function selectProfile(
+  command: SetupCommand,
+  ctx: WorktreeContext,
+  config: WorkspaceConfig,
+): SelectedProfile | undefined {
+  if (command.profile === undefined) return;
+  const profiles = config.setupProfiles ?? {};
+  const names = Object.keys(profiles);
+  if (names.length === 0) {
+    throw new WorkspaceError(
+      "This project declares no setup profile (no `setupProfiles` in the workspace config).",
+    );
+  }
+  const selected: SetupProfile | undefined = profiles[command.profile];
+  if (selected === undefined) {
+    throw new WorkspaceError(
+      `Unknown profile "${command.profile}". Declared profiles: ${names.join(", ")}.`,
+    );
+  }
+  if (!ctx.isMainWorktree) {
+    throw new WorkspaceError(
+      `\`--profile\` applies only to the main worktree. Run it from ${ctx.mainWorktree}.`,
+    );
+  }
+  return { profile: command.profile, apply: selected.apply };
+}
+
+interface SetupLog {
+  fd: number;
+  path: string;
+  /** Writes to stdout and the log. */
+  tee: (msg: string) => void;
+  /** Writes to the log only. */
+  append: (msg: string) => void;
+  /** `tee` with `--verbose`, `append` otherwise. */
+  verbose: (msg: string) => void;
+}
+
+function openSetupLog(worktree: string, runtimeDir: string, verbose: boolean): SetupLog {
+  const path = setupLogPath(worktree, runtimeDir);
+  mkdirSync(dirname(path), { recursive: true });
+  // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
+  // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
+  writeFileSync(path, "");
+  rmSync(setupProgressPath(worktree, runtimeDir), { force: true });
+  // Opened "a" so the same fd can be inherited by the detached finalize child.
+  const fd = openSync(path, "a");
+  const append = (msg: string): void => {
+    appendFileSync(fd, `${msg}\n`);
+  };
+  const tee = (msg: string): void => {
+    console.log(msg);
+    append(msg);
+  };
+  return { fd, path, tee, append, verbose: verbose ? tee : append };
+}
+
+interface PrepareWorktreeInput {
+  command: SetupCommand;
+  setupCtx: WorktreeContext;
+  kernel: Kernel;
+  name: string;
+  ports: Record<string, number>;
+  profile?: SelectedProfile;
+  log: SetupLog;
+}
+
+/** The synchronous setup phase: hooks and file writes between registration and the summary. */
+async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
+  const { command, setupCtx, kernel, name, ports, profile, log } = input;
+  const { config } = kernel;
+  if (kernel.ports) {
+    log.verbose(
+      `Using ports (${Object.entries(ports)
+        .map(([portName, port]) => `${portName}: ${port}`)
+        .join(", ")})`,
+    );
+  }
+  if (config.preSetup) {
+    await config.preSetup({
+      ...setupCtx,
+      name,
+      force: command.force,
+      profile: command.profile,
+      log: log.tee,
+    });
+  }
+  linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
+  linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
+  await seedGitignoredFiles(
+    setupCtx,
+    config.gitignoredFiles,
+    name,
+    ports,
+    command.force,
+    log.verbose,
+  );
+  if (profile) await applySelectedProfile(profile, { ...setupCtx, name, ports, log: log.tee });
+}
+
+async function applySelectedProfile(
+  selected: SelectedProfile,
+  ctx: ApplyProfileContext,
+): Promise<void> {
+  try {
+    await selected.apply(ctx);
+  } catch (err) {
+    throw new WorkspaceError(`Profile "${selected.profile}": ${(err as Error).message}`);
+  }
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   lastLines,
   patchEnvFile,
 } from "../src/helpers.js";
+import { WorkspaceError } from "../src/errors.js";
 
 describe("patchEnvFile", () => {
   it("replaces an existing line in place", () => {
@@ -227,5 +228,20 @@ describe("copyAndPatchFile", () => {
     );
     expect(existsSync(join(cur, "out.txt"))).toBe(false);
     expect(logs.some((l) => l.includes("optional"))).toBe(true);
+  });
+
+  it("throws a WorkspaceError on a missing required path source", () => {
+    const cur = tmp();
+    expect(() =>
+      copyAndPatchFile(
+        { currentWorktree: cur, log: () => {} },
+        "out.txt",
+        { path: join(cur, "nope.txt") },
+        (c) => c,
+        "out",
+        false,
+      ),
+    ).toThrow(WorkspaceError);
+    expect(existsSync(join(cur, "out.txt"))).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
 
 export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
@@ -109,11 +110,10 @@ export function copyAndPatchFile(
   } else {
     if (!existsSync(source.path)) {
       if (!optional) {
-        console.error(
-          `Error: config source ${source.path} not found. Bootstrap it first ` +
+        throw new WorkspaceError(
+          `config source ${source.path} not found. Bootstrap it first ` +
             `(\`${wsCmd("setup")}\`, or commit the template), or mark the entry as optional.`,
         );
-        process.exit(1);
       }
       ctx.log(`Warning: source ${source.path} not found, skipping (optional).`);
       return;
