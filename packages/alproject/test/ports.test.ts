@@ -46,6 +46,12 @@ describe("project port allocation", () => {
     ).toBe(9000);
   });
 
+  it("does not allocate beyond the end of the current available range", () => {
+    expect(() =>
+      allocateProjectPorts([allocated("/later", 9500, 100)], request(500), [range(8000, 8099)]),
+    ).toThrow(/No contiguous block/);
+  });
+
   it("claims an exact available range and rejects conflicts or excluded ranges", () => {
     const claim = { basePort: 8020, ...request(10) };
     expect(claimProjectPorts([allocated("/a", 8000, 10)], claim, [range(8000, 8099)])).toEqual(

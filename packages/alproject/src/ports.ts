@@ -84,6 +84,7 @@ function lowestFreeBase(
   let candidate = firstPort;
   for (const range of ranges.toSorted((left, right) => left.start - right.start)) {
     if (range.end < candidate) continue;
+    if (range.start > lastPort) break;
     if (fitsBefore(candidate, size, range.start - 1)) return candidate;
     candidate = range.end + 1;
   }

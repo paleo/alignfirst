@@ -76,6 +76,17 @@ describe("getProjectStatus", () => {
     );
   });
 
+  it("does not treat a hostless URL scheme as an SCP host", () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    execGit(project, "remote", "add", "origin", "file:///srv/project.git");
+    execGit(project, "remote", "add", "backup", "https://gitlab.com/team/project.git");
+
+    expect(getProjectStatus(fixture.config, emptyRegistry(), project).remoteHost).toBe(
+      "gitlab.com",
+    );
+  });
+
   it("reads a remote whose name starts with a hyphen", () => {
     const fixture = makeFixture();
     const project = makeRepository(fixture.root, "project");
@@ -109,6 +120,35 @@ describe("getProjectStatus", () => {
       status: "missing",
       worktrees: [],
     });
+  });
+
+  it("inspects a registered project whose parent is no longer configured", () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    const configuredParent = join(fixture.root, "other-parent");
+    mkdirSync(configuredParent);
+    fixture.config.projectParents = [{ path: configuredParent }];
+    execGit(project, "remote", "add", "origin", "https://github.com/team/project.git");
+    const registry: Registry = { projects: [{ path: project }], version: 1 };
+
+    expect(getProjectStatus(fixture.config, registry, project)).toMatchObject({
+      path: project,
+      remoteHost: "github.com",
+      status: "registered",
+      worktrees: [{ branch: "main", name: "project", path: project }],
+    });
+  });
+
+  it("rejects an unregistered project outside configured parents", () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    const configuredParent = join(fixture.root, "other-parent");
+    mkdirSync(configuredParent);
+    fixture.config.projectParents = [{ path: configuredParent }];
+
+    expect(() => getProjectStatus(fixture.config, emptyRegistry(), project)).toThrow(
+      /neither registered nor discovered/,
+    );
   });
 
   it("rejects unknown and linked-worktree paths with main-worktree guidance", () => {

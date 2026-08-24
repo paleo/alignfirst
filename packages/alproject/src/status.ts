@@ -1,11 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { basename } from "node:path";
+import { lstatSync } from "node:fs";
+import { basename, dirname } from "node:path";
 
 import type { AlprojectConfig } from "./config.js";
-import { buildProjectList, type ListedPortAllocation, type ProjectStatus } from "./discovery.js";
-import { AlprojectError, errorMessage } from "./errors.js";
+import {
+  type ListedPortAllocation,
+  mainWorktreeGitDirectory,
+  type ProjectStatus,
+} from "./discovery.js";
+import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { canonicalizePath, resolveProjectPath } from "./paths.js";
-import type { Registry } from "./registry.js";
+import { allocationEnd } from "./ports.js";
+import type { PortAllocation, Registry } from "./registry.js";
+
+const URL_WITH_AUTHORITY = /^[A-Za-z][A-Za-z\d+.-]*:\/\//u;
 
 export interface ProjectDetails {
   name: string;
@@ -28,33 +36,61 @@ export function getProjectStatus(
   inputPath: string,
 ): ProjectDetails {
   const path = resolveProjectPath(inputPath, config.root.path);
-  const project = buildProjectList(config, registry).projects.find(
-    (candidate) => candidate.path === path,
-  );
-  if (project === undefined) {
-    throw new AlprojectError(
-      "filesystem",
-      `Project is neither registered nor discovered: ${path}. Use the canonical main-worktree path.`,
-    );
-  }
-  if (project.status === "missing") {
+  const registration = registry.projects.find((candidate) => candidate.path === path);
+  if (registration !== undefined && isMissingPath(path)) {
     return {
-      name: project.name,
-      path: project.path,
-      ports: project.ports ?? null,
+      name: basename(path),
+      path,
+      ports: listedPorts(registration.ports),
       remoteHost: null,
-      status: project.status,
+      status: "missing",
       worktrees: [],
     };
   }
+  if (mainWorktreeGitDirectory(path) === undefined) {
+    throw projectLookupError(path, registration !== undefined);
+  }
+  if (
+    registration === undefined &&
+    !config.projectParents.some((parent) => parent.path === dirname(path))
+  ) {
+    throw projectLookupError(path, false);
+  }
   return {
-    name: project.name,
-    path: project.path,
-    ports: project.ports ?? null,
-    remoteHost: readRemoteHost(project.path),
-    status: project.status,
-    worktrees: readWorktrees(project.path),
+    name: basename(path),
+    path,
+    ports: listedPorts(registration?.ports),
+    remoteHost: readRemoteHost(path),
+    status: registration === undefined ? "unregistered" : "registered",
+    worktrees: readWorktrees(path),
   };
+}
+
+function isMissingPath(path: string): boolean {
+  try {
+    lstatSync(path);
+    return false;
+  } catch (error) {
+    if (isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) return true;
+    throw new AlprojectError(
+      "filesystem",
+      `Cannot inspect project path ${path}: ${errorMessage(error)}`,
+      {
+        cause: error,
+      },
+    );
+  }
+}
+
+function listedPorts(ports: PortAllocation | undefined): ListedPortAllocation | null {
+  return ports === undefined ? null : { ...ports, endPort: allocationEnd(ports) };
+}
+
+function projectLookupError(path: string, registered: boolean): AlprojectError {
+  const detail = registered
+    ? `Registered project is not a Git main worktree: ${path}. Use the canonical main-worktree path.`
+    : `Project is neither registered nor discovered: ${path}. Use the canonical main-worktree path.`;
+  return new AlprojectError("filesystem", detail);
 }
 
 function readRemoteHost(projectPath: string): string | null {
@@ -74,7 +110,7 @@ function readRemoteHost(projectPath: string): string | null {
 }
 
 function remoteHost(remoteUrl: string): string | null {
-  return urlRemoteHost(remoteUrl) ?? scpRemoteHost(remoteUrl);
+  return URL_WITH_AUTHORITY.test(remoteUrl) ? urlRemoteHost(remoteUrl) : scpRemoteHost(remoteUrl);
 }
 
 function urlRemoteHost(remoteUrl: string): string | null {
