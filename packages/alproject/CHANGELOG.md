@@ -1,5 +1,11 @@
 # @paleo/alproject
 
+## 1.1.0
+
+### Minor Changes
+
+- ecf4cee: Added explicit base-port allocations outside configured port ranges.
+
 ## 1.0.0
 
 ### Major Changes
