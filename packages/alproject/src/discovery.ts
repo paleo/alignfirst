@@ -86,9 +86,12 @@ export function buildProjectList(
 export function discoverProjects(
   config: Pick<AlprojectConfig, "projectParents">,
 ): ProjectDiscovery {
-  const candidates = config.projectParents.toSorted().flatMap(readDirectoryCandidates);
+  const candidates = config.projectParents
+    .map((parent) => parent.path)
+    .toSorted()
+    .flatMap(readDirectoryCandidates);
   const mainCandidates = candidates.flatMap((candidate) => {
-    const gitDirectory = existingGitDirectory(candidate.path);
+    const gitDirectory = mainWorktreeGitDirectory(candidate.path);
     return gitDirectory === undefined ? [] : [{ ...candidate, gitDirectory }];
   });
   const mainsByGitDirectory = new Map(
@@ -133,7 +136,7 @@ function readDirectoryCandidate(parent: string, name: string): DirectoryCandidat
   }
 }
 
-function existingGitDirectory(projectPath: string): string | undefined {
+export function mainWorktreeGitDirectory(projectPath: string): string | undefined {
   const gitPath = join(projectPath, ".git");
   try {
     if (!lstatSync(gitPath).isDirectory()) return;

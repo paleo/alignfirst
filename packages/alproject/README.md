@@ -14,22 +14,42 @@ Create `~/.alproject.json` before running commands:
 
 ```json
 {
-  "root": "~/projects",
-  "projectParents": ["~/projects", "~/work/projects"],
-  "firstPort": 8000,
-  "lastPort": 9999
+  "root": {
+    "path": "~/projects",
+    "portRange": {
+      "first": 8000,
+      "last": 9999
+    }
+  },
+  "projectParents": [
+    {
+      "path": "~/projects"
+    },
+    {
+      "path": "~/work/projects",
+      "portRange": {
+        "first": 9000,
+        "last": 9999
+      }
+    }
+  ]
 }
 ```
 
-`root` is the base for relative command paths and stores `alproject-registry.json`. `projectParents` lists the directories whose direct children may be discovered and registered. It defaults to `[root]`. All configured directories must exist. Alproject reads this configuration but never changes it.
+`root.path` is the base for relative command paths and stores `alproject-registry.json`. `root.portRange` is the inclusive global allocation range. `projectParents` lists the directories whose direct children may be discovered and registered. It defaults to the root path. All configured directories must exist.
+
+An optional parent `portRange` reserves part of the global range for projects under that parent. Parent ranges must be inside the global range and cannot overlap. Projects under parents without a dedicated range share the unreserved ports.
 
 ## Commands
 
 ```text
 alproject list [--json]
-alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
+alproject status <path> [--json]
+alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]]
 alproject unregister <path>
 ```
+
+`status` reports one discovered or registered project. It includes the canonical main path, registration and filesystem status, optional port allocation, preferred remote host, and every Git worktree with its path and branch. Relative paths resolve from `root`; absolute paths are accepted directly. Pass the main-worktree path.
 
 Run `alproject --guide` for the agent-facing operating guide. When `<root>/alproject-guide.md` exists, the command appends it verbatim after the generic guide — use it to describe how the project parents are organized. An unreadable custom guide is an error.
 

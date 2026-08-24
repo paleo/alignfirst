@@ -203,10 +203,10 @@ function makeFixture(parentOrder = ["parentA", "parentB"]): Fixture {
   return {
     config: {
       configPath: join(fixtureDir, ".alproject.json"),
-      firstPort: 8000,
-      lastPort: 9000,
-      projectParents: parentOrder.map((name) => parents[name as keyof typeof parents]),
-      root,
+      projectParents: parentOrder.map((name) => ({
+        path: parents[name as keyof typeof parents],
+      })),
+      root: { path: root, portRange: { first: 8000, last: 9000 } },
     },
     parentA,
     parentB,

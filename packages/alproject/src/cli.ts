@@ -8,6 +8,7 @@ import { errorMessage } from "./errors.js";
 import { renderGuide } from "./guide.js";
 import { registerProject, unregisterProject } from "./mutations.js";
 import { readRegistry } from "./registry.js";
+import { getProjectStatus, type ProjectDetails } from "./status.js";
 
 const statusLabels: Record<ProjectStatus, string> = {
   missing: "registered but missing from filesystem",
@@ -28,6 +29,7 @@ export interface Output {
 }
 
 export interface AlprojectArgs {
+  basePort?: number;
   command?: string;
   guide: boolean;
   help: boolean;
@@ -36,6 +38,12 @@ export interface AlprojectArgs {
   path?: string;
   portsPerWorkspace?: number;
   version: boolean;
+}
+
+interface PortOptionValues {
+  "base-port"?: string;
+  "max-workspaces"?: string;
+  "ports-per-workspace"?: string;
 }
 
 export async function main(options: MainOptions = {}): Promise<number> {
@@ -65,7 +73,7 @@ export async function main(options: MainOptions = {}): Promise<number> {
   try {
     if (args.guide) {
       const config = readConfigIfPresent(home);
-      stdout.write(ensureTrailingNewline(renderGuide(config?.root)));
+      stdout.write(ensureTrailingNewline(renderGuide(config?.root.path)));
       return 0;
     }
     if (args.command === undefined) {
@@ -78,8 +86,14 @@ export async function main(options: MainOptions = {}): Promise<number> {
       stdout.write(args.json ? renderProjectListJson(list) : renderProjectList(list));
       return 0;
     }
+    if (args.command === "status" && args.path !== undefined) {
+      const status = getProjectStatus(config, readRegistry(config), args.path);
+      stdout.write(args.json ? renderProjectStatusJson(status) : renderProjectStatus(status));
+      return 0;
+    }
     if (args.command === "register" && args.path !== undefined) {
       const result = await registerProject(config, args.path, {
+        basePort: args.basePort,
         maxWorkspaces: args.maxWorkspaces,
         portsPerWorkspace: args.portsPerWorkspace,
       });
@@ -103,6 +117,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     allowPositionals: true,
     args: argv.slice(2),
     options: {
+      "base-port": { type: "string" },
       guide: { default: false, type: "boolean" },
       help: { default: false, short: "h", type: "boolean" },
       json: { default: false, type: "boolean" },
@@ -122,11 +137,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   }
   if (selectedModes.length === 1) {
     if (positionals.length > 0) throw new Error(`${selectedModes[0]} does not accept a command`);
-    if (
-      values.json === true ||
-      values["ports-per-workspace"] !== undefined ||
-      values["max-workspaces"] !== undefined
-    ) {
+    if (values.json === true || hasPortOptions(values)) {
       throw new Error(`${selectedModes[0]} does not accept command options`);
     }
     return {
@@ -139,8 +150,8 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
 
   const [command, path, ...extraPaths] = positionals;
   if (command === undefined) {
-    if (values.json === true) throw new Error("--json is valid only with list");
-    if (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined) {
+    if (values.json === true) throw new Error("--json is valid only with list or status");
+    if (hasPortOptions(values)) {
       throw new Error("Port options are valid only with register");
     }
     return { guide: false, help: false, json: false, version: false };
@@ -148,18 +159,23 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   if (!isCommand(command)) throw new Error(`Unknown command: ${command}`);
   validateCommandPaths(command, path, extraPaths);
   validatePortOptionPlacement(command, values);
-  if (values.json === true && command !== "list") {
-    throw new Error("--json is valid only with list");
+  if (values.json === true && command !== "list" && command !== "status") {
+    throw new Error("--json is valid only with list or status");
   }
   const portsPerWorkspace = parsePositiveInteger(
     "--ports-per-workspace",
     values["ports-per-workspace"],
   );
   const maxWorkspaces = parsePositiveInteger("--max-workspaces", values["max-workspaces"]);
+  const basePort = parsePositiveInteger("--base-port", values["base-port"]);
   if ((portsPerWorkspace === undefined) !== (maxWorkspaces === undefined)) {
     throw new Error("--ports-per-workspace and --max-workspaces must be provided together");
   }
+  if (basePort !== undefined && portsPerWorkspace === undefined) {
+    throw new Error("--base-port requires --ports-per-workspace and --max-workspaces");
+  }
   return {
+    basePort,
     command,
     guide: false,
     help: false,
@@ -171,8 +187,16 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   };
 }
 
-function isCommand(value: string): value is "list" | "register" | "unregister" {
-  return value === "list" || value === "register" || value === "unregister";
+function hasPortOptions(values: PortOptionValues): boolean {
+  return (
+    values["base-port"] !== undefined ||
+    values["ports-per-workspace"] !== undefined ||
+    values["max-workspaces"] !== undefined
+  );
+}
+
+function isCommand(value: string): value is "list" | "register" | "status" | "unregister" {
+  return value === "list" || value === "register" || value === "status" || value === "unregister";
 }
 
 function validateCommandPaths(
@@ -188,14 +212,8 @@ function validateCommandPaths(
   if (extraPaths.length > 0) throw new Error(`${command} requires exactly one path`);
 }
 
-function validatePortOptionPlacement(
-  command: string,
-  values: { "max-workspaces"?: string; "ports-per-workspace"?: string },
-): void {
-  if (
-    command !== "register" &&
-    (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined)
-  ) {
+function validatePortOptionPlacement(command: string, values: PortOptionValues): void {
+  if (command !== "register" && hasPortOptions(values)) {
     throw new Error("Port options are valid only with register");
   }
 }
@@ -225,12 +243,14 @@ function renderHelp(): string {
 
 Usage:
   alproject list [--json]
-  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
+  alproject status <path> [--json]
+  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]]
   alproject unregister <path>
 
 Options:
   --guide              Print the complete guide
   -h, --help           Print this help
+  --json               Print structured list or status output
   -v, --version        Print the alproject version
 
 Run \`alproject --guide\` for configuration and operational procedures.
@@ -272,6 +292,40 @@ export function renderProjectList(list: ProjectList): string {
 
 export function renderProjectListJson(list: ProjectList): string {
   return `${escapeAdditionalJsonCharacters(JSON.stringify(list, undefined, 2))}\n`;
+}
+
+function renderProjectStatus(status: ProjectDetails): string {
+  const lines = [
+    "Project:",
+    `  Name: ${renderOutputValue(status.name)}`,
+    `  Main path: ${renderOutputValue(status.path)}`,
+    `  Status: ${statusLabels[status.status]}`,
+    `  Remote host: ${status.remoteHost === null ? "(none)" : renderOutputValue(status.remoteHost)}`,
+  ];
+  if (status.ports === null) {
+    lines.push("  Port allocation: (none)");
+  } else {
+    lines.push(
+      `  Base port: ${status.ports.basePort}`,
+      `  Port range: ${status.ports.basePort}..${status.ports.endPort}`,
+      `  Ports per workspace: ${status.ports.portsPerWorkspace}`,
+      `  Maximum workspaces: ${status.ports.maxWorkspaces}`,
+    );
+  }
+  lines.push("  Worktrees:");
+  if (status.worktrees.length === 0) lines.push("    (none)");
+  for (const worktree of status.worktrees) {
+    lines.push(
+      `  - Name: ${renderOutputValue(worktree.name)}`,
+      `    Path: ${renderOutputValue(worktree.path)}`,
+      `    Branch: ${worktree.branch === null ? "(detached)" : renderOutputValue(worktree.branch)}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function renderProjectStatusJson(status: ProjectDetails): string {
+  return `${escapeAdditionalJsonCharacters(JSON.stringify(status, undefined, 2))}\n`;
 }
 
 function renderRegistration(result: {

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -141,6 +141,37 @@ describe("readRegistry", () => {
     expect(readRegistry(fixture.config)).toEqual(registry);
   });
 
+  it("rejects an allocation outside its parent-specific port range", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "project");
+    fixture.config.projectParents[0].portRange = { first: 8500, last: 8599 };
+    writeRegistry(fixture, {
+      projects: [
+        { path: project, ports: { basePort: 8400, maxWorkspaces: 1, portsPerWorkspace: 10 } },
+      ],
+      version: 1,
+    });
+
+    expect(() => readRegistry(fixture.config)).toThrow(/outside its available parent port range/);
+  });
+
+  it("rejects an existing shared allocation inside another parent's reserved range", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "project");
+    fixture.config.projectParents.push({
+      path: join(dirname(fixture.root), "dedicated"),
+      portRange: { first: 8500, last: 8599 },
+    });
+    writeRegistry(fixture, {
+      projects: [
+        { path: project, ports: { basePort: 8500, maxWorkspaces: 1, portsPerWorkspace: 10 } },
+      ],
+      version: 1,
+    });
+
+    expect(() => readRegistry(fixture.config)).toThrow(/outside its available parent port range/);
+  });
+
   it("rejects overlapping and duplicate port reservations", () => {
     const fixture = makeFixture();
     const projectA = makeProject(fixture, "a");
@@ -189,10 +220,8 @@ function makeFixture(): Fixture {
   return {
     config: {
       configPath: join(fixtureDir, ".alproject.json"),
-      firstPort: 8000,
-      lastPort: 9000,
-      projectParents: [root],
-      root,
+      projectParents: [{ path: root }],
+      root: { path: root, portRange: { first: 8000, last: 9000 } },
     },
     root,
   };

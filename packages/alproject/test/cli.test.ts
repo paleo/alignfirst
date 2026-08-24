@@ -18,6 +18,12 @@ describe("parseAlprojectArgs", () => {
   it("parses every command and global mode", () => {
     expect(parse(["list"])).toMatchObject({ command: "list" });
     expect(parse(["list", "--json"])).toMatchObject({ command: "list", json: true });
+    expect(parse(["status", "project"])).toMatchObject({ command: "status", path: "project" });
+    expect(parse(["status", "project", "--json"])).toMatchObject({
+      command: "status",
+      json: true,
+      path: "project",
+    });
     expect(parse(["register", "project"])).toMatchObject({
       command: "register",
       path: "project",
@@ -42,6 +48,8 @@ describe("parseAlprojectArgs", () => {
     expect(() => parse(["list", "project"])).toThrow("list does not accept a path");
     expect(() => parse(["register"])).toThrow("register requires exactly one path");
     expect(() => parse(["register", "one", "two"])).toThrow("register requires exactly one path");
+    expect(() => parse(["status"])).toThrow("status requires exactly one path");
+    expect(() => parse(["status", "one", "two"])).toThrow("status requires exactly one path");
     expect(() => parse(["unregister"])).toThrow("unregister requires exactly one path");
     expect(() => parse(["unregister", "one", "two"])).toThrow(
       "unregister requires exactly one path",
@@ -55,6 +63,9 @@ describe("parseAlprojectArgs", () => {
     expect(() => parse(["register", "project", "--ports-per-workspace", "2"])).toThrow(
       /provided together/,
     );
+    expect(() => parse(["register", "project", "--base-port", "8000"])).toThrow(
+      /requires --ports-per-workspace and --max-workspaces/,
+    );
     expect(() =>
       parse(["register", "project", "--ports-per-workspace", "0", "--max-workspaces", "2"]),
     ).toThrow(/positive integer/);
@@ -62,8 +73,17 @@ describe("parseAlprojectArgs", () => {
       /only with register/,
     );
     expect(
-      parse(["register", "project", "--ports-per-workspace", "5", "--max-workspaces", "3"]),
-    ).toMatchObject({ maxWorkspaces: 3, portsPerWorkspace: 5 });
+      parse([
+        "register",
+        "project",
+        "--ports-per-workspace",
+        "5",
+        "--max-workspaces",
+        "3",
+        "--base-port",
+        "8100",
+      ]),
+    ).toMatchObject({ basePort: 8100, maxWorkspaces: 3, portsPerWorkspace: 5 });
   });
 
   it("rejects invalid global-mode combinations", () => {
@@ -72,8 +92,8 @@ describe("parseAlprojectArgs", () => {
     expect(() => parse(["--guide", "--ports-per-workspace", "2"])).toThrow(
       /does not accept command options/,
     );
-    expect(() => parse(["register", "project", "--json"])).toThrow(/only with list/);
-    expect(() => parse(["--json"])).toThrow(/only with list/);
+    expect(() => parse(["register", "project", "--json"])).toThrow(/only with list or status/);
+    expect(() => parse(["--json"])).toThrow(/only with list or status/);
   });
 });
 
@@ -82,6 +102,8 @@ describe("main", () => {
     const stdout = makeSink();
     expect(await run([], { stdout })).toBe(0);
     expect(stdout.text()).toContain("alproject register <path>");
+    expect(stdout.text()).toContain("--base-port <n>");
+    expect(stdout.text()).toContain("alproject status <path> [--json]");
     expect(stdout.text()).toContain("alproject --guide");
   });
 
@@ -149,13 +171,22 @@ describe("main", () => {
     const project = makeRepository(fixture.root, "project");
     const registerOutput = makeSink();
     expect(
-      await run(["register", "project", "--ports-per-workspace", "5", "--max-workspaces", "2"], {
-        home: fixture.home,
-        stdout: registerOutput,
-      }),
+      await run(
+        [
+          "register",
+          "project",
+          "--ports-per-workspace",
+          "5",
+          "--max-workspaces",
+          "2",
+          "--base-port",
+          "8010",
+        ],
+        { home: fixture.home, stdout: registerOutput },
+      ),
     ).toBe(0);
     expect(registerOutput.text()).toBe(
-      `Registered project: ${JSON.stringify(project)}\nBase port: 8000\nPort range: 8000..8009\n`,
+      `Registered project: ${JSON.stringify(project)}\nBase port: 8010\nPort range: 8010..8019\n`,
     );
 
     const listOutput = makeSink();
@@ -165,8 +196,8 @@ describe("main", () => {
     expect(listOutput.text()).toContain(`  Parent: ${JSON.stringify(fixture.root)}`);
     expect(listOutput.text()).toContain("  Status: registered");
     expect(listOutput.text()).toContain("  Workspaces: (none)");
-    expect(listOutput.text()).toContain("  Base port: 8000");
-    expect(listOutput.text()).toContain("  Port range: 8000..8009");
+    expect(listOutput.text()).toContain("  Base port: 8010");
+    expect(listOutput.text()).toContain("  Port range: 8010..8019");
 
     const unregisterOutput = makeSink();
     expect(
@@ -184,6 +215,47 @@ describe("main", () => {
       path: project,
       status: "unregistered",
     });
+  });
+
+  it("prints human and JSON project status", async () => {
+    const fixture = makeFixture();
+    const project = makeRepository(fixture.root, "project");
+    expect(await run(["register", "project"], { home: fixture.home, stdout: makeSink() })).toBe(0);
+
+    const labelledOutput = makeSink();
+    expect(await run(["status", "project"], { home: fixture.home, stdout: labelledOutput })).toBe(
+      0,
+    );
+    expect(labelledOutput.text()).toContain(`  Main path: ${JSON.stringify(project)}`);
+    expect(labelledOutput.text()).toContain("  Status: registered");
+    expect(labelledOutput.text()).toContain("  Remote host: (none)");
+    expect(labelledOutput.text()).toContain("  Port allocation: (none)");
+    expect(labelledOutput.text()).toContain('  - Name: "project"');
+    expect(labelledOutput.text()).toContain('    Branch: "main"');
+
+    const jsonOutput = makeSink();
+    expect(
+      await run(["status", project, "--json"], { home: fixture.home, stdout: jsonOutput }),
+    ).toBe(0);
+    expect(JSON.parse(jsonOutput.text())).toMatchObject({
+      name: "project",
+      path: project,
+      ports: null,
+      remoteHost: null,
+      status: "registered",
+      worktrees: [{ branch: "main", name: "project", path: project }],
+    });
+  });
+
+  it("writes an actionable status lookup failure only to stderr", async () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.root, "directory"));
+    const stdout = makeSink();
+    const stderr = makeSink();
+
+    expect(await run(["status", "directory"], { home: fixture.home, stderr, stdout })).toBe(1);
+    expect(stdout.text()).toBe("");
+    expect(stderr.text()).toMatch(/neither registered nor discovered.*main-worktree path/);
   });
 
   it("reports duplicate and exhaustion errors only to stderr", async () => {
@@ -298,7 +370,7 @@ function makeFixture(firstPort = 8000, lastPort = 8999): Fixture {
   mkdirSync(root);
   writeFileSync(
     join(home, ".alproject.json"),
-    `${JSON.stringify({ firstPort, lastPort, root })}\n`,
+    `${JSON.stringify({ root: { path: root, portRange: { first: firstPort, last: lastPort } } })}\n`,
   );
   return { home, root };
 }
