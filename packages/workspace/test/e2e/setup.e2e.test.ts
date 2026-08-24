@@ -157,6 +157,118 @@ describe("portless workspace (e2e)", () => {
   );
 });
 
+describe("setup --profile (e2e)", () => {
+  const PROFILE_FIXTURE: FixtureOptions = { profiles: true, fallbackSeeding: true };
+
+  it(
+    "applies the profile on the main worktree after seeding",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      const result = runCli(repo, ["setup", "--profile", "claw"]);
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).toBe(0);
+      expect(output).toContain("Applied profile claw.");
+      expect(output).toContain("… ready");
+      expect(profileMarker(repo)).toEqual({
+        ports: { web: 8100 },
+        seeded: "committed-template\nworktree=main\n",
+      });
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "reapplies the profile on a configured main without --force",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      expect(runCli(repo, ["setup", "--profile", "claw"]).status).toBe(0);
+      const first = profileMarker(repo);
+      rmSync(join(repo, "profile-applied.txt"));
+
+      const rerun = runCli(repo, ["setup", "--profile", "claw"]);
+      expect(rerun.status).toBe(0);
+      expect(profileMarker(repo)).toEqual(first);
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses --profile from a linked worktree, before any write",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+      expect(runCli(repo, ["setup", "-c", "feat-linked"]).status).toBe(0);
+      const linked = join(repo, "..", "fixrepo-feat-linked");
+
+      const result = runCli(linked, ["setup", "--profile", "claw"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("main worktree");
+      expect(existsSync(join(linked, "profile-applied.txt"))).toBe(false);
+      expect(entryFor(repo, "fixrepo-feat-linked").status).toBe("ready");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "marks the workspace failed when the profile throws, then a plain retry succeeds",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      const failed = runCli(repo, ["setup", "--profile", "claw"], { E2E_PROFILE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('Profile "claw": e2e profile boom');
+      expect(entryFor(repo, "fixrepo").status).toBe("failed");
+      expect(existsSync(join(repo, "profile-applied.txt"))).toBe(false);
+
+      const retry = runCli(repo, ["setup"]);
+      expect(retry.status).toBe(0);
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps a configured main ready when the profile throws",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+
+      const failed = runCli(repo, ["setup", "--profile", "claw"], { E2E_PROFILE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('Profile "claw": e2e profile boom');
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+      expect(existsSync(join(repo, "profile-applied.txt"))).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses an unknown profile name, listing the declared ones, before registration",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      const result = runCli(repo, ["setup", "--profile", "nope"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Unknown profile "nope". Declared profiles: claw.');
+      expect(existsSync(registryFile(repo))).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses --profile when the project declares no setupProfiles, before registration",
+    () => {
+      const { repo } = fixture();
+      const result = runCli(repo, ["setup", "--profile", "claw"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("declares no setup profile");
+      expect(existsSync(registryFile(repo))).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
 function fixture(options?: FixtureOptions): FixtureRepo {
   const fx = createFixtureRepo(options);
   createdRoots.push(fx.root);
@@ -167,6 +279,19 @@ function entryFor(repo: string, name: string): WorkspaceEntry {
   const entry = readWorkspaces(repo).workspaces[name];
   if (!entry) throw new Error(`No workspace registered under "${name}"`);
   return entry;
+}
+
+interface ProfileMarker {
+  ports: Record<string, number>;
+  seeded: string;
+}
+
+function profileMarker(repo: string): ProfileMarker {
+  return JSON.parse(readFileSync(join(repo, "profile-applied.txt"), "utf-8")) as ProfileMarker;
+}
+
+function registryFile(repo: string): string {
+  return join(repo, ".wt", "workspace-registry", "workspaces.json");
 }
 
 function setupLog(repo: string, worktreeDir: string): string {

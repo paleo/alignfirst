@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDevArgs, parseWorkspaceArgs } from "../src/cli.js";
+import { parseDevArgs, parseWorkspaceArgs, renderWorkspaceHelp } from "../src/cli.js";
 import { ConfigError } from "../src/errors.js";
 
 describe("parseWorkspaceArgs", () => {
@@ -36,8 +36,29 @@ describe("parseWorkspaceArgs", () => {
       enter: true,
       dedupe: false,
       detached: false,
+      profile: undefined,
     });
     expect(verbose).toBe(true);
+  });
+
+  it("parses `setup --profile <name>`", () => {
+    expect(parseWorkspaceArgs(["setup", "--profile", "claw"]).command).toMatchObject({
+      kind: "setup",
+      branch: undefined,
+      profile: "claw",
+    });
+    expect(
+      parseWorkspaceArgs(["setup", "--profile", "claw", "--force", "-d"]).command,
+    ).toMatchObject({ profile: "claw", force: true, detached: true });
+  });
+
+  it("rejects `--profile` combined with a branch, with or without `-c`", () => {
+    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--profile", "claw"])).toThrow(
+      ConfigError,
+    );
+    expect(() => parseWorkspaceArgs(["setup", "-c", "feat/42", "--profile", "claw"])).toThrow(
+      ConfigError,
+    );
   });
 
   it("rejects the removed `--slot` flag on setup", () => {
@@ -226,6 +247,22 @@ describe("parseWorkspaceArgs", () => {
 
   it("returns guide for --guide", () => {
     expect(parseWorkspaceArgs(["--guide"]).command).toEqual({ kind: "guide" });
+  });
+});
+
+describe("renderWorkspaceHelp", () => {
+  it("lists the declared profiles, and omits `--profile` when none is declared", () => {
+    const withProfiles = renderWorkspaceHelp({
+      claw: "HTTPS gateway environment",
+      local: "Plain localhost",
+    });
+    expect(withProfiles).toContain("[--profile <name>]");
+    expect(withProfiles).toContain("current main worktree");
+    expect(withProfiles).toContain("        claw   HTTPS gateway environment");
+    expect(withProfiles).toContain("        local  Plain localhost");
+    const withoutProfiles = renderWorkspaceHelp({});
+    expect(withoutProfiles).not.toContain("--profile");
+    expect(withoutProfiles).not.toContain("claw");
   });
 });
 

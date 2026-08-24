@@ -18,9 +18,10 @@ const LAYOUT: GuideLayout = {
   sharedDirs: [".local", ".plans"],
   hasDevServer: true,
   hasPorts: true,
+  profiles: { claw: "HTTPS gateway environment" },
 };
 
-const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false, hasPorts: false };
+const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false, hasPorts: false, profiles: {} };
 
 describe("renderGuide", () => {
   it("renders npm commands with the `--` separator for forwarded args", () => {
@@ -77,6 +78,17 @@ describe("renderGuide", () => {
     expect(guide).not.toContain("**Concurrent cap.**");
     expect(guide).not.toContain("npm run dev");
     expect(guide).toContain("`setup` creates the worktree (branch, symlinks, config files)");
+  });
+
+  it("lists the declared setup profiles, and nothing about profiles when none is declared", () => {
+    const withProfiles = renderGuide(NPM, LAYOUT);
+    expect(withProfiles).toContain("npm run workspace -- setup --profile <name>");
+    expect(withProfiles).toContain("**Setup profiles:**");
+    expect(withProfiles).toContain("- `claw` — HTTPS gateway environment");
+    const withoutProfiles = renderGuide(NPM, { ...LAYOUT, profiles: {} });
+    expect(withoutProfiles).not.toContain("--profile");
+    expect(withoutProfiles).not.toContain("Setup profiles");
+    expect(withoutProfiles).not.toContain("claw");
   });
 
   it("leaves no template marker and no blank-line gap in either mode", () => {

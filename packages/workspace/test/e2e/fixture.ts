@@ -24,17 +24,23 @@ export interface FixtureOptions {
   portless?: boolean;
   /** Seeds a gitignored file from a committed fallback or the customized main file. */
   fallbackSeeding?: boolean;
+  /**
+   * Declares one setup profile, `claw`, whose `apply` throws with `E2E_PROFILE_FAIL=1` and otherwise
+   * writes `profile-applied.txt`: `ctx.ports` and the seeded file's content as JSON.
+   */
+  profiles?: boolean;
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   const portless = options.portless ?? false;
   const fallbackSeeding = options.fallbackSeeding ?? false;
+  const profiles = options.profiles ?? false;
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
   const repo = join(root, "fixrepo");
   mkdirSync(join(repo, "scripts"), { recursive: true });
   writeFileSync(
     join(repo, "scripts", "workspace.mjs"),
-    workspaceMjsSource(portless, fallbackSeeding),
+    workspaceMjsSource(portless, fallbackSeeding, profiles),
   );
   if (fallbackSeeding) {
     writeFileSync(join(repo, ".gitignore"), "workspace.local\n");
@@ -54,7 +60,27 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   return { root, repo };
 }
 
-function workspaceMjsSource(portless: boolean, fallbackSeeding: boolean): string {
+function workspaceMjsSource(
+  portless: boolean,
+  fallbackSeeding: boolean,
+  profiles: boolean,
+): string {
+  const setupProfiles = profiles
+    ? `  setupProfiles: {
+    claw: {
+      description: "e2e gateway environment",
+      apply: (ctx) => {
+        if (process.env.E2E_PROFILE_FAIL === "1") throw new Error("e2e profile boom");
+        const seededPath = join(ctx.currentWorktree, "workspace.local");
+        const seeded = existsSync(seededPath) ? readFileSync(seededPath, "utf-8") : "(none)";
+        const marker = { ports: ctx.ports, seeded };
+        writeFileSync(join(ctx.currentWorktree, "profile-applied.txt"), JSON.stringify(marker));
+        ctx.log("Applied profile claw.");
+      },
+    },
+  },
+`
+    : "";
   const devSetup = portless
     ? ""
     : `  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
@@ -70,7 +96,7 @@ function workspaceMjsSource(portless: boolean, fallbackSeeding: boolean): string
     },
   ]`
     : "[]";
-  return `import { writeFileSync } from "node:fs";
+  return `import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,7 +107,7 @@ await runWorkspace({
 ${devSetup}  sharedDirs: [],
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
-  formatSummary: () => "Workspace ready.",
+${setupProfiles}  formatSummary: () => "Workspace ready.",
   finalizeWorkspace: (ctx) => {
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");

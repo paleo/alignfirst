@@ -12,6 +12,8 @@ export type WorkspaceCommand =
       enter: boolean;
       dedupe: boolean;
       detached: boolean;
+      /** The `--profile <name>` selection; applies to the current main worktree only. */
+      profile?: string;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
   | { kind: "list" }
@@ -88,6 +90,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       enter: { type: "boolean" },
       dedupe: { type: "boolean" },
       detached: { type: "boolean", short: "d" },
+      profile: { type: "string" },
       verbose: { type: "boolean" },
     },
     allowPositionals: true,
@@ -99,6 +102,11 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   const dedupe = values.dedupe ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup -c <branch>` requires a branch name.");
+  }
+  if (values.profile !== undefined && branch !== undefined) {
+    throw new ConfigError(
+      "`--profile` applies only to the current main worktree; it cannot be combined with a branch.",
+    );
   }
   if (values.from !== undefined && !newBranch) {
     throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
@@ -119,6 +127,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       enter,
       dedupe,
       detached: values.detached ?? false,
+      profile: values.profile,
     },
     verbose: values.verbose ?? false,
   };
@@ -230,51 +239,66 @@ function rejectPositionals(positionals: string[], command: string): void {
   }
 }
 
-export function printWorkspaceHelp(): void {
-  console.log(
-    [
-      "Usage: workspace <command> [options]",
-      "",
-      "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
-      "ports, database, dev server).",
-      "",
-      "Commands:",
-      "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter]",
-      "      Set up the workspace. With <branch>, create a sibling worktree for it",
-      "      (add -c to create the branch first). Without, set up the current worktree",
-      "      (idempotent; bootstrap and retry path).",
-      "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
-      "      --dedupe: when the branch name is taken, append -2, -3… instead of failing",
-      "      (without it, a taken name is an error).",
-      "      Blocks until setup reaches READY (or FAILED), showing a progress ticker.",
-      "      -d|--detached: return once the worktree exists; setup continues in the background,",
-      "      join it with `wait`.",
-      "      With --enter, drop into an interactive shell in the new worktree (exit to return);",
-      "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
-      "  remove [<dir>] [--force]",
-      "      Remove a workspace, selected by directory (path or basename);",
-      "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
-      "  list",
-      "      List all registered workspaces (name, status, branch, path, created).",
-      "  prune",
-      "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
-      "      and drop their registry entries, then run `git worktree prune`.",
-      "  status [<dir>]",
-      "      Print a workspace summary (branch, readiness, ports, dev-server).",
-      "      Selected by directory (path or basename); the current worktree when omitted.",
-      "  wait [<dir>]",
-      "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
-      "  migrate-registry-0.30",
-      "      Convert an old registry (slots.json) to workspaces.json, in place.",
-      "      Run it once from the main worktree after upgrading the package.",
-      "",
-      "Global options:",
-      "      --verbose       Show intermediate output.",
-      "      --guide         Print the full workspace + dev-server operating guide.",
-      "  -h, --help          Show this help message.",
-      "  -v, --version       Print the workspace version.",
-    ].join("\n"),
-  );
+/** `profiles`: the declared setup profiles, name → description; empty when the config declares none. */
+export function printWorkspaceHelp(profiles: Record<string, string>): void {
+  console.log(renderWorkspaceHelp(profiles));
+}
+
+export function renderWorkspaceHelp(profiles: Record<string, string>): string {
+  const hasProfiles = Object.keys(profiles).length > 0;
+  const profileSynopsis = hasProfiles ? " [--profile <name>]" : "";
+  return [
+    "Usage: workspace <command> [options]",
+    "",
+    "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
+    "ports, database, dev server).",
+    "",
+    "Commands:",
+    `  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter]${profileSynopsis}`,
+    "      Set up the workspace. With <branch>, create a sibling worktree for it",
+    "      (add -c to create the branch first). Without, set up the current worktree",
+    "      (idempotent; bootstrap and retry path).",
+    "      With -c, the new branch starts at the current worktree's HEAD, or at <ref> with --from.",
+    "      --dedupe: when the branch name is taken, append -2, -3… instead of failing",
+    "      (without it, a taken name is an error).",
+    "      Blocks until setup reaches READY (or FAILED), showing a progress ticker.",
+    "      -d|--detached: return once the worktree exists; setup continues in the background,",
+    "      join it with `wait`.",
+    "      With --enter, drop into an interactive shell in the new worktree (exit to return);",
+    "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
+    ...(hasProfiles ? profileHelpLines(profiles) : []),
+    "  remove [<dir>] [--force]",
+    "      Remove a workspace, selected by directory (path or basename);",
+    "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
+    "  list",
+    "      List all registered workspaces (name, status, branch, path, created).",
+    "  prune",
+    "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
+    "      and drop their registry entries, then run `git worktree prune`.",
+    "  status [<dir>]",
+    "      Print a workspace summary (branch, readiness, ports, dev-server).",
+    "      Selected by directory (path or basename); the current worktree when omitted.",
+    "  wait [<dir>]",
+    "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
+    "  migrate-registry-0.30",
+    "      Convert an old registry (slots.json) to workspaces.json, in place.",
+    "      Run it once from the main worktree after upgrading the package.",
+    "",
+    "Global options:",
+    "      --verbose       Show intermediate output.",
+    "      --guide         Print the full workspace + dev-server operating guide.",
+    "  -h, --help          Show this help message.",
+    "  -v, --version       Print the workspace version.",
+  ].join("\n");
+}
+
+function profileHelpLines(profiles: Record<string, string>): string[] {
+  const entries = Object.entries(profiles);
+  const width = Math.max(...entries.map(([name]) => name.length));
+  return [
+    "      --profile <name>: apply a setup profile to the current main worktree. Profiles:",
+    ...entries.map(([name, description]) => `        ${name.padEnd(width)}  ${description}`),
+  ];
 }
 
 export function printWorkspaceVersion(): void {

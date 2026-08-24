@@ -11,7 +11,10 @@ export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   WorkspaceConfig,
+  SetupContextBase,
   PreSetupContext,
+  SetupProfile,
+  ApplyProfileContext,
   FinalizeContext,
   FinalizeResult,
   SummaryContext,

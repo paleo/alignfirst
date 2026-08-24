@@ -34,6 +34,12 @@ It streams to the setup log and **blocks until the log ends with `READY:` or `FA
 
 **Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
 
+{{#PROFILES}}
+**Setup profiles:** `setup --profile <name>` rewrites the main worktree's ignored configuration for that environment. Linked worktrees set up afterwards inherit the resulting files.
+
+{{LIST:profiles}}
+
+{{/PROFILES}}
 ### Recovery from a failed setup
 
 If setup fails (check the setup log), do **not** delete the worktree. From inside it, `setup` is idempotent. Fix the issues and repeat until the log ends with `READY:`:
