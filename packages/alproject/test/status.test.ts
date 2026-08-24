@@ -31,7 +31,7 @@ describe("getProjectStatus", () => {
           ports: { basePort: 8000, maxWorkspaces: 3, portsPerWorkspace: 4 },
         },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
 
     expect(getProjectStatus(fixture.config, registry, "project")).toEqual({
@@ -110,7 +110,7 @@ describe("getProjectStatus", () => {
   it("reports a registered project missing from the filesystem", () => {
     const fixture = makeFixture();
     const project = join(fixture.root, "missing");
-    const registry: Registry = { projects: [{ path: project }], version: 1 };
+    const registry: Registry = { projects: [{ path: project }], schemaVersion: 2 };
 
     expect(getProjectStatus(fixture.config, registry, "missing")).toEqual({
       name: "missing",
@@ -129,7 +129,7 @@ describe("getProjectStatus", () => {
     mkdirSync(configuredParent);
     fixture.config.projectParents = [{ path: configuredParent }];
     execGit(project, "remote", "add", "origin", "https://github.com/team/project.git");
-    const registry: Registry = { projects: [{ path: project }], version: 1 };
+    const registry: Registry = { projects: [{ path: project }], schemaVersion: 2 };
 
     expect(getProjectStatus(fixture.config, registry, project)).toMatchObject({
       path: project,
@@ -198,7 +198,7 @@ function makeRepository(parent: string, name: string): string {
 }
 
 function emptyRegistry(): Registry {
-  return { projects: [], version: 1 };
+  return { projects: [], schemaVersion: 2 };
 }
 
 function execGit(cwd: string, ...args: string[]): string {

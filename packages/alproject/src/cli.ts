@@ -29,6 +29,7 @@ export interface Output {
 }
 
 export interface AlprojectArgs {
+  allowOutsidePortRange: boolean;
   basePort?: number;
   command?: string;
   guide: boolean;
@@ -41,6 +42,7 @@ export interface AlprojectArgs {
 }
 
 interface PortOptionValues {
+  "allow-outside-port-range"?: boolean;
   "base-port"?: string;
   "max-workspaces"?: string;
   "ports-per-workspace"?: string;
@@ -93,6 +95,7 @@ export async function main(options: MainOptions = {}): Promise<number> {
     }
     if (args.command === "register" && args.path !== undefined) {
       const result = await registerProject(config, args.path, {
+        allowOutsidePortRange: args.allowOutsidePortRange,
         basePort: args.basePort,
         maxWorkspaces: args.maxWorkspaces,
         portsPerWorkspace: args.portsPerWorkspace,
@@ -117,6 +120,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     allowPositionals: true,
     args: argv.slice(2),
     options: {
+      "allow-outside-port-range": { default: false, type: "boolean" },
       "base-port": { type: "string" },
       guide: { default: false, type: "boolean" },
       help: { default: false, short: "h", type: "boolean" },
@@ -141,6 +145,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
       throw new Error(`${selectedModes[0]} does not accept command options`);
     }
     return {
+      allowOutsidePortRange: false,
       guide: values.guide === true,
       help: values.help === true,
       json: false,
@@ -154,7 +159,13 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     if (hasPortOptions(values)) {
       throw new Error("Port options are valid only with register");
     }
-    return { guide: false, help: false, json: false, version: false };
+    return {
+      allowOutsidePortRange: false,
+      guide: false,
+      help: false,
+      json: false,
+      version: false,
+    };
   }
   if (!isCommand(command)) throw new Error(`Unknown command: ${command}`);
   validateCommandPaths(command, path, extraPaths);
@@ -168,13 +179,18 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   );
   const maxWorkspaces = parsePositiveInteger("--max-workspaces", values["max-workspaces"]);
   const basePort = parsePositiveInteger("--base-port", values["base-port"]);
+  const allowOutsidePortRange = values["allow-outside-port-range"] === true;
   if ((portsPerWorkspace === undefined) !== (maxWorkspaces === undefined)) {
     throw new Error("--ports-per-workspace and --max-workspaces must be provided together");
   }
   if (basePort !== undefined && portsPerWorkspace === undefined) {
     throw new Error("--base-port requires --ports-per-workspace and --max-workspaces");
   }
+  if (allowOutsidePortRange && basePort === undefined) {
+    throw new Error("--allow-outside-port-range requires --base-port");
+  }
   return {
+    allowOutsidePortRange,
     basePort,
     command,
     guide: false,
@@ -189,6 +205,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
 
 function hasPortOptions(values: PortOptionValues): boolean {
   return (
+    values["allow-outside-port-range"] === true ||
     values["base-port"] !== undefined ||
     values["ports-per-workspace"] !== undefined ||
     values["max-workspaces"] !== undefined
@@ -244,13 +261,15 @@ function renderHelp(): string {
 Usage:
   alproject list [--json]
   alproject status <path> [--json]
-  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]]
+  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n> [--allow-outside-port-range]]]
   alproject unregister <path>
 
 Options:
   --guide              Print the complete guide
   -h, --help           Print this help
   --json               Print structured list or status output
+  --allow-outside-port-range
+                       Permit an explicit allocation outside configured ranges
   -v, --version        Print the alproject version
 
 Run \`alproject --guide\` for configuration and operational procedures.

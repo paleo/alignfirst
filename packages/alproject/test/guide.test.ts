@@ -30,6 +30,7 @@ describe("renderGuide", () => {
       "alproject unregister <path>",
       "--ports-per-workspace",
       "--base-port",
+      "--allow-outside-port-range",
       "does not delete",
       "projectParents",
       "remote host",

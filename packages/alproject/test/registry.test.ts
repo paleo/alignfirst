@@ -15,13 +15,13 @@ afterEach(() => {
 });
 
 describe("readRegistry", () => {
-  it("returns an empty version-1 registry when the file is absent", () => {
+  it("returns an empty schema-version-2 registry when the file is absent", () => {
     const fixture = makeFixture();
-    expect(readRegistry(fixture.config)).toEqual({ projects: [], version: 1 });
+    expect(readRegistry(fixture.config)).toEqual({ projects: [], schemaVersion: 2 });
     expect(registryPath(fixture.config)).toBe(join(fixture.root, REGISTRY_FILENAME));
   });
 
-  it("reads valid portless and allocated projects", () => {
+  it("reads valid schema-version-2 projects", () => {
     const fixture = makeFixture();
     const projectA = makeProject(fixture, "a");
     const projectB = makeProject(fixture, "b");
@@ -33,11 +33,22 @@ describe("readRegistry", () => {
           ports: { basePort: 8000, maxWorkspaces: 2, portsPerWorkspace: 10 },
         },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     writeRegistry(fixture, registry);
 
     expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("migrates a legacy version-1 registry", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "legacy");
+    writeRegistry(fixture, { projects: [{ path: project }], version: 1 });
+
+    expect(readRegistry(fixture.config)).toEqual({
+      projects: [{ path: project }],
+      schemaVersion: 2,
+    });
   });
 
   it("reports malformed JSON with the registry path", () => {
@@ -47,7 +58,9 @@ describe("readRegistry", () => {
   });
 
   it.each([
-    ["unsupported version", { projects: [], version: 2 }],
+    ["unsupported legacy version", { projects: [], version: 2 }],
+    ["unsupported schema version", { projects: [], schemaVersion: 1 }],
+    ["both version fields", { projects: [], schemaVersion: 2, version: 1 }],
     ["missing projects", { version: 1 }],
     ["non-array projects", { projects: {}, version: 1 }],
     ["unknown registry field", { extra: true, projects: [], version: 1 }],
@@ -55,6 +68,23 @@ describe("readRegistry", () => {
     ["empty project path", { projects: [{ path: "" }], version: 1 }],
     ["non-string project path", { projects: [{ path: 42 }], version: 1 }],
     ["non-object ports", { projects: [{ path: "/project", ports: 42 }], version: 1 }],
+    [
+      "false port-range override",
+      {
+        projects: [
+          {
+            path: "/project",
+            ports: {
+              allowOutsidePortRange: false,
+              basePort: 8000,
+              maxWorkspaces: 1,
+              portsPerWorkspace: 1,
+            },
+          },
+        ],
+        version: 1,
+      },
+    ],
     [
       "unknown port field",
       {
@@ -90,13 +120,13 @@ describe("readRegistry", () => {
     const fixture = makeFixture();
     writeRegistry(fixture, {
       projects: [{ path: "relative" }],
-      version: 1,
+      schemaVersion: 2,
     });
     expect(() => readRegistry(fixture.config)).toThrow(/project path must be absolute/);
 
     writeRegistry(fixture, {
       projects: [{ path: `${fixture.root}/missing/../project` }],
-      version: 1,
+      schemaVersion: 2,
     });
     expect(() => readRegistry(fixture.config)).toThrow(/project path must be canonical/);
   });
@@ -135,10 +165,54 @@ describe("readRegistry", () => {
       projects: [
         { path: project, ports: { basePort: 8991, maxWorkspaces: 2, portsPerWorkspace: 5 } },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     writeRegistry(fixture, registry);
     expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("accepts a marked allocation outside configured ranges", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "external");
+    fixture.config.projectParents[0].portRange = { first: 8500, last: 8599 };
+    const registry = {
+      projects: [
+        {
+          path: project,
+          ports: {
+            allowOutsidePortRange: true,
+            basePort: 9001,
+            maxWorkspaces: 1,
+            portsPerWorkspace: 10,
+          },
+        },
+      ],
+      schemaVersion: 2,
+    };
+    writeRegistry(fixture, registry);
+
+    expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("rejects an override allocation beyond the TCP port range", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "external");
+    writeRegistry(fixture, {
+      projects: [
+        {
+          path: project,
+          ports: {
+            allowOutsidePortRange: true,
+            basePort: 65_535,
+            maxWorkspaces: 1,
+            portsPerWorkspace: 2,
+          },
+        },
+      ],
+      version: 1,
+    });
+
+    expect(() => readRegistry(fixture.config)).toThrow(/exceeds port 65535/);
   });
 
   it("rejects an allocation outside its parent-specific port range", () => {

@@ -82,8 +82,18 @@ describe("parseAlprojectArgs", () => {
         "3",
         "--base-port",
         "8100",
+        "--allow-outside-port-range",
       ]),
-    ).toMatchObject({ basePort: 8100, maxWorkspaces: 3, portsPerWorkspace: 5 });
+    ).toMatchObject({
+      allowOutsidePortRange: true,
+      basePort: 8100,
+      maxWorkspaces: 3,
+      portsPerWorkspace: 5,
+    });
+    expect(() => parse(["register", "project", "--allow-outside-port-range"])).toThrow(
+      /requires --base-port/,
+    );
+    expect(() => parse(["list", "--allow-outside-port-range"])).toThrow(/only with register/);
   });
 
   it("rejects invalid global-mode combinations", () => {
@@ -103,6 +113,7 @@ describe("main", () => {
     expect(await run([], { stdout })).toBe(0);
     expect(stdout.text()).toContain("alproject register <path>");
     expect(stdout.text()).toContain("--base-port <n>");
+    expect(stdout.text()).toContain("--allow-outside-port-range");
     expect(stdout.text()).toContain("alproject status <path> [--json]");
     expect(stdout.text()).toContain("alproject --guide");
   });
@@ -214,6 +225,40 @@ describe("main", () => {
       name: "project",
       path: project,
       status: "unregistered",
+    });
+  });
+
+  it("registers an explicit allocation outside configured ranges", async () => {
+    const fixture = makeFixture(8000, 8009);
+    const project = makeRepository(fixture.root, "external");
+    const stdout = makeSink();
+
+    expect(
+      await run(
+        [
+          "register",
+          "external",
+          "--ports-per-workspace",
+          "5",
+          "--max-workspaces",
+          "2",
+          "--base-port",
+          "9000",
+          "--allow-outside-port-range",
+        ],
+        { home: fixture.home, stdout },
+      ),
+    ).toBe(0);
+    expect(stdout.text()).toContain("Port range: 9000..9009");
+
+    const jsonOutput = makeSink();
+    expect(
+      await run(["status", project, "--json"], { home: fixture.home, stdout: jsonOutput }),
+    ).toBe(0);
+    expect(JSON.parse(jsonOutput.text()).ports).toMatchObject({
+      allowOutsidePortRange: true,
+      basePort: 9000,
+      endPort: 9009,
     });
   });
 

@@ -34,6 +34,7 @@ const atomicWriteOperations: AtomicWriteOperations = {
 };
 
 export interface RegistrationOptions {
+  allowOutsidePortRange?: boolean;
   basePort?: number;
   maxWorkspaces?: number;
   portsPerWorkspace?: number;
@@ -45,6 +46,7 @@ export interface RegistrationResult {
 }
 
 export interface RegistrationPorts extends PortRequest {
+  allowOutsidePortRange?: true;
   basePort: number;
   endPort: number;
 }
@@ -76,7 +78,14 @@ export async function registerProject(
     if (registry.projects.some((project) => project.path === path)) {
       throw new AlprojectError("registry", `Project is already registered: ${path}`);
     }
-    const ports = allocateRegistrationPorts(config, registry, path, request, options.basePort);
+    const ports = allocateRegistrationPorts(
+      config,
+      registry,
+      path,
+      request,
+      options.basePort,
+      options.allowOutsidePortRange === true,
+    );
     registry.projects.push(ports === undefined ? { path } : { path, ports });
     return {
       path,
@@ -131,6 +140,9 @@ function assertMainWorktree(path: string): void {
 }
 
 function portRequest(options: RegistrationOptions): PortRequest | undefined {
+  if (options.allowOutsidePortRange === true && options.basePort === undefined) {
+    throw new AlprojectError("registry", "allowOutsidePortRange requires basePort");
+  }
   const hasPortsPerWorkspace = options.portsPerWorkspace !== undefined;
   const hasMaxWorkspaces = options.maxWorkspaces !== undefined;
   if (hasPortsPerWorkspace !== hasMaxWorkspaces) {
@@ -166,13 +178,22 @@ function allocateRegistrationPorts(
   path: string,
   request: PortRequest | undefined,
   basePort: number | undefined,
+  allowOutsidePortRange: boolean,
 ): PortAllocation | undefined {
   if (request === undefined) return;
   const ranges = availablePortRanges(config, path);
   const allocation =
     basePort === undefined
       ? allocateProjectPorts(registry.projects, request, ranges)
-      : claimProjectPorts(registry.projects, { basePort, ...request }, ranges);
+      : claimProjectPorts(
+          registry.projects,
+          {
+            basePort,
+            ...request,
+            ...(allowOutsidePortRange ? { allowOutsidePortRange: true } : {}),
+          },
+          ranges,
+        );
   return allocation;
 }
 
