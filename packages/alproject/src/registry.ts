@@ -10,6 +10,11 @@ import { allocationEnd } from "./ports.js";
 
 export const REGISTRY_FILENAME = "alproject-registry.json";
 
+const integerPortFields = [
+  "basePort",
+  "maxWorkspaces",
+  "portsPerWorkspace",
+] satisfies readonly (keyof PortAllocation)[];
 const portsSchema = type({
   "+": "reject",
   "allowOutsidePortRange?": "true",
@@ -25,7 +30,7 @@ const projectEntrySchema = type({
 const registrySchema = type({
   "+": "reject",
   projects: projectEntrySchema.array(),
-  version: "1",
+  schemaVersion: "2",
 });
 
 export type PortAllocation = typeof portsSchema.infer;
@@ -45,14 +50,26 @@ export function registryPath(config: Pick<AlprojectConfig, "root">): string {
 export function readRegistry(config: AlprojectConfig): Registry {
   const path = registryPath(config);
   const rawRegistry = readRegistryFile(path);
-  if (rawRegistry === undefined) return { projects: [], version: 1 };
+  if (rawRegistry === undefined) return { projects: [], schemaVersion: 2 };
 
-  const registry = registrySchema(rawRegistry);
+  const registry = registrySchema(migrateLegacyRegistry(rawRegistry));
   if (registry instanceof type.errors) {
     throw registryError(path, registry.summary);
   }
   validateRegistry(registry, config, path);
   return registry;
+}
+
+function migrateLegacyRegistry(rawRegistry: unknown): unknown {
+  if (!isRecord(rawRegistry) || rawRegistry.version !== 1 || "schemaVersion" in rawRegistry) {
+    return rawRegistry;
+  }
+  const { version: _version, ...registry } = rawRegistry;
+  return { ...registry, schemaVersion: 2 };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readRegistryFile(path: string): unknown {
@@ -103,7 +120,7 @@ function portRange(
 ): PortRange {
   const ports = project.ports;
   if (ports === undefined) throw new Error("Port allocation is required");
-  for (const field of ["basePort", "maxWorkspaces", "portsPerWorkspace"] as const) {
+  for (const field of integerPortFields) {
     const value = ports[field];
     if (!Number.isSafeInteger(value)) {
       throw registryError(registryFile, `${field} must be a safe integer for ${project.path}`);

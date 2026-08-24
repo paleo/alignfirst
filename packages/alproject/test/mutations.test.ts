@@ -237,7 +237,24 @@ describe("atomic registry mutation", () => {
 
     const content = readFileSync(registryPath(fixture.config), "utf8");
     expect(content.endsWith("\n")).toBe(true);
-    expect(JSON.parse(content)).toEqual({ projects: [{ path: project }], version: 1 });
+    expect(JSON.parse(content)).toEqual({ projects: [{ path: project }], schemaVersion: 2 });
+  });
+
+  it("rewrites a legacy registry with schema version 2", async () => {
+    const fixture = makeFixture();
+    const legacy = makeProject(fixture.root, "legacy");
+    const project = makeProject(fixture.root, "project");
+    writeFileSync(
+      registryPath(fixture.config),
+      `${JSON.stringify({ projects: [{ path: legacy }], version: 1 })}\n`,
+    );
+
+    await registerProject(fixture.config, project);
+
+    expect(JSON.parse(readFileSync(registryPath(fixture.config), "utf8"))).toEqual({
+      projects: [{ path: legacy }, { path: project }],
+      schemaVersion: 2,
+    });
   });
 
   it("syncs the registry file and its parent directory", async () => {

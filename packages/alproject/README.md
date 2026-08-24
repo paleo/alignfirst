@@ -71,4 +71,6 @@ Discrepancies are informational. Listing never changes files or registrations.
 
 Alproject owns `<root>/alproject-registry.json` and its short-lived lock and temporary sibling files. Edit project files and immutable configuration through their own workflows.
 
+The current registry format uses `"schemaVersion": 2`. Alproject reads legacy version-1 registries and rewrites them in the current format on the next registration or unregistration.
+
 Concurrent mutations wait briefly for a live lock and then fail with an actionable error. Retry after the other command finishes. Alproject reclaims locks whose recorded process identity no longer exists. If registry validation fails, correct the reported field or restore a valid registry before retrying. Failed registration, allocation, locking, and writes preserve the previous registry.

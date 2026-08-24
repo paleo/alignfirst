@@ -132,7 +132,7 @@ describe("buildProjectList", () => {
         },
         { path: missing },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     const registryPath = join(fixture.root, "alproject-registry.json");
     writeFileSync(registryPath, `${JSON.stringify(registry, undefined, 2)}\n`);
@@ -167,7 +167,7 @@ describe("buildProjectList", () => {
   it("reports a moved project as one missing and one unregistered record", () => {
     const fixture = makeFixture();
     const original = makeRepository(fixture.parentA, "original");
-    const registry: Registry = { projects: [{ path: original }], version: 1 };
+    const registry: Registry = { projects: [{ path: original }], schemaVersion: 2 };
     const moved = join(fixture.parentA, "moved");
     renameSync(original, moved);
 

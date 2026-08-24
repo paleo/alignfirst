@@ -15,13 +15,13 @@ afterEach(() => {
 });
 
 describe("readRegistry", () => {
-  it("returns an empty version-1 registry when the file is absent", () => {
+  it("returns an empty schema-version-2 registry when the file is absent", () => {
     const fixture = makeFixture();
-    expect(readRegistry(fixture.config)).toEqual({ projects: [], version: 1 });
+    expect(readRegistry(fixture.config)).toEqual({ projects: [], schemaVersion: 2 });
     expect(registryPath(fixture.config)).toBe(join(fixture.root, REGISTRY_FILENAME));
   });
 
-  it("reads valid portless and allocated projects", () => {
+  it("reads valid schema-version-2 projects", () => {
     const fixture = makeFixture();
     const projectA = makeProject(fixture, "a");
     const projectB = makeProject(fixture, "b");
@@ -33,11 +33,22 @@ describe("readRegistry", () => {
           ports: { basePort: 8000, maxWorkspaces: 2, portsPerWorkspace: 10 },
         },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     writeRegistry(fixture, registry);
 
     expect(readRegistry(fixture.config)).toEqual(registry);
+  });
+
+  it("migrates a legacy version-1 registry", () => {
+    const fixture = makeFixture();
+    const project = makeProject(fixture, "legacy");
+    writeRegistry(fixture, { projects: [{ path: project }], version: 1 });
+
+    expect(readRegistry(fixture.config)).toEqual({
+      projects: [{ path: project }],
+      schemaVersion: 2,
+    });
   });
 
   it("reports malformed JSON with the registry path", () => {
@@ -47,7 +58,9 @@ describe("readRegistry", () => {
   });
 
   it.each([
-    ["unsupported version", { projects: [], version: 2 }],
+    ["unsupported legacy version", { projects: [], version: 2 }],
+    ["unsupported schema version", { projects: [], schemaVersion: 1 }],
+    ["both version fields", { projects: [], schemaVersion: 2, version: 1 }],
     ["missing projects", { version: 1 }],
     ["non-array projects", { projects: {}, version: 1 }],
     ["unknown registry field", { extra: true, projects: [], version: 1 }],
@@ -107,13 +120,13 @@ describe("readRegistry", () => {
     const fixture = makeFixture();
     writeRegistry(fixture, {
       projects: [{ path: "relative" }],
-      version: 1,
+      schemaVersion: 2,
     });
     expect(() => readRegistry(fixture.config)).toThrow(/project path must be absolute/);
 
     writeRegistry(fixture, {
       projects: [{ path: `${fixture.root}/missing/../project` }],
-      version: 1,
+      schemaVersion: 2,
     });
     expect(() => readRegistry(fixture.config)).toThrow(/project path must be canonical/);
   });
@@ -152,7 +165,7 @@ describe("readRegistry", () => {
       projects: [
         { path: project, ports: { basePort: 8991, maxWorkspaces: 2, portsPerWorkspace: 5 } },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     writeRegistry(fixture, registry);
     expect(readRegistry(fixture.config)).toEqual(registry);
@@ -174,7 +187,7 @@ describe("readRegistry", () => {
           },
         },
       ],
-      version: 1,
+      schemaVersion: 2,
     };
     writeRegistry(fixture, registry);
 
