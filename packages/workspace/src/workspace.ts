@@ -483,14 +483,16 @@ async function runSetup(
   const log = openSetupLog(setupCtx.currentWorktree, config.runtimeDir, run.verbose);
 
   // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
+  // A `ready` entry stays `ready`: the finalize outcome is unchanged and nothing forces a re-finalize.
   try {
     await prepareWorktree({ command, setupCtx, kernel, name, ports, profile, log });
     log.tee(config.formatSummary({ ...setupCtx, name, branch, ports, status }));
   } catch (err) {
-    const message = (err as Error).message;
+    const message = errorMessage(err);
     log.append(`FAILED: ${message}`);
+    if (err instanceof Error && err.stack !== undefined) log.append(err.stack);
     closeSync(log.fd);
-    markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
+    if (status !== "ready") markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
     throw err;
   }
 
@@ -512,9 +514,13 @@ async function runSetup(
   return { name, worktree: setupCtx.currentWorktree };
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** The `--profile` selection, checked against the config and the worktree before any write. */
 interface SelectedProfile {
-  profile: string;
+  name: string;
   apply: (ctx: ApplyProfileContext) => Promise<void> | void;
 }
 
@@ -531,8 +537,7 @@ function selectProfile(
       "This project declares no setup profile (no `setupProfiles` in the workspace config).",
     );
   }
-  const selected: SetupProfile | undefined = profiles[command.profile];
-  if (selected === undefined) {
+  if (!Object.hasOwn(profiles, command.profile)) {
     throw new WorkspaceError(
       `Unknown profile "${command.profile}". Declared profiles: ${names.join(", ")}.`,
     );
@@ -542,7 +547,7 @@ function selectProfile(
       `\`--profile\` applies only to the main worktree. Run it from ${ctx.mainWorktree}.`,
     );
   }
-  return { profile: command.profile, apply: selected.apply };
+  return { name: command.profile, apply: profiles[command.profile].apply };
 }
 
 interface SetupLog {
@@ -585,7 +590,7 @@ interface PrepareWorktreeInput {
   log: SetupLog;
 }
 
-/** The synchronous setup phase: hooks and file writes between registration and the summary. */
+/** The pre-finalize phase: hooks and file writes between registration and the summary. */
 async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
   const { command, setupCtx, kernel, name, ports, profile, log } = input;
   const { config } = kernel;
@@ -625,7 +630,7 @@ async function applySelectedProfile(
   try {
     await selected.apply(ctx);
   } catch (err) {
-    throw new WorkspaceError(`Profile "${selected.profile}": ${(err as Error).message}`);
+    throw new WorkspaceError(`Profile "${selected.name}": ${errorMessage(err)}`, { cause: err });
   }
 }
 

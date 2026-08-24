@@ -222,10 +222,24 @@ describe("setup --profile (e2e)", () => {
       expect(entryFor(repo, "fixrepo").status).toBe("failed");
       expect(existsSync(join(repo, "profile-applied.txt"))).toBe(false);
 
-      const retry = runCli(repo, ["setup", "--profile", "claw"]);
+      const retry = runCli(repo, ["setup"]);
       expect(retry.status).toBe(0);
       expect(entryFor(repo, "fixrepo").status).toBe("ready");
-      expect(profileMarker(repo).ports).toEqual({ web: 8100 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps a configured main ready when the profile throws",
+    () => {
+      const { repo } = fixture(PROFILE_FIXTURE);
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+
+      const failed = runCli(repo, ["setup", "--profile", "claw"], { E2E_PROFILE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('Profile "claw": e2e profile boom');
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+      expect(existsSync(join(repo, "profile-applied.txt"))).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

@@ -23,7 +23,7 @@ The child is spawned as `__finalize` with no target argument and `cwd` set to th
 
 ### Failure before the finalize spawn
 
-`registerWorkspace` writes the entry as `pending`, and a plain `setup` refuses a `pending` entry (`refuseIfFinalizePending`, bypassed by `--force`). An error in the synchronous phase that follows — `preSetup`, seeding, a profile's `apply`, `formatSummary` — is therefore caught in `runSetup`: it appends `FAILED: <message>` to the setup log, marks the entry `failed` (`markWorkspaceFailed`), and rethrows. A `failed` entry passes the pending check, so the retry after any setup failure is a plain `setup`. `copyAndPatchFile` throws a `WorkspaceError` on a missing required source for the same reason: a `process.exit` there would skip the catch.
+`registerWorkspace` writes the entry as `pending`, and a plain `setup` refuses a `pending` entry (`refuseIfFinalizePending`, bypassed by `--force`). An error in the pre-finalize phase that follows — `preSetup`, seeding, a profile's `apply`, `formatSummary` — is therefore caught in `runSetup`: it appends `FAILED: <message>` and the stack to the setup log, marks a `pending` entry `failed` (`markWorkspaceFailed`), and rethrows. A `failed` entry passes the pending check, so the retry after any setup failure is a plain `setup`. A `ready` entry keeps its status: an already-finalized main worktree whose `preSetup` or profile refuses stays usable and is not re-finalized. `copyAndPatchFile` throws a `WorkspaceError` on a missing required source for the same reason: a `process.exit` there would skip the catch.
 
 ### Setup profiles
 
