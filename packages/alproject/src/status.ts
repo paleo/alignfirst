@@ -27,7 +27,7 @@ export function getProjectStatus(
   registry: Registry,
   inputPath: string,
 ): ProjectDetails {
-  const path = resolveProjectPath(inputPath, config.root);
+  const path = resolveProjectPath(inputPath, config.root.path);
   const project = buildProjectList(config, registry).projects.find(
     (candidate) => candidate.path === path,
   );

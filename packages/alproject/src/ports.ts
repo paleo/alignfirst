@@ -1,4 +1,5 @@
 import { AlprojectError } from "./errors.js";
+import type { PortRange } from "./config.js";
 import type { PortAllocation, ProjectEntry } from "./registry.js";
 
 export interface PortRequest {
@@ -6,7 +7,7 @@ export interface PortRequest {
   portsPerWorkspace: number;
 }
 
-interface PortRange {
+interface AllocatedPortRange {
   end: number;
   start: number;
 }
@@ -14,21 +15,45 @@ interface PortRange {
 export function allocateProjectPorts(
   projects: readonly ProjectEntry[],
   request: PortRequest,
-  firstPort: number,
-  lastPort: number,
+  availableRanges: readonly PortRange[],
 ): PortAllocation {
   const size = projectPortCount(request);
-  const ranges = projects.flatMap((project) =>
+  const allocations = projects.flatMap((project) =>
     project.ports === undefined ? [] : [allocationRange(project.ports)],
   );
-  const basePort = lowestFreeBase(ranges, size, firstPort, lastPort);
-  if (basePort === undefined) {
+  for (const range of availableRanges.toSorted((left, right) => left.first - right.first)) {
+    const basePort = lowestFreeBase(allocations, size, range.first, range.last);
+    if (basePort !== undefined) return { basePort, ...request };
+  }
+  throw new AlprojectError(
+    "registry",
+    `No contiguous block of ${size} ports is available within ${formatPortRanges(availableRanges)}`,
+  );
+}
+
+export function claimProjectPorts(
+  projects: readonly ProjectEntry[],
+  claim: PortAllocation,
+  availableRanges: readonly PortRange[],
+): PortAllocation {
+  const claimedRange = allocationRange(claim);
+  if (!availableRanges.some((range) => containsRange(range, claimedRange))) {
     throw new AlprojectError(
       "registry",
-      `No contiguous block of ${size} ports is available within ${firstPort}..${lastPort}`,
+      `Claimed port range ${formatAllocatedRange(claimedRange)} is outside ${formatPortRanges(availableRanges)}`,
     );
   }
-  return { basePort, ...request };
+  const conflict = projects.find(
+    (project) =>
+      project.ports !== undefined && rangesOverlap(claimedRange, allocationRange(project.ports)),
+  );
+  if (conflict !== undefined) {
+    throw new AlprojectError(
+      "registry",
+      `Claimed port range ${formatAllocatedRange(claimedRange)} is not available because it overlaps ${conflict.path}`,
+    );
+  }
+  return claim;
 }
 
 export function projectPortCount(request: PortRequest): number {
@@ -51,7 +76,7 @@ export function allocationEnd(allocation: PortAllocation): number {
 }
 
 function lowestFreeBase(
-  ranges: readonly PortRange[],
+  ranges: readonly AllocatedPortRange[],
   size: number,
   firstPort: number,
   lastPort: number,
@@ -70,8 +95,25 @@ function fitsBefore(basePort: number, size: number, lastPort: number): boolean {
   return Number.isSafeInteger(end) && end <= lastPort;
 }
 
-function allocationRange(allocation: PortAllocation): PortRange {
+function allocationRange(allocation: PortAllocation): AllocatedPortRange {
   return { end: allocationEnd(allocation), start: allocation.basePort };
+}
+
+function containsRange(available: PortRange, allocation: AllocatedPortRange): boolean {
+  return allocation.start >= available.first && allocation.end <= available.last;
+}
+
+function rangesOverlap(left: AllocatedPortRange, right: AllocatedPortRange): boolean {
+  return left.start <= right.end && right.start <= left.end;
+}
+
+function formatPortRanges(ranges: readonly PortRange[]): string {
+  if (ranges.length === 0) return "the configured port ranges (none available)";
+  return ranges.map((range) => `${range.first}..${range.last}`).join(", ");
+}
+
+function formatAllocatedRange(range: AllocatedPortRange): string {
+  return `${range.start}..${range.end}`;
 }
 
 function assertPositiveSafeInteger(value: number, field: string): void {

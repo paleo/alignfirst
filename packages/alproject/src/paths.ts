@@ -42,10 +42,6 @@ export function resolveConfiguredPath(path: string, home: string): string {
   return canonicalizePath(normalizeAbsolutePath(path, home));
 }
 
-export function canonicalizeParentPaths(paths: readonly string[], home: string): string[] {
-  return [...new Set(paths.map((path) => resolveConfiguredPath(path, home)))];
-}
-
 function isMissingPathError(error: unknown): boolean {
   return isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR");
 }

@@ -72,6 +72,9 @@ describe("registerProject", () => {
     await expect(
       registerProject(fixture.config, project, { maxWorkspaces: 2, portsPerWorkspace: 0 }),
     ).rejects.toThrow(/positive integer/);
+    await expect(registerProject(fixture.config, project, { basePort: 8000 })).rejects.toThrow(
+      /requires portsPerWorkspace and maxWorkspaces/,
+    );
     expect(existsSync(registryPath(fixture.config))).toBe(false);
   });
 
@@ -90,6 +93,42 @@ describe("registerProject", () => {
     expect((await registerProject(fixture.config, b, options)).ports?.basePort).toBe(8010);
     await unregisterProject(fixture.config, a);
     expect((await registerProject(fixture.config, c, options)).ports?.basePort).toBe(8000);
+  });
+
+  it("claims an exact available base port and preserves the registry on conflicts", async () => {
+    const fixture = makeFixture(8000, 8029);
+    const a = makeProject(fixture.root, "a");
+    const b = makeProject(fixture.root, "b");
+    const options = { basePort: 8010, maxWorkspaces: 2, portsPerWorkspace: 5 };
+
+    expect((await registerProject(fixture.config, a, options)).ports).toEqual({
+      basePort: 8010,
+      endPort: 8019,
+      maxWorkspaces: 2,
+      portsPerWorkspace: 5,
+    });
+    const before = readFileSync(registryPath(fixture.config), "utf8");
+    await expect(registerProject(fixture.config, b, options)).rejects.toThrow(/not available/);
+    expect(readFileSync(registryPath(fixture.config), "utf8")).toBe(before);
+  });
+
+  it("reserves dedicated parent ranges from the shared allocation pool", async () => {
+    const fixture = makeFixture(8000, 8029);
+    fixture.config.projectParents[1].portRange = { first: 8010, last: 8019 };
+    const sharedA = makeProject(fixture.root, "shared-a");
+    const sharedB = makeProject(fixture.root, "shared-b");
+    const dedicated = makeProject(fixture.parent, "dedicated");
+    const options = { maxWorkspaces: 2, portsPerWorkspace: 5 };
+
+    await expect(
+      registerProject(fixture.config, sharedA, { basePort: 8010, ...options }),
+    ).rejects.toThrow(/outside/);
+    await expect(
+      registerProject(fixture.config, dedicated, { basePort: 8000, ...options }),
+    ).rejects.toThrow(/outside/);
+    expect((await registerProject(fixture.config, sharedA, options)).ports?.basePort).toBe(8000);
+    expect((await registerProject(fixture.config, sharedB, options)).ports?.basePort).toBe(8020);
+    expect((await registerProject(fixture.config, dedicated, options)).ports?.basePort).toBe(8010);
   });
 
   it("uses registry reservations only and preserves an exhausted registry", async () => {
@@ -248,10 +287,8 @@ function makeFixture(firstPort = 8000, lastPort = 9000): Fixture {
   return {
     config: {
       configPath: join(fixtureDir, ".alproject.json"),
-      firstPort,
-      lastPort,
-      projectParents: [root, parent],
-      root,
+      projectParents: [{ path: root }, { path: parent }],
+      root: { path: root, portRange: { first: firstPort, last: lastPort } },
     },
     parent,
     root,

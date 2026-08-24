@@ -29,6 +29,7 @@ export interface Output {
 }
 
 export interface AlprojectArgs {
+  basePort?: number;
   command?: string;
   guide: boolean;
   help: boolean;
@@ -37,6 +38,12 @@ export interface AlprojectArgs {
   path?: string;
   portsPerWorkspace?: number;
   version: boolean;
+}
+
+interface PortOptionValues {
+  "base-port"?: string;
+  "max-workspaces"?: string;
+  "ports-per-workspace"?: string;
 }
 
 export async function main(options: MainOptions = {}): Promise<number> {
@@ -66,7 +73,7 @@ export async function main(options: MainOptions = {}): Promise<number> {
   try {
     if (args.guide) {
       const config = readConfigIfPresent(home);
-      stdout.write(ensureTrailingNewline(renderGuide(config?.root)));
+      stdout.write(ensureTrailingNewline(renderGuide(config?.root.path)));
       return 0;
     }
     if (args.command === undefined) {
@@ -86,6 +93,7 @@ export async function main(options: MainOptions = {}): Promise<number> {
     }
     if (args.command === "register" && args.path !== undefined) {
       const result = await registerProject(config, args.path, {
+        basePort: args.basePort,
         maxWorkspaces: args.maxWorkspaces,
         portsPerWorkspace: args.portsPerWorkspace,
       });
@@ -109,6 +117,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     allowPositionals: true,
     args: argv.slice(2),
     options: {
+      "base-port": { type: "string" },
       guide: { default: false, type: "boolean" },
       help: { default: false, short: "h", type: "boolean" },
       json: { default: false, type: "boolean" },
@@ -128,11 +137,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   }
   if (selectedModes.length === 1) {
     if (positionals.length > 0) throw new Error(`${selectedModes[0]} does not accept a command`);
-    if (
-      values.json === true ||
-      values["ports-per-workspace"] !== undefined ||
-      values["max-workspaces"] !== undefined
-    ) {
+    if (values.json === true || hasPortOptions(values)) {
       throw new Error(`${selectedModes[0]} does not accept command options`);
     }
     return {
@@ -146,7 +151,7 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
   const [command, path, ...extraPaths] = positionals;
   if (command === undefined) {
     if (values.json === true) throw new Error("--json is valid only with list or status");
-    if (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined) {
+    if (hasPortOptions(values)) {
       throw new Error("Port options are valid only with register");
     }
     return { guide: false, help: false, json: false, version: false };
@@ -162,10 +167,15 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     values["ports-per-workspace"],
   );
   const maxWorkspaces = parsePositiveInteger("--max-workspaces", values["max-workspaces"]);
+  const basePort = parsePositiveInteger("--base-port", values["base-port"]);
   if ((portsPerWorkspace === undefined) !== (maxWorkspaces === undefined)) {
     throw new Error("--ports-per-workspace and --max-workspaces must be provided together");
   }
+  if (basePort !== undefined && portsPerWorkspace === undefined) {
+    throw new Error("--base-port requires --ports-per-workspace and --max-workspaces");
+  }
   return {
+    basePort,
     command,
     guide: false,
     help: false,
@@ -175,6 +185,14 @@ export function parseAlprojectArgs(argv: string[]): AlprojectArgs {
     portsPerWorkspace,
     version: false,
   };
+}
+
+function hasPortOptions(values: PortOptionValues): boolean {
+  return (
+    values["base-port"] !== undefined ||
+    values["ports-per-workspace"] !== undefined ||
+    values["max-workspaces"] !== undefined
+  );
 }
 
 function isCommand(value: string): value is "list" | "register" | "status" | "unregister" {
@@ -194,14 +212,8 @@ function validateCommandPaths(
   if (extraPaths.length > 0) throw new Error(`${command} requires exactly one path`);
 }
 
-function validatePortOptionPlacement(
-  command: string,
-  values: { "max-workspaces"?: string; "ports-per-workspace"?: string },
-): void {
-  if (
-    command !== "register" &&
-    (values["ports-per-workspace"] !== undefined || values["max-workspaces"] !== undefined)
-  ) {
+function validatePortOptionPlacement(command: string, values: PortOptionValues): void {
+  if (command !== "register" && hasPortOptions(values)) {
     throw new Error("Port options are valid only with register");
   }
 }
@@ -232,7 +244,7 @@ function renderHelp(): string {
 Usage:
   alproject list [--json]
   alproject status <path> [--json]
-  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n>]
+  alproject register <path> [--ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]]
   alproject unregister <path>
 
 Options:

@@ -86,7 +86,10 @@ export function buildProjectList(
 export function discoverProjects(
   config: Pick<AlprojectConfig, "projectParents">,
 ): ProjectDiscovery {
-  const candidates = config.projectParents.toSorted().flatMap(readDirectoryCandidates);
+  const candidates = config.projectParents
+    .map((parent) => parent.path)
+    .toSorted()
+    .flatMap(readDirectoryCandidates);
   const mainCandidates = candidates.flatMap((candidate) => {
     const gitDirectory = existingGitDirectory(candidate.path);
     return gitDirectory === undefined ? [] : [{ ...candidate, gitDirectory }];

@@ -29,8 +29,11 @@ describe("renderGuide", () => {
       "alproject register <path>",
       "alproject unregister <path>",
       "--ports-per-workspace",
+      "--base-port",
       "does not delete",
+      "projectParents",
       "remote host",
+      "root.portRange",
     ]) {
       expect(guide).toContain(content);
     }

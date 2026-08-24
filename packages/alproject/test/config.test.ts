@@ -4,14 +4,14 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CONFIG_FILENAME, readConfig, readConfigIfPresent } from "../src/config.js";
-import type { AlprojectError } from "../src/errors.js";
 import {
-  canonicalizeParentPaths,
-  canonicalizePath,
-  expandHomePath,
-  normalizeAbsolutePath,
-} from "../src/paths.js";
+  availablePortRanges,
+  CONFIG_FILENAME,
+  readConfig,
+  readConfigIfPresent,
+} from "../src/config.js";
+import type { AlprojectError } from "../src/errors.js";
+import { canonicalizePath, expandHomePath, normalizeAbsolutePath } from "../src/paths.js";
 
 let fixtureDir: string | undefined;
 
@@ -43,29 +43,20 @@ describe("path resolution", () => {
       join(fixture.home, "gone"),
     );
   });
-
-  it("deduplicates canonical parent paths", () => {
-    const fixture = makeFixture();
-    const real = join(fixture.home, "real");
-    const link = join(fixture.home, "link");
-    mkdirSync(real);
-    symlinkSync(real, link);
-
-    expect(canonicalizeParentPaths([real, link, real], fixture.home)).toEqual([realpathSync(real)]);
-  });
 });
 
 describe("readConfig", () => {
   it("loads an omitted projectParents field as the canonical root", () => {
     const fixture = makeFixture();
-    writeConfig(fixture, { firstPort: 8000, lastPort: 9999, root: "~/root" });
+    writeConfig(fixture, configuredRoot("~/root", 8000, 9999));
 
     expect(readConfig(fixture.home)).toEqual({
       configPath: join(fixture.home, CONFIG_FILENAME),
-      firstPort: 8000,
-      lastPort: 9999,
-      projectParents: [realpathSync(fixture.root)],
-      root: realpathSync(fixture.root),
+      projectParents: [{ path: realpathSync(fixture.root) }],
+      root: {
+        path: realpathSync(fixture.root),
+        portRange: { first: 8000, last: 9999 },
+      },
     });
   });
 
@@ -74,31 +65,49 @@ describe("readConfig", () => {
     const otherParent = join(fixture.home, "other");
     mkdirSync(otherParent);
     writeConfig(fixture, {
-      firstPort: 1,
-      lastPort: 65535,
-      projectParents: ["~/other"],
-      root: "~/root",
+      projectParents: [{ path: "~/other" }],
+      ...configuredRoot("~/root", 1, 65535),
     });
 
     const config = readConfig(fixture.home);
-    expect(config.projectParents).toEqual([realpathSync(otherParent)]);
-    expect(config.projectParents).not.toContain(config.root);
+    expect(config.projectParents).toEqual([{ path: realpathSync(otherParent) }]);
+    expect(config.projectParents.map((parent) => parent.path)).not.toContain(config.root.path);
   });
 
-  it("canonicalizes and deduplicates explicit parents", () => {
+  it("rejects canonically duplicate explicit parents", () => {
     const fixture = makeFixture();
     const linkedRoot = join(fixture.home, "linked-root");
     symlinkSync(fixture.root, linkedRoot);
     writeConfig(fixture, {
-      firstPort: 8000,
-      lastPort: 9000,
-      projectParents: ["~/root", "~/linked-root", "~/root/../root"],
-      root: "~/linked-root",
+      projectParents: [{ path: "~/root" }, { path: "~/linked-root" }, { path: "~/root/../root" }],
+      ...configuredRoot("~/linked-root"),
+    });
+
+    expect(() => readConfig(fixture.home)).toThrow(/duplicate project parent/);
+  });
+
+  it("reserves non-overlapping parent port ranges from the shared root range", () => {
+    const fixture = makeFixture();
+    const dedicated = join(fixture.home, "dedicated");
+    const shared = join(fixture.home, "shared");
+    mkdirSync(dedicated);
+    mkdirSync(shared);
+    writeConfig(fixture, {
+      projectParents: [
+        { path: dedicated, portRange: { first: 8200, last: 8299 } },
+        { path: shared },
+      ],
+      ...configuredRoot("~/root", 8000, 8999),
     });
 
     const config = readConfig(fixture.home);
-    expect(config.root).toBe(realpathSync(fixture.root));
-    expect(config.projectParents).toEqual([realpathSync(fixture.root)]);
+    expect(availablePortRanges(config, join(dedicated, "project"))).toEqual([
+      { first: 8200, last: 8299 },
+    ]);
+    expect(availablePortRanges(config, join(shared, "project"))).toEqual([
+      { first: 8000, last: 8199 },
+      { first: 8300, last: 8999 },
+    ]);
   });
 
   it("reports a missing configuration with its path", () => {
@@ -118,24 +127,30 @@ describe("readConfig", () => {
   });
 
   it.each([
-    ["missing root", { firstPort: 8000, lastPort: 9000 }],
-    ["missing first port", { lastPort: 9000, root: "~/root" }],
-    ["missing last port", { firstPort: 8000, root: "~/root" }],
-    ["unknown field", { extra: true, firstPort: 8000, lastPort: 9000, root: "~/root" }],
-    ["empty root", { firstPort: 8000, lastPort: 9000, root: "" }],
-    ["non-string root", { firstPort: 8000, lastPort: 9000, root: 42 }],
-    ["empty parents", { firstPort: 8000, lastPort: 9000, projectParents: [], root: "~/root" }],
-    ["empty parent", { firstPort: 8000, lastPort: 9000, projectParents: [""], root: "~/root" }],
+    ["missing root", {}],
+    ["string root", { root: "~/root" }],
+    ["unknown field", { extra: true, ...configuredRoot("~/root") }],
+    ["empty root path", configuredRoot("")],
+    ["non-string root path", configuredRoot(42)],
+    ["empty parents", { projectParents: [], ...configuredRoot("~/root") }],
+    ["empty parent path", { projectParents: [{ path: "" }], ...configuredRoot("~/root") }],
+    ["string parent", { projectParents: ["~/root"], ...configuredRoot("~/root") }],
+    ["non-array parents", { projectParents: "~/root", ...configuredRoot("~/root") }],
     [
-      "non-array parents",
-      { firstPort: 8000, lastPort: 9000, projectParents: "~/root", root: "~/root" },
+      "partial parent range",
+      {
+        projectParents: [{ path: "~/root", portRange: { first: 8000 } }],
+        ...configuredRoot("~/root"),
+      },
     ],
-    ["non-number first port", { firstPort: "8000", lastPort: 9000, root: "~/root" }],
-    ["non-integer first port", { firstPort: 8000.5, lastPort: 9000, root: "~/root" }],
-    ["first port below range", { firstPort: 0, lastPort: 9000, root: "~/root" }],
-    ["non-integer last port", { firstPort: 8000, lastPort: 9000.5, root: "~/root" }],
-    ["last port above range", { firstPort: 8000, lastPort: 65536, root: "~/root" }],
-    ["reversed ports", { firstPort: 9000, lastPort: 8000, root: "~/root" }],
+    ["missing first port", configuredRange({ last: 9000 })],
+    ["missing last port", configuredRange({ first: 8000 })],
+    ["non-number first port", configuredRange({ first: "8000", last: 9000 })],
+    ["non-integer first port", configuredRange({ first: 8000.5, last: 9000 })],
+    ["first port below range", configuredRange({ first: 0, last: 9000 })],
+    ["non-integer last port", configuredRange({ first: 8000, last: 9000.5 })],
+    ["last port above range", configuredRange({ first: 8000, last: 65536 })],
+    ["reversed ports", configuredRange({ first: 9000, last: 8000 })],
   ])("rejects %s", (_label, value) => {
     const fixture = makeFixture();
     writeConfig(fixture, value);
@@ -144,20 +159,18 @@ describe("readConfig", () => {
 
   it("rejects relative configured paths", () => {
     const fixture = makeFixture();
-    writeConfig(fixture, { firstPort: 8000, lastPort: 9000, root: "root" });
-    expect(() => readConfig(fixture.home)).toThrow(/root: Path must be absolute/);
+    writeConfig(fixture, configuredRoot("root"));
+    expect(() => readConfig(fixture.home)).toThrow(/root\.path: Path must be absolute/);
   });
 
   it.each(["root", "parent"])("rejects a missing %s directory", (missingField) => {
     const fixture = makeFixture();
     const value =
       missingField === "root"
-        ? { firstPort: 8000, lastPort: 9000, root: "~/missing" }
+        ? configuredRoot("~/missing")
         : {
-            firstPort: 8000,
-            lastPort: 9000,
-            projectParents: ["~/missing"],
-            root: "~/root",
+            projectParents: [{ path: "~/missing" }],
+            ...configuredRoot("~/root"),
           };
     writeConfig(fixture, value);
     expect(() => readConfig(fixture.home)).toThrow(/directory is missing or inaccessible/);
@@ -167,8 +180,34 @@ describe("readConfig", () => {
     const fixture = makeFixture();
     const filePath = join(fixture.home, "file");
     writeFileSync(filePath, "not a directory");
-    writeConfig(fixture, { firstPort: 8000, lastPort: 9000, root: filePath });
+    writeConfig(fixture, configuredRoot(filePath));
     expect(() => readConfig(fixture.home)).toThrow(/path is not a directory/);
+  });
+
+  it.each([
+    ["outside root", { first: 7000, last: 8000 }, { first: 8000, last: 9000 }],
+    ["reversed", { first: 8500, last: 8400 }, { first: 8000, last: 9000 }],
+  ])("rejects a parent port range %s", (_label, portRange, rootRange) => {
+    const fixture = makeFixture();
+    writeConfig(fixture, {
+      projectParents: [{ path: "~/root", portRange }],
+      root: { path: "~/root", portRange: rootRange },
+    });
+    expect(() => readConfig(fixture.home)).toThrow(/Invalid configuration/);
+  });
+
+  it("rejects overlapping parent port ranges", () => {
+    const fixture = makeFixture();
+    const other = join(fixture.home, "other");
+    mkdirSync(other);
+    writeConfig(fixture, {
+      projectParents: [
+        { path: "~/root", portRange: { first: 8100, last: 8200 } },
+        { path: other, portRange: { first: 8200, last: 8300 } },
+      ],
+      ...configuredRoot("~/root"),
+    });
+    expect(() => readConfig(fixture.home)).toThrow(/port ranges overlap/);
   });
 });
 
@@ -202,4 +241,12 @@ function makeFixture(): Fixture {
 
 function writeConfig(fixture: Fixture, value: object): void {
   writeFileSync(join(fixture.home, CONFIG_FILENAME), JSON.stringify(value));
+}
+
+function configuredRoot(path: unknown, first = 8000, last = 9000): object {
+  return { root: { path, portRange: { first, last } } };
+}
+
+function configuredRange(portRange: object): object {
+  return { root: { path: "~/root", portRange } };
 }

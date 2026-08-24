@@ -11,16 +11,17 @@ import {
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
-import type { AlprojectConfig } from "./config.js";
+import { availablePortRanges, type AlprojectConfig } from "./config.js";
 import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { resolveProjectPath } from "./paths.js";
 import {
   allocateProjectPorts,
   allocationEnd,
+  claimProjectPorts,
   projectPortCount,
   type PortRequest,
 } from "./ports.js";
-import { readRegistry, type Registry, registryPath } from "./registry.js";
+import { type PortAllocation, readRegistry, type Registry, registryPath } from "./registry.js";
 import { type RegistryLockOptions, withRegistryLock } from "./registry-lock.js";
 
 const atomicWriteOperations: AtomicWriteOperations = {
@@ -33,6 +34,7 @@ const atomicWriteOperations: AtomicWriteOperations = {
 };
 
 export interface RegistrationOptions {
+  basePort?: number;
   maxWorkspaces?: number;
   portsPerWorkspace?: number;
 }
@@ -69,16 +71,12 @@ export async function registerProject(
 ): Promise<RegistrationResult> {
   const path = registrationPath(config, inputPath);
   const request = portRequest(options);
-  if (request !== undefined) assertRequestFitsConfiguredRange(config, request);
 
   return mutateRegistry(config, mutationOptions, (registry) => {
     if (registry.projects.some((project) => project.path === path)) {
       throw new AlprojectError("registry", `Project is already registered: ${path}`);
     }
-    const ports =
-      request === undefined
-        ? undefined
-        : allocateProjectPorts(registry.projects, request, config.firstPort, config.lastPort);
+    const ports = allocateRegistrationPorts(config, registry, path, request, options.basePort);
     registry.projects.push(ports === undefined ? { path } : { path, ports });
     return {
       path,
@@ -104,7 +102,7 @@ export async function unregisterProject(
 function registrationPath(config: AlprojectConfig, inputPath: string): string {
   const path = mutationPath(config, inputPath);
   assertMainWorktree(path);
-  if (!config.projectParents.includes(dirname(path))) {
+  if (!config.projectParents.some((parent) => parent.path === dirname(path))) {
     throw new AlprojectError(
       "filesystem",
       `Project must be a direct child of an allowed project parent: ${path}`,
@@ -114,7 +112,7 @@ function registrationPath(config: AlprojectConfig, inputPath: string): string {
 }
 
 function mutationPath(config: Pick<AlprojectConfig, "root">, inputPath: string): string {
-  return resolveProjectPath(inputPath, config.root);
+  return resolveProjectPath(inputPath, config.root.path);
 }
 
 function assertMainWorktree(path: string): void {
@@ -146,6 +144,9 @@ function portRequest(options: RegistrationOptions): PortRequest | undefined {
     options.portsPerWorkspace === undefined ||
     options.maxWorkspaces === undefined
   ) {
+    if (options.basePort !== undefined) {
+      throw new AlprojectError("registry", "basePort requires portsPerWorkspace and maxWorkspaces");
+    }
     return;
   }
   const request = {
@@ -153,18 +154,26 @@ function portRequest(options: RegistrationOptions): PortRequest | undefined {
     portsPerWorkspace: options.portsPerWorkspace,
   };
   projectPortCount(request);
+  if (options.basePort !== undefined) {
+    allocationEnd({ basePort: options.basePort, ...request });
+  }
   return request;
 }
 
-function assertRequestFitsConfiguredRange(config: AlprojectConfig, request: PortRequest): void {
-  const available = config.lastPort - config.firstPort + 1;
-  const requested = projectPortCount(request);
-  if (requested > available) {
-    throw new AlprojectError(
-      "registry",
-      `Requested block of ${requested} ports exceeds configured range ${config.firstPort}..${config.lastPort}`,
-    );
-  }
+function allocateRegistrationPorts(
+  config: AlprojectConfig,
+  registry: Registry,
+  path: string,
+  request: PortRequest | undefined,
+  basePort: number | undefined,
+): PortAllocation | undefined {
+  if (request === undefined) return;
+  const ranges = availablePortRanges(config, path);
+  const allocation =
+    basePort === undefined
+      ? allocateProjectPorts(registry.projects, request, ranges)
+      : claimProjectPorts(registry.projects, { basePort, ...request }, ranges);
+  return allocation;
 }
 
 async function mutateRegistry<T>(

@@ -139,10 +139,8 @@ function makeFixture(): Fixture {
   return {
     config: {
       configPath: join(fixtureDir, ".alproject.json"),
-      firstPort: 8000,
-      lastPort: 9000,
-      projectParents: [root],
-      root,
+      projectParents: [{ path: root }],
+      root: { path: root, portRange: { first: 8000, last: 9000 } },
     },
     root,
   };

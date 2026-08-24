@@ -3,7 +3,7 @@ import { isAbsolute, join, normalize } from "node:path";
 
 import { type } from "arktype";
 
-import type { AlprojectConfig } from "./config.js";
+import { availablePortRanges, type AlprojectConfig } from "./config.js";
 import { AlprojectError, errorMessage, isNodeError } from "./errors.js";
 import { canonicalizePath } from "./paths.js";
 import { allocationEnd } from "./ports.js";
@@ -38,7 +38,7 @@ interface PortRange {
 }
 
 export function registryPath(config: Pick<AlprojectConfig, "root">): string {
-  return join(config.root, REGISTRY_FILENAME);
+  return join(config.root.path, REGISTRY_FILENAME);
 }
 
 export function readRegistry(config: AlprojectConfig): Registry {
@@ -107,10 +107,11 @@ function portRange(
       throw registryError(registryFile, `${field} must be a safe integer for ${project.path}`);
     }
   }
-  if (ports.basePort < config.firstPort || ports.basePort > config.lastPort) {
+  const rootRange = config.root.portRange;
+  if (ports.basePort < rootRange.first || ports.basePort > rootRange.last) {
     throw registryError(
       registryFile,
-      `basePort for ${project.path} must be within ${config.firstPort}..${config.lastPort}`,
+      `basePort for ${project.path} must be within ${rootRange.first}..${rootRange.last}`,
     );
   }
 
@@ -120,10 +121,17 @@ function portRange(
   } catch (error) {
     throw registryError(registryFile, errorMessage(error), error);
   }
-  if (end > config.lastPort) {
+  if (end > rootRange.last) {
     throw registryError(
       registryFile,
-      `port allocation for ${project.path} exceeds configured range ending at ${config.lastPort}`,
+      `port allocation for ${project.path} exceeds configured range ending at ${rootRange.last}`,
+    );
+  }
+  const availableRanges = availablePortRanges(config, project.path);
+  if (!availableRanges.some((range) => ports.basePort >= range.first && end <= range.last)) {
+    throw registryError(
+      registryFile,
+      `port allocation for ${project.path} is outside its available parent port range`,
     );
   }
   return { end, path: project.path, start: ports.basePort };

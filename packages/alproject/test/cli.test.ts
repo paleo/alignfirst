@@ -63,6 +63,9 @@ describe("parseAlprojectArgs", () => {
     expect(() => parse(["register", "project", "--ports-per-workspace", "2"])).toThrow(
       /provided together/,
     );
+    expect(() => parse(["register", "project", "--base-port", "8000"])).toThrow(
+      /requires --ports-per-workspace and --max-workspaces/,
+    );
     expect(() =>
       parse(["register", "project", "--ports-per-workspace", "0", "--max-workspaces", "2"]),
     ).toThrow(/positive integer/);
@@ -70,8 +73,17 @@ describe("parseAlprojectArgs", () => {
       /only with register/,
     );
     expect(
-      parse(["register", "project", "--ports-per-workspace", "5", "--max-workspaces", "3"]),
-    ).toMatchObject({ maxWorkspaces: 3, portsPerWorkspace: 5 });
+      parse([
+        "register",
+        "project",
+        "--ports-per-workspace",
+        "5",
+        "--max-workspaces",
+        "3",
+        "--base-port",
+        "8100",
+      ]),
+    ).toMatchObject({ basePort: 8100, maxWorkspaces: 3, portsPerWorkspace: 5 });
   });
 
   it("rejects invalid global-mode combinations", () => {
@@ -90,6 +102,7 @@ describe("main", () => {
     const stdout = makeSink();
     expect(await run([], { stdout })).toBe(0);
     expect(stdout.text()).toContain("alproject register <path>");
+    expect(stdout.text()).toContain("--base-port <n>");
     expect(stdout.text()).toContain("alproject status <path> [--json]");
     expect(stdout.text()).toContain("alproject --guide");
   });
@@ -158,13 +171,22 @@ describe("main", () => {
     const project = makeRepository(fixture.root, "project");
     const registerOutput = makeSink();
     expect(
-      await run(["register", "project", "--ports-per-workspace", "5", "--max-workspaces", "2"], {
-        home: fixture.home,
-        stdout: registerOutput,
-      }),
+      await run(
+        [
+          "register",
+          "project",
+          "--ports-per-workspace",
+          "5",
+          "--max-workspaces",
+          "2",
+          "--base-port",
+          "8010",
+        ],
+        { home: fixture.home, stdout: registerOutput },
+      ),
     ).toBe(0);
     expect(registerOutput.text()).toBe(
-      `Registered project: ${JSON.stringify(project)}\nBase port: 8000\nPort range: 8000..8009\n`,
+      `Registered project: ${JSON.stringify(project)}\nBase port: 8010\nPort range: 8010..8019\n`,
     );
 
     const listOutput = makeSink();
@@ -174,8 +196,8 @@ describe("main", () => {
     expect(listOutput.text()).toContain(`  Parent: ${JSON.stringify(fixture.root)}`);
     expect(listOutput.text()).toContain("  Status: registered");
     expect(listOutput.text()).toContain("  Workspaces: (none)");
-    expect(listOutput.text()).toContain("  Base port: 8000");
-    expect(listOutput.text()).toContain("  Port range: 8000..8009");
+    expect(listOutput.text()).toContain("  Base port: 8010");
+    expect(listOutput.text()).toContain("  Port range: 8010..8019");
 
     const unregisterOutput = makeSink();
     expect(
@@ -348,7 +370,7 @@ function makeFixture(firstPort = 8000, lastPort = 8999): Fixture {
   mkdirSync(root);
   writeFileSync(
     join(home, ".alproject.json"),
-    `${JSON.stringify({ firstPort, lastPort, root })}\n`,
+    `${JSON.stringify({ root: { path: root, portRange: { first: firstPort, last: lastPort } } })}\n`,
   );
   return { home, root };
 }

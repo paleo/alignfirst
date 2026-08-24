@@ -2,6 +2,28 @@
 
 Your project registry.
 
+## Configuration
+
+```json
+{
+  "root": {
+    "path": "~/projects",
+    "portRange": { "first": 8000, "last": 9999 }
+  },
+  "projectParents": [
+    { "path": "~/projects" },
+    {
+      "path": "~/work/projects",
+      "portRange": { "first": 9000, "last": 9999 }
+    }
+  ]
+}
+```
+
+`root.path` stores the registry and resolves relative command paths. `root.portRange` defines the inclusive global port range. `projectParents` defaults to the root path.
+
+An optional parent `portRange` reserves part of the global range for that parent's projects. Parent ranges must be inside the global range and cannot overlap. Parents without a dedicated range share the remaining global ports.
+
 ## Commands
 
 ### `alproject list [--json]`
@@ -25,10 +47,12 @@ Register an existing Git main worktree that is a direct child of an allowed pare
 Use both port options to reserve a range:
 
 ```sh
-alproject register <path> --ports-per-workspace <n> --max-workspaces <n>
+alproject register <path> --ports-per-workspace <n> --max-workspaces <n> [--base-port <n>]
 ```
 
-Both values must be positive integers. `max-workspaces` includes the main worktree. Alproject reserves `ports-per-workspace * max-workspaces` ports and selects the lowest contiguous free block in the configured inclusive range. It considers registry reservations rather than listening processes.
+The sizing values must be positive integers. `max-workspaces` includes the main worktree. Alproject reserves `ports-per-workspace * max-workspaces` ports and selects the lowest contiguous free block available to the project's parent. It considers registry reservations rather than listening processes.
+
+Pass `--base-port` to claim an exact range instead. Registration fails when the claimed range is outside the ports available to the project's parent or overlaps an existing reservation.
 
 To change a registration, unregister it first.
 
