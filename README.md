@@ -55,3 +55,5 @@ npm install
 npm run build --workspace @paleo/workspace
 npm run workspace -- setup
 ```
+
+The everyday workflow is in [`DEVELOPERS.md`](DEVELOPERS.md).

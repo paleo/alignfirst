@@ -5,7 +5,7 @@ The setup phase of a working session: get the workspace ready before handling th
 ## Prerequisites — run both now, before Step 1
 
 - `alcode --openclaw-guide` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
-- read `{PROJECT_PATH}/DEVELOPMENT.md` — how to create a worktree or a branch.
+- read `{PROJECT_PATH}/DEVELOPERS.md` — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
 
@@ -39,12 +39,12 @@ That single call is the whole exception. The post right after it, and every one 
 
 The workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
-A project whose `DEVELOPMENT.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
+A project whose `DEVELOPERS.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
 
 First, check what already exists for the {TICKET_ID} — two checks, both required:
 
 - **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
-- **Registered workspaces**: `DEVELOPMENT.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+- **Registered workspaces**: `DEVELOPERS.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 

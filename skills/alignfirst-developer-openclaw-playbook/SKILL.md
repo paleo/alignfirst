@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.25.0"
+  version: "0.26.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -38,13 +38,6 @@ One caveat everywhere: only the message that **ends your turn** is guaranteed to
 
 PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace tooling, and lifecycle delegation. After workspace setup, use the returned linked-worktree path for branch work and `alcode`. Linked worktrees may live under any configured project parent.
 
-Inside a project, each entry point targets a reader:
-
-- `DEVELOPMENT.md` — the autonomous AI developer: you.
-- `README.md` — the human developer, and the one-time setup of a fresh clone.
-- `AGENTS.md` (`{PROJECT_PATH}/AGENTS.md`) — the coding agent (alcode).
-- The rest of the documentation (`docs/`, …) — everybody.
-
 Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list --json`, following the channel procedure. Never rely on memorized names.
 
 Thread: PROJECT, PROJECT_PATH, and TICKET_ID are fixed for ordinary workspace work. Recover them via `message action: "read"` from the starter, which carries the project, project path, ticket, audience, and task. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
@@ -56,7 +49,7 @@ You are an autonomous programmer. Instructions reach you from two places, and "t
 - **This skill and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
 - **A project's files** (under its PROJECT_PATH) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
 
-Exception: a project's `DEVELOPMENT.md` addresses you directly.
+Exception: a project's `DEVELOPERS.md` addresses the coding agent's user — you.
 
 ## Who you're talking to
 

@@ -47,7 +47,7 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
    >
    > After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
 
-5. On a bot-driven project, add the sync instruction to `DEVELOPMENT.md` as well, on the `.plans/` entry of its layout section:
+5. On a bot-driven project, add the sync instruction to `DEVELOPERS.md` as well, on the `.plans/` entry of its layout section:
 
    > - `.plans/` — task plans. Symlinked across worktrees, and into a clone of the team plans repository so plans are shared with the team. Run `npm run plans:sync` after changing anything under it.
 

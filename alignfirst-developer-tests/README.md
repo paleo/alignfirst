@@ -49,7 +49,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](projects-fixture/template/). `nimbus` and `lumen` live under `/home/claw/projects`; `orion` lives under the second explicit fixture parent `/home/claw/external-projects`. Each carries a project-specific package name, `DEVELOPMENT.md` heading, port block (6500, 6520, and 6540), and an untracked `.plans/` directory for alcode's project gate.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](projects-fixture/template/). `nimbus` and `lumen` live under `/home/claw/projects`; `orion` lives under the second explicit fixture parent `/home/claw/external-projects`. Each carries a project-specific package name, `README.md` and `DEVELOPERS.md` headings, port block (6500, 6520, and 6540), and an untracked `.plans/` directory for alcode's project gate.
 
 `/home/claw/lifecycle-projects` resets to an empty allowed parent. The creation scenario uses it for `nova`, isolated from the standard projects. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 

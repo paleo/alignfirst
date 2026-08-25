@@ -85,7 +85,17 @@ For the `.plans/` directory's task directories, cycles, filenames, and artifact 
 
 ### Hand-written changes in `.plans/`
 
-Some projects share `.plans/` through a sync command, documented in `DEVELOPMENT.md`. After writing or editing a file there yourself, run the sync. A change written by alcode needs nothing — alcode syncs its own.
+Some projects share `.plans/` through a sync command, documented in `DEVELOPERS.md`. After writing or editing a file there yourself, run the sync. A change written by alcode needs nothing — alcode syncs its own.
+
+### The project's entry points
+
+A project has up to three entry points:
+
+- `README.md` — presentation, getting-started procedure…
+- `DEVELOPERS.md` — the coding agent's user, human or AI: you.
+- `AGENTS.md` — the coding agent (alcode).
+
+The rest of the documentation (`docs/`, …) addresses everybody.
 
 ### The project's documentation
 
@@ -110,7 +120,7 @@ Running the dev-server from the main worktree is fine.
 
 After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
 
-Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPMENT.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
+Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPERS.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
 ### Updating a branch with the base branch
 
@@ -178,7 +188,7 @@ When the user brings up acceptance testing, first be sure who runs it — ask wh
 
 ### Improving project docs
 
-When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `DEVELOPMENT.md`. Propose the improvement to the user, ask for confirmation, then have alcode make the edit.
+When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `DEVELOPERS.md`. Propose the improvement to the user, ask for confirmation, then have alcode make the edit.
 
 ### Commit & push cadence
 

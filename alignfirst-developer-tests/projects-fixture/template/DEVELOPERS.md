@@ -1,6 +1,4 @@
-# Developing
-
-A small full-stack product monorepo (API + frontend).
+# Developer Guide
 
 ## Stack
 
@@ -29,13 +27,6 @@ pnpm lint       # syntax-check every module
 A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated from one another, so you can run several branches in parallel.
 
 Run `pnpm workspace --guide` for the full procedures (creating/removing workspaces, starting/stopping the dev server).
-
-### Fresh Clone
-
-```sh
-pnpm i
-pnpm workspace setup
-```
 
 ## Conventions
 

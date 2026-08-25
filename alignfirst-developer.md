@@ -148,7 +148,7 @@ Feel free to adapt the other sections. In particular, replace the instructions r
 Before handing a project to an AlignFirst Developer, set it up for autonomous work:
 
 - **Install [`@paleo/workspace`](https://www.npmjs.com/package/@paleo/workspace)** so the agent runs each task in its own isolated git-worktree environment, several branches in parallel. See its [README](packages/workspace/README.md) for setup.
-- **Add a `DEVELOPMENT.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPMENT.md`](alignfirst-developer-tests/projects-fixture/template/DEVELOPMENT.md).
+- **Add a `DEVELOPERS.md`** at the project root: stack, layout, daily commands, conventions (ticket / branch / commit), and how to find docs. Example: [`projects-fixture/template/DEVELOPERS.md`](alignfirst-developer-tests/projects-fixture/template/DEVELOPERS.md).
 - **Register the main worktree with `alproject`** after its `.git` directory exists. Use both port-allocation options when its workspace setup requires them.
 
 ## Contribute
