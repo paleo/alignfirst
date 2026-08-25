@@ -1,4 +1,4 @@
-# Development
+# Developer Guide
 
 The everyday workflow of this repository. Run `npm run docmap` for the design documentation.
 

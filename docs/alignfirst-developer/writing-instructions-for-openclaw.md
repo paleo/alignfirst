@@ -48,7 +48,7 @@ This is why the channel session's starter is the only place the handoff values c
 
 When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the agent to drop X from the ack. Collapse to: "Post `<form including X>`".
 
-This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPMENT.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
+This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
 
 ## The other side: a value already on screen gets dropped
 

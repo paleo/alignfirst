@@ -84,7 +84,7 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   });
 
   // A status report may be composed from repo/workflow metadata (git, gh, ls,
-  // DEVELOPMENT.md, .plans/) OR via alcode — both are fine, so we don't assert
+  // DEVELOPERS.md, .plans/) OR via alcode — both are fine, so we don't assert
   // how the status was gathered, only that the report is correct (rubric above),
   // lands in the thread, and leaves no stray worktrees / channel leak.
   assertWorktreePaths(ctx, [seededWorktreePath]);

@@ -99,7 +99,7 @@ describe("aggregateAgentToolCalls", () => {
         sessionKey: thread,
         ts: "2026-01-01T00:00:09Z",
         turns: [
-          { calls: [["t1", "read", { path: "~/projects/nimbus/DEVELOPMENT.md" }]] },
+          { calls: [["t1", "read", { path: "~/projects/nimbus/DEVELOPERS.md" }]] },
           { calls: [["t2", "exec", { command: "pnpm workspace --guide" }]] },
         ],
       }),
@@ -109,7 +109,7 @@ describe("aggregateAgentToolCalls", () => {
     expect(calls.find((c) => c.toolUseId === "c1")?.sessionKey).toBe(channel);
     expect(calls.find((c) => c.toolUseId === "t1")?.sessionKey).toBe(thread);
     expect(calls.find((c) => c.toolUseId === "t1")?.input).toEqual({
-      path: "~/projects/nimbus/DEVELOPMENT.md",
+      path: "~/projects/nimbus/DEVELOPERS.md",
     });
     expect(calls.find((c) => c.toolUseId === "t1")?.result).toEqual({
       isError: false,

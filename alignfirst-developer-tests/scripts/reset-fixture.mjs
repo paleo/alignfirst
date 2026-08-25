@@ -87,7 +87,7 @@ async function resetFixture({ name, parent, basePort }) {
   runGit(dst, ["init", "-q", "--bare", "-b", BASE_BRANCH, origin], gitEnv);
   runGit(dst, ["remote", "add", "origin", origin], gitEnv);
   runGit(dst, ["push", "-q", "-u", "origin", BASE_BRANCH], gitEnv);
-  // A `production` branch too, so the remote matches DEVELOPMENT.md's convention
+  // A `production` branch too, so the remote matches DEVELOPERS.md's convention
   // (base `main`, production `production`) and `git branch -a` reads realistically.
   runGit(dst, ["push", "-q", "origin", `${BASE_BRANCH}:refs/heads/production`], gitEnv);
   runGit(dst, ["remote", "set-head", "origin", BASE_BRANCH], gitEnv);
@@ -104,11 +104,11 @@ function patchFixture(dst, name, basePort) {
   pkg.name = `@alignfirst-developer-tests/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  const devDocPath = `${dst}/DEVELOPMENT.md`;
+  const devDocPath = `${dst}/DEVELOPERS.md`;
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
   const devDoc = readFileSync(devDocPath, "utf8").replace(
-    /^# Developing$/m,
-    `# Developing ${capitalized}`,
+    /^# Developer Guide$/m,
+    `# ${capitalized} Developer Guide`,
   );
   writeFileSync(devDocPath, devDoc);
 

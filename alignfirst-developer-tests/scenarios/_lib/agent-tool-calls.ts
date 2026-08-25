@@ -11,7 +11,7 @@ const READ_VIA_EXEC = /\b(cat|head|tail|less|bat)\b/;
 /**
  * True when the call reads `fileName` — either the `read` tool with a matching
  * `path`, or an `exec` that cats/heads/tails it. `fileName` is matched as a
- * substring, so pass a discriminating suffix like `nimbus/DEVELOPMENT.md`.
+ * substring, so pass a discriminating suffix like `nimbus/DEVELOPERS.md`.
  */
 export function readsFile(call: AgentToolCall, fileName: string): boolean {
   const input = inputOf(call);

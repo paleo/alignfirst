@@ -193,11 +193,11 @@ The system only works if agents know about it. The CLI self-documents via `works
   Always ignore the `.local-wt`, `.plans` directories when searching the codebase.
   ```
 
-On a bot-driven project, `DEVELOPMENT.md` carries the same workspaces section: the bot reads that file to learn how to create a worktree or a branch. Same two parts, same limit — the definition and the pointer to `--guide`, never the command list.
+On a bot-driven project, `DEVELOPERS.md` carries the same workspaces section: its developers, the bot included, read that file to learn how to create a worktree or a branch. Same two parts, same limit — the definition and the pointer to `--guide`, never the command list.
 
 ### Project-specific facts the guide can't know
 
-Record only repo-specific facts, in whatever entry point developers and agents already read (`README.md`, `AGENTS.md`, `DEVELOPMENT.md`):
+Record only repo-specific facts, in whatever entry point developers and agents already read (`README.md`, `AGENTS.md`, `DEVELOPERS.md`):
 
 1. **URLs to open after `dev` starts** (admin UI, auto-login), with the dynamic port.
 2. **Any project quirk** — extra build steps, a non-obvious log path.
@@ -208,7 +208,7 @@ The port layout is not one of them either: the block table, what raising `perWor
 
 ## The bot contract
 
-An OpenClaw bot creates every worktree through the workspace system; its playbook offers no hand-made fallback, so a project it drives must have the system installed. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation must provide the same behavior, whatever its language and runner: the playbook reads the invocation from `DEVELOPMENT.md`, so the command's name and prefix are free while its behavior is fixed.
+An OpenClaw bot creates every worktree through the workspace system; its playbook offers no hand-made fallback, so a project it drives must have the system installed. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation must provide the same behavior, whatever its language and runner: the playbook reads the invocation from `DEVELOPERS.md`, so the command's name and prefix are free while its behavior is fixed.
 
 | Requirement | Why the bot needs it |
 | --- | --- |
@@ -239,6 +239,6 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
-- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPMENT.md` too on a bot-driven project), the conventions, and the project-specific facts.
+- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPERS.md` too on a bot-driven project), the conventions, and the project-specific facts.
 - [ ] **Check [the bot contract](#the-bot-contract)** on a bot-driven project. Automatic with `@paleo/workspace`; a matter of verification in a reimplementation.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. A wrapper that merely loads proves nothing.
