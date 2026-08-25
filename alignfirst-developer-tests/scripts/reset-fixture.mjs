@@ -94,7 +94,7 @@ async function resetFixture({ name, parent, basePort }) {
 }
 
 // Per-name patches applied to the materialized copy of the shared template.
-// The package `name`, the welcome H1 and the port block diverge — the live
+// The package `name`, the entry-point H1s and the port block diverge — the live
 // directory name is what actually matters. Patching only the `name` field of
 // package.json keeps the frozen lockfile valid, so a single build-time install
 // serves both projects.
@@ -104,15 +104,23 @@ function patchFixture(dst, name, basePort) {
   pkg.name = `@alignfirst-developer-tests/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  const devDocPath = `${dst}/DEVELOPERS.md`;
+  // Both entry points name the project, so the three otherwise identical copies
+  // read distinctly — the app itself stays the "Comparables" product.
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
-  const devDoc = readFileSync(devDocPath, "utf8").replace(
-    /^# Developer Guide$/m,
-    `# ${capitalized} Developer Guide`,
-  );
-  writeFileSync(devDocPath, devDoc);
+  patchHeading(`${dst}/README.md`, /^# Comparables$/m, `# ${capitalized}`);
+  patchHeading(`${dst}/DEVELOPERS.md`, /^# Developer Guide$/m, `# ${capitalized} Developer Guide`);
 
   patchBasePort(dst, basePort);
+}
+
+// An unmatched pattern would ship an unpersonalized fixture, silently weakening
+// every scenario that asserts which project the agent read. Fail loudly instead.
+function patchHeading(path, pattern, heading) {
+  const content = readFileSync(path, "utf8");
+  if (!pattern.test(content)) {
+    throw new Error(`heading ${pattern} not found in ${path}`);
+  }
+  writeFileSync(path, content.replace(pattern, heading));
 }
 
 // The template is written for the first fixture's block, so the second one has
