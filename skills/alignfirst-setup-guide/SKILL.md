@@ -6,7 +6,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.26.0"
+  version: "0.27.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -26,7 +26,7 @@ A project has up to three Markdown entry points, one per reader:
 
 - `README.md` — the presentation and the getting-started procedure (machine installation, plans repository link, main-worktree bootstrap).
 - `AGENTS.md` (or `CLAUDE.md`) — the coding agent (Claude Code, alcode). The Step 3 references write their agent instructions here.
-- `DEVELOPERS.md` — the coding agent's user, human or AI. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`.
+- `DEVELOPERS.md` — the coding agent's user, human or AI. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`. Default title: `# Developer Guide`.
 
 `DEVELOPERS.md` is an AlignFirst convention, so write it only for a project an AI bot will drive. Once present, it serves every developer of the project.
 

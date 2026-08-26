@@ -49,6 +49,8 @@ For each gitignored directory, decide: **shared** across worktrees, or **isolate
 
 Setup symlinks the shared directories and creates fresh per-worktree ones. A shared directory missing from the main worktree is created there first, so every symlink resolves. The names are customizable.
 
+Suggest `.local/` by default, even when the repo has no such directory yet: a gitignored shared directory for personal notes and files, declared in `sharedDirs`.
+
 `runtimeDir` (`.local-wt/` above) stays per-worktree, but the kernel symlinks its `workspace-registry/` sub-directory to the main worktree's, so every worktree reads one registry.
 
 The main worktree's `.plans` may itself be a symlink — into a clone of a team plans repository (see [plans-share-setup.md](plans-share-setup.md)); the symlink chain resolves on its own.
@@ -187,10 +189,10 @@ The system only works if agents know about it. The CLI self-documents via `works
 
   Keep it to those two parts. Restating the CLI — `setup`, `remove`, `list` — duplicates `--guide` and goes stale when the commands change.
 
-- **A search-ignore line** so agents skip gitignored runtime dirs. List `runtimeDir` (e.g. `.local-wt`), and `.local` only if your repo uses it. Extend an existing line rather than duplicate:
+- **A search-ignore line** so agents skip gitignored runtime dirs. List every shared directory and `runtimeDir`. Extend an existing line rather than duplicate:
 
   ```markdown
-  Always ignore the `.local-wt`, `.plans` directories when searching the codebase.
+  Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
   ```
 
 On a bot-driven project, `DEVELOPERS.md` carries the same workspaces section: its developers, the bot included, read that file to learn how to create a worktree or a branch. Same two parts, same limit — the definition and the pointer to `--guide`, never the command list.
@@ -229,7 +231,7 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
 - [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
-- [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree.
+- [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
 - [ ] **Decide the dev-server ready marker** and **fatal markers** (or leave empty) for fast-fail. *(dev server)*
 - [ ] **Pair main-worktree sources with committed fallbacks.** Declare each existing `.example` template as `fallback` so fresh main and linked setup work while siblings still prefer customized main files.
