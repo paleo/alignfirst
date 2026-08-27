@@ -46,13 +46,11 @@ uses env-backed SecretRefs.
 ```sh
 install -m 0600 infra/openclaw/alproject/.alproject.json "$HOME/.alproject.json"
 install -m 0600 infra/openclaw/alproject/alproject-guide.md '{{PROJECTS_ROOT}}/alproject-guide.md'
-infra/openclaw/seed.sh
-infra/openclaw/bin/apply-workspace.sh
 ```
 
-The seed refuses incomplete overlays, invalid baseline configuration, missing values, or the wrong
-service user before mutation. It validates effective configuration and SecretRefs after applying all
-modules.
+Do not run the seed yet. It validates all common, surface, and coding-agent inputs together, so the
+selected channel and delegated-agent runbooks must be complete first. The coding-agent runbook
+applies the seed and workspace after those prerequisites exist.
 
 ## User Service
 
@@ -61,14 +59,11 @@ modules.
 
 ```sh
 install -d -m 0700 "$HOME/.config/systemd/user" "$HOME/.config/alignfirst-developer"
-install -m 0600 infra/openclaw/secrets/environment \
-  "$HOME/.config/alignfirst-developer/environment"
 install -m 0644 infra/openclaw/systemd/openclaw-gateway.service \
   "$HOME/.config/systemd/user/openclaw-gateway.service"
 systemctl --user daemon-reload
-systemctl --user enable --now openclaw-gateway.service
-systemctl --user status openclaw-gateway.service
 ```
 
-Validate configuration before every restart. Continue with
+Do not copy the service environment or start the service yet. The coding-agent runbook does both
+after applying and validating the complete seed. Continue with
 [OpenClaw dependencies](05-openclaw-dependencies.md).

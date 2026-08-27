@@ -37,7 +37,7 @@ sudo apt-get install -y ca-certificates curl git jq uidmap dbus-user-session pod
 sudo timedatectl set-timezone '{{TIME_ZONE}}'
 ```
 
-Keep inbound access limited to the administrator's SSH path. OpenClaw uses outbound Socket Mode or
+Keep inbound access limited to the administrator's SSH path. OpenClaw uses outbound channel and
 gateway connections and does not require a public listener unless a separately reviewed integration
 does.
 

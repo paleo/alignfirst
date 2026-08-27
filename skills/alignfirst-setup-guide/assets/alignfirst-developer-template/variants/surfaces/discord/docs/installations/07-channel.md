@@ -38,15 +38,14 @@ DISCORD_BOT_TOKEN=<bot token>
 ```
 
 Never paste it into chat, a tracked file, or a command line. Confirm the file contains the
-non-secret guild/channel IDs from `.env.example`, then apply the seed:
+non-secret guild/channel IDs from `.env.example`, then protect it:
 
 ```sh
 chmod 0600 infra/openclaw/secrets/environment
-infra/openclaw/seed.sh
-openclaw config validate
-openclaw secrets audit
-openclaw channels status --probe
 ```
+
+Continue with [coding-agent setup](08-coding-agent.md). That runbook applies and validates the seed
+after every selected module has its required values.
 
 DMs are disabled. Automatic reply threading and parent-transcript inheritance are off. The coding
 tool profile is widened only with `message`, allowing the channel session to call `thread-create`.

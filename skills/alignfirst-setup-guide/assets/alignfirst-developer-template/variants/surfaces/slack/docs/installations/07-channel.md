@@ -38,15 +38,14 @@ SLACK_APP_TOKEN=<xapp token>
 ```
 
 Never paste either value into chat, a tracked file, or a command line. Confirm the file contains the
-non-secret workspace/channel IDs from `.env.example`, then apply the seed:
+non-secret workspace/channel IDs from `.env.example`, then protect it:
 
 ```sh
 chmod 0600 infra/openclaw/secrets/environment
-infra/openclaw/seed.sh
-openclaw config validate
-openclaw secrets audit
-openclaw channels status --probe
 ```
+
+Continue with [coding-agent setup](08-coding-agent.md). That runbook applies and validates the seed
+after every selected module has its required values.
 
 The generated configuration allowlists one channel, disables DMs, replies in a thread for every
 channel response, and injects up to 100 initial thread messages. The channel session only creates

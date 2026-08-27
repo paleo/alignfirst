@@ -80,7 +80,8 @@ Run these steps on the operator machine from the installed setup skill directory
 7. Replace every token only after both overlays are present.
 8. Remove the `TEAM_PLANS_SECTION` markers. If team plans are enabled, install
    `@paleo/plans-share`, add `plans:setup` and `plans:sync` scripts, add the documented `AGENTS.md`
-   and `DEVELOPERS.md` sections, and retain the main-worktree `preSetup` check.
+   and `DEVELOPERS.md` sections, replace local `.plans` creation in the fresh-clone runbooks with
+   `plans:setup -- <plans-clone-path>`, and retain the main-worktree `preSetup` check.
 9. Initialize git, install dependencies, and install project and global skills through `npx skills`.
    Let that CLI create canonical skill directories and lock state.
 

@@ -43,9 +43,9 @@ must authenticate the selected coding-agent CLI before retrying. Preserve failed
 
 ## Channel and Thread Flow
 
-Use the selected channel runbook's smoke test. Check the allowlist, session binding, starter history,
-and destination before changing playbook text. Slack injects thread history; a fresh Discord thread
-session reads its bound thread through the `message` tool.
+Use the selected channel runbook's smoke test. Check the allowlist, session binding, starter
+history, and destination before changing playbook text. The selected surface runbook owns its
+history-recovery and thread-delivery contract.
 
 ## Incident Notes
 

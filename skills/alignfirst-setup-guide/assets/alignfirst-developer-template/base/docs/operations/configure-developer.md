@@ -17,5 +17,5 @@ read_when:
 6. Validate configuration and SecretRefs before restarting the user service.
 7. Run positive and negative channel checks plus a read-only delegated command.
 
-Changing the OpenClaw runtime provider does not change `ALIGNFIRST_CODE_AGENT`. Changing Claude Code
-or Codex does not change the runtime provider.
+Changing the OpenClaw runtime provider does not change `ALIGNFIRST_CODE_AGENT`. Changing the
+delegated coding agent does not change the runtime provider.

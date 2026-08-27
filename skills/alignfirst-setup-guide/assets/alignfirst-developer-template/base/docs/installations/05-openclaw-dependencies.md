@@ -13,14 +13,11 @@ separate.
 
 ```sh
 npm install --global @paleo/alcode@0.10.2 @paleo/alproject@1.1.0
-alcode --guide
-alcode --openclaw-guide
-alproject --guide
 ```
 
-`alproject` discovers canonical managed projects. `alcode` invokes the selected Claude Code or Codex
-CLI. `ALIGNFIRST_CODE_AGENT` is set by the selected coding-agent overlay; permission bypass remains
-disabled.
+`alproject` discovers canonical managed projects. `alcode` invokes the selected delegated-agent CLI.
+`ALIGNFIRST_CODE_AGENT` is set by the selected coding-agent overlay; permission bypass remains
+disabled. The selected-agent runbook verifies both guides after the selector and agent CLI exist.
 
 ## OpenClaw Playbook
 
@@ -46,5 +43,6 @@ prepare and repair managed projects.
 
 ## Verification
 
-Start a new selected-agent session after installation. Verify its command syntax and `alcode --guide`
-selection through `08-coding-agent.md`. Continue with [security hardening](06-security-hardening.md).
+Start a new selected-agent session after installation. Verify its command syntax, `alcode --guide`
+selection, and `alproject --guide` through `08-coding-agent.md`. Continue with
+[security hardening](06-security-hardening.md).

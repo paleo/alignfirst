@@ -7,17 +7,17 @@ read_when:
 
 # Architecture Overview
 
-{{DEVELOPER_NAME}} receives requests on the selected Slack or Discord surface. OpenClaw binds each
+{{DEVELOPER_NAME}} receives requests on the selected communication surface. OpenClaw binds each
 surface to a session and loads a lean workspace. The `alignfirst-developer-openclaw-playbook` skill
 routes channel requests into threads and governs working sessions.
 
 ```text
-Slack or Discord
+Selected communication surface
   → OpenClaw gateway and workspace
   → AlignFirst Developer playbook
   → alproject project selection
   → alcode delegation
-  → selected Claude Code or Codex CLI
+  → selected delegated coding-agent CLI
   → managed project workspace
 ```
 

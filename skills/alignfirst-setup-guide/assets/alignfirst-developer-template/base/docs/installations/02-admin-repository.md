@@ -11,7 +11,8 @@ read_when:
 **Role: operator machine.** Audit the rendered files before the first commit.
 
 ```sh
-rg -n '\{\{[A-Z][A-Z0-9_]*\}\}|ADAPT|TEAM_PLANS_SECTION' .
+rg -n '\{\{[A-Z][A-Z0-9_]*\}\}' .
+rg -n 'A[D]APT|TEAM_PLANS_SECTIO[N]' .
 npm install
 npm run validate
 git init
@@ -21,7 +22,7 @@ git remote add origin '{{ADMIN_REPOSITORY_URL}}'
 git push -u origin main
 ```
 
-The first search must return no matches. Keep the repository private. Do not commit generated
+Both searches must return no matches. Keep the repository private. Do not commit generated
 configuration, authentication state, secrets, `node_modules`, or lock files copied from the template
 source.
 
@@ -39,9 +40,6 @@ mkdir -p .plans .local
 npm run workspace -- setup
 npm run docmap
 ```
-
-When team plans are configured, clone the plans repository separately and run
-`npm run plans:setup -- <plans-clone-path>` before workspace setup.
 
 ## Verify Ownership
 

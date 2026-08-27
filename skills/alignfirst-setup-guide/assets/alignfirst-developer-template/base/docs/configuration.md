@@ -13,8 +13,8 @@ effective configuration from its own version's baseline. No tracked `openclaw.js
 
 - `secrets/environment` — untracked owner-only values and non-secret deployment environment.
 - `seed/common.sh` — surface-independent runtime settings.
-- `seed/surface.sh` — selected Slack or Discord settings and SecretRefs.
-- `seed/coding-agent.sh` — selected Claude Code or Codex selector and global instructions.
+- `seed/surface.sh` — selected channel settings and SecretRefs.
+- `seed/coding-agent.sh` — selected delegated-agent selector and global instructions.
 - `workspace/` — reviewed bootstrap source applied to the live workspace.
 - `alproject/` — immutable project-parent configuration and custom guide.
 

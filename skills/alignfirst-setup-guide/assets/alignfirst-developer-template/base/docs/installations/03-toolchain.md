@@ -30,8 +30,8 @@ node --version
 npm --version
 podman --version
 openclaw --version
-alcode --help
-alproject --guide
+command -v alcode
+command -v alproject
 ```
 
 Install the official CLI for each selected git host named in `{{GIT_HOSTS}}`. When tooling expects a

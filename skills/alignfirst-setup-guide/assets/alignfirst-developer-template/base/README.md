@@ -26,9 +26,6 @@ npm run workspace -- setup
 npm run docmap
 ```
 
-When team plans are configured, run `npm run plans:setup -- <plans-clone-path>` instead of creating a
-local `.plans` directory.
-
 ## Documentation
 
 Run `npm run docmap` to list the operational documents. Start with

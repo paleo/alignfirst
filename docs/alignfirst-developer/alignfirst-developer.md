@@ -1,12 +1,29 @@
 # AlignFirst Developer
 
-Maintainer's map of AlignFirst Developer: the product and its current OpenClaw packaging. This document is the entry point for working *on* the product in this repository. For deploying it, see [`alignfirst-developer.md`](../../alignfirst-developer.md).
+Maintainer's map of AlignFirst Developer: the product and its current OpenClaw packaging. This
+document is the entry point for working *on* the product in this repository. For creation and
+deployment, use the
+[`alignfirst-setup-guide`](../../skills/alignfirst-setup-guide/references/alignfirst-developer.md).
 
 ## Three layers
 
-1. **Reference workspace** — [`alignfirst-developer-tests/workspace/`](../../alignfirst-developer-tests/workspace/). The `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`), auto-loaded into the system prompt every turn. `TOOLS.md` stays empty — the next OpenClaw release drops it; its content lives in `AGENTS.md` under `## Tools`. It lives inside the harness (its only consumer) as the test fixture, and doubles as the worked example the consumer [`README`](../../alignfirst-developer.md) points at. `AGENTS.md` is a thin pointer: on every user message it sends the agent into the `alignfirst-developer-openclaw-playbook` skill's dispatcher. The workspace carries **no** playbook copy — the skill is the single source.
-2. **Operating-instructions playbook** — the [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/) skill. Its `SKILL.md` is the dispatcher: it routes by surface (thread → `working-session.md`; channel/DM → `channel-handling.md`) and carries the global rules ("tickets are labels", projects, `chat_id`, and the channel/thread split below); the language rule lives in the workspace `AGENTS.md`. The procedures live in [`references/`](../../skills/alignfirst-developer-openclaw-playbook/references/) (`working-session.md`, `channel-handling.md`, `project-workspace-setup.md`, `project-lifecycle.md`). Project discovery and lifecycle boundaries come from `alproject --guide`. Coding is delegated to the `alcode` CLI; the delegation manual is its `--openclaw-guide` output ([`packages/alcode/templates/openclaw-guide.md`](../../packages/alcode/templates/openclaw-guide.md)), run via `exec` at delegation time. Nothing here is auto-loaded — files are read on demand (see context engineering below).
-3. **Regression-test harness** — [`alignfirst-developer-tests/`](../../alignfirst-developer-tests/). A standalone Dockerised consumer of the published `@paleo/openclaw-*` packages that drives the workspace through synthetic Discord/Slack channels and judges the outcome. It bind-mounts the workspace dir, the playbook skill, and the built `@paleo/alcode` package into the gateway. Alcode delegates to the `ALIGNFIRST_CODE_AGENT` selection; the harness intercepts both Claude and Codex subprocesses.
+1. **Reference workspace** —
+   [`alignfirst-developer-tests/workspace/`](../../alignfirst-developer-tests/workspace/). The
+   `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
+   load into the system prompt every turn. `TOOLS.md` stays empty; its content lives in `AGENTS.md`
+   under `## Tools`. `AGENTS.md` sends every user message to the
+   `alignfirst-developer-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
+2. **Operating-instructions playbook** — the
+   [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/)
+   skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
+   `channel-handling.md`. Its references own working sessions, channel handling, project workspace
+   setup, and project lifecycle. Project discovery comes from `alproject --guide`; the delegation
+   procedure comes from `alcode --openclaw-guide` only when delegation starts.
+3. **Regression-test harness** —
+   [`alignfirst-developer-tests/`](../../alignfirst-developer-tests/). This standalone Dockerised
+   consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
+   It bind-mounts the workspace, playbook skill, and built `@paleo/alcode` package into the gateway.
+   The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
 
@@ -55,4 +72,9 @@ Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Me
 
 ## Deployment
 
-Running an AlignFirst Developer against real Discord/Slack channels is documented in [`alignfirst-developer.md`](../../alignfirst-developer.md) — the `openclaw.json` knobs and the `AGENTS.md` template. Creating the bot itself (tokens, scopes, Socket Mode) is standard OpenClaw; defer to OpenClaw's channel docs.
+The setup skill owns creation and deployment. Its
+[`alignfirst-developer.md`](../../skills/alignfirst-setup-guide/references/alignfirst-developer.md)
+reference assembles a version-controlled admin repository from a common base plus one channel and
+one coding-agent overlay. The generated runbooks derive configuration from the installed OpenClaw
+version, keep secrets outside git, and prepare managed projects through the complete AlignFirst
+Developer contract.

@@ -47,6 +47,14 @@ Codex reads the repository's canonical root `AGENTS.md` directly.
 
 ```sh
 infra/openclaw/seed.sh
+infra/openclaw/bin/apply-workspace.sh
+openclaw config validate
+openclaw secrets audit
+install -m 0600 infra/openclaw/secrets/environment \
+  "$HOME/.config/alignfirst-developer/environment"
+systemctl --user enable --now openclaw-gateway.service
+systemctl --user status openclaw-gateway.service
+openclaw channels status --probe
 ALIGNFIRST_CODE_AGENT=codex alcode --guide
 alproject --guide
 npx -y skills list --global --agent codex --json
