@@ -1,62 +1,30 @@
 # Upgrade AlignFirst to v3
 
-This prompt detects your current AlignFirst version (v1 or v2) and runs the appropriate migration.
+Migrate an existing AlignFirst v1 or v2 project, then install the current AlignFirst skills. This
+workflow does not install docmap or workspace unless the user separately requests them.
 
-> **Note**: Commands shown are Unix-style. Adapt to your OS if needed (e.g., PowerShell on Windows).
+Commands are Unix-style. Adapt them for another shell.
 
-## Step 1 — Prerequisites
+## Preflight
 
-1. If this is a git repository, verify the working tree is clean. **Do not proceed with uncommitted changes.**
+1. Verify the git working tree is clean immediately before mutations.
+2. Use the existing `AGENTS.md` or `CLAUDE.md`; create `AGENTS.md` when neither exists.
+3. Preserve the project's ticket, commit, default-branch, and other local conventions. The current
+   setup reference will reconcile them after legacy cleanup.
 
-2. Verify the **docmap CLI** is available (e.g., check if `package.json` has a `docmap` script, or try running `npx docmap --help`). If not, install it first by following [docmap-setup.md](docmap-setup.md).
+## Detect the Installed Version
 
-## Step 2 — Ensure Conventions Section
+Detect v1 from `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/`.
 
-Check if `AGENTS.md` or `CLAUDE.md` exists. If one exists, use it as the INSTRUCTION_FILE. If neither exists, create `AGENTS.md`.
+Detect v2 from `alignfirst/SKILL.md` under a canonical project skill root such as `.agents/skills/`,
+`.claude/skills/`, `.codex/skills/`, `.github/skills/`, `.cursor/skills/`, `.gemini/skills/`, or
+`.agent/skills/`. Also inspect `skills-lock.json` through the current skills CLI when present. Ignore
+dependencies and generated output.
 
-Check if the INSTRUCTION_FILE already contains an `## AlignFirst` section with ticket ID and commit message conventions. If it does and it looks correct, skip ahead. Otherwise:
+- For v1, follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
+- For v2, follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
+- If neither exists, use [alignfirst-skills-setup.md](alignfirst-skills-setup.md) as a fresh setup.
 
-1. Look at git branches (`git branch -a`) to detect a ticket ID format (e.g., `ABC-###`, `PROJ-###`, or numeric).
-2. If no pattern is found, ask the user:
-
-   > "I couldn't detect a ticket ID format from the branch names. Please provide the ticket ID format (e.g., "numeric", `ABC-###`, etc.)"
-
-3. From recent commit messages (`git log --oneline -20`), deduce the commit message convention (e.g., `<type>: [<ticket-id>] description`, `<type>(<scope>): description`, `[<ticket-id>] description`, etc.).
-4. If no pattern is found, ask the user:
-
-   > "I couldn't detect a commit message convention. Please describe it (e.g., `feat: [#123] short description`, `type(scope): description`, etc.) or type 'skip' to omit."
-
-5. Detect the default branch with `git remote show origin | grep "HEAD branch"` (e.g., `main`, `master`, `develop`).
-
-6. Add (or fix) this section in the INSTRUCTION_FILE (include each convention line only if one was detected or provided):
-
-   > ## AlignFirst - Ticket ID, Commit Message, Default Branch
-   >
-   > _Ticket ID_: Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
-   >
-   > _Commit message convention_: `{DETECTED_CONVENTION}`
-   >
-   > _Default branch_: `{DETECTED_DEFAULT_BRANCH}`
-
-## Step 3 — Detect Version
-
-**Check for v1**: Look for `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/` directory.
-
-**Check for v2**: Search for `alignfirst/SKILL.md` in any of these skills directories:
-
-- `.claude/skills/`
-- `.codex/skills/`
-- `.github/skills/`
-- `.cursor/skills/`
-- `.gemini/skills/`
-- `.agent/skills/`
-
-**Important**: Ignore directories inside dependencies (`node_modules/`, `vendor/`, `venv/`, `.venv/`, `target/`, `build/`, `dist/`, etc.).
-
-## Step 4 — Route
-
-- **If v1 detected**: Follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
-- **If v2 detected**: Follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
-- **If neither**: Stop and tell the user:
-
-  > "This project doesn't appear to have AlignFirst v1 or v2 installed. Use the installation instructions instead."
+After the version-specific migration, always follow
+[alignfirst-skills-setup.md](alignfirst-skills-setup.md) to install the current content skill and all
+seven commands, establish `.plans`, and reconcile project instructions.

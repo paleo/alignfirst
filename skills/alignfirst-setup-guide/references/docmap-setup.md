@@ -29,10 +29,10 @@ Install the docmap CLI in a consumer repo so humans and agents share one set of 
 
    The **Essential Documentation** sub-list names the 1–3 docs an agent must always read first (e.g. architecture, code style) — the always-read subset, not the full index. Populate it from the docs that already exist; if there are none yet, omit the sub-list for now — the bootstrap/migrate step below adds it once docs exist.
 
-## Then
+## Optional Documentation Work
 
 1. Read authoring and browsing conventions by running `npm run docmap -- --guide`.
-2. Ask the user what to do next:
+2. Continue only when the user also requested one of these documentation tasks:
    - [docmap-bootstrapping.md](docmap-bootstrapping.md) — create or extend documentation by exploring the codebase.
    - [docmap-migrate-existing-docs.md](docmap-migrate-existing-docs.md) — bring an existing docs folder into docmap conventions.
    - [docmap-migrate-skills.md](docmap-migrate-skills.md) — move internal knowledge from agent skills into `docs/`.

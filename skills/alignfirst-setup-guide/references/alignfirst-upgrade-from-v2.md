@@ -1,83 +1,54 @@
 # Upgrade from AlignFirst v2
 
-This migration converts a v2 installation (agent skills system) to a v3-ready state.
+Remove the v2 agent-skills installation while preserving project-specific instructions and custom
+skills. Continue with the current setup reference after these steps.
 
-> **Note**: Commands shown are Unix-style. Adapt to your OS if needed (e.g., PowerShell on Windows).
+Commands are Unix-style. Adapt them for another shell.
 
-## Step 1 — Detect Skills Directory
+## Locate the Installation
 
-Find the skills directory that contains `alignfirst/SKILL.md`. Set **SKILLS_DIR** to this directory (e.g., `.claude/skills/`).
+Find every project skill root containing `alignfirst/SKILL.md`. Common roots are `.agents/skills/`,
+`.claude/skills/`, `.codex/skills/`, `.github/skills/`, `.cursor/skills/`, `.gemini/skills/`, and
+`.agent/skills/`. Ignore dependencies and generated output.
 
-## Step 2 — Delete Known Skills
+When the current skills CLI owns the installation, use
+`npx -y skills remove alignfirst --yes </dev/null>` so it removes canonical links and updates lock
+state. Otherwise remove only the detected legacy `alignfirst` and
+`technical-documentation-authoring` directories. Do not delete unrelated skills.
 
-```bash
-rm -rf {SKILLS_DIR}/alignfirst
-rm -rf {SKILLS_DIR}/technical-documentation-authoring
-```
+## Remove Legacy Commands
 
-## Step 3 — Delete Command Files
+Remove only known AlignFirst command files from existing project directories:
 
-Delete all known AlignFirst command files from **all** agent directories that exist in the project. Check every directory listed below and remove the matching files.
+- `.claude/commands/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.codex/prompts/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.github/prompts/{al,alspec,alplan,aldescription,almerge,alreview,alread}.prompt.md`
+- `.cursor/commands/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.agent/workflows/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
 
-**Files to delete**:
+These paths are legacy cleanup targets, not current installation locations.
 
-- `al.md`, `alspec.md`, `alplan.md`, `aldescription.md`
+## Migrate Plans and Instructions
 
-**Directories to check:**
+1. If only `_plans/` exists, rename it to `.plans/`. If both exist, move `_plans/` to
+   `.plans/_plans-archives/`. Remove `.plans/.gitkeep`.
+2. Replace repository references to `_plans` with `.plans`.
+3. Remove `_plans` ignore rules. Replace the old shared-file block (`.plans/**`, `!.plans/**/`, and
+   `!.plans/**/*.shared.md`) with `.plans`. Untrack committed `*.shared.md` files and report them.
+4. In `AGENTS.md` or `CLAUDE.md`, preserve project conventions while removing references to deleted
+   v2 skills and legacy paths. Remove sections that become empty.
 
-| Agent | Directory | Extension |
-|-------|-----------|-----------|
-| Claude Code | `.claude/commands/` | `.md` |
-| Codex | `.codex/prompts/` | `.md` |
-| GitHub Copilot | `.github/prompts/` | `.prompt.md` |
-| Cursor | `.cursor/commands/` | `.md` |
-| Antigravity | `.agent/workflows/` | `.md` |
+## Preserve Remaining Custom Skills
 
-_Note: For GitHub Copilot, the files have a `.prompt.md` extension (e.g., `al.prompt.md`)._
+List the remaining directories under every detected project skill root. If custom skills remain,
+follow [docmap-migrate-skills.md](docmap-migrate-skills.md) only when the user wants to migrate them;
+otherwise leave them untouched.
 
-## Step 4 — Rename `_plans/` to `.plans/`
+## Finish the Upgrade
 
-- If **only `_plans/`** exists: `mv _plans .plans`
-- If **both `_plans/` and `.plans/`** exist: `mv _plans .plans/_plans-archives`
-- If **only `.plans/`** exists: nothing to do.
+Follow [alignfirst-skills-setup.md](alignfirst-skills-setup.md). Install the current `alignfirst`
+content skill and all seven command skills for the requested agent and scope, then reconcile `.plans`,
+`.gitignore`, and project instructions.
 
-Then, remove `.plans/.gitkeep` if it exists:
-
-```bash
-rm -f .plans/.gitkeep
-```
-
-Search the entire codebase for any references to `_plans` (in source code, configuration files, documentation, etc.) and replace them with `.plans`.
-
-## Step 5 — Update `.gitignore`
-
-Remove all lines referencing `_plans` (e.g., `_plans/*`, `!_plans/.gitkeep`, `_plans`).
-
-Ensure `.gitignore` contains `.plans`, replacing the old block (`.plans/**`, `!.plans/**/`, `!.plans/**/*.shared.md`) if found. If any `*.shared.md` files are committed, untrack them (`git rm --cached`) and tell the user about them.
-
-## Step 6 — Clean AGENTS.md
-
-If `AGENTS.md` (or `CLAUDE.md`) exists, edit it:
-
-1. Remove references to the deleted skills (`alignfirst`, `technical-documentation-authoring`).
-2. Replace any remaining `_plans` references with `.plans`.
-3. Remove sections that become empty after these changes.
-
-## Step 7 — Migrate Remaining Custom Skills (Conditional)
-
-Check if any skill directories remain in `{SKILLS_DIR}/` (after deleting alignfirst and technical-documentation-authoring).
-
-- **If skills remain**: Migrate them by following [docmap-migrate-skills.md](docmap-migrate-skills.md). This includes a discussion phase where the agent and user decide which skills to migrate and how to organize them.
-
-- **If no skills remain**: Skip this step.
-
-## Done
-
-Summarize what was done:
-
-- AlignFirst and technical-documentation-authoring skills removed
-- Command files removed (list which agent directories were cleaned)
-- `_plans` renamed to `.plans`
-- `.gitignore` updated
-- `AGENTS.md` cleaned
-- Whether custom skills were migrated to `docs/` via docmap, or no remaining skills were found
+Summarize the removed legacy files, plan migration, preserved custom skills, and the scope and agents
+that received the current AlignFirst skills.
