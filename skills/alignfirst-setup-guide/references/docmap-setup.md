@@ -4,7 +4,7 @@ Install the docmap CLI in a consumer repo so humans and agents share one set of 
 
 ## Install the CLI
 
-1. **Use the package manager** identified in the skill's Investigate step (fall back to npm).
+1. **Use the package manager** identified in the skill's Shared Investigation Rules (fall back to npm).
 2. **Add a `docmap` script** to the root `package.json`:
 
    ```json

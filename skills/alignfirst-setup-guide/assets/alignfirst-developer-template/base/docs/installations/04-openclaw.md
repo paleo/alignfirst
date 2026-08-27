@@ -1,69 +1,234 @@
 ---
 title: OpenClaw Installation
 read_when:
-  - creating the OpenClaw baseline and user service
+  - installing or re-seeding OpenClaw for the service account
+  - filling infra/openclaw/.env, pairing the dashboard, rotating a secret
 ---
 
 # OpenClaw Installation
 
-**Role: service user.** Human runtime authentication and secret entry happen before configuration.
-The OpenClaw runtime provider is `{{RUNTIME_PROVIDER}}`; the delegated coding agent is selected later
-and may use another provider.
+**Operator**, after [05-openclaw-dependencies.md](05-openclaw-dependencies.md) and the platform part of [07-channel.md](07-channel.md) (it produces the channel tokens and IDs that `.env` needs); before [08-coding-agent.md](08-coding-agent.md). OpenClaw runs natively as `{{SERVICE_USER}}` and starts containers on behalf of the projects it manages; the gateway dashboard listens on loopback port 18789.
 
-## Human Onboarding
+The seed assets live in `infra/openclaw/`:
 
-Run the installed OpenClaw onboarding flow and authenticate the runtime provider interactively. Use
-the installed CLI's `--help`; do not copy a command from another OpenClaw version. Select
-`{{RUNTIME_MODEL}}`, a local workspace, and no public listener unless the deployment design requires
-one.
-
-Confirm the installed-version baseline before continuing:
-
-```sh
-openclaw --version
-openclaw config --help
-openclaw config validate
-openclaw secrets --help
+```text
+infra/openclaw/
+├── .env.example        # every value the seed reads; copy to .env (gitignored)
+├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
+├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
+├── environment.d/      # non-secret variables for systemd --user and login shells
+├── bin/                # apply-workspace.sh, backup.sh, developer-kill.sh
+├── alproject/          # .alproject.json and alproject-guide.md
+├── workspace/          # curated workspace files (AGENTS.md, IDENTITY.md, …)
+└── coding-agent/       # global instruction file of the delegated coding agent
 ```
 
-## Secure Environment
+The service account never reads this checkout. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, refreshed by the operator (step 2).
 
-Create `infra/openclaw/secrets/environment` from `.env.example`. Enter secrets as a human in an editor
-that does not record them in shell history. Set owner-only permissions:
+## 1. Fill `.env`
 
-```sh
-install -d -m 0700 infra/openclaw/secrets
-install -m 0600 infra/openclaw/.env.example infra/openclaw/secrets/environment
-chmod 0600 infra/openclaw/secrets/environment
-```
-
-Replace every non-secret placeholder and enter the runtime and channel secret variables required by
-the selected runbooks. Secret values remain in this untracked file. Generated OpenClaw configuration
-uses env-backed SecretRefs.
-
-## Source Configuration
+The checkout's `infra/openclaw/.env` is the canonical copy, gitignored:
 
 ```sh
-install -m 0600 infra/openclaw/alproject/.alproject.json "$HOME/.alproject.json"
-install -m 0600 infra/openclaw/alproject/alproject-guide.md '{{PROJECTS_ROOT}}/alproject-guide.md'
+cd ~/{{ADMIN_REPOSITORY_NAME}}
+cp infra/openclaw/.env.example infra/openclaw/.env && chmod 600 infra/openclaw/.env
 ```
 
-Do not run the seed yet. It validates all common, surface, and coding-agent inputs together, so the
-selected channel and delegated-agent runbooks must be complete first. The coding-agent runbook
-applies the seed and workspace after those prerequisites exist.
+> **User action required.** Edit `infra/openclaw/.env`. The values come from the password manager and the provider dashboards, so the agent cannot fill it.
 
-## User Service
+- `RUNTIME_PROVIDER`, `RUNTIME_MODEL` — pre-filled from the render.
+- `RUNTIME_API_KEY` — when the provider authenticates by key; leave empty for an interactive login (step 10).
+- `GATEWAY_AUTH_TOKEN` — `openssl rand -hex 32` on a fresh install; on an existing server, the current value (the `.env.example` comment shows how to read it back).
+- `GATEWAY_DASHBOARD_ORIGIN` — keep the default for the SSH tunnel.
+- `CONTEXT7_API_KEY` — from the Context7 dashboard.
+- The channel tokens and IDs — from the platform part of [07-channel.md](07-channel.md).
 
-> **Note:** Commands shown are for Ubuntu 24.04 with systemd. Adapt package, firewall, filesystem,
-> and service-manager commands for another Linux server when needed.
+Each variable carries a comment in `.env.example` saying where it comes from and which step consumes it.
+
+## 2. Snapshot
+
+Copies `infra/openclaw/`, `.env` included, and hands it over. Re-run it after every change under `infra/openclaw/`:
 
 ```sh
-install -d -m 0700 "$HOME/.config/systemd/user" "$HOME/.config/alignfirst-developer"
-install -m 0644 infra/openclaw/systemd/openclaw-gateway.service \
-  "$HOME/.config/systemd/user/openclaw-gateway.service"
-systemctl --user daemon-reload
+sudo rsync -a --delete ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/ /home/{{SERVICE_USER}}/seed/
+sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
 ```
 
-Do not copy the service environment or start the service yet. The coding-agent runbook does both
-after applying and validating the complete seed. Continue with
-[OpenClaw dependencies](05-openclaw-dependencies.md).
+The execute bits are tracked by git; no `chmod` is needed.
+
+## 3. Seed
+
+`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. `openclaw secrets audit --check` then fails the seed on any residual plaintext or unresolved reference, before `openclaw config validate` and an interactive `openclaw doctor`.
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
+```
+
+Once, on first install, apply doctor's auto-fixes to create the credential scaffolding (`~/.openclaw/credentials/`). The gateway token is not among them: it is a SecretRef, never generated.
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw doctor --fix
+```
+
+Later runs use plain `openclaw doctor` — see [gotchas.md](../gotchas.md).
+
+## 4. Provider plugin
+
+A runtime provider served by an OpenClaw plugin needs two more keys in `seed/common.sh`, next to `plugins.allow`, then the package installed once:
+
+```sh
+set_json "plugins.entries.<id>.enabled" true
+set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"<id>\"]"
+```
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw plugins install <package>
+```
+
+Enabling does not install: a missing package shows in `openclaw config validate` as `plugin not installed: <id>`. Skip this step for a provider that OpenClaw serves natively.
+
+## 5. Workspace files
+
+`openclaw setup` populated `~/.openclaw/workspace/` with bare templates. The script backs them up to `~/backups/workspace-backups/<stamp>/` and writes the curated files from `~/seed/workspace/` over them:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
+```
+
+Later changes follow [update-workspace.md](../operations/update-workspace.md): once `06` has run, the files are immutable.
+
+## 6. alproject
+
+Create the project parent, then install the configuration and the guide as root-owned files. The registry, `{{PROJECTS_ROOT}}/alproject-registry.json`, is created by the first registration and stays owned by the service account.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p {{PROJECTS_ROOT}}'
+projects_root=$(sudo -H -u {{SERVICE_USER}} bash -lc 'echo {{PROJECTS_ROOT}}')
+sudo install -m 644 -o root -g root /home/{{SERVICE_USER}}/seed/alproject/.alproject.json /home/{{SERVICE_USER}}/.alproject.json
+sudo install -m 644 -o root -g root /home/{{SERVICE_USER}}/seed/alproject/alproject-guide.md "$projects_root/alproject-guide.md"
+sudo -i -u {{SERVICE_USER}} -- alproject list
+```
+
+An empty registry lists nothing and exits 0. Projects come later, through [add-project.md](../operations/add-project.md).
+
+## 7. Gateway unit
+
+Enable lingering first, so a `systemd --user` manager exists for the account without a session and restarts the gateway at boot:
+
+```sh
+sudo loginctl enable-linger {{SERVICE_USER}}
+loginctl show-user {{SERVICE_USER}} | grep Linger
+# Expected: Linger=yes
+```
+
+`openclaw gateway install` writes the user unit: `ExecStart` points at the installed `dist/index.js`, and the current `PATH` is baked in as `Environment=PATH=`. With the `.bash_profile` of `03`, that is `/usr/bin:…:~/.npm-system-global/bin`, which is what lets exec children find `alcode` and the coding agent.
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw gateway install
+sudo -i -u {{SERVICE_USER}} -- systemctl --user enable --now openclaw-gateway.service
+sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway.service
+```
+
+After an OpenClaw upgrade, refresh the unit (version stamp, settings) with `--force`:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw gateway install --force
+sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reload
+sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
+```
+
+## 8. Podman socket
+
+`DOCKER_HOST` is already in `~/.config/environment.d/runtime.conf`; the socket it names comes from the user manager (lingering keeps it across reboots):
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user enable --now podman.socket
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'docker version'
+# Expected: the Server section reports Podman Engine
+```
+
+## 9. Environment changes
+
+`~/.config/environment.d/*.conf` is installed by the seed. After a change, re-exec the user manager so it rebuilds its environment block, then restart the gateway so the running process inherits it:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec
+sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
+```
+
+Verify on both sides, the gateway (systemd-injected) and the login shell (`.bash_profile`-sourced):
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user show-environment | grep -E '^(PROJECT_DEV_LIMIT|DOCKER_HOST)='
+pid=$(sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p MainPID --value openclaw-gateway)
+sudo cat /proc/$pid/environ | tr '\0' '\n' | grep -E '^(PROJECT_DEV_LIMIT|DOCKER_HOST)='
+sudo -i -u {{SERVICE_USER}} -- env | grep -E '^(PROJECT_DEV_LIMIT|DOCKER_HOST)='
+```
+
+## 10. Provider login
+
+Skip when `RUNTIME_API_KEY` is set. Otherwise the provider's interactive login needs a TTY; `openclaw models auth login` refuses to run without one.
+
+> **User action required.** In a fresh SSH terminal as `{{SERVER_ADMIN_USER}}`, open an interactive service-account shell and complete the browser flow on the laptop, signed in to the account that funds the developer:
+>
+> ```sh
+> sudo -i -u {{SERVICE_USER}}
+> openclaw models auth login --provider {{RUNTIME_PROVIDER}}
+> openclaw models status
+> exit
+> ```
+
+The provider's login flags (device code, browser callback) are listed by `openclaw models auth login --help`. Never move credentials through shell history, chat or a tracked file.
+
+## 11. Dashboard
+
+The gateway listens on loopback with token auth. The Control UI needs a secure context for its device identity, which over plain HTTP only `localhost` provides, hence the tunnel. `openclaw.json` holds a reference; the value sits in the secret store:
+
+```sh
+sudo -u {{SERVICE_USER}} jq -r .GATEWAY_AUTH_TOKEN /home/{{SERVICE_USER}}/.openclaw/secrets/secrets.json
+```
+
+> **User action required.** From the laptop, keep the tunnel running while using the dashboard, open `http://localhost:18789/`, paste the token, and store it in the password manager:
+>
+> ```sh
+> ssh -N -L 18789:127.0.0.1:18789 {{SERVER_ADMIN_USER}}@<vps-ip>
+> ```
+
+The bearer token grants the pairing scope on first connect, so the browser is paired without approval. Verify, and approve a pending request when one is listed:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw devices list
+sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
+```
+
+## 12. Reboot check
+
+> **User action required.** The reboot ends the agent's SSH session, so this runs from the laptop:
+>
+> ```sh
+> ssh {{SERVER_ADMIN_USER}}@<vps-ip> 'sudo reboot'
+> # after ~30 s
+> ssh {{SERVER_ADMIN_USER}}@<vps-ip> 'sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway.service'
+> ```
+
+Continue with [08-coding-agent.md](08-coding-agent.md).
+
+## Day-to-day
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- journalctl --user -u openclaw-gateway -f
+sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- openclaw plugins list
+sudo -i -u {{SERVICE_USER}} -- openclaw doctor          # interactive; no --fix, see gotchas.md
+sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload   # after a secret rotation
+```
+
+Upgrades: [update-developer.md](../operations/update-developer.md). Configuration changes: [configure-developer.md](../operations/configure-developer.md).
+
+## Rotating a secret
+
+Edit the value in the checkout's `infra/openclaw/.env`, refresh the snapshot (step 2), re-run the seed (step 3; once `06` has run, unflag `openclaw.json` first — [configure-developer.md](../operations/configure-developer.md)). The seed rewrites `secrets.json`; the references in `openclaw.json` are unchanged, so the live gateway only needs its snapshot refreshed:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload
+```

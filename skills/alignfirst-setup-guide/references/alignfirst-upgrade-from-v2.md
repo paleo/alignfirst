@@ -12,7 +12,7 @@ Find every project skill root containing `alignfirst/SKILL.md`. Common roots are
 `.agent/skills/`. Ignore dependencies and generated output.
 
 When the current skills CLI owns the installation, use
-`npx -y skills remove alignfirst --yes </dev/null>` so it removes canonical links and updates lock
+`npx -y skills remove alignfirst --yes </dev/null` so it removes canonical links and updates lock
 state. Otherwise remove only the detected legacy `alignfirst` and
 `technical-documentation-authoring` directories. Do not delete unrelated skills.
 

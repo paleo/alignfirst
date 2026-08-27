@@ -74,7 +74,7 @@ Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Me
 
 The setup skill owns creation and deployment. Its
 [`alignfirst-developer.md`](../../skills/alignfirst-setup-guide/references/alignfirst-developer.md)
-reference assembles a version-controlled admin repository from a common base plus one channel and
-one coding-agent overlay. The generated runbooks derive configuration from the installed OpenClaw
-version, keep secrets outside git, and prepare managed projects through the complete AlignFirst
-Developer contract.
+reference assembles a version-controlled admin repository from a common base plus one channel
+overlay, one coding-agent overlay and the optional dev-server gateway. The generated runbooks derive
+configuration from the installed OpenClaw version, keep secrets outside git, and prepare managed
+projects through the complete AlignFirst Developer contract.

@@ -1,45 +1,56 @@
-# Repository Instructions
+# Admin Repository of {{DEVELOPER_NAME}}
 
-Always ignore `.plans`, `.local`, `.local-wt`, `node_modules`, generated reports, runtime state, and
-secret files when searching the repository.
+This repository documents and operates `{{SERVER_HOST}}`, the server that runs **{{DEVELOPER_NAME}}**, an AlignFirst Developer. Every configuration step is a runbook under `docs/installations/`, so the server can be rebuilt from scratch.
 
-## Work Boundaries
+Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
 
-Use the installed `sysadmin` skill for infrastructure, service, security, package, account, or
-runtime-configuration work.
+## Sysadmin workflow
 
-Repository support work may inspect and edit version-controlled files and run local validation.
-Server operator work must follow the relevant runbook, use its stated execution role, and stop when
-the live host differs from the documented preconditions. Report the unexpected state to the human
-operator before mutating the host.
+Follow the `sysadmin` skill: record steps as runbooks under `docs/`, keep a per-task `.reports/` journal, run commands carefully.
 
-Never read, print, copy, commit, or send secret values. Human operators own authentication and secret
-entry.
+Two roles, keyed to where the session runs:
+
+- **Support** — a session on a laptop: edits the repository, never executes on the server.
+- **Operator** — a session in the admin account `{{SERVER_ADMIN_USER}}` on `{{SERVER_HOST}}` (`~/{{ADMIN_REPOSITORY_NAME}}`): edits and executes. The service account is `{{SERVICE_USER}}`, reached with `sudo -i -u {{SERVICE_USER}} -- <command>`.
+
+Repository specifics:
+
+- Runbooks match `docs/installations/01-server-setup.md`: one short line of prose, then a fenced code block.
+- `.reports/` is committed.
 
 ## Docmap - Seek Documentation
 
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant
-documentation. Mandatory for every task.
+*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
-## AlignFirst - Ticket ID, Commit Message, Branch Name
+Always read `docs/overview.md`.
 
-_Ticket ID:_ Format is numeric. Use an explicitly provided ticket. Otherwise deduce it from the
-current branch name, then `git branch --show-current`. Ask only as a last resort.
+## AlignFirst - Ticket ID, Commit Message, Default Branch
 
-Use Conventional Commits without the ticket ID, such as `docs: update recovery procedure`.
+_Ticket ID:_ numeric, incremented from the highest existing directory in `.plans/`. This repository does not branch per ticket; ask the user when unsure.
 
-Name branches `<ticket-id>/<1-3-words>`.
+_Commit message convention:_ Conventional Commits with a very short subject, e.g. `docs: tighten 04 seed section`. No body unless the change needs one. Do not mention the ticket ID.
 
+_Default branch:_ `main`.
+
+<!-- TEAM_PLANS_SECTION -->
+### Team Plans Repository
+
+In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `{{ADMIN_REPOSITORY_NAME}}/`). Plans are shared with the team through that repository and are never committed in this one.
+
+After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
 <!-- TEAM_PLANS_SECTION -->
 
 ## Workspaces
 
-A workspace is a git worktree with shared `.plans` and `.local` directories, seeded gitignored files,
-and per-worktree `.local-wt` state. This repository is portless and has no dev-server command.
+A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
 
 Run `npm run workspace -- --guide` for the full procedures.
 
-## Validation
+## Writing OpenClaw workspace files
 
-Run `npm run validate` after changing repository source. For shell assets, also run `bash -n`; for
-JSON, parse the file; for JavaScript, run `node --check`.
+When editing a file under `infra/openclaw/workspace/` to fix an agent behavior, leave the text the same length or shorter. First understand why the surrounding passage exists, then rewrite it to express the new behavior without bloat.
+
+## Coding rules
+
+- UTF-8, 2-space indentation, 100-char line width.
+- Semicolons; double quotes `"`.

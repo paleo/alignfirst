@@ -1,0 +1,28 @@
+{
+	servers {
+		protocols h1 h2
+	}
+	# The credential variable is named by the DNS module; its value lives in /etc/caddy/gateway.env.
+	acme_dns {{CADDY_DNS_PROVIDER}} {env.<DNS_CREDENTIAL_VARIABLE>}
+}
+
+*.{{DEV_DOMAIN}} {
+	@p header_regexp Host ^(?:[a-z0-9][a-z0-9-]*-)?p({{PORT_RANGE_REGEX}})\.{{DEV_DOMAIN_REGEX}}$
+
+	forward_auth localhost:9091 {
+		uri /api/authz/forward-auth
+		copy_headers Remote-User Remote-Email
+	}
+
+	handle @p {
+		reverse_proxy localhost:{re.p.1}
+	}
+
+	handle {
+		respond 404
+	}
+}
+
+auth.{{DEV_DOMAIN}} {
+	reverse_proxy localhost:9091
+}

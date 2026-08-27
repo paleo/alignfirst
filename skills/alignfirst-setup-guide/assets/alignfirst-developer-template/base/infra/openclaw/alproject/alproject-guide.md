@@ -1,13 +1,9 @@
-# Managed Project Rules
+## Projects and directory structure
 
-Use `alproject list --json` as the project inventory. A managed project is a canonical main Git
-worktree directly beneath an allowed project parent.
+Every project is a direct child of `{{PROJECTS_ROOT}}`. The managed port range is `{{PORT_RANGE_FIRST}}..{{PORT_RANGE_LAST}}`. Adding a project is an operator's decision: ask before creating or registering one.
 
-Before registration, prepare the repository through `alignfirst-setup-guide`: AlignFirst skills,
-conditional plans-share, docmap, workspace, and a project-specific `DEVELOPERS.md` are required. Run
-the project's workspace main-worktree setup and verification before `alproject register`.
+<!-- TEAM_PLANS_SECTION -->
+A clone of the team plans repository may sit under the parent. It is a repository, not a project: it stays unregistered, with no ports and no workspace.
+<!-- TEAM_PLANS_SECTION -->
 
-Port allocation is optional. Reserve ports only for a project whose workspace wrapper uses them.
-Missing-path and unregistered statuses are diagnostic; never edit `alproject-registry.json` directly.
-Restore a valid registry backup or correct `.alproject.json`, then use `alproject register` or
-`unregister` to change owned state.
+<!-- Operator: to split projects into several parents, add `projectParents` entries to `.alproject.json` (each optionally with its own sub-range) and describe them here. -->

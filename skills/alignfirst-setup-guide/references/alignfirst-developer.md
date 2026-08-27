@@ -1,159 +1,151 @@
 # Create an AlignFirst Developer
 
-Create a dedicated Linux service that receives work through Slack or Discord and delegates coding to
-Claude Code or Codex. The OpenClaw runtime model, communication surface, and delegated coding agent
-are independent choices.
+An AlignFirst Developer is a dedicated Linux service account that receives work through Slack or Discord (OpenClaw) and delegates coding to Claude Code or Codex through `alcode`. This reference produces its **admin repository**: a private repository rendered from `assets/alignfirst-developer-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
 
-## Execution Roles
+## Topology
 
-Every command in the generated runbooks carries one role:
+Three roles, named as the runbooks name them:
 
-- **Operator machine**: creates and maintains the admin repository and connects to the server.
-- **Privileged server administrator**: installs system packages, creates the service account, and
-  configures host security. This role does not run OpenClaw day to day.
-- **Service user**: owns OpenClaw, coding-agent authentication, projects, and user-level services. The
-  account is unprivileged and has no sudo access.
-- **Managed project**: repository-specific preparation, workspace setup, and registration commands.
+- **Support** — a coding-agent session on a laptop. Edits the admin repository, never executes on the server.
+- **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with team plans, the plans clone beside it. Root steps are the operator's, through `sudo`.
+- **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw, the coding agent, `alcode`, `alproject`, rootless podman and the managed projects.
 
-The human performs every interactive authentication and secret-entry step. Never paste credentials
-into chat, tracked files, commands saved in shell history, or documentation.
+The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the operator after every change. From there:
 
-## Collect Deployment Values
+- `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only).
+- `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
+- The gateway unit, written by `openclaw gateway install`, enabled under lingering.
+- `{{PROJECTS_ROOT}}` — the managed projects, the `alproject` registry and, with team plans, the service account's own clone of the plans repository (a repository, never a project).
 
-Inspect the operator machine, chosen git hosts, and target server. Record every value before rendering
-the template. Do not infer a value that controls identity, access, networking, or billing.
+Both accounts install the same selected coding agent. The admin account uses it as the operator with the project-local `sysadmin` skill; the service account uses it through `alcode`.
 
-Choose one Slack or Discord surface and one Claude Code or Codex delegated agent. Choose and
-authenticate the OpenClaw runtime provider separately. Decide whether a team plans repository exists.
+The human performs every interactive authentication and secret entry. Credentials never enter chat, files under version control, commands saved in shell history, or documentation.
+
+## Rendering Inputs
+
+### Options
+
+- **Surface**: `slack` or `discord`.
+- **Coding agent**: `claude-code` or `codex`.
+- **Team plans repository**: yes or no. Yes when the team has one (see [plans-share-setup.md](plans-share-setup.md)).
+- **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and `workspace setup --profile remote` is unusable in the managed projects.
+
+Choose the OpenClaw runtime provider and model separately; the template favors no provider.
 
 ### Placeholder Vocabulary
 
-Replace each token after applying both selected overlays. Tokens are concrete non-secret values.
+`{{TOKEN}}` is replaced at render time. `<value>` in angle brackets is filled by the human at execution time (a Node version, a VPS IP, a secret) and never appears in this table. One execution-time value is a *name*, not a secret: `<DNS_CREDENTIAL_VARIABLE>` in the Caddyfile and in `09` is the environment variable the selected Caddy DNS module documents; the human writes it into `/etc/caddy/gateway.env` and into the `acme_dns` line.
 
-| Token | Supplied by | Secret |
+| Token | Supplied by | Used by |
 | --- | --- | --- |
-| `{{ADMIN_REPOSITORY_NAME}}` | Operator | No |
-| `{{ADMIN_REPOSITORY_URL}}` | Operator or git host | No |
-| `{{SERVER_HOST}}` | Server administrator | No |
-| `{{SERVER_ADMIN_USER}}` | Server administrator | No |
-| `{{SERVICE_USER}}` | Server administrator | No |
-| `{{DEVELOPER_NAME}}` | Operator | No |
-| `{{PROJECTS_ROOT}}` | Operator and service user | No |
-| `{{TIME_ZONE}}` | Operator | No |
-| `{{GIT_HOSTS}}` | Operator | No |
-| `{{RUNTIME_PROVIDER}}` | Operator | No |
-| `{{RUNTIME_MODEL}}` | Operator | No |
-| `{{TEAM_NAME}}` | Operator | No |
-| `{{TECH_USERS}}` | Operator | No |
-| `{{NONTECH_USERS}}` | Operator | No |
-| `{{SLACK_WORKSPACE_ID}}` | Slack administrator | No |
-| `{{SLACK_CHANNEL_ID}}` | Slack administrator | No |
-| `{{DISCORD_GUILD_ID}}` | Discord administrator | No |
-| `{{DISCORD_CHANNEL_ID}}` | Discord administrator | No |
+| `{{ADMIN_REPOSITORY_NAME}}` | Operator | `package.json`, root files, `~/{{ADMIN_REPOSITORY_NAME}}` in the runbooks, the team plans folder |
+| `{{ADMIN_REPOSITORY_URL}}` | Operator or git host | `02` (deploy key) |
+| `{{SERVER_HOST}}` | Server administrator | hostname (`01`), deploy-key alias (`02`), overview, workspace files |
+| `{{SERVER_ADMIN_USER}}` | Server administrator | admin account (`01`), operator commands, hardening ownership |
+| `{{SERVICE_USER}}` | Server administrator | service account (`03`), every `sudo -i -u` command, the scripts |
+| `{{DEVELOPER_NAME}}` | Operator | agent identity, bot name (`07`), secret provider id `{{DEVELOPER_NAME}}file` (lowercased by the seed; letters, digits, `-` and `_`, starting with a letter) |
+| `{{PROJECTS_ROOT}}` | Operator | `.alproject.json`, `alproject-guide.md`, `backup.sh`, the project runbooks |
+| `{{TIME_ZONE}}` | Operator | `timedatectl` (`01`), `USER.md`, overview |
+| `{{GIT_HOSTS}}` | Operator | `03`, `05` (git-host CLIs), workspace `AGENTS.md`, coding-agent instructions |
+| `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (provider login) |
+| `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
+| `{{TECH_USERS}}`, `{{NONTECH_USERS}}` | Operator | `USER.md` |
+| `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alproject.json`, `alproject-guide.md`, overview, workspace `AGENTS.md`, `09` |
+| `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
+| `{{DISCORD_OWNER_ID}}`, `{{DISCORD_GUILD_ID}}`, `{{DISCORD_CHANNEL_ID}}` | Discord administrator | `.env.example` (Discord overlay) |
+| `{{DEV_DOMAIN}}` | Operator | `09`, Caddyfile, `authelia.yml`, `REMOTE_DEV_DOMAIN` in `common.conf`, overview, gotchas |
+| `{{CADDY_DNS_MODULE}}`, `{{CADDY_DNS_PROVIDER}}` | Operator | `caddy add-package` (`09`), `acme_dns` (Caddyfile) |
+| `{{PORT_RANGE_REGEX}}`, `{{DEV_DOMAIN_REGEX}}` | Derived | Caddyfile host regex |
 
-Tokens and API keys are different. Templates may name secret environment variables and OpenClaw
-SecretRefs, but never contain the values. Remove the unused surface tokens with the unused overlay.
+`{{PROJECTS_ROOT}}` is written as the service account sees it: `~/projects` (the default) or an absolute path. `alproject` expands `~/` only, and the runbooks resolve the value through the service account's shell.
 
-When team plans are enabled, also collect the repository URL, clone location, and admin-repository
-folder name. Add them through the plans-share setup operation; they are not unconditional template
-tokens.
+`{{TECH_USERS}}` and `{{NONTECH_USERS}}` are Markdown lists. Every member carries the handle the playbook matches on: the Slack member ID (`U…`) or the Discord `username`.
+
+```markdown
+- Alex Example — lead developer, Slack member ID `U0123456789`
+```
+
+The channel IDs are known before the bot exists (the channel, the server and the accounts pre-date the app). `04` lets the human correct them in `.env`.
+
+The last two rows exist only when the gateway option is on. `{{PORT_RANGE_REGEX}}` is a regex matching exactly the integers `PORT_RANGE_FIRST..PORT_RANGE_LAST`: one digit class per position when the range allows it (`28000..28599` → `28[0-5][0-9]{2}`), otherwise an alternation of such classes (`6500..7700` → `6[5-9][0-9]{2}|7[0-6][0-9]{2}|7700`). `{{DEV_DOMAIN_REGEX}}` is `DEV_DOMAIN` with every `.` escaped as `\.`.
+
+With team plans, also collect the plans repository URL and the two clone locations (beside the admin repository for the operator, under `{{PROJECTS_ROOT}}` for the service account). They are execution-time values of `02` and `add-project.md`, not tokens.
 
 ## Assemble the Admin Repository
 
-Run these steps on the operator machine from the installed setup skill directory:
+On the operator's machine, from the installed skill directory:
 
-1. Create an empty target directory outside the setup skill.
-2. Copy `assets/alignfirst-developer-template/base/.` into it.
-3. Overlay exactly one directory from
-   `assets/alignfirst-developer-template/variants/surfaces/`.
-4. Overlay exactly one directory from
-   `assets/alignfirst-developer-template/variants/coding-agents/`.
-5. Copy `assets/workspace.mjs` to `scripts/workspace/workspace.mjs`.
-6. Adapt that wrapper to the portless admin repository:
-   - remove `devServerScript`, `ports`, and all dev-server or infrastructure callbacks;
-   - keep `sharedDirs: [".local", ".plans"]` and `runtimeDir: ".local-wt"`;
-   - seed only gitignored files the admin repository actually needs;
-   - make `finalizeWorkspace` run `npm install` idempotently before any later check;
-   - when plans-share is enabled, make `preSetup` run
-     `npx --no plans-share check` in the main worktree only;
-   - remove all `ADAPT` and example scaffolding.
-7. Replace every token only after both overlays are present.
-8. Remove the `TEAM_PLANS_SECTION` markers. If team plans are enabled, install
-   `@paleo/plans-share`, add `plans:setup` and `plans:sync` scripts, add the documented `AGENTS.md`
-   and `DEVELOPERS.md` sections, replace local `.plans` creation in the fresh-clone runbooks with
-   `plans:setup -- <plans-clone-path>`, and retain the main-worktree `preSetup` check.
-9. Initialize git, install dependencies, and install project and global skills through `npx skills`.
-   Let that CLI create canonical skill directories and lock state.
+1. Create an empty target directory outside the skill.
+2. Copy the base with `cp -a` (the scripts' executable bits must survive): `cp -a assets/alignfirst-developer-template/base/. <target>/`.
+3. Overlay exactly one surface: `cp -a assets/alignfirst-developer-template/variants/surfaces/<surface>/. <target>/`.
+4. Overlay exactly one coding agent: `cp -a assets/alignfirst-developer-template/variants/coding-agents/<agent>/. <target>/`.
+5. Gateway on: overlay `variants/options/dev-server-gateway/.` the same way, then delete the `DEV_SERVER_GATEWAY_SECTION` marker lines. Off: delete each marker block. From the target root, with `name` set to the marker:
 
-Do not copy source-repository `node_modules`, package lock state, or `skills-lock.json`. The rendered
-repository must not contain `variants/`.
+   ```sh
+   re="^[[:space:]]*(<!-- $name -->|# $name|// $name)[[:space:]]*$"
+   # option on — delete the marker lines, keep the content
+   grep -rlE "$re" . | while read -r f; do awk -v re="$re" '$0 !~ re' "$f" > "$f.tmp" && cat "$f.tmp" > "$f" && rm "$f.tmp"; done
+   # option off — delete the markers and the content between them
+   grep -rlE "$re" . | while read -r f; do awk -v re="$re" '$0 ~ re { skip = !skip; next } !skip' "$f" | cat -s > "$f.tmp" && cat "$f.tmp" > "$f" && rm "$f.tmp"; done
+   ```
 
-Before the first commit, require these audits from the target root:
+6. Team plans on: delete the `TEAM_PLANS_SECTION` marker lines, then `npm pkg set 'scripts.plans:setup=plans-share setup --folder {{ADMIN_REPOSITORY_NAME}}' 'scripts.plans:sync=plans-share sync'` and `npm install -D @paleo/plans-share`. Off: delete the blocks.
+7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the two user lists need the editor or a Node one-liner. Dotfiles (`.env.example`, `.alproject.json`) are part of the sweep.
+8. `npm install`.
+9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.
+10. Run the audits below.
+11. `git init -b main`, first commit `chore: initialize developer administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
+
+Do not copy the alignfirst repository's `node_modules`, lock files or `skills-lock.json`. The rendered tree has no `variants/`.
+
+The workspace `AGENTS.md` (`infra/openclaw/workspace/AGENTS.md`) carries no forge, ticketing or merging policy. When the deployment has a ticketing CLI or a forge policy, the operator replaces `## Tickets are labels, not lookup targets` and adds the forge and merging sections, keeping the file under 12 KB.
+
+## Audits Before the First Commit
+
+From the target root:
 
 ```sh
-rg -n '\{\{[A-Z][A-Z0-9_]*\}\}' .
-rg -n 'ADAPT|TEAM_PLANS_SECTION' .
+rg -n --hidden -g '!node_modules' '\{\{[A-Z][A-Z0-9_]*\}\}' .
+rg -n --hidden -g '!node_modules' 'TEAM_PLANS_SECTION|DEV_SERVER_GATEWAY_SECTION' .
+for f in infra/openclaw/seed.sh infra/openclaw/seed/*.sh infra/openclaw/bin/*.sh; do bash -n "$f"; done
 node --check scripts/workspace/workspace.mjs
-npm run docmap -- --check
+node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/alproject/.alproject.json package.json
+npm run validate
 ```
 
-Both searches must return no matches. Parse every JSON file and run `bash -n` on every shell script.
+Both `rg` searches must be empty. Add a search for every collected value that is not a token (the VPS IP, the plans repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 
-Follow the generated runbooks in order. Each document states its execution role and human-owned
-steps.
+Every runbook states its role and its position at the top. Human steps are marked `> **User action required.**`. Execution order:
 
-1. **Inspect and decide**: confirm the collected values, selected surface, delegated agent, runtime
-   provider/model, git hosts, and team plans choice.
-2. **Create the repository**: render the template, audit it, initialize git, and publish the private
-   admin repository.
-3. **Prepare the Linux host**: follow `docs/installations/01-server-setup.md` as the privileged
-   administrator. Create the dedicated service user without sudo access.
-4. **Clone the admin repository**: follow `docs/installations/02-admin-repository.md` as the service
-   user.
-5. **Install the toolchain**: follow `docs/installations/03-toolchain.md` for Node, rootless
-   containers, OpenClaw, `alcode`, `alproject`, and git-host CLIs.
-6. **Install OpenClaw**: follow `docs/installations/04-openclaw.md`. Authenticate the independently
-   selected runtime provider as a human.
-7. **Install project and delegation dependencies**: follow
-   `docs/installations/05-openclaw-dependencies.md`. Configure `alproject`, install the OpenClaw
-   playbook, and install the delegated-agent skills. Retain `alignfirst-setup-guide` globally for the
-   selected delegated agent under the service user.
-8. **Apply security boundaries**: follow `docs/installations/06-security-hardening.md` and record any
-   distribution-specific adaptations.
-9. **Configure the surface**: follow `docs/installations/07-channel.md`. Enter channel tokens and
-   identifiers as a human.
-10. **Configure the delegated agent**: follow `docs/installations/08-coding-agent.md`. Authenticate
-    interactively and set the `alcode` selector independently from the runtime provider.
-11. **Seed and validate configuration**: derive configuration from the installed OpenClaw defaults,
-    apply common and selected modules, create SecretRefs, and validate the result.
-12. **Install the service and workspace**: install the user-level service, enable lingering when
-    available, apply the version-controlled workspace, and verify hardening boundaries.
-13. **Prepare managed projects**: in each project, use this setup skill's complete project-preparation
-    route before `alproject register`. Include AlignFirst skills, conditional plans-share, docmap,
-    workspace, and a project-specific `DEVELOPERS.md`.
-14. **Verify end to end**: run the selected channel smoke test, project selection, thread flow,
-    workspace creation, read-only protocol delegation, result delivery, restart, kill switch, backup,
-    and recovery checks.
-15. **Hand off operations**: follow the generated update, recovery, and troubleshooting runbooks.
-    Record ownership for routine upgrades, backup review, kill-switch use, and incidents.
+1. `01-server-setup.md` — **human administrator**, on the fresh server: admin account, SSH key-only, firewall, Node, podman. Ends with the coding agent installed and logged in for the admin account, then a session of that agent in the clone takes over as the **operator**.
+2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, plans clone and `plans:setup` when enabled, `workspace setup`.
+3. `03-toolchain.md` — service account created, npm prefix, the CLIs, the coding agent, git access (human: key registration or device code).
+4. `05-openclaw-dependencies.md` — OS packages for the tools, git-host CLIs and their authentication (human), Chromium.
+5. `07-channel.md`, platform part — **channel administrator** creates the app and collects the tokens and IDs for `.env`.
+6. `04-openclaw.md` — human fills `.env`; snapshot, seed, workspace files, alproject files, lingering, `gateway install`, `podman.socket`; human: provider login when no API key, dashboard pairing through the SSH tunnel, reboot check from the laptop.
+7. `08-coding-agent.md` — human authenticates the coding agent in the service account; skills, global instructions, verification.
+8. `09-dev-server-gateway.md` when selected — human: DNS wildcard record and API token, Authelia secrets, gateway users.
+9. `06-security-hardening.md` — last, because it locks what the others write.
+10. `07-channel.md`, smoke test — operator, from the chat client.
+11. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an AlignFirst Developer" route, then `alproject register`.
+
+The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `configure-developer.md` (re-seed, secret rotation), `update-developer.md`, `update-workspace.md`, `recover-developer.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 
 ## Linux Examples
 
-The deployment invariants are distribution-independent: an unprivileged service account, rootless
-containers, user-owned configuration and secrets, explicit environment propagation, and a supervised
-user service.
+The deployment invariants are distribution-independent: an unprivileged service account, rootless containers, user-owned configuration and secrets, explicit environment propagation, and a supervised user service.
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and
-> service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
-The generated server and toolchain runbooks contain the concrete Ubuntu commands. Keep privileged
-administrator commands separate from service-user commands when adapting them.
+The generated runbooks contain the concrete Ubuntu commands. Keep root commands separate from service-account commands when adapting them.
 
 ## Completion Criteria
 
-The deployment is complete when the allowed channel routes work into one thread, the selected agent
-can execute every AlignFirst command through `alcode`, managed-project workspaces are isolated, reports
-return to the originating thread, restarts preserve operation, and the documented kill switch, backup,
-update, and recovery procedures have been exercised.
+- The allowed channel routes work into one thread; a message elsewhere gets no reply.
+- The coding agent runs every AlignFirst command through `alcode`, unattended.
+- Managed-project workspaces are isolated; reports return to the originating thread.
+- The gateway survives a reboot.
+- Kill switch, backup, update and recovery have each been exercised.
+- `openclaw secrets audit --check` passes; every credential in `openclaw.json` is a file SecretRef; the gateway environment holds no secret.

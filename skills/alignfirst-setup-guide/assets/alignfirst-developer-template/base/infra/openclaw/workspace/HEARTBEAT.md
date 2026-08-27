@@ -1,3 +1,4 @@
 # Heartbeat
 
-Report a pending `alcode` completion or actionable service alert. Otherwise answer `NO_REPLY`.
+# Keep this file comment-only (ATX headers and blank lines): the periodic tick
+# then skips its model call. Exec-exit wakes bypass this file entirely.

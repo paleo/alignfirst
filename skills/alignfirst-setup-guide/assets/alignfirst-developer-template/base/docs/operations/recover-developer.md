@@ -1,37 +1,71 @@
 ---
 title: Recover the Developer
 read_when:
-  - restoring service after a failed update or incident
+  - the developer misbehaves and must be stopped
+  - restoring the service after a failed update or a broken configuration
 ---
 
 # Recover the Developer
 
+**Operator.** Contain first, then diagnose, restore, re-authenticate when needed, re-seed, verify. Record the incident in `.reports/`.
+
 ## Contain
 
-**Role: service user.** Resolve targets, then stop only developer-owned work:
+The kill switch stops the gateway unit and terminates the remaining agent processes; the user manager stays up:
 
 ```sh
-infra/openclaw/bin/developer-kill.sh
-systemctl --user status openclaw-gateway.service
+sudo ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/developer-kill.sh
+ps -u {{SERVICE_USER}}
 ```
 
-The kill switch stops the gateway service and active `alcode` processes. It does not stop the user's
-service manager or all rootless containers.
+## Diagnose
 
-## Diagnose and Restore
+```sh
+sudo -i -u {{SERVICE_USER}} -- journalctl --user -u openclaw-gateway --since "-2h" --no-pager | tail -200
+sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
+sudo -i -u {{SERVICE_USER}} -- openclaw config validate
+```
 
-1. Preserve journals, failed alcode session files, and the current broken state without secrets.
-2. Select the last known-good deployment backup.
-3. Restore the affected workspace, secure environment, configuration source, skill, or package only.
-4. Re-authenticate interactively when the runtime or delegated agent reports expired authentication.
-5. Run `seed.sh`, `openclaw config validate`, and `openclaw secrets audit` before service start.
-6. Start the user service and inspect its journal.
+A delegated run leaves its session file under the project's `.plans/<ticket>/_alcode/`; read it before restoring anything. `exitReason: auth_required` means the coding agent's login expired — [08-coding-agent.md § Authenticate](../installations/08-coding-agent.md#authenticate). A provider error means the runtime login — [04 § 10](../installations/04-openclaw.md#10-provider-login). Keep the failed files.
 
-**Role: privileged server administrator** participates only when the service account, filesystem
-ownership, lingering, system packages, firewall, or host service manager is damaged.
+## Restore
 
-## Verify and Reopen
+`backup.sh` copies the deployment state before every risky operation; run it now as well, so the broken state is kept:
 
-Run allowlist negatives, channel/thread routing, project inventory, workspace setup, read-only
-delegation, restart, and repeated-wake suppression. Reopen user access only after all affected checks
-pass. Record the incident and the exact restored backup.
+```sh
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
+sudo -i -u {{SERVICE_USER}} -- ls /home/{{SERVICE_USER}}/backups/deployment/
+```
+
+A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one place, and the locked ones need an unflag first:
+
+| Backup file | Live path | Unflag |
+| --- | --- | --- |
+| `openclaw.json` | `~/.openclaw/openclaw.json` | `chattr -i` |
+| `secrets.json` | `~/.openclaw/secrets/secrets.json` | — |
+| `openclaw.env` | `~/.openclaw/.env` | — |
+| `workspace/*.md` | `~/.openclaw/workspace/` | `chattr -i` on the six files |
+| `environment.d/*.conf` | `~/.config/environment.d/` | — |
+| `alproject-registry.json` | `{{PROJECTS_ROOT}}/alproject-registry.json` | — |
+
+```sh
+sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+sudo -i -u {{SERVICE_USER}} -- install -m 600 /home/{{SERVICE_USER}}/backups/deployment/<stamp>/openclaw.json /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+```
+
+Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env` and `environment.d/` from the repository and `.env`. Prefer the backup for the workspace files and the registry, which the seed does not write.
+
+## Re-seed and validate
+
+Follow [configure-developer.md](configure-developer.md): snapshot, unflag, seed, `config validate`, reflag. Then [update-workspace.md](update-workspace.md) when the workspace files were touched.
+
+## Start and verify
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- alproject list
+```
+
+Finish with [08-coding-agent.md § Verification](../installations/08-coding-agent.md#verification) and the smoke test of [07-channel.md](../installations/07-channel.md) before reopening the channel to users.

@@ -1,10 +1,7 @@
 {
   "root": {
-    "path": "{{PROJECTS_ROOT}}"
+    "path": "{{PROJECTS_ROOT}}",
+    "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} }
   },
-  "projectParents": [
-    {
-      "path": "{{PROJECTS_ROOT}}"
-    }
-  ]
+  "projectParents": [{ "path": "{{PROJECTS_ROOT}}" }]
 }

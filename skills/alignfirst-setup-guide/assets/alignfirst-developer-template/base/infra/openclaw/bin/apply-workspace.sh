@@ -1,75 +1,70 @@
-#!/bin/sh
+#!/usr/bin/env bash
+#
+# Backs up the live OpenClaw workspace files, then overwrites them with the curated versions
+# from the seed snapshot. Backup + overwrite only: decide what to push before running it
+# (docs/operations/update-workspace.md).
+#
+# Run as the service account:
+#   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
 
-set -eu
+set -euo pipefail
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-openclaw_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
-source_workspace="$openclaw_dir/workspace"
-environment_file=${OPENCLAW_ADMIN_ENV:-"$openclaw_dir/secrets/environment"}
+SOURCE_BASE="$HOME/seed/workspace"
+TARGET_BASE="$HOME/.openclaw/workspace"
+BACKUP_DIR="$HOME/backups/workspace-backups/$(date +%Y%m%d-%H%M)"
 
 main() {
-  load_environment
-  validate_paths
-  backup_live_workspace
-  apply_source_files
+  check_preconditions
+  apply_files
+  print_summary
 }
 
-load_environment() {
-  if [ ! -f "$environment_file" ]; then
-    echo "Missing environment file: $environment_file" >&2
+check_preconditions() {
+  if [ "$(id -un)" != "{{SERVICE_USER}}" ]; then
+    echo "Run as {{SERVICE_USER}}: sudo -i -u {{SERVICE_USER}} -- ~/seed/bin/apply-workspace.sh" >&2
     exit 1
   fi
-  set -a
-  # shellcheck source=/dev/null
-  . "$environment_file"
-  set +a
-}
-
-validate_paths() {
-  current_user=$(id -un)
-  if [ "${SERVICE_USER-}" != "$current_user" ]; then
-    echo "Run as SERVICE_USER=${SERVICE_USER-<unset>}, not $current_user." >&2
-    exit 1
-  fi
-  if [ ! -d "$source_workspace" ]; then
-    echo "Workspace source is missing: $source_workspace" >&2
-    exit 1
-  fi
-  case "${OPENCLAW_WORKSPACE-}" in
-    /*) ;;
-    *) echo "OPENCLAW_WORKSPACE must be an absolute path." >&2; exit 1 ;;
-  esac
-  if [ "$OPENCLAW_WORKSPACE" = "/" ] || [ "$OPENCLAW_WORKSPACE" = "$HOME" ]; then
-    echo "Refusing unsafe OPENCLAW_WORKSPACE: $OPENCLAW_WORKSPACE" >&2
-    exit 1
-  fi
-  if grep -R '{{[A-Z][A-Z0-9_]*}}' "$source_workspace" >/dev/null 2>&1; then
-    echo "Workspace source has unresolved placeholders." >&2
+  if [ ! -d "$SOURCE_BASE" ]; then
+    echo "No workspace directory at $SOURCE_BASE — refresh the seed snapshot first." >&2
     exit 1
   fi
 }
 
-backup_live_workspace() {
-  backup_root="$openclaw_dir/backups/workspace"
-  backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)
-  backup_dir="$backup_root/$backup_stamp"
-  install -d -m 0700 "$backup_dir"
-  if [ -d "$OPENCLAW_WORKSPACE" ]; then cp -a "$OPENCLAW_WORKSPACE/." "$backup_dir/"; fi
+apply_files() {
+  local found=0 src rel target backup
+  mkdir -p "$BACKUP_DIR"
+  # find + install -D: nested directories and arbitrary file names keep their relative paths in
+  # both the target and the backup.
+  while IFS= read -r -d '' src; do
+    found=1
+    rel="${src#"$SOURCE_BASE"/}"
+    target="$TARGET_BASE/$rel"
+    backup="$BACKUP_DIR/$rel"
+    if [ -f "$target" ]; then
+      install -D -m 644 "$target" "$backup"
+      echo "[apply-workspace] backup: $rel → $backup"
+    else
+      echo "[apply-workspace] (no backup, target absent) $rel"
+    fi
+    install -D -m 644 "$src" "$target"
+    echo "[apply-workspace] write:  $rel → $target"
+  done < <(find "$SOURCE_BASE" -type f \( -name '*.md' -o -name '*.png' -o -name '*.svg' \) -print0)
+  if [ "$found" -eq 0 ]; then
+    echo "No workspace file (*.md, *.png, *.svg) under $SOURCE_BASE" >&2
+    exit 1
+  fi
 }
 
-apply_source_files() {
-  install -d -m 0700 "$OPENCLAW_WORKSPACE"
-  find "$source_workspace" -type d -print | while IFS= read -r source_dir; do
-    relative_path=${source_dir#"$source_workspace"}
-    install -d -m 0700 "$OPENCLAW_WORKSPACE$relative_path"
-  done
-  find "$source_workspace" -type f -print | while IFS= read -r source_file; do
-    relative_path=${source_file#"$source_workspace/"}
-    target_file="$OPENCLAW_WORKSPACE/$relative_path"
-    target_mode=0600
-    if [ -f "$target_file" ]; then target_mode=$(stat -c '%a' "$target_file"); fi
-    install -m "$target_mode" "$source_file" "$target_file"
-  done
+print_summary() {
+  cat <<SUMMARY
+
+[apply-workspace] Done. Backup at:
+                    $BACKUP_DIR
+
+                  New sessions pick up the new files automatically. To refresh active sessions:
+
+                    systemctl --user restart openclaw-gateway
+SUMMARY
 }
 
 main "$@"

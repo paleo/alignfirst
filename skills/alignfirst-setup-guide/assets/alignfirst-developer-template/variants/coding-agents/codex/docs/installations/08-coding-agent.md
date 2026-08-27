@@ -1,67 +1,160 @@
 ---
 title: Codex Setup
 read_when:
-  - installing or authenticating the delegated Codex agent
+  - installing, authenticating, locking or updating Codex in either account
+  - a delegated run ends with exit reason auth_required or a 401
+  - Codex logs `failed to install system skills`
 ---
 
 # Codex Setup
 
-**Role: service user.** Authentication is an interactive human action. It is independent from the
-OpenClaw runtime provider and must not be represented by an environment placeholder or credential
-file in this repository.
+Position: after `04-openclaw.md`, before `06-security-hardening.md`. Two sections run earlier: [Admin Account](#admin-account) during `01-server-setup.md`, [Install](#install) during `03-toolchain.md`. Every Codex command of this deployment lives here; the base runbooks link to these sections.
 
-## Install and Authenticate
+Codex is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `alcode`, one fresh `codex` process per delegated run.
 
-Install Codex with OpenAI's current [CLI installer](https://developers.openai.com/codex/cli), then
-start it in the admin repository and choose an interactive sign-in method:
+## Admin Account
+
+**Role: human**, in the `{{SERVER_ADMIN_USER}}` shell, as the last step of `01-server-setup.md`.
+
+The vendor installer places the binary under `~/.local/bin`; `npm install -g @openai/codex` under the admin account's Node is the alternative. `--yolo` is absent from `codex --help` yet accepted: it is the hidden alias of `--dangerously-bypass-approvals-and-sandbox`. Codex has no memory feature to disable; durable context lives in the repository (`AGENTS.md`, `docs/`).
 
 ```sh
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
-codex
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+echo "alias codexy='codex --yolo'" >> ~/.bashrc
+source ~/.bashrc
 ```
 
-Set `ALIGNFIRST_CODE_AGENT=codex` in `infra/openclaw/secrets/environment`; this selects delegation,
-not the gateway model.
+> **User action required.** Run `codex login` (or `codex login --device-auth` when the account allows device codes, see [Authenticate](#authenticate)) with the account that operates this server. Then start `codex` in the home directory and continue with `02-admin-repository.md` from that session: it clones the admin repository, and the operator runs every later runbook from there.
 
-## Install Skills
+## Service Account
 
-From the admin repository root, install the named AlignFirst bundle globally, retain the setup guide
-globally, and install `sysadmin` only in this project:
+### Install
+
+**Role: operator**, during `03-toolchain.md`, once `~/.npmrc` points at the shared prefix. The seed in `04-openclaw.md` refuses to run without the binary.
 
 ```sh
+sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g @openai/codex
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'which codex && codex --version'
+# Expected: /home/{{SERVICE_USER}}/.npm-system-global/bin/codex
+```
+
+The same alias for interactive `sudo -i -u {{SERVICE_USER}}` shells:
+
+```sh
+printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /home/{{SERVICE_USER}}/.bashrc
+```
+
+### Authenticate
+
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw runtime provider. When that provider is itself the Codex plugin, the two keep separate Codex homes: leave `plugins.entries.codex.config.appServer.homeScope` at its default, and authenticate both. The seed strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`environment.d/coding-agent.conf`), so this login is the only credential the coding agent uses.
+
+> **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
+
+```sh
+sudo -i -u {{SERVICE_USER}}
+codex login --device-auth
+codex login status
+exit
+```
+
+`~/.codex/auth.json` is a secret: never copy it into the repository, the seed or a project. When the account forbids device codes, run `codex login` without the flag through an SSH tunnel to the localhost callback port it prints.
+
+### Skills
+
+**Role: operator**, as the service account, after [Authenticate](#authenticate). Three tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink; the seven command skills go to the `codex` tier only and stay outside OpenClaw's allowlist (`agents.defaults.skills` in `seed/common.sh`). `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+
+```sh
+sudo -i -u {{SERVICE_USER}} bash <<'EOS'
+set -e
+npx -y skills add https://github.com/paleo/alignfirst --global --yes \
+  --agent universal --agent codex \
+  --skill alignfirst --skill alignfirst-setup-guide \
+  --skill alignfirst-developer-openclaw-playbook < /dev/null
+npx -y skills add https://github.com/paleo/skills --global --yes \
+  --agent universal --agent codex --skill sharp-writing < /dev/null
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent codex \
-  --skill alignfirst --skill alspec --skill alplan --skill al --skill almerge \
-  --skill alreview --skill aldescription --skill alread </dev/null
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent codex --skill alignfirst-setup-guide </dev/null
-npx -y skills add https://github.com/paleo/skills --yes \
-  --agent codex --skill sysadmin </dev/null
+  --skill al --skill alplan --skill alspec --skill aldescription \
+  --skill alreview --skill alread --skill almerge < /dev/null
+EOS
 ```
 
-The seed merges the reviewed global source into `${CODEX_HOME:-~/.codex}/AGENTS.md` inside a managed
-block. It preserves unrelated global instructions, agent configuration, skills, and user settings.
-Codex reads the repository's canonical root `AGENTS.md` directly.
-
-## Verify
+The `sysadmin` skill is project-local to the admin repository and belongs to the operator's account, never to the service account. The render step installed it, so a fresh clone already carries it; from the repository root in `{{SERVER_ADMIN_USER}}`'s shell, this command is a no-op check:
 
 ```sh
-infra/openclaw/seed.sh
-infra/openclaw/bin/apply-workspace.sh
-openclaw config validate
-openclaw secrets audit
-install -m 0600 infra/openclaw/secrets/environment \
-  "$HOME/.config/alignfirst-developer/environment"
-systemctl --user enable --now openclaw-gateway.service
-systemctl --user status openclaw-gateway.service
-openclaw channels status --probe
-ALIGNFIRST_CODE_AGENT=codex alcode --guide
-alproject --guide
-npx -y skills list --global --agent codex --json
-npx -y skills list --agent codex --json
+npx -y skills add https://github.com/paleo/skills --yes --agent codex --skill sysadmin < /dev/null
 ```
 
-The delegation guide must report Codex, and the project guide must load successfully. Start a new
-`codex` session and verify `$alspec`, `$alplan`, `$al`, `$almerge`, `$alreview`, `$aldescription`,
-and `$alread`. Delegate a read-only protocol task through OpenClaw and confirm its `_alcode` session
-record reports `agent: codex`.
+**System skills.** Codex unpacks its bundled skills into `~/.codex/skills/.system/` at session start, behind a content-hash marker. Once `06-security-hardening.md` has locked that directory, Codex cannot write it and logs `failed to install system skills` on every run. Run this block before `06`, and again after every Codex upgrade ([Update](#update)): hand the directory to the service account, let one throwaway session unpack the skills, take it back. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
+
+```sh
+sudo -H -u {{SERVICE_USER}} mkdir -p /home/{{SERVICE_USER}}/.codex/skills
+sudo chattr -i /home/{{SERVICE_USER}}/.codex/skills 2>/dev/null || true
+sudo chown -Rh {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.codex/skills
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop."' < /dev/null
+sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.codex/skills
+sudo find /home/{{SERVICE_USER}}/.codex/skills -type d -exec chmod 755 {} +
+sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
+sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills
+```
+
+The bundled `skill-creator` and `skill-installer` become visible to the delegated coder. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
+
+### Global Instructions
+
+The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `${CODEX_HOME:-~/.codex}/AGENTS.md`, between `<!-- alignfirst-developer:start -->` and `<!-- alignfirst-developer:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
+
+To change the instructions: edit the repository file, refresh the snapshot, unflag the file when `06-security-hardening.md` has run ([Hardening](#hardening)), re-run the seed (`docs/operations/configure-developer.md`), reflag. The seed writes nothing when the merged content is unchanged, so a re-seed for another reason succeeds while the file is immutable.
+
+### Hardening
+
+**Role: operator**, during `06-security-hardening.md`, after the system-skills block of [Skills](#skills). `~/.codex/skills` and `~/.codex/AGENTS.md` feed the delegated coder's prompt, so both become admin-owned and immutable. `~/.codex` itself stays writable: the CLI keeps `auth.json` (a secret) and its session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
+
+```sh
+sudo chattr -i /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md 2>/dev/null || true
+sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md
+sudo find /home/{{SERVICE_USER}}/.codex/skills -type d -exec chmod 755 {} +
+sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
+sudo chmod 644 /home/{{SERVICE_USER}}/.codex/AGENTS.md
+sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md
+```
+
+Verify: the first three commands fail (`Permission denied`, `Operation not permitted`), the fourth works.
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- bash -c 'echo x >> ~/.codex/AGENTS.md'
+sudo -i -u {{SERVICE_USER}} -- bash -c 'rm ~/.codex/AGENTS.md'
+sudo -i -u {{SERVICE_USER}} -- bash -c 'touch ~/.codex/skills/x'
+sudo -i -u {{SERVICE_USER}} -- codex login status
+```
+
+### Update
+
+**Role: operator**, during `docs/operations/update-developer.md`.
+
+Inside the npm-prefix unlock window that runbook opens, add:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g @openai/codex@latest
+```
+
+A Codex upgrade changes the system-skills marker, so repeat the system-skills block of [Skills](#skills) after the prefix is locked again. Then verify the marker took: a second session prints nothing.
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
+```
+
+The skills window of `update-developer.md` unflags `~/.agents` only: `skills update` writes nothing under `~/.codex/skills`, which holds Codex's own skills alone.
+
+### Verification
+
+After the seed and the gateway start (`04-openclaw.md`):
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode --guide | head'      # names codex as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide >/dev/null && echo alproject-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 11 skills: 4 shared, 7 commands
+```
+
+In an interactive session as the service account (`sudo -i -u {{SERVICE_USER}}`, then `codex` in a project), `$al`, `$alplan`, `$alspec`, `$aldescription`, `$alreview`, `$alread` and `$almerge` are offered. The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: codex`.

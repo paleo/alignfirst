@@ -1,67 +1,67 @@
 ---
-title: Discord Channel Setup
+title: Discord Channel
 read_when:
-  - connecting the developer to its selected Discord channel
+  - creating the Discord application that feeds the DISCORD_* variables of .env
+  - rotating the bot token or moving the bot to another channel
+  - running the channel smoke test after the developer is installed
 ---
 
-# Discord Channel Setup
+# Discord Channel
 
-**Role: Discord administrator** for application creation, then **service user** for configuration.
-Token creation and entry are human-only steps.
+**Role: Discord administrator** for the platform setup, **operator** for the smoke test. Platform setup runs before `04` (its token and IDs go into `infra/openclaw/.env`); the smoke test runs after `08`.
 
-## Create and Install the Bot
+## Enable Developer Mode
 
-Follow Discord's [application and bot
-quickstart](https://docs.discord.com/developers/quick-start/getting-started). Create one application
-and bot, then enable the privileged **Message Content Intent**. Install the bot in guild
-`{{DISCORD_GUILD_ID}}` with the `bot` and `applications.commands` scopes.
+> **User action required.** Discord client → **Settings → Advanced → Developer Mode** → enable. It adds **Copy ID** to the right-click menus used below.
 
-Grant only the permissions required for this workflow: View Channels, Send Messages, Read Message
-History, Create Public Threads, Send Messages in Threads, Embed Links, and Attach Files. Add
-Reactions only when wanted. Do not grant Administrator. Install the official channel plugin for the
-service user:
+## Create the Application
 
-```sh
-openclaw plugins install @openclaw/discord
-```
+> **User action required.** Sign in to <https://discord.com/developers/applications> and click **New Application**. Name it `{{DEVELOPER_NAME}}`, then:
+>
+> 1. **Installation**: set **Install Link** to **None** and save. The private-bot switch below depends on it.
+> 2. **Bot**: click **Reset Token** and save the value as `DISCORD_BOT_TOKEN` in `.env`. The token is shown once; losing it means resetting again.
+> 3. **Bot**: uncheck **Public Bot** and save.
+> 4. **Bot → Privileged Gateway Intents**: enable **Message Content Intent**. Without it the bot receives empty message bodies.
 
-Enable Discord Developer Mode and confirm the selected text channel ID is
-`{{DISCORD_CHANNEL_ID}}`. The configuration uses numeric IDs and rejects every other guild/channel.
+## Authorize the Bot into the Server
 
-## Enter the Token
+> **User action required.** Under **OAuth2 → URL Generator**, select the scopes `bot` and `applications.commands`, then the bot permissions:
+>
+> - General: **View Channels**
+> - Text: **Send Messages**, **Create Public Threads**, **Create Private Threads**, **Send Messages in Threads**, **Manage Threads**, **Pin Messages**, **Attach Files**, **Read Message History**, **Add Reactions**
+>
+> Open the generated URL in a browser and authorize the bot into the target server. The authorizing account needs **Manage Server** there.
 
-**Role: human service operator.** Reset and copy the bot token in the Developer Portal. Enter it
-with an editor in `infra/openclaw/secrets/environment`:
+**Manage Threads** is required: the playbook renames a thread as soon as it knows the ticket and the task. Do not grant Administrator.
 
-```text
-DISCORD_BOT_TOKEN=<bot token>
-```
+## Channel Permissions
 
-Never paste it into chat, a tracked file, or a command line. Confirm the file contains the
-non-secret guild/channel IDs from `.env.example`, then protect it:
+> **User action required.** Create or pick the private channel the bot listens on. Right-click it → **Edit Channel → Permissions** → add the bot role and grant **View Channel** and **Send Messages**.
 
-```sh
-chmod 0600 infra/openclaw/secrets/environment
-```
+The seed allowlists that one channel (`channels.discord.guilds`, `groupPolicy allowlist`). A message from another channel or guild is ignored. DMs use `dmPolicy pairing`: the owner is pre-trusted, anyone else is approved through `../operations/pair-dm-sender.md`.
 
-Continue with [coding-agent setup](08-coding-agent.md). That runbook applies and validates the seed
-after every selected module has its required values.
+## Collect the IDs
 
-DMs are disabled. Automatic reply threading and parent-transcript inheritance are off. The coding
-tool profile is widened only with `message`, allowing the channel session to call `thread-create`.
-The thread starter must carry project, canonical path, ticket when present, audience, and task. A
-fresh thread session recovers that starter with `message` action `read` against its bound thread.
+| Variable | How to get it |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Application → **Bot → Reset Token**. Unique per running instance. |
+| `DISCORD_OWNER_ID` | Right-click your own name → **Copy User ID**. Gates admin chat commands, exec approvals, and the pre-trusted DM. |
+| `DISCORD_GUILD_ID` | Right-click the server icon → **Copy Server ID**. |
+| `DISCORD_CHANNEL_ID` | Right-click the target channel → **Copy Channel ID**. |
+
+## Notes
+
+- One connected process per token. A second instance disconnects the first; a local or staging bot needs its own application and token.
+- Rotating the token: **Reset Token** on the Bot page, edit `DISCORD_BOT_TOKEN` in `infra/openclaw/.env`, then follow `../operations/configure-developer.md` (snapshot, re-seed, `openclaw secrets reload`).
 
 ## Smoke Test
 
-1. In the allowed channel, request a small read-only AlignFirst protocol task against a known
-   project.
-2. Confirm the channel session creates one named thread with a complete starter and posts no
-   duplicate starter or setup message in the channel root.
-3. Send a follow-up in the thread. Confirm the fresh session reads its own history, delegates the
-   read-only task, and returns the completion to that thread.
-4. Repeat from an unlisted channel or guild. It must not create a thread or start work.
-5. Confirm the channel root received neither the working report nor a duplicate completion.
+Run it after `08`, as the operator, from the Discord client.
 
-If a negative check fails, stop the gateway and correct the allowlist or delivery behavior before
-use.
+1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
+2. The channel session creates one named thread on your message. Its starter carries the project, the project path, the ticket when you gave one, the audience, and the task. The channel root receives no duplicate starter and no setup message.
+3. Answer in the thread. The fresh thread session reads its own history, delegates the read-only task, and reports in the same thread.
+4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens, no work starts.
+5. The channel root received neither the report nor a duplicate completion.
+
+When a negative check fails, stop the gateway (`sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway`) and correct the allowlist or the delivery settings before further use.

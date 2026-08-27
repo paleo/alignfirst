@@ -1,40 +1,19 @@
-#!/bin/sh
+#!/usr/bin/env bash
+#
+# Coding-agent seed module: Codex. Sourced by seed.sh; not meant to run on its own.
+# The agent is selected by the overlay (environment.d/coding-agent.conf), not by .env.
+
+required_coding_agent=()
 
 validate_coding_agent() {
-  require_environment ALIGNFIRST_CODE_AGENT
-  if [ "$ALIGNFIRST_CODE_AGENT" != "codex" ]; then
-    echo "ALIGNFIRST_CODE_AGENT must be codex for the selected overlay." >&2
+  if ! command -v codex >/dev/null 2>&1; then
+    echo "[seed] Codex is not installed for $(id -un): see 08-coding-agent.md#install." >&2
     exit 1
   fi
-  command -v codex >/dev/null 2>&1 || {
-    echo "Codex is not installed for the service user." >&2
-    exit 1
-  }
 }
 
 configure_coding_agent() {
-  codex_home=${CODEX_HOME:-"$HOME/.codex"}
-  merge_global_instructions "$codex_home/AGENTS.md" \
-    "$script_dir/coding-agent/AGENTS.md" "alignfirst-developer"
-}
-
-merge_global_instructions() {
-  target_file=$1
-  source_file=$2
-  block_name=$3
-  target_dir=$(dirname -- "$target_file")
-  begin_marker="<!-- $block_name:start -->"
-  end_marker="<!-- $block_name:end -->"
-
-  install -d -m 0700 "$target_dir"
-  temporary_file=$(mktemp "$target_dir/.instructions.XXXXXX")
-  if [ -f "$target_file" ]; then
-    sed "/^$begin_marker\$/,/^$end_marker\$/d" "$target_file" >"$temporary_file"
-  fi
-  if [ -s "$temporary_file" ]; then printf '\n' >>"$temporary_file"; fi
-  printf '%s\n' "$begin_marker" >>"$temporary_file"
-  cat "$source_file" >>"$temporary_file"
-  printf '%s\n' "$end_marker" >>"$temporary_file"
-  install -m 0600 "$temporary_file" "$target_file"
-  rm -f "$temporary_file"
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  echo "[seed] Codex global instructions — $codex_home/AGENTS.md"
+  merge_managed_block "$codex_home/AGENTS.md" "$DIR/coding-agent/AGENTS.md" alignfirst-developer
 }

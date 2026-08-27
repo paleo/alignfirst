@@ -1,5 +1,1 @@
 .env
-generated/
-backups/
-runtime/
-secrets/

@@ -1,35 +1,40 @@
-# {{DEVELOPER_NAME}} Administration
+# {{ADMIN_REPOSITORY_NAME}}
 
-This private repository reproduces and operates the {{DEVELOPER_NAME}} AlignFirst Developer on
-`{{SERVER_HOST}}`. The operator owns reviewed source files. The `{{SERVICE_USER}}` account owns the
-deployed runtime and has no sudo access.
+Private repository that reproduces and operates **{{DEVELOPER_NAME}}**, the AlignFirst Developer of {{TEAM_NAME}}, on `{{SERVER_HOST}}`. Runbooks under [`docs/`](docs/) (`npm run docmap` to browse); the OpenClaw seed, workspace files and scripts under [`infra/openclaw/`](infra/openclaw/).
 
-## Bootstrap Order
+## Bootstrap order
 
-1. Complete [server setup](docs/installations/01-server-setup.md) as the privileged administrator.
-2. Complete [admin repository setup](docs/installations/02-admin-repository.md) as the service user.
-3. Complete [toolchain setup](docs/installations/03-toolchain.md).
-4. Follow the remaining numbered documents under `docs/installations/`.
-5. Run the verification checklist before enabling routine use.
+- [01-server-setup.md](docs/installations/01-server-setup.md) — human, on the fresh server
+- [02-admin-repository.md](docs/installations/02-admin-repository.md) — operator, from here on
+- [03-toolchain.md](docs/installations/03-toolchain.md)
+- [05-openclaw-dependencies.md](docs/installations/05-openclaw-dependencies.md)
+- [07-channel.md](docs/installations/07-channel.md) — platform part
+- [04-openclaw.md](docs/installations/04-openclaw.md)
+- [08-coding-agent.md](docs/installations/08-coding-agent.md)
+<!-- DEV_SERVER_GATEWAY_SECTION -->
+- [09-dev-server-gateway.md](docs/installations/09-dev-server-gateway.md)
+<!-- DEV_SERVER_GATEWAY_SECTION -->
+- [06-security-hardening.md](docs/installations/06-security-hardening.md) — last: it locks what the others write
+- [07-channel.md](docs/installations/07-channel.md) — smoke test
 
-Interactive authentication, secret creation, and secret entry are human actions. Keep secret values
-outside git, chat, documentation, and shell history.
+Then [`docs/operations/`](docs/operations/), starting with [add-project.md](docs/operations/add-project.md).
 
-## Fresh Clone
+## Fresh clone
 
-From the repository root as the service user:
+In the admin account:
 
 ```sh
 npm install
+# TEAM_PLANS_SECTION
+npm run plans:setup -- <plans-clone-path>
+# TEAM_PLANS_SECTION
 mkdir -p .plans .local
 npm run workspace -- setup
 npm run docmap
 ```
 
-## Documentation
+Optional upstream reference for investigations (host-only, gitignored):
 
-Run `npm run docmap` to list the operational documents. Start with
-[the architecture overview](docs/overview.md). Installation is numbered; recurring work lives under
-operations, recovery, and troubleshooting.
-
-Do not place setup-once procedures in `AGENTS.md` or `DEVELOPERS.md`.
+```sh
+git clone --depth=1 https://github.com/openclaw/openclaw.git .local/openclaw
+```

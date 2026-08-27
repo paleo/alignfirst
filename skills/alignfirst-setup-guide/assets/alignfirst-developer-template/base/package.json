@@ -1,11 +1,8 @@
 {
   "name": "{{ADMIN_REPOSITORY_NAME}}",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
-  "engines": {
-    "node": ">=22.11.0"
-  },
+  "engines": { "node": ">=22.11.0" },
   "scripts": {
     "docmap": "docmap",
     "workspace": "node scripts/workspace/workspace.mjs",
