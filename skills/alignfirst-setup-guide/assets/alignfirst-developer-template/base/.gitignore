@@ -1,0 +1,13 @@
+node_modules/
+.plans
+.local/
+.local-wt/
+.env
+.env.*
+!.env.example
+*.report
+reports/
+infra/openclaw/generated/
+infra/openclaw/backups/
+infra/openclaw/runtime/
+infra/openclaw/secrets/
