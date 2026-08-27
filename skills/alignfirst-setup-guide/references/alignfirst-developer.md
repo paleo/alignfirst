@@ -49,7 +49,7 @@ Choose the OpenClaw runtime provider and model separately; the template favors n
 | `{{GIT_HOSTS}}` | Operator | `03`, `05` (git-host CLIs), workspace `AGENTS.md`, coding-agent instructions |
 | `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (provider login) |
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
-| `{{TECH_USERS}}`, `{{NONTECH_USERS}}` | Operator | `USER.md` |
+| `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
 | `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alproject.json`, `alproject-guide.md`, overview, workspace `AGENTS.md`, `09` |
 | `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
 | `{{DISCORD_OWNER_ID}}`, `{{DISCORD_GUILD_ID}}`, `{{DISCORD_CHANNEL_ID}}` | Discord administrator | `.env.example` (Discord overlay) |
@@ -59,7 +59,7 @@ Choose the OpenClaw runtime provider and model separately; the template favors n
 
 `{{PROJECTS_ROOT}}` is written as the service account sees it: `~/projects` (the default) or an absolute path. `alproject` expands `~/` only, and the runbooks resolve the value through the service account's shell.
 
-`{{TECH_USERS}}` and `{{NONTECH_USERS}}` are Markdown lists. Every member carries the handle the playbook matches on: the Slack member ID (`U…`) or the Discord `username`.
+`{{TEAM_MEMBERS}}` is a Markdown list. Every member carries their role and the handle OpenClaw reports: the Slack member ID (`U…`) or the Discord `username`.
 
 ```markdown
 - Alex Example — lead developer, Slack member ID `U0123456789`
@@ -90,7 +90,7 @@ On the operator's machine, from the installed skill directory:
    ```
 
 6. Team plans on: delete the `TEAM_PLANS_SECTION` marker lines, then `npm pkg set 'scripts.plans:setup=plans-share setup --folder {{ADMIN_REPOSITORY_NAME}}' 'scripts.plans:sync=plans-share sync'` and `npm install -D @paleo/plans-share`. Off: delete the blocks.
-7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the two user lists need the editor or a Node one-liner. Dotfiles (`.env.example`, `.alproject.json`) are part of the sweep.
+7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Dotfiles (`.env.example`, `.alproject.json`) are part of the sweep.
 8. `npm install`.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.
 10. Run the audits below.
@@ -98,7 +98,7 @@ On the operator's machine, from the installed skill directory:
 
 Do not copy the alignfirst repository's `node_modules`, lock files or `skills-lock.json`. The rendered tree has no `variants/`.
 
-The workspace `AGENTS.md` (`infra/openclaw/workspace/AGENTS.md`) carries no forge, ticketing or merging policy. When the deployment has a ticketing CLI or a forge policy, the operator replaces `## Tickets are labels, not lookup targets` and adds the forge and merging sections, keeping the file under 12 KB.
+The workspace `AGENTS.md` (`infra/openclaw/workspace/AGENTS.md`) carries no code-hosting, ticketing or merging policy. When the deployment provides a ticketing CLI or code-hosting policy, the operator replaces `## No ticket-system access` and adds the corresponding ticketing, code-hosting and merging sections, keeping the file under 12 KB.
 
 ## Audits Before the First Commit
 

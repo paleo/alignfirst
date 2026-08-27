@@ -30,7 +30,6 @@ export default async function duplicateProjectName(ctx: ScenarioContext): Promis
     text: `Sur ${PROJECT}, ticket ${TICKET_ID}, passe le bouton d'export en gras.`,
     project: PROJECT,
     ticketId: TICKET_ID,
-    audience: "tech",
     codingAgent,
   });
   ctx.assertRegex(

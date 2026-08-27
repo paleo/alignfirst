@@ -27,7 +27,6 @@ export default async function missingProject(ctx: ScenarioContext): Promise<void
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Sur ${PROJECT}, analyse pourquoi les tests sont lents.`,
     project: PROJECT,
-    audience: "tech",
     codingAgent,
   });
   const projectPathLine = starter.match.text

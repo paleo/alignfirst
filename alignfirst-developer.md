@@ -21,15 +21,12 @@ Install the setup skill in the repository where your agent will assemble the pri
 repository:
 
 ```sh
-npx -y skills add https://github.com/paleo/alignfirst --yes \
-  --skill alignfirst-setup-guide </dev/null
+npx -y skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
 ```
 
 Ask the agent to create an AlignFirst Developer. The setup skill collects deployment values, renders
 one Slack or Discord overlay and one Claude Code or Codex overlay, and produces role-specific
-installation, security, operation, and recovery runbooks. Its
-[creation reference](skills/alignfirst-setup-guide/references/alignfirst-developer.md) is the
-canonical workflow.
+installation, security, operation, and recovery runbooks.
 
 Managed projects receive the full preparation contract: AlignFirst skills, optional team plans,
 docmap, isolated workspaces, and a project-specific `DEVELOPERS.md`.

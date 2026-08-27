@@ -7,7 +7,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.28.0"
+  version: "0.29.0"
   repository: https://github.com/paleo/alignfirst
 ---
 

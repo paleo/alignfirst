@@ -115,7 +115,7 @@ If nothing needs attention, reply exactly NO_REPLY."
   # `clawhub` is deliberately absent: the agent cannot install skills on its own. The `al*`
   # command skills belong to the delegated coding agent only.
   set_json agents.defaults.skills \
-    '["alignfirst","alignfirst-developer-openclaw-playbook","sharp-writing"]'
+    '["alignfirst","alignfirst-setup-guide","alignfirst-developer-openclaw-playbook","sharp-writing"]'
 
   echo "[seed] tools"
   set_scalar tools.profile coding

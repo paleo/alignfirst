@@ -57,7 +57,7 @@ The absolute parents are harness storage details. Scenarios obtain canonical mai
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A20`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A25`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its absolute path as `seededWorktreePaths` so the check still catches anything the channel session created.
 
@@ -66,6 +66,8 @@ Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstra
 `A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
 
 `A17` creates and registers `nova`, bootstraps it on `main`, and checks the initial commit and refreshed inventory. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
+
+`A23` keeps a PR URL for working-session ticket discovery, `A24` carries a multi-project base-refresh request without forcing one main project, and `A25` preserves a detailed request in the thread starter.
 
 Rebuild the alcode package and harness image before focused coverage:
 
@@ -81,7 +83,7 @@ ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contr
 npm run e2e -- --model gpt-5.6-terra --channel all --all
 ```
 
-**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
 ## Vendored `@paleo/openclaw-*` packages
 

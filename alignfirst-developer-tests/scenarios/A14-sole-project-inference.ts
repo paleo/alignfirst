@@ -23,7 +23,6 @@ export default async function soleProjectInference(ctx: ScenarioContext): Promis
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
-    audience: "tech",
     codingAgent,
   });
   await ctx.judgeLLM({

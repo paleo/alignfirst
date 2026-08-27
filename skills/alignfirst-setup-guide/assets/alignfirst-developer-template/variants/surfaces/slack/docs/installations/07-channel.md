@@ -129,7 +129,7 @@ The manifest is scoped to a private channel (`groups:*`, `message.groups`). Conv
 Run it after `08`, as the operator, from the Slack client.
 
 1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
-2. The first reply opens a thread on your message. Its starter carries the project, the project path, the ticket when you gave one, the audience, and the task.
+2. The first reply opens a thread on your message. Its starter carries the task plus the known project path and ticket.
 3. Answer in the thread. The fresh thread session reads the thread history, delegates the read-only task, and reports in the same thread, never in the channel root.
 4. Post the same request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.
 

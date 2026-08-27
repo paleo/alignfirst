@@ -19,7 +19,7 @@ If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess 
 
 ## Step 2 — Post the setup signal
 
-Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the project, the ticket, the audience and the task, so restating them here just repeats a message they can see.
+Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the known project, ticket and task, so restating them here just repeats a message they can see.
 
 Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 

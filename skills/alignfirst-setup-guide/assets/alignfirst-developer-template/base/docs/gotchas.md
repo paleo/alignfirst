@@ -28,7 +28,12 @@ For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/
 
 ## `~/.agents/skills` is shared between OpenClaw and the coding agent
 
-Skills install once, into `~/.agents/skills/`, which OpenClaw and the delegated coding agent both scan. OpenClaw loads only its `agents.defaults.skills` allowlist; the coding agent loads every skill there. The `al*` command skills (`al`, `alplan`, `alspec`, `aldescription`, `alreview`, `alread`, `almerge`) sit outside OpenClaw's allowlist and look like orphans in its inventory. They are active skills of the coding agent: `skills remove` would delete the canonical copy for both.
+Skills install once, into `~/.agents/skills/`, which OpenClaw and the delegated coding agent
+both scan. OpenClaw loads only its `agents.defaults.skills` allowlist, including
+`alignfirst-setup-guide` for project creation; the coding agent loads every skill there. The `al*`
+command skills (`al`, `alplan`, `alspec`, `aldescription`, `alreview`, `alread`, `almerge`) sit
+outside OpenClaw's allowlist and look like orphans in its inventory. They are active skills of the
+coding agent: `skills remove` would delete the canonical copy for both.
 
 ## Moving a project breaks its workspace registry
 

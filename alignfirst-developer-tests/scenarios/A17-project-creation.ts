@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
-import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
+import { extractCodingPrompt, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import {
   assertAlprojectCallOrder,
@@ -33,7 +33,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
     guide: lifecycleGuide(),
     registerBasePort: 6600,
   });
-  setupCodingAgentMock(ctx, {
+  const codingAgent = setupCodingAgentMock(ctx, {
     // Any delegation from the nova main worktree during creation is the
     // bootstrap, whatever the prompt shape (protocol-wrapped or plain). The
     // reply is an authoritative alcode report: it enumerates the actual files
@@ -57,7 +57,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".gitignore. This minimal scaffold is deliberate and complete — nothing else is " +
+        ".local/, .gitignore. This minimal scaffold is deliberate and complete — nothing else is " +
         "required before the initial commit on main."
       );
     },
@@ -67,7 +67,6 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Crée le nouveau projet ${PROJECT}.`,
     project: PROJECT,
-    audience: "tech",
   });
   if (pathExists(NOVA_PROJECT_PATH)) {
     throw new Error("channel session created the absent project before the thread started");
@@ -93,6 +92,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   );
 
   assertCreationCalls(alproject.calls);
+  assertSetupGuideDelegation(codingAgent.codingAgentCalls);
   await assertCreatedRepository(ctx);
   const agentCalls = ctx.getAgentToolCalls();
   const linkedWorkspaceBeforeInitialCommit = agentCalls.some((call) => {
@@ -182,6 +182,7 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
       "sh",
       "-c",
       `cp -R /opt/alignfirst-developer-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
+        `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
         `sed -i -e 's/base: 6500/base: 6600/' ` +
         // Match the registration the bot performed (2 ports × 4 workspaces) —
         // a verifying bot treats a mismatched template as a bootstrap defect
@@ -220,6 +221,17 @@ function assertOption(argv: string[], option: string, expected: string): void {
   }
 }
 
+function assertSetupGuideDelegation(
+  calls: ReturnType<typeof setupCodingAgentMock>["codingAgentCalls"],
+): void {
+  const prompts = calls.map(extractCodingPrompt).filter((prompt) => prompt !== undefined);
+  if (!prompts.some((prompt) => /alignfirst-setup-guide/iu.test(prompt))) {
+    throw new Error(
+      `creation did not delegate through the setup guide: ${JSON.stringify(prompts)}`,
+    );
+  }
+}
+
 async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
   const branch = await assertGatewayCommand(
     ctx,
@@ -233,4 +245,19 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
     "created repository commit count",
   );
   if (Number(commits) < 1) throw new Error("created repository has no initial commit");
+  await assertGatewayCommand(
+    ctx,
+    ["git", "-C", NOVA_PROJECT_PATH, "check-ignore", ".local/probe"],
+    ".local gitignore",
+  );
+  await assertGatewayCommand(
+    ctx,
+    [
+      "grep",
+      "-F",
+      'sharedDirs: [".local", ".plans"]',
+      `${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs`,
+    ],
+    ".local shared workspace configuration",
+  );
 }

@@ -16,8 +16,8 @@ import {
 } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
-const QUESTION_TEXT =
-  "Sur nimbus, pourquoi le bouton d'export échoue quand il n'y a pas de comparables ?";
+const TICKET_ID = "ABC-030";
+const QUESTION_TEXT = `Pour ${TICKET_ID} sur nimbus, pourquoi le bouton d'export échoue quand il n'y a pas de comparables ?`;
 
 const INVESTIGATION_FINDING =
   "Investigation finding: handleExport in export-handler.mjs early-returns with a 204 when the region has no comparables, so the response carries no payload at all. The browser treats the empty body as a failed download and the button surfaces it as an error. Fix would be to either render a header-only CSV or surface a 'no comparables' message to the user.";
@@ -46,6 +46,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     text: QUESTION_TEXT,
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
+    ticketId: TICKET_ID,
     codingAgent,
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
@@ -54,7 +55,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     ctx,
     codingAgent,
     {
-      rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an alignfirst protocol header. Expected: an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine) and signals "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject only if: the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), or the question content is missing or unrelated.`,
+      rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an alignfirst protocol header. Expected: ticket ${TICKET_ID}; an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine); and "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject if the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), the ticket is missing, or the question content is missing or unrelated.`,
       label: "coding-agent-investigation-delegation",
     },
   );
@@ -72,8 +73,8 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   assertNoWorktreeDirs(ctx);
 
   // The guide makes every alcode run a background task, so the findings arrive only after the
-  // exec-exit wake: launch ack first, then the session file reaches `status: succeeded` (no-ticket
-  // run → `.plans/_alcode/`), then the woken agent relays the finding in the thread.
+  // exec-exit wake: launch ack first, then the no-protocol session file reaches
+  // `status: succeeded`, then the woken agent relays the finding in the thread.
   const sessionFilePath = await waitForCodingSessionSucceeded(ctx, { timeoutMs: 120_000 });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 

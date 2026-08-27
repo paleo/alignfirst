@@ -18,8 +18,8 @@ export interface ChannelBootstrapOptions {
   projectPath?: string;
   /** Asserted to appear in the starter, when the channel message supplied one. */
   ticketId?: string;
-  /** Asserted as a literal `tech` / `non-tech` token in the starter. */
-  audience?: "tech" | "non-tech";
+  /** Asserted verbatim in the starter for a detailed request. */
+  request?: string;
   codingAgent?: CodingAgentMockHandle;
   /** Worktree paths seeded before the run; anything else on disk is the channel session's. */
   seededWorktreePaths?: string[];
@@ -75,7 +75,7 @@ export async function bootstrapThreadFromChannel(
 
 /**
  * The starter is the thread's durable record: a fresh thread session recovers
- * the project, the ticket, the audience and the task from it, having seen
+ * the project, ticket, task and full detailed request from it, having seen
  * neither the channel message nor the thread's own name. Assert the values the
  * channel message actually supplied.
  */
@@ -84,8 +84,6 @@ function assertStarterValues(
   text: string,
   opts: ChannelBootstrapOptions,
 ): void {
-  const projectPathLine = starterFieldLine(text, 1);
-  ctx.assertRegex(projectPathLine, /^[^:\n]+:\s*\S.*$/u, "starter carries a project-path field");
   // On Discord the starter is the ONLY carrier — the channel message is the
   // thread's parent, excluded from its message list.
   if (ctx.channel === "discord-mock" && opts.project !== undefined) {
@@ -96,6 +94,7 @@ function assertStarterValues(
     );
   }
   if (opts.projectPath !== undefined) {
+    const projectPathLine = starterFieldLine(text, "Project path");
     ctx.assertRegex(
       projectPathLine,
       new RegExp(escapeRe(opts.projectPath), "i"),
@@ -109,29 +108,17 @@ function assertStarterValues(
       "starter states the ticket",
     );
   }
-  if (opts.audience !== undefined) assertStarterAudience(text, opts.audience);
+  if (opts.request !== undefined && !text.includes(opts.request)) {
+    throw new Error(`starter omitted the detailed request: ${JSON.stringify(text)}`);
+  }
 }
 
-function starterFieldLine(text: string, index: number): string {
-  const line = text.split(/\r?\n/u).filter((candidate) => candidate.trim().length > 0)[index];
-  if (line === undefined) throw new Error(`starter is missing field line ${index + 1}`);
+function starterFieldLine(text: string, field: string): string {
+  const line = text
+    .split(/\r?\n/u)
+    .find((candidate) => candidate.trimStart().startsWith(`${field}:`));
+  if (line === undefined) throw new Error(`starter is missing ${field}: ${JSON.stringify(text)}`);
   return line;
-}
-
-// The audience travels as a literal `tech` / `non-tech` token, kept intact
-// across languages, so check it by token rather than by an LLM judge.
-// "non-tech" contains "tech", so the tech case must also exclude it.
-function assertStarterAudience(text: string, expected: "tech" | "non-tech"): void {
-  const hasNonTech = /\bnon-?tech\b/i.test(text);
-  if (expected === "non-tech") {
-    if (!hasNonTech) {
-      throw new Error(`starter audience: expected non-tech, got: ${JSON.stringify(text)}`);
-    }
-    return;
-  }
-  if (hasNonTech || !/\btech\b/i.test(text)) {
-    throw new Error(`starter audience: expected tech, got: ${JSON.stringify(text)}`);
-  }
 }
 
 interface ChannelSessionStoppedOptions {

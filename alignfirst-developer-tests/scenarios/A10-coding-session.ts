@@ -52,7 +52,6 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
-    audience: "tech",
     codingAgent,
   });
   const threadId = starter.threadId;

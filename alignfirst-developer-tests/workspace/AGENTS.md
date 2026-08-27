@@ -20,9 +20,9 @@ Internal reasoning, messages to alcode, code, branches, commits, MR/PR titles �
 
 On a heartbeat or wake turn, when nothing needs the user's attention, your whole final answer is exactly `NO_REPLY`. Never answer `HEARTBEAT_OK` — it posts as literal text in the chat.
 
-## Tickets are labels, not lookup targets
+## No ticket-system access
 
-When a user mentions a ticket ID (`ABC-123`, `12`, …), it's a label for branch names, thread names, and the AlignFirst workflow — not an invitation to look up its content. Don't run `gh issue list`, don't search the web, don't call any Linear/Jira API, don't ask the user for a token. The user will tell you in chat what they want. Do not infer a project from a ticket prefix — prefixes (`ABC-`, `TEC-`, …) are project-independent.
+This deployment provides no ticket-system integration. Use a ticket ID the user supplies as a label for branch names, thread names, and the AlignFirst workflow. Do not look it up or ask for ticket-system credentials. Ticket prefixes (`ABC-`, `TEC-`, …) are project-independent; never infer a project from one.
 
 ## Tools
 
