@@ -10,7 +10,7 @@ import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
-const RESERVED_TICKET_ID = "nt-2";
+const RESERVED_TICKET_ID = "side-2";
 const REQUEST = `Sur nimbus, sans ticket, améliore le bouton d'export.
 
 - Ajoute une infobulle « Exporter les données ».
@@ -44,7 +44,7 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
   await sendInThread(ctx, starter.threadId, "Vas-y sans ticket.");
   const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
   if (!capturedRequest.includes(REQUEST)) {
-    throw new Error(`nt-2 request omitted details: ${JSON.stringify(capturedRequest)}`);
+    throw new Error(`side-2 request omitted details: ${JSON.stringify(capturedRequest)}`);
   }
   await assertNoTicketWorktreeExists();
 
@@ -57,8 +57,8 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
   const delegation = await expectCodingDelegation(ctx, codingAgent, {
     ticketId: RESERVED_TICKET_ID,
     rubric:
-      "An AlignFirst coding-protocol delegation for internal ticket nt-2. It asks to add a " +
-      "tooltip to the nimbus export button. Reject if it asks alcode to choose an nt-N identifier, " +
+      "An AlignFirst coding-protocol delegation for side ticket side-2. It asks to add a " +
+      "tooltip to the nimbus export button. Reject if it asks alcode to choose a side-N identifier, " +
       "create the request file, or set up the workspace.",
     label: "explicit-no-ticket-coding-delegation",
     timeoutMs: 240_000,
@@ -77,12 +77,12 @@ async function assertNoTicketWorktreeExists(): Promise<void> {
   const prefix = `${basename(NIMBUS_PROJECT_PATH)}-${RESERVED_TICKET_ID}-`;
   const entries = await readdir(parent, { withFileTypes: true });
   if (entries.some((entry) => entry.isDirectory() && entry.name.startsWith(prefix))) {
-    throw new Error("nt-2 workspace existed before its request file was observed");
+    throw new Error("side-2 workspace existed before its request file was observed");
   }
 }
 
 async function seedPriorNoTicketWork(): Promise<void> {
-  const taskDir = `${NIMBUS_PROJECT_PATH}/.plans/nt-1`;
+  const taskDir = `${NIMBUS_PROJECT_PATH}/.plans/side-1`;
   await mkdir(taskDir, { recursive: true });
   await writeFile(`${taskDir}/A1-request.md`, "# Earlier no-ticket request\n", "utf8");
 }

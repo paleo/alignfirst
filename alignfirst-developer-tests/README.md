@@ -67,7 +67,7 @@ Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstra
 
 `A17` creates and registers `nova`, bootstraps it on `main` without an AlignFirst protocol, and checks the initial commit. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
 
-`A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next internal `nt-N` before workspace setup for explicit no-ticket work.
+`A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
 
 Rebuild the alcode package and harness image before focused coverage:
 

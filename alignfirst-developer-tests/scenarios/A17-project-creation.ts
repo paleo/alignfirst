@@ -24,7 +24,7 @@ const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
 const ALLOCATED_PORT_RANGE = "6600..6607";
-const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/nt-1/A1-request.md`;
+const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/side-1/A1-request.md`;
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
 // runs this scenario never exceeded 50% on Discord (Slack ended 2/2). Creation
@@ -48,7 +48,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       }
       const capturedRequest = await readFile(REQUEST_PATH, "utf8").catch(() => "");
       if (!hasCompleteCreationRequest(capturedRequest)) {
-        throw new Error("project bootstrap started before the nt-1 request reservation");
+        throw new Error("project bootstrap started before the side-1 request reservation");
       }
       await copyBootstrapTemplate(scenario);
       // A bot may delegate the initial commit itself ("create one initial
@@ -89,7 +89,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   );
   const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
   if (!hasCompleteCreationRequest(capturedRequest)) {
-    throw new Error(`nt-1 creation request omitted details: ${JSON.stringify(capturedRequest)}`);
+    throw new Error(`side-1 creation request omitted details: ${JSON.stringify(capturedRequest)}`);
   }
 
   // Completion is the initial commit (the loose ref appears when it lands on

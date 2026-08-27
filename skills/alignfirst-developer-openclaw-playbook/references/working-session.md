@@ -31,7 +31,7 @@ When the request creates or physically removes a project, open [`project-lifecyc
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
-### Step 4 — Reserve an identifier for explicit no-ticket work
+### Step 4 — Reserve a side ticket for explicit no-ticket work
 
 Skip this step for project lifecycle and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
 
@@ -39,12 +39,12 @@ For new single-project work where the user explicitly says there is no ticket:
 
 1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
 2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
-3. Inspect only directories matching `.plans/nt-{N}`. Start at one above the highest N, or `nt-1` when none exists.
+3. Inspect only directories matching `.plans/side-{N}`. Start at one above the highest N, or `side-1` when none exists.
 4. Atomically reserve the candidate with directory creation. If creation reports that it already exists, increment N and retry. Never reuse a candidate after a failed reservation.
-5. Set TICKET_ID to the reserved `nt-N`. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
+5. Set TICKET_ID to the reserved `side-N`. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
 6. Run the documented plans synchronization command again when the project has one.
 
-The bot owns this reservation. Do not delegate identifier selection or request capture to alcode. Continue to workspace setup with the internal TICKET_ID, then run the coding protocol from the returned linked worktree.
+The bot owns this reservation. Do not delegate side-ticket selection or request capture to alcode. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 
 ### Step 5 — The thread's state is its workspace
 
@@ -89,7 +89,7 @@ When one project owns a detailed user explanation, preserve it before delegation
 4. Run the project's documented plans synchronization command.
 5. Continue through project workspace setup and alcode as usual.
 
-When Step 4 assigned an internal `nt-N` identifier, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
+When Step 4 reserved a side ticket `side-N`, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
 
 Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh. Delegate those requests to alcode without an AlignFirst protocol.
 

@@ -13,7 +13,7 @@ You need:
 
 - **PROJECT** — The main-worktree directory name shown to the user.
 - **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
-- **TICKET_ID** — The external ticket ID or the internal `nt-N` identifier reserved by the working session.
+- **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
 
 If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess or reconstruct these values. Ask the user.
 
