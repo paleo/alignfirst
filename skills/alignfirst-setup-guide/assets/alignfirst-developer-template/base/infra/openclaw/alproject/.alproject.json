@@ -1,0 +1,10 @@
+{
+  "root": {
+    "path": "{{PROJECTS_ROOT}}"
+  },
+  "projectParents": [
+    {
+      "path": "{{PROJECTS_ROOT}}"
+    }
+  ]
+}

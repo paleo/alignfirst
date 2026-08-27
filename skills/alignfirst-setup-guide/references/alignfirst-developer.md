@@ -43,6 +43,9 @@ Replace each token after applying both selected overlays. Tokens are concrete no
 | `{{GIT_HOSTS}}` | Operator | No |
 | `{{RUNTIME_PROVIDER}}` | Operator | No |
 | `{{RUNTIME_MODEL}}` | Operator | No |
+| `{{TEAM_NAME}}` | Operator | No |
+| `{{TECH_USERS}}` | Operator | No |
+| `{{NONTECH_USERS}}` | Operator | No |
 | `{{SLACK_WORKSPACE_ID}}` | Slack administrator | No |
 | `{{SLACK_CHANNEL_ID}}` | Slack administrator | No |
 | `{{DISCORD_GUILD_ID}}` | Discord administrator | No |
@@ -112,12 +115,12 @@ steps.
    containers, OpenClaw, `alcode`, `alproject`, and git-host CLIs.
 6. **Install OpenClaw**: follow `docs/installations/04-openclaw.md`. Authenticate the independently
    selected runtime provider as a human.
-7. **Configure project discovery**: follow `docs/installations/05-project-registry.md` and validate
-   `alproject list --json`.
-8. **Install skills**: follow `docs/installations/06-skills.md`. Install the OpenClaw playbook for the
-   runtime role, the AlignFirst content and command skills for the delegated coding agent, and the
-   project-local `sysadmin` skill. Install and retain `alignfirst-setup-guide` globally for the
+7. **Install project and delegation dependencies**: follow
+   `docs/installations/05-openclaw-dependencies.md`. Configure `alproject`, install the OpenClaw
+   playbook, and install the delegated-agent skills. Retain `alignfirst-setup-guide` globally for the
    selected delegated agent under the service user.
+8. **Apply security boundaries**: follow `docs/installations/06-security-hardening.md` and record any
+   distribution-specific adaptations.
 9. **Configure the surface**: follow `docs/installations/07-channel.md`. Enter channel tokens and
    identifiers as a human.
 10. **Configure the delegated agent**: follow `docs/installations/08-coding-agent.md`. Authenticate
