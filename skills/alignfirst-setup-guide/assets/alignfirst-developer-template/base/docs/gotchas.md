@@ -64,7 +64,7 @@ While a kernel upgrade is pending, package postinsts raise a "Newer kernel avail
 
 ## Config-writing commands fail while `openclaw.json` is immutable
 
-Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Unflag → run → reflag: [configure-developer.md](operations/configure-developer.md).
+Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Run it through the `config` scope of the root-owned maintenance wrapper: [configure-developer.md](operations/configure-developer.md).
 
 ## `MEDIA:` and `message` attachments read different media roots
 

@@ -23,10 +23,10 @@ sudo apt update && sudo apt install -y \
   fonts-liberation fonts-noto-color-emoji xdg-utils
 ```
 
-Then download Chromium as the service account:
+Then download Chromium as the service account. Resolve `playwright-core` from the installed OpenClaw package so its expected browser revision and the downloaded revision match:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y playwright install chromium'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw_entry=$(readlink -f "$(command -v openclaw)"); playwright_cli=$(node -e '\''const fs = require("node:fs"); const path = require("node:path"); const { createRequire } = require("node:module"); const fromOpenClaw = createRequire(process.argv[1]); let cli; try { const packageFile = fromOpenClaw.resolve("playwright-core/package.json"); cli = path.join(path.dirname(packageFile), "cli.js"); } catch {} if (!cli || !fs.existsSync(cli)) { const root = path.dirname(process.argv[1]); cli = [path.join(root, "node_modules/playwright-core/cli.js"), path.join(root, "dist/extensions/browser/node_modules/playwright-core/cli.js")].find(fs.existsSync); } if (!cli) throw new Error("OpenClaw playwright-core CLI not found"); process.stdout.write(cli);'\'' "$openclaw_entry"); node "$playwright_cli" install chromium'
 ```
 
 When Chromium fails to launch, list the unresolved direct dependencies. GTK and Vulkan load through `dlopen` and do not show here; Playwright's own manifest (`deb.deps` next to the binary) is the cross-check.

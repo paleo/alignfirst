@@ -1,11 +1,15 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
-import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
+import { expectCodingDelegation, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
+import { waitForReport } from "./_lib/outbound.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
+import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
+const TICKET_ID = "ABC-0250";
 const REQUEST = `Sur nimbus, réorganise la page d'export.
 
 - Le filtre de région doit rester visible pendant le défilement.
@@ -36,6 +40,49 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
     label: "detailed-request-preserved",
   });
   alproject.assertListCallCount(1);
+
+  const firstWakeCursor = await sendInThread(ctx, starter.threadId, "Vas-y.");
+  const ticketQuestion = await waitForReport(
+    ctx,
+    (message) =>
+      message.direction === "outbound" &&
+      message.threadId === starter.threadId &&
+      /(?:ticket|identifiant)/iu.test(message.text),
+    { sinceCursor: firstWakeCursor, timeoutMs: 120_000 },
+  );
+  await ctx.judgeLLM({
+    attachTo: ticketQuestion.entry,
+    message: ticketQuestion.match.text,
+    rubric:
+      "A concise question asking for the ticket ID needed to continue the detailed nimbus request. " +
+      "Reject claims that workspace setup or coding has started.",
+    label: "detailed-request-ticket-question",
+  });
+
+  await sendInThread(ctx, starter.threadId, `Utilise le ticket ${TICKET_ID}.`);
+  const requestPath = `${NIMBUS_PROJECT_PATH}/.plans/${TICKET_ID}/A1-request.md`;
+  const requestFile = await waitForFile(requestPath, 120_000);
+  if (!requestFile.includes(REQUEST)) {
+    throw new Error(`captured request omitted details: ${JSON.stringify(requestFile)}`);
+  }
+
+  const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
+    timeoutMs: 180_000,
+  });
+  assertBranchForTicket(worktreeDir, TICKET_ID);
+  const delegation = await expectCodingDelegation(ctx, codingAgent, {
+    ticketId: TICKET_ID,
+    rubric:
+      `An AlignFirst coding-protocol delegation for ticket ${TICKET_ID}. It tells the coding agent ` +
+      "to implement the detailed export-page request: sticky region filter, an explanation for the " +
+      "disabled export button, and preserved keyboard and screen-reader behavior. Reject if any of " +
+      "the three requirements is absent.",
+    label: "detailed-request-coding-delegation",
+    timeoutMs: 240_000,
+  });
+  if (delegation.cwd !== worktreeDir) {
+    throw new Error(`coding ran from ${delegation.cwd}, expected linked worktree ${worktreeDir}`);
+  }
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

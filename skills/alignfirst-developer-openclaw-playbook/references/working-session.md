@@ -23,7 +23,7 @@ The channel deliberately leaves some values for this session:
 - A PR/MR, issue, ticket, or other resource URL may identify its project and ticket. Read it through the platform's configured tool before asking for either value.
 - For a multi-project request, retain every affected project and path. Do not choose a main project merely to fit a single-project workflow.
 - A request may need no project. Do not ask for one until the work itself requires project files.
-- Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. When the user explicitly says there is no ticket, tell alcode; the `alignfirst` skill assigns the internal identifier.
+- Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 4 instead of asking for an external ID.
 
 ### Step 3 — Route project lifecycle work
 
@@ -31,17 +31,31 @@ When the request creates or physically removes a project, open [`project-lifecyc
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
-### Step 4 — The thread's state is its workspace
+### Step 4 — Reserve an identifier for explicit no-ticket work
+
+Skip this step for project lifecycle and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
+
+For new single-project work where the user explicitly says there is no ticket:
+
+1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
+2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
+3. Inspect only directories matching `.plans/nt-{N}`. Start at one above the highest N, or `nt-1` when none exists.
+4. Atomically reserve the candidate with directory creation. If creation reports that it already exists, increment N and retry. Never reuse a candidate after a failed reservation.
+5. Set TICKET_ID to the reserved `nt-N`. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
+6. Run the documented plans synchronization command again when the project has one.
+
+The bot owns this reservation. Do not delegate identifier selection or request capture to alcode. Continue to workspace setup with the internal TICKET_ID, then run the coding protocol from the returned linked worktree.
+
+### Step 5 — The thread's state is its workspace
 
 The question on every wake is not a mode but a fact: does this request need a project workspace?
 
-- **The request edits, reports, tests, reviews, or otherwise needs a branch** — require PROJECT, PROJECT_PATH, and TICKET_ID. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **The request is read-only project work** — it still requires PROJECT, PROJECT_PATH, and TICKET_ID, but no linked workspace. Delegate from PROJECT_PATH after the values are established.
-- **A required value is missing** — go to Step 5. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
+- **The request is single-project work** — require PROJECT, PROJECT_PATH, and TICKET_ID, including for read-only work. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **A required value is missing** — go to Step 6. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
-The underlying invariant for an existing project: reading never needs a workspace, while editing project files happens inside a linked workspace. New-project bootstrap follows the explicit main-worktree exception in `project-lifecycle.md`.
+The underlying invariant for an existing project: project work always happens inside a linked workspace. New-project bootstrap through its initial commit is the sole main-worktree exception in `project-lifecycle.md`.
 
-### Step 5 — Handle the actual request
+### Step 6 — Handle the actual request
 
 Use the guidelines.
 
@@ -75,10 +89,7 @@ When one project owns a detailed user explanation, preserve it before delegation
 4. Run the project's documented plans synchronization command.
 5. Continue through project workspace setup and alcode as usual.
 
-When the user explicitly says there is no ticket, do not choose an `nt-N` identifier yourself. Pass
-the full request and the fact that there is no ticket to alcode. Require that delegated session to
-apply the `alignfirst` skill's no-ticket convention, create the next `-request.md` file in its assigned
-TASK_DIR, synchronize plans, and then continue the work.
+When Step 4 assigned an internal `nt-N` identifier, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
 
 Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh. Delegate those requests to alcode without an AlignFirst protocol.
 

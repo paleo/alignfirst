@@ -86,7 +86,7 @@ The `sysadmin` skill is project-local to the admin repository and belongs to the
 npx -y skills add https://github.com/paleo/skills --yes --agent codex --skill sysadmin < /dev/null
 ```
 
-**System skills.** Codex unpacks its bundled skills into `~/.codex/skills/.system/` at session start, behind a content-hash marker. Once `06-security-hardening.md` has locked that directory, Codex cannot write it and logs `failed to install system skills` on every run. Run this block before `06`, and again after every Codex upgrade ([Update](#update)): hand the directory to the service account, let one throwaway session unpack the skills, take it back. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
+**System skills.** Codex unpacks its bundled skills into `~/.codex/skills/.system/` at session start, behind a content-hash marker. Run this block before `06-security-hardening.md`. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} mkdir -p /home/{{SERVICE_USER}}/.codex/skills
@@ -99,13 +99,21 @@ sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills
 ```
 
+After `06`, run the same refresh through the root-owned maintenance wrapper. It contains the developer before the directory becomes writable and restores the directory through an `EXIT` trap:
+
+```sh
+sudo /usr/local/sbin/alignfirst-developer-maintenance agent-skills -- bash -lc \
+  'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop."' \
+  < /dev/null
+```
+
 The bundled `skill-creator` and `skill-installer` become visible to the delegated coder. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
 
 ### Global Instructions
 
 The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `${CODEX_HOME:-~/.codex}/AGENTS.md`, between `<!-- alignfirst-developer:start -->` and `<!-- alignfirst-developer:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
-To change the instructions: edit the repository file, refresh the snapshot, unflag the file when `06-security-hardening.md` has run ([Hardening](#hardening)), re-run the seed (`docs/operations/configure-developer.md`), reflag. The seed writes nothing when the merged content is unchanged, so a re-seed for another reason succeeds while the file is immutable.
+To change the instructions, edit the repository file and run `docs/operations/configure-developer.md` with its `config instructions` scopes. The maintenance wrapper contains the developer before either file becomes writable and restores both through an `EXIT` trap.
 
 ### Hardening
 
@@ -133,19 +141,20 @@ sudo -i -u {{SERVICE_USER}} -- codex login status
 
 **Role: operator**, during `docs/operations/update-developer.md`.
 
-Inside the npm-prefix unlock window that runbook opens, add:
+Run the coding-agent package update through its own package-scoped maintenance window:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g @openai/codex@latest
+sudo /usr/local/sbin/alignfirst-developer-maintenance packages -- \
+  /usr/bin/npm install -g @openai/codex@latest
 ```
 
-A Codex upgrade changes the system-skills marker, so repeat the system-skills block of [Skills](#skills) after the prefix is locked again. Then verify the marker took: a second session prints nothing.
+A Codex upgrade changes the system-skills marker, so repeat the post-hardening maintenance command in [Skills](#skills). Then verify the marker took: a second session prints nothing.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
 ```
 
-The skills window of `update-developer.md` unflags `~/.agents` only: `skills update` writes nothing under `~/.codex/skills`, which holds Codex's own skills alone.
+The `skills` scope of `update-developer.md` covers `~/.agents` only. `skills update` writes nothing under `~/.codex/skills`, which holds Codex's own skills alone.
 
 ### Verification
 

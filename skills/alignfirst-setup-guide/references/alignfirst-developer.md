@@ -10,7 +10,7 @@ Three roles, named as the runbooks name them:
 - **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with team plans, the plans clone beside it. Root steps are the operator's, through `sudo`.
 - **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw, the coding agent, `alcode`, `alproject`, rootless podman and the managed projects.
 
-The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the operator after every change. From there:
+The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the root-owned maintenance wrapper before every protected change. The wrapper contains the service account, unlocks only named scopes, runs one command as that account, and restores hardening through an exit trap. From there:
 
 - `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only).
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
@@ -147,5 +147,5 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 - The coding agent runs every AlignFirst command through `alcode`, unattended.
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
-- Kill switch, backup, update and recovery have each been exercised.
+- Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.
 - `openclaw secrets audit --check` passes; every credential in `openclaw.json` is a file SecretRef; the gateway environment holds no secret.

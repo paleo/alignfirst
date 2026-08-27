@@ -11,10 +11,10 @@ read_when:
 
 ## Contain
 
-The kill switch stops the gateway unit and terminates the remaining agent processes; the user manager stays up:
+The kill switch stops the gateway and every rootless container, terminates all account workloads, and fails if anything except the user manager and `(sd-pam)` survives:
 
 ```sh
-sudo ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/developer-kill.sh
+sudo /usr/local/sbin/alignfirst-developer-kill
 ps -u {{SERVICE_USER}}
 ```
 
@@ -37,28 +37,28 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
 sudo -i -u {{SERVICE_USER}} -- ls /home/{{SERVICE_USER}}/backups/deployment/
 ```
 
-A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one place, and the locked ones need an unflag first:
+A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one place. Restore locked files through the listed maintenance scope:
 
-| Backup file | Live path | Unflag |
+| Backup file | Live path | Maintenance scope |
 | --- | --- | --- |
-| `openclaw.json` | `~/.openclaw/openclaw.json` | `chattr -i` |
+| `openclaw.json` | `~/.openclaw/openclaw.json` | `config` |
 | `secrets.json` | `~/.openclaw/secrets/secrets.json` | — |
 | `openclaw.env` | `~/.openclaw/.env` | — |
-| `workspace/*.md` | `~/.openclaw/workspace/` | `chattr -i` on the six files |
+| `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
 | `alproject-registry.json` | `{{PROJECTS_ROOT}}/alproject-registry.json` | — |
 
 ```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
-sudo -i -u {{SERVICE_USER}} -- install -m 600 /home/{{SERVICE_USER}}/backups/deployment/<stamp>/openclaw.json /home/{{SERVICE_USER}}/.openclaw/openclaw.json
-sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+sudo /usr/local/sbin/alignfirst-developer-maintenance config -- install -m 600 \
+  /home/{{SERVICE_USER}}/backups/deployment/<stamp>/openclaw.json \
+  /home/{{SERVICE_USER}}/.openclaw/openclaw.json
 ```
 
 Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env` and `environment.d/` from the repository and `.env`. Prefer the backup for the workspace files and the registry, which the seed does not write.
 
 ## Re-seed and validate
 
-Follow [configure-developer.md](configure-developer.md): snapshot, unflag, seed, `config validate`, reflag. Then [update-workspace.md](update-workspace.md) when the workspace files were touched.
+Follow [configure-developer.md](configure-developer.md) to re-seed through a contained maintenance window. Then follow [update-workspace.md](update-workspace.md) when the workspace files were touched.
 
 ## Start and verify
 

@@ -90,6 +90,8 @@ configure_common() {
   set_json agents.defaults.model.fallbacks '[]'
   if [ -n "${RUNTIME_API_KEY:-}" ]; then
     set_secret_ref "models.providers.$RUNTIME_PROVIDER.apiKey" /RUNTIME_API_KEY
+  else
+    unset_key "models.providers.$RUNTIME_PROVIDER.apiKey"
   fi
   # Semantic recall is unused; disabled so it never binds a provider of its own.
   set_json_tolerated agents.defaults.memorySearch.enabled false \
@@ -119,8 +121,8 @@ If nothing needs attention, reply exactly NO_REPLY."
 
   echo "[seed] tools"
   set_scalar tools.profile coding
-  # The coding profile omits `message`; the playbook needs `read`, thread actions, attachments.
-  set_json tools.alsoAllow '["message"]'
+  # The coding profile omits `message` and `browser`; the playbook needs both.
+  set_json tools.alsoAllow '["message","browser"]'
   set_json agents.defaults.sandbox.browser.headless true
   set_scalar messages.groupChat.visibleReplies automatic
 
@@ -145,6 +147,6 @@ If nothing needs attention, reply exactly NO_REPLY."
   # A provider served by an additional OpenClaw plugin (a runtime harness, for example) needs
   # `plugins.entries.<id>.enabled true` and its id appended to `plugins.allow` here; the runbook
   # 04 shows the form.
-  set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\"]"
+  set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\"]"
   set_json_tolerated plugins.bundledDiscovery '"allowlist"' "key removed upstream after 2026.7"
 }

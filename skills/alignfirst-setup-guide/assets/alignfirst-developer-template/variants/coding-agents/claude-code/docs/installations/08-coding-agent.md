@@ -97,7 +97,7 @@ npx -y skills add https://github.com/paleo/skills --yes --agent claude-code --sk
 
 The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into `~/.claude/CLAUDE.md`, between `<!-- alignfirst-developer:start -->` and `<!-- alignfirst-developer:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
-To change the instructions: edit the repository file, refresh the snapshot, unflag the file when `06-security-hardening.md` has run ([Hardening](#hardening)), re-run the seed (`docs/operations/configure-developer.md`), reflag. The seed writes nothing when the merged content is unchanged, so a re-seed for another reason succeeds while the file is immutable.
+To change the instructions, edit the repository file and run `docs/operations/configure-developer.md` with its `config instructions` scopes. The maintenance wrapper contains the developer before either file becomes writable and restores both through an `EXIT` trap.
 
 ### Hardening
 
@@ -124,21 +124,14 @@ sudo -i -u {{SERVICE_USER}} -- claude auth status
 
 **Role: operator**, during `docs/operations/update-developer.md`.
 
-Inside the npm-prefix unlock window that runbook opens, add:
+Run the coding-agent package update through its own package-scoped maintenance window:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g @anthropic-ai/claude-code@latest
+sudo /usr/local/sbin/alignfirst-developer-maintenance packages -- \
+  /usr/bin/npm install -g @anthropic-ai/claude-code@latest
 ```
 
-`skills update` refreshes the `~/.claude/skills` symlinks, so the skills window must unflag that directory with `~/.agents`, and reflag it after:
-
-```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.claude/skills
-sudo chown -Rh {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.claude/skills
-# … the update and add commands of update-developer.md, then:
-sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.claude/skills
-sudo chattr +i /home/{{SERVICE_USER}}/.claude/skills
-```
+The `skills` scope of `update-developer.md` includes `~/.claude/skills`, so the symlink tier is restored with the canonical tree.
 
 ### Verification
 

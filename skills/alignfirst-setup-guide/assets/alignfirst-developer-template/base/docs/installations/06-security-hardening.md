@@ -20,11 +20,29 @@ read_when:
 
 The developer can no longer edit its own instruction files or install global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs and `workspace/scratch/` stay writable.
 
-## Configuration and workspace files
+## Install the maintenance controls
 
-Run [update-workspace.md](../operations/update-workspace.md) once first, so the live files match the repository. `TOOLS.md` is empty and `HEARTBEAT.md` comment-only, and both are locked all the same — see [gotchas.md](../gotchas.md).
+Install the kill switch and maintenance wrapper outside the service account's writable paths, then contain the developer before changing the hardening policy:
 
 ```sh
+sudo install -m 755 -o root -g root \
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/developer-kill.sh \
+  /usr/local/sbin/alignfirst-developer-kill
+sudo install -m 755 -o root -g root \
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/developer-maintenance.sh \
+  /usr/local/sbin/alignfirst-developer-maintenance
+sudo /usr/local/sbin/alignfirst-developer-kill
+```
+
+## Configuration and workspace files
+
+The workspace was applied during `04`. If it has changed since then, run [update-workspace.md](../operations/update-workspace.md), then rerun the kill switch before continuing. `TOOLS.md` is empty and `HEARTBEAT.md` comment-only, and both are locked all the same — see [gotchas.md](../gotchas.md).
+
+```sh
+sudo chown {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
+  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
+sudo chmod 600 /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
 sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
 ```
@@ -63,14 +81,16 @@ sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
 
 ## Unlocking for maintenance
 
-Every write to a locked path follows unflag → apply → reflag. The sequences live where they are used: [configure-developer.md](../operations/configure-developer.md) (`openclaw.json`, the instruction file), [update-developer.md](../operations/update-developer.md) (npm prefix, skills, alproject files), [update-workspace.md](../operations/update-workspace.md) (workspace files).
+Use `/usr/local/sbin/alignfirst-developer-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `alproject`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+
+The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
 ## Kill switch
 
-`developer-kill.sh` stops the gateway unit, then terminates the remaining agent processes of the account (`node`, the coding agent, `alcode`; rootless containers run under the same uid). The `systemd --user` manager stays up.
+The installed kill switch stops the gateway, stops and kills every rootless container, then terminates every service-account process regardless of its executable name. Only the `systemd --user` manager and its `(sd-pam)` process may survive. The script fails when a container, the gateway or another process survives.
 
 ```sh
-sudo ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/developer-kill.sh
+sudo /usr/local/sbin/alignfirst-developer-kill
 # recovery:
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
@@ -106,3 +126,9 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user is-active openclaw-gateway podma
 ```
 
 Finish with [08-coding-agent.md § Verification](08-coding-agent.md#verification), then the smoke test of [07-channel.md](07-channel.md).
+
+Start the gateway before that smoke test:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
+```

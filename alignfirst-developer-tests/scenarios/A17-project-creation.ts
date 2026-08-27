@@ -1,6 +1,11 @@
+import { readFile } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
-import { extractCodingPrompt, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
+import {
+  extractCodingPrompt,
+  isCodingProtocolPrompt,
+  setupCodingAgentMock,
+} from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import {
   assertAlprojectCallOrder,
@@ -11,6 +16,7 @@ import {
 import { waitForReport } from "./_lib/outbound.ts";
 import type { Step } from "./_lib/types.ts";
 import { LIFECYCLE_PROJECT_PARENT, NOVA_PROJECT_PATH } from "./_lib/project-fixtures.ts";
+import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
@@ -18,6 +24,7 @@ const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
 const ALLOCATED_PORT_RANGE = "6600..6607";
+const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/nt-1/A1-request.md`;
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
 // runs this scenario never exceeded 50% on Discord (Slack ended 2/2). Creation
@@ -34,13 +41,15 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
     registerBasePort: 6600,
   });
   const codingAgent = setupCodingAgentMock(ctx, {
-    // Any delegation from the nova main worktree during creation is the
-    // bootstrap, whatever the prompt shape (protocol-wrapped or plain). The
-    // reply is an authoritative alcode report: it enumerates the actual files
-    // and closes the scaffold question — a diligent bot otherwise compares the
-    // result against the scaffold it had envisioned and loops on "fixing" it.
     onPrompt: async (scenario, cwd, prompt) => {
       if (cwd !== NOVA_PROJECT_PATH) return;
+      if (isCodingProtocolPrompt(prompt)) {
+        throw new Error(`project creation used an AlignFirst protocol: ${prompt.slice(0, 200)}`);
+      }
+      const capturedRequest = await readFile(REQUEST_PATH, "utf8").catch(() => "");
+      if (!hasCompleteCreationRequest(capturedRequest)) {
+        throw new Error("project bootstrap started before the nt-1 request reservation");
+      }
       await copyBootstrapTemplate(scenario);
       // A bot may delegate the initial commit itself ("create one initial
       // commit with message …", "run git commit -m …"); comply, like a real
@@ -78,6 +87,10 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       `Réserve ${PORTS_PER_WORKSPACE} ports par workspace pour ${MAX_WORKSPACES} workspaces. ` +
       "Tu peux procéder jusqu'au commit initial sur main.",
   );
+  const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
+  if (!hasCompleteCreationRequest(capturedRequest)) {
+    throw new Error(`nt-1 creation request omitted details: ${JSON.stringify(capturedRequest)}`);
+  }
 
   // Completion is the initial commit (the loose ref appears when it lands on
   // main) plus the registration. The lifecycle reference requires an inventory
@@ -110,6 +123,19 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
+}
+
+function hasCompleteCreationRequest(request: string): boolean {
+  return [
+    /\b(?:create|cr[ée]er?)\b/iu,
+    new RegExp(`\\b${PROJECT}\\b`, "u"),
+    /\bNode\.js\b/iu,
+    /\bpnpm\b/iu,
+    /\b2\b/iu,
+    /\b4\b/iu,
+    /(?:initial commit|commit initial)/iu,
+    /\bmain\b/iu,
+  ].every((pattern) => pattern.test(request));
 }
 
 async function waitForCreationReport(
@@ -225,6 +251,10 @@ function assertSetupGuideDelegation(
   calls: ReturnType<typeof setupCodingAgentMock>["codingAgentCalls"],
 ): void {
   const prompts = calls.map(extractCodingPrompt).filter((prompt) => prompt !== undefined);
+  const protocolPrompt = prompts.find(isCodingProtocolPrompt);
+  if (protocolPrompt !== undefined) {
+    throw new Error(`creation delegated through a protocol: ${JSON.stringify(protocolPrompt)}`);
+  }
   if (!prompts.some((prompt) => /alignfirst-setup-guide/iu.test(prompt))) {
     throw new Error(
       `creation did not delegate through the setup guide: ${JSON.stringify(prompts)}`,

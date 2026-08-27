@@ -31,29 +31,27 @@ Commit and push, so the repository mirrors the server:
 git add infra/openclaw/workspace/ && git commit -m "docs: update workspace files" && git push
 ```
 
-Snapshot, unflag, apply, reflag:
+Apply through the maintenance wrapper. It contains the developer, refreshes the seed snapshot, and restores the workspace ownership, modes and flags through an `EXIT` trap:
 
 ```sh
-sudo rsync -a --delete ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/ /home/{{SERVICE_USER}}/seed/
-sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
-sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
-sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
-sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
+sudo /usr/local/sbin/alignfirst-developer-maintenance workspace -- \
+  /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
 ```
 
-New sessions read the new files on their own. Restart only when active sessions must see them:
+The wrapper leaves the gateway stopped. Start it only after the wrapper reports that hardening was restored and exits 0:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
 
 ## Adding or removing a file
 
-The script mirrors `*.md`, `*.png` and `*.svg` under `~/seed/workspace/`, subdirectories included. A new file is added to the repository, applied with the procedure above, then added to the two flag lists (here and in `06`). A removal leaves the live copy in place: delete it by hand.
+The script mirrors `*.md`, `*.png` and `*.svg` under `~/seed/workspace/`, subdirectories included. The maintenance wrapper discovers the resulting live files and restores their flags dynamically. A removal leaves the live copy in place: delete it through a maintenance window.
 
 ```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/workspace/<file>.md
-sudo -i -u {{SERVICE_USER}} -- rm /home/{{SERVICE_USER}}/.openclaw/workspace/<file>.md
+sudo /usr/local/sbin/alignfirst-developer-maintenance workspace -- \
+  rm /home/{{SERVICE_USER}}/.openclaw/workspace/<file>.md
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
 
 `AGENTS.md` and `TOOLS.md` cannot be removed: OpenClaw recreates a missing one from its own template, unlocked. Retire content by shipping the file empty, as `TOOLS.md` is.

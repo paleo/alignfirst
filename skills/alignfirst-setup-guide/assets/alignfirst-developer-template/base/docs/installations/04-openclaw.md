@@ -17,7 +17,7 @@ infra/openclaw/
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
-├── bin/                # apply-workspace.sh, backup.sh, developer-kill.sh
+├── bin/                # workspace, backup, kill-switch and maintenance scripts
 ├── alproject/          # .alproject.json and alproject-guide.md
 ├── workspace/          # curated workspace files (AGENTS.md, IDENTITY.md, …)
 └── coding-agent/       # global instruction file of the delegated coding agent
@@ -78,7 +78,7 @@ A runtime provider served by an OpenClaw plugin needs two more keys in `seed/com
 
 ```sh
 set_json "plugins.entries.<id>.enabled" true
-set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"<id>\"]"
+set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\",\"<id>\"]"
 ```
 
 ```sh
@@ -227,8 +227,8 @@ Upgrades: [update-developer.md](../operations/update-developer.md). Configuratio
 
 ## Rotating a secret
 
-Edit the value in the checkout's `infra/openclaw/.env`, refresh the snapshot (step 2), re-run the seed (step 3; once `06` has run, unflag `openclaw.json` first — [configure-developer.md](../operations/configure-developer.md)). The seed rewrites `secrets.json`; the references in `openclaw.json` are unchanged, so the live gateway only needs its snapshot refreshed:
+Edit the value in the checkout's `infra/openclaw/.env`. Before `06`, refresh the snapshot and re-run the seed. After `06`, follow [configure-developer.md](../operations/configure-developer.md); its root-owned wrapper contains the developer and restores the locked configuration.
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload
+sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload  # before 06 only
 ```

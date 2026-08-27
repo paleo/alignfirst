@@ -8,15 +8,17 @@
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
 
 set -euo pipefail
+umask 077
 
-BACKUP_DIR="$HOME/backups/deployment/$(date +%Y%m%d-%H%M)"
+BACKUP_BASE="$HOME/backups/deployment"
+BACKUP_DIR=
 WORKSPACE="$HOME/.openclaw/workspace"
 # Unquoted so a ~-prefixed PROJECTS_ROOT expands.
 REGISTRY_FILE={{PROJECTS_ROOT}}/alproject-registry.json
 
 main() {
   check_user
-  install -d -m 700 "$BACKUP_DIR"
+  create_backup_dir
   copy_file "$HOME/.openclaw/openclaw.json" openclaw.json
   copy_file "$HOME/.openclaw/secrets/secrets.json" secrets.json
   copy_file "$HOME/.openclaw/.env" openclaw.env
@@ -25,6 +27,12 @@ main() {
   copy_file "$REGISTRY_FILE" alproject-registry.json
   chmod -R go-rwx "$BACKUP_DIR"
   echo "$BACKUP_DIR"
+}
+
+create_backup_dir() {
+  install -d -m 700 "$BACKUP_BASE"
+  BACKUP_DIR=$(mktemp -d "$BACKUP_BASE/$(date +%Y%m%d-%H%M%S)-XXXXXX")
+  chmod 700 "$BACKUP_DIR"
 }
 
 check_user() {

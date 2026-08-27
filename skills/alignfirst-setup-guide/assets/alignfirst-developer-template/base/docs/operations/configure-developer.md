@@ -9,33 +9,31 @@ read_when:
 
 **Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the runtime model, the skill allowlist, a new variable.
 
-`openclaw.json` is immutable once [06](../installations/06-security-hardening.md) has run, so unflag it around the seed. While it is flagged, every config-writing command (`config set`, `plugins install`, the seed) fails, and not always legibly — see [gotchas.md](../gotchas.md#config-writing-commands-fail-while-openclawjson-is-immutable).
+`openclaw.json` is immutable once [06](../installations/06-security-hardening.md) has run. The root-owned maintenance wrapper contains the developer, refreshes the seed snapshot, unlocks only the requested paths, runs the seed, and restores the hardening policy through an `EXIT` trap.
 
 ```sh
 cd ~/{{ADMIN_REPOSITORY_NAME}} && git pull
-sudo rsync -a --delete ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/ /home/{{SERVICE_USER}}/seed/
-sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
-sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
-sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
-sudo -i -u {{SERVICE_USER}} -- openclaw config validate
-sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json
+sudo /usr/local/sbin/alignfirst-developer-maintenance config -- \
+  /home/{{SERVICE_USER}}/seed/seed.sh
 ```
 
-When `infra/openclaw/coding-agent/*.md` changed ([08-coding-agent.md § Global Instructions](../installations/08-coding-agent.md#global-instructions)), also unflag the coding agent's global instruction file before the seed and reflag it after — the pair of commands is in [08-coding-agent.md § Hardening](../installations/08-coding-agent.md#hardening). An unchanged file needs no unflag: the seed compares the merged content and writes nothing when it is identical.
+When `infra/openclaw/coding-agent/*.md` changed ([08-coding-agent.md § Global Instructions](../installations/08-coding-agent.md#global-instructions)), include the instruction scope:
+
+```sh
+sudo /usr/local/sbin/alignfirst-developer-maintenance config instructions -- \
+  /home/{{SERVICE_USER}}/seed/seed.sh
+```
 
 ## Apply
 
-A secret-only change (a value in `secrets.json`, references unchanged) is hot-swapped:
+A successful maintenance window leaves the gateway stopped. When `environment.d/` changed, rebuild the user manager's environment first. Then start the gateway:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload
+sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec  # environment.d changes only
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
 
-Every other change reaches new sessions on its own. Restart only when active sessions must see it too, or when `environment.d/` changed (then `daemon-reexec` first, [04 § 9](../installations/04-openclaw.md#9-environment-changes)):
-
-```sh
-sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
-```
+Run these commands only after the wrapper reports that hardening was restored and exits 0. A failure leaves the developer contained for diagnosis.
 
 ## Scope
 

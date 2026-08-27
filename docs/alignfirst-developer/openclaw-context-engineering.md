@@ -106,18 +106,18 @@ Three viable shapes for handling a Discord thread, given the above:
 
 The channel session opens a thread on demand via the `message` tool with `action: "thread-create"` (`extensions/discord/src/channel-actions.ts`, handler in `extensions/discord/src/actions/`). Subsequent posts in the thread go through `message` `action: "thread-reply"`. Routing of the user's follow-up messages to a fresh per-thread session is handled by `resolveThreadSessionKeys` (`extensions/discord/src/monitor/`) and depends only on the message's `threadId`, not on how the thread was created.
 
-The `message` tool is profile-gated. Default tool profiles place it under `messaging` only (`src/agents/tool-catalog.ts`); the `coding` profile excludes it. The supported widening knob is `tools.alsoAllow` (merged in `src/agents/pi-tools.policy.ts`):
+The `message` and `browser` tools are profile-gated. The `coding` profile excludes both. The supported widening knob is `tools.alsoAllow` (merged in `src/agents/pi-tools.policy.ts`):
 
 ```jsonc
 {
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["message"]
+    "alsoAllow": ["message", "browser"]
   }
 }
 ```
 
-Without `alsoAllow`, the channel session falls back to raw Discord REST via `exec` + `curl`. That still works for thread creation (and the thread-session routing still kicks in, since `resolveThreadSessionKeys` looks at the inbound `threadId` regardless of origin), but you lose transcript persistence, secret redaction, streaming previews, rate-limit retries, and observability through the standard tool result pipeline. Don't take the curl shortcut.
+Without `message` in `alsoAllow`, the channel session falls back to raw Discord REST via `exec` + `curl`. That still works for thread creation (and the thread-session routing still kicks in, since `resolveThreadSessionKeys` looks at the inbound `threadId` regardless of origin), but you lose transcript persistence, secret redaction, streaming previews, rate-limit retries, and observability through the standard tool result pipeline. Without `browser`, the workspace's promised browsing capability is unavailable.
 
 ### Discord vs Slack thread history — upstream gap
 

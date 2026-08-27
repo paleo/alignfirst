@@ -8,15 +8,24 @@
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
 
 set -euo pipefail
+umask 077
 
 SOURCE_BASE="$HOME/seed/workspace"
 TARGET_BASE="$HOME/.openclaw/workspace"
-BACKUP_DIR="$HOME/backups/workspace-backups/$(date +%Y%m%d-%H%M)"
+BACKUP_BASE="$HOME/backups/workspace-backups"
+BACKUP_DIR=
 
 main() {
   check_preconditions
+  create_backup_dir
   apply_files
   print_summary
+}
+
+create_backup_dir() {
+  install -d -m 700 "$BACKUP_BASE"
+  BACKUP_DIR=$(mktemp -d "$BACKUP_BASE/$(date +%Y%m%d-%H%M%S)-XXXXXX")
+  chmod 700 "$BACKUP_DIR"
 }
 
 check_preconditions() {
@@ -32,7 +41,6 @@ check_preconditions() {
 
 apply_files() {
   local found=0 src rel target backup
-  mkdir -p "$BACKUP_DIR"
   # find + install -D: nested directories and arbitrary file names keep their relative paths in
   # both the target and the backup.
   while IFS= read -r -d '' src; do

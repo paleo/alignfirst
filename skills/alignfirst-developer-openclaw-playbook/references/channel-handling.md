@@ -95,7 +95,8 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - An unresolved PROJECT for ordinary single-project work → ask for the registered project path.
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
-- A resource URL that may provide the project or ticket → ask for neither; the working session inspects it.
+- A resource URL that may provide the project or ticket → ask for neither; state that the user's
+  next message launches the thread session, which inspects the URL.
 - A multi-project request, or a request that may not need a project → ask for no main project; the working session routes it.
 - Nothing else needs an answer → state that the user's next message launches the thread session. Do not claim that you are checking or starting the work now.
 
