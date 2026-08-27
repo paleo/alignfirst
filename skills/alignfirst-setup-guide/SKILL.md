@@ -15,6 +15,22 @@ metadata:
 
 Route by the user's intent. Load only the references needed for that route.
 
+## Terminology
+
+AlignFirst is both the core `alignfirst` skill and the umbrella name for the related software
+development tooling in this repository. In skill contexts, AlignFirst means the core skill, used
+alone or with its command-alias companions. The core skill and any installed companions are the
+**AlignFirst skills**. Use **AlignFirst tooling** for the broader product family when the
+distinction matters.
+
+The `alignfirst` skill contains the protocols. Its seven human-invoked command companions are
+`alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, and `alread`. The command skills
+keep `disable-model-invocation: true`, humans invoke them as `/alspec` in Claude Code, GitHub
+Copilot, Cursor, or `$alspec` in Codex.
+
+`alignfirst-setup-guide` and `alignfirst-developer-openclaw-playbook` are separate skills.
+plans-share is an optional companion to AlignFirst skills, not a fourth independent recommendation.
+
 ## Named Tool
 
 When the user names a tool, inspect the repository and proceed directly to that tool. Install or
@@ -41,6 +57,16 @@ choices:
 
 Determine whether a team plans repository exists before recommending plans-share. Let the user choose
 any subset.
+
+## AlignFirst Developer
+
+An AlignFirst Developer is a persistent AI teammate for software work. It receives requests through
+team chat, manages each task in an isolated project workspace, and delegates repository work to
+a coding agent (Claude Code or Codex) using the AlignFirst protocols. The current deployment runs on
+OpenClaw through Slack or Discord under a dedicated Linux service account.
+
+Preparing a project makes its repository compatible with an AlignFirst Developer. Creating an
+AlignFirst Developer builds and deploys the teammate itself.
 
 ## Prepare a Project for an AlignFirst Developer
 
@@ -82,16 +108,6 @@ Detect existing footprints before proposing changes:
 
 Require a clean working tree immediately before project mutations. Read-only discovery and
 recommendations do not require one.
-
-## Terminology
-
-“AlignFirst skills” is one content skill, `alignfirst`, plus seven human-invoked command skills:
-`alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, and `alread`. The command skills keep
-`disable-model-invocation: true`; repository discovery can still list their directories. Humans invoke
-them as `/alspec` in Claude Code, GitHub Copilot, and Cursor, or `$alspec` in Codex.
-
-`alignfirst-setup-guide` and `alignfirst-developer-openclaw-playbook` are separate skills. plans-share
-is an optional companion to AlignFirst skills, not a fourth independent recommendation.
 
 ## Temporary Local Installation
 
