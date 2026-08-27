@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Read when the user names 
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.10.1"
+  version: "3.11.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -28,7 +28,7 @@ If you don't already know which protocol to use, read [overview.md](references/o
 - Create TASK_DIR if it doesn't exist
 - Or, list all existing files (do not truncate)
 
-**Work without a ticket:** when the user says there is no ticket, use `nt-{N}` as the TICKET_ID: find the highest `nt-{N}` directory in `.plans/` and take N + 1 (`nt-1` if there is none). Reuse an existing `nt-{N}` directory when the user refers to that earlier work. Omit the ticket ID from commit messages.
+**Work without a ticket:** when the user says there is no ticket, issue a *side ticket*, a ticket kept aside from the ticket system. Its ID is `side-{N}`: find the highest `side-{N}` directory in `.plans/` and take N + 1 (`side-1` if there is none). Reuse an existing `side-{N}` directory when the user refers to that earlier work. Omit the ticket ID from commit messages.
 
 ## File Naming Convention
 

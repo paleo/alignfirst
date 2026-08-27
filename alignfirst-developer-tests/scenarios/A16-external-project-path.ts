@@ -29,7 +29,6 @@ export default async function externalProjectPath(ctx: ScenarioContext): Promise
     project: PROJECT,
     projectPath: ORION_PROJECT_PATH,
     ticketId: TICKET_ID,
-    audience: "tech",
     codingAgent,
   });
   await ctx.judgeLLM({

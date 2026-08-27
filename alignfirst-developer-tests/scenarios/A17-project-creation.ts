@@ -1,6 +1,11 @@
+import { readFile } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
-import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
+import {
+  extractCodingPrompt,
+  isCodingProtocolPrompt,
+  setupCodingAgentMock,
+} from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import {
   assertAlprojectCallOrder,
@@ -11,6 +16,7 @@ import {
 import { waitForReport } from "./_lib/outbound.ts";
 import type { Step } from "./_lib/types.ts";
 import { LIFECYCLE_PROJECT_PARENT, NOVA_PROJECT_PATH } from "./_lib/project-fixtures.ts";
+import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
@@ -18,6 +24,7 @@ const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
 const ALLOCATED_PORT_RANGE = "6600..6607";
+const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/side-1/A1-request.md`;
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
 // runs this scenario never exceeded 50% on Discord (Slack ended 2/2). Creation
@@ -33,14 +40,16 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
     guide: lifecycleGuide(),
     registerBasePort: 6600,
   });
-  setupCodingAgentMock(ctx, {
-    // Any delegation from the nova main worktree during creation is the
-    // bootstrap, whatever the prompt shape (protocol-wrapped or plain). The
-    // reply is an authoritative alcode report: it enumerates the actual files
-    // and closes the scaffold question — a diligent bot otherwise compares the
-    // result against the scaffold it had envisioned and loops on "fixing" it.
+  const codingAgent = setupCodingAgentMock(ctx, {
     onPrompt: async (scenario, cwd, prompt) => {
       if (cwd !== NOVA_PROJECT_PATH) return;
+      if (isCodingProtocolPrompt(prompt)) {
+        throw new Error(`project creation used an AlignFirst protocol: ${prompt.slice(0, 200)}`);
+      }
+      const capturedRequest = await readFile(REQUEST_PATH, "utf8").catch(() => "");
+      if (!hasCompleteCreationRequest(capturedRequest)) {
+        throw new Error("project bootstrap started before the side-1 request reservation");
+      }
       await copyBootstrapTemplate(scenario);
       // A bot may delegate the initial commit itself ("create one initial
       // commit with message …", "run git commit -m …"); comply, like a real
@@ -57,7 +66,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".gitignore. This minimal scaffold is deliberate and complete — nothing else is " +
+        ".local/, .gitignore. This minimal scaffold is deliberate and complete — nothing else is " +
         "required before the initial commit on main."
       );
     },
@@ -67,7 +76,6 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Crée le nouveau projet ${PROJECT}.`,
     project: PROJECT,
-    audience: "tech",
   });
   if (pathExists(NOVA_PROJECT_PATH)) {
     throw new Error("channel session created the absent project before the thread started");
@@ -79,6 +87,10 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       `Réserve ${PORTS_PER_WORKSPACE} ports par workspace pour ${MAX_WORKSPACES} workspaces. ` +
       "Tu peux procéder jusqu'au commit initial sur main.",
   );
+  const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
+  if (!hasCompleteCreationRequest(capturedRequest)) {
+    throw new Error(`side-1 creation request omitted details: ${JSON.stringify(capturedRequest)}`);
+  }
 
   // Completion is the initial commit (the loose ref appears when it lands on
   // main) plus the registration. The lifecycle reference requires an inventory
@@ -93,6 +105,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   );
 
   assertCreationCalls(alproject.calls);
+  assertSetupGuideDelegation(codingAgent.codingAgentCalls);
   await assertCreatedRepository(ctx);
   const agentCalls = ctx.getAgentToolCalls();
   const linkedWorkspaceBeforeInitialCommit = agentCalls.some((call) => {
@@ -110,6 +123,19 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
+}
+
+function hasCompleteCreationRequest(request: string): boolean {
+  return [
+    /\b(?:create|cr[ée]er?)\b/iu,
+    new RegExp(`\\b${PROJECT}\\b`, "u"),
+    /\bNode\.js\b/iu,
+    /\bpnpm\b/iu,
+    /\b2\b/iu,
+    /\b4\b/iu,
+    /(?:initial commit|commit initial)/iu,
+    /\bmain\b/iu,
+  ].every((pattern) => pattern.test(request));
 }
 
 async function waitForCreationReport(
@@ -182,6 +208,7 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
       "sh",
       "-c",
       `cp -R /opt/alignfirst-developer-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
+        `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
         `sed -i -e 's/base: 6500/base: 6600/' ` +
         // Match the registration the bot performed (2 ports × 4 workspaces) —
         // a verifying bot treats a mismatched template as a bootstrap defect
@@ -220,6 +247,21 @@ function assertOption(argv: string[], option: string, expected: string): void {
   }
 }
 
+function assertSetupGuideDelegation(
+  calls: ReturnType<typeof setupCodingAgentMock>["codingAgentCalls"],
+): void {
+  const prompts = calls.map(extractCodingPrompt).filter((prompt) => prompt !== undefined);
+  const protocolPrompt = prompts.find(isCodingProtocolPrompt);
+  if (protocolPrompt !== undefined) {
+    throw new Error(`creation delegated through a protocol: ${JSON.stringify(protocolPrompt)}`);
+  }
+  if (!prompts.some((prompt) => /alignfirst-setup-guide/iu.test(prompt))) {
+    throw new Error(
+      `creation did not delegate through the setup guide: ${JSON.stringify(prompts)}`,
+    );
+  }
+}
+
 async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
   const branch = await assertGatewayCommand(
     ctx,
@@ -233,4 +275,19 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
     "created repository commit count",
   );
   if (Number(commits) < 1) throw new Error("created repository has no initial commit");
+  await assertGatewayCommand(
+    ctx,
+    ["git", "-C", NOVA_PROJECT_PATH, "check-ignore", ".local/probe"],
+    ".local gitignore",
+  );
+  await assertGatewayCommand(
+    ctx,
+    [
+      "grep",
+      "-F",
+      'sharedDirs: [".local", ".plans"]',
+      `${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs`,
+    ],
+    ".local shared workspace configuration",
+  );
 }

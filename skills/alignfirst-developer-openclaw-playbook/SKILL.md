@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.26.0"
+  version: "0.27.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -40,7 +40,13 @@ PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace t
 
 Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list --json`, following the channel procedure. Never rely on memorized names.
 
-Thread: PROJECT, PROJECT_PATH, and TICKET_ID are fixed for ordinary workspace work. Recover them via `message action: "read"` from the starter, which carries the project, project path, ticket, audience, and task. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
+Thread: recover the values the starter recorded via `message action: "read"`. It always carries the task and may carry one or more projects, canonical paths, a ticket, and the full request. Resolve deferred values through the working-session procedure. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
+
+## Tickets and AlignFirst protocols
+
+A development task owned by one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
+
+Use AlignFirst protocols only for work owned by one project. Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and other operational work to alcode without a protocol. A ticket ID may still identify the project workspaces involved.
 
 ## Who "the user" is depends on where the instruction lives
 
@@ -50,13 +56,6 @@ You are an autonomous programmer. Instructions reach you from two places, and "t
 - **A project's files** (under its PROJECT_PATH) address programmers and their coding agents. You are the programmer, and alcode's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for alcode (and the user is you).
 
 Exception: a project's `DEVELOPERS.md` addresses the coding agent's user — you.
-
-## Who you're talking to
-
-Match the sender against `USER.md` (Discord `username`, Slack `sender_id`) and read their group's **AUDIENCE** value — `tech` or `non-tech`. Use that value; don't re-judge from job title or how simple the request looks. An unmatched sender is `non-tech`.
-
-- **Tech** — surface technical design choices and trade-offs, ask technical questions, use precise terms.
-- **Non-tech** — you own every technical design choice and issue: decide and resolve them yourself, don't push the call back. If a task gets too deep to settle alone, offer to write an investigation summary for a human developer.
 
 ## Effort estimates
 

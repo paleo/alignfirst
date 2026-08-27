@@ -10,14 +10,20 @@ Run `alproject --guide` and read the complete output before any lifecycle action
 
 Creation may begin with a proposed PROJECT and no PROJECT_PATH.
 
+Project creation is bootstrap work, not an AlignFirst protocol. Through the initial commit, every alcode delegation uses a fresh session with a plain message. Never pass `--protocol`, even when `.plans/` exists or the bootstrap resembles development work.
+
+Before creating a directory, load the `alignfirst-setup-guide` skill. If the skill is unavailable or cannot be read, project creation is disabled: report that requirement and stop. Use the skill throughout the bootstrap.
+
 1. Settle the stack, allowed parent directory, project name, and port requirements with the user. Use the `alproject --guide` output to constrain the choices.
 2. Create the main-worktree directory under the selected allowed parent. Initialize its Git repository on `main`.
 3. Once the directory contains its `.git` directory, register the main worktree with `alproject`. Request a port allocation when required. Retain the canonical path as PROJECT_PATH and retain the reported base port and range.
-4. Before delegating the bootstrap, run `alcode --openclaw-guide`. Then bootstrap directly from PROJECT_PATH. Include the project's documentation and workspace tooling, following the selected stack and the host-specific guide.
-5. Make the project's initial commit on `main` in PROJECT_PATH.
-6. After that commit, return to the normal working-session flow. Every subsequent branch change uses a linked project workspace.
+4. Read the `alignfirst` skill and create `.plans/`. Use the external ticket ID when the request has one. Otherwise atomically reserve the next side ticket `side-N` through the skill's no-ticket convention. Write `.plans/{TICKET_ID}/A1-request.md` with the complete creation request. The bot chooses the identifier and writes the request; alcode does neither. A later plans-share setup migrates this content when it replaces the directory with a symlink.
+5. Before delegating the bootstrap, run `alcode --openclaw-guide`. Then bootstrap directly from PROJECT_PATH through `alcode --new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an AlignFirst Developer. Include `.local/` as a gitignored shared directory in the workspace mechanism. Follow the selected stack and the host-specific guide.
+6. Verify the project through the setup guide, synchronize the request artifact when the prepared project documents a plans command, and make its initial commit on `main` in PROJECT_PATH. Do not ask for confirmation before committing.
+7. When a remote destination is known from the request, environment, or host instructions, configure it when needed and push `main`. Do not ask for confirmation before pushing. When no destination is known, or the user requested a local-only project, leave the committed project local and report that no remote was configured.
+8. After that commit and push when applicable, return to the normal working-session flow. Every subsequent branch change uses a linked project workspace.
 
-The direct main-worktree bootstrap is the creation exception. It ends with the initial commit.
+The direct main-worktree bootstrap is the creation exception. It ends with the initial commit and the push when a remote destination is known. If the user then requests more changes without a ticket, return to the working-session flow: reserve `side-N`, create a linked workspace, and delegate from it.
 
 ## Remove a project
 

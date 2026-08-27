@@ -31,7 +31,6 @@ export default async function projectDetectionStarter(ctx: ScenarioContext): Pro
     text: "Nous avons un travail à faire sur nimbus.",
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
-    audience: "tech",
     codingAgent,
   });
 

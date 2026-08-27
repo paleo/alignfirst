@@ -1,83 +1,122 @@
 ---
 name: alignfirst-setup-guide
 description: >-
-  Setup-time companion to install or upgrade any subset of {docmap, workspace, alignfirst skills} in a consumer repo. Use when asked to install, set up, or upgrade docmap, the workspace worktree system, or the AlignFirst skills.
+  Install, upgrade, recommend, or combine AlignFirst skills, plans-share, docmap, and workspace in a
+  consumer repository, or prepare a repository and Linux deployment for an AlignFirst Developer.
 compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or bun).
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.27.0"
+  version: "0.28.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
 # AlignFirst Setup Guide
 
-A one-time companion for setting up a consumer repository. It installs any subset of three independent tools:
+Route by the user's intent. Load only the references needed for that route.
 
-- **docmap** — agent-discoverable documentation under `docs/`.
-- **workspace** — worktree-based concurrent local dev environments.
-- **alignfirst skills** — collaborative spec/plan/AAD/review protocols.
+## Terminology
 
-Pick any combination. Each has its own reference; this skill investigates the repo, agrees on scope, then follows the matching reference(s).
+AlignFirst is both the core `alignfirst` skill and the umbrella name for the related software
+development tooling in this repository. In skill contexts, AlignFirst means the core skill, used
+alone or with its command-alias companions. The core skill and any installed companions are the
+**AlignFirst skills**. Use **AlignFirst tooling** for the broader product family when the
+distinction matters.
 
-## The entry-point files
+The `alignfirst` skill contains the protocols. Its seven human-invoked command companions are
+`alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, and `alread`. The command skills
+keep `disable-model-invocation: true`, humans invoke them as `/alspec` in Claude Code, GitHub
+Copilot, Cursor, or `$alspec` in Codex.
 
-A project has up to three Markdown entry points, one per reader:
+`alignfirst-setup-guide` and `alignfirst-developer-openclaw-playbook` are separate skills.
+plans-share is an optional companion to AlignFirst skills, not a fourth independent recommendation.
 
-- `README.md` — the presentation and the getting-started procedure (machine installation, plans repository link, main-worktree bootstrap).
-- `AGENTS.md` (or `CLAUDE.md`) — the coding agent (Claude Code, alcode). The Step 3 references write their agent instructions here.
-- `DEVELOPERS.md` — the coding agent's user, human or AI. Recurring operating knowledge only; setup-once procedures belong in `README.md`. It must reference neither `README.md` nor `AGENTS.md`. Default title: `# Developer Guide`.
+## Named Tool
 
-`DEVELOPERS.md` is an AlignFirst convention, so write it only for a project an AI bot will drive. Once present, it serves every developer of the project.
+When the user names a tool, inspect the repository and proceed directly to that tool. Install or
+upgrade only what they requested.
 
-The rest of the documentation (`docs/`, served by docmap) addresses everybody. The entry points are read every session, `docs/` on demand — so anything consulted occasionally goes there, including multi-step procedures such as creating a merge request or writing a changeset. Move the whole procedure and leave no summary behind in an entry point.
+- **AlignFirst skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). For an
+  existing v1 or v2 installation, start with [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
+- **plans-share**: [plans-share-setup.md](references/plans-share-setup.md).
+- **docmap**: [docmap-setup.md](references/docmap-setup.md).
+- **workspace**: [workspace-setup.md](references/workspace-setup.md).
 
-Inside an entry point, add each new fact to the line that already describes its subject, rather than opening a section for it.
+Do not present the tooling menu or add unrelated tools on this route.
 
-A project is **bot-ready** when the workspace system is installed, the alignfirst skills section in `AGENTS.md` is written, and `DEVELOPERS.md` covers: the stack, the layout, the daily commands, the conventions (ticket, branch, commit), a workspaces section pointing at the `workspace --guide` command, and how to browse the docs (docmap).
+## Tooling Recommendation
 
-Follow these four steps in order. Do not skip ahead: complete each before starting the next.
+When the user asks what the project could adopt, inspect the repository and present these independent
+choices:
 
-## Step 1 — Investigate
+- **AlignFirst skills** add collaborative specification, planning, implementation, merge, review,
+  description, and task-reading commands. When the team has a plans repository, plans-share can back
+  the project's `.plans` directory.
+- **docmap** makes the repository's `docs/` tree discoverable to agents and humans.
+- **workspace** creates isolated git-worktree development environments.
 
-Detect the stack and **package manager**: check the `packageManager` field in `package.json`, else the root lockfile — `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb`/`bun.lock` → bun — falling back to npm. Record the result — every reference in Step 3 reuses this one detection rather than repeating it.
+Determine whether a team plans repository exists before recommending plans-share. Let the user choose
+any subset.
 
-**Commands in this guide are written for npm; convert each one to the detected manager** — both when you run it and when you write it into project files. Only npm needs a `--` separator to pass flags to a script (`npm run docmap -- --guide`); pnpm and yarn drop the `run` and the separator (`pnpm docmap --guide`), and bun keeps `run` but needs no separator (`bun run docmap --guide`). Install verbs differ too (`npm install -D` vs `pnpm add -D` / `yarn add -D` / `bun add -D`).
+## AlignFirst Developer
 
-Then detect each tool's existing footprint:
+An AlignFirst Developer is a persistent AI teammate for software work. It receives requests through
+team chat, manages each task in an isolated project workspace, and delegates repository work to
+a coding agent (Claude Code or Codex) using the AlignFirst protocols. The current deployment runs on
+OpenClaw through Slack or Discord under a dedicated Linux service account.
 
-- **docmap**: a `docmap` script, a `@paleo/docmap` dependency, or a `docs/` directory.
-- **workspace**: a `workspace` script or a `@paleo/workspace` dependency.
-- **alignfirst skills**: an installed alignfirst skill, a `.plans/` directory, or an `## AlignFirst` section in `AGENTS.md` / `CLAUDE.md`.
-- **bot readiness**: a `DEVELOPERS.md` at the project root.
+Preparing a project makes its repository compatible with an AlignFirst Developer. Creating an
+AlignFirst Developer builds and deploys the teammate itself.
 
-## Step 2 — Discuss
+## Prepare a Project for an AlignFirst Developer
 
-Present the findings and agree with the user on which tools to install or upgrade. Any combination is valid. Ask too whether an AI bot (e.g. an AlignFirst Developer) will use the project: if so, the setup must leave it [bot-ready](#the-entry-point-files). The workspace system is mandatory there — the bot drives every worktree through it, and has no hand-made fallback (see [the bot contract](references/workspace-setup.md#the-bot-contract)).
+Inspect the repository before changing it. A prepared project has all of these:
 
-A project without a dev server still benefits from the workspace system: recommend its portless subset — no `ports` group, no `dev-server.mjs` — which keeps the worktree lifecycle, shared-directory symlinks, config-file seeding, and orphan healing (see [portless mode](references/workspace-setup.md#portless-mode)).
+1. AlignFirst skills and their project-specific `AGENTS.md` or `CLAUDE.md` section.
+2. plans-share when a team plans repository exists.
+3. docmap, including project scripts and agent instructions.
+4. workspace, adapted to the project's runtime and development lifecycle.
+5. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
+   documentation map, development workflow, and verification procedures.
 
-## Step 3 — Set up
+Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
+directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
+repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`.
 
-Require a clean working tree first (`git status`). If it isn't clean, stop and ask the user to commit or stash. Then follow the matching reference(s):
+## Create an AlignFirst Developer
 
-- [docmap-setup.md](references/docmap-setup.md) — install the docmap CLI, then optionally bootstrap or migrate docs.
-- [workspace-setup.md](references/workspace-setup.md) — implement the worktree system (adapt the [asset scripts](assets/), install `@paleo/workspace`).
-- [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md) — install the AlignFirst skills and configure the project. For a team sharing plans through a dedicated repository, continue with [plans-share-setup.md](references/plans-share-setup.md).
+For creating or operating the developer deployment itself, read
+[alignfirst-developer.md](references/alignfirst-developer.md). Do not load that workflow for ordinary
+tool setup.
 
-**Bot-ready setup**: finish by creating or completing `DEVELOPERS.md` ([entry-point files](#the-entry-point-files)), reusing Step 1's detections and the sections the references wrote to `AGENTS.md`.
+## Shared Investigation Rules
 
-**Upgrading from an older AlignFirst** (v1/v2): route through [alignfirst-upgrade.md](references/alignfirst-upgrade.md), which detects the version and follows [alignfirst-upgrade-from-v1.md](references/alignfirst-upgrade-from-v1.md) or [alignfirst-upgrade-from-v2.md](references/alignfirst-upgrade-from-v2.md).
+Detect the package manager from `packageManager` in `package.json`, then the root lockfile:
+`package-lock.json` means npm, `pnpm-lock.yaml` means pnpm, `yarn.lock` means yarn, and `bun.lock` or
+`bun.lockb` means bun. Fall back to npm.
 
-## Step 4 — After setup
+Translate commands to that package manager. npm needs `--` before script flags; pnpm and yarn omit
+`run` and the separator; bun keeps `run` but omits the separator.
 
-A local install of this skill is temporary: once setup is done, the user can uninstall it. A global install serves their other projects — leave it in place and skip this step.
+Detect existing footprints before proposing changes:
 
-Look for an `alignfirst-setup-guide` entry in the project's `skills-lock.json`. When it is there, the skill is local; provide the user the command:
+- docmap: a `docmap` script, `@paleo/docmap`, or `docs/`.
+- workspace: a `workspace` script or `@paleo/workspace`.
+- AlignFirst skills: a canonical skill installation, `.plans/`, or an AlignFirst instruction section.
+- plans-share: a plans-share script, dependency, or `.plans` symlink.
+- AlignFirst Developer preparation: the complete five-part contract above.
+
+Require a clean working tree immediately before project mutations. Read-only discovery and
+recommendations do not require one.
+
+## Temporary Local Installation
+
+When this guide was installed only for the current project, remove it through the skills CLI after
+setup:
 
 ```sh
-npx skills remove alignfirst-setup-guide --yes
-
-# prune the entry in skills-lock.json
-node --input-type=module -e 'import {readFileSync as r,writeFileSync as w} from "node:fs";const f="skills-lock.json",j=JSON.parse(r(f));delete j.skills["alignfirst-setup-guide"];w(f,JSON.stringify(j,null,2)+"\n")'
+npx -y skills remove alignfirst-setup-guide --yes </dev/null
 ```
+
+The CLI owns `skills-lock.json`. Leave global installations in place for other repositories. An
+AlignFirst Developer service account must retain a global installation for its delegated coding agent.

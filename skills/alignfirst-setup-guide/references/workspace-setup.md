@@ -4,7 +4,7 @@ Blueprint for a **workspace** system — multiple git-worktree dev environments 
 
 **Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project driven by an OpenClaw bot must also meet [the bot contract](#the-bot-contract).
+**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an AlignFirst Developer must also meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract).
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -195,7 +195,7 @@ The system only works if agents know about it. The CLI self-documents via `works
   Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
   ```
 
-On a bot-driven project, `DEVELOPERS.md` carries the same workspaces section: its developers, the bot included, read that file to learn how to create a worktree or a branch. Same two parts, same limit — the definition and the pointer to `--guide`, never the command list.
+On a project prepared for an AlignFirst Developer, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
 
 ### Project-specific facts the guide can't know
 
@@ -208,11 +208,11 @@ The release process is not one of them: a multi-step procedure followed occasion
 
 The port layout is not one of them either: the block table, what raising `perWorkspace` costs elsewhere in the repo, which config file each port reaches. That reference material belongs in `docs/`, with nothing left behind in the entry points. Point at the document from the `ports` group in `workspace.mjs`. Entry points keep only what a reader needs every session: the ports are printed at startup, read them from the log.
 
-## The bot contract
+## The AlignFirst Developer Contract
 
-An OpenClaw bot creates every worktree through the workspace system; its playbook offers no hand-made fallback, so a project it drives must have the system installed. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation must provide the same behavior, whatever its language and runner: the playbook reads the invocation from `DEVELOPERS.md`, so the command's name and prefix are free while its behavior is fixed.
+An AlignFirst Developer creates every worktree through the workspace system. Its playbook has no manual fallback, so every managed project must install workspace and document its invocation in `DEVELOPERS.md`. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation may use another language or runner but must preserve the behavior.
 
-| Requirement | Why the bot needs it |
+| Requirement | Why the developer needs it |
 | --- | --- |
 | A `--guide` flag printing the full operating procedures | The playbook points the bot at the guide instead of restating the commands. |
 | A command listing **registered** workspaces, runnable from any worktree | The bot checks whether the ticket already has a workspace before creating one. |
@@ -241,6 +241,6 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
-- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (in `DEVELOPERS.md` too on a bot-driven project), the conventions, and the project-specific facts.
-- [ ] **Check [the bot contract](#the-bot-contract)** on a bot-driven project. Automatic with `@paleo/workspace`; a matter of verification in a reimplementation.
+- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts.
+- [ ] **Check [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project. Automatic with `@paleo/workspace`; verify it for a reimplementation.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. A wrapper that merely loads proves nothing.

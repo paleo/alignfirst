@@ -1,0 +1,41 @@
+# Installed to /etc/authelia/configuration.yml by docs/installations/09-dev-server-gateway.md.
+# Each <secret> is replaced in the installed file only, with `authelia crypto rand --length 64`.
+server:
+  address: 'tcp://127.0.0.1:9091'
+  endpoints:
+    authz:
+      forward-auth:
+        implementation: 'ForwardAuth'
+        authn_strategies:
+          - name: 'CookieSession'
+
+authentication_backend:
+  file:
+    path: '/etc/authelia/users.yml'
+    watch: true
+  password_reset:
+    disable: true
+
+session:
+  secret: '<secret>'
+  cookies:
+    - domain: '{{DEV_DOMAIN}}'
+      authelia_url: 'https://auth.{{DEV_DOMAIN}}'
+
+storage:
+  encryption_key: '<secret>'
+  local:
+    path: '/var/lib/authelia/db.sqlite3'
+
+notifier:
+  filesystem:
+    filename: '/var/lib/authelia/notification.txt'
+
+access_control:
+  default_policy: 'deny'
+  rules:
+    - domain: '*.{{DEV_DOMAIN}}'
+      methods: ['OPTIONS']
+      policy: 'bypass'
+    - domain: '*.{{DEV_DOMAIN}}'
+      policy: 'one_factor'

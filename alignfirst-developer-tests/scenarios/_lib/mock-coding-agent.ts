@@ -61,7 +61,7 @@ const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing bra
 // description the agent derives, not a fixed work-type vocabulary. Accept any
 // slug (kebab or snake, any case), so the mock recognizes whatever the agent
 // picked.
-const BRANCH_TOKEN_RE = /\b((?:[A-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
+const BRANCH_TOKEN_RE = /\b((?:[a-zA-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
 function buildClaudeStreamResponse(sessionId: string, result: string): string {
@@ -383,6 +383,15 @@ export function setupCodingAgentMock(
   }
 
   const waitForCall = (options: WaitForCallOptions): Promise<CodingAgentCall> => {
+    const rejected = codingAgentCalls.find(
+      (call) => finalizedCalls.has(call) && options.rejectOn?.(call),
+    );
+    if (rejected !== undefined) {
+      const message =
+        options.rejectMessage?.(rejected) ??
+        `unexpected coding-agent call: ${JSON.stringify(rejected.argv)}`;
+      return Promise.reject(new Error(message));
+    }
     const existing = codingAgentCalls.find((c) => finalizedCalls.has(c) && options.predicate(c));
     if (existing) return Promise.resolve(existing);
     return new Promise<CodingAgentCall>((resolve, reject) => {
@@ -571,6 +580,8 @@ export function renderCodingAgentCall(call: CodingAgentCall): string {
 export interface ExpectNoProtocolDelegationOptions {
   rubric: string;
   label: string;
+  /** Optional extra predicate, such as a project working-directory filter. */
+  matches?: (call: CodingAgentCall) => boolean;
   timeoutMs?: number;
 }
 
@@ -590,18 +601,22 @@ export async function expectNoProtocolDelegation(
   handle: CodingAgentMockHandle,
   // 180s: slower providers (glm-5.2) burn many short turns before delegating —
   // a valid call landed 3s past a 90s deadline (A03, artifacts 2026-07-28T09-01-38).
-  { rubric, label, timeoutMs = 180_000 }: ExpectNoProtocolDelegationOptions,
+  { rubric, label, matches, timeoutMs = 180_000 }: ExpectNoProtocolDelegationOptions,
 ): Promise<NoProtocolDelegationResult> {
   const codingAgentCall = await handle.waitForCall({
     predicate: (call) =>
       call.agent === handle.selectedAgent &&
       isAlignfirstWrapperCall(call) &&
-      !isCodingProtocolPrompt(extractCodingPrompt(call)),
+      !isCodingProtocolPrompt(extractCodingPrompt(call)) &&
+      (matches?.(call) ?? true),
     rejectOn: (call) =>
       !isCodexCatalogCall(call) &&
-      (!isAlignfirstWrapperCall(call) || call.agent !== handle.selectedAgent),
+      (!isAlignfirstWrapperCall(call) ||
+        call.agent !== handle.selectedAgent ||
+        (isCodingProtocolPrompt(extractCodingPrompt(call)) && (matches?.(call) ?? true))),
     rejectMessage: (call) =>
-      `unexpected non-wrapper coding-agent call: agent=${call.agent} argv=${JSON.stringify(call.argv)}`,
+      "unexpected coding-agent call while awaiting no-protocol delegation: " +
+      `agent=${call.agent} argv=${JSON.stringify(call.argv)}`,
     timeoutMs,
   });
   const cursorAfterDelegation = await ctx.getCursor();
@@ -630,6 +645,8 @@ export interface ExpectCodingDelegationOptions {
   ticketId: string;
   /** Optional extra predicate, e.g. project-name filter for multi-project. */
   matches?: (call: CodingAgentCall) => boolean;
+  /** Override the default export-button task rubric. */
+  rubric?: string;
   timeoutMs?: number;
   label?: string;
 }
@@ -639,7 +656,13 @@ export async function expectCodingDelegation(
   handle: CodingAgentMockHandle,
   options: ExpectCodingDelegationOptions,
 ): Promise<CodingAgentCall> {
-  const { ticketId, matches, timeoutMs = 180_000, label = "coding-agent-delegation" } = options;
+  const {
+    ticketId,
+    matches,
+    rubric = defaultCodingDelegationRubric(ticketId),
+    timeoutMs = 180_000,
+    label = "coding-agent-delegation",
+  } = options;
   const codingAgentCall = await handle.waitForCall({
     predicate: (call) =>
       call.agent === handle.selectedAgent &&
@@ -667,9 +690,13 @@ export async function expectCodingDelegation(
   await ctx.judgeLLM({
     attachTo: target,
     message: renderCodingAgentCall(codingAgentCall),
-    rubric: `The message is a prompt sent to a coding agent via the \`alcode\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`,
+    rubric,
     label,
   });
 
   return codingAgentCall;
+}
+
+function defaultCodingDelegationRubric(ticketId: string): string {
+  return `The message is a prompt sent to a coding agent via the \`alcode\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`;
 }

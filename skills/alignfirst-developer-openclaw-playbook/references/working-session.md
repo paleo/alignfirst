@@ -12,26 +12,50 @@ Recover the thread context in Step 1 first. Ordinary project work then loads its
 
 ### Step 1 — Recover thread context (fresh thread session)
 
-Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover PROJECT, PROJECT_PATH, TICKET_ID, AUDIENCE, and the task from the thread's starter. Anything still missing comes from the user's messages. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix; when no starter recorded the audience, read the sender's from `USER.md`. Branch, linked-worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
+Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover the task, the full request when recorded, every PROJECT / PROJECT_PATH pair, and TICKET_ID from the thread's starter. Anything still missing comes from the user's messages. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. Branch, linked-worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
 
 The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's `Task:` line, and it's your green light.
 
-### Step 2 — Route project lifecycle work
+### Step 2 — Resolve deferred context
+
+The channel deliberately leaves some values for this session:
+
+- A PR/MR, issue, ticket, or other resource URL may identify its project and ticket. Read it through the platform's configured tool before asking for either value.
+- For a multi-project request, retain every affected project and path. Do not choose a main project merely to fit a single-project workflow.
+- A request may need no project. Do not ask for one until the work itself requires project files.
+- Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 4 instead of asking for an external ID.
+
+### Step 3 — Route project lifecycle work
 
 When the request creates or physically removes a project, open [`project-lifecycle.md`](./project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
-### Step 3 — The thread's state is its workspace
+### Step 4 — Reserve a side ticket for explicit no-ticket work
 
-The question on every wake is not a mode but a fact: does this thread have its project workspace?
+Skip this step for project lifecycle and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
 
-- **PROJECT, PROJECT_PATH, and TICKET_ID are known** — the thread can have its workspace. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
-- **A value is missing** — the thread cannot have a workspace yet. Go to Step 4. PROJECT and PROJECT_PATH are enough for an investigation, question, or advice: delegate from PROJECT_PATH without requiring TICKET_ID. Ask for missing values only when the current request needs a workspace. The moment all three values are known for workspace work, run the same procedure.
+For new single-project work where the user explicitly says there is no ticket:
 
-The underlying invariant for an existing project: reading never needs a workspace, while editing project files happens inside a linked workspace. New-project bootstrap follows the explicit main-worktree exception in `project-lifecycle.md`.
+1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
+2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
+3. Inspect only directories matching `.plans/side-{N}`. Start at one above the highest N, or `side-1` when none exists.
+4. Atomically reserve the candidate with directory creation. If creation reports that it already exists, increment N and retry. Never reuse a candidate after a failed reservation.
+5. Set TICKET_ID to the reserved `side-N`. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
+6. Run the documented plans synchronization command again when the project has one.
 
-### Step 4 — Handle the actual request
+The bot owns this reservation. Do not delegate side-ticket selection or request capture to alcode. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
+
+### Step 5 — The thread's state is its workspace
+
+The question on every wake is not a mode but a fact: does this request need a project workspace?
+
+- **The request is single-project work** — require PROJECT, PROJECT_PATH, and TICKET_ID, including for read-only work. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **A required value is missing** — go to Step 6. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
+
+The underlying invariant for an existing project: project work always happens inside a linked workspace. New-project bootstrap through its initial commit is the sole main-worktree exception in `project-lifecycle.md`.
+
+### Step 6 — Handle the actual request
 
 Use the guidelines.
 
@@ -55,6 +79,24 @@ Only when the message is unambiguously about chat content ("summarize this threa
 
 **Investigation / question, or advice.** The substance comes from alcode: delegate the question without a protocol so it investigates the right repo, then summarize its reply back to the user in the thread. Ground the answer in the actual code. No code change unless asked.
 
+### Detailed requests
+
+When one project owns a detailed user explanation, preserve it before delegation:
+
+1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
+2. Read the `alignfirst` skill for TASK_DIR and filename conventions. Create the next `-request.md` file, such as `.plans/{TICKET_ID}/A1-request.md`, containing the complete `Request:` text from the starter. Keep its language. You may fix typos; preserve every detail.
+3. When ticket editing is available, add the request-file path relative to the project to the ticket description.
+4. Run the project's documented plans synchronization command.
+5. Continue through project workspace setup and alcode as usual.
+
+When Step 4 reserved a side ticket `side-N`, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
+
+Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh. Delegate those requests to alcode without an AlignFirst protocol.
+
+### Multi-project and operational work
+
+Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alproject list --json` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+
 ### What you delegate vs do
 
 Lean toward delegating; the less you touch the project directly, the better.
@@ -64,6 +106,8 @@ Delegate to alcode: workspace/branch/worktree creation, writing code (`alignfirs
 Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to alcode (no protocol in a fresh session, or resumed where the topic lives) and build on its answer. Never brainstorm alone: alcode grounds its ideas in the codebase; yours would come from memory.
 
 Global tools go in the prompt. Run alcode from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. alcode knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+
+Every single-project development delegation carries TICKET_ID, including a no-protocol investigation. Put it in the alcode invocation or message as the delegation guide allows. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 
@@ -79,7 +123,7 @@ The agent usually has no question. When it does, answer it: a technical question
 
 ### Plan files are alcode's material
 
-Never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
+Before acting on any file the user names under `.plans/`, run the project's documented plans synchronization command when it has one. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
 
 For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, read the `alignfirst` skill. Project instructions only define whether and how the directory is shared.
 
@@ -232,13 +276,23 @@ After creating the MR/PR (via `alcode`):
 - Post the MR/PR link.
 - Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.
 
+Whenever you observe that a PR/MR is merged, delegate the post-merge maintenance to alcode without a protocol:
+
+1. Remove the source branch's registered project workspace through the project's workspace tooling, when one exists.
+2. Refresh the merge target in the main worktree without switching the main worktree away from its base branch. Fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when the project requires them.
+3. Report the removed workspace and refreshed branch.
+
 ### Cleanup requests
 
-When the user asks to tear down a project workspace (or worktree) from inside a thread:
+When the user asks to tear down one named project workspace (or worktree) from inside a thread:
 
 1. Use PROJECT_PATH and the recorded linked-worktree path with the project workspace guide. Have alcode remove the *workspace*. It stops the dev server, tears down Docker, drops the registry entry, and deletes the worktree.
 2. Confirm the teardown to the user.
 3. Reset the thread session.
+
+When the user asks to clean the workspaces, run a no-protocol alcode delegation from each affected PROJECT_PATH with this instruction:
+
+> List every registered workspace for this project. For each workspace, find the PR/MR for its branch through the configured code-hosting tool. Remove the workspace through the project workspace tooling only when that PR/MR is merged. Leave workspaces with no PR/MR or an unmerged PR/MR intact. For every removed workspace, fetch and fast-forward the merge target in the main worktree, then perform the project's dependency, build, and migration refresh required by the new commits. Report every decision and the final base-branch state.
 
 ### Resetting a thread session
 

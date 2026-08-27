@@ -57,7 +57,7 @@ The absolute parents are harness storage details. Scenarios obtain canonical mai
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A20`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A26`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its absolute path as `seededWorktreePaths` so the check still catches anything the channel session created.
 
@@ -65,7 +65,9 @@ Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstra
 
 `A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
 
-`A17` creates and registers `nova`, bootstraps it on `main`, and checks the initial commit and refreshed inventory. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
+`A17` creates and registers `nova`, bootstraps it on `main` without an AlignFirst protocol, and checks the initial commit. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
+
+`A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
 
 Rebuild the alcode package and harness image before focused coverage:
 
@@ -76,12 +78,13 @@ npm run env:build
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A06-off-projects A14-sole-project-inference A15-duplicate-project-name A16-external-project-path
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A17-project-creation A18-project-removal A19-project-removal-failure
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A23-resource-url-handoff A24-multi-project-handoff A25-detailed-request-handoff A26-explicit-no-ticket
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A10-coding-session A12-sequential-coding-sessions
 ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
 npm run e2e -- --model gpt-5.6-terra --channel all --all
 ```
 
-**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01` (a `tech` user in [`workspace/USER.md`](workspace/USER.md)). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
 ## Vendored `@paleo/openclaw-*` packages
 

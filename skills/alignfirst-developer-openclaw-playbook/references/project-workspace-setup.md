@@ -13,13 +13,13 @@ You need:
 
 - **PROJECT** — The main-worktree directory name shown to the user.
 - **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
-- **TICKET_ID** — An identifier for the work, ideally (but not necessarily) a ticket ID from the user's tracking system.
+- **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
 
 If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess or reconstruct these values. Ask the user.
 
 ## Step 2 — Post the setup signal
 
-Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the project, the ticket, the audience and the task, so restating them here just repeats a message they can see.
+Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the known project, ticket and task, so restating them here just repeats a message they can see.
 
 Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 

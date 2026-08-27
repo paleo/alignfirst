@@ -1,6 +1,7 @@
 # Upgrade from AlignFirst v1
 
-This migration converts a v1 installation (`_docs/` system) to a v3-ready state.
+This migration removes the v1 `_docs/` system while preserving project knowledge. Continue with the
+current setup reference after these steps.
 
 > **Note**: Commands shown are Unix-style. Adapt to your OS if needed (e.g., PowerShell on Windows).
 
@@ -24,7 +25,7 @@ Delete all known AlignFirst command files from **all** agent directories that ex
 **Files to delete** (both old and new names):
 
 - `spec.md`, `plan.md`, `dtdp.md`, `pr-message.md`, `doc.md`
-- `al.md`, `alspec.md`, `alplan.md`, `aldescription.md`
+- `al.md`, `alspec.md`, `alplan.md`, `aldescription.md`, `almerge.md`, `alreview.md`, `alread.md`
 
 **Directories to check:**
 
@@ -88,9 +89,13 @@ Check if any `.md` files remain in `_docs/`.
   rm -rf _docs
   ```
 
-## Done
+## Finish the Upgrade
 
-Summarize what was done:
+Follow [alignfirst-skills-setup.md](alignfirst-skills-setup.md). Install the current `alignfirst`
+content skill and all seven command skills for the requested agent and scope, then reconcile `.plans`,
+`.gitignore`, and project instructions.
+
+Summarize:
 
 - AlignFirst/Vibe Flow/AI Workflow v1 files removed
 - Command files removed (list which agent directories were cleaned)
@@ -98,3 +103,4 @@ Summarize what was done:
 - `.gitignore` updated
 - `AGENTS.md` cleaned
 - Whether documentation was migrated to `docs/` via docmap, or no remaining docs were found
+- The scope and agents that received the current AlignFirst skills

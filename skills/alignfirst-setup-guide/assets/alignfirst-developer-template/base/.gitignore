@@ -1,0 +1,7 @@
+.local
+.local-wt
+.plans
+node_modules
+infra/openclaw/.env
+.vscode/*
+!.vscode/settings.example.json
