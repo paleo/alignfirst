@@ -11,13 +11,13 @@ deployment, use the
    [`alignfirst-developer-tests/workspace/`](../../alignfirst-developer-tests/workspace/). The
    `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
    load into the system prompt every turn. `TOOLS.md` stays empty; its content lives in `AGENTS.md`
-   under `## Tools`. `AGENTS.md` sends every user message to the
+   under `## Environment`. `AGENTS.md` sends every user message to the
    `alignfirst-developer-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the
    [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/)
    skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
    `channel-handling.md`. Its references own working sessions, channel handling, project workspace
-   setup, and project lifecycle. Project discovery comes from `alproject --guide`; the delegation
+   setup, project lifecycle, and the `message` tool per surface. Project discovery comes from `alproject --guide`; the delegation
    procedure comes from `alcode --openclaw-guide` only when delegation starts.
 3. **Regression-test harness** —
    [`alignfirst-developer-tests/`](../../alignfirst-developer-tests/). This standalone Dockerised

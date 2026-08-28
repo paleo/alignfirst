@@ -7,7 +7,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.28.0"
+  version: "0.29.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -75,7 +75,8 @@ Inspect the repository before changing it. A prepared project has all of these:
 1. AlignFirst skills and their project-specific `AGENTS.md` or `CLAUDE.md` section.
 2. plans-share when a team plans repository exists.
 3. docmap, including project scripts and agent instructions.
-4. workspace, adapted to the project's runtime and development lifecycle.
+4. workspace, adapted to the project's runtime and development lifecycle, meeting
+   [the AlignFirst Developer contract](references/workspace-setup.md#the-alignfirst-developer-contract).
 5. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
 

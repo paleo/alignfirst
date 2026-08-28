@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.27.0"
+  version: "0.28.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -69,4 +69,12 @@ Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describ
 
 ## `chat_id` values
 
-Always keep the whole string, prefix included (e.g. `"channel:#####"`). Never strip anything. When a tool returns a thread's `chat_id` (e.g. `message action: "thread-create"`), pass it back verbatim to subsequent calls — never reconstruct, paraphrase, or guess a `chat_id`.
+For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"channel:#####"`). Never reconstruct, paraphrase, or guess a `chat_id`. A `threadId` parameter is different: pass only the bare thread ID from the conversation metadata or tool result, never a `thread:<channel>/<id>` target.
+
+## Ephemeral artifacts
+
+- Put screenshots, downloads, OCR/PDF scratch, temporary conversions, and other non-project artifacts under `~/.openclaw/workspace/scratch/`. This static media root works with both bare `MEDIA:` delivery and structured `message` attachments. Files persist across reboots until an administrator prunes them.
+- A gitignored `.local/` directory in a project can be use as a scratch space too.
+- `/tmp/` is fine only for files you don't care about losing.
+
+Keep scratch artifacts out of tracked git directories.

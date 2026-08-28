@@ -70,4 +70,14 @@ await runDevServer({
     //   detectReady: (log) => log.includes("ready in"),
     // },
   ],
+
+  // ADAPT (managed project): report the public URL instead of the default
+  // `http://localhost:<port>/`, read from the file the `remote` profile rewrites
+  // (see workspace.mjs). Both profile variants write it to the same variable.
+  // Needs `import { readFileSync } from "node:fs";`.
+  // formatSummary: ({ workspace, servers }) => {
+  //   const url = readFileSync(".env", "utf8").match(/^API_URL=(.+)$/m)?.[1];
+  //   const pids = servers.map(({ server, pid }) => `  ${server.name}: PID ${pid}`);
+  //   return [`Dev server up for ${workspace.name}: ${url}`, ...pids].join("\n");
+  // },
 });

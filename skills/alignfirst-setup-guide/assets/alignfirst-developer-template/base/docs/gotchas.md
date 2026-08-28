@@ -41,7 +41,7 @@ coding agent: `skills remove` would delete the canonical copy for both.
 
 ## `TOOLS.md` is empty on purpose
 
-The tool notes live in the `## Tools` section of the workspace `AGENTS.md`. The file itself stays, zero bytes and immutable, because OpenClaw counts `TOOLS.md` and `AGENTS.md` among its required bootstrap files: a session that finds one missing recreates it from the upstream template, unlocked and service-writable. Both files land in every subagent prompt, so the template would be a live injection surface. Retire content by emptying the file, never by deleting it. Deleting it achieves nothing anyway: `apply-workspace.sh` mirrors `~/seed/workspace/*.md`, so the empty file returns on the next apply.
+The tool notes live in the `## Environment` section of the workspace `AGENTS.md`. The file itself stays, zero bytes and immutable, because OpenClaw counts `TOOLS.md` and `AGENTS.md` among its required bootstrap files: a session that finds one missing recreates it from the upstream template, unlocked and service-writable. Both files land in every subagent prompt, so the template would be a live injection surface. Retire content by emptying the file, never by deleting it. Deleting it achieves nothing anyway: `apply-workspace.sh` mirrors `~/seed/workspace/*.md`, so the empty file returns on the next apply.
 
 ## Heartbeat cost is a main-session problem
 

@@ -8,7 +8,8 @@
 // =============================================================================
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@paleo/workspace";
 
@@ -86,16 +87,14 @@ await runWorkspace({
     {
       path: ".env",
       source: { kind: "mainWorktree", fallback: ".env.example" },
-      patch: (content, { ports }) => {
-        // Use extractHost to preserve a non-localhost API_URL configured in the
-        // main worktree (e.g. a public dev-server IP).
-        const apiHost = helpers.extractHost(content, "API_URL");
-        return helpers.patchEnvFile(content, {
+      // `publicUrl` (below) keeps the host configured in the main worktree — a
+      // public IP, or the `p<port>.<domain>` written by the `remote` profile.
+      patch: (content, { ports }) =>
+        helpers.patchEnvFile(content, {
           PORT: String(ports.frontend),
           SERVER_PORT: String(ports.server),
-          API_URL: `http://${apiHost}:${ports.server}`,
-        });
-      },
+          API_URL: publicUrl(content, "API_URL", ports.server),
+        }),
     },
     // ADAPT: Docker example. Patches the host port and the container_name so
     // worktrees don't collide. Drop this entry on a non-Docker stack.
@@ -118,6 +117,70 @@ await runWorkspace({
       optional: true,
     },
   ],
+
+  // ADAPT (dev server, managed project): the `remote` setup profile, required by
+  // the AlignFirst Developer contract. This is the HTTPS-gateway variant:
+  // `setup --profile remote` rewrites the main worktree's public URLs to
+  // `https://p<port>.<domain>` with `<domain>` from REMOTE_DEV_DOMAIN; linked
+  // worktrees inherit them through `publicUrl`. List every variable a browser or a
+  // third party resolves (API base URL, front URL, OAuth callbacks, CORS origins,
+  // allowed hosts); server-to-server URLs stay on localhost. The servers keep
+  // listening on localhost. Drop both fields in a project without a dev server.
+  preSetup: ({ profile }) => {
+    if (profile === "remote" && !process.env.REMOTE_DEV_DOMAIN) {
+      throw new Error("REMOTE_DEV_DOMAIN is not set.");
+    }
+  },
+  setupProfiles: {
+    remote: {
+      description: "public URLs through the dev-server gateway (REMOTE_DEV_DOMAIN)",
+      apply: ({ currentWorktree, ports }) => {
+        const envFile = join(currentWorktree, ".env");
+        const content = readFileSync(envFile, "utf8");
+        const patched = helpers.patchEnvFile(content, {
+          API_URL: `https://p${ports.server}.${process.env.REMOTE_DEV_DOMAIN}`,
+        });
+        if (patched !== content) writeFileSync(envFile, patched);
+      },
+    },
+  },
+  // ALTERNATIVE (public-IP variant, no gateway): the browser reaches
+  // `http://<public-ip>:<port>` directly, so the servers must listen on every
+  // interface. `apply` swaps the host of the same variables for the machine's
+  // single public IPv4, keeping scheme and port; the `.env` patcher above keeps a
+  // non-localhost host, so linked worktrees need nothing more. No `preSetup` check.
+  //
+  //   import { networkInterfaces } from "node:os";
+  //   description: "public URLs on the machine's public IP instead of localhost",
+  //   apply: ({ currentWorktree, ports }) => {
+  //     const host = publicIPv4();
+  //     const envFile = join(currentWorktree, ".env");
+  //     const content = readFileSync(envFile, "utf8");
+  //     const patched = helpers.patchEnvFile(content, {
+  //       API_URL: `http://${host}:${ports.server}`,
+  //     });
+  //     if (patched !== content) writeFileSync(envFile, patched);
+  //   },
+  //   // The single public IPv4 on the interfaces (a VPS carries it). Loopback,
+  //   // link-local, carrier-grade NAT and private ranges are skipped.
+  //   function publicIPv4() {
+  //     const found = Object.values(networkInterfaces())
+  //       .flat()
+  //       .filter((e) => e.family === "IPv4" && !e.internal && !isPrivateIPv4(e.address))
+  //       .map((e) => e.address);
+  //     if (found.length !== 1) {
+  //       throw new Error(`Expected one public IPv4, found: ${found.join(", ") || "none"}.`);
+  //     }
+  //     return found[0];
+  //   }
+  //   function isPrivateIPv4(address) {
+  //     const [a, b] = address.split(".").map(Number);
+  //     if (a === 10 || a === 127) return true;
+  //     if (a === 172 && b >= 16 && b <= 31) return true;
+  //     if (a === 192 && b === 168) return true;
+  //     if (a === 169 && b === 254) return true;
+  //     return a === 100 && b >= 64 && b <= 127;
+  //   }
 
   // ADAPT: Detached finalization step. Runs in the background after the
   // worktree is created and the foreground command has returned.
@@ -206,3 +269,12 @@ Workspace setup complete!
   Path:          ${currentWorktree}
 `,
 });
+
+// Public URL of `key` on `port`. A `p<port>.<domain>` host (written by the
+// `remote` profile) takes the port as its first label; any other host keeps
+// `http://<host>:<port>`.
+function publicUrl(content, key, port) {
+  const host = helpers.extractHost(content, key);
+  const remote = host.match(/^p\d+\.(.+)$/);
+  return remote ? `https://p${port}.${remote[1]}` : `http://${host}:${port}`;
+}

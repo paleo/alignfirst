@@ -210,19 +210,42 @@ The port layout is not one of them either: the block table, what raising `perWor
 
 ## The AlignFirst Developer Contract
 
-An AlignFirst Developer creates every worktree through the workspace system. Its playbook has no manual fallback, so every managed project must install workspace and document its invocation in `DEVELOPERS.md`. `@paleo/workspace` satisfies the contract below as shipped. A reimplementation may use another language or runner but must preserve the behavior.
+An AlignFirst Developer creates every worktree through the workspace system and has no manual fallback. `@paleo/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
 
-| Requirement | Why the developer needs it |
-| --- | --- |
-| A `--guide` flag printing the full operating procedures | The playbook points the bot at the guide instead of restating the commands. |
-| A command listing **registered** workspaces, runnable from any worktree | The bot checks whether the ticket already has a workspace before creating one. |
-| `setup` on an existing branch **and** on a new one | It handles three entry cases: no branch, branch only, branch plus worktree. |
-| `setup` blocking in the foreground until a terminal state, with an opt-in background mode | The bot runs it in the foreground and reports the state it returns. |
-| The states named `running`, `ready` and `failed` | They go verbatim into the bot's `[WORKSPACE]` banner. |
-| `remove` performing the whole teardown in one command: dev server, infrastructure, registry entry, worktree directory | The bot delegates a cleanup request as a single step. |
-| `setup` seeding the shared-directory symlinks (`.plans`) and the gitignored config files | The bot runs no post-create step by hand. |
+1. The workspaces section in `DEVELOPERS.md` ([Agent Instructions](#agent-instructions)).
+2. A setup profile named `remote` *(dev server)*, below.
+3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the patched config file, so the developer reports an address that works from the user's browser.
+4. A README section on remote access, below.
 
-A project with a dev server adds its start, stop and status commands, and the URL to report to the user.
+### The `remote` setup profile
+
+The developer's dev servers are reached from the team's browsers, so the deployment runs `workspace setup --profile remote` on the main worktree of every managed project with a dev server. The profile rewrites, in the ignored main files, every URL a browser or a third party resolves: the API base URL, the front URL, OAuth callbacks, CORS origins, allowed hosts. Server-to-server URLs stay on localhost. Linked worktrees inherit the rewritten files through their `mainWorktree` sources, so each file patcher keeps the host it finds and changes only the port.
+
+How the servers are exposed depends on the deployment. The profile has one variant for each:
+
+- **HTTPS gateway.** The deployment has the dev-server gateway: port `<port>` is served at `https://p<port>.$REMOTE_DEV_DOMAIN` behind a login, and `REMOTE_DEV_DOMAIN` is set in the service account's environment. `preSetup` rejects a missing or malformed variable before any file is written. `apply` sets the public URL to `https://p<port>.<domain>`; an application that distinguishes them also gets the public protocol (`https`), the public port (`443`) and the trusted proxy (loopback). The servers keep listening on `localhost:<port>`; the gateway proxies to them. A patcher recognizes a `p<port>.` host and replaces its port label instead of appending `:<port>`: see `publicUrl` in [workspace.mjs](../assets/workspace.mjs).
+- **Public IP.** No gateway: the browser reaches `http://<public-ip>:<port>` directly. `apply` reads the machine's single public IPv4 from the network interfaces (a VPS carries it; skip loopback, link-local and private ranges) and swaps the host of the listed variables, keeping scheme and port. The servers must listen on every interface. A patcher that keeps a non-localhost host (`helpers.extractHost`) needs nothing more.
+
+Pick the variant from the deployment that will run the project: the gateway variant when `REMOTE_DEV_DOMAIN` is set in the developer's environment, the public-IP variant when the deployment opens the dev-port range on its public IP. Ask the user when the deployment is unknown.
+
+In both variants, compute every change before the first write, so a missing variable aborts with the files untouched, and make reapplying the profile a no-op. The commented alternative in [workspace.mjs](../assets/workspace.mjs) shows the public-IP variant.
+
+### README section
+
+`README.md` documents the profile next to the setup commands. Gateway variant:
+
+````markdown
+### Remote access
+
+When the dev servers are reached through the HTTPS gateway, set up the project with the `remote` profile instead of the plain `setup`:
+
+```sh
+export REMOTE_DEV_DOMAIN=dev.example.org
+npm run workspace -- setup --profile remote
+```
+````
+
+Public-IP variant: the same section without the `export` line, introduced by "When the dev servers are reached from other machines through the machine's public IP".
 
 ## Checklist
 
@@ -242,5 +265,5 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts.
-- [ ] **Check [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project. Automatic with `@paleo/workspace`; verify it for a reimplementation.
-- [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. A wrapper that merely loads proves nothing.
+- [ ] **Meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
+- [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. On a managed project, also run `setup --profile remote` on the main worktree (gateway variant: with `REMOTE_DEV_DOMAIN` set to a placeholder domain), check the rewritten URLs there and in a new linked worktree, then restore the main files. A wrapper that merely loads proves nothing.
