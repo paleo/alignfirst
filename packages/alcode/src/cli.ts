@@ -16,6 +16,7 @@ import {
 } from "./session-file.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import { buildAgentEnv, type RunConfig, type RunOutput, runAgent } from "./run-agent.js";
+import { readUsage, type UsageReader } from "./usage.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
@@ -28,6 +29,7 @@ export interface MainOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   modelResolver?: ExecutableModelResolver;
+  usageReader?: UsageReader;
 }
 
 export async function main(options?: MainOptions): Promise<number> {
@@ -56,6 +58,22 @@ export async function main(options?: MainOptions): Promise<number> {
   } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
+  }
+
+  if (parsed.usage) {
+    const validationError = validateArgs(parsed, []);
+    if (validationError) {
+      stderr.write(`${validationError}\n`);
+      return 1;
+    }
+    try {
+      const report = await (options?.usageReader ?? readUsage)(agent, { cwd, env });
+      stdout.write(`${report.trimEnd()}\n`);
+      return 0;
+    } catch (error) {
+      stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      return 1;
+    }
   }
 
   const models = resolveModels(agent, env);
@@ -338,6 +356,7 @@ export interface AlcodeArgs {
   openclawGuide: boolean;
   help: boolean;
   version: boolean;
+  usage: boolean;
 }
 
 export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
@@ -355,6 +374,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
       "openclaw-guide": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
       version: { type: "boolean", short: "v", default: false },
+      usage: { type: "boolean", default: false },
     },
     strict: true,
   });
@@ -370,10 +390,12 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
     openclawGuide: values["openclaw-guide"] === true,
     help: values.help === true,
     version: values.version === true,
+    usage: values.usage === true,
   };
 }
 
 export function validateArgs(args: AlcodeArgs, models: readonly string[]): string | undefined {
+  if (args.usage) return validateUsageArgs(args);
   const isResume = args.resume !== undefined;
   if (args.isNew && isResume) return "Error: --new and --resume are mutually exclusive.";
   if (!args.isNew && !isResume) return "Error: at least one of --new or --resume is required.";
@@ -397,6 +419,25 @@ export function validateArgs(args: AlcodeArgs, models: readonly string[]): strin
       "Error: --ticket must be a single path segment " +
       "(letters, digits, '.', '-', '_'); no path separators or '..'."
     );
+  }
+  return;
+}
+
+function validateUsageArgs(args: AlcodeArgs): string | undefined {
+  if (
+    args.isNew ||
+    args.resume !== undefined ||
+    args.ticket !== undefined ||
+    args.protocol !== undefined ||
+    args.message !== undefined ||
+    args.model !== undefined ||
+    args.meta !== undefined ||
+    args.guide ||
+    args.openclawGuide ||
+    args.help ||
+    args.version
+  ) {
+    return "Error: --usage cannot be combined with other options.";
   }
   return;
 }
@@ -425,6 +466,7 @@ Usage:
   alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode --guide
   alcode --openclaw-guide
+  alcode --usage
   alcode --help
   alcode -v, --version
 
@@ -441,6 +483,7 @@ Options:
   --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
                     (\`meta:\`). alcode never interprets it; a later reader of the session file
                     (e.g. the caller reporting the run's outcome) can use it.
+  --usage           Show the selected coding agent's current usage limits and reset times.
 
 Env:
   ALIGNFIRST_CODE_AGENT            Required coding agent: claude or codex (selected: ${agent}).

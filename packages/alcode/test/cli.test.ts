@@ -89,6 +89,10 @@ describe("parseAlcodeArgs", () => {
     expect(args.meta).toBe("thread:room/abc.def");
   });
 
+  it("reads --usage as a standalone mode", () => {
+    expect(parse(["--usage"]).usage).toBe(true);
+  });
+
   it("leaves meta undefined when --meta is omitted", () => {
     expect(parse(["--new", "--message", "go"]).meta).toBeUndefined();
   });
@@ -99,6 +103,16 @@ describe("parseAlcodeArgs", () => {
 });
 
 describe("validateArgs — parity with the retired .mjs", () => {
+  it("accepts standalone usage and rejects combinations", () => {
+    expect(validate(["--usage"])).toBeUndefined();
+    expect(validate(["--usage", "--new", "--message", "go"])).toBe(
+      "Error: --usage cannot be combined with other options.",
+    );
+    expect(validate(["--usage", "--help"])).toBe(
+      "Error: --usage cannot be combined with other options.",
+    );
+  });
+
   it("rejects --new with --resume", () => {
     expect(validate(["--new", "--resume", "s"])).toBe(
       "Error: --new and --resume are mutually exclusive.",
@@ -183,6 +197,49 @@ describe("validateArgs — parity with the retired .mjs", () => {
     expect(validate(["--new", "--protocol", "plan", "--ticket", "a/b"])).toBe(expected);
     expect(validate(["--new", "--protocol", "plan", "--ticket", ".."])).toBe(expected);
     expect(validate(["--resume", "s", "--ticket", "a/b", "--message", "m"])).toBe(expected);
+  });
+});
+
+describe("usage", () => {
+  it("reads usage without a plans directory or model discovery", async () => {
+    const stdout = makeSink();
+    const modelResolver = vi.fn(async () => {
+      throw new Error("usage must not discover models");
+    });
+    const usageReader = vi.fn(async () => "Claude Code usage\n\nCurrent session: 25% used");
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "--usage"],
+        cwd: tmpdir(),
+        env: { ALIGNFIRST_CODE_AGENT: "claude" },
+        stdout,
+        modelResolver,
+        usageReader,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toBe("Claude Code usage\n\nCurrent session: 25% used\n");
+    expect(usageReader).toHaveBeenCalledWith("claude", {
+      cwd: tmpdir(),
+      env: { ALIGNFIRST_CODE_AGENT: "claude" },
+    });
+    expect(modelResolver).not.toHaveBeenCalled();
+  });
+
+  it("reports usage failures", async () => {
+    const stderr = makeSink();
+    const usageReader = async () => {
+      throw new Error("limits unavailable");
+    };
+    expect(
+      await main({
+        argv: ["node", "alcode", "--usage"],
+        env: { ALIGNFIRST_CODE_AGENT: "codex" },
+        stderr,
+        usageReader,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toBe("limits unavailable\n");
   });
 });
 

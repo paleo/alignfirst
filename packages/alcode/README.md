@@ -20,9 +20,12 @@ When the coding agent's own session on the host is missing or expired, `alcode` 
 ALIGNFIRST_CODE_AGENT=claude alcode --new --protocol spec --ticket AB-123 --message "Feature description"
 ALIGNFIRST_CODE_AGENT=codex alcode --resume <sessionId> --protocol plan
 ALIGNFIRST_CODE_AGENT=codex alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
+ALIGNFIRST_CODE_AGENT=claude alcode --usage
 ```
 
 See `alcode --help` for all flags.
+
+`alcode --usage` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
 
 ## Coding agents
 
