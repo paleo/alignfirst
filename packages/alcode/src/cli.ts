@@ -60,7 +60,7 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  if (parsed.usage) {
+  if (parsed.status) {
     const validationError = validateArgs(parsed, []);
     if (validationError) {
       stderr.write(`${validationError}\n`);
@@ -356,7 +356,7 @@ export interface AlcodeArgs {
   openclawGuide: boolean;
   help: boolean;
   version: boolean;
-  usage: boolean;
+  status: boolean;
 }
 
 export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
@@ -374,7 +374,7 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
       "openclaw-guide": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
       version: { type: "boolean", short: "v", default: false },
-      usage: { type: "boolean", default: false },
+      status: { type: "boolean", default: false },
     },
     strict: true,
   });
@@ -390,12 +390,12 @@ export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
     openclawGuide: values["openclaw-guide"] === true,
     help: values.help === true,
     version: values.version === true,
-    usage: values.usage === true,
+    status: values.status === true,
   };
 }
 
 export function validateArgs(args: AlcodeArgs, models: readonly string[]): string | undefined {
-  if (args.usage) return validateUsageArgs(args);
+  if (args.status) return validateStatusArgs(args);
   const isResume = args.resume !== undefined;
   if (args.isNew && isResume) return "Error: --new and --resume are mutually exclusive.";
   if (!args.isNew && !isResume) return "Error: at least one of --new or --resume is required.";
@@ -423,7 +423,7 @@ export function validateArgs(args: AlcodeArgs, models: readonly string[]): strin
   return;
 }
 
-function validateUsageArgs(args: AlcodeArgs): string | undefined {
+function validateStatusArgs(args: AlcodeArgs): string | undefined {
   if (
     args.isNew ||
     args.resume !== undefined ||
@@ -437,7 +437,7 @@ function validateUsageArgs(args: AlcodeArgs): string | undefined {
     args.help ||
     args.version
   ) {
-    return "Error: --usage cannot be combined with other options.";
+    return "Error: --status cannot be combined with other options.";
   }
   return;
 }
@@ -466,7 +466,7 @@ Usage:
   alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode --guide
   alcode --openclaw-guide
-  alcode --usage
+  alcode --status
   alcode --help
   alcode -v, --version
 
@@ -483,7 +483,7 @@ Options:
   --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
                     (\`meta:\`). alcode never interprets it; a later reader of the session file
                     (e.g. the caller reporting the run's outcome) can use it.
-  --usage           Show the selected coding agent's current usage limits and reset times.
+  --status          Show the selected coding agent's current usage limits and reset times.
 
 Env:
   ALIGNFIRST_CODE_AGENT            Required coding agent: claude or codex (selected: ${agent}).

@@ -4,7 +4,7 @@
 alcode --new --protocol <protocol> --ticket <id> [--message "..."]
 alcode --new --message "..."
 alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
-alcode --usage
+alcode --status
 ```
 
 | Flag | Description |
@@ -16,11 +16,11 @@ alcode --usage
 | `--message "..."` | Message to send, written in English. Required for `spec`, `aad`, and when no `--protocol`. |
 | `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
-| `--usage` | Show the selected coding agent's current usage limits and reset times. Cannot be combined with session options. |
+| `--status` | Show the selected coding agent's current usage limits and reset times. Cannot be combined with session options. |
 
 The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`--usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+`--status` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
 
 {{PERMISSIONS}}.
 

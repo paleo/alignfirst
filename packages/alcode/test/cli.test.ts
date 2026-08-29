@@ -89,27 +89,28 @@ describe("parseAlcodeArgs", () => {
     expect(args.meta).toBe("thread:room/abc.def");
   });
 
-  it("reads --usage as a standalone mode", () => {
-    expect(parse(["--usage"]).usage).toBe(true);
+  it("reads --status as a standalone mode", () => {
+    expect(parse(["--status"]).status).toBe(true);
   });
 
   it("leaves meta undefined when --meta is omitted", () => {
     expect(parse(["--new", "--message", "go"]).meta).toBeUndefined();
   });
 
-  it("throws on unknown flags", () => {
+  it("throws on unknown and retired flags", () => {
     expect(() => parse(["--nope"])).toThrow();
+    expect(() => parse(["--usage"])).toThrow();
   });
 });
 
 describe("validateArgs — parity with the retired .mjs", () => {
-  it("accepts standalone usage and rejects combinations", () => {
-    expect(validate(["--usage"])).toBeUndefined();
-    expect(validate(["--usage", "--new", "--message", "go"])).toBe(
-      "Error: --usage cannot be combined with other options.",
+  it("accepts standalone status and rejects combinations", () => {
+    expect(validate(["--status"])).toBeUndefined();
+    expect(validate(["--status", "--new", "--message", "go"])).toBe(
+      "Error: --status cannot be combined with other options.",
     );
-    expect(validate(["--usage", "--help"])).toBe(
-      "Error: --usage cannot be combined with other options.",
+    expect(validate(["--status", "--help"])).toBe(
+      "Error: --status cannot be combined with other options.",
     );
   });
 
@@ -200,7 +201,7 @@ describe("validateArgs — parity with the retired .mjs", () => {
   });
 });
 
-describe("usage", () => {
+describe("status", () => {
   it("reads usage without a plans directory or model discovery", async () => {
     const stdout = makeSink();
     const modelResolver = vi.fn(async () => {
@@ -210,7 +211,7 @@ describe("usage", () => {
 
     expect(
       await main({
-        argv: ["node", "alcode", "--usage"],
+        argv: ["node", "alcode", "--status"],
         cwd: tmpdir(),
         env: { ALIGNFIRST_CODE_AGENT: "claude" },
         stdout,
@@ -233,7 +234,7 @@ describe("usage", () => {
     };
     expect(
       await main({
-        argv: ["node", "alcode", "--usage"],
+        argv: ["node", "alcode", "--status"],
         env: { ALIGNFIRST_CODE_AGENT: "codex" },
         stderr,
         usageReader,

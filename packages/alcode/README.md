@@ -22,12 +22,12 @@ export ALIGNFIRST_CODE_AGENT=claude # or codex
 alcode --new --protocol spec --ticket AB-123 --message "Feature description"
 alcode --resume <sessionId> --protocol plan
 alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
-alcode --usage
+alcode --status
 ```
 
 See `alcode --help` for all flags.
 
-`alcode --usage` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
+`alcode --status` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
 
 ## Coding agents
 
