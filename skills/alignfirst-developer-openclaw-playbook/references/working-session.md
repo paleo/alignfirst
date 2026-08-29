@@ -248,7 +248,7 @@ It's also how you show code. The user is a developer with the repository on thei
 
 ### Code review
 
-Before every code review, always start by updating both the base branch and the branch to review.
+_Note: Before every code review, always start by updating both the base branch and the branch to review._
 
 A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
