@@ -47,6 +47,7 @@ export type AlcodeCommand =
   | { kind: "help" }
   | { kind: "guide"; variant: GuideVariant }
   | { kind: "status" }
+  | { kind: "reserveSideTicket" }
   | { kind: "session"; args: SessionArgs };
 
 // `resume` undefined means a new session.
@@ -77,6 +78,15 @@ export async function main(options?: MainOptions): Promise<number> {
 
   if (command.kind === "version") {
     stdout.write(`${readPackageVersion()}\n`);
+    return 0;
+  }
+  if (command.kind === "reserveSideTicket") {
+    const gateError = assertPlansGate(cwd);
+    if (gateError) {
+      stderr.write(`${gateError}\n`);
+      return 1;
+    }
+    stdout.write(`${reserveSideTicket(cwd)}\n`);
     return 0;
   }
 
@@ -144,7 +154,9 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
     case "resume":
       return parseResumeCommand(tokens);
     case "status":
-      return parseStatusCommand(tokens);
+      return parseBareCommand(tokens, "status");
+    case "reserve-side-ticket":
+      return parseBareCommand(tokens, "reserveSideTicket");
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
@@ -195,13 +207,13 @@ function parseResumeCommand(tokens: string[]): AlcodeCommand {
   };
 }
 
-function parseStatusCommand(tokens: string[]): AlcodeCommand {
+function parseBareCommand(tokens: string[], kind: "status" | "reserveSideTicket"): AlcodeCommand {
   const { values } = parseArgs({
     args: tokens,
     options: { help: { type: "boolean", short: "h", default: false } },
     strict: true,
   });
-  return values.help ? { kind: "help" } : { kind: "status" };
+  return values.help ? { kind: "help" } : { kind };
 }
 
 export function validateSessionArgs(
@@ -498,6 +510,7 @@ Usage:
   alcode new --message "..."
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode status
+  alcode reserve-side-ticket
   alcode --guide
   alcode --openclaw-guide
   alcode -h, --help
@@ -507,12 +520,14 @@ Commands:
   new                   Start a new session; prints its Session ID at the end.
   resume <sessionId>    Continue an existing session.
   status                Show the selected coding agent's current usage limits and reset times.
+  reserve-side-ticket   Reserve the next side ticket for work without a ticket: creates
+                        .plans/side-N/ and prints side-N.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.
   --ticket <id>         Ticket ID. \`new --protocol\` requires it, or --no-ticket.
-  --no-ticket           Work without a ticket: reserves the next side ticket (side-N) under
-                        .plans/ and passes it to the agent. new only, requires --protocol.
+  --no-ticket           Work without a ticket: reserves the next side ticket (side-N) and passes
+                        it to the agent. new only, requires --protocol.
   -m, --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>       Model for a new session: one of ${models.join(", ")}. Omit to use the
                         default model.

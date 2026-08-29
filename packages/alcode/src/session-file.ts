@@ -150,15 +150,25 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
   return records;
 }
 
-// Work without a ticket: the next free `side-N` under `.plans/`, following the alignfirst skill's
-// side-ticket convention. Writing the session file under it is the reservation.
+// Work without a ticket: reserves the next free `side-N` under `.plans/`, following the alignfirst
+// skill's side-ticket convention. The non-recursive mkdir is the reservation: EEXIST means a
+// concurrent reservation took the id, so the loop moves on to the next one.
 export function reserveSideTicket(cwd: string): string {
+  const plansDir = join(cwd, ".plans");
   let highest = 0;
-  for (const entry of readEntries(join(cwd, ".plans"))) {
+  for (const entry of readEntries(plansDir)) {
     const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
     if (match) highest = Math.max(highest, Number(match[1]));
   }
-  return `side-${highest + 1}`;
+  for (let n = highest + 1; ; ++n) {
+    const ticket = `side-${n}`;
+    try {
+      mkdirSync(join(plansDir, ticket));
+      return ticket;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+  }
 }
 
 function readEntries(dir: string): Dirent[] {

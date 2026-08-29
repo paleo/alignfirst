@@ -5,6 +5,7 @@ alcode new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
 alcode new --message "..."
 alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
 alcode status
+alcode reserve-side-ticket
 ```
 
 | Command | Description |
@@ -12,19 +13,20 @@ alcode status
 | `new` | Start a new session. |
 | `resume <sessionId>` | Continue an existing session. |
 | `status` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
+| `reserve-side-ticket` | Reserve the next side ticket for work without a ticket: creates `.plans/side-N/` and prints `side-N`. Takes no option. Use it when you need the ticket ID before delegating; otherwise `new --no-ticket` reserves and delegates in one run. |
 
 | Option | Description |
 |--------|-------------|
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. `new --protocol` requires it, or `--no-ticket`. |
-| `--no-ticket` | Work without a ticket: `alcode` reserves the next side ticket `side-N` under `.plans/` and passes it to the agent. `new` only, with a protocol. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
+| `--no-ticket` | Work without a ticket: `alcode` reserves the next side ticket `side-N` and passes it to the agent. `new` only, with a protocol. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
 | `--message "..."` | Message to send, written in English. `-m` is the short form. Required for `spec`, `aad`, and when no `--protocol`. |
 | `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
 The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`alcode status` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+`alcode status` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits. `alcode reserve-side-ticket` needs `.plans/` and no coding agent.
 
 {{PERMISSIONS}}.
 

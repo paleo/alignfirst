@@ -39,12 +39,11 @@ For new single-project work where the user explicitly says there is no ticket:
 
 1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
 2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
-3. Inspect only directories matching `.plans/side-{N}`. Start at one above the highest N, or `side-1` when none exists.
-4. Atomically reserve the candidate with directory creation. If creation reports that it already exists, increment N and retry. Never reuse a candidate after a failed reservation.
-5. Set TICKET_ID to the reserved `side-N`. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
-6. Run the documented plans synchronization command again when the project has one.
+3. Run `alcode reserve-side-ticket` from PROJECT_PATH (`exec`). It creates the next free `.plans/side-N/` and prints `side-N`. Set TICKET_ID to that id.
+4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
+5. Run the documented plans synchronization command again when the project has one.
 
-The bot owns this reservation. Do not delegate side-ticket selection or request capture to alcode. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
+The bot owns this reservation and the request capture; the coding agent receives TICKET_ID. Do not use `alcode new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 
 ### Step 5 — The thread's state is its workspace
 
@@ -227,7 +226,7 @@ Clean logs are required for the manual test to pass.
 
 When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
 
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`alcode read`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
+- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (alcode, `read` protocol). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
 - **The user runs it.** They only need the dev-server up with its URL.
 
 ### Improving project docs

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,6 +93,9 @@ describe("parseAlcodeArgs", () => {
       variant: "openclaw",
     });
     expect(parseAlcodeArgs(["node", "alcode", "status"])).toEqual({ kind: "status" });
+    expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket"])).toEqual({
+      kind: "reserveSideTicket",
+    });
   });
 
   it("reads `new` options into camelCase fields", () => {
@@ -130,6 +133,9 @@ describe("parseAlcodeArgs", () => {
     expect(parseAlcodeArgs(["node", "alcode", "new", "--help"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "resume", "-h"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "status", "--help"])).toEqual({ kind: "help" });
+    expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket", "-h"])).toEqual({
+      kind: "help",
+    });
   });
 
   it("rejects a missing or unknown command", () => {
@@ -142,6 +148,7 @@ describe("parseAlcodeArgs", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
     expect(() => parse(["status", "--message", "go"])).toThrow();
+    expect(() => parse(["reserve-side-ticket", "extra"])).toThrow();
     expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
     expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow("exactly one <sessionId>");
   });
@@ -268,6 +275,40 @@ describe("status", () => {
       }),
     ).toBe(1);
     expect(stderr.text()).toBe("limits unavailable\n");
+  });
+});
+
+describe("reserve-side-ticket", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "alcode-reserve-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("prints the reserved id and creates its directory, without a coding agent", async () => {
+    mkdirSync(join(dir, ".plans", "side-1"), { recursive: true });
+    const stdout = makeSink();
+    const code = await main({
+      argv: ["node", "alcode", "reserve-side-ticket"],
+      cwd: dir,
+      env: {},
+      stdout,
+    });
+    expect(code).toBe(0);
+    expect(stdout.text()).toBe("side-2\n");
+    expect(existsSync(join(dir, ".plans", "side-2"))).toBe(true);
+  });
+
+  it("requires a .plans directory", async () => {
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "alcode", "reserve-side-ticket"],
+      cwd: dir,
+      env: {},
+      stderr,
+    });
+    expect(code).toBe(1);
+    expect(stderr.text()).toContain("no `.plans/` directory");
   });
 });
 
