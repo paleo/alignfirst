@@ -17,10 +17,12 @@ When the coding agent's own session on the host is missing or expired, `alcode` 
 ## Usage
 
 ```bash
-ALIGNFIRST_CODE_AGENT=claude alcode --new --protocol spec --ticket AB-123 --message "Feature description"
-ALIGNFIRST_CODE_AGENT=codex alcode --resume <sessionId> --protocol plan
-ALIGNFIRST_CODE_AGENT=codex alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
-ALIGNFIRST_CODE_AGENT=claude alcode --usage
+export ALIGNFIRST_CODE_AGENT=claude # or codex
+
+alcode --new --protocol spec --ticket AB-123 --message "Feature description"
+alcode --resume <sessionId> --protocol plan
+alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
+alcode --usage
 ```
 
 See `alcode --help` for all flags.
