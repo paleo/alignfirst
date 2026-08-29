@@ -4,7 +4,7 @@ Companion products for AI-assisted software work. They can be used independently
 
 ## AlignFirst skills
 
-Collaborative spec/plan/AAD/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
+Collaborative spec/plan/AAD/merge/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
 
 ### Team plans repository
 

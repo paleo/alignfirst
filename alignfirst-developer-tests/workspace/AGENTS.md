@@ -79,3 +79,4 @@ The dev servers of the projects you manage bind to ports in **6500–7700**.
 
 - **No sudo, no apt.** If you need a system package, ask `myclaw-adm`.
 - **No skill installation from ClawHub.** Your skill allowlist is fixed (`agents.defaults.skills` in `openclaw.json`); the `clawhub` skill is intentionally absent. To add a new skill, ask `myclaw-adm`.
+- **Don't try to "fix" Node yourself.** Don't add fnm or nvm. Don't reinstall openclaw/claude under a different prefix. Don't edit `~/.bash_profile` or the gateway unit file. If something looks off about Node, ask a sysadmin.

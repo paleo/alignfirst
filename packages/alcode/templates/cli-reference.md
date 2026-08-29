@@ -38,8 +38,8 @@ The default workflow. Always start with it, except for very insignificant tasks.
 For large work, do not rush. Decompose it yourself only when the concerns are truly distinct; otherwise write one big spec, iterate on discussing it with the agent, then translate it into one or several plans.
 
 1. **Spec** — `alcode --new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
-2. **Plan** — `alcode --resume <sessionId> --protocol plan`. The agent writes the plan file.
-3. **Execute** — `alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. When executing a main plan that spans several sub-plans and the working tree is clean, append to the message: *"Feel free to commit between each plan."*
+2. **Plan** — `alcode --resume <sessionId> --protocol plan`. The agent writes the plan file, or several sub-plans and a main plan for large work.
+3. **Execute** — `alcode --new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. Given a main plan, it spawns one subagent per sub-plan and writes a main summary; when the working tree is clean, append to the message: *"Feel free to commit between each plan."*
 4. **Commit** — use the suggested commit message from the spec file.
 
 Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
