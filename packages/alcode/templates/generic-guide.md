@@ -12,7 +12,7 @@ Running under OpenClaw? Read `alcode --openclaw-guide` instead — the same manu
 
 ## After a run completes
 
-Read the run's session file (the path `alcode` prints on its first line, under `_alcode/`): its frontmatter carries `status` (`succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Report it to the user where the work was requested. If the run failed, say so plainly and propose the next step.
+Run `alcode status <session-file>` with the path printed on the run's first line. This reconciles a stale `running` record before reporting its status. Then read the session file: its frontmatter carries `status` (`succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Report it to the user where the work was requested. If the run failed, say so plainly and propose the next step.
 
 An `exitReason` of `auth_required` in the frontmatter (alcode also exits `2`) means the coding agent is not authenticated on the host. An administrator must authenticate with {{AUTH_COMMAND}} before another run.
 

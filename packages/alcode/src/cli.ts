@@ -1,22 +1,24 @@
-import { readFileSync, realpathSync } from "node:fs";
-import { relative } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
-import { createAgentAdapter, type CodingAgent, resolveCodingAgent } from "./coding-agent.js";
+import { type CodingAgent, createAgentAdapter, resolveCodingAgent } from "./coding-agent.js";
 import { type GuideVariant, renderGuide } from "./guide.js";
 import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
+import { buildPrompt, PROTOCOLS } from "./prompt.js";
+import { buildAgentEnv, runAgent, type RunConfig, type RunOutput } from "./run-agent.js";
 import {
-  assertPlansGate,
   applyCompletion,
+  assertPlansGate,
   listSessionRecords,
+  readPidStartTime,
+  reconcileSessionFile,
   reserveSideTicket,
   resolveSessionFilePath,
   type SessionFrontmatter,
   type SessionRecord,
   writeInitialSessionFile,
 } from "./session-file.js";
-import { buildPrompt, PROTOCOLS } from "./prompt.js";
-import { buildAgentEnv, type RunConfig, type RunOutput, runAgent } from "./run-agent.js";
 import { readUsage, type UsageReader } from "./usage.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
@@ -46,7 +48,8 @@ export type AlcodeCommand =
   | { kind: "version" }
   | { kind: "help" }
   | { kind: "guide"; variant: GuideVariant }
-  | { kind: "status" }
+  | { kind: "status"; sessionFile: string }
+  | { kind: "usage" }
   | { kind: "reserveSideTicket" }
   | { kind: "session"; args: SessionArgs };
 
@@ -89,6 +92,17 @@ export async function main(options?: MainOptions): Promise<number> {
     stdout.write(`${reserveSideTicket(cwd)}\n`);
     return 0;
   }
+  if (command.kind === "status") {
+    try {
+      const sessionFilePath = resolveStatusSessionFile(cwd, command.sessionFile);
+      const completion = reconcileSessionFile(sessionFilePath);
+      stdout.write(renderSessionStatus(cwd, sessionFilePath, completion.frontmatter));
+      return 0;
+    } catch (error) {
+      stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      return 1;
+    }
+  }
 
   let agent: CodingAgent;
   try {
@@ -98,7 +112,7 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  if (command.kind === "status") {
+  if (command.kind === "usage") {
     try {
       const report = await (options?.usageReader ?? readUsage)(agent, { cwd, env });
       stdout.write(`${report.trimEnd()}\n`);
@@ -134,6 +148,52 @@ export async function main(options?: MainOptions): Promise<number> {
   });
 }
 
+function resolveStatusSessionFile(cwd: string, input: string): string {
+  const sessionFilePath = resolve(cwd, input);
+  const plansPath = resolve(cwd, ".plans");
+  if (
+    !isWithinDirectory(plansPath, sessionFilePath) ||
+    basename(dirname(sessionFilePath)) !== "_alcode" ||
+    extname(sessionFilePath) !== ".md"
+  ) {
+    throw new Error("Error: status requires a session file under .plans/**/_alcode/*.md.");
+  }
+  if (!existsSync(sessionFilePath)) {
+    throw new Error(`Error: session file not found: ${relative(cwd, sessionFilePath)}`);
+  }
+  if (!isWithinDirectory(realpathSync(plansPath), realpathSync(sessionFilePath))) {
+    throw new Error("Error: the session file resolves outside the current project's .plans/.");
+  }
+  return sessionFilePath;
+}
+
+function isWithinDirectory(directory: string, path: string): boolean {
+  const childPath = relative(directory, path);
+  return (
+    childPath !== "" &&
+    childPath !== ".." &&
+    !childPath.startsWith(`..${sep}`) &&
+    !isAbsolute(childPath)
+  );
+}
+
+function renderSessionStatus(
+  cwd: string,
+  sessionFilePath: string,
+  frontmatter: SessionFrontmatter,
+): string {
+  return [
+    `sessionFile: ${relative(cwd, sessionFilePath)}`,
+    `sessionId: ${frontmatter.sessionId ?? ""}`,
+    `status: ${frontmatter.status}`,
+    `pid: ${frontmatter.pid ?? ""}`,
+    `startedAt: ${frontmatter.startedAt}`,
+    `endedAt: ${frontmatter.endedAt ?? ""}`,
+    `exitReason: ${frontmatter.exitReason ?? ""}`,
+    "",
+  ].join("\n");
+}
+
 export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
   const [command, ...tokens] = argv.slice(2);
   switch (command) {
@@ -154,12 +214,28 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
     case "resume":
       return parseResumeCommand(tokens);
     case "status":
-      return parseBareCommand(tokens, "status");
+      return parseStatusCommand(tokens);
+    case "usage":
+      return parseBareCommand(tokens, "usage");
     case "reserve-side-ticket":
       return parseBareCommand(tokens, "reserveSideTicket");
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
+}
+
+function parseStatusCommand(tokens: string[]): AlcodeCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { help: { type: "boolean", short: "h", default: false } },
+    strict: true,
+    allowPositionals: true,
+  });
+  if (values.help) return { kind: "help" };
+  if (positionals.length !== 1) {
+    throw new Error("Error: `alcode status` takes exactly one <session-file>.");
+  }
+  return { kind: "status", sessionFile: positionals[0] };
 }
 
 function parseNewCommand(tokens: string[]): AlcodeCommand {
@@ -207,7 +283,7 @@ function parseResumeCommand(tokens: string[]): AlcodeCommand {
   };
 }
 
-function parseBareCommand(tokens: string[], kind: "status" | "reserveSideTicket"): AlcodeCommand {
+function parseBareCommand(tokens: string[], kind: "usage" | "reserveSideTicket"): AlcodeCommand {
   const { values } = parseArgs({
     args: tokens,
     options: { help: { type: "boolean", short: "h", default: false } },
@@ -449,6 +525,7 @@ function buildFrontmatter(
     command: formatCommand(args),
     meta: args.meta ?? null,
     pid: process.pid,
+    pidStartTime: readPidStartTime(process.pid),
     cwd: realCwd,
     startedAt: now.toISOString(),
     endedAt: null,
@@ -510,7 +587,8 @@ Usage:
   alcode new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
   alcode new --message "..."
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
-  alcode status
+  alcode status <session-file>
+  alcode usage
   alcode reserve-side-ticket
   alcode --guide
   alcode --openclaw-guide
@@ -520,7 +598,8 @@ Usage:
 Commands:
   new                   Start a new session; prints its Session ID at the end.
   resume <sessionId>    Continue an existing session.
-  status                Show the selected coding agent's current usage limits and reset times.
+  status <session-file> Reconcile and show one run's durable status. Does not start an agent.
+  usage                 Show the selected coding agent's current usage limits and reset times.
   reserve-side-ticket   Reserve the next side ticket for work without a ticket: creates
                         .plans/side-N/ and prints side-N.
 

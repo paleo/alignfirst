@@ -12,6 +12,8 @@ import {
   listSessionRecords,
   parseFrontmatter,
   readCompletion,
+  readPidStartTime,
+  reconcileSessionFile,
   reserveSideTicket,
   resolveSessionFilePath,
   serializeFrontmatter,
@@ -31,6 +33,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     command: "alcode new --protocol spec --ticket 29",
     meta: null,
     pid: null,
+    pidStartTime: null,
     cwd: null,
     startedAt: "2026-07-01T09:15:03.000Z",
     endedAt: null,
@@ -82,6 +85,7 @@ describe("frontmatter serialization", () => {
     command: 'alcode new --protocol spec --ticket 29 --message "do: it"',
     meta: "thread:room-1/abc.def",
     pid: 12345,
+    pidStartTime: "98765",
     cwd: "/home/user/proj",
   });
 
@@ -107,6 +111,8 @@ describe("frontmatter serialization", () => {
 
   it("parses an invalid or absent pid as null", () => {
     expect(parseFrontmatter("status: running\npid: not-a-number").pid).toBeNull();
+    expect(parseFrontmatter("status: running\npid: -1").pid).toBeNull();
+    expect(parseFrontmatter("status: running\npid: 1.5").pid).toBeNull();
     expect(parseFrontmatter("status: running").pid).toBeNull();
   });
 
@@ -168,6 +174,30 @@ describe("session file lifecycle", () => {
     expect(completion.frontmatter.status).toBe("failed");
     expect(completion.frontmatter.exitReason).toBe("error");
     expect(completion.result).toBe("boom");
+  });
+
+  it("reconciles a dead running process without waiting for another run", () => {
+    const child = spawnSync("node", ["-e", ""]);
+    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+    writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: child.pid }));
+
+    const completion = reconcileSessionFile(sessionFilePath, FIXED_DATE);
+
+    expect(completion.frontmatter.status).toBe("failed");
+    expect(completion.frontmatter.endedAt).toBe(FIXED_DATE.toISOString());
+    expect(completion.frontmatter.exitReason).toBe("terminated");
+    expect(completion.result).toContain("is gone");
+  });
+
+  it("detects pid reuse when Linux process start time differs", () => {
+    const currentStartTime = readPidStartTime(process.pid);
+    if (currentStartTime === null) return;
+    writeInitialSessionFile(
+      sessionFilePath,
+      makeFrontmatter({ pid: process.pid, pidStartTime: `${currentStartTime}-other` }),
+    );
+
+    expect(reconcileSessionFile(sessionFilePath).frontmatter.status).toBe("failed");
   });
 
   it("reads the terminal result even when the transcript echoes the result marker", () => {

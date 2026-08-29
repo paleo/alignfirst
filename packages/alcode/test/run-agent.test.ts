@@ -112,6 +112,7 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
     command: "alcode new --message go",
     meta: null,
     pid: process.pid,
+    pidStartTime: null,
     cwd: dir,
     startedAt: new Date(0).toISOString(),
     endedAt: null,

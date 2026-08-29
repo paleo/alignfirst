@@ -4,7 +4,8 @@
 alcode new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
 alcode new --message "..."
 alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
-alcode status
+alcode status <session-file>
+alcode usage
 alcode reserve-side-ticket
 ```
 
@@ -12,7 +13,8 @@ alcode reserve-side-ticket
 |---------|-------------|
 | `new` | Start a new session. |
 | `resume <sessionId>` | Continue an existing session. |
-| `status` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
+| `status <session-file>` | Reconcile and show one run's durable status. The path must be under `.plans/**/_alcode/`. Does not start a coding agent. |
+| `usage` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
 | `reserve-side-ticket` | Reserve the next side ticket for work without a ticket: creates `.plans/side-N/` and prints `side-N`. Takes no option. Use it when you need the ticket ID before delegating; otherwise `new --no-ticket` reserves and delegates in one run. |
 
 | Option | Description |
@@ -26,7 +28,7 @@ alcode reserve-side-ticket
 
 The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`alcode status` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits. `alcode reserve-side-ticket` needs `.plans/` and no coding agent.
+`alcode status <session-file>` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits. `alcode reserve-side-ticket` needs `.plans/` and no coding agent.
 
 {{PERMISSIONS}}.
 

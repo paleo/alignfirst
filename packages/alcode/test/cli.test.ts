@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,7 +101,11 @@ describe("parseAlcodeArgs", () => {
       kind: "guide",
       variant: "openclaw",
     });
-    expect(parseAlcodeArgs(["node", "alcode", "status"])).toEqual({ kind: "status" });
+    expect(parseAlcodeArgs(["node", "alcode", "status", ".plans/1/_alcode/run.md"])).toEqual({
+      kind: "status",
+      sessionFile: ".plans/1/_alcode/run.md",
+    });
+    expect(parseAlcodeArgs(["node", "alcode", "usage"])).toEqual({ kind: "usage" });
     expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket"])).toEqual({
       kind: "reserveSideTicket",
     });
@@ -133,6 +146,7 @@ describe("parseAlcodeArgs", () => {
     expect(parseAlcodeArgs(["node", "alcode", "new", "--help"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "resume", "-h"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "status", "--help"])).toEqual({ kind: "help" });
+    expect(parseAlcodeArgs(["node", "alcode", "usage", "--help"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket", "-h"])).toEqual({
       kind: "help",
     });
@@ -147,7 +161,11 @@ describe("parseAlcodeArgs", () => {
   it("rejects unknown options, stray positionals, and a resume without an id", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
+    expect(() => parseAlcodeArgs(["node", "alcode", "status"])).toThrow(
+      "exactly one <session-file>",
+    );
     expect(() => parse(["status", "--message", "go"])).toThrow();
+    expect(() => parse(["usage", "extra"])).toThrow();
     expect(() => parse(["reserve-side-ticket", "extra"])).toThrow();
     expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
     expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow("exactly one <sessionId>");
@@ -248,6 +266,114 @@ describe("validateSessionArgs", () => {
 });
 
 describe("status", () => {
+  let dir: string;
+  let sessionFilePath: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "alcode-status-"));
+    sessionFilePath = join(dir, ".plans", "1", "_alcode", "run.md");
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function writeStatusRecord(pid: number): void {
+    writeInitialSessionFile(sessionFilePath, {
+      status: "running",
+      agent: "claude",
+      protocol: "review",
+      ticket: "1",
+      model: null,
+      sessionId: "sess-42",
+      command: "alcode new --protocol review --ticket 1",
+      meta: null,
+      pid,
+      pidStartTime: null,
+      cwd: dir,
+      startedAt: "2026-08-29T11:55:29.000Z",
+      endedAt: null,
+      exitReason: null,
+    });
+  }
+
+  it("reconciles and reports a dead run without a coding agent", async () => {
+    const child = spawnSync("node", ["-e", ""]);
+    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+    writeStatusRecord(child.pid);
+    const stdout = makeSink();
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", ".plans/1/_alcode/run.md"],
+        cwd: dir,
+        env: {},
+        stdout,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toContain("sessionFile: .plans/1/_alcode/run.md\nstatus: failed\n");
+    expect(stdout.text()).toContain("sessionId: sess-42\n");
+    expect(stdout.text()).toContain("exitReason: terminated\n");
+    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
+  });
+
+  it("reports a live run without changing its record", async () => {
+    writeStatusRecord(process.pid);
+    const stdout = makeSink();
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", ".plans/1/_alcode/run.md"],
+        cwd: dir,
+        env: {},
+        stdout,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toContain("status: running\n");
+    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("running");
+  });
+
+  it("rejects files outside the session-record tree", async () => {
+    const stderr = makeSink();
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", "notes.md"],
+        cwd: dir,
+        env: {},
+        stderr,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toContain("session file under .plans/**/_alcode/*.md");
+  });
+
+  it("reports a missing session file in its own words", async () => {
+    const stderr = makeSink();
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", ".plans/1/_alcode/run.md"],
+        cwd: dir,
+        env: {},
+        stderr,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toBe("Error: session file not found: .plans/1/_alcode/run.md\n");
+  });
+
+  it("rejects a session-path symlink that resolves outside .plans", async () => {
+    mkdirSync(join(dir, ".plans", "1", "_alcode"), { recursive: true });
+    const outsidePath = join(dir, "outside.md");
+    writeFileSync(outsidePath, "keep me");
+    symlinkSync(outsidePath, sessionFilePath);
+    const stderr = makeSink();
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", ".plans/1/_alcode/run.md"],
+        cwd: dir,
+        env: {},
+        stderr,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toContain("resolves outside");
+  });
+});
+
+describe("usage", () => {
   it("reads usage without a plans directory or model discovery", async () => {
     const stdout = makeSink();
     const modelResolver = vi.fn(async () => {
@@ -257,7 +383,7 @@ describe("status", () => {
 
     expect(
       await main({
-        argv: ["node", "alcode", "status"],
+        argv: ["node", "alcode", "usage"],
         cwd: tmpdir(),
         env: { ALIGNFIRST_CODE_AGENT: "claude" },
         stdout,
@@ -280,7 +406,7 @@ describe("status", () => {
     };
     expect(
       await main({
-        argv: ["node", "alcode", "status"],
+        argv: ["node", "alcode", "usage"],
         env: { ALIGNFIRST_CODE_AGENT: "codex" },
         stderr,
         usageReader,
@@ -338,6 +464,7 @@ describe("resolveTicket", () => {
         command: "alcode new --protocol spec --ticket 30 --message go",
         meta: null,
         pid: null,
+        pidStartTime: null,
         cwd: "/proj",
         startedAt: "2026-07-01T09:15:03.000Z",
         endedAt: null,
@@ -450,6 +577,7 @@ describe("launch guards", () => {
       command: "alcode new --protocol spec --ticket 30 --message go",
       meta: null,
       pid: process.pid,
+      pidStartTime: null,
       cwd: realCwd,
       startedAt: "2026-07-01T09:15:03.000Z",
       endedAt: null,
