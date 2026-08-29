@@ -27,7 +27,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     ticket: "29",
     model: null,
     sessionId: null,
-    command: "alcode --new --protocol spec --ticket 29",
+    command: "alcode new --protocol spec --ticket 29",
     meta: null,
     pid: null,
     cwd: null,
@@ -78,7 +78,7 @@ describe("resolveSessionFilePath", () => {
 
 describe("frontmatter serialization", () => {
   const frontmatter = makeFrontmatter({
-    command: 'alcode --new --protocol spec --ticket 29 --message "do: it"',
+    command: 'alcode new --protocol spec --ticket 29 --message "do: it"',
     meta: "thread:room-1/abc.def",
     pid: 12345,
     cwd: "/home/user/proj",
@@ -154,7 +154,7 @@ describe("session file lifecycle", () => {
   it("records a failed completion", () => {
     writeInitialSessionFile(
       sessionFilePath,
-      makeFrontmatter({ protocol: null, ticket: null, command: "alcode --new --message hi" }),
+      makeFrontmatter({ protocol: null, ticket: null, command: "alcode new --message hi" }),
     );
     applyCompletion(sessionFilePath, {
       status: "failed",
@@ -174,7 +174,7 @@ describe("session file lifecycle", () => {
       sessionFilePath,
       makeFrontmatter({
         protocol: "aad",
-        command: "alcode --new --protocol aad --ticket 29 --message go",
+        command: "alcode new --protocol aad --ticket 29 --message go",
       }),
     );
     // The agent echoes a whole session file into the transcript, spurious marker and all.

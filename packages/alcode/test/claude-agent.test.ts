@@ -12,7 +12,6 @@ const BASE: RunConfig = {
   prompt: "do the thing",
   sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
-  isNew: true,
   executableModel: undefined,
   skipPermissions: false,
   unset: [],

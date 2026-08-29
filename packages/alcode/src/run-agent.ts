@@ -8,7 +8,6 @@ export interface RunConfig {
   prompt: string;
   sessionFilePath: string;
   cwd: string;
-  isNew: boolean;
   resume?: string;
   executableModel: string | undefined;
   skipPermissions: boolean;

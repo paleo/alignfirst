@@ -13,7 +13,7 @@ Under OpenClaw, background it through the `exec` tool:
 - Before the first `alcode` run of this session, call the `session_status` tool and read the `Session:` line from its result — that is this session's key. Obtain it once, reuse it for every run of this session.
 - The exec command chains a completion wake onto the run:
 
-  `alcode <flags> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
+  `alcode <command> <options> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
   Chain with `;` (never `&&`) so a failed run wakes you too. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it — never wait for either text.
 - Pass `background: true` and `timeout: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.

@@ -19,15 +19,18 @@ When the coding agent's own session on the host is missing or expired, `alcode` 
 ```bash
 export ALIGNFIRST_CODE_AGENT=claude # or codex
 
-alcode --new --protocol spec --ticket AB-123 --message "Feature description"
-alcode --resume <sessionId> --protocol plan
-alcode --new --message "Execute the plan: .plans/AB-123/A2-plan.md"
-alcode --status
+alcode new --protocol spec --ticket AB-123 --message "Feature description"
+alcode resume <sessionId> --protocol plan
+alcode new --message "Execute the plan: .plans/AB-123/A2-plan.md"
+alcode new --protocol aad --no-ticket --message "Task description"
+alcode status
 ```
 
-See `alcode --help` for all flags.
+See `alcode --help` for all commands and options.
 
-`alcode --status` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
+A new protocol session needs a ticket. `--no-ticket` makes `alcode` reserve the next side ticket (`side-N` under `.plans/`) and pass it to the agent.
+
+`alcode status` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
 
 ## Coding agents
 

@@ -150,6 +150,17 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
   return records;
 }
 
+// Work without a ticket: the next free `side-N` under `.plans/`, following the alignfirst skill's
+// side-ticket convention. Writing the session file under it is the reservation.
+export function reserveSideTicket(cwd: string): string {
+  let highest = 0;
+  for (const entry of readEntries(join(cwd, ".plans"))) {
+    const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  return `side-${highest + 1}`;
+}
+
 function readEntries(dir: string): Dirent[] {
   try {
     return readdirSync(dir, { withFileTypes: true });
