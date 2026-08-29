@@ -307,8 +307,9 @@ describe("status", () => {
         stdout,
       }),
     ).toBe(0);
-    expect(stdout.text()).toContain("sessionFile: .plans/1/_alcode/run.md\nstatus: failed\n");
-    expect(stdout.text()).toContain("sessionId: sess-42\n");
+    expect(stdout.text()).toContain(
+      "sessionFile: .plans/1/_alcode/run.md\nsessionId: sess-42\nstatus: failed\n",
+    );
     expect(stdout.text()).toContain("exitReason: terminated\n");
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
   });
