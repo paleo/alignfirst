@@ -187,6 +187,12 @@ describe("validateSessionArgs", () => {
     expect(validate(["resume", "s"])).toBe(
       "Error: --message is required when --protocol is not specified.",
     );
+    expect(validate(["new", "--message", ""])).toBe(
+      "Error: --message is required when --protocol is not specified.",
+    );
+    expect(validate(["new", "--message", "   "])).toBe(
+      "Error: --message is required when --protocol is not specified.",
+    );
   });
 
   it("requires --ticket or --no-ticket with `new --protocol`", () => {
@@ -211,6 +217,12 @@ describe("validateSessionArgs", () => {
       "Error: --protocol spec requires --message.",
     );
     expect(validate(["new", "--protocol", "aad", "--no-ticket"])).toBe(
+      "Error: --protocol aad requires --message.",
+    );
+    expect(validate(["new", "--protocol", "spec", "--ticket", "1", "--message", ""])).toBe(
+      "Error: --protocol spec requires --message.",
+    );
+    expect(validate(["new", "--protocol", "aad", "--no-ticket", "--message", "\t"])).toBe(
       "Error: --protocol aad requires --message.",
     );
   });

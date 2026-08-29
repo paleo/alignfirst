@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { CodingAgent } from "./coding-agent.js";
@@ -6,6 +6,12 @@ import { buildAgentEnv } from "./run-agent.js";
 
 const USAGE_TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
+const DEFAULT_USAGE_PROCESS_ADAPTER: UsageProcessAdapter = {
+  execute: executeUsageProcess,
+  spawn: spawnUsageProcess,
+};
+
+export const readUsage: UsageReader = createUsageReader();
 
 export interface UsageContext {
   cwd: string;
@@ -13,6 +19,20 @@ export interface UsageContext {
 }
 
 export type UsageReader = (agent: CodingAgent, context: UsageContext) => Promise<string>;
+
+export interface UsageProcessAdapter {
+  execute(
+    file: string,
+    args: string[],
+    options: UsageProcessOptions & { timeout: number },
+  ): Promise<{ stdout: string }>;
+  spawn(file: string, args: string[], options: UsageProcessOptions): ChildProcessWithoutNullStreams;
+}
+
+interface UsageProcessOptions {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}
 
 interface RateLimitWindow {
   usedPercent: number;
@@ -26,22 +46,30 @@ interface RateLimitBucket {
   windows: RateLimitWindow[];
 }
 
-export async function readUsage(agent: CodingAgent, context: UsageContext): Promise<string> {
-  const env = buildAgentEnv(context.env, (context.env.ALIGNFIRST_CODE_UNSET ?? "").split(","));
-  return agent === "claude"
-    ? readClaudeUsage({ ...context, env })
-    : readCodexUsage({ ...context, env });
+export function createUsageReader(
+  adapter: UsageProcessAdapter = DEFAULT_USAGE_PROCESS_ADAPTER,
+  timeoutMs = USAGE_TIMEOUT_MS,
+): UsageReader {
+  return async (agent, context) => {
+    const env = buildAgentEnv(context.env, (context.env.ALIGNFIRST_CODE_UNSET ?? "").split(","));
+    return agent === "claude"
+      ? readClaudeUsage({ ...context, env }, adapter, timeoutMs)
+      : readCodexUsage({ ...context, env }, adapter, timeoutMs);
+  };
 }
 
-async function readClaudeUsage(context: UsageContext): Promise<string> {
-  const { stdout } = await execFileAsync(
+async function readClaudeUsage(
+  context: UsageContext,
+  adapter: UsageProcessAdapter,
+  timeoutMs: number,
+): Promise<string> {
+  const { stdout } = await adapter.execute(
     "claude",
     ["-p", "/usage", "--tools", "", "--output-format", "json", "--no-session-persistence"],
     {
       cwd: context.cwd,
       env: context.env,
-      encoding: "utf8",
-      timeout: USAGE_TIMEOUT_MS,
+      timeout: timeoutMs,
     },
   );
   return `Claude Code usage\n\n${parseClaudeUsage(stdout)}`;
@@ -64,20 +92,32 @@ export function parseClaudeUsage(stdout: string): string {
   return trimmed;
 }
 
-async function readCodexUsage(context: UsageContext): Promise<string> {
-  const response = await requestCodexUsage(context);
+async function readCodexUsage(
+  context: UsageContext,
+  adapter: UsageProcessAdapter,
+  timeoutMs: number,
+): Promise<string> {
+  const response = await requestCodexUsage(context, adapter, timeoutMs);
   return formatCodexUsage(response);
 }
 
-function requestCodexUsage(context: UsageContext): Promise<unknown> {
-  const child = spawn("codex", ["app-server"], {
+function requestCodexUsage(
+  context: UsageContext,
+  adapter: UsageProcessAdapter,
+  timeoutMs: number,
+): Promise<unknown> {
+  const child = adapter.spawn("codex", ["app-server"], {
     cwd: context.cwd,
     env: context.env,
-    stdio: ["pipe", "pipe", "pipe"],
   });
+  return exchangeCodexMessages(child, timeoutMs);
+}
+
+function exchangeCodexMessages(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number,
+): Promise<unknown> {
   const detachGuard = guardChild(child);
-  let stdout = "";
-  let stderr = "";
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -92,67 +132,15 @@ function requestCodexUsage(context: UsageContext): Promise<unknown> {
     };
     const timer = setTimeout(
       () => finish(new Error("Codex timed out while reading usage limits.")),
-      USAGE_TIMEOUT_MS,
+      timeoutMs,
     );
-
-    child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk: string) => {
-      stdout += chunk;
-      stdout = drainJsonLines(stdout, (message) => {
-        if (message.id === 0 && message.result !== undefined) {
-          sendCodexMessage(child, { method: "initialized", params: {} });
-          sendCodexMessage(child, { method: "account/rateLimits/read", id: 1 });
-        }
-        if (message.id !== 1) return;
-        if (isRecord(message.error)) {
-          const detail = message.error.message;
-          finish(
-            new Error(
-              typeof detail === "string"
-                ? `Codex could not read usage limits: ${detail}`
-                : "Codex could not read the current usage limits.",
-            ),
-          );
-          return;
-        }
-        finish(undefined, message.result);
-      });
-    });
-    child.stderr?.setEncoding("utf8");
-    child.stderr?.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.stdin?.on("error", (error) => {
-      finish(new Error(`Codex could not read usage limits: ${error.message}`));
-    });
-    child.on("error", (error) => finish(error));
-    child.on("close", (code) => {
-      if (settled) return;
-      const detail = stderr.trim();
-      finish(
-        new Error(
-          detail !== ""
-            ? `Codex could not read usage limits: ${detail}`
-            : `Codex app-server exited with code ${code ?? "unknown"}.`,
-        ),
-      );
-    });
-
-    sendCodexMessage(child, {
-      method: "initialize",
-      id: 0,
-      params: {
-        clientInfo: {
-          name: "alcode",
-          title: "AlignFirst alcode",
-          version: "0.0.0",
-        },
-      },
-    });
+    const readStderr = observeCodexOutput(child, finish);
+    observeCodexLifecycle(child, finish, () => settled, readStderr);
+    initializeCodex(child);
   });
 }
 
-function guardChild(child: ChildProcess): () => void {
+function guardChild(child: ChildProcessWithoutNullStreams): () => void {
   const kill = () => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
   };
@@ -160,8 +148,22 @@ function guardChild(child: ChildProcess): () => void {
   return () => process.off("exit", kill);
 }
 
-function sendCodexMessage(child: ChildProcess, message: unknown): void {
-  child.stdin?.write(`${JSON.stringify(message)}\n`);
+function observeCodexOutput(
+  child: ChildProcessWithoutNullStreams,
+  finish: (error: Error | undefined, result?: unknown) => void,
+): () => string {
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+    stdout = drainJsonLines(stdout, (message) => handleCodexMessage(child, message, finish));
+  });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  return () => stderr;
 }
 
 function drainJsonLines(
@@ -181,6 +183,91 @@ function drainJsonLines(
     if (isRecord(value)) onMessage(value);
   }
   return rest;
+}
+
+function handleCodexMessage(
+  child: ChildProcessWithoutNullStreams,
+  message: Record<string, unknown>,
+  finish: (error: Error | undefined, result?: unknown) => void,
+): void {
+  if (message.id === 0 && message.result !== undefined) {
+    sendCodexMessage(child, { method: "initialized", params: {} });
+    sendCodexMessage(child, { method: "account/rateLimits/read", id: 1 });
+  }
+  if (message.id !== 1) return;
+  if (isRecord(message.error)) {
+    const detail = message.error.message;
+    finish(
+      new Error(
+        typeof detail === "string"
+          ? `Codex could not read usage limits: ${detail}`
+          : "Codex could not read the current usage limits.",
+      ),
+    );
+    return;
+  }
+  finish(undefined, message.result);
+}
+
+function sendCodexMessage(child: ChildProcessWithoutNullStreams, message: unknown): void {
+  child.stdin.write(`${JSON.stringify(message)}\n`);
+}
+
+function observeCodexLifecycle(
+  child: ChildProcessWithoutNullStreams,
+  finish: (error: Error | undefined) => void,
+  isSettled: () => boolean,
+  readStderr: () => string,
+): void {
+  child.stdin.on("error", (error) => {
+    finish(new Error(`Codex could not read usage limits: ${error.message}`));
+  });
+  child.on("error", (error) => finish(error));
+  child.on("close", (code) => {
+    if (isSettled()) return;
+    const detail = readStderr().trim();
+    finish(
+      new Error(
+        detail !== ""
+          ? `Codex could not read usage limits: ${detail}`
+          : `Codex app-server exited with code ${code ?? "unknown"}.`,
+      ),
+    );
+  });
+}
+
+function initializeCodex(child: ChildProcessWithoutNullStreams): void {
+  sendCodexMessage(child, {
+    method: "initialize",
+    id: 0,
+    params: {
+      clientInfo: {
+        name: "alcode",
+        title: "AlignFirst alcode",
+        version: "0.0.0",
+      },
+    },
+  });
+}
+
+async function executeUsageProcess(
+  file: string,
+  args: string[],
+  options: UsageProcessOptions & { timeout: number },
+): Promise<{ stdout: string }> {
+  const { stdout } = await execFileAsync(file, args, {
+    ...options,
+    encoding: "utf8",
+  });
+  return { stdout };
+}
+
+function spawnUsageProcess(
+  file: string,
+  args: string[],
+  options: UsageProcessOptions,
+): ChildProcessWithoutNullStreams {
+  return spawn(file, args, { ...options, stdio: ["pipe", "pipe", "pipe"] });
 }
 
 export function formatCodexUsage(

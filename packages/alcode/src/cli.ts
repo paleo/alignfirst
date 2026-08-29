@@ -221,13 +221,14 @@ export function validateSessionArgs(
   models: readonly string[],
 ): string | undefined {
   const isNew = args.resume === undefined;
+  const hasMessage = args.message !== undefined && args.message.trim() !== "";
   if (args.protocol !== undefined && !(PROTOCOLS as readonly string[]).includes(args.protocol)) {
     return `Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`;
   }
   if (args.model !== undefined && !models.includes(args.model)) {
     return `Error: --model must be one of: ${models.join(", ")}.`;
   }
-  if (args.protocol === undefined && args.message === undefined) {
+  if (args.protocol === undefined && !hasMessage) {
     return "Error: --message is required when --protocol is not specified.";
   }
   if (args.ticket !== undefined && args.noTicket) {
@@ -239,7 +240,7 @@ export function validateSessionArgs(
   if (isNew && args.protocol !== undefined && args.ticket === undefined && !args.noTicket) {
     return "Error: --ticket or --no-ticket is required with `new --protocol`.";
   }
-  if (["spec", "aad"].includes(args.protocol ?? "") && args.message === undefined) {
+  if (["spec", "aad"].includes(args.protocol ?? "") && !hasMessage) {
     return `Error: --protocol ${args.protocol} requires --message.`;
   }
   if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
