@@ -248,6 +248,8 @@ It's also how you show code. The user is a developer with the repository on thei
 
 ### Code review
 
+Before every code review, always start by updating both the base branch and the branch to review.
+
 A code review is the review workflow from the delegation guide: a fresh alcode session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
 - **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
