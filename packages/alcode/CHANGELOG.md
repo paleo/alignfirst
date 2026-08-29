@@ -1,5 +1,16 @@
 # @paleo/alcode
 
+## 0.11.0
+
+### Minor Changes
+
+- 99fe331: The CLI is now command-based: `alcode new`, `alcode resume <sessionId>`, `alcode status <session-file>`, and `alcode usage`. `status` reconciles stale runs before reporting them. `new --protocol` requires `--ticket <id>` or `--no-ticket`, which reserves a `side-N` ticket; `alcode reserve-side-ticket` reserves one and prints its id. Added the `-m` alias for `--message`. Required messages reject blank values.
+- 99fe331: Added `alcode usage` to show the selected coding agent's current usage limits.
+
+### Patch Changes
+
+- 99fe331: Explained in the delegation guide how a main plan executes: one subagent per sub-plan, orchestrated by the executing agent.
+
 ## 0.10.2
 
 ### Patch Changes
