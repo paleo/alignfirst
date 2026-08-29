@@ -12,6 +12,9 @@ import {
   listSessionRecords,
   parseFrontmatter,
   readCompletion,
+  readPidStartTime,
+  reconcileSessionFile,
+  reserveSideTicket,
   resolveSessionFilePath,
   serializeFrontmatter,
   writeInitialSessionFile,
@@ -27,9 +30,10 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     ticket: "29",
     model: null,
     sessionId: null,
-    command: "alcode --new --protocol spec --ticket 29",
+    command: "alcode new --protocol spec --ticket 29",
     meta: null,
     pid: null,
+    pidStartTime: null,
     cwd: null,
     startedAt: "2026-07-01T09:15:03.000Z",
     endedAt: null,
@@ -78,9 +82,10 @@ describe("resolveSessionFilePath", () => {
 
 describe("frontmatter serialization", () => {
   const frontmatter = makeFrontmatter({
-    command: 'alcode --new --protocol spec --ticket 29 --message "do: it"',
+    command: 'alcode new --protocol spec --ticket 29 --message "do: it"',
     meta: "thread:room-1/abc.def",
     pid: 12345,
+    pidStartTime: "98765",
     cwd: "/home/user/proj",
   });
 
@@ -106,6 +111,8 @@ describe("frontmatter serialization", () => {
 
   it("parses an invalid or absent pid as null", () => {
     expect(parseFrontmatter("status: running\npid: not-a-number").pid).toBeNull();
+    expect(parseFrontmatter("status: running\npid: -1").pid).toBeNull();
+    expect(parseFrontmatter("status: running\npid: 1.5").pid).toBeNull();
     expect(parseFrontmatter("status: running").pid).toBeNull();
   });
 
@@ -154,7 +161,7 @@ describe("session file lifecycle", () => {
   it("records a failed completion", () => {
     writeInitialSessionFile(
       sessionFilePath,
-      makeFrontmatter({ protocol: null, ticket: null, command: "alcode --new --message hi" }),
+      makeFrontmatter({ protocol: null, ticket: null, command: "alcode new --message hi" }),
     );
     applyCompletion(sessionFilePath, {
       status: "failed",
@@ -169,12 +176,36 @@ describe("session file lifecycle", () => {
     expect(completion.result).toBe("boom");
   });
 
+  it("reconciles a dead running process without waiting for another run", () => {
+    const child = spawnSync("node", ["-e", ""]);
+    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+    writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: child.pid }));
+
+    const completion = reconcileSessionFile(sessionFilePath, FIXED_DATE);
+
+    expect(completion.frontmatter.status).toBe("failed");
+    expect(completion.frontmatter.endedAt).toBe(FIXED_DATE.toISOString());
+    expect(completion.frontmatter.exitReason).toBe("terminated");
+    expect(completion.result).toContain("is gone");
+  });
+
+  it("detects pid reuse when Linux process start time differs", () => {
+    const currentStartTime = readPidStartTime(process.pid);
+    if (currentStartTime === null) return;
+    writeInitialSessionFile(
+      sessionFilePath,
+      makeFrontmatter({ pid: process.pid, pidStartTime: `${currentStartTime}-other` }),
+    );
+
+    expect(reconcileSessionFile(sessionFilePath).frontmatter.status).toBe("failed");
+  });
+
   it("reads the terminal result even when the transcript echoes the result marker", () => {
     writeInitialSessionFile(
       sessionFilePath,
       makeFrontmatter({
         protocol: "aad",
-        command: "alcode --new --protocol aad --ticket 29 --message go",
+        command: "alcode new --protocol aad --ticket 29 --message go",
       }),
     );
     // The agent echoes a whole session file into the transcript, spurious marker and all.
@@ -187,6 +218,40 @@ describe("session file lifecycle", () => {
       result: "the real result",
     });
     expect(readCompletion(sessionFilePath).result).toBe("the real result");
+  });
+});
+
+describe("reserveSideTicket", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "alcode-side-"));
+    mkdirSync(join(dir, ".plans"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("starts at side-1 and creates the directory", () => {
+    expect(reserveSideTicket(dir)).toBe("side-1");
+    expect(existsSync(join(dir, ".plans", "side-1"))).toBe(true);
+  });
+
+  it("takes one above the highest side-N directory, ignoring other names", () => {
+    mkdirSync(join(dir, ".plans", "side-1"));
+    mkdirSync(join(dir, ".plans", "side-3"));
+    mkdirSync(join(dir, ".plans", "side-notes"));
+    mkdirSync(join(dir, ".plans", "42"));
+    expect(reserveSideTicket(dir)).toBe("side-4");
+  });
+
+  it("skips a candidate whose creation loses to an existing entry", () => {
+    mkdirSync(join(dir, ".plans", "side-1"));
+    writeFileSync(join(dir, ".plans", "side-2"), ""); // not a directory: invisible to the scan
+    expect(reserveSideTicket(dir)).toBe("side-3");
+    expect(existsSync(join(dir, ".plans", "side-3"))).toBe(true);
+  });
+
+  it("reserves consecutive ids on successive calls", () => {
+    expect(reserveSideTicket(dir)).toBe("side-1");
+    expect(reserveSideTicket(dir)).toBe("side-2");
   });
 });
 

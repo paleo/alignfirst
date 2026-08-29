@@ -24,9 +24,19 @@ describe("renderGuide", () => {
       const guide = renderGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("## CLI reference");
+      expect(guide).toContain("alcode status <session-file>");
+      expect(guide).toContain("alcode usage");
+      expect(guide).toContain("current usage limits and reset times");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
       expect(guide).toContain("Stop AAD now. Start a spec instead (alignfirst).");
       expect(guide).toContain("`fable`, `opus`, `sonnet`, `haiku`");
+    }
+  });
+
+  it("requires stale-run reconciliation before completion reporting", () => {
+    for (const variant of ["generic", "openclaw"] as const) {
+      const guide = renderGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
+      expect(guide).toContain("Run `alcode status <session-file>`");
     }
   });
 

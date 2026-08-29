@@ -27,7 +27,7 @@ export default async function alcodeAgentContract(ctx: ScenarioContext): Promise
   assertEqual(agent, mock.selectedAgent, "runner and gateway coding-agent selectors");
 
   const first = await runAlcode(ctx, [
-    "--new",
+    "new",
     "--ticket",
     TICKET_ID,
     "--message",
@@ -42,7 +42,7 @@ export default async function alcodeAgentContract(ctx: ScenarioContext): Promise
   assertSelectedNewCall(mock, agent);
 
   const resumed = await runAlcode(ctx, [
-    "--resume",
+    "resume",
     sessionId,
     "--message",
     RESUME_MESSAGE,
@@ -230,7 +230,7 @@ async function assertCodexFailure(
 ): Promise<void> {
   mock.queueCodexResponse(variant);
   const run = await runAlcode(ctx, [
-    "--new",
+    "new",
     "--ticket",
     TICKET_ID,
     "--message",

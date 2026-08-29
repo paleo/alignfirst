@@ -1,25 +1,38 @@
-import { readFileSync, realpathSync } from "node:fs";
-import { relative } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
-import { createAgentAdapter, type CodingAgent, resolveCodingAgent } from "./coding-agent.js";
-import { renderGuide } from "./guide.js";
+import { type CodingAgent, createAgentAdapter, resolveCodingAgent } from "./coding-agent.js";
+import { type GuideVariant, renderGuide } from "./guide.js";
 import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
+import { buildPrompt, PROTOCOLS } from "./prompt.js";
+import { buildAgentEnv, runAgent, type RunConfig, type RunOutput } from "./run-agent.js";
 import {
-  assertPlansGate,
   applyCompletion,
+  assertPlansGate,
   listSessionRecords,
+  readPidStartTime,
+  reconcileSessionFile,
+  reserveSideTicket,
   resolveSessionFilePath,
   type SessionFrontmatter,
   type SessionRecord,
   writeInitialSessionFile,
 } from "./session-file.js";
-import { buildPrompt, PROTOCOLS } from "./prompt.js";
-import { buildAgentEnv, type RunConfig, type RunOutput, runAgent } from "./run-agent.js";
+import { readUsage, type UsageReader } from "./usage.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
 const EXIT_AUTH_REQUIRED = 2;
+
+const SESSION_OPTIONS = {
+  protocol: { type: "string" },
+  ticket: { type: "string" },
+  message: { type: "string", short: "m" },
+  model: { type: "string" },
+  meta: { type: "string" },
+  help: { type: "boolean", short: "h", default: false },
+} as const;
 
 export interface MainOptions {
   argv?: string[];
@@ -28,6 +41,27 @@ export interface MainOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   modelResolver?: ExecutableModelResolver;
+  usageReader?: UsageReader;
+}
+
+export type AlcodeCommand =
+  | { kind: "version" }
+  | { kind: "help" }
+  | { kind: "guide"; variant: GuideVariant }
+  | { kind: "status"; sessionFile: string }
+  | { kind: "usage" }
+  | { kind: "reserveSideTicket" }
+  | { kind: "session"; args: SessionArgs };
+
+// `resume` undefined means a new session.
+export interface SessionArgs {
+  resume?: string;
+  ticket?: string;
+  noTicket: boolean;
+  protocol?: string;
+  message?: string;
+  model?: string;
+  meta?: string;
 }
 
 export async function main(options?: MainOptions): Promise<number> {
@@ -37,17 +71,37 @@ export async function main(options?: MainOptions): Promise<number> {
   const cwd = options?.cwd ?? process.cwd();
   const env = options?.env ?? process.env;
 
-  let parsed: AlcodeArgs;
+  let command: AlcodeCommand;
   try {
-    parsed = parseAlcodeArgs(argv);
+    command = parseAlcodeArgs(argv);
   } catch (err) {
     stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 
-  if (parsed.version) {
+  if (command.kind === "version") {
     stdout.write(`${readPackageVersion()}\n`);
     return 0;
+  }
+  if (command.kind === "reserveSideTicket") {
+    const gateError = assertPlansGate(cwd);
+    if (gateError) {
+      stderr.write(`${gateError}\n`);
+      return 1;
+    }
+    stdout.write(`${reserveSideTicket(cwd)}\n`);
+    return 0;
+  }
+  if (command.kind === "status") {
+    try {
+      const sessionFilePath = resolveStatusSessionFile(cwd, command.sessionFile);
+      const completion = reconcileSessionFile(sessionFilePath);
+      stdout.write(renderSessionStatus(cwd, sessionFilePath, completion.frontmatter));
+      return 0;
+    } catch (error) {
+      stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      return 1;
+    }
   }
 
   let agent: CodingAgent;
@@ -58,23 +112,34 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
+  if (command.kind === "usage") {
+    try {
+      const report = await (options?.usageReader ?? readUsage)(agent, { cwd, env });
+      stdout.write(`${report.trimEnd()}\n`);
+      return 0;
+    } catch (error) {
+      stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      return 1;
+    }
+  }
+
   const models = resolveModels(agent, env);
-  if (parsed.help) {
+  if (command.kind === "help") {
     stdout.write(renderHelp(agent, models));
     return 0;
   }
-  if (parsed.guide || parsed.openclawGuide) {
-    stdout.write(`${renderGuide(parsed.openclawGuide ? "openclaw" : "generic", agent, models)}\n`);
+  if (command.kind === "guide") {
+    stdout.write(`${renderGuide(command.variant, agent, models)}\n`);
     return 0;
   }
 
-  const validationError = validateArgs(parsed, models);
+  const validationError = validateSessionArgs(command.args, models);
   if (validationError) {
     stderr.write(`${validationError}\n`);
     return 1;
   }
 
-  return runSession(parsed, agent, {
+  return runSession(command.args, agent, {
     cwd,
     env,
     stdout,
@@ -83,12 +148,191 @@ export async function main(options?: MainOptions): Promise<number> {
   });
 }
 
-function readPackageVersion(): string {
-  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
-    version?: string;
+function resolveStatusSessionFile(cwd: string, input: string): string {
+  const sessionFilePath = resolve(cwd, input);
+  const plansPath = resolve(cwd, ".plans");
+  if (
+    !isWithinDirectory(plansPath, sessionFilePath) ||
+    basename(dirname(sessionFilePath)) !== "_alcode" ||
+    extname(sessionFilePath) !== ".md"
+  ) {
+    throw new Error("Error: status requires a session file under .plans/**/_alcode/*.md.");
+  }
+  if (!existsSync(sessionFilePath)) {
+    throw new Error(`Error: session file not found: ${relative(cwd, sessionFilePath)}`);
+  }
+  if (!isWithinDirectory(realpathSync(plansPath), realpathSync(sessionFilePath))) {
+    throw new Error("Error: the session file resolves outside the current project's .plans/.");
+  }
+  return sessionFilePath;
+}
+
+function isWithinDirectory(directory: string, path: string): boolean {
+  const childPath = relative(directory, path);
+  return (
+    childPath !== "" &&
+    childPath !== ".." &&
+    !childPath.startsWith(`..${sep}`) &&
+    !isAbsolute(childPath)
+  );
+}
+
+function renderSessionStatus(
+  cwd: string,
+  sessionFilePath: string,
+  frontmatter: SessionFrontmatter,
+): string {
+  return [
+    `sessionFile: ${relative(cwd, sessionFilePath)}`,
+    `sessionId: ${frontmatter.sessionId ?? ""}`,
+    `status: ${frontmatter.status}`,
+    `pid: ${frontmatter.pid ?? ""}`,
+    `startedAt: ${frontmatter.startedAt}`,
+    `endedAt: ${frontmatter.endedAt ?? ""}`,
+    `exitReason: ${frontmatter.exitReason ?? ""}`,
+    "",
+  ].join("\n");
+}
+
+export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
+  const [command, ...tokens] = argv.slice(2);
+  switch (command) {
+    case undefined:
+      throw new Error("Error: no command given. Run `alcode --help`.");
+    case "--help":
+    case "-h":
+      return { kind: "help" };
+    case "--version":
+    case "-v":
+      return { kind: "version" };
+    case "--guide":
+      return { kind: "guide", variant: "generic" };
+    case "--openclaw-guide":
+      return { kind: "guide", variant: "openclaw" };
+    case "new":
+      return parseNewCommand(tokens);
+    case "resume":
+      return parseResumeCommand(tokens);
+    case "status":
+      return parseStatusCommand(tokens);
+    case "usage":
+      return parseBareCommand(tokens, "usage");
+    case "reserve-side-ticket":
+      return parseBareCommand(tokens, "reserveSideTicket");
+    default:
+      throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
+  }
+}
+
+function parseStatusCommand(tokens: string[]): AlcodeCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { help: { type: "boolean", short: "h", default: false } },
+    strict: true,
+    allowPositionals: true,
+  });
+  if (values.help) return { kind: "help" };
+  if (positionals.length !== 1) {
+    throw new Error("Error: `alcode status` takes exactly one <session-file>.");
+  }
+  return { kind: "status", sessionFile: positionals[0] };
+}
+
+function parseNewCommand(tokens: string[]): AlcodeCommand {
+  const { values } = parseArgs({
+    args: tokens,
+    options: { ...SESSION_OPTIONS, "no-ticket": { type: "boolean", default: false } },
+    strict: true,
+  });
+  if (values.help) return { kind: "help" };
+  return {
+    kind: "session",
+    args: {
+      ticket: values.ticket,
+      noTicket: values["no-ticket"],
+      protocol: values.protocol,
+      message: values.message,
+      model: values.model,
+      meta: values.meta,
+    },
   };
-  if (!pkg.version) throw new Error("alcode: package.json is missing 'version'");
-  return pkg.version;
+}
+
+function parseResumeCommand(tokens: string[]): AlcodeCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: SESSION_OPTIONS,
+    strict: true,
+    allowPositionals: true,
+  });
+  if (values.help) return { kind: "help" };
+  if (positionals.length !== 1) {
+    throw new Error("Error: `alcode resume` takes exactly one <sessionId>.");
+  }
+  return {
+    kind: "session",
+    args: {
+      resume: positionals[0],
+      ticket: values.ticket,
+      noTicket: false,
+      protocol: values.protocol,
+      message: values.message,
+      model: values.model,
+      meta: values.meta,
+    },
+  };
+}
+
+function parseBareCommand(tokens: string[], kind: "usage" | "reserveSideTicket"): AlcodeCommand {
+  const { values } = parseArgs({
+    args: tokens,
+    options: { help: { type: "boolean", short: "h", default: false } },
+    strict: true,
+  });
+  return values.help ? { kind: "help" } : { kind };
+}
+
+export function validateSessionArgs(
+  args: SessionArgs,
+  models: readonly string[],
+): string | undefined {
+  const isNew = args.resume === undefined;
+  const hasMessage = args.message !== undefined && args.message.trim() !== "";
+  if (args.protocol !== undefined && !(PROTOCOLS as readonly string[]).includes(args.protocol)) {
+    return `Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`;
+  }
+  if (args.model !== undefined && !models.includes(args.model)) {
+    return `Error: --model must be one of: ${models.join(", ")}.`;
+  }
+  if (args.protocol === undefined && !hasMessage) {
+    return "Error: --message is required when --protocol is not specified.";
+  }
+  if (args.ticket !== undefined && args.noTicket) {
+    return "Error: --ticket and --no-ticket are mutually exclusive.";
+  }
+  if (args.noTicket && args.protocol === undefined) {
+    return "Error: --no-ticket requires --protocol.";
+  }
+  if (isNew && args.protocol !== undefined && args.ticket === undefined && !args.noTicket) {
+    return "Error: --ticket or --no-ticket is required with `new --protocol`.";
+  }
+  if (["spec", "aad"].includes(args.protocol ?? "") && !hasMessage) {
+    return `Error: --protocol ${args.protocol} requires --message.`;
+  }
+  if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
+    return (
+      "Error: --ticket must be a single path segment " +
+      "(letters, digits, '.', '-', '_'); no path separators or '..'."
+    );
+  }
+  return;
+}
+
+// The ticket becomes a `.plans/<ticket>/_alcode/…` path segment. Ticket formats vary by
+// consumer repo (numeric here, but e.g. `AB-123` elsewhere), so allow a permissive charset while
+// blocking path separators and `..` traversal that could escape `.plans/`.
+function isPathSafeTicket(ticket: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(ticket) && ticket !== "." && !ticket.includes("..");
 }
 
 interface RunContext {
@@ -105,11 +349,7 @@ interface RunContext {
 // file under `.plans/` is the durable result handoff: on completion the frontmatter carries the
 // session id and status, and the `---- Result ----` block carries the outcome for a waking agent
 // (or a human).
-async function runSession(
-  parsed: AlcodeArgs,
-  agent: CodingAgent,
-  ctx: RunContext,
-): Promise<number> {
+async function runSession(args: SessionArgs, agent: CodingAgent, ctx: RunContext): Promise<number> {
   const { cwd, env, stdout, stderr, modelResolver } = ctx;
 
   const gateError = assertPlansGate(cwd);
@@ -120,21 +360,21 @@ async function runSession(
 
   const realCwd = realpathSync(cwd);
   const records = listSessionRecords(cwd);
-  const guardError = checkLaunchGuards(parsed, agent, realCwd, records);
+  const guardError = checkLaunchGuards(args, agent, realCwd, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
   }
 
   const now = new Date();
-  const ticket = resolveTicket(parsed, records);
+  const ticket = args.noTicket ? reserveSideTicket(cwd) : resolveTicket(args, records);
   const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(parsed, agent, now, realCwd, ticket));
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(args, agent, now, realCwd, ticket));
   stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
 
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, parsed.model, {
+    executableModel = await modelResolver(agent, args.model, {
       cwd,
       env: buildAgentEnv(env, (env.ALIGNFIRST_CODE_UNSET ?? "").split(",")),
     });
@@ -152,12 +392,12 @@ async function runSession(
   }
 
   const result = await runAgent(
-    buildRunConfig(parsed, cwd, sessionFilePath, env, executableModel),
+    buildRunConfig(args, ticket, cwd, sessionFilePath, env, executableModel),
     createAgentAdapter(agent),
     stdout,
   );
 
-  if (parsed.isNew && result.sessionId) {
+  if (args.resume === undefined && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
   }
   if (result.authRequired) {
@@ -173,20 +413,20 @@ async function runSession(
 // Fail-fast launch guards, run against the (healed) session records before anything is written.
 // Returns the error to print, or `undefined` when the launch may proceed.
 export function checkLaunchGuards(
-  parsed: AlcodeArgs,
+  args: SessionArgs,
   agent: CodingAgent,
   realCwd: string,
   records: SessionRecord[],
 ): string | undefined {
-  if (parsed.resume !== undefined) {
+  if (args.resume !== undefined) {
     // A resumed run writes a new session file carrying the same sessionId as the original, so one
     // id can match several records — a running status on any of them blocks.
-    const matches = records.filter((r) => r.frontmatter.sessionId === parsed.resume);
-    if (matches.length === 0) return unknownResumeError(parsed.resume, records);
+    const matches = records.filter((r) => r.frontmatter.sessionId === args.resume);
+    if (matches.length === 0) return unknownResumeError(args.resume, records);
     const running = matches.find((r) => r.frontmatter.status === "running");
     if (running) {
       return (
-        `Error: session ${parsed.resume} is still running (pid ${running.frontmatter.pid}); ` +
+        `Error: session ${args.resume} is still running (pid ${running.frontmatter.pid}); ` +
         "wait for it to finish or kill it."
       );
     }
@@ -195,19 +435,19 @@ export function checkLaunchGuards(
     )[0];
     if (latest.frontmatter.agent === null) {
       return (
-        `Error: session ${parsed.resume} predates agent-aware sessions and cannot be resumed; ` +
+        `Error: session ${args.resume} predates agent-aware sessions and cannot be resumed; ` +
         "start a new session."
       );
     }
     if (latest.frontmatter.agent !== agent) {
       return (
-        `Error: session ${parsed.resume} belongs to agent ${latest.frontmatter.agent}, but the ` +
+        `Error: session ${args.resume} belongs to agent ${latest.frontmatter.agent}, but the ` +
         `selected agent is ${agent}.`
       );
     }
   }
   // Protocol runs only: plain messages (answers, questions, plan executions) may run at any time.
-  if (parsed.protocol !== undefined) {
+  if (args.protocol !== undefined) {
     const busy = records.find(
       (r) => r.frontmatter.status === "running" && r.frontmatter.cwd === realCwd,
     );
@@ -234,13 +474,13 @@ function unknownResumeError(resume: string, records: SessionRecord[]): string {
   return `Error: unknown session id ${resume}. Known recent sessions:\n${recent.join("\n")}`;
 }
 
-// The effective ticket scopes the session file to `.plans/<ticket>/_alcode/` and lands in the
-// frontmatter. Exported for tests. Precedence: explicit `--ticket`, then the resumed session's
-// records, then a `.plans/<ticket>/` path in the message.
-export function resolveTicket(parsed: AlcodeArgs, records: SessionRecord[]): string | undefined {
-  if (parsed.ticket !== undefined) return parsed.ticket;
-  if (parsed.resume !== undefined) return inheritTicketFromResume(parsed.resume, records);
-  if (parsed.isNew && parsed.message !== undefined) return inferTicketFromMessage(parsed.message);
+// The effective ticket scopes the session file to `.plans/<ticket>/_alcode/`, lands in the
+// frontmatter, and reaches the agent in the prompt. Exported for tests. Precedence: explicit
+// `--ticket`, then the resumed session's records, then a `.plans/<ticket>/` path in the message.
+export function resolveTicket(args: SessionArgs, records: SessionRecord[]): string | undefined {
+  if (args.ticket !== undefined) return args.ticket;
+  if (args.resume !== undefined) return inheritTicketFromResume(args.resume, records);
+  if (args.message !== undefined) return inferTicketFromMessage(args.message);
   return;
 }
 
@@ -269,7 +509,7 @@ function inferTicketFromMessage(message: string): string | undefined {
 }
 
 function buildFrontmatter(
-  parsed: AlcodeArgs,
+  args: SessionArgs,
   agent: CodingAgent,
   now: Date,
   realCwd: string,
@@ -278,13 +518,14 @@ function buildFrontmatter(
   return {
     status: "running",
     agent,
-    protocol: parsed.protocol ?? null,
+    protocol: args.protocol ?? null,
     ticket: ticket ?? null,
-    model: parsed.model ?? null,
+    model: args.model ?? null,
     sessionId: null,
-    command: formatCommand(parsed),
-    meta: parsed.meta ?? null,
+    command: formatCommand(args),
+    meta: args.meta ?? null,
     pid: process.pid,
+    pidStartTime: readPidStartTime(process.pid),
     cwd: realCwd,
     startedAt: now.toISOString(),
     endedAt: null,
@@ -292,19 +533,30 @@ function buildFrontmatter(
   };
 }
 
+function formatCommand(args: SessionArgs): string {
+  const parts = ["alcode", ...(args.resume === undefined ? ["new"] : ["resume", args.resume])];
+  if (args.protocol !== undefined) parts.push("--protocol", args.protocol);
+  if (args.ticket !== undefined) parts.push("--ticket", args.ticket);
+  if (args.noTicket) parts.push("--no-ticket");
+  if (args.model !== undefined) parts.push("--model", args.model);
+  if (args.message !== undefined) parts.push("--message", JSON.stringify(args.message));
+  if (args.meta !== undefined) parts.push("--meta", JSON.stringify(args.meta));
+  return parts.join(" ");
+}
+
 export function buildRunConfig(
-  parsed: AlcodeArgs,
+  args: SessionArgs,
+  ticket: string | undefined,
   cwd: string,
   sessionFilePath: string,
   env: NodeJS.ProcessEnv,
   executableModel: string | undefined,
 ): RunConfig {
   return {
-    prompt: buildPrompt(parsed),
+    prompt: buildPrompt({ protocol: args.protocol, ticket, message: args.message }),
     sessionFilePath,
     cwd,
-    isNew: parsed.isNew,
-    resume: parsed.resume,
+    resume: args.resume,
     executableModel,
     skipPermissions: env.ALIGNFIRST_CODE_SKIP_PERMISSIONS === "1",
     unset: (env.ALIGNFIRST_CODE_UNSET ?? "").split(","),
@@ -312,100 +564,12 @@ export function buildRunConfig(
   };
 }
 
-function formatCommand(parsed: AlcodeArgs): string {
-  const parts = ["alcode"];
-  if (parsed.isNew) parts.push("--new");
-  if (parsed.resume) parts.push("--resume", parsed.resume);
-  if (parsed.protocol) parts.push("--protocol", parsed.protocol);
-  if (parsed.ticket) parts.push("--ticket", parsed.ticket);
-  if (parsed.model) parts.push("--model", parsed.model);
-  if (parsed.message) parts.push("--message", JSON.stringify(parsed.message));
-  if (parsed.meta) parts.push("--meta", JSON.stringify(parsed.meta));
-  return parts.join(" ");
-}
-
-// --- Argument parsing + validation (ported from the retired .mjs) ---
-
-export interface AlcodeArgs {
-  isNew: boolean;
-  resume?: string;
-  ticket?: string;
-  protocol?: string;
-  message?: string;
-  model?: string;
-  meta?: string;
-  guide: boolean;
-  openclawGuide: boolean;
-  help: boolean;
-  version: boolean;
-}
-
-export function parseAlcodeArgs(argv: string[]): AlcodeArgs {
-  const { values } = parseArgs({
-    args: argv.slice(2),
-    options: {
-      new: { type: "boolean", default: false },
-      resume: { type: "string" },
-      ticket: { type: "string" },
-      protocol: { type: "string" },
-      message: { type: "string" },
-      model: { type: "string" },
-      meta: { type: "string" },
-      guide: { type: "boolean", default: false },
-      "openclaw-guide": { type: "boolean", default: false },
-      help: { type: "boolean", default: false },
-      version: { type: "boolean", short: "v", default: false },
-    },
-    strict: true,
-  });
-  return {
-    isNew: values.new === true,
-    resume: values.resume,
-    ticket: values.ticket,
-    protocol: values.protocol,
-    message: values.message,
-    model: values.model,
-    meta: values.meta,
-    guide: values.guide === true,
-    openclawGuide: values["openclaw-guide"] === true,
-    help: values.help === true,
-    version: values.version === true,
+function readPackageVersion(): string {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version?: string;
   };
-}
-
-export function validateArgs(args: AlcodeArgs, models: readonly string[]): string | undefined {
-  const isResume = args.resume !== undefined;
-  if (args.isNew && isResume) return "Error: --new and --resume are mutually exclusive.";
-  if (!args.isNew && !isResume) return "Error: at least one of --new or --resume is required.";
-  if (args.protocol !== undefined && !(PROTOCOLS as readonly string[]).includes(args.protocol)) {
-    return `Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`;
-  }
-  if (args.model !== undefined && !models.includes(args.model)) {
-    return `Error: --model must be one of: ${models.join(", ")}.`;
-  }
-  if (!args.protocol && !args.message) {
-    return "Error: --message is required when --protocol is not specified.";
-  }
-  if (args.isNew && args.protocol && !args.ticket) {
-    return "Error: --ticket is required with --new and --protocol.";
-  }
-  if (["spec", "aad"].includes(args.protocol ?? "") && !args.message) {
-    return `Error: --protocol ${args.protocol} requires --message.`;
-  }
-  if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
-    return (
-      "Error: --ticket must be a single path segment " +
-      "(letters, digits, '.', '-', '_'); no path separators or '..'."
-    );
-  }
-  return;
-}
-
-// The ticket becomes a `.plans/<ticket>/_alcode/…` path segment. Ticket formats vary by
-// consumer repo (numeric here, but e.g. `AB-123` elsewhere), so allow a permissive charset while
-// blocking path separators and `..` traversal that could escape `.plans/`.
-function isPathSafeTicket(ticket: string): boolean {
-  return /^[A-Za-z0-9._-]+$/.test(ticket) && ticket !== "." && !ticket.includes("..");
+  if (!pkg.version) throw new Error("alcode: package.json is missing 'version'");
+  return pkg.version;
 }
 
 function renderHelp(agent: CodingAgent, models: readonly string[]): string {
@@ -420,27 +584,36 @@ function renderHelp(agent: CodingAgent, models: readonly string[]): string {
   return `alcode — run a coding agent through AlignFirst protocols.
 
 Usage:
-  alcode --new --protocol <protocol> --ticket <id> [--message "..."]
-  alcode --new --message "..."
-  alcode --resume <sessionId> [--protocol <protocol>] [--message "..."]
+  alcode new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
+  alcode new --message "..."
+  alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
+  alcode status <session-file>
+  alcode usage
+  alcode reserve-side-ticket
   alcode --guide
   alcode --openclaw-guide
-  alcode --help
+  alcode -h, --help
   alcode -v, --version
 
-Modes:
-  --new                 Start a new session.
-  --resume <sessionId>  Continue an existing session.
+Commands:
+  new                   Start a new session; prints its Session ID at the end.
+  resume <sessionId>    Continue an existing session.
+  status <session-file> Reconcile and show one run's durable status. Does not start an agent.
+  usage                 Show the selected coding agent's current usage limits and reset times.
+  reserve-side-ticket   Reserve the next side ticket for work without a ticket: creates
+                        .plans/side-N/ and prints side-N.
 
-Options:
-  --protocol <p>    One of: ${PROTOCOLS.join(", ")}.
-  --ticket <id>     Ticket ID. Required with --new + --protocol.
-  --message "..."   Message to send. Required for spec, aad, and when no --protocol.
-  --model <model>   Model for a new session: one of ${models.join(", ")}. Omit to use the
-                    default model.
-  --meta "..."      Opaque handoff string, stored verbatim in the session file frontmatter
-                    (\`meta:\`). alcode never interprets it; a later reader of the session file
-                    (e.g. the caller reporting the run's outcome) can use it.
+Options (new, resume):
+  --protocol <p>        One of: ${PROTOCOLS.join(", ")}.
+  --ticket <id>         Ticket ID. \`new --protocol\` requires it, or --no-ticket.
+  --no-ticket           Work without a ticket: reserves the next side ticket (side-N) and passes
+                        it to the agent. new only, requires --protocol.
+  -m, --message "..."   Message to send. Required for spec, aad, and when no --protocol.
+  --model <model>       Model for a new session: one of ${models.join(", ")}. Omit to use the
+                        default model.
+  --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
+                        (\`meta:\`). alcode never interprets it; a later reader of the session file
+                        (e.g. the caller reporting the run's outcome) can use it.
 
 Env:
   ALIGNFIRST_CODE_AGENT            Required coding agent: claude or codex (selected: ${agent}).

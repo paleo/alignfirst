@@ -25,6 +25,9 @@ export interface SessionFrontmatter {
   // alcode's own pid — lets a later scan tell a live `running` session from a stale record left by
   // an interrupted run.
   pid: number | null;
+  // Linux `/proc/<pid>/stat` start time. Distinguishes the original process from a later process
+  // that reused its pid; null on platforms without `/proc` and in legacy records.
+  pidStartTime: string | null;
   // Realpath alcode ran from. Scopes the single-protocol-run guard to the worktree (worktree
   // `.plans/` symlinks back to the main project, so several worktrees share one `.plans/`).
   cwd: string | null;
@@ -120,6 +123,66 @@ export function readCompletion(sessionFilePath: string): SessionCompletion {
   return { frontmatter, result };
 }
 
+export function reconcileSessionFile(
+  sessionFilePath: string,
+  now: Date = new Date(),
+): SessionCompletion {
+  const completion = readCompletion(sessionFilePath);
+  const update = interruptedCompletion(completion.frontmatter, now);
+  if (!update) return completion;
+  applyCompletion(sessionFilePath, update);
+  return {
+    frontmatter: {
+      ...completion.frontmatter,
+      status: update.status,
+      endedAt: update.endedAt,
+      exitReason: update.exitReason,
+    },
+    result: update.result,
+  };
+}
+
+function interruptedCompletion(
+  frontmatter: SessionFrontmatter,
+  now: Date,
+): CompletionUpdate | undefined {
+  if (frontmatter.status !== "running" || isRecordedProcessAlive(frontmatter)) return;
+  return {
+    status: "failed",
+    endedAt: now.toISOString(),
+    exitReason: "terminated",
+    sessionId: frontmatter.sessionId,
+    result: `Sealed as interrupted: process ${frontmatter.pid ?? "(unknown)"} is gone.`,
+  };
+}
+
+function isRecordedProcessAlive(frontmatter: SessionFrontmatter): boolean {
+  if (frontmatter.pid === null || !isPidAlive(frontmatter.pid)) return false;
+  if (frontmatter.pidStartTime === null) return true;
+  const currentStartTime = readPidStartTime(frontmatter.pid);
+  return currentStartTime === null || currentStartTime === frontmatter.pidStartTime;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+export function readPidStartTime(pid: number): string | null {
+  if (process.platform !== "linux") return null;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
+    const fieldsAfterCommand = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return fieldsAfterCommand[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export interface SessionRecord {
   path: string;
   frontmatter: SessionFrontmatter;
@@ -143,11 +206,32 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
     for (const entry of readEntries(dir)) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       const path = join(dir, entry.name);
-      const frontmatter = readFrontmatterOrSkip(path);
-      if (frontmatter) records.push({ path, frontmatter: sealIfStale(path, frontmatter) });
+      const completion = reconcileSessionFileOrSkip(path);
+      if (completion) records.push({ path, frontmatter: completion.frontmatter });
     }
   }
   return records;
+}
+
+// Work without a ticket: reserves the next free `side-N` under `.plans/`, following the alignfirst
+// skill's side-ticket convention. The non-recursive mkdir is the reservation: EEXIST means a
+// concurrent reservation took the id, so the loop moves on to the next one.
+export function reserveSideTicket(cwd: string): string {
+  const plansDir = join(cwd, ".plans");
+  let highest = 0;
+  for (const entry of readEntries(plansDir)) {
+    const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  for (let n = highest + 1; ; ++n) {
+    const ticket = `side-${n}`;
+    try {
+      mkdirSync(join(plansDir, ticket));
+      return ticket;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+  }
 }
 
 function readEntries(dir: string): Dirent[] {
@@ -159,40 +243,11 @@ function readEntries(dir: string): Dirent[] {
 }
 
 // A malformed file (e.g. missing its frontmatter block) must not block every future launch.
-function readFrontmatterOrSkip(path: string): SessionFrontmatter | undefined {
+function reconcileSessionFileOrSkip(path: string): SessionCompletion | undefined {
   try {
-    return readCompletion(path).frontmatter;
+    return reconcileSessionFile(path);
   } catch {
     return;
-  }
-}
-
-function sealIfStale(path: string, frontmatter: SessionFrontmatter): SessionFrontmatter {
-  if (frontmatter.status !== "running") return frontmatter;
-  if (frontmatter.pid !== null && isPidAlive(frontmatter.pid)) return frontmatter;
-  const update: CompletionUpdate = {
-    status: "failed",
-    endedAt: new Date().toISOString(),
-    exitReason: "terminated",
-    sessionId: frontmatter.sessionId,
-    result: `Sealed as interrupted: process ${frontmatter.pid ?? "(unknown)"} is gone.`,
-  };
-  applyCompletion(path, update);
-  return {
-    ...frontmatter,
-    status: update.status,
-    endedAt: update.endedAt,
-    exitReason: update.exitReason,
-  };
-}
-
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM: the process exists but belongs to another user — alive. ESRCH (or anything else): dead.
-    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -244,6 +299,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     command: map.command ?? "",
     meta: map.meta ?? null,
     pid: parsePid(map.pid),
+    pidStartTime: map.pidStartTime ?? null,
     cwd: map.cwd ?? null,
     startedAt: map.startedAt ?? "",
     endedAt: map.endedAt ?? null,
@@ -258,7 +314,7 @@ function parseAgent(raw: string | null | undefined): CodingAgent | null {
 function parsePid(raw: string | null | undefined): number | null {
   if (raw === null || raw === undefined) return null;
   const pid = Number(raw);
-  return Number.isFinite(pid) ? pid : null;
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
 }
 
 function parseValue(raw: string): string | null {

@@ -13,7 +13,7 @@ Under OpenClaw, background it through the `exec` tool:
 - Before the first `alcode` run of this session, call the `session_status` tool and read the `Session:` line from its result — that is this session's key. Obtain it once, reuse it for every run of this session.
 - The exec command chains a completion wake onto the run:
 
-  `alcode <flags> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
+  `alcode <command> <options> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
   Chain with `;` (never `&&`) so a failed run wakes you too. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it — never wait for either text.
 - Pass `background: true` and `timeout: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
@@ -35,7 +35,7 @@ The chained wake fires when the backgrounded `alcode` exits: this session receiv
 
 Any heartbeat received while an `alcode` run is **still pending** (running, or finished but not yet reported) is the completion wake — do exactly this:
 
-1. **Read the run's session file** (the path `alcode` printed on its first line, under `_alcode/`). Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
+1. **Reconcile the run, then read its session file.** Run `alcode status <session-file>` with the path printed on the run's first line. If it reports `running`, keep the run pending and end with `NO_REPLY`; never report it as completed or start polling. Otherwise read the session file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
 2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe; when it launches a coding-agent run (a manual test), the report is its launch ack and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
