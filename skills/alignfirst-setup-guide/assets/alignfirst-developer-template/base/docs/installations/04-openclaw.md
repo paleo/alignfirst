@@ -60,8 +60,16 @@ The execute bits are tracked by git; no `chmod` is needed.
 
 `seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. `openclaw secrets audit --check` then fails the seed on any residual plaintext or unresolved reference, before `openclaw config validate` and an interactive `openclaw doctor`.
 
+The provider and model are deployment choices. The seed always pins
+`models.providers.{{RUNTIME_PROVIDER}}.agentRuntime.id` to `openclaw`. The embedded runtime owns the
+turn and supplies the `exec` and `process` tools that the developer playbook uses. Keep this pin
+when changing models.
+
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
+sudo -i -u {{SERVICE_USER}} -- \
+  openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
+# Expected: {"id":"openclaw"}
 ```
 
 Once, on first install, apply doctor's auto-fixes to create the credential scaffolding (`~/.openclaw/credentials/`). The gateway token is not among them: it is a SecretRef, never generated.
@@ -74,7 +82,7 @@ Later runs use plain `openclaw doctor` — see [gotchas.md](../gotchas.md).
 
 ## 4. Provider plugin
 
-A runtime provider served by an OpenClaw plugin needs two more keys in `seed/common.sh`, next to `plugins.allow`, then the package installed once:
+A model provider served by an OpenClaw plugin needs two more keys in `seed/common.sh`, next to `plugins.allow`, then the package installed once:
 
 ```sh
 set_json "plugins.entries.<id>.enabled" true
@@ -86,6 +94,17 @@ sudo -i -u {{SERVICE_USER}} -- openclaw plugins install <package>
 ```
 
 Enabling does not install: a missing package shows in `openclaw config validate` as `plugin not installed: <id>`. Skip this step for a provider that OpenClaw serves natively.
+
+An installed agent-harness plugin cannot claim this deployment's turns because the explicit
+`openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
+authentication, or chat commands.
+
+## Model-specific parameters
+
+The template leaves model parameters at OpenClaw's defaults. Before setting compaction thresholds,
+context limits, service tiers, or other provider-specific parameters, follow the current
+[official OpenClaw provider documentation](https://docs.openclaw.ai/providers). Route capabilities
+and defaults change; do not copy values from another deployment.
 
 ## 5. Workspace files
 

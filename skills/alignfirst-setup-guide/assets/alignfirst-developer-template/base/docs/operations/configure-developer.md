@@ -7,7 +7,11 @@ read_when:
 
 # Configure the Developer
 
-**Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the runtime model, the skill allowlist, a new variable.
+**Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
+
+Changing the model never changes the agent runtime. Keep
+`models.providers.<provider>.agentRuntime.id` set to `openclaw`; the developer requires OpenClaw's
+`exec` and `process` tools.
 
 `openclaw.json` is immutable once [06](../installations/06-security-hardening.md) has run. The root-owned maintenance wrapper contains the developer, refreshes the seed snapshot, unlocks only the requested paths, runs the seed, and restores the hardening policy through an `EXIT` trap.
 
@@ -31,6 +35,9 @@ A successful maintenance window leaves the gateway stopped. When `environment.d/
 ```sh
 sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec  # environment.d changes only
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- \
+  openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
+# Expected: {"id":"openclaw"}
 ```
 
 Run these commands only after the wrapper reports that hardening was restored and exits 0. A failure leaves the developer contained for diagnosis.

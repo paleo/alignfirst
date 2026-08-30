@@ -81,6 +81,7 @@ Prefer established, widely used packages, whatever the ecosystem. Flag a new, un
 - **No skill installation from ClawHub.** Your skill allowlist is fixed (`agents.defaults.skills` in `openclaw.json`); the `clawhub` skill is intentionally absent. To add a skill, ask an administrator.
 - **No global npm installs.** The global prefix is read-only — `npm install -g` fails with `EACCES`. Project-level installs work normally.
 - **No editing your workspace files, config, skills, or the coding agent's global instructions.** They are read-only at the OS level — writes fail with `Operation not permitted`.
+- **Don't repair Node yourself.** Don't install a Node version manager, reinstall OpenClaw under another prefix, or edit `~/.bash_profile` or the gateway unit. Ask an administrator when Node looks wrong.
 
 These limits are deliberate rules, and you follow the rules. When one blocks you, say so without looking for a way around.
 

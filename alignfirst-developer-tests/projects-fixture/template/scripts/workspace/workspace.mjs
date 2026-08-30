@@ -1,10 +1,12 @@
 // Workspace lifecycle wrapper. Stripped fixture mirror of a real product
-// script: same shape, runs `pnpm install` like the real one; no docker, no
-// migrations, no builds, no config patching.
+// script: same shape, runs `pnpm install` like the real one; no docker,
+// migrations, or builds.
 
 import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWorkspace } from "@paleo/workspace";
+import { helpers, runWorkspace } from "@paleo/workspace";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
@@ -26,9 +28,37 @@ await runWorkspace({
     {
       path: "local.env",
       source: { kind: "committed", path: "local.env.example" },
-      patch: (content, { ports }) => content.replace(/^PORT=.*$/m, `PORT=${ports.frontend}`),
+      patch: (content, { ports }) =>
+        helpers.patchEnvFile(content, {
+          PORT: String(ports.frontend),
+          PUBLIC_URL: publicUrl(content, ports.frontend),
+        }),
     },
   ],
+
+  preSetup: ({ profile }) => {
+    const domain = process.env.REMOTE_DEV_DOMAIN;
+    if (profile === "remote" && (domain === undefined || domain === "")) {
+      throw new Error("REMOTE_DEV_DOMAIN is not set.");
+    }
+  },
+  setupProfiles: {
+    remote: {
+      description: "public URL through the dev-server gateway (REMOTE_DEV_DOMAIN)",
+      apply: ({ currentWorktree, ports }) => {
+        const domain = process.env.REMOTE_DEV_DOMAIN;
+        if (domain === undefined || domain === "") {
+          throw new Error("REMOTE_DEV_DOMAIN is not set.");
+        }
+        const envFile = join(currentWorktree, "local.env");
+        const content = readFileSync(envFile, "utf8");
+        const patched = helpers.patchEnvFile(content, {
+          PUBLIC_URL: `https://p${ports.frontend}.${domain}`,
+        });
+        if (patched !== content) writeFileSync(envFile, patched);
+      },
+    },
+  },
 
   finalizeWorkspace: async ({ currentWorktree }) => {
     execSync("pnpm install --frozen-lockfile --prod=false", {
@@ -46,3 +76,9 @@ Workspace setup complete!
   Path:          ${currentWorktree}
 `,
 });
+
+function publicUrl(content, port) {
+  const host = helpers.extractHost(content, "PUBLIC_URL");
+  const remote = host.match(/^p\d+\.(.+)$/);
+  return remote ? `https://p${port}.${remote[1]}` : `http://${host}:${port}`;
+}

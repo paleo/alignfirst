@@ -23,9 +23,10 @@
   "models": {
     "providers": {
       "openai": {
-        "agentRuntime": { "id": "codex" }
+        "agentRuntime": { "id": "openclaw" }
       },
       "custom-anthropic": {
+        "agentRuntime": { "id": "openclaw" },
         "baseUrl": "https://api.anthropic.com",
         "apiKey": "${ANTHROPIC_API_KEY}",
         "api": "anthropic-messages",
@@ -42,6 +43,7 @@
         ]
       },
       "custom-openrouter": {
+        "agentRuntime": { "id": "openclaw" },
         "baseUrl": "https://openrouter.ai/api/v1",
         "apiKey": "${OPENROUTER_API_KEY}",
         "api": "openai-completions",
@@ -58,6 +60,7 @@
         ]
       },
       "zai": {
+        "agentRuntime": { "id": "openclaw" },
         "apiKey": "${ZAI_API_KEY}",
         "baseUrl": "https://api.z.ai/api/paas/v4",
         "api": "openai-completions",

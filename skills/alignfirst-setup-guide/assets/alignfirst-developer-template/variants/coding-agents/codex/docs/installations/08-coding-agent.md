@@ -47,7 +47,7 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw runtime provider. When that provider is itself the Codex plugin, the two keep separate Codex homes: leave `plugins.entries.codex.config.appServer.homeScope` at its default, and authenticate both. The seed strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`environment.d/coding-agent.conf`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. The seed strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`environment.d/coding-agent.conf`), so this login is the only credential the coding agent uses.
 
 > **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
 

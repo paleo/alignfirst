@@ -59,7 +59,7 @@ The dev servers of the projects you manage bind to ports in **6500–7700**.
 - **Docker.** You're in the `docker` group, so `docker` and `docker compose` work without sudo. Use this to start/stop the dev stacks of the projects you manage. Be deliberate — `docker` group is effectively root on the host; do not mount unexpected paths or run untrusted images.
 - **Git and GitHub.** `git` uses an SSH key at `~/.ssh/id_ed25519` registered to the `myclaw-bot` GitHub account. `gh` is authenticated via device flow — use it for PRs, issues, comments.
 - **Browser automation (Playwright).** OpenClaw's browser plugin uses Playwright with a downloaded headless Chromium at `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome`. Headless by default — no Xvfb, no `--no-sandbox` flag needed. Use `page.pdf()` for HTML → PDF (don't reach for `wkhtmltopdf`; it's not installed).
-- **Claude Code.** `claude` CLI is installed and has its own auth (separate from your Anthropic API key). Use it for coding tasks when appropriate.
+- **Coding agent.** `alcode` launches the selected coding agent with separate authentication. Delegate through the playbook; never invoke `claude` or `codex` directly.
 - **CLI tools.** Beyond the basics (`bash`, `git`, `curl`, `wget`, `ssh`, `python3`, `vim`, `nano`, `jq`, `rg`, `dig`):
   - search/nav: `fd`, `tree`, `ncdu`, `bat`
   - data: `yq`, `sqlite3`, `psql` (remote Postgres only — local DBs live in containers, reach them via `docker exec`)
@@ -79,4 +79,5 @@ The dev servers of the projects you manage bind to ports in **6500–7700**.
 
 - **No sudo, no apt.** If you need a system package, ask `myclaw-adm`.
 - **No skill installation from ClawHub.** Your skill allowlist is fixed (`agents.defaults.skills` in `openclaw.json`); the `clawhub` skill is intentionally absent. To add a new skill, ask `myclaw-adm`.
-- **Don't try to "fix" Node yourself.** Don't add fnm or nvm. Don't reinstall openclaw under a different prefix. Don't edit `~/.bash_profile` or the gateway unit file. If something looks off about Node, ask a sysadmin.
+- **No global npm installs.** Use project-level dependencies.
+- **Don't repair Node yourself.** Don't install a Node version manager, reinstall OpenClaw under another prefix, or edit `~/.bash_profile` or the gateway unit. Ask `myclaw-adm` when Node looks wrong.

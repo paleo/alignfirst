@@ -88,6 +88,10 @@ configure_common() {
   set_scalar agents.defaults.workspace "$HOME/.openclaw/workspace"
   set_scalar agents.defaults.model.primary "$RUNTIME_PROVIDER/$RUNTIME_MODEL"
   set_json agents.defaults.model.fallbacks '[]'
+  # The playbook depends on OpenClaw's exec/process surface. Provider and model are selectable;
+  # the agent runtime is fixed. The explicit pin prevents an installed harness from claiming an
+  # eligible route.
+  set_scalar "models.providers.$RUNTIME_PROVIDER.agentRuntime.id" openclaw
   if [ -n "${RUNTIME_API_KEY:-}" ]; then
     set_secret_ref "models.providers.$RUNTIME_PROVIDER.apiKey" /RUNTIME_API_KEY
   else

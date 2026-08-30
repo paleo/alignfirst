@@ -290,4 +290,23 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
     ],
     ".local shared workspace configuration",
   );
+  await assertPreparedProjectContract(ctx);
+}
+
+async function assertPreparedProjectContract(ctx: ScenarioContext): Promise<void> {
+  await assertGatewayCommand(
+    ctx,
+    ["grep", "-F", "setupProfiles:", `${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs`],
+    "remote setup profile",
+  );
+  await assertGatewayCommand(
+    ctx,
+    ["grep", "-F", "PUBLIC_URL", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    "public dev-server URL",
+  );
+  await assertGatewayCommand(
+    ctx,
+    ["grep", "-F", "### Remote access", `${NOVA_PROJECT_PATH}/README.md`],
+    "remote-access documentation",
+  );
 }

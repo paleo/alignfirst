@@ -32,7 +32,13 @@ sudo -i -u {{SERVICE_USER}} -- alproject status <repo> --json
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- alcode --guide
+sudo -i -u {{SERVICE_USER}} -- \
+  openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
+# Expected: {"id":"openclaw"}
 ```
+
+The agent runtime must be `openclaw`; another value changes the tool surface and breaks the
+playbook's background delegation contract. Re-seed before investigating alcode itself.
 
 The session file under the project's `.plans/<ticket>/_alcode/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 9](installations/04-openclaw.md#9-environment-changes)).
 

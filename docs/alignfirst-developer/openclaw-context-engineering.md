@@ -9,7 +9,7 @@ When you actually edit a workspace file, also read [`writing-instructions-for-op
 These top-level files under `~/.openclaw/workspace/` are read on every turn and injected into the system prompt:
 
 - `AGENTS.md` — operating instructions (required)
-- `TOOLS.md` — local tool conventions (required)
+- `TOOLS.md` — a currently required compatibility file; keep it empty because OpenClaw plans to remove it
 - `SOUL.md`, `IDENTITY.md`, `USER.md` — persona / context (optional)
 - `MEMORY.md` — curated long-term memory (optional)
 - `BOOTSTRAP.md` — first-run ritual (optional)
@@ -19,7 +19,9 @@ Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootst
 
 ## Subagent sessions get a filtered subset
 
-When a session is spawned (e.g. `sessions_spawn` with `context: "isolated"`), only `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md` are injected. `MEMORY.md`, `BOOTSTRAP.md`, `HEARTBEAT.md` are stripped. Filter: `filterBootstrapFilesForSession()` in the same file.
+When a session is spawned (e.g. `sessions_spawn` with `context: "isolated"`), only `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, and the compatibility `TOOLS.md` are injected. `MEMORY.md`, `BOOTSTRAP.md`, and `HEARTBEAT.md` are stripped. Filter: `filterBootstrapFilesForSession()` in the same file.
+
+`TOOLS.md` is transitional. OpenClaw currently recreates it when missing, but plans to remove it in the next version. AlignFirst keeps a zero-byte, read-only file for compatibility with deployed versions and puts tool and environment instructions in `AGENTS.md`. Do not add content or references to `TOOLS.md`; remove the placeholder once the supported OpenClaw version no longer creates it.
 
 ## Nested files are not auto-loaded
 
@@ -47,7 +49,7 @@ Trap: on every heartbeat-triggered run, OpenClaw injects a hard-coded system-pro
 ## Practical implications
 
 - Keep top-level workspace files lean — every turn pays the token cost.
-- Push everything situational (per-surface playbooks, per-project welcome docs) into nested files referenced by name from `AGENTS.md` / `TOOLS.md`. The agent reads them only when relevant.
+- Push everything situational (per-surface playbooks, per-project welcome docs) into nested files referenced by name from `AGENTS.md`. The agent reads them only when relevant.
 - For a subagent's bootstrap task, list prerequisite reads explicitly — the subagent doesn't inherit the parent's read history.
 - `sessions_spawn` accepts `task`, `label`, `thread: true|false`, `mode: "session"|"run"`, `context: "fork"|"isolated"`, `runTimeoutSeconds`. `"fork"` inherits the requester's transcript; `"isolated"` starts clean (still gets the filtered bootstrap subset).
 

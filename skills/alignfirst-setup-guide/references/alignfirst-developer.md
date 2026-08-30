@@ -30,7 +30,9 @@ The human performs every interactive authentication and secret entry. Credential
 - **Team plans repository**: yes or no. Yes when the team has one (see [plans-share-setup.md](plans-share-setup.md)).
 - **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and `workspace setup --profile remote` is unusable in the managed projects.
 
-Choose the OpenClaw runtime provider and model separately; the template favors no provider.
+Choose the model provider and model separately; the template favors no provider.
+
+The agent **runtime** is fixed: every AlignFirst Developer uses OpenClaw's embedded runtime so the playbook can rely on OpenClaw's `exec` and `process` tools.
 
 ### Placeholder Vocabulary
 
@@ -145,6 +147,8 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 
 - The allowed channel routes work into one thread; a message elsewhere gets no reply.
 - The coding agent runs every AlignFirst command through `alcode`, unattended.
+- Every model route uses OpenClaw's embedded agent runtime.
+- The workspace `TOOLS.md` compatibility placeholder is zero bytes; tool facts live in `AGENTS.md`.
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.
