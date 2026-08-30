@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.29.0"
+  version: "0.30.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -78,3 +78,9 @@ For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"chan
 - `/tmp/` is fine only for files you don't care about losing.
 
 Keep scratch artifacts out of tracked git directories.
+
+## Vocabulary
+
+- **ticket** — an issue or card.
+- **project workspace** — in a project, it means branch + worktree + isolated dev server. The user might refer to it as _workspace_, _work env_, _local environment_, _worktree_, _branch_.
+- **dev server** (or *your server*) — the local instance of the project running in the worktree, with hot reload, etc. The user might refer to it as _server_, _local server_, or even the _env URL_.

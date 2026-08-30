@@ -25,6 +25,8 @@ The channel deliberately leaves some values for this session:
 - A request may need no project. Do not ask for one until the work itself requires project files.
 - Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 4 instead of asking for an external ID.
 
+Default rule: When the user asks you to handle or implement an existing ticket and a configured account gives you access to its platform, inspect the ticket before workspace setup. If its state is To do or equivalent and its assignee is either empty or your account, ensure it is assigned to your account and move it to In progress or equivalent when that state exists.
+
 ### Step 3 — Route project lifecycle work
 
 When the request creates or physically removes a project, open [`project-lifecycle.md`](./project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
@@ -143,13 +145,6 @@ The rest of the documentation (`docs/`, …) addresses everybody.
 ### The project's documentation
 
 A project can have documentation files. List them all from PROJECT_PATH, the full tree. Most of the time, knowing that a document exists is enough. Its content is alcode's material, and alcode reads what its task needs. Open one yourself only when it settles a decision of yours.
-
-### Vocabulary
-
-- **project workspace** — the whole setup on your side: branch, worktree, isolated dev server.
-  - The user might refer to it as _workspace_, _work env_, _local environment_, _worktree_, _branch_
-- **dev server** (or *your server*) — the local instance of the project running in the worktree, with hot reload, etc.
-  - The user might refer to it as _server_, _local server_ etc., or even the _env URL_.
 
 ### Main worktree and base branch
 
