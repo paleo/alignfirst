@@ -65,7 +65,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 
 `alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
 
-Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describes (`background: true`, `timeout: 0`), so it is not killed mid-run; OpenClaw wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --openclaw-guide` read).
+Coding runs are long. Run `alcode` via `exec` backgrounded, as the guide describes (`background: true`, `timeoutSeconds: 0`), so it is not killed mid-run; OpenClaw wakes you when it exits. Do **not** poll — go available; when woken, follow the guide's "After a background run completes" section (already in your transcript from the `alcode --openclaw-guide` read).
 
 ## `chat_id` values
 

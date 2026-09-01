@@ -18,7 +18,8 @@
   },
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["message", "browser"]
+    "alsoAllow": ["message", "browser"],
+    "deny": ["ask_user"]
   },
   "models": {
     "providers": {
@@ -83,6 +84,7 @@
       "skills": ["alignfirst", "alignfirst-setup-guide", "alignfirst-developer-openclaw-playbook"],
       "heartbeat": {
         "every": "24h",
+        "target": "last",
         "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       },
       "blockStreamingDefault": "on",

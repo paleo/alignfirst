@@ -16,7 +16,7 @@ Under OpenClaw, background it through the `exec` tool:
   `alcode <command> <options> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
   Chain with `;` (never `&&`) so a failed run wakes you too. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it — never wait for either text.
-- Pass `background: true` and `timeout: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
+- Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
 - The session-file path comes from the run's first stdout line (`Session file: …`), available via `process log <id>`. The stamp in the file name is the run's start time; it cannot be derived from the clock.
 - `--meta` is for one case only: a **Discord** thread **you created yourself** this turn via `message` `action: "thread-create"`. There, the completion wake's plain reply would go to the channel, so add `--meta "<THREAD_ID>"` with that thread's `chat_id`; the wake then reports back into the thread via `message` `action: "thread-reply"`. In **every other case — always on Slack, and on Discord when the session is already thread-bound — omit `--meta`.** Slack auto-threads plain replies and exposes no `send`/`thread-reply` action, so a `--meta` there makes the wake attempt an unsupported `message` send that fails; a thread-bound session already replies in its own thread.
@@ -36,7 +36,7 @@ The chained wake fires when the backgrounded `alcode` exits: this session receiv
 Any heartbeat received while an `alcode` run is **still pending** (running, or finished but not yet reported) is the completion wake — do exactly this:
 
 1. **Reconcile the run, then read its session file.** Run `alcode status <session-file>` with the path printed on the run's first line. If it reports `running`, keep the run pending and end with `NO_REPLY`; never report it as completed or start polling. Otherwise read the session file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome. If you set `meta` at launch, it is there too.
-2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe; when it launches a coding-agent run (a manual test), the report is its launch ack and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
+2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `alcode` run launched from this wake turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake; its report is then the launch ack and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
 

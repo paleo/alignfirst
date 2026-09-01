@@ -107,7 +107,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   assertCreationCalls(alproject.calls);
   assertSetupGuideDelegation(codingAgent.codingAgentCalls);
   await assertCreatedRepository(ctx);
-  const agentCalls = ctx.getAgentToolCalls();
+  const agentCalls = await ctx.getAgentToolCalls();
   const linkedWorkspaceBeforeInitialCommit = agentCalls.some((call) => {
     const command = call.toolName === "exec" ? JSON.stringify(call.input) : "";
     return /workspace\s+setup[^;&|]*(?:\s-c\b|--create\b)/.test(command);
@@ -143,7 +143,9 @@ async function waitForCreationReport(
   starter: Step,
   sinceCursor: number,
 ): Promise<void> {
-  const deadline = Date.now() + 120_000;
+  // Creation ends the turn on the report; on Slack nothing posts before turn
+  // end, and the whole flow runs in that one turn — give it real headroom.
+  const deadline = Date.now() + 240_000;
   const seen: string[] = [];
   let cursor = sinceCursor;
   for (;;) {

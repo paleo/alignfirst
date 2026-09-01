@@ -162,17 +162,36 @@ async function judgeMatches(
  */
 export async function waitForCodingSessionSucceeded(
   ctx: ScenarioContext,
-  opts: { ticketId?: string; timeoutMs: number; minCount?: number },
+  opts: {
+    ticketId?: string;
+    /**
+     * Also accept the no-ticket dir. For a no-protocol delegation the ticket may
+     * ride in the message instead of `--ticket`, and alcode then writes under
+     * `.plans/_alcode/` — both are playbook-compliant.
+     */
+    allowNoTicketDir?: boolean;
+    timeoutMs: number;
+    minCount?: number;
+  },
 ): Promise<string> {
   const minCount = opts.minCount ?? 1;
-  const sessionsDir = opts.ticketId ? `.plans/${opts.ticketId}/_alcode` : ".plans/_alcode";
+  const sessionsDirs = [
+    ...(opts.ticketId ? [`.plans/${opts.ticketId}/_alcode`] : []),
+    ...(opts.ticketId === undefined || opts.allowNoTicketDir ? [".plans/_alcode"] : []),
+  ];
   const deadline = Date.now() + opts.timeoutMs;
+  const pathArgs = sessionsDirs.flatMap((dir, i) => [
+    ...(i > 0 ? ["-o"] : []),
+    "-path",
+    `*/${dir}/*.md`,
+  ]);
   const findArgs = [
     "find",
     PRIMARY_PROJECT_PARENT,
     EXTERNAL_PROJECT_PARENT,
-    "-path",
-    `*/${sessionsDir}/*.md`,
+    "(",
+    ...pathArgs,
+    ")",
     "-exec",
     "grep",
     "-l",
@@ -193,7 +212,7 @@ export async function waitForCodingSessionSucceeded(
     await delay(3_000);
   }
   throw new Error(
-    `fewer than ${minCount} alcode coding-session file(s) under ${sessionsDir} reached ` +
+    `fewer than ${minCount} alcode coding-session file(s) under ${sessionsDirs.join(" or ")} reached ` +
       `"status: succeeded" within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
   );
 }

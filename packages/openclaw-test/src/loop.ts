@@ -1,13 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-} from "node:fs";
+import { closeSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, cellLeafName, readCellResult } from "./cell-result.js";
 import { judgeCostUsd } from "./cost.js";
@@ -214,8 +206,6 @@ function expandCells(opts: MatrixOptions): Cell[] {
 
 async function workerLoop(ctx: WorkerLoopContext, worker: WorkerContext): Promise<void> {
   const { opts, state } = ctx;
-  const liveTrajectoryDir = join(worker.gatewayLogsDir, "trajectory");
-  archiveLeftoverTrajectory(liveTrajectoryDir, opts.artifactsDir);
   // The model the worker's gateway booted on. Workers are created lazily: the
   // first cell's `up -d --force-recreate` also creates a stack that isn't running.
   let loadedModelId: string | undefined;
@@ -224,7 +214,7 @@ async function workerLoop(ctx: WorkerLoopContext, worker: WorkerContext): Promis
     if (!cell) return;
     changeRunningCount(state, cell.model.id, 1);
     try {
-      const recreated = await runCell(ctx, worker, cell, loadedModelId, liveTrajectoryDir);
+      const recreated = await runCell(ctx, worker, cell, loadedModelId);
       if (recreated) loadedModelId = cell.model.id;
     } finally {
       changeRunningCount(state, cell.model.id, -1);
@@ -275,7 +265,6 @@ async function runCell(
   worker: WorkerContext,
   cell: Cell,
   loadedModelId: string | undefined,
-  liveTrajectoryDir: string,
 ): Promise<boolean> {
   const { opts, state } = ctx;
   const leaf = cellLeafName({
@@ -354,13 +343,6 @@ async function runCell(
     });
   state.records.push({ cell, result });
 
-  rotateTrajectory({
-    liveTrajectoryDir,
-    artifactsDir: opts.artifactsDir,
-    cellDirName: result.artifactDirName,
-    fallbackDir: join(opts.resultsDir, `${leaf}.trajectory`),
-  });
-
   if (opts.parallel > 1) console.log(formatCellDone(worker.index, leaf, result));
   if (result.verdict === "fail") {
     if (opts.stopOnFail) state.stopped = true;
@@ -418,51 +400,6 @@ function signalNumber(signal: NodeJS.Signals): number {
   if (signal === "SIGINT") return 2;
   if (signal === "SIGTERM") return 15;
   return 1;
-}
-
-/**
- * Move the live trajectory dir's per-session files into the just-finished cell's
- * artifact dir. Rename is atomic and O(1); the gateway's writer reopens by path
- * per write, so the next write recreates fresh files at the live dir.
- */
-function rotateTrajectory(params: {
-  liveTrajectoryDir: string;
-  artifactsDir: string;
-  cellDirName: string;
-  fallbackDir: string;
-}): void {
-  const dest = params.cellDirName
-    ? join(params.artifactsDir, params.cellDirName, "trajectory")
-    : params.fallbackDir;
-  moveTrajectoryFiles(params.liveTrajectoryDir, dest);
-}
-
-/**
- * Archive any per-session files left behind in a worker's live trajectory dir by
- * a prior session, so this matrix's first cell on that worker starts clean.
- */
-function archiveLeftoverTrajectory(liveTrajectoryDir: string, artifactsDir: string): void {
-  moveTrajectoryFiles(liveTrajectoryDir, join(artifactsDir, "trajectory.leftover"));
-}
-
-function moveTrajectoryFiles(srcDir: string, destDir: string): void {
-  if (!existsSync(srcDir)) return;
-  let files: string[];
-  try {
-    files = readdirSync(srcDir).filter((f) => f.endsWith(".jsonl"));
-  } catch {
-    return;
-  }
-  if (files.length === 0) return;
-  mkdirSync(destDir, { recursive: true });
-  for (const file of files) {
-    const dest = join(destDir, file);
-    try {
-      renameSync(join(srcDir, file), dest);
-    } catch (err) {
-      console.warn(`run: failed to move trajectory file to ${dest}:`, (err as Error).message);
-    }
-  }
 }
 
 function synthesizeFailedResult(params: {

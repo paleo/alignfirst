@@ -39,8 +39,10 @@ export default async function multiProjectHandoff(ctx: ScenarioContext): Promise
     message: starter.match.text,
     rubric:
       "A thread-opening handoff for refreshing the base branches of both nimbus and lumen. It " +
-      "does not ask the user to choose one main project or supply a ticket. It asks only for a " +
-      "reply in the thread and does not claim that either refresh has started.",
+      "does not ask the user to choose one main project or supply a ticket. It brings the user " +
+      "back — an explicit ask for a reply, or a statement that the user's next message launches " +
+      "the working session; that future-tense promise is the handoff, not an action claim. " +
+      "Reject only a claim that a refresh already ran or is currently running.",
     label: "multi-project-deferred-to-working-session",
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
@@ -60,9 +62,12 @@ async function expectBaseRefreshDelegation(
   const { call } = await expectNoProtocolDelegation(ctx, codingAgent, {
     matches: (candidate) => candidate.cwd.replace(/\/$/u, "") === projectPath,
     rubric:
-      `A plain, no-protocol alcode delegation from the ${project} project. It asks the coding ` +
-      "agent to refresh the base branch from its remote and perform any required dependency, " +
-      "build, or migration refresh. Reject every AlignFirst protocol invocation.",
+      "A captured coding-agent CLI invocation. Judge only the prompt text (the last argv " +
+      "element); CLI flags such as exec/--json/--sandbox are the runner's mechanics, not a " +
+      `protocol. Pass when the prompt asks the coding agent, from the ${project} project, to ` +
+      "refresh the base branch from its remote and perform any required dependency, build, or " +
+      "migration refresh. Reject an AlignFirst protocol invocation in the prompt " +
+      "(`Run the _spec_ protocol …` and similar).",
     label: `${project}-base-refresh-delegation`,
     timeoutMs: 300_000,
   });

@@ -145,7 +145,7 @@ export interface AgentToolCall {
   toolName: string;
   toolUseId: string;
   /**
-   * `sessionKey` of the trajectory snapshot the call was collected from — the
+   * `sessionKey` of the session transcript the call was collected from — the
    * OpenClaw session that made it (e.g. channel vs per-thread session).
    */
   sessionKey?: string;

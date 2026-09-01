@@ -106,6 +106,9 @@ configure_common() {
   # governs periodic ticks. isolatedSession, lightContext and activeHours would each break the
   # wake (throwaway session, no workspace bootstrap, deferred run), so they are cleared.
   set_scalar agents.defaults.heartbeat.every "24h"
+  # Explicit target: the implicit default route prepends a one-time operator-facing
+  # "First heartbeat alert" preamble to the first delivered wake report (2026.8+).
+  set_scalar agents.defaults.heartbeat.target "last"
   set_scalar agents.defaults.heartbeat.prompt \
     "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. \
 Do not infer or repeat old tasks from prior chats. \

@@ -6,9 +6,8 @@ import {
   type QaBusMessage,
   type QaBusPollResult,
 } from "@paleo/openclaw-channel-mock-core";
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { judgeCostUsd } from "./cost.js";
+import { execInGateway, type ExecInGatewayOptions, type ExecInGatewayResult } from "./exec-rpc.js";
 import {
   judgeLLM,
   judgeLLMJson,
@@ -36,7 +35,7 @@ import type {
   ScenarioLogNote,
   ScenarioResult,
 } from "./report.js";
-import { parseAgentToolCalls } from "./trajectory-log.js";
+import { parseAgentToolCalls } from "./transcript-log.js";
 
 const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
@@ -147,24 +146,23 @@ export interface ScenarioContext {
    */
   execInGateway(argv: string[], opts?: ExecInGatewayOptions): Promise<ExecInGatewayResult>;
   /**
-   * Poll the trajectory log until an agent tool call matches `predicate`, then
-   * record a passing `AssertionRecord` on the current entry and return the call.
-   * On timeout, record a failing assertion and throw (hard-fail) — use it to
-   * assert the agent took a specific action (read a file, ran a command).
+   * Poll the session transcripts until an agent tool call matches `predicate`,
+   * then record a passing `AssertionRecord` on the current entry and return the
+   * call. On timeout, record a failing assertion and throw (hard-fail) — use it
+   * to assert the agent took a specific action (read a file, ran a command).
    * Aggregates across all the conversation's sessions, so it sees thread and
-   * subagent tool calls, and rides out the trajectory's flush latency.
+   * subagent tool calls; the transcript is appended per message, so calls from
+   * a turn still in flight are already visible.
    */
   waitForAgentToolCall(
     predicate: (call: AgentToolCall) => boolean,
     opts: WaitForAgentToolCallOptions,
   ): Promise<AgentToolCall>;
   /**
-   * One-shot parse of the conversation's agent tool calls from the trajectory
-   * log — no waiting, no assertion recorded. The trajectory flushes ~2-10s
-   * after each session's last turn, so calls from a turn still in flight may
-   * be missing: run end-of-scenario sweeps after the final waits resolved.
+   * One-shot parse of the conversation's agent tool calls from the session
+   * transcripts — no waiting, no assertion recorded.
    */
-  getAgentToolCalls(): AgentToolCall[];
+  getAgentToolCalls(): Promise<AgentToolCall[]>;
 }
 
 export interface WaitForAgentToolCallOptions {
@@ -183,25 +181,12 @@ export interface WaitForOutboundOptions {
   /**
    * Liveness fail-fast: throw when a mocked CLI invoked *during this wait* is
    * followed by neither a CLI call nor any outbound for this long (default
-   * 30s). CLI calls from before the wait never arm it; any outbound disarms it
+   * 60s). CLI calls from before the wait never arm it; any outbound disarms it
    * until the next CLI call. `false` disables it — for waits where long
    * non-CLI agent work (exec calls, delegation) legitimately follows a CLI
    * call with no post in between.
    */
   failFastCliMockGraceMs?: number | false;
-}
-
-export interface ExecInGatewayOptions {
-  cwd?: string;
-  env?: Record<string, string>;
-  stdin?: string;
-  timeoutMs?: number;
-}
-
-export interface ExecInGatewayResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
 }
 
 export interface ScenarioInternals {
@@ -235,7 +220,7 @@ export class AssertionError extends Error {
 export function createContext(params: {
   channel: ChannelId;
   conversationId: string;
-  /** Scenario start time; bounds the trajectory window for `waitForAgentToolCall`. */
+  /** Scenario start time; bounds the transcript window for `waitForAgentToolCall`. */
   startedAtIso?: string;
   emitSink?: EmitSink;
 }): { ctx: ScenarioContext; internals: ScenarioInternals } {
@@ -574,7 +559,9 @@ export async function waitForOutbound(
 ): Promise<WaitForOutboundResult> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const maxUnmatched = opts.failFastUnmatchedOutbounds ?? 3;
-  const cliMockGraceMs = opts.failFastCliMockGraceMs ?? 30_000;
+  // 60s: OpenClaw 2026.8 turns run noticeably longer between a CLI call and the
+  // turn-end post, and Slack sessions post nothing before turn end.
+  const cliMockGraceMs = opts.failFastCliMockGraceMs ?? 60_000;
   const pollFn = opts.pollImpl ?? poll;
   const now = opts.nowImpl ?? Date.now;
   const deadline = now() + timeoutMs;
@@ -705,7 +692,7 @@ async function waitForAgentToolCall(
   const deadline = Date.now() + timeoutMs;
   let calls: AgentToolCall[] = [];
   while (Date.now() < deadline) {
-    calls = parseAgentToolCalls({
+    calls = await parseAgentToolCalls({
       conversationId: deps.conversationId,
       startedAtIso: deps.startedAtIso,
     });
@@ -835,47 +822,4 @@ async function callJudgeRaw(
 async function getCursor(): Promise<number> {
   const snap = await getQaBusState(BUS_URL);
   return snap.cursor;
-}
-
-const IPC_DIR = "/var/run/openclaw-test-ipc";
-// Wait this much longer than the requested timeout before declaring the
-// host-side poll dead. Gives the watcher time to kill the child on its own
-// timeout (exitCode 124) and write the truncated response file.
-const WATCHER_DEADLINE_HEADROOM_MS = 5_000;
-const EXEC_POLL_INTERVAL_MS = 100;
-const WATCHER_TIMEOUT_EXIT_CODE = 124;
-
-async function execInGateway(
-  argv: string[],
-  opts: ExecInGatewayOptions = {},
-): Promise<ExecInGatewayResult> {
-  const id = randomUUID();
-  const timeoutMs = opts.timeoutMs ?? 30_000;
-  const payload: Record<string, unknown> = { id, argv, timeoutMs };
-  if (opts.cwd !== undefined) payload.cwd = opts.cwd;
-  if (opts.env !== undefined) payload.env = opts.env;
-  if (opts.stdin !== undefined) payload.stdin = opts.stdin;
-  const reqPath = `${IPC_DIR}/${id}.req.json`;
-  const reqTmp = `${reqPath}.tmp`;
-  const resPath = `${IPC_DIR}/${id}.res.json`;
-  writeFileSync(reqTmp, JSON.stringify(payload));
-  renameSync(reqTmp, reqPath);
-  const deadline = Date.now() + timeoutMs + WATCHER_DEADLINE_HEADROOM_MS;
-  while (Date.now() < deadline) {
-    if (existsSync(resPath)) {
-      const raw = readFileSync(resPath, "utf8");
-      rmSync(resPath, { force: true });
-      rmSync(reqPath, { force: true });
-      const parsed = JSON.parse(raw) as ExecInGatewayResult;
-      if (parsed.exitCode === WATCHER_TIMEOUT_EXIT_CODE) {
-        console.warn(
-          `execInGateway: watcher killed child after ${timeoutMs}ms (id ${id}, argv ${JSON.stringify(argv)})`,
-        );
-      }
-      return parsed;
-    }
-    await new Promise((r) => setTimeout(r, EXEC_POLL_INTERVAL_MS));
-  }
-  rmSync(reqPath, { force: true });
-  throw new Error(`execInGateway timed out waiting for response (request id ${id})`);
 }

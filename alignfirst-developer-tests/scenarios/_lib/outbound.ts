@@ -45,7 +45,9 @@ export function waitForStarter(
       m.conversation.id === ctx.conversationId &&
       m.threadId !== undefined,
     {
-      timeoutMs: opts.timeoutMs ?? 90_000,
+      // 150s: OpenClaw 2026.8 channel turns can take well over a minute before
+      // the turn-end starter posts (Slack posts nothing earlier).
+      timeoutMs: opts.timeoutMs ?? 150_000,
       sinceCursor: opts.sinceCursor,
       failFastUnmatchedOutbounds: false,
     },
@@ -169,7 +171,8 @@ export async function assertNoSelfThreadMessagePost(
   threadId: string,
   sinceCursor = 0,
 ): Promise<void> {
-  const posts = ctx.getAgentToolCalls().filter((call) => isSelfThreadMessagePost(call, threadId));
+  const calls = await ctx.getAgentToolCalls();
+  const posts = calls.filter((call) => isSelfThreadMessagePost(call, threadId));
   const { messages } = await ctx.poll({ sinceCursor, timeoutMs: 1_000 });
   const threadTexts = messages
     .filter((m) => m.direction === "outbound" && m.threadId === threadId)

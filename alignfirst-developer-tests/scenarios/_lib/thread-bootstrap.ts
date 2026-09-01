@@ -94,11 +94,12 @@ function assertStarterValues(
     );
   }
   if (opts.projectPath !== undefined) {
-    const projectPathLine = starterFieldLine(text, "Project path");
+    // Content-based: labels follow the user's language, so assert the exact
+    // canonical path rather than a "Project path:" line.
     ctx.assertRegex(
-      projectPathLine,
+      text,
       new RegExp(escapeRe(opts.projectPath), "i"),
-      "starter project-path field carries the canonical path",
+      "starter carries the canonical project path",
     );
   }
   if (opts.ticketId !== undefined) {
@@ -111,14 +112,6 @@ function assertStarterValues(
   if (opts.request !== undefined && !text.includes(opts.request)) {
     throw new Error(`starter omitted the detailed request: ${JSON.stringify(text)}`);
   }
-}
-
-function starterFieldLine(text: string, field: string): string {
-  const line = text
-    .split(/\r?\n/u)
-    .find((candidate) => candidate.trimStart().startsWith(`${field}:`));
-  if (line === undefined) throw new Error(`starter is missing ${field}: ${JSON.stringify(text)}`);
-  return line;
 }
 
 interface ChannelSessionStoppedOptions {
