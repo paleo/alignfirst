@@ -40,11 +40,11 @@ Defaults in `src/agents/bootstrap-budget.ts`:
 
 Over-budget files are truncated with a marker. Keep workspace files under these limits.
 
-## Heartbeat sentinel: `NO_REPLY`, never `HEARTBEAT_OK`
+## Heartbeat sentinel: `NO_REPLY`
 
-OpenClaw has two silence tokens: `NO_REPLY` (`SILENT_REPLY_TOKEN`, suppressed on every delivery path) and `HEARTBEAT_OK` (`HEARTBEAT_TOKEN`, heartbeat acks). Measured on `2026.6.11`: a token-only `HEARTBEAT_OK` final on a system-event wake turn is **not** stripped — it posts as literal text to the channel (2/2 leaked in a 108-cell batch), while `NO_REPLY` was suppressed 83/83. The wake convention is therefore `NO_REPLY` (workspace `AGENTS.md`, alcode guide).
+The workspace and alcode wake convention is `NO_REPLY`, OpenClaw's general silent-reply token. OpenClaw 2026.8.1 sends the configured heartbeat prompt verbatim as the scheduled user message and no longer adds a heartbeat-specific system-prompt section. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
-Trap: on every heartbeat-triggered run, OpenClaw injects a hard-coded system-prompt section — *"reply exactly: HEARTBEAT_OK"* (`src/agents/system-prompt.ts`) — after the bootstrap files, contradicting the `AGENTS.md` rule; models occasionally obey it. The harness disables that section with `agents.defaults.heartbeat.includeSystemPromptSection: false` (`openclaw.json`). Deleting the `heartbeat` config block would not help: cadence defaults to 30m and the section stays. The `heartbeat.prompt` override only reaches scheduled heartbeats, not system-event wakes (those submit the bare `[OpenClaw heartbeat poll]`).
+OpenClaw still accepts the legacy `HEARTBEAT_OK` acknowledgment and suppresses token-only replies, including stray acknowledgments outside heartbeat turns. Keep new instructions on `NO_REPLY` so scheduled and event-driven wake paths share one convention.
 
 ## Practical implications
 
@@ -161,10 +161,9 @@ The agent is otherwise a black box. A handful of env vars unlock raw introspecti
 | `OPENCLAW_RAW_STREAM=1` | Raw event stream the runtime emits (messages, tool calls, responses) as JSONL. Override path with `OPENCLAW_RAW_STREAM_PATH`. | `~/.openclaw/logs/raw-stream.jsonl` |
 | `OPENCLAW_CACHE_TRACE=1` (+ `OPENCLAW_CACHE_TRACE_SYSTEM=1`, `OPENCLAW_CACHE_TRACE_PROMPT=1`) | Anthropic prompt-cache breakpoints and reuse. Useful to verify the bootstrap files land in a cached prefix. | `~/.openclaw/logs/cache-trace.jsonl` |
 | `OPENCLAW_DEBUG_MODEL_PAYLOAD=tools\|summary\|full-redacted` | Stderr summary of each model call. Lighter than the payload log. | stderr / journal |
-| `OPENCLAW_TRAJECTORY_DIR=<path>` | Redirect the always-on per-session trajectory logs (full conversation history) elsewhere. | per-session JSON |
 
-Trajectories are written by default under `~/.openclaw/logs/trajectory/` and can be extracted with `openclaw export-trajectory --sessionKey <key>`.
+Trajectory capture is default-on (disable with `OPENCLAW_TRAJECTORY=0`). Since 2026.8, the events are SQLite rows in the per-agent store (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`, table `trajectory_runtime_events`); `OPENCLAW_TRAJECTORY_DIR` per-session files are a legacy read path the gateway no longer writes. Extract a session with `openclaw export-trajectory --sessionKey <key>`. Caveat: trajectory payloads run through the diagnostic projection, which caps the whole payload at ~64 nodes — a `model.completed` snapshot keeps only its first few messages, the rest become `"[Truncated]"`.
 
-In the test harness, the gateway's `~/.openclaw/logs/` is bind-mounted to `alignfirst-developer-tests/.gateway-logs/`. The scenario runner parses the per-session `trajectory/*.jsonl` from there to attribute per-turn tool calls and cost (provider-neutral — works under any LiteLLM provider); if the dir is absent (logging disabled, or the dir is unwritable) the runner logs `agentToolCall parsing skipped: … trajectory not found` and reports `agentTurns: 0`. The trajectory log is default-on (disable with `OPENCLAW_TRAJECTORY=0`); ensure `.gateway-logs/` is writable by your user when you need the trace.
+That cap is why the test harness reads the **session transcripts** instead (`transcript_events` in the same store — the full-fidelity record the gateway replays, appended per message). The scenario runner extracts a conversation's transcripts through the exec-watcher RPC (`transcript-dump.js`) to attribute per-turn tool calls and cost (provider-neutral — works under any LiteLLM provider), and archives them as `transcripts.json` in each cell's artifact dir. If no agent store exists yet, the runner logs `agentToolCall parsing skipped: no agent session store found in the gateway` and reports `agentTurns: 0`.
 
 Disable the debug vars once done — the JSONL files grow per turn.

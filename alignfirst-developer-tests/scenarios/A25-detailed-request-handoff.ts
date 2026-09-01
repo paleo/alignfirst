@@ -36,7 +36,8 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
     rubric:
       "A thread-opening handoff for the detailed French nimbus request. It preserves all three " +
       "requirements in their original language. It defers ticket creation or collection to the " +
-      "working session, asks only for a reply in the thread, and claims no work has started.",
+      "working session, brings the user back (an explicit ask for a reply, or a statement that " +
+      "the user's next message launches the working session), and claims no work has started.",
     label: "detailed-request-preserved",
   });
   alproject.assertListCallCount(1);
@@ -54,8 +55,9 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
     attachTo: ticketQuestion.entry,
     message: ticketQuestion.match.text,
     rubric:
-      "A concise question asking for the ticket ID needed to continue the detailed nimbus request. " +
-      "Reject claims that workspace setup or coding has started.",
+      "A question asking for the ticket ID needed to continue the detailed nimbus request. Plain " +
+      "prose or OpenClaw's structured prompt (numbered options, 'Reply with the number…', a " +
+      "side-ticket option) both count. Reject claims that workspace setup or coding has started.",
     label: "detailed-request-ticket-question",
   });
 
@@ -73,10 +75,13 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
   const delegation = await expectCodingDelegation(ctx, codingAgent, {
     ticketId: TICKET_ID,
     rubric:
-      `An AlignFirst coding-protocol delegation for ticket ${TICKET_ID}. It tells the coding agent ` +
-      "to implement the detailed export-page request: sticky region filter, an explanation for the " +
-      "disabled export button, and preserved keyboard and screen-reader behavior. Reject if any of " +
-      "the three requirements is absent.",
+      `An AlignFirst coding-protocol delegation for ticket ${TICKET_ID} covering the detailed ` +
+      "export-page request. The three requirements — sticky region filter, an explanation for " +
+      "the disabled export button, preserved keyboard and screen-reader behavior — may be " +
+      "spelled out in the prompt, or carried by a reference to the captured request file " +
+      `(.plans/${TICKET_ID}/A1-request.md holds the full request; pointing the agent at it ` +
+      "counts as covering all three). Reject only if the prompt neither references the request " +
+      "file nor covers the requirements.",
     label: "detailed-request-coding-delegation",
     timeoutMs: 240_000,
   });

@@ -11,12 +11,11 @@ import {
 } from "./context.js";
 import { judgeCostUsd } from "./cost.js";
 import {
-  parseAgentToolCalls,
-  readTrajectoryCostFor,
-  TRAJECTORY_DIR,
-  trajectoryDirExists,
-  waitForTrajectoryUsage,
-} from "./trajectory-log.js";
+  aggregateAgentToolCalls,
+  fetchTranscriptSnapshot,
+  readTranscriptCost,
+  waitForTranscriptQuiescence,
+} from "./transcript-log.js";
 import { startMockCliServer } from "./mock-cli-server.js";
 import type {
   AgentToolCall,
@@ -83,25 +82,30 @@ async function runCell(args: RunnerArgs): Promise<number> {
 
     const { entries, judgeUsages, result } = internals.finalize({ failure });
 
-    await waitForTrajectoryUsage({ conversationId, startedAtIso });
-    const { cost: agentCostUsd, turns: agentTurns } = readTrajectoryCostFor({
-      startTsIso: startedAtIso,
-      conversationId,
-    });
+    await waitForTranscriptQuiescence({ conversationId, startedAtIso });
+    const snapshot = await fetchTranscriptSnapshot({ conversationId, startedAtIso });
+    const { cost: agentCostUsd, turns: agentTurns } = readTranscriptCost(snapshot);
     const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
 
-    const agentCalls = parseAgentToolCalls({ conversationId, startedAtIso });
+    // The per-session store dies with the stack recreation, so keep the raw
+    // transcripts as a cell artifact for post-mortems.
+    writeFileSync(join(outDir, "transcripts.json"), JSON.stringify(snapshot.sessions));
+
+    const agentCalls = aggregateAgentToolCalls(snapshot.sessions);
     pairAgentCallsWithCliMocks(agentCalls, entries);
-    if (agentCalls.length === 0 && !trajectoryDirExists()) {
+    if (agentCalls.length === 0 && (snapshot.error !== undefined || snapshot.databases === 0)) {
       entries.push({
         entrySeq: entries.length,
         ts: finishedAtIso,
         kind: "scenarioLog",
-        message: `agentToolCall parsing skipped: ${TRAJECTORY_DIR} not found`,
+        message:
+          snapshot.error !== undefined
+            ? `agentToolCall parsing failed: ${snapshot.error}`
+            : "agentToolCall parsing skipped: no agent session store found in the gateway",
       });
     }
 
-    const agentEntries = buildAgentToolCallEntries(agentCalls, entries.length);
+    const agentEntries = buildAgentToolCallEntries(agentCalls, entries.length, finishedAtIso);
     appendAgentCallsToLog(logStream, agentEntries);
     await closeStream(logStream);
     const merged = mergeTimeline(entries, agentEntries);
@@ -324,14 +328,22 @@ export function leadingCli(input: unknown): string | undefined {
 function buildAgentToolCallEntries(
   agentCalls: AgentToolCall[],
   liveEntryCount: number,
+  fallbackTs: string,
 ): AgentToolCallEntry[] {
-  const sorted = [...agentCalls].sort((a, b) => (a.startedAt < b.startedAt ? -1 : 1));
+  const sorted = [...agentCalls].sort(compareStartedAt);
   return sorted.map((call, i) => ({
     entrySeq: liveEntryCount + i,
-    ts: call.startedAt,
+    ts: call.startedAt ?? fallbackTs,
     kind: "agentToolCall",
     call,
   }));
+}
+
+// A call whose message carried no timestamp sorts to the end, never the front.
+function compareStartedAt(a: AgentToolCall, b: AgentToolCall): number {
+  if (a.startedAt === undefined) return b.startedAt === undefined ? 0 : 1;
+  if (b.startedAt === undefined) return -1;
+  return a.startedAt < b.startedAt ? -1 : 1;
 }
 
 /**

@@ -106,6 +106,11 @@ configure_common() {
   # governs periodic ticks. isolatedSession, lightContext and activeHours would each break the
   # wake (throwaway session, no workspace bootstrap, deferred run), so they are cleared.
   set_scalar agents.defaults.heartbeat.every "24h"
+  # Explicit target: the implicit owner-DM default prepends a one-time operator-facing
+  # "First heartbeat alert" preamble to the first delivered wake report (2026.8+), and the
+  # owner route never resolves to a group. Wake reports must follow the ticket conversation,
+  # which "last" targets.
+  set_scalar agents.defaults.heartbeat.target "last"
   set_scalar agents.defaults.heartbeat.prompt \
     "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. \
 Do not infer or repeat old tasks from prior chats. \
@@ -137,7 +142,7 @@ If nothing needs attention, reply exactly NO_REPLY."
   set_json session.threadBindings '{"enabled":true,"idleHours":60,"maxAgeHours":0}'
 
   echo "[seed] agent identity"
-  set_json agents.list '[{"id":"main","identity":{"name":"{{DEVELOPER_NAME}}"}}]'
+  set_json agents.entries '{"main":{"identity":{"name":"{{DEVELOPER_NAME}}"}}}'
 
   echo "[seed] gateway — loopback, token auth, dashboard through an SSH tunnel"
   set_json gateway.port 18789

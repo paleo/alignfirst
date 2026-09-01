@@ -52,10 +52,11 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
     attachTo: starter.entry,
     message: starter.match.text,
     rubric:
-      `A thread-opening handoff for reviewing ${PULL_REQUEST_URL}. It retains the URL and asks ` +
-      "the user to reply in the thread so the working session can start. It may promise that the " +
-      "working session will derive the ticket from the URL, but does not ask the user for a " +
-      "ticket ID or claim that the pull request has already been read.",
+      `A thread-opening handoff for reviewing ${PULL_REQUEST_URL}. It retains the URL and brings ` +
+      "the user back — an explicit ask for a reply, or a statement that the user's next message " +
+      "launches the working session. It may promise that the working session will derive the " +
+      "ticket from the URL, but does not ask the user for a ticket ID or claim that the pull " +
+      "request has already been read.",
     label: "resource-url-deferred-to-working-session",
   });
   alproject.assertListCallCount(1);

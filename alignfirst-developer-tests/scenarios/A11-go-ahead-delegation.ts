@@ -33,7 +33,7 @@ const PROJECT = "nimbus";
  * exactly that: "prépare le workspace, ne lance aucun travail de code sans mon feu vert" must
  * produce a workspace and no coding-protocol call. Phase 2 releases it and asserts the launch path
  * from the incident `.plans/30/D1-spec.md`: a backgrounded alcode exec (`background: true`,
- * `timeout: 0`) whose exec-exit wake lands the completion report back in the same thread.
+ * `timeoutSeconds: 0`) whose exec-exit wake lands the completion report back in the same thread.
  */
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -122,11 +122,11 @@ async function runGoAheadPhase(
       `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
     );
   }
-  // The incident's regression: the agent passed a finite `timeout` (300/600) instead of the
-  // guide-mandated `background: true, timeout: 0` (field names per the exec input in A10 reports).
-  const input = (alcodeCall.input ?? {}) as { background?: unknown; timeout?: unknown };
+  // The incident's regression: the agent passed a finite timeout (300/600) instead of the
+  // guide-mandated `background: true, timeoutSeconds: 0` (OpenClaw 2026.8 exec field names).
+  const input = (alcodeCall.input ?? {}) as { background?: unknown; timeoutSeconds?: unknown };
   ctx.assertEqual(input.background, true, "alcode exec: background === true");
-  ctx.assertEqual(input.timeout, 0, "alcode exec: timeout === 0");
+  ctx.assertEqual(input.timeoutSeconds, 0, "alcode exec: timeoutSeconds === 0");
 
   // The started ack, classified by a batch judge over the thread's outbounds (tolerant of
   // phrasing/language and interleaved reasoning narration).

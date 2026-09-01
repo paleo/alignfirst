@@ -97,12 +97,14 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the session
   // file and reports in the thread — the same session, so the completion carries the thread's id.
   // A batch judge picks the FINISHED report out of the thread window, distinguishing it from the
-  // earlier ack and any launch banner. Generous timeout: a real LLM wake turn.
+  // earlier ack and any launch banner. Generous timeout: a real LLM wake turn,
+  // and the playbook's wrap-up (manual test, log review, review, draft PR) can
+  // legitimately precede the confirmation on slower providers.
   await waitForCompletionReport(ctx, {
     conversationId: ctx.conversationId,
     threadId,
     sinceCursor: goAheadCursor,
-    timeoutMs: 240_000,
+    timeoutMs: 420_000,
     label: "completion-wake-report",
   });
 

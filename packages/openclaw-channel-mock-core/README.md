@@ -9,6 +9,8 @@ Not meant to be consumed directly. Use the surface wrappers:
 
 Both wrappers register as OpenClaw channels and talk to a single bus (`http://bus:43123` by default) provisioned by [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test).
 
+`zod` is a peer dependency pinned to OpenClaw's own version: the config schema composes OpenClaw's zod objects with locally built ones, so both must resolve to the same zod instance. When upgrading OpenClaw, move the peer pin to whatever zod version the new OpenClaw release pins.
+
 ## Attribution
 
 Adapted from upstream OpenClaw's `extensions/qa-channel/`. See [`NOTICE.md`](NOTICE.md).

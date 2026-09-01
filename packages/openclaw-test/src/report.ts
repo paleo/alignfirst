@@ -145,7 +145,7 @@ export interface AgentToolCall {
   toolName: string;
   toolUseId: string;
   /**
-   * `sessionKey` of the trajectory snapshot the call was collected from — the
+   * `sessionKey` of the session transcript the call was collected from — the
    * OpenClaw session that made it (e.g. channel vs per-thread session).
    */
   sessionKey?: string;
@@ -162,14 +162,17 @@ export interface AgentToolCall {
     /** Only in `report.json`: rtrimmed first 60 chars + `…` of the truncatable text. */
     truncatedContent?: string;
   };
-  startedAt: string;
   /**
-   * Best-effort estimate of when the tool call actually started, inferred by
+   * Timestamp of the transcript's assistant message that issued the call —
+   * per-message, so ordering `entries` on it is meaningful. Absent when the
+   * message carried no timestamp; such calls sort to the end of the timeline.
+   */
+  startedAt?: string;
+  /**
+   * Best-effort estimate of when the tool call actually executed, inferred by
    * matching the call's leading CLI against an in-order `cliMock` entry from
-   * the same scenario. `startedAt` carries the synthetic end-of-turn ts
-   * because the gateway log has no per-tool timestamp; this field, when
-   * present, lets readers see roughly when the call happened. Not used for
-   * `entries` ordering.
+   * the same scenario. `startedAt` stamps the issuing assistant message, not
+   * the execution. Not used for `entries` ordering.
    */
   inferredStartedAt?: string;
   turn?: number;

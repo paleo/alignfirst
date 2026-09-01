@@ -186,7 +186,7 @@ async function expectDelegationChain(
     conversationId: ctx.conversationId,
     threadId,
     sinceCursor,
-    timeoutMs: 240_000,
+    timeoutMs: 420_000,
     label: `completion-wake-report-${launchIndex}`,
   });
 }

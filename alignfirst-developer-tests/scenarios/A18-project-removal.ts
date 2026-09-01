@@ -90,7 +90,7 @@ export default async function projectRemoval(ctx: ScenarioContext): Promise<void
   // The workspace name matches both path forms the bot uses (absolute, or
   // `../<name>` relative to the main worktree).
   assertAgentCommandOrder(
-    ctx.getAgentToolCalls(),
+    await ctx.getAgentToolCalls(),
     new RegExp(String.raw`workspace\s+remove[^\n]*${escapeRe(fixture.workspaceName)}`),
     new RegExp(String.raw`\brm\b[^\n]*${escapeRe(NIMBUS_PROJECT_PATH)}`),
     "workspace tooling must remove the linked worktree before the main worktree",

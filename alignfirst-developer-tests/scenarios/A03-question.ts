@@ -5,15 +5,16 @@ import {
   extractCodingPrompt,
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
+import {
+  assertBranchForTicket,
+  escapeRegExp,
+  waitForAnyWorktreeDir,
+} from "./_lib/fixture-state.ts";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import {
-  assertNoWorktreeDirs,
-  bootstrapThreadFromChannel,
-  sendInThread,
-} from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-030";
@@ -24,10 +25,11 @@ const INVESTIGATION_FINDING =
 
 /**
  * An investigation question hands off like any other work: the channel session
- * opens the thread and stops, even though nothing is missing and no workspace
- * is needed. The thread session recovers the question from the starter's task
- * line — the channel message is invisible to it — and delegates a no-protocol
- * investigation to alcode, in the project dir, with no worktree.
+ * opens the thread and stops. The thread session recovers the question from the
+ * starter's task line — the channel message is invisible to it — then, since
+ * single-project work always gets its workspace (read-only included), sets up
+ * the ticket's workspace and delegates a no-protocol investigation to alcode
+ * from the linked worktree.
  */
 export default async function projectInvestigationQuestion(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -51,6 +53,11 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
   });
   await sendInThread(ctx, starter.threadId, "Vas-y.");
 
+  const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
+    timeoutMs: 180_000,
+  });
+  assertBranchForTicket(worktreeDir, TICKET_ID);
+
   const { call: delegationCall, cursorAfterDelegation } = await expectNoProtocolDelegation(
     ctx,
     codingAgent,
@@ -59,23 +66,25 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
       label: "coding-agent-investigation-delegation",
     },
   );
-  // The delegation must run in the project dir so the coding agent investigates
-  // the right repo — checked structurally (deterministic), not by the judge.
+  // The delegation must run from the ticket's linked worktree so the coding
+  // agent investigates the right repo — checked structurally, not by the judge.
   ctx.assertRegex(
     delegationCall.cwd,
-    new RegExp(`^${NIMBUS_PROJECT_PATH}/?$`),
-    "delegation runs from the nimbus project directory",
+    new RegExp(`^${escapeRegExp(worktreeDir)}/?$`),
+    "delegation runs from the ticket's linked worktree",
   );
   ctx.log(
     `no-protocol delegation captured (prompt length=${extractCodingPrompt(delegationCall)?.length ?? 0})`,
   );
 
-  assertNoWorktreeDirs(ctx);
-
   // The guide makes every alcode run a background task, so the findings arrive only after the
   // exec-exit wake: launch ack first, then the no-protocol session file reaches
   // `status: succeeded`, then the woken agent relays the finding in the thread.
-  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, { timeoutMs: 120_000 });
+  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, {
+    ticketId: TICKET_ID,
+    allowNoTicketDir: true,
+    timeoutMs: 120_000,
+  });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
   // The findings arrive only after the exec-exit wake; a batch judge picks the relayed finding out

@@ -291,7 +291,7 @@ function ensureConsumerImage(composeArgs: string[]): void {
  * canonical file is never mutated and `process.env` is never repointed — callers
  * pass the path to worker spawns via per-spawn env.
  *
- * When a `model` is given, `agents.list[id=main].model` is set to its full ref so
+ * When a `model` is given, `agents.entries.main.model` is set to its full ref so
  * the gateway boots on the selected model. Rendered per model (own temp file).
  *
  * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
@@ -329,15 +329,24 @@ function assertModelProviderPresent(model: SelectedModel, droppedProviders: Set<
 
 function setMainAgentModel(config: Record<string, unknown>, ref: string): void {
   const agents = config.agents;
-  const list =
-    agents && typeof agents === "object" ? (agents as { list?: unknown }).list : undefined;
-  if (!Array.isArray(list)) throw new Error("openclaw-test: config has no agents.list array");
-  const main = list.find(
-    (a): a is Record<string, unknown> =>
-      !!a && typeof a === "object" && (a as { id?: unknown }).id === "main",
-  );
-  if (!main) throw new Error("openclaw-test: config has no agents.list entry with id 'main'");
-  main.model = ref;
+  const agentsObj =
+    agents && typeof agents === "object"
+      ? (agents as { entries?: unknown; list?: unknown })
+      : undefined;
+  if (Array.isArray(agentsObj?.list)) {
+    throw new Error(
+      "openclaw-test: config uses the retired agents.list array; migrate openclaw.json to agents.entries keyed by agent id (agents.entries.main)",
+    );
+  }
+  const entries = agentsObj?.entries;
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+    throw new Error("openclaw-test: config has no agents.entries object");
+  }
+  const main = (entries as Record<string, unknown>).main;
+  if (!main || typeof main !== "object" || Array.isArray(main)) {
+    throw new Error("openclaw-test: config has no agents.entries.main object");
+  }
+  (main as Record<string, unknown>).model = ref;
 }
 
 const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;

@@ -14,7 +14,7 @@ Recover the thread context in Step 1 first. Ordinary project work then loads its
 
 Before any other tool call or reply, call `message` `action: "read"` with `channel` and `threadId` from your conversation metadata. Recover the task, the full request when recorded, every PROJECT / PROJECT_PATH pair, and TICKET_ID from the thread's starter. Anything still missing comes from the user's messages. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. Branch, linked-worktree path, and dev-server URL also live in the history, under the `[WORKSPACE]` banner when one was posted.
 
-The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's `Task:` line, and it's your green light.
+The message that woke you is often content-free — "vas-y", "ok", a bare answer to the starter's ask. That's the handoff, not the task: the task is the starter's task line, and it's your green light.
 
 ### Step 2 — Resolve deferred context
 
@@ -42,7 +42,7 @@ For new single-project work where the user explicitly says there is no ticket:
 1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
 2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
 3. Run `alcode reserve-side-ticket` from PROJECT_PATH (`exec`). It creates the next free `.plans/side-N/` and prints `side-N`. Set TICKET_ID to that id.
-4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's `Task:` and the message that explicitly confirmed no ticket.
+4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
 5. Run the documented plans synchronization command again when the project has one.
 
 The bot owns this reservation and the request capture; the coding agent receives TICKET_ID. Do not use `alcode new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
@@ -85,7 +85,7 @@ Only when the message is unambiguously about chat content ("summarize this threa
 When one project owns a detailed user explanation, preserve it before delegation:
 
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
-2. Read the `alignfirst` skill for TASK_DIR and filename conventions. Create the next `-request.md` file, such as `.plans/{TICKET_ID}/A1-request.md`, containing the complete `Request:` text from the starter. Keep its language. You may fix typos; preserve every detail.
+2. Read the `alignfirst` skill for TASK_DIR and filename conventions. Create the next `-request.md` file, such as `.plans/{TICKET_ID}/A1-request.md`, containing the complete request text recorded in the starter's request block. Keep its language. You may fix typos; preserve every detail.
 3. When ticket editing is available, add the request-file path relative to the project to the ticket description.
 4. Run the project's documented plans synchronization command.
 5. Continue through project workspace setup and alcode as usual.

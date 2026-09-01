@@ -5,6 +5,14 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync
 const IPC_DIR = "/var/run/openclaw-test-ipc";
 const MAX_OUTPUT_BYTES = 1_048_576;
 const POLL_INTERVAL_MS = 100;
+const STALE_SUFFIXES = [
+  ".req.json",
+  ".req.json.processing",
+  ".res.json",
+  ".res.json.tmp",
+  ".transcript.json",
+  ".transcript.json.tmp",
+];
 
 mkdirSync(IPC_DIR, { recursive: true });
 
@@ -12,7 +20,7 @@ mkdirSync(IPC_DIR, { recursive: true });
 // persistent) IPC dir, so the next runner cycle starts clean.
 try {
   for (const f of readdirSync(IPC_DIR)) {
-    if (f.endsWith(".req.json") || f.endsWith(".req.json.processing") || f.endsWith(".res.json")) {
+    if (STALE_SUFFIXES.some((suffix) => f.endsWith(suffix))) {
       try {
         rmSync(`${IPC_DIR}/${f}`, { force: true });
       } catch (err) {

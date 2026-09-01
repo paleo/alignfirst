@@ -14,7 +14,7 @@ describe("renderGuide", () => {
   it("renders the OpenClaw variant with its run and wake instructions", () => {
     const guide = renderGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS);
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
-    expect(guide).toContain("`background: true` and `timeout: 0`");
+    expect(guide).toContain("`background: true` and `timeoutSeconds: 0`");
     expect(guide).toContain("plain heartbeat poll");
     expect(guide).toContain("`~` is not expanded there");
   });

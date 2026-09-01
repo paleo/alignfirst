@@ -76,8 +76,8 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
   });
 
   // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // setup turn (workspace setup goes through alcode). The trajectory snapshot
-  // flushes when the session run ends, after the report — hence the generous timeout.
+  // setup turn (workspace setup goes through alcode). The call can come late in
+  // a long turn — hence the generous timeout.
   await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
     label: "agent runs `alcode --openclaw-guide`",
     timeoutMs: 120_000,

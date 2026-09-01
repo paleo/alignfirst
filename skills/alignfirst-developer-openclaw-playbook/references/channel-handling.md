@@ -16,7 +16,7 @@ Resolve PROJECT and PROJECT_PATH from that result:
 - **PROJECT_PATH** — its canonical absolute main-worktree path.
 - For ordinary work, only records whose status is `registered` or `unregistered` can supply PROJECT_PATH. A `missing` record is a discrepancy, not a usable project location.
 - For project removal, a `missing` record can supply PROJECT_PATH so the lifecycle procedure can unregister it.
-- A mentioned name with one eligible match supplies both values.
+- A mentioned name with one eligible match supplies both values. A name counts as mentioned wherever it appears, including inside a resource URL's path (a repository URL naming the project, for instance).
 - A mentioned name with several eligible matches supplies PROJECT but leaves PROJECT_PATH unresolved. Ask the user to select one of the matching canonical paths.
 - A mentioned name with no eligible match supplies the proposed PROJECT but leaves PROJECT_PATH unresolved. Mention a same-name `missing` discrepancy when present.
 - With no mentioned project, infer both values only when the list contains exactly one filesystem-present project. Zero or several filesystem-present projects leave both values unresolved.
@@ -46,7 +46,7 @@ From the user's message and the retained inventory result:
 - **TICKET_ID** — the ticket the user gave.
 - **TASK** — a one-line restatement, in your own words, of what the user wants. Preserve every
   resource URL verbatim in this line so the working session can inspect it.
-- **REQUEST** — for a detailed explanation, the complete user message, unchanged. Omit it for a short request.
+- **REQUEST** — for a detailed explanation (several requirements, constraints, or itemized points), the complete user message, unchanged. The working session files this text verbatim; a condensed task line is not a substitute. Omit it for a short request.
 
 A value the user did not supply and the lookup did not resolve stays missing. Step 3 turns it into a question. Run no project inspection or work command.
 
@@ -69,7 +69,7 @@ The tool returns the thread's `chat_id` — that is the THREAD_ID.
 
 A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter is its whole inheritance and stays the thread's record of the work. It ends with an ask that brings the user back — the thread session activates on the user's next message in the thread.
 
-Template. `Task:`, `Project:`, `Project path:`, `Ticket:`, and `Request:` are machine-readable keys: copy them verbatim in English. Start with `Task:`. Add one adjacent `Project:` / `Project path:` pair for each resolved project, omitting the path when it is unresolved. Add `Ticket:` only when known. Add the `Request:` block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Translate the values and `{ask}` to the user's language.
+Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Add the request block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
 
 ```text
 Task: {TASK}
@@ -83,21 +83,21 @@ Request:
 {ask}
 ```
 
-Omit unknown project, path, and ticket fields instead of filling them with placeholder text. Write the `Task:` value as "to be defined" in the user's language when the user gave no scope. The `Request:` block preserves the original language and every detail; do not condense or translate it.
+Omit unknown project, path, and ticket fields instead of filling them with placeholder text. Write the task value as "to be defined" in the user's language when the user gave no scope. The request block preserves the original language and every detail; do not condense or translate it.
 
-Earlier channel context that the thread session would otherwise lose belongs in the TASK line, condensed and rephrased. A detailed request also carries the original message in `Request:`. Do not narrate in third person ("the user is asking…").
+Earlier channel context that the thread session would otherwise lose belongs in the task line, condensed and rephrased. A detailed request also carries the original message in the request block. Do not narrate in third person ("the user is asking…").
 
 The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 
 - Duplicate PROJECT matches → list the matching canonical paths and ask which PROJECT_PATH to use.
 - No PROJECT_PATH for project removal → ask which registered canonical path to remove.
 - A clearly single-project task with no PROJECT → ask which project it belongs to, restating the ticket id when present.
-- An unresolved PROJECT for ordinary single-project work → ask for the registered project path.
+- An unresolved PROJECT for ordinary single-project work → state that the name is not in the project inventory, then ask for the registered project path.
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the user's
   next message launches the thread session, which inspects the URL.
-- A multi-project request, or a request that may not need a project → ask for no main project; the working session routes it.
+- A multi-project request, or a request that may not need a project → ask for no main project; state that the user's next message launches the thread session, which routes the work.
 - Nothing else needs an answer → state that the user's next message launches the thread session. Do not claim that you are checking or starting the work now.
 
 For project creation, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path. Then end the turn:
