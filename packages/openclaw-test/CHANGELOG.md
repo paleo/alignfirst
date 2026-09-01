@@ -1,5 +1,18 @@
 # @paleo/openclaw-test
 
+## 0.16.0
+
+### Minor Changes
+
+- ac9b4c5: OpenClaw 2026.8 support. `ctx.getAgentToolCalls()` is now async, each cell archives `transcripts.json` instead of a `trajectory/` directory, `waitForOutbound`'s CLI-silence fail-fast default grew from 30s to 60s, and model-selected runs reject the retired `agents.list` config shape — migrate to `agents.entries`.
+
+### Patch Changes
+
+- Updated dependencies [ac9b4c5]
+  - @paleo/openclaw-channel-mock-core@0.7.0
+  - @paleo/openclaw-discord-mock@0.3.8
+  - @paleo/openclaw-slack-mock@0.3.8
+
 ## 0.15.5
 
 ### Patch Changes
