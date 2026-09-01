@@ -1,5 +1,5 @@
-import { getChatChannelMeta } from "openclaw/plugin-sdk/channel-plugin-common";
 import { createChannelMockAccountHelpers } from "./accounts.js";
+import { createChannelMockMeta } from "./channel-meta.js";
 import { buildChannelMockConfigSchema } from "./config-schema.js";
 import type { ChannelPlugin } from "./runtime-api.js";
 import { createApplyChannelMockSetup } from "./setup.js";
@@ -10,7 +10,7 @@ export function createChannelMockSetupPlugin(params: {
   label: string;
 }): ChannelPlugin<ResolvedChannelMockAccount> {
   const { channelId, label } = params;
-  const meta = { ...getChatChannelMeta(channelId), label };
+  const meta = createChannelMockMeta({ channelId, label });
   const helpers = createChannelMockAccountHelpers({ channelId });
   const applySetup = createApplyChannelMockSetup({ channelId });
   const configSchema = buildChannelMockConfigSchema(channelId);

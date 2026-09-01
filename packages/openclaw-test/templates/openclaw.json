@@ -15,14 +15,13 @@
     }
   },
   "agents": {
-    "list": [
-      {
-        "id": "main",
+    "entries": {
+      "main": {
         "name": "OpenClaw Main",
         "model": "<set-your-litellm-model-ref>",
         "workspace": "/home/claw/.openclaw/workspace"
       }
-    ]
+    }
   },
   "channels": {
     "discord-mock": {

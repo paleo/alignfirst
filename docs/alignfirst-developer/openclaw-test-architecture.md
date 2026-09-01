@@ -107,7 +107,7 @@ Workers are created **lazily**: the per-cell `docker compose up -d --force-recre
 
 Per-worker resources ride **per-spawn env** (never `process.env` mutation), on every Compose invocation for that worker — recreate and runner alike, since Compose re-interpolates bind mounts each time:
 
-- `OPENCLAW_CONFIG_PATH` — the rendered config of the cell's model. `--model <id|id,id,…|all>` resolves each bare id to a full `provider/model` ref via `OPENCLAW_TEST_MODELS` (`all` alphabetical, an explicit list in CLI order); the CLI renders that ref into `agents.list[id=main].model` of a run-scoped config (`renderRuntimeConfig`, which also expands `${VAR}` secret refs, memoized one temp file per model) — the canonical `openclaw.json` is never mutated.
+- `OPENCLAW_CONFIG_PATH` — the rendered config of the cell's model. `--model <id|id,id,…|all>` resolves each bare id to a full `provider/model` ref via `OPENCLAW_TEST_MODELS` (`all` alphabetical, an explicit list in CLI order); the CLI renders that ref into `agents.entries.main.model` of a run-scoped config (`renderRuntimeConfig`, which also expands `${VAR}` secret refs, memoized one temp file per model) — the canonical `openclaw.json` is never mutated.
 - `OPENCLAW_TEST_GATEWAY_LOGS_DIR` → `<gatewayLogsDir>/w<i>`. Trajectory rotation and leftover archiving run per worker against this dir.
 - `OPENCLAW_WORKSPACE_DIR` → `<projectDir>/.workers/w<i>/workspace`, a private copy refreshed (delete + re-copy from the canonical workspace) before every cell — workspace writes never leak across cells, and host edits to workspace files land on the next cell.
 
@@ -218,7 +218,7 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 
 ## OpenClaw config quirks the harness depends on
 
-- **`agents.list[*].workspace`, not `workspaceDir`.** The schema accepts both spellings on related surfaces, but the agents list only reads `workspace`.
+- **`agents.entries.*.workspace`, not `workspaceDir`.** Agent entries read `workspace`.
 - **`gateway.mode: "local"` required.** Without it, startup fails with `existing config is missing gateway.mode`.
 
 ## Scenario loading

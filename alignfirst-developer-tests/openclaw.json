@@ -83,21 +83,19 @@
       "skills": ["alignfirst", "alignfirst-setup-guide", "alignfirst-developer-openclaw-playbook"],
       "heartbeat": {
         "every": "24h",
-        "includeSystemPromptSection": false,
         "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
       },
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
     },
-    "list": [
-      {
-        "id": "main",
+    "entries": {
+      "main": {
         "name": "OpenClaw Main",
         "model": "custom-anthropic/claude-sonnet-5",
         "workspace": "/home/claw/.openclaw/workspace"
       }
-    ]
+    }
   },
   "channels": {
     "discord-mock": {

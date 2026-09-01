@@ -31,8 +31,8 @@ Adds the four `package.json` scripts (`env:build`, `env:up`, `env:down`, `e2e`) 
 
 Edit `openclaw.json`:
 
-- `agents.list[id=main].model` — default `provider/model` ref; `run --model` overrides it per run.
-- `agents.list[id=main].workspace` — host path to your OpenClaw workspace. Field name is **`workspace`**, not `workspaceDir`.
+- `agents.entries.main.model` — default `provider/model` ref; `run --model` overrides it per run.
+- `agents.entries.main.workspace` — host path to your OpenClaw workspace. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.slack-mock.blockStreaming: true` — set this when running Slack scenarios under auto-thread, otherwise the agent's reply dribbles into the thread token-by-token.
 
 ## Env vars (`.env.local`)

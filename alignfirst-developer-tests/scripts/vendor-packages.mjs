@@ -10,7 +10,7 @@
 // `env:build` (npm's `env:build` script chains this automatically).
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +18,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "../..");
 const CONSUMER_DIR = resolve(HERE, "..");
 const VENDOR_DIR = resolve(HERE, "../vendor");
+const LOCK_PATH = resolve(CONSUMER_DIR, "package-lock.json");
 
 // Build order matters: the mock wrappers and harness resolve types from
 // channel-mock-core's dist, so it is built (and listed) first.
@@ -34,19 +35,26 @@ function vendorPackages() {
   resetVendorDir();
   buildPackages();
   for (const pkg of PACKAGES) packPackage(pkg);
-  removeStaleInstalls();
+  invalidateVendoredDependencies();
   console.log(`Vendored ${PACKAGES.length} package(s) into ${VENDOR_DIR}`);
 }
 
 // A vendored tarball keeps the same version (e.g. 0.12.0) across edits, so a subsequent
-// `npm install` trusts the already-installed copy in node_modules and reuses its now-stale
-// integrity instead of re-hashing the freshly packed tarball. The lockfile then disagrees with the
-// tarball, and the image's `npm ci` fails EINTEGRITY. Removing the installed copies forces the next
-// `npm install` to re-extract and re-hash, keeping lockfile and tarball consistent.
-function removeStaleInstalls() {
+// `npm install` reuses both the installed copy and its locked integrity. Remove both cached records
+// so the install following `vendor` reads and locks the new archive.
+function invalidateVendoredDependencies() {
+  removeStaleLockEntries();
   for (const pkg of PACKAGES) {
     rmSync(resolve(CONSUMER_DIR, "node_modules", pkg.name), { recursive: true, force: true });
   }
+}
+
+function removeStaleLockEntries() {
+  if (!existsSync(LOCK_PATH)) return;
+  const lock = JSON.parse(readFileSync(LOCK_PATH, "utf8"));
+  if (!lock.packages || typeof lock.packages !== "object") return;
+  for (const pkg of PACKAGES) delete lock.packages[`node_modules/${pkg.name}`];
+  writeFileSync(LOCK_PATH, `${JSON.stringify(lock, null, 2)}\n`);
 }
 
 function resetVendorDir() {

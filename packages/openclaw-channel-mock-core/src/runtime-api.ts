@@ -16,7 +16,7 @@ export {
 export {
   createMessageReceiptFromOutboundResults,
   defineChannelMessageAdapter,
-} from "openclaw/plugin-sdk/channel-message";
+} from "openclaw/plugin-sdk/channel-outbound";
 export { jsonResult, readStringParam } from "openclaw/plugin-sdk/channel-actions";
 export { getChatChannelMeta } from "openclaw/plugin-sdk/channel-plugin-common";
 export {

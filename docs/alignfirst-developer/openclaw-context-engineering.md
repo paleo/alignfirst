@@ -40,11 +40,11 @@ Defaults in `src/agents/bootstrap-budget.ts`:
 
 Over-budget files are truncated with a marker. Keep workspace files under these limits.
 
-## Heartbeat sentinel: `NO_REPLY`, never `HEARTBEAT_OK`
+## Heartbeat sentinel: `NO_REPLY`
 
-OpenClaw has two silence tokens: `NO_REPLY` (`SILENT_REPLY_TOKEN`, suppressed on every delivery path) and `HEARTBEAT_OK` (`HEARTBEAT_TOKEN`, heartbeat acks). Measured on `2026.6.11`: a token-only `HEARTBEAT_OK` final on a system-event wake turn is **not** stripped — it posts as literal text to the channel (2/2 leaked in a 108-cell batch), while `NO_REPLY` was suppressed 83/83. The wake convention is therefore `NO_REPLY` (workspace `AGENTS.md`, alcode guide).
+The workspace and alcode wake convention is `NO_REPLY`, OpenClaw's general silent-reply token. OpenClaw 2026.8.1 sends the configured heartbeat prompt verbatim as the scheduled user message and no longer adds a heartbeat-specific system-prompt section. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
-Trap: on every heartbeat-triggered run, OpenClaw injects a hard-coded system-prompt section — *"reply exactly: HEARTBEAT_OK"* (`src/agents/system-prompt.ts`) — after the bootstrap files, contradicting the `AGENTS.md` rule; models occasionally obey it. The harness disables that section with `agents.defaults.heartbeat.includeSystemPromptSection: false` (`openclaw.json`). Deleting the `heartbeat` config block would not help: cadence defaults to 30m and the section stays. The `heartbeat.prompt` override only reaches scheduled heartbeats, not system-event wakes (those submit the bare `[OpenClaw heartbeat poll]`).
+OpenClaw still accepts the legacy `HEARTBEAT_OK` acknowledgment and suppresses token-only replies, including stray acknowledgments outside heartbeat turns. Keep new instructions on `NO_REPLY` so scheduled and event-driven wake paths share one convention.
 
 ## Practical implications
 

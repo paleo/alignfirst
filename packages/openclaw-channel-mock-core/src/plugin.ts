@@ -10,10 +10,10 @@ import {
 import {
   createMessageReceiptFromOutboundResults,
   defineChannelMessageAdapter,
-} from "openclaw/plugin-sdk/channel-message";
-import { getChatChannelMeta } from "openclaw/plugin-sdk/channel-plugin-common";
+} from "openclaw/plugin-sdk/channel-outbound";
 import { DEFAULT_ACCOUNT_ID, createChannelMockAccountHelpers } from "./accounts.js";
 import { buildQaTarget, normalizeQaTarget, parseQaTarget } from "./bus-client.js";
+import { createChannelMockMeta } from "./channel-meta.js";
 import { buildChannelMockConfigSchema } from "./config-schema.js";
 import { startChannelMockGatewayAccount } from "./gateway.js";
 import { createSendChannelMockText } from "./outbound.js";
@@ -31,7 +31,7 @@ export function createChannelMockPlugin(params: {
   getRuntime: () => PluginRuntime;
 }): ChannelPlugin<ResolvedChannelMockAccount> {
   const { channelId, label, surface, autoThread, getRuntime } = params;
-  const meta = { ...getChatChannelMeta(channelId), label };
+  const meta = createChannelMockMeta({ channelId, label });
   const helpers = createChannelMockAccountHelpers({ channelId });
   const applySetup = createApplyChannelMockSetup({ channelId });
   const sendText = createSendChannelMockText({ helpers });
@@ -100,14 +100,6 @@ export function createChannelMockPlugin(params: {
       },
       messaging: {
         normalizeTarget: normalizeQaTarget,
-        parseExplicitTarget: ({ raw }) => {
-          const parsed = parseQaTarget(raw);
-          return {
-            to: buildQaTarget(parsed),
-            threadId: parsed.threadId,
-            chatType: parsed.chatType,
-          };
-        },
         inferTargetChatType: ({ to }) => parseQaTarget(to).chatType,
         targetResolver: {
           looksLikeId: (raw) => raw.trim().length > 0,
