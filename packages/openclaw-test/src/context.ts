@@ -688,7 +688,9 @@ async function waitForAgentToolCall(
   opts: WaitForAgentToolCallOptions,
 ): Promise<AgentToolCall> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
-  const pollMs = opts.pollMs ?? 500;
+  // Each poll spawns a full transcript dump inside the gateway container —
+  // keep the cadence low enough not to load the system under test.
+  const pollMs = opts.pollMs ?? 2_000;
   const deadline = Date.now() + timeoutMs;
   let calls: AgentToolCall[] = [];
   while (Date.now() < deadline) {

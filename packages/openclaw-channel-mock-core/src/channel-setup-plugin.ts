@@ -1,6 +1,7 @@
 import { createChannelMockAccountHelpers } from "./accounts.js";
 import { createChannelMockMeta } from "./channel-meta.js";
 import { buildChannelMockConfigSchema } from "./config-schema.js";
+import type { ChannelSurface } from "./plugin-actions.js";
 import type { ChannelPlugin } from "./runtime-api.js";
 import { createApplyChannelMockSetup } from "./setup.js";
 import type { CoreConfig, ResolvedChannelMockAccount } from "./types.js";
@@ -8,9 +9,10 @@ import type { CoreConfig, ResolvedChannelMockAccount } from "./types.js";
 export function createChannelMockSetupPlugin(params: {
   channelId: string;
   label: string;
+  surface: ChannelSurface;
 }): ChannelPlugin<ResolvedChannelMockAccount> {
-  const { channelId, label } = params;
-  const meta = createChannelMockMeta({ channelId, label });
+  const { channelId, label, surface } = params;
+  const meta = createChannelMockMeta({ channelId, label, surface });
   const helpers = createChannelMockAccountHelpers({ channelId });
   const applySetup = createApplyChannelMockSetup({ channelId });
   const configSchema = buildChannelMockConfigSchema(channelId);

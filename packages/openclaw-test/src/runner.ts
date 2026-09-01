@@ -93,16 +93,19 @@ async function runCell(args: RunnerArgs): Promise<number> {
 
     const agentCalls = aggregateAgentToolCalls(snapshot.sessions);
     pairAgentCallsWithCliMocks(agentCalls, entries);
-    if (agentCalls.length === 0 && snapshot.databases === 0) {
+    if (agentCalls.length === 0 && (snapshot.error !== undefined || snapshot.databases === 0)) {
       entries.push({
         entrySeq: entries.length,
         ts: finishedAtIso,
         kind: "scenarioLog",
-        message: "agentToolCall parsing skipped: no agent session store found in the gateway",
+        message:
+          snapshot.error !== undefined
+            ? `agentToolCall parsing failed: ${snapshot.error}`
+            : "agentToolCall parsing skipped: no agent session store found in the gateway",
       });
     }
 
-    const agentEntries = buildAgentToolCallEntries(agentCalls, entries.length);
+    const agentEntries = buildAgentToolCallEntries(agentCalls, entries.length, finishedAtIso);
     appendAgentCallsToLog(logStream, agentEntries);
     await closeStream(logStream);
     const merged = mergeTimeline(entries, agentEntries);
@@ -325,14 +328,22 @@ export function leadingCli(input: unknown): string | undefined {
 function buildAgentToolCallEntries(
   agentCalls: AgentToolCall[],
   liveEntryCount: number,
+  fallbackTs: string,
 ): AgentToolCallEntry[] {
-  const sorted = [...agentCalls].sort((a, b) => (a.startedAt < b.startedAt ? -1 : 1));
+  const sorted = [...agentCalls].sort(compareStartedAt);
   return sorted.map((call, i) => ({
     entrySeq: liveEntryCount + i,
-    ts: call.startedAt,
+    ts: call.startedAt ?? fallbackTs,
     kind: "agentToolCall",
     call,
   }));
+}
+
+// A call whose message carried no timestamp sorts to the end, never the front.
+function compareStartedAt(a: AgentToolCall, b: AgentToolCall): number {
+  if (a.startedAt === undefined) return b.startedAt === undefined ? 0 : 1;
+  if (b.startedAt === undefined) return -1;
+  return a.startedAt < b.startedAt ? -1 : 1;
 }
 
 /**

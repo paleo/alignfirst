@@ -15,6 +15,12 @@ export interface TranscriptSnapshot {
   /** Agent stores found in the gateway. 0 means no store yet — or none at all. */
   databases: number;
   sessions: TranscriptSession[];
+  /**
+   * Set when the dump itself failed (non-zero exit, timeout, unreadable
+   * output). `databases` and `sessions` are then placeholders, not
+   * observations — report the failure, not "no store found".
+   */
+  error?: string;
 }
 
 export interface TranscriptSession {
@@ -36,24 +42,23 @@ export async function fetchTranscriptSnapshot(opts: {
 }): Promise<TranscriptSnapshot> {
   const outPath = `${IPC_DIR}/${randomUUID()}.transcript.json`;
   try {
-    const result = await execInGateway([
-      "node",
-      DUMP_SCRIPT,
-      opts.startedAtIso,
-      opts.conversationId,
-      outPath,
-    ]);
+    const result = await execInGateway(
+      ["node", DUMP_SCRIPT, opts.startedAtIso, opts.conversationId, outPath],
+      // A whole conversation can take a while to serialize; the default 30s
+      // exec timeout is too tight for long cells.
+      { timeoutMs: 60_000 },
+    );
     if (result.exitCode !== 0) {
-      console.warn(
-        `openclaw-test: transcript dump failed (exit ${result.exitCode}): ${result.stderr}`,
-      );
-      return { databases: 0, sessions: [] };
+      const error = `transcript dump failed (exit ${result.exitCode}): ${result.stderr}`;
+      console.warn(`openclaw-test: ${error}`);
+      return { databases: 0, sessions: [], error };
     }
     const raw = readFileSync(outPath, "utf8");
     return JSON.parse(raw) as TranscriptSnapshot;
   } catch (err) {
-    console.warn(`openclaw-test: transcript dump failed: ${String(err)}`);
-    return { databases: 0, sessions: [] };
+    const error = `transcript dump failed: ${String(err)}`;
+    console.warn(`openclaw-test: ${error}`);
+    return { databases: 0, sessions: [], error };
   } finally {
     rmSync(outPath, { force: true });
   }
@@ -61,11 +66,13 @@ export async function fetchTranscriptSnapshot(opts: {
 
 /**
  * Polls the transcripts until they are *quiescent* for this conversation — no
- * new message has appeared for `settleMs` — or the budget expires. A
- * conversation spans multiple OpenClaw sessions (e.g. Discord's channel
- * session plus a per-thread session); waiting for the count to stabilise lets
- * a still-flushing turn land its final assistant message (which carries the
- * turn's usage) before the report is written.
+ * new message for `settleMs` AND no session's turn is demonstrably open — or
+ * the budget expires. The transcript is appended per message, so a settle
+ * window alone would return between two tool calls of one turn (a single
+ * model round-trip routinely exceeds it); the open-turn gate holds until the
+ * turn-final assistant message — the one carrying `usage.cost.total` — has
+ * landed. A conversation spans multiple OpenClaw sessions (e.g. Discord's
+ * channel session plus a per-thread session).
  */
 export async function waitForTranscriptQuiescence(opts: {
   conversationId: string;
@@ -74,8 +81,8 @@ export async function waitForTranscriptQuiescence(opts: {
   pollMs?: number;
   settleMs?: number;
 }): Promise<void> {
-  const maxWaitMs = opts.maxWaitMs ?? 20_000;
-  const pollMs = opts.pollMs ?? 250;
+  const maxWaitMs = opts.maxWaitMs ?? 60_000;
+  const pollMs = opts.pollMs ?? 1_000;
   const settleMs = opts.settleMs ?? 4_000;
   const deadline = Date.now() + maxWaitMs;
   let lastCount = 0;
@@ -88,11 +95,27 @@ export async function waitForTranscriptQuiescence(opts: {
     if (count !== lastCount) {
       lastCount = count;
       lastChangeAt = Date.now();
-    } else if (seenAny && Date.now() - lastChangeAt >= settleMs) {
+    } else if (seenAny && !hasOpenTurn(sessions) && Date.now() - lastChangeAt >= settleMs) {
       return;
     }
     await new Promise((r) => setTimeout(r, pollMs));
   }
+}
+
+/**
+ * A turn is open when a session's last message is a tool result or an
+ * assistant stop for tool use — more of the turn is coming. A trailing user
+ * message does not count as open: some sessions of a conversation never get a
+ * reply (the agent answers in a sibling session), and treating them as open
+ * would burn the whole budget on every cell.
+ */
+export function hasOpenTurn(sessions: TranscriptSession[]): boolean {
+  return sessions.some((session) => {
+    const last = session.messages.at(-1);
+    if (!isRecord(last)) return false;
+    if (last.role === "toolResult") return true;
+    return last.role === "assistant" && last.stopReason === "toolUse";
+  });
 }
 
 /**
@@ -179,12 +202,13 @@ function collectToolUses(
       const toolUseId = typeof block.id === "string" ? block.id : "";
       const toolName = typeof block.name === "string" ? block.name : "";
       if (!toolUseId || !toolName) continue;
+      const startedAt = messageTimestampIso(msg);
       const call: AgentToolCall = {
         toolName,
         toolUseId,
         ...(sessionKey !== undefined ? { sessionKey } : {}),
         input: block.arguments ?? null,
-        startedAt: messageTimestampIso(msg) ?? "",
+        ...(startedAt !== undefined ? { startedAt } : {}),
         turn,
       };
       const result = results.get(toolUseId);

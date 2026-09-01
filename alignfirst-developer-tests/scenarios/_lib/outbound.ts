@@ -107,10 +107,10 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
  * material share of turns and three playbook wordings did not eliminate it —
  * an obedience ceiling, not a regression. Substantive leaks (reports,
  * duplicate summaries, improvised tokens) fail. Call it once the turn has
- * fully drained — e.g. after a `waitForAgentToolCall` assert, which resolves
- * only after the trajectory flushed at session-run end. `withinMs` extends the
- * sweep past that point for turns that may still be streaming a final answer
- * (default 5s).
+ * fully drained — e.g. after a `waitForAgentToolCall` assert. The transcript
+ * surfaces tool calls mid-turn, so the turn may still be running then;
+ * `withinMs` extends the sweep for turns that may still be streaming a final
+ * answer (default 5s).
  */
 export async function assertNoChannelRootLeak(
   ctx: ScenarioContext,
@@ -163,7 +163,7 @@ const SELF_POST_ACTIONS = new Set(["send", "sendMessage", "thread-reply", "threa
  * through the tool when it needs a rename, and Discord offers no other way. So
  * the failure is a self-thread post whose text also arrived on its own.
  *
- * One-shot sweep over the flushed trajectory — call it at scenario end, after
+ * One-shot sweep over the session transcript — call it at scenario end, after
  * the final waits resolved.
  */
 export async function assertNoSelfThreadMessagePost(

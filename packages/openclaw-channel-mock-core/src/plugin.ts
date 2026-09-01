@@ -31,7 +31,7 @@ export function createChannelMockPlugin(params: {
   getRuntime: () => PluginRuntime;
 }): ChannelPlugin<ResolvedChannelMockAccount> {
   const { channelId, label, surface, autoThread, getRuntime } = params;
-  const meta = createChannelMockMeta({ channelId, label });
+  const meta = createChannelMockMeta({ channelId, label, surface });
   const helpers = createChannelMockAccountHelpers({ channelId });
   const applySetup = createApplyChannelMockSetup({ channelId });
   const sendText = createSendChannelMockText({ helpers });

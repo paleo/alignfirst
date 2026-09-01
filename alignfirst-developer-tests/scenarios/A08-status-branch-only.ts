@@ -88,8 +88,8 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
   );
 
   // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // setup turn. The trajectory snapshot flushes when the session run ends,
-  // after the report — hence the generous timeout.
+  // setup turn. The call can come late in a long turn — hence the generous
+  // timeout.
   await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
     label: "agent runs `alcode --openclaw-guide`",
     timeoutMs: 120_000,

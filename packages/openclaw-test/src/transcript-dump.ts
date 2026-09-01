@@ -82,7 +82,7 @@ function readConversationSessions(
       sessions.push({
         sessionKey: node.session_key,
         sessionId: node.current_session_id,
-        messages: readSessionMessages(db, node.current_session_id, sinceMs),
+        messages: readNodeMessages(db, node, sinceMs),
       });
     }
     return sessions;
@@ -93,6 +93,26 @@ function readConversationSessions(
   } finally {
     db.close();
   }
+}
+
+/**
+ * A session key can span several session windows: compaction, reset, or
+ * recovery mints a successor id that `current_session_id` then advances to,
+ * and `transcript_events` rows stay keyed to the window that wrote them.
+ * Union every window of the key (in creation order) so earlier tool calls and
+ * costs survive a mid-run rollover.
+ */
+function readNodeMessages(
+  db: DatabaseSync,
+  node: { session_key: string; current_session_id: string },
+  sinceMs: number,
+): unknown[] {
+  const windows = db
+    .prepare("SELECT session_id FROM session_windows WHERE session_key = ? ORDER BY created_at")
+    .all(node.session_key) as { session_id: string }[];
+  const sessionIds = windows.map((w) => w.session_id);
+  if (!sessionIds.includes(node.current_session_id)) sessionIds.push(node.current_session_id);
+  return sessionIds.flatMap((id) => readSessionMessages(db, id, sinceMs));
 }
 
 function readSessionMessages(db: DatabaseSync, sessionId: string, sinceMs: number): unknown[] {

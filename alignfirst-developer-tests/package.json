@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "~0.122.0",
-    "@openclaw/codex": "2026.8.1",
     "@paleo/openclaw-channel-mock-core": "file:vendor/openclaw-channel-mock-core.tgz",
     "@paleo/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",
     "@paleo/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",

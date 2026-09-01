@@ -64,11 +64,11 @@ export async function runWorkspaceFlow(
 
   // The setup flow's documented prerequisites (project-workspace-setup.md): the
   // agent must read the project's DEVELOPERS.md — the worktree-setup entry
-  // point — and run `workspace --guide` to discover the setup commands. The
-  // trajectory snapshot flushes only when a session run ends; when queued
+  // point — and run `workspace --guide` to discover the setup commands. Tool
+  // calls surface in the session transcript as they happen, but when queued
   // inbounds and the exec wake coalesce the whole conversation into one run,
-  // the flush trails the completion outbound — hence timeouts well past the
-  // 30s default.
+  // these calls can come minutes into it — hence timeouts well past the 30s
+  // default.
   await ctx.waitForAgentToolCall((c) => readsFile(c, `${projectPath}/DEVELOPERS.md`), {
     label: "agent reads the project DEVELOPERS.md",
     timeoutMs: 120_000,

@@ -54,5 +54,10 @@ export async function execInGateway(
     await new Promise((r) => setTimeout(r, EXEC_POLL_INTERVAL_MS));
   }
   rmSync(reqPath, { force: true });
+  rmSync(`${reqPath}.processing`, { force: true });
+  // The watcher can still write `<id>.res.json` after this deadline (its own
+  // timeout kill plus the write can trail it). Nobody will read it, and the
+  // IPC volume is persistent — sweep it once it had time to land.
+  setTimeout(() => rmSync(resPath, { force: true }), WATCHER_DEADLINE_HEADROOM_MS * 2).unref();
   throw new Error(`execInGateway timed out waiting for response (request id ${id})`);
 }

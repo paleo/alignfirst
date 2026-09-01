@@ -329,8 +329,16 @@ function assertModelProviderPresent(model: SelectedModel, droppedProviders: Set<
 
 function setMainAgentModel(config: Record<string, unknown>, ref: string): void {
   const agents = config.agents;
-  const entries =
-    agents && typeof agents === "object" ? (agents as { entries?: unknown }).entries : undefined;
+  const agentsObj =
+    agents && typeof agents === "object"
+      ? (agents as { entries?: unknown; list?: unknown })
+      : undefined;
+  if (Array.isArray(agentsObj?.list)) {
+    throw new Error(
+      "openclaw-test: config uses the retired agents.list array; migrate openclaw.json to agents.entries keyed by agent id (agents.entries.main)",
+    );
+  }
+  const entries = agentsObj?.entries;
   if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
     throw new Error("openclaw-test: config has no agents.entries object");
   }
