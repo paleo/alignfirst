@@ -1,5 +1,11 @@
 # @paleo/openclaw-channel-mock-core
 
+## 0.7.0
+
+### Minor Changes
+
+- ac9b4c5: OpenClaw 2026.8 compatibility. The core package now requires `zod` as a peer dependency (pinned to OpenClaw's version) and no longer provides the `messaging.parseExplicitTarget` handler.
+
 ## 0.6.1
 
 ### Patch Changes

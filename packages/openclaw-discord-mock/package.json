@@ -1,6 +1,6 @@
 {
   "name": "@paleo/openclaw-discord-mock",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Synthetic Discord-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
@@ -64,7 +64,7 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@paleo/openclaw-channel-mock-core": "0.6.1"
+    "@paleo/openclaw-channel-mock-core": "0.7.0"
   },
   "devDependencies": {
     "@types/node": "~24.13.3",

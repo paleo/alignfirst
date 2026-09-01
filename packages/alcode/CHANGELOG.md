@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.11.1
+
+### Patch Changes
+
+- ac9b4c5: Updated the OpenClaw delegation guide to OpenClaw 2026.8's exec tool parameter: `timeoutSeconds: 0` instead of the removed `timeout: 0`.
+
 ## 0.11.0
 
 ### Minor Changes
