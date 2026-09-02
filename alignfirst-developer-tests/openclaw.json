@@ -14,8 +14,16 @@
       "codex": { "enabled": true },
       "discord-mock": { "enabled": true },
       "slack-mock": { "enabled": true }
-    }
+    },
+    "slots": { "memory": "none" }
   },
+  "memory": {
+    "search": { "enabled": false, "rememberAcrossConversations": false }
+  },
+  "skills": {
+    "workshop": { "autonomous": { "mode": "off" } }
+  },
+  "update": { "checkOnStart": false },
   "tools": {
     "profile": "coding",
     "alsoAllow": ["message", "browser"],
@@ -85,8 +93,9 @@
       "heartbeat": {
         "every": "24h",
         "target": "last",
-        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply exactly NO_REPLY."
+        "directPolicy": "allow"
       },
+      "compaction": { "memoryFlush": { "enabled": false } },
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }

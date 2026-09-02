@@ -12,18 +12,22 @@ secrets_provider_id="$(printf '%s' '{{DEVELOPER_NAME}}' | tr '[:upper:]' '[:lowe
 
 set_scalar() { openclaw config set "$1" "$2"; }
 set_json() { openclaw config set "$1" --json "$2"; }
-
-# set_json_tolerated <path> <json> <reason>: for keys the installed version may have removed.
-set_json_tolerated() {
-  set_json "$1" "$2" || echo "[seed] skipped $1: $3"
-}
-
 unset_key() { openclaw config unset "$1" || true; }
 
 # ref <pointer>: SecretRef into the file provider registered by seed.sh. The pointer is a JSON
 # pointer into secrets.json, so the variable NAME is reached as /NAME.
 ref() { printf '{"source":"file","provider":"%s","id":"%s"}' "$secrets_provider_id" "$1"; }
 set_secret_ref() { set_json "$1" "$(ref "$2")"; }
+
+# install_plugin_once <package>: installs an external npm plugin when no copy is present under
+# ~/.openclaw/npm/ (the layout varies across versions). The caller records the capability consent
+# with `openclaw plugins enable <id> --accept-capabilities`, which also enables the plugin.
+install_plugin_once() {
+  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path "*/node_modules/$1" 2>/dev/null \
+    | grep -q .; then
+    openclaw plugins install "$1" --accept-capabilities
+  fi
+}
 
 # merge_managed_block <target-file> <source-file> <block-name>: replaces the block between
 # `<!-- name:start -->` and `<!-- name:end -->` in the target with the source content, keeps the
@@ -97,27 +101,35 @@ configure_common() {
   else
     unset_key "models.providers.$RUNTIME_PROVIDER.apiKey"
   fi
+
+  echo "[seed] memory — nothing persists across sessions"
   # Semantic recall is unused; disabled so it never binds a provider of its own.
-  set_json_tolerated agents.defaults.memorySearch.enabled false \
-    "key removed upstream after 2026.7 (config-surface reduction); harmless when rejected"
+  set_json memory.search.enabled false
+  # Defaults on while session.dmScope is unset; doctor reports it "effectively enabled".
+  set_json memory.search.rememberAcrossConversations false
+  # The pre-compaction memory flush is an agentic turn that writes memory/YYYY-MM-DD.md when a
+  # long session nears its token limit.
+  set_json agents.defaults.compaction.memoryFlush.enabled false
+  # memory-core owns the memory slot and loads regardless of plugins.allow, bringing the
+  # memory_search/memory_get tools and a nightly "dreaming" turn that rewrites MEMORY.md. The
+  # slot is its only off switch. A leftover plugins.entries.memory-core block would warn
+  # "plugin disabled but config is present".
+  set_scalar plugins.slots.memory none
+  unset_key plugins.entries.memory-core
 
   echo "[seed] heartbeat — on, one periodic tick a day"
   # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
-  # governs periodic ticks. isolatedSession, lightContext and activeHours would each break the
-  # wake (throwaway session, no workspace bootstrap, deferred run), so they are cleared.
+  # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
+  # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
+  # session, no workspace bootstrap, deferred run), so they are cleared.
   set_scalar agents.defaults.heartbeat.every "24h"
   # Explicit target: the implicit owner-DM default prepends a one-time operator-facing
-  # "First heartbeat alert" preamble to the first delivered wake report (2026.8+), and the
+  # "First heartbeat alert" preamble to the first delivered wake report, and the
   # owner route never resolves to a group. Wake reports must follow the ticket conversation,
   # which "last" targets.
   set_scalar agents.defaults.heartbeat.target "last"
-  set_scalar agents.defaults.heartbeat.prompt \
-    "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. \
-Do not infer or repeat old tasks from prior chats. \
-If nothing needs attention, reply exactly NO_REPLY."
-  # Drops the built-in "reply exactly: HEARTBEAT_OK" section, which contradicts NO_REPLY.
-  set_json_tolerated agents.defaults.heartbeat.includeSystemPromptSection false \
-    "key removed upstream after 2026.7 (config-surface reduction); harmless when rejected"
+  # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.
+  unset_key agents.defaults.heartbeat.prompt
   unset_key agents.defaults.heartbeat.isolatedSession
   unset_key agents.defaults.heartbeat.lightContext
   unset_key agents.defaults.heartbeat.activeHours
@@ -127,6 +139,15 @@ If nothing needs attention, reply exactly NO_REPLY."
   # command skills belong to the delegated coding agent only.
   set_json agents.defaults.skills \
     '["alignfirst","alignfirst-setup-guide","alignfirst-developer-openclaw-playbook","sharp-writing"]'
+  # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the agent rewrite or
+  # drop writable skills. Same rule as clawhub.
+  set_scalar skills.workshop.autonomous.mode off
+
+  echo "[seed] updates — operator-driven (update-developer.md)"
+  # The startup check also sends an anonymous version ping to telemetry.openclaw.ai. Background
+  # auto-update could not write the root-owned npm prefix anyway.
+  set_json update.checkOnStart false
+  set_json update.auto.enabled false
 
   echo "[seed] tools"
   set_scalar tools.profile coding
@@ -154,8 +175,7 @@ If nothing needs attention, reply exactly NO_REPLY."
 
   echo "[seed] plugins — explicit allowlist"
   # A provider served by an additional OpenClaw plugin (a runtime harness, for example) needs
-  # `plugins.entries.<id>.enabled true` and its id appended to `plugins.allow` here; the runbook
-  # 04 shows the form.
+  # `install_plugin_once`, its id appended to `plugins.allow` here and `openclaw plugins enable`;
+  # the runbook 04 shows the form.
   set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\"]"
-  set_json_tolerated plugins.bundledDiscovery '"allowlist"' "key removed upstream after 2026.7"
 }

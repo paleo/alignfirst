@@ -19,14 +19,15 @@ validate_surface() {
 
 configure_surface() {
   echo "[seed] plugin — @openclaw/discord"
-  # External npm plugin; installed under ~/.openclaw/npm/ (layout varies across versions).
-  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path '*/node_modules/@openclaw/discord' \
-    2>/dev/null | grep -q .; then
-    openclaw plugins install @openclaw/discord
-  fi
-  set_json plugins.entries.discord.enabled true
+  install_plugin_once @openclaw/discord
+  # Enables the plugin and records the capability consent, kept per plugin version outside
+  # openclaw.json, so a version bump needs it again. Idempotent.
+  openclaw plugins enable discord --accept-capabilities
 
   echo "[seed] Discord channel — single guild channel, DMs by pairing"
+  # A wake report follows the last conversation, which may be a paired DM. The explicit value
+  # (the default) also stops doctor's security check from asking for a pin.
+  set_scalar agents.defaults.heartbeat.directPolicy allow
   set_json channels.discord.enabled true
   set_secret_ref channels.discord.token /DISCORD_BOT_TOKEN
   # The owner is pre-trusted; another DM sender gets a pairing code (operations/pair-dm-sender.md).

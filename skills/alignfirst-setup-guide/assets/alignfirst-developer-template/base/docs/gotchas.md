@@ -10,7 +10,7 @@ Behaviors that look like bugs and are intentional, with the reason. Read the rel
 
 ## No version manager in the service account's PATH
 
-OpenClaw is installed under one prefix (`~/.npm-system-global/`, fed by `/usr/bin/npm`). A version manager shifts the active prefix: `which openclaw` returns nothing, and `openclaw update` installs the new version into the manager's prefix while the gateway unit keeps running the old one. `openclaw doctor` also flags version-manager Nodes as fragile runtimes. `openclaw update` is the upgrade path because it refreshes the plugins in lockstep with the core; it stays safe only with exactly one `npm` on `PATH`. A project that needs another Node runs it in a container.
+OpenClaw is installed under one prefix (`~/.npm-system-global/`, fed by `/usr/bin/npm`). A version manager shifts the active prefix: `which openclaw` returns nothing, and `openclaw update` installs the new version into the manager's prefix while the gateway unit keeps running the old one. `openclaw doctor` also flags version-manager Nodes as fragile runtimes. `openclaw update` is the upgrade path because it refreshes the plugins in lockstep with the core; it stays safe only with exactly one `npm` on `PATH`. A pinned `npm install -g openclaw@<version>` skips that lockstep: an external plugin built for the previous core fails to load on the new one, and each needs `openclaw plugins install npm:@openclaw/<name>@<version> --accept-capabilities`. A project that needs another Node runs it in a container.
 
 ## Containers are per-user
 
@@ -39,19 +39,21 @@ coding agent: `skills remove` would delete the canonical copy for both.
 
 `@paleo/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `alproject` is unaffected: it reads git worktrees directly.
 
-## Legacy `TOOLS.md`
-
-Tool notes live in the `## Environment` section of the workspace `AGENTS.md`. OpenClaw 2026.8+ neither loads nor recreates `TOOLS.md`, and the seed no longer ships it. Installations hardened before its retirement still carry a zero-byte, immutable live copy that `openclaw doctor` warns about and `--fix` cannot delete (`chattr +i` blocks the unlink). Remove it through a maintenance window:
-
-```sh
-sudo /usr/local/sbin/alignfirst-developer-maintenance workspace -- \
-  rm /home/{{SERVICE_USER}}/.openclaw/workspace/TOOLS.md
-sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
-```
-
 ## Heartbeat cost is a main-session problem
 
-A bill that climbs day after day with near-zero output (the agent waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on, because the `alcode` completion wake is a heartbeat-sourced turn; `isolatedSession` and `lightContext` would each break that wake. A comment-only `HEARTBEAT.md` skips the model call on periodic ticks entirely — check that the live file is genuinely comment-only (ATX headers and blank lines) when the cost appears despite it.
+A bill that climbs day after day with near-zero output (the agent waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on, because the `alcode` completion wake is a heartbeat-sourced turn; `isolatedSession` and `lightContext` would each break that wake. A comment-only scratch on the `heartbeat:main` job skips the model call on periodic ticks entirely. When the cost appears despite it, run `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)): it restores the snapshot when the agent has rewritten the scratch ([06](installations/06-security-hardening.md#configuration-and-workspace-files)).
+
+## OpenClaw schedules background model runs on its own
+
+Three defaults spend tokens without a user message: the memory-core *dreaming* sweep (a daily 03:00 isolated turn that rewrites `MEMORY.md`), the weekly *skill collection review* (`skills.workshop.autonomous.mode` defaults to `auto`, which also lets the agent rewrite writable skills), and the pre-compaction *memory flush* (an agentic turn that writes `memory/YYYY-MM-DD.md` when a long session nears its token limit). The seed turns each off: `plugins.slots.memory none`, `skills.workshop.autonomous.mode off`, `agents.defaults.compaction.memoryFlush.enabled false`. After an upgrade, `openclaw cron list --all` must list `heartbeat:main` as the only enabled system-owned job ([update-developer.md](operations/update-developer.md#smoke-test)); a new one is a default the release turned on, to opt out of in `seed/common.sh`. A dated note under `workspace/memory/` means the flush is back on.
+
+## `plugins.allow` does not govern slot plugins
+
+`memory-core` is the default owner of the `memory` slot and loads whatever `plugins.allow` says; `plugins.slots.memory` is the switch. A leftover `plugins.entries.memory-core` block then warns *plugin disabled but config is present* and makes doctor propose an auto-enable: unset the block, do not tune it.
+
+## `gateway install` refuses group-writable systemd paths
+
+The installer inspects `~/.config`, `~/.config/systemd`, `~/.config/systemd/user`, the unit file, its `.bak` and its `.d/` directory, and aborts with `[unsafe-permissions]` when any is `g+w`, which the account's default umask (`0002`) produces. Run `chmod go-w` on the paths it names, without `-R`; it names one path per run.
 
 ## `sudo -i -u … bash -lc '…'` expands the string twice
 
@@ -62,7 +64,9 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'z=hello; printf "[%s]" "$z"'   # prints
 sudo -H -u {{SERVICE_USER}} bash -lc 'z=hello; printf "[%s]" "$z"'      # prints [hello]
 ```
 
-`sudo -i -u {{SERVICE_USER}} -- <command>` is fine for a command that defines no variable. Anything with an assignment or a loop uses `sudo -H -u {{SERVICE_USER}} bash -lc '…'`.
+The re-escaping also mangles a `\`+newline inside the quoted script: it comes out as an escaped space, so the next `~/path` becomes `~/ path` and the files land in a directory named `~/ `. Keep a `bash -lc` script on one line, or feed a multi-line script on stdin: `sudo -H -u {{SERVICE_USER}} bash <<'EOF' … EOF`.
+
+`sudo -i -u {{SERVICE_USER}} -- <command>` is fine for a one-line command that defines no variable. Anything with an assignment or a loop uses `sudo -H -u {{SERVICE_USER}} bash -lc '…'`.
 
 ## apt without a TTY dies in a debconf dialog
 
@@ -82,7 +86,7 @@ Two outbound paths deliver a local file with different read policies. The `MEDIA
 
 ## Prefer interactive `openclaw doctor` over `--fix`
 
-`--fix` applies every recommendation without review. Plain `openclaw doctor` prompts before each change, so a recommendation that contradicts the seed can be declined. The one `--fix` is on first install ([04 § 3](installations/04-openclaw.md#3-seed)), to create the credential scaffolding.
+`--fix` applies every recommendation without review. Plain `openclaw doctor` prompts before each change, so a recommendation that contradicts the seed can be declined; without a TTY it only reports. Two exceptions use `--fix`: the first install ([04 § 3](installations/04-openclaw.md#3-seed)), to create the credential scaffolding, and the migration after a core bump ([update-developer.md](operations/update-developer.md#migrate-after-a-core-bump)), because a release's state migrations apply in repair mode only, TTY or not.
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 ## Gateway URLs answer curl with a redirect

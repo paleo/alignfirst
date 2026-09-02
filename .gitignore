@@ -20,5 +20,4 @@ alignfirst-developer-tests/vendor/
 
 # OpenClaw runtime state — recreated per-instance, not team-curated (a test
 # instance snapshots these into the workspace; we don't track them)
-alignfirst-developer-tests/workspace/HEARTBEAT.md
 alignfirst-developer-tests/workspace/.openclaw/

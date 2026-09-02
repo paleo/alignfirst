@@ -12,11 +12,12 @@ The seed is the record of the OpenClaw configuration. No copy of `openclaw.json`
 ## Sources
 
 - `infra/openclaw/.env` — every deployment value and secret the seed reads (gitignored; `.env.example` documents each variable).
-- `infra/openclaw/seed/common.sh` — the baseline: model, heartbeat, skill allowlist, tools, thread sessions, identity, gateway, plugin allowlist. Also the helpers every module calls.
+- `infra/openclaw/seed/common.sh` — the baseline: model, memory opt-outs, heartbeat, skill allowlist, tools, updates, thread sessions, identity, gateway, plugin allowlist. Also the helpers every module calls.
 - `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel.
 - `infra/openclaw/seed/coding-agent.sh` — the delegated coding agent's global instructions (merged into its instruction file).
 - `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`, `coding-agent.conf`; `runtime.conf` is generated).
 - `infra/openclaw/workspace/` — the workspace files, applied by `apply-workspace.sh`.
+- `infra/openclaw/heartbeat-scratch.md` — the heartbeat job's checklist, pushed by `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)).
 - `infra/openclaw/alproject/` — `.alproject.json` (project parent, port range) and the guide appended to `alproject --guide`.
 
 ## Module contract

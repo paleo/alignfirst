@@ -12,7 +12,6 @@ These top-level files under `~/.openclaw/workspace/` are read on every turn and 
 - `SOUL.md`, `IDENTITY.md`, `USER.md` — persona / context (optional)
 - `MEMORY.md` — curated long-term memory (optional)
 - `BOOTSTRAP.md` — first-run ritual (optional)
-- `HEARTBEAT.md` — heartbeat checklist (optional, dynamic load)
 
 Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootstrap cache (`src/agents/bootstrap-cache.ts`) refreshes per turn keyed on inode/mtime, so live edits are picked up without restarting the gateway. This is why the harness can bind-mount the workspace and the playbook skill into the gateway and have playbook edits iterate without a rebuild.
 
@@ -39,11 +38,17 @@ Defaults in `src/agents/bootstrap-budget.ts`:
 
 Over-budget files are truncated with a marker. Keep workspace files under these limits.
 
-## Heartbeat sentinel: `NO_REPLY`
+## Heartbeat: cron scratch and `NO_REPLY`
 
-The workspace and alcode wake convention is `NO_REPLY`, OpenClaw's general silent-reply token. OpenClaw 2026.8.1 sends the configured heartbeat prompt verbatim as the scheduled user message and no longer adds a heartbeat-specific system-prompt section. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
+The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; the listing shows it as `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.
+
+The workspace and alcode wake convention is `NO_REPLY`, OpenClaw's general silent-reply token. The stock heartbeat prompt (`src/auto-reply/heartbeat.ts`) follows the scratch and ends in `NO_REPLY`, and OpenClaw sends it verbatim as the scheduled user message, so neither the harness nor the deployment seed overrides `agents.defaults.heartbeat.prompt`. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
 OpenClaw still accepts the legacy `HEARTBEAT_OK` acknowledgment and suppresses token-only replies, including stray acknowledgments outside heartbeat turns. Keep new instructions on `NO_REPLY` so scheduled and event-driven wake paths share one convention.
+
+## Background model runs disabled by the harness and the seed
+
+Three defaults schedule model turns without a user message: the memory-core dreaming sweep (daily, rewrites `MEMORY.md`), the weekly skill-collection review (`skills.workshop.autonomous.mode` defaults to `auto`) and the pre-compaction memory flush (`agents.defaults.compaction.memoryFlush`, writes `memory/YYYY-MM-DD.md`). `memory-core` owns the `memory` plugin slot and loads regardless of `plugins.allow`; `plugins.slots.memory: "none"` removes it along with the `memory_search`/`memory_get` tools. The harness config and the deployment seed set the same opt-outs, plus `update.checkOnStart: false` (the startup update check is also an anonymous version ping).
 
 ## Practical implications
 
