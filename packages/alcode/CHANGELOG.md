@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.12.0
+
+### Minor Changes
+
+- a873b8b: The `catchup` protocol replaces `read`: it loads the ticket's history and returns a synthesis, and a following `resume` continues the ticket with that history in context. `reserve-side-ticket` now also counts the side tickets archived under `.plans/_archives/`.
+
 ## 0.11.1
 
 ### Patch Changes
