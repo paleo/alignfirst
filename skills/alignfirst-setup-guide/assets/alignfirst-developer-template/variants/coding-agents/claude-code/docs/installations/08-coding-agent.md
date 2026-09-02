@@ -83,7 +83,7 @@ npx -y skills add https://github.com/paleo/skills --global --yes \
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent claude-code \
   --skill al --skill alplan --skill alspec --skill aldescription \
-  --skill alreview --skill alread --skill almerge < /dev/null
+  --skill alreview --skill alcatchup --skill almerge < /dev/null
 EOS
 ```
 
@@ -143,4 +143,4 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide >/dev/null && echo al
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 11 skills: 4 shared, 7 commands
 ```
 
-In an interactive session as the service account (`sudo -i -u {{SERVICE_USER}}`, then `claude` in a project), `/al`, `/alplan`, `/alspec`, `/aldescription`, `/alreview`, `/alread` and `/almerge` are offered. The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: claude`.
+In an interactive session as the service account (`sudo -i -u {{SERVICE_USER}}`, then `claude` in a project), `/al`, `/alplan`, `/alspec`, `/aldescription`, `/alreview`, `/alcatchup` and `/almerge` are offered. The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: claude`.

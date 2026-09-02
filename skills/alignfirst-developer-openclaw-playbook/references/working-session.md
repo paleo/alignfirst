@@ -187,7 +187,7 @@ Delegate the sequence to alcode.
 ### Status update
 
 - Check status from the recorded linked-worktree path. The takeover sync in `runbooks/project-workspace-setup.md` has already fetched and merged the remote branch, so you are reporting the latest state.
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`read` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`catchup` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Dev-server while working
 
@@ -224,7 +224,7 @@ Clean logs are required for the manual test to pass.
 
 When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
 
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (alcode, `read` protocol). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
+- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (alcode, `catchup` protocol). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
 - **The user runs it.** They only need the dev-server up with its URL.
 
 ### Project rules and docs

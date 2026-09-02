@@ -25,17 +25,9 @@ describe("buildPrompt", () => {
     );
   });
 
-  it("builds the special read prompt with a ticket", () => {
-    expect(buildPrompt({ protocol: "read", ticket: "29" })).toBe(
-      "Use the *alignfirst* skill to determine the TASK_DIR for ticket 29. " +
-        "Then read every `*spec.md` and `*summary.md` file in the TASK_DIR.",
-    );
-  });
-
-  it("appends the message to a read prompt", () => {
-    expect(buildPrompt({ protocol: "read", ticket: "7", message: "What changed?" })).toBe(
-      "Use the *alignfirst* skill to determine the TASK_DIR for ticket 7. " +
-        "Then read every `*spec.md` and `*summary.md` file in the TASK_DIR.\n\nWhat changed?",
+  it("builds the catchup protocol prompt", () => {
+    expect(buildPrompt({ protocol: "catchup", ticket: "29", message: "What changed?" })).toBe(
+      "Run the _catchup_ protocol from the *alignfirst* skill. Ticket ID = 29.\n\nWhat changed?",
     );
   });
 });

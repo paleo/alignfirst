@@ -91,7 +91,7 @@ RUN cd /opt/alignfirst-developer-tests/fixtures/template && \
 RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent universal --agent claude-code \
       --skill alignfirst --skill al --skill alplan --skill alspec \
-      --skill aldescription --skill alreview --skill alread \
+      --skill aldescription --skill alreview --skill alcatchup \
       --skill almerge --skill alignfirst-setup-guide \
       --skill alignfirst-developer-openclaw-playbook
 

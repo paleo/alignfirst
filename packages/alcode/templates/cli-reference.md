@@ -19,7 +19,7 @@ alcode reserve-side-ticket
 
 | Option | Description |
 |--------|-------------|
-| `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `read`, `review`, `merge`. Optional. |
+| `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `catchup`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. `new --protocol` requires it, or `--no-ticket`. |
 | `--no-ticket` | Work without a ticket: `alcode` reserves the next side ticket `side-N` and passes it to the agent. `new` only, with a protocol. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
 | `--message "..."` | Message to send, written in English. `-m` is the short form. Required for `spec`, `aad`, and when no `--protocol`. |
@@ -83,14 +83,14 @@ Stop AAD now. Start a spec instead (alignfirst).
 Two fresh sessions: one reviews, one fixes.
 
 1. **Review** — `alcode new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`.
-2. **Fix** (optional, always in a fresh session — never in the review session) — `alcode new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session, then it implements and writes a summary file.
+2. **Fix** (optional, always in a fresh session — never in the review session) — `alcode new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session. Keep it simple and avoid overengineering. When the agent asks about scope, welcome expansion that cleans things up and refuse expansion that adds complexity; simplicity wins. The agent then implements and writes a summary file.
 
 Skip the fix step when the review is informational.
 
 ## Other protocols
 
 - **description** — `alcode new --protocol description --ticket AB-123`. Writes a PR/MR description for committed work. No discussion.
-- **read** — `alcode new --protocol read --ticket AB-123 [--message "..."]`. Loads the ticket's spec and summary files into context; with a message, answers it against that context.
+- **catchup** — `alcode new --protocol catchup --ticket AB-123 [--message "..."]`. Loads the ticket's history from its requests, specs, and summaries and returns a synthesis. To continue the ticket with that history in context, run `alcode resume <sessionId> --protocol aad --message "..."` (or `--protocol spec`) in the same session. Runs are sequential, so the one-protocol-at-a-time rule still holds.
 - **review** — see the review workflow above.
 - **merge** — `alcode new --protocol merge --ticket AB-123`. Resolves conflicts and summarizes tricky resolutions. Pass the incoming branch via `--message` to start the merge.
 
@@ -105,7 +105,7 @@ alcode resume <sessionId> --message \
 3 - Yes, it should be optional."
 ```
 
-**Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the most elegant way to do it?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
+**Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the elegant, proper, simple yet robust solution?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
 
 **Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user, then relay the answer.
 

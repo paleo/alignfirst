@@ -79,7 +79,7 @@ export async function waitForCompletionReport(
 
 /**
  * Wait for the investigation findings — the agent relaying, in the thread, the result of a
- * `read`-protocol delegation (A03). Judged per message like the ack/completion waits: tolerant of
+ * no-protocol delegation (A03). Judged per message like the ack/completion waits: tolerant of
  * phrasing and language, and it judges the earlier launch/ack lines false rather than needing a regex
  * to exclude them.
  */
