@@ -47,7 +47,7 @@ sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 ```
 
-Accepted gap: the heartbeat checklist is the `heartbeat-main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the agent can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the agent-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-developer.md](../operations/update-developer.md#smoke-test) checks its revision.
+Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the agent can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the agent-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-developer.md](../operations/update-developer.md#smoke-test) restores it.
 
 The alproject configuration and guide are repository-managed; the registry stays service-owned and writable:
 

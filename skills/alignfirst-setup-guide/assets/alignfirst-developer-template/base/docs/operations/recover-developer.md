@@ -47,13 +47,14 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
 | `alproject-registry.json` | `{{PROJECTS_ROOT}}/alproject-registry.json` | — |
-| `*-openclaw-backup.tar.gz` | SQLite state and auth profiles, through `openclaw backup restore <archive> --target <dir>`, then copied with the gateway stopped | `config` |
 
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance config -- install -m 600 \
   /home/{{SERVICE_USER}}/backups/deployment/<stamp>/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/openclaw.json
 ```
+
+The archive `*-openclaw-backup.tar.gz` holds the SQLite state (sessions, cron jobs and their scratch, plugin consent, device pairing) and the auth profiles. Unpack it with `openclaw backup restore <archive> --target <dir>`, then copy the needed files under `~/.openclaw/` through the `config` maintenance scope, gateway stopped.
 
 Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env` and `environment.d/` from the repository and `.env`. Prefer the backup for the workspace files and the registry, which the seed does not write.
 

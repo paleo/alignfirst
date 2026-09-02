@@ -151,4 +151,4 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.
-- `openclaw secrets audit` reports no plaintext, unresolved or shadowed reference; every credential in `openclaw.json` is a file SecretRef; the gateway environment holds no secret.
+- `openclaw secrets audit` reports no plaintext, unresolved or shadowed reference and no store residue; every credential in `openclaw.json` is a file SecretRef; the gateway environment holds no secret.

@@ -127,9 +127,9 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```sh
 sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
-sudo -i -u {{SERVICE_USER}} -- openclaw cron scratch <job-id>
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
 ```
 
-Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat-main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). The scratch must still read as `infra/openclaw/heartbeat-scratch.md`; push it again otherwise ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)).
+Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat:main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). `apply-heartbeat-scratch.sh` reports the scratch unchanged, or pushes `infra/openclaw/heartbeat-scratch.md` back when the release or the agent rewrote it ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)).
 
 Once the release has run for a while, `openclaw update cleanup --dry-run` (gateway stopped) previews the retirement of the archived pre-migration files; run it without `--dry-run` to reclaim the space.

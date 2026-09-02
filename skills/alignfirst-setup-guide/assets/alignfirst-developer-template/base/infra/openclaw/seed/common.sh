@@ -19,6 +19,16 @@ unset_key() { openclaw config unset "$1" || true; }
 ref() { printf '{"source":"file","provider":"%s","id":"%s"}' "$secrets_provider_id" "$1"; }
 set_secret_ref() { set_json "$1" "$(ref "$2")"; }
 
+# install_plugin_once <package>: installs an external npm plugin when no copy is present under
+# ~/.openclaw/npm/ (the layout varies across versions). The caller records the capability consent
+# with `openclaw plugins enable <id> --accept-capabilities`, which also enables the plugin.
+install_plugin_once() {
+  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path "*/node_modules/$1" 2>/dev/null \
+    | grep -q .; then
+    openclaw plugins install "$1" --accept-capabilities
+  fi
+}
+
 # merge_managed_block <target-file> <source-file> <block-name>: replaces the block between
 # `<!-- name:start -->` and `<!-- name:end -->` in the target with the source content, keeps the
 # rest of the file, and writes nothing when the result already equals the target (a re-seed then
@@ -109,7 +119,7 @@ configure_common() {
 
   echo "[seed] heartbeat — on, one periodic tick a day"
   # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
-  # governs periodic ticks; the gateway derives the system-owned `heartbeat-main` cron job from
+  # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
   # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
   # session, no workspace bootstrap, deferred run), so they are cleared.
   set_scalar agents.defaults.heartbeat.every "24h"
@@ -165,7 +175,7 @@ configure_common() {
 
   echo "[seed] plugins — explicit allowlist"
   # A provider served by an additional OpenClaw plugin (a runtime harness, for example) needs
-  # `plugins.entries.<id>.enabled true` and its id appended to `plugins.allow` here; the runbook
-  # 04 shows the form.
+  # `install_plugin_once`, its id appended to `plugins.allow` here and `openclaw plugins enable`;
+  # the runbook 04 shows the form.
   set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\"]"
 }

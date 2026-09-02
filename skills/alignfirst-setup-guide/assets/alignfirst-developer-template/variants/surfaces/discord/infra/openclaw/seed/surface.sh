@@ -19,14 +19,9 @@ validate_surface() {
 
 configure_surface() {
   echo "[seed] plugin — @openclaw/discord"
-  # External npm plugin; installed under ~/.openclaw/npm/ (layout varies across versions).
-  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path '*/node_modules/@openclaw/discord' \
-    2>/dev/null | grep -q .; then
-    openclaw plugins install @openclaw/discord --accept-capabilities
-  fi
-  set_json plugins.entries.discord.enabled true
-  # Capability consent is recorded per plugin version, outside openclaw.json; a version bump
-  # needs it again. Idempotent.
+  install_plugin_once @openclaw/discord
+  # Enables the plugin and records the capability consent, kept per plugin version outside
+  # openclaw.json, so a version bump needs it again. Idempotent.
   openclaw plugins enable discord --accept-capabilities
 
   echo "[seed] Discord channel — single guild channel, DMs by pairing"

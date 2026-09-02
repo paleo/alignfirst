@@ -59,7 +59,7 @@ The execute bits are tracked by git; no `chmod` is needed.
 
 ## 3. Seed
 
-`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
+`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
 
 The provider and model are deployment choices. The seed always pins
 `models.providers.{{RUNTIME_PROVIDER}}.agentRuntime.id` to `openclaw`. The embedded runtime owns the
@@ -83,19 +83,15 @@ Later runs use plain `openclaw doctor` — see [gotchas.md](../gotchas.md).
 
 ## 4. Provider plugin
 
-A model provider served by an OpenClaw plugin needs three more lines in `seed/common.sh`, next to `plugins.allow`, then the package installed once:
+A model provider served by an OpenClaw plugin needs three more lines in `seed/common.sh`, next to `plugins.allow`:
 
 ```sh
-set_json "plugins.entries.<id>.enabled" true
+install_plugin_once <package>
 set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\",\"<id>\"]"
 openclaw plugins enable "<id>" --accept-capabilities
 ```
 
-```sh
-sudo -i -u {{SERVICE_USER}} -- openclaw plugins install <package> --accept-capabilities
-```
-
-`--accept-capabilities` records consent to the plugin's declared capabilities; a run without a TTY stops at the consent prompt otherwise. Consent is recorded per plugin version, so the seed re-records it on every run, as the surface module does for the channel plugin. Enabling does not install: a missing package shows in `openclaw config validate` as `plugin not installed: <id>`. Skip this step for a provider that OpenClaw serves natively.
+`install_plugin_once` installs the package when no copy is present. `plugins enable` writes `plugins.entries.<id>.enabled` and records consent to the plugin's declared capabilities; a run without a TTY stops at the consent prompt otherwise. Consent is recorded per plugin version, so the seed re-records it on every run, as the surface module does for the channel plugin. Skip this step for a provider that OpenClaw serves natively.
 
 An installed agent-harness plugin cannot claim this deployment's turns because the explicit
 `openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
@@ -164,13 +160,10 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
 
 ### Heartbeat scratch
 
-The heartbeat checklist is the scratch of the system-owned `heartbeat-main` cron job, which the gateway creates at its first start from `agents.defaults.heartbeat.every`. Push the comment-only text from the snapshot; the job id is stable across restarts:
+The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job, which the gateway creates at its first start from `agents.defaults.heartbeat.every`. `apply-heartbeat-scratch.sh` pushes the comment-only text from the snapshot when the live scratch differs from it:
 
 ```sh
-job_id=$(sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all --json \
-  | node -e 'const j = JSON.parse(require("node:fs").readFileSync(0, "utf8")); const jobs = Array.isArray(j) ? j : j.jobs; console.log(jobs.find((job) => job.declarationKey === "heartbeat:main").id)')
-sudo -i -u {{SERVICE_USER}} -- openclaw cron scratch "$job_id" --file /home/{{SERVICE_USER}}/seed/heartbeat-scratch.md
-sudo -i -u {{SERVICE_USER}} -- openclaw cron scratch "$job_id"
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
 ```
 
 A comment-only scratch makes the daily tick skip its model call ([gotchas.md](../gotchas.md#heartbeat-cost-is-a-main-session-problem)). The scratch carries no immutable flag; `06` records the accepted gap.

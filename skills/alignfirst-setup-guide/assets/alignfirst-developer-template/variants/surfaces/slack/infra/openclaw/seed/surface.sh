@@ -20,14 +20,9 @@ validate_surface() {
 
 configure_surface() {
   echo "[seed] plugin — @openclaw/slack"
-  # External npm plugin; installed under ~/.openclaw/npm/ (layout varies across versions).
-  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path '*/node_modules/@openclaw/slack' \
-    2>/dev/null | grep -q .; then
-    openclaw plugins install @openclaw/slack --accept-capabilities
-  fi
-  set_json plugins.entries.slack.enabled true
-  # Capability consent is recorded per plugin version, outside openclaw.json; a version bump
-  # needs it again. Idempotent.
+  install_plugin_once @openclaw/slack
+  # Enables the plugin and records the capability consent, kept per plugin version outside
+  # openclaw.json, so a version bump needs it again. Idempotent.
   openclaw plugins enable slack --accept-capabilities
 
   echo "[seed] Slack channel — Socket Mode, single channel, DMs disabled"
