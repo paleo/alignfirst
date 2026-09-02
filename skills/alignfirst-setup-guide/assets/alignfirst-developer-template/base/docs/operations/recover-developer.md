@@ -47,6 +47,7 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
 | `alproject-registry.json` | `{{PROJECTS_ROOT}}/alproject-registry.json` | — |
+| `*-openclaw-backup.tar.gz` | SQLite state and auth profiles, through `openclaw backup restore <archive> --target <dir>`, then copied with the gateway stopped | `config` |
 
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance config -- install -m 600 \

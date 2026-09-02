@@ -139,13 +139,29 @@ install_environment_files() {
 }
 
 verify() {
-  echo "[seed] secrets audit"
-  openclaw secrets audit --check
+  audit_secrets
   echo "[seed] config validate"
   openclaw config validate
   echo "[seed] doctor (interactive; the first install adds --fix once, see 04-openclaw.md)"
   openclaw doctor
   echo "[seed] done. Apply with: systemctl --user restart openclaw-gateway"
+}
+
+audit_secrets() {
+  echo "[seed] secrets audit"
+  # Not `--check`: it fails on every finding, including the info-level LEGACY_RESIDUE that a
+  # provider OAuth login (04-openclaw.md § 10) always produces. Fail on the actionable counters.
+  openclaw secrets audit --json | node -e '
+    const report = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    const summary = report.summary;
+    const failures = summary.plaintextCount + summary.unresolvedRefCount +
+      summary.shadowedRefCount + summary.storeResidueCount;
+    console.log(`[seed] secrets audit: ${JSON.stringify(summary)}`);
+    if (failures > 0) {
+      console.error(JSON.stringify(report.findings, null, 2));
+      process.exit(1);
+    }
+  '
 }
 
 main "$@"

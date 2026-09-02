@@ -36,16 +36,18 @@ sudo /usr/local/sbin/alignfirst-developer-kill
 
 ## Configuration and workspace files
 
-The workspace was applied during `04`. If it has changed since then, run [update-workspace.md](../operations/update-workspace.md), then rerun the kill switch before continuing. `HEARTBEAT.md` is comment-only, and locked all the same — see [gotchas.md](../gotchas.md).
+The workspace was applied during `04`. If it has changed since then, run [update-workspace.md](../operations/update-workspace.md), then rerun the kill switch before continuing.
 
 ```sh
 sudo chown {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
-  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
+  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 sudo chmod 600 /home/{{SERVICE_USER}}/.openclaw/openclaw.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
+sudo chmod 644 /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
-  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
+  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 ```
+
+Accepted gap: the heartbeat checklist is the `heartbeat-main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the agent can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the agent-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-developer.md](../operations/update-developer.md#smoke-test) checks its revision.
 
 The alproject configuration and guide are repository-managed; the registry stays service-owned and writable:
 

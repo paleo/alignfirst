@@ -62,20 +62,20 @@ COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/
 COPY --chown=claw:claw vendor/ /opt/openclaw-test/src/vendor/
 COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 
-# OpenClaw 2026.8.1 verifies managed plugin dependencies and capabilities at
+# OpenClaw 2026.8 verifies managed plugin dependencies and capabilities at
 # gateway startup. Install the exact official artifacts instead of copying the
 # local package directory, which omits its runtime dependencies. Z.AI backs the
 # configured GLM model; Perplexity is auto-selected when OpenRouter is present.
 RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.8.1 && \
+        npm:@openclaw/codex@2026.8.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.8.1 && \
+        npm:@openclaw/zai-provider@2026.8.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.8.1 && \
+        npm:@openclaw/perplexity-plugin@2026.8.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force

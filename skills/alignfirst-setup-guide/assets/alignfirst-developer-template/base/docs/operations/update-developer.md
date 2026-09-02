@@ -22,20 +22,30 @@ sudo install -m 755 -o root -g root infra/openclaw/bin/developer-maintenance.sh 
   /usr/local/sbin/alignfirst-developer-maintenance
 ```
 
+## Back up
+
+Before a core bump, keep the state the migrations will rewrite: configuration, SQLite stores, workspace files ([recover-developer.md](recover-developer.md#restore)):
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
+```
+
 ## npm packages
 
-The prefix is root-owned and immutable ([06](../installations/06-security-hardening.md)). The maintenance wrapper gives the service account this scope for the command, then restores root ownership, modes and the immutable flag through an `EXIT` trap. `openclaw update` is channel-aware and refreshes its plugins; the other packages ride `@latest`.
+The prefix is root-owned and immutable ([06](../installations/06-security-hardening.md)). The maintenance wrapper gives the service account this scope for the command, then restores root ownership, modes and the immutable flag through an `EXIT` trap. `openclaw update` is channel-aware and refreshes its plugins at the core's version; the other packages ride `@latest`.
 
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance packages -- bash -lc '
-openclaw update --yes --no-restart
+openclaw update --yes --no-restart --accept-capabilities
 /usr/bin/npm install -g @paleo/alproject@latest @paleo/alcode@latest ctx7@latest
 '
 ```
 
+`--accept-capabilities` accepts the plugins' reviewed capability changes. Without it the post-update plugin sync stops with an unresolved review, which `openclaw update repair --accept-capabilities` finishes.
+
 Update the coding agent through its package-scoped command: [08-coding-agent.md § Update](../installations/08-coding-agent.md#update).
 
-`openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts.
+`openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts, and the migration step below finishes what the lock interrupted.
 
 Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `@paleo/alproject`, `@paleo/alcode`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
 
@@ -83,11 +93,27 @@ alproject list
 
 Workspace files follow [update-workspace.md](update-workspace.md).
 
-## Gateway unit and restart
+## Migrate after a core bump
 
-After an OpenClaw version bump, doctor may report a unit installed by an older version. `ExecStart` already points at the updated code. Refresh the stamp, then start the contained gateway:
+A release can ship state migrations that only doctor's repair mode applies, with or without a TTY. `openclaw update repair` runs that repair, syncs the plugins at the core's version and refreshes the plugin registry; it needs the configuration and the workspace writable:
 
 ```sh
+sudo /usr/local/sbin/alignfirst-developer-maintenance config workspace -- \
+  openclaw update repair --yes --accept-capabilities
+```
+
+Read its output: every imported or removed file is a change to port into the repository.
+
+## Re-seed after a core bump
+
+A new OpenClaw release can retire keys the seed sets, turn on new defaults and widen the channel plugin's declared capabilities. Re-seed through [configure-developer.md](configure-developer.md): `config set` under the new binary rewrites the config in the current schema, and the surface module re-records the plugin consent. A `config set` that fails names a retired key; the trailing interactive `openclaw doctor` shows the new defaults. Port both into the seed modules before starting the gateway.
+
+## Gateway unit and restart
+
+After an OpenClaw version bump, doctor may report a unit installed by an older version. `ExecStart` already points at the updated code. Refresh the unit, then start the contained gateway. The installer refuses group-writable paths ([gotchas.md](../gotchas.md#gateway-install-refuses-group-writable-systemd-paths)), hence the `chmod`:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'chmod go-w ~/.config ~/.config/systemd ~/.config/systemd/user ~/.config/systemd/user/openclaw-gateway.service'
 sudo /usr/local/sbin/alignfirst-developer-maintenance config -- \
   openclaw gateway install --force
 sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reload
@@ -100,6 +126,10 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
+sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
+sudo -i -u {{SERVICE_USER}} -- openclaw cron scratch <job-id>
 ```
 
-Config-schema warnings here mean the update shipped a migration that the immutable `openclaw.json` blocked. Re-run the seed flow of [configure-developer.md](configure-developer.md): `config set` under the new binary rewrites the config in the current schema. When warnings persist on keys the seed does not set, run interactive `openclaw doctor` through another `config` maintenance window and port the accepted changes into the seed modules.
+Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat-main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). The scratch must still read as `infra/openclaw/heartbeat-scratch.md`; push it again otherwise ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)).
+
+Once the release has run for a while, `openclaw update cleanup --dry-run` (gateway stopped) previews the retirement of the archived pre-migration files; run it without `--dry-run` to reclaim the space.

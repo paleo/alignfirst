@@ -11,8 +11,6 @@ read_when:
 
 Layout: repository → `~/seed/workspace/` (snapshot) → `~/.openclaw/workspace/` (live). Backups under `~/backups/workspace-backups/<stamp>/`.
 
-`HEARTBEAT.md` is comment-only on purpose — [heartbeat](../gotchas.md#heartbeat-cost-is-a-main-session-problem). Keep it that way.
-
 ## Procedure
 
 Diff the repository against the live files. The live files are locked, so the diff shows the edit being pushed and nothing else; anything else is drift worth a question to the user.

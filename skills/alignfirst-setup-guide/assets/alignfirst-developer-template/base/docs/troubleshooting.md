@@ -14,10 +14,10 @@ read_when:
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- journalctl --user -u openclaw-gateway --since today --no-pager
 sudo -i -u {{SERVICE_USER}} -- openclaw config validate
-sudo -i -u {{SERVICE_USER}} -- openclaw secrets audit --check
+sudo -i -u {{SERVICE_USER}} -- openclaw secrets audit
 ```
 
-Run `secrets audit` from a login shell, as above: the file provider resolves from `secrets.json`, and a shell without `~/.bash_profile` lacks the environment the gateway has. Look at the first failing event, not the last restart.
+Run `secrets audit` from a login shell, as above: the file provider resolves from `secrets.json`, and a shell without `~/.bash_profile` lacks the environment the gateway has. A provider OAuth login appears as an informational legacy-residue finding; any other finding is a defect. Look at the first failing event, not the last restart.
 
 ## Project routing
 

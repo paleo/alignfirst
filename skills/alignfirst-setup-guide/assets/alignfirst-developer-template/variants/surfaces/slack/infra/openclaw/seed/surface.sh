@@ -23,11 +23,17 @@ configure_surface() {
   # External npm plugin; installed under ~/.openclaw/npm/ (layout varies across versions).
   if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path '*/node_modules/@openclaw/slack' \
     2>/dev/null | grep -q .; then
-    openclaw plugins install @openclaw/slack
+    openclaw plugins install @openclaw/slack --accept-capabilities
   fi
   set_json plugins.entries.slack.enabled true
+  # Capability consent is recorded per plugin version, outside openclaw.json; a version bump
+  # needs it again. Idempotent.
+  openclaw plugins enable slack --accept-capabilities
 
   echo "[seed] Slack channel — Socket Mode, single channel, DMs disabled"
+  # Inbound DMs are disabled, so heartbeat wake reports never target a DM. The explicit value
+  # also stops doctor's security check from asking for a pin.
+  set_scalar agents.defaults.heartbeat.directPolicy block
   set_json channels.slack.enabled true
   set_secret_ref channels.slack.botToken /SLACK_BOT_TOKEN
   set_secret_ref channels.slack.appToken /SLACK_APP_TOKEN
