@@ -218,11 +218,10 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
 // concurrent reservation took the id, so the loop moves on to the next one.
 export function reserveSideTicket(cwd: string): string {
   const plansDir = join(cwd, ".plans");
-  let highest = 0;
-  for (const entry of readEntries(plansDir)) {
-    const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
-    if (match) highest = Math.max(highest, Number(match[1]));
-  }
+  const highest = Math.max(
+    highestSideTicket(plansDir),
+    highestSideTicket(join(plansDir, "_archives")),
+  );
   for (let n = highest + 1; ; ++n) {
     const ticket = `side-${n}`;
     try {
@@ -232,6 +231,15 @@ export function reserveSideTicket(cwd: string): string {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
   }
+}
+
+function highestSideTicket(dir: string): number {
+  let highest = 0;
+  for (const entry of readEntries(dir)) {
+    const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  return highest;
 }
 
 function readEntries(dir: string): Dirent[] {

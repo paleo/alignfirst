@@ -22,7 +22,7 @@ A contributor without access to the plans repository leaves `.plans` as a plain 
 
 Plan history has no value, so the plans repository only receives synchronization commits (`sync`). The instruction file asks the agent to sync after each change in `.plans/`; a forgotten sync means a teammate sees a stale version, never pollution. The skills themselves never trigger a sync and never detect which mode they run in.
 
-To keep `.plans/` small, finished tickets are moved to `_archives/` inside the project folder — by anyone, at any time (e.g. `mv .plans/250 .plans/_archives/`).
+To keep `.plans/` small, `sync --auto-archive` moves stale ticket directories and no-ticket session files into `_archives/`. `PLANS_SHARE_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`. Manual moves remain valid (e.g. `mv .plans/250 .plans/_archives/`).
 
 ## Setup, Once Per Team
 
@@ -35,7 +35,7 @@ Create the plans repository on the team's git host (recommended name: `{team-nam
 
    ```json
    "plans:setup": "plans-share setup --folder project-a",
-   "plans:sync": "plans-share sync"
+   "plans:sync": "plans-share sync --auto-archive"
    ```
 
 3. Ensure `.gitignore` contains `.plans` (the skills setup already does this).

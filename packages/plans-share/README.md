@@ -31,7 +31,7 @@ Add the npm scripts, with the project folder baked in:
 ```json
 {
   "plans:setup": "plans-share setup --folder project-a",
-  "plans:sync": "plans-share sync"
+  "plans:sync": "plans-share sync --auto-archive"
 }
 ```
 
@@ -55,6 +55,21 @@ npm run plans:sync
 
 A project may keep `.plans` as a plain local directory. `sync` then reports local plans mode and exits successfully.
 
+Archive one ticket immediately by id or path:
+
+```sh
+npx --no plans-share archive 250
+npx --no plans-share archive .plans/250
+```
+
+Archive stale entries without synchronizing:
+
+```sh
+npx --no plans-share auto-archive
+```
+
+Pass `--auto-archive` to `sync` to archive stale entries after pulling and before committing. The recommended `plans:sync` script above enables it.
+
 To verify that `.plans` is usable and report its mode:
 
 ```sh
@@ -72,7 +87,11 @@ Pass `--no` to keep npx off the registry. The bin is `plans-share`, while the pa
 
 ## Archiving
 
-To keep `.plans` small, move finished tickets to `_archives/` inside the project folder — anyone, anytime:
+Automatic archiving moves stale ticket directories and stale no-ticket session files from `.plans/_alcode/` into `.plans/_archives/`. A ticket's age is the newest modification time among its files. `PLANS_SHARE_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`.
+
+Existing names gain a numeric suffix, such as `250-2` or `20260101-101010-2.md`.
+
+Manual moves remain valid:
 
 ```sh
 mv .plans/250 .plans/_archives/

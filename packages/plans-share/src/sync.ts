@@ -1,25 +1,45 @@
-import type { CliContext } from "./context.js";
+import { join } from "node:path";
+import { archiveThresholdDays, autoArchive } from "./archive.js";
+import { CliError, type CliContext } from "./context.js";
 import { git, gitOutput, gitSucceeds } from "./git.js";
 import { resolvePlansMode } from "./plans-path.js";
 
-export function runSync(ctx: CliContext): void {
+export function runSync(ctx: CliContext, args: string[]): void {
+  const options = parseSyncArgs(args);
+  const thresholdDays = options.autoArchive ? archiveThresholdDays() : undefined;
   const mode = resolvePlansMode(ctx);
+  const plansDir = join(ctx.cwd, ".plans");
   if (mode.kind === "local") {
+    if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
     ctx.stdout.write("(local plans mode, nothing to sync)\n");
     return;
   }
-  const plansDir = mode.repoToplevel;
+  const repoDir = mode.repoToplevel;
   // A fresh clone of an empty plans repository has no HEAD yet: nothing to rebase onto.
-  if (hasHead(plansDir)) git(plansDir, "pull", "--rebase", "--autostash");
-  git(plansDir, "add", "-A");
-  if (hasStagedChanges(plansDir)) git(plansDir, "commit", "--quiet", "-m", "sync");
+  if (hasHead(repoDir)) git(repoDir, "pull", "--rebase", "--autostash");
+  if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
+  git(repoDir, "add", "-A");
+  if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
   // Still no HEAD after the commit step: an empty clone with nothing staged, nothing to push.
-  if (hasHead(plansDir) && hasCommitsToSend(plansDir)) {
-    git(plansDir, "push", "--quiet", "-u", "origin", "HEAD");
+  if (hasHead(repoDir) && hasCommitsToSend(repoDir)) {
+    git(repoDir, "push", "--quiet", "-u", "origin", "HEAD");
     ctx.stdout.write("Plans synchronized: local changes sent.\n");
   } else {
     ctx.stdout.write("Plans synchronized: nothing to send.\n");
   }
+}
+
+interface SyncOptions {
+  autoArchive: boolean;
+}
+
+function parseSyncArgs(args: string[]): SyncOptions {
+  let autoArchive = false;
+  for (const arg of args) {
+    if (arg === "--auto-archive") autoArchive = true;
+    else throw new CliError(`Unknown option: ${arg}`);
+  }
+  return { autoArchive };
 }
 
 function hasHead(dir: string): boolean {

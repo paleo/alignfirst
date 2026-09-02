@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { runArchive, runAutoArchive } from "./archive.js";
 import { runCheck } from "./check.js";
 import { CliError, type CliContext } from "./context.js";
 import { runSetup } from "./setup.js";
@@ -8,17 +9,25 @@ const HELP = `plans-share — share the .plans directory through a team plans re
 
 Usage:
   plans-share setup <dir> --folder <name>
-  plans-share sync
+  plans-share sync [--auto-archive]
+  plans-share archive <ticket-id | path>
+  plans-share auto-archive
   plans-share check
   plans-share --help | --version
 
 setup   Link .plans to <dir>/<name>/, where <dir> is an existing clone of the plans
         repository, migrating any existing .plans content. Once per machine; re-run
         with the new location if the clone moves.
-sync    Pull, commit, and push the plans repository.
+sync    Pull, commit, and push the plans repository. With --auto-archive, archive
+        stale plans before committing.
+archive Move one ticket directory to .plans/_archives/.
+auto-archive
+        Move stale ticket directories and no-ticket session files to .plans/_archives/.
 check   Report whether .plans is shared through a team plans repository or a plain
         local directory; exit 1 when it is unusable. For automation, e.g. a
         workspace preSetup callback.
+
+PLANS_SHARE_ARCHIVE_DAYS sets the auto-archive threshold in days (default 7).
 `;
 
 export interface MainOptions {
@@ -44,7 +53,13 @@ export function main(options?: MainOptions): number {
         runSetup(ctx, rest);
         return 0;
       case "sync":
-        runSync(ctx);
+        runSync(ctx, rest);
+        return 0;
+      case "archive":
+        runArchive(ctx, rest);
+        return 0;
+      case "auto-archive":
+        runAutoArchive(ctx);
         return 0;
       case "check":
         runCheck(ctx);
