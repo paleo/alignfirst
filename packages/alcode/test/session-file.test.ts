@@ -242,6 +242,14 @@ describe("reserveSideTicket", () => {
     expect(reserveSideTicket(dir)).toBe("side-4");
   });
 
+  it("takes one above the highest archived side ticket", () => {
+    mkdirSync(join(dir, ".plans", "side-1"));
+    mkdirSync(join(dir, ".plans", "_archives", "side-5"), { recursive: true });
+    mkdirSync(join(dir, ".plans", "_archives", "side-5-2"));
+    expect(reserveSideTicket(dir)).toBe("side-6");
+    expect(existsSync(join(dir, ".plans", "side-6"))).toBe(true);
+  });
+
   it("skips a candidate whose creation loses to an existing entry", () => {
     mkdirSync(join(dir, ".plans", "side-1"));
     writeFileSync(join(dir, ".plans", "side-2"), ""); // not a directory: invisible to the scan

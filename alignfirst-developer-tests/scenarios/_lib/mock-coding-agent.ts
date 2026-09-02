@@ -511,7 +511,7 @@ function parseWorktreeRequest(
 }
 
 const CODING_PROTOCOL_RE =
-  /^Run the _(spec|AAD|plan|description|read|review|merge)_ protocol from the \*alignfirst\* skill\./;
+  /^Run the _(spec|AAD|plan|description|catchup|review|merge)_ protocol from the \*alignfirst\* skill\./;
 
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket

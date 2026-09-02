@@ -1,4 +1,12 @@
-export const PROTOCOLS = ["spec", "plan", "aad", "description", "read", "review", "merge"] as const;
+export const PROTOCOLS = [
+  "spec",
+  "plan",
+  "aad",
+  "description",
+  "catchup",
+  "review",
+  "merge",
+] as const;
 
 export type Protocol = (typeof PROTOCOLS)[number];
 
@@ -7,6 +15,7 @@ export const PROTOCOL_LABELS: Record<string, string> = {
   aad: "AAD",
   plan: "plan",
   description: "description",
+  catchup: "catchup",
   review: "review",
   merge: "merge",
 };
@@ -20,14 +29,7 @@ export interface PromptInput {
 export function buildPrompt(input: PromptInput): string {
   const { protocol, ticket, message } = input;
   if (!protocol) return message ?? "";
-  if (protocol === "read") return buildReadPrompt(ticket, message);
   return buildProtocolPrompt(PROTOCOL_LABELS[protocol], ticket, message);
-}
-
-function buildReadPrompt(ticket?: string, message?: string): string {
-  const ticketPart = ticket ? ` for ticket ${ticket}` : "";
-  const messagePart = message ? `\n\n${message}` : "";
-  return `Use the *alignfirst* skill to determine the TASK_DIR${ticketPart}. Then read every \`*spec.md\` and \`*summary.md\` file in the TASK_DIR.${messagePart}`;
 }
 
 function buildProtocolPrompt(label: string, ticket?: string, message?: string): string {

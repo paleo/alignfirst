@@ -10,7 +10,7 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alread --skill almerge
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alcatchup --skill almerge
 ```
 
 > **Note:** We recommend installing these skills globally.
@@ -117,12 +117,13 @@ Resolve conflicts after a merge or rebase:
 
 The agent investigates both sides of each conflict, resolves them, and writes a `.plans/AB-123/A4-merge.summary.md` file documenting any tricky resolutions.
 
-### Read Task Context
+### Catch Up
 
-Load into context all specs and summaries of the current ticket:
+Load the history of the current ticket, then continue with your instructions or get a synthesis:
 
 ```markdown
-/alread
+/alcatchup
+/alcatchup then start an AAD: …
 ```
 
 ## Rationale

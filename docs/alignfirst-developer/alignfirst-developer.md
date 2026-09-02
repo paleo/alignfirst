@@ -15,9 +15,10 @@ deployment, use the
 2. **Operating-instructions playbook** — the
    [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/)
    skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
-   `channel-handling.md`. Its references own working sessions, channel handling, project workspace
-   setup, project lifecycle, and the `message` tool per surface. Project discovery comes from `alproject --guide`; the delegation
-   procedure comes from `alcode --openclaw-guide` only when delegation starts.
+   `channel-handling.md`. Its references own working sessions, channel handling, the `runbooks/`
+   directory for project workspace setup and project lifecycle, and the `message` tool per surface.
+   Project discovery comes from `alproject --guide`; the delegation procedure comes from
+   `alcode --openclaw-guide` only when delegation starts.
 3. **Regression-test harness** —
    [`alignfirst-developer-tests/`](../../alignfirst-developer-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
@@ -31,8 +32,8 @@ user message
   → workspace AGENTS.md (auto-loaded)              layer 1
   → alignfirst-developer-openclaw-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
-  → references/project-lifecycle.md (create/remove)       layer 2
-  → references/project-workspace-setup.md (if the thread gets its workspace)  layer 2
+  → references/runbooks/project-lifecycle.md (create/onboard/remove)       layer 2
+  → references/runbooks/project-workspace-setup.md (if the thread gets its workspace)  layer 2
   → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
 ```
 
@@ -42,7 +43,7 @@ Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 
 
 A channel/DM session runs `alproject list --json` before routing a message that may refer to a project. It resolves filesystem-present projects only, then records the known project paths, ticket, one-line task, and the full text of a detailed request. It opens a thread and ends the turn. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing project paths stay unresolved until the user selects a usable canonical path. The channel session never sets up a workspace, delegates to `alcode`, inspects a codebase, or reports a status — the thread session does all of that, whatever the user asked for and however explicit their green light was.
 
-The cost is one round-trip: a thread session activates on the user's next message in that thread, so the starter ends by bringing the user back. It asks only for a value the channel can establish is required; otherwise it states that the next message launches the working session. Project creation is the exception to the path requirement: the lifecycle procedure establishes the new canonical path. The gain is that everything substantive runs in a session whose plain text auto-streams to the right surface. The previous contract had the channel session finish the setup in-turn, which forced every post through `message`+`threadId` and made a leak to the channel root the standard failure (`alignfirst-developer-tests/artifacts/2026-07-15T10-31-39-655Z/`).
+The cost is one round-trip: a thread session activates on the user's next message in that thread, so the starter ends by bringing the user back. It asks only for a value the channel can establish is required; otherwise it states that the next message launches the working session. Project creation and repository onboarding are the exceptions to the path requirement: the lifecycle procedure establishes the new canonical path. The gain is that everything substantive runs in a session whose plain text auto-streams to the right surface. The previous contract had the channel session finish the setup in-turn, which forced every post through `message`+`threadId` and made a leak to the channel root the standard failure (`alignfirst-developer-tests/artifacts/2026-07-15T10-31-39-655Z/`).
 
 ## Reading order for maintainers
 

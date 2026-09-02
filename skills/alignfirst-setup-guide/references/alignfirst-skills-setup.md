@@ -6,7 +6,7 @@ repository. AlignFirst does not require docmap or workspace.
 ## Skill Model
 
 `alignfirst` contains the protocols. `alspec`, `alplan`, `al`, `almerge`, `alreview`,
-`aldescription`, and `alread` are human-invoked commands with `disable-model-invocation: true`.
+`aldescription`, and `alcatchup` are human-invoked commands with `disable-model-invocation: true`.
 Repository discovery still lists all eight directories.
 
 Humans invoke commands with `/`, such as `/alspec`, in Claude Code, GitHub Copilot, and Cursor. Codex
@@ -57,7 +57,7 @@ For Claude Code:
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent claude-code \
   --skill alignfirst --skill alspec --skill alplan --skill al --skill almerge \
-  --skill alreview --skill aldescription --skill alread </dev/null
+  --skill alreview --skill aldescription --skill alcatchup </dev/null
 ```
 
 For Codex:
@@ -66,7 +66,7 @@ For Codex:
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent codex \
   --skill alignfirst --skill alspec --skill alplan --skill al --skill almerge \
-  --skill alreview --skill aldescription --skill alread </dev/null
+  --skill alreview --skill aldescription --skill alcatchup </dev/null
 ```
 
 For both agents:
@@ -75,7 +75,7 @@ For both agents:
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent claude-code --agent codex \
   --skill alignfirst --skill alspec --skill alplan --skill al --skill almerge \
-  --skill alreview --skill aldescription --skill alread </dev/null
+  --skill alreview --skill aldescription --skill alcatchup </dev/null
 ```
 
 Restart the target agent after installation. Use `npx -y skills update --global --yes` to update

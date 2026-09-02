@@ -7,7 +7,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.31.0"
+  version: "0.32.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -24,7 +24,7 @@ alone or with its command-alias companions. The core skill and any installed com
 distinction matters.
 
 The `alignfirst` skill contains the protocols. Its seven human-invoked command companions are
-`alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, and `alread`. The command skills
+`alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, and `alcatchup`. The command skills
 keep `disable-model-invocation: true`, humans invoke them as `/alspec` in Claude Code, GitHub
 Copilot, Cursor, or `$alspec` in Codex.
 
@@ -50,7 +50,7 @@ When the user asks what the project could adopt, inspect the repository and pres
 choices:
 
 - **AlignFirst skills** add collaborative specification, planning, implementation, merge, review,
-  description, and task-reading commands. When the team has a plans repository, plans-share can back
+  description, and catch-up commands. When the team has a plans repository, plans-share can back
   the project's `.plans` directory.
 - **docmap** makes the repository's `docs/` tree discoverable to agents and humans.
 - **workspace** creates isolated git-worktree development environments.
@@ -74,7 +74,9 @@ Inspect the repository before changing it. A prepared project has all of these:
 
 1. AlignFirst skills and their project-specific `AGENTS.md` or `CLAUDE.md` section.
 2. plans-share when a team plans repository exists.
-3. docmap, including project scripts and agent instructions.
+3. docmap, including project scripts and agent instructions. When the repository has no `docs/`
+   directory, bootstrap its documentation through
+   [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
 4. workspace, adapted to the project's runtime and development lifecycle, meeting
    [the AlignFirst Developer contract](references/workspace-setup.md#the-alignfirst-developer-contract).
 5. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,

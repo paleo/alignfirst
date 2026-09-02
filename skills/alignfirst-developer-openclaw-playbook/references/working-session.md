@@ -4,9 +4,12 @@ You're handling project work inside a thread (Slack or Discord). The thread is t
 
 Your plain-text replies are your delivery, on Discord and Slack alike — but only the message that **ends your turn** is guaranteed to post. On most model providers, text written between tool calls never leaves the transcript. So the message you end a turn with must carry everything the user needs from that turn — the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` targeting this thread: it posts everything twice. The single exception is a rename, which Discord only performs through a post — see "Thread name" below. Otherwise `message` stays for `read`, cross-surface posts, and attachments.
 
-## Prerequisites
+## Runbooks
 
-Recover the thread context in Step 1 first. Ordinary project work then loads its delegation and project guides through [`project-workspace-setup.md`](./project-workspace-setup.md). Project creation or removal loads its guides through [`project-lifecycle.md`](./project-lifecycle.md).
+A runbook is a procedure you read fully when its situation arises. Step 1 recovers the thread context first.
+
+- [`runbooks/project-workspace-setup.md`](./runbooks/project-workspace-setup.md) — every single-project request, before any other action.
+- [`runbooks/project-lifecycle.md`](./runbooks/project-lifecycle.md) — creating a project, onboarding a repository to clone, physically removing a project.
 
 ## Take over a working session
 
@@ -29,7 +32,7 @@ Default rule: When the user asks you to handle or implement an existing ticket a
 
 ### Step 3 — Route project lifecycle work
 
-When the request creates or physically removes a project, open [`project-lifecycle.md`](./project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
+When the request creates a project, onboards a repository to clone, or physically removes a project, open [`project-lifecycle.md`](./runbooks/project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
@@ -51,10 +54,10 @@ The bot owns this reservation and the request capture; the coding agent receives
 
 The question on every wake is not a mode but a fact: does this request need a project workspace?
 
-- **The request is single-project work** — require PROJECT, PROJECT_PATH, and TICKET_ID, including for read-only work. Open [`project-workspace-setup.md`](./project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
+- **The request is single-project work** — require PROJECT, PROJECT_PATH, and TICKET_ID, including for read-only work. Open [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md), read it fully, and complete its procedure *before any other action* — including before inspecting the codebase. Your first post is its setup signal (Step 2), before any other ack or prose. The procedure attaches the registered workspace or sets one up — it handles the three cases (no branch, branch only, branch + worktree) uniformly — and posts the `[WORKSPACE]` banner. Skipping it and going straight to `git log` or `git branch` is a violation.
 - **A required value is missing** — go to Step 6. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
-The underlying invariant for an existing project: project work always happens inside a linked workspace. New-project bootstrap through its initial commit is the sole main-worktree exception in `project-lifecycle.md`.
+The underlying invariant for an existing project: project work always happens inside a linked workspace. The two main-worktree exceptions in `runbooks/project-lifecycle.md` are new-project bootstrap through its initial commit and the repository-onboarding setup branch.
 
 ### Step 6 — Handle the actual request
 
@@ -148,15 +151,15 @@ A project can have documentation files. List them all from PROJECT_PATH, the ful
 
 ### Main worktree and base branch
 
-The main worktree at PROJECT_PATH must always stay on the base branch. Never switch it — it is shared across sessions.
+The main worktree at PROJECT_PATH stays on the base branch, except for the repository-onboarding setup branch defined in [`project-lifecycle.md`](./runbooks/project-lifecycle.md). It is shared across sessions.
 
-Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `project-lifecycle.md`.
+Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `runbooks/project-lifecycle.md`.
 
 Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./project-workspace-setup.md) instructions to set it up.
+After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md) instructions to set it up.
 
 Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPERS.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
@@ -183,8 +186,8 @@ Delegate the sequence to alcode.
 
 ### Status update
 
-- Check status from the recorded linked-worktree path. The takeover sync in `project-workspace-setup.md` has already fetched and merged the remote branch, so you are reporting the latest state.
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`read` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
+- Check status from the recorded linked-worktree path. The takeover sync in `runbooks/project-workspace-setup.md` has already fetched and merged the remote branch, so you are reporting the latest state.
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`catchup` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Dev-server while working
 
@@ -221,12 +224,17 @@ Clean logs are required for the manual test to pass.
 
 When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
 
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (alcode, `read` protocol). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
+- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (alcode, `catchup` protocol). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
 - **The user runs it.** They only need the dev-server up with its URL.
 
-### Improving project docs
+### Project rules and docs
 
-When you learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down — offer to capture it in the project's `DEVELOPERS.md`. Propose the improvement to the user, ask for confirmation, then have alcode make the edit.
+Two triggers, both edited through alcode:
+
+- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in `DEVELOPERS.md`, ask for confirmation, then have alcode make the edit.
+- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 4), set up a workspace on a new branch for the rule, and create a ready pull request.
+
+A rule that is not about a project has no home: the workspace files are read-only and no memory persists across sessions. Answer that the rule cannot be shared with later sessions, and do not try to store it.
 
 ### Commit & push cadence
 
@@ -254,7 +262,7 @@ A code review is the review workflow from the delegation guide: a fresh alcode s
 The PR/MR review sequence:
 
 1. Read the PR/MR via the platform CLI (`gh`, `glab`). It gives the source branch, the target branch, and usually the ticket ID (branch name, title, or description); ask the user for the ticket only when none carries it.
-2. Set up or reuse a workspace on the source branch ([`project-workspace-setup.md`](./project-workspace-setup.md)).
+2. Set up or reuse a workspace on the source branch ([`project-workspace-setup.md`](./runbooks/project-workspace-setup.md)).
 3. Run the `review` protocol with the target branch as base. Do not fix anything unless the user explicitly asks.
 4. Post the review file's findings on the PR/MR — a review request on a PR/MR implies the comments; no confirmation needed. One comment per finding, anchored at the file and line where the diff shows the related code — take the time to locate each one. One general comment for findings with no precise spot. Post yourself via the platform CLI, or delegate to alcode when navigating a huge PR would flood your context.
 5. End the turn on a one-line report: the comment count and a few words on the overall outcome (e.g. "Posted 6 comments on the MR — solid branch, two real bugs.").
@@ -278,6 +286,10 @@ Whenever you observe that a PR/MR is merged, delegate the post-merge maintenance
 2. Refresh the merge target in the main worktree without switching the main worktree away from its base branch. Fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when the project requires them.
 3. Report the removed workspace and refreshed branch.
 
+### Protected directories
+
+When the deployment or the git host refuses a change under a directory — typically `.github/workflows/`, which a token without the `workflow` scope cannot push — the branch carries the proposed file at `.<dirname>-proposed/` with the rest of the path unchanged: `.github/workflows/ci.yml` becomes `.github-proposed/workflows/ci.yml`. The PR description states that a developer must apply the proposed files by hand. Pass this instruction to alcode, which writes the copy and the description.
+
 ### Cleanup requests
 
 When the user asks to tear down one named project workspace (or worktree) from inside a thread:
@@ -298,7 +310,7 @@ Run the reset **after** the final reply — it clears the session you're in.
 
 ### Project lifecycle requests
 
-Creating or physically removing a project follows [`project-lifecycle.md`](./project-lifecycle.md). Route there before workspace setup.
+Creating a project, onboarding a repository to clone, or physically removing a project follows [`project-lifecycle.md`](./runbooks/project-lifecycle.md). Route there before workspace setup.
 
 ### Forbidden
 

@@ -88,9 +88,9 @@ Only for a status request; otherwise skip to Step 7. The Step 4 banner comes fir
 The `[WORKSPACE]` banner answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
-- **The ticket's AlignFirst artifacts** via `alcode` (`read` protocol, run from the worktree): it loads the ticket's `*spec.md` / `*summary.md` local files in the agent's session and returns a synthesis of them.
+- **The ticket's AlignFirst artifacts** via `alcode` (`catchup` protocol, run from the worktree): it loads the ticket's `*spec.md` / `*summary.md` local files in the agent's session and returns a synthesis of them.
 
-Combine them into the report and post it in the thread; lean on the `read` protocol whenever the spec/summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
+Combine them into the report and post it in the thread; lean on the `catchup` protocol whenever the spec/summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
 
 ## Step 7 — Start the work
 

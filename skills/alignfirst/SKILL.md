@@ -1,10 +1,10 @@
 ---
 name: alignfirst
-description: "Collaborative problem-solving protocols. Read when the user names AlignFirst or a protocol alias: spec, alspec, plan, alplan, AAD, al, merge, almerge, alreview, or aldescription."
+description: "Collaborative problem-solving protocols. Read when the user names AlignFirst or a protocol alias: spec, alspec, plan, alplan, AAD, al, catchup, alcatchup, merge, almerge, alreview, or aldescription."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "3.11.0"
+  version: "3.12.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -17,6 +17,7 @@ If you don't already know which protocol to use, read [overview.md](references/o
 - **Technical Specification** (_spec_, or _alspec_): [spec-protocol.md](references/spec-protocol.md)
 - **Implementation Plans** (_plan_, or _alplan_): [plan-protocol.md](references/plan-protocol.md)
 - **Align-and-Do Protocol** (_AAD_): [aad-protocol.md](references/aad-protocol.md)
+- **Catch Up** (_catchup_, or _alcatchup_): [catchup-protocol.md](references/catchup-protocol.md)
 - **Merge** (_merge_, or _almerge_): [merge-protocol.md](references/merge-protocol.md)
 - **Code Review** (_alreview_): [review-protocol.md](references/review-protocol.md)
 - **Description** (_aldescription_): [description-protocol.md](references/description-protocol.md)
@@ -24,6 +25,8 @@ If you don't already know which protocol to use, read [overview.md](references/o
 ## TASK_DIR Location
 
 **TASK_DIR** is the directory where work files related to a task are stored. Usually, we use **TASK_DIR** = `.plans/{TICKET_ID}/` (a sub-directory of the `.plans` folder). If no ticket ID is known, ask the user for it.
+
+When `.plans/{TICKET_ID}/` is missing, test whether the single path `.plans/_archives/{TICKET_ID}/` exists. If it does, move it back to `.plans/{TICKET_ID}/` before continuing. Never list `.plans/_archives/`: its content would flood the context with old ticket IDs.
 
 - Create TASK_DIR if it doesn't exist
 - Or, list all existing files (do not truncate)

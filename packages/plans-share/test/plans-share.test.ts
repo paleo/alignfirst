@@ -8,6 +8,7 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,6 +89,11 @@ function run(cwd: string, ...args: string[]): RunResult {
 
 function runSetup(fixture: Fixture, dir = join(fixture.root, "team-plans")): RunResult {
   return run(fixture.product, "setup", dir, "--folder", "myproj");
+}
+
+function age(path: string, days: number): void {
+  const timestamp = new Date(Date.now() - days * 86_400_000);
+  utimesSync(path, timestamp, timestamp);
 }
 
 describe("plans-share setup", () => {
@@ -348,5 +354,246 @@ describe("plans-share sync", () => {
     const result = run(fixture.product, "sync");
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("not a directory");
+  });
+
+  it("archives stale plans before publishing when requested", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "88");
+    const spec = join(ticketDir, "A1-spec.md");
+    mkdirSync(ticketDir, { recursive: true });
+    writeFileSync(spec, "spec\n");
+    run(fixture.product, "sync");
+    age(spec, 10);
+
+    const result = run(fixture.product, "sync", "--auto-archive");
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Archived 88 → _archives/88");
+    const remoteFiles = execGit(fixture.remoteUrl, "ls-tree", "-r", "HEAD", "--name-only");
+    expect(remoteFiles).toContain("myproj/_archives/88/A1-spec.md");
+    expect(remoteFiles).not.toContain("myproj/88/A1-spec.md");
+  });
+
+  it("rejects unknown options", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = run(fixture.product, "sync", "--bogus");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Unknown option: --bogus");
+  });
+});
+
+describe("plans-share auto-archive", () => {
+  it("rejects arguments without archiving", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "250");
+    const spec = join(ticketDir, "A1-spec.md");
+    mkdirSync(ticketDir);
+    writeFileSync(spec, "spec\n");
+    age(spec, 10);
+
+    const result = run(fixture.product, "auto-archive", "--dry-run");
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Unexpected argument: --dry-run");
+    expect(existsSync(ticketDir)).toBe(true);
+  });
+
+  it("archives a stale ticket directory and prints the shared-mode publish hint", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const spec = join(fixture.product, ".plans", "250", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "250"));
+    writeFileSync(spec, "spec\n");
+    age(spec, 10);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(result.code).toBe(0);
+    expect(existsSync(join(fixture.product, ".plans", "250"))).toBe(false);
+    expect(existsSync(join(fixture.product, ".plans", "_archives", "250", "A1-spec.md"))).toBe(
+      true,
+    );
+    expect(result.stdout).toContain("Archived 250 → _archives/250");
+    expect(result.stdout).toContain("Publish with: npm run plans:sync");
+  });
+
+  it("keeps a fresh ticket directory", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "250");
+    mkdirSync(ticketDir);
+    writeFileSync(join(ticketDir, "A1-spec.md"), "spec\n");
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(existsSync(ticketDir)).toBe(true);
+    expect(result.stdout).toBe("Nothing to archive.\n");
+  });
+
+  it("ignores the archive directory", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const archivedSpec = join(fixture.product, ".plans", "_archives", "old", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "_archives", "old"), { recursive: true });
+    writeFileSync(archivedSpec, "spec\n");
+    age(archivedSpec, 10);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(existsSync(archivedSpec)).toBe(true);
+    expect(result.stdout).toBe("Nothing to archive.\n");
+  });
+
+  it("archives stale no-ticket sessions and keeps fresh ones", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const sessionDir = join(fixture.product, ".plans", "_alcode");
+    const stale = join(sessionDir, "20260101-101010.md");
+    const fresh = join(sessionDir, "20260102-101010.md");
+    mkdirSync(sessionDir);
+    writeFileSync(stale, "stale\n");
+    writeFileSync(fresh, "fresh\n");
+    age(stale, 10);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(fresh)).toBe(true);
+    expect(
+      existsSync(join(fixture.product, ".plans", "_archives", "_alcode", "20260101-101010.md")),
+    ).toBe(true);
+    expect(result.stdout).toContain(
+      "Archived _alcode/20260101-101010.md → _archives/_alcode/20260101-101010.md",
+    );
+  });
+
+  it("uses the newest nested file as a ticket's age", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "250");
+    const oldSpec = join(ticketDir, "A1-spec.md");
+    const freshSession = join(ticketDir, "_alcode", "x.md");
+    mkdirSync(join(ticketDir, "_alcode"), { recursive: true });
+    writeFileSync(oldSpec, "spec\n");
+    writeFileSync(freshSession, "session\n");
+    age(oldSpec, 30);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(existsSync(ticketDir)).toBe(true);
+    expect(result.stdout).toBe("Nothing to archive.\n");
+  });
+
+  it("honors and validates PLANS_SHARE_ARCHIVE_DAYS", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "250");
+    const spec = join(ticketDir, "A1-spec.md");
+    mkdirSync(ticketDir);
+    writeFileSync(spec, "spec\n");
+    age(spec, 2);
+    const previous = process.env.PLANS_SHARE_ARCHIVE_DAYS;
+    try {
+      process.env.PLANS_SHARE_ARCHIVE_DAYS = "1";
+      expect(run(fixture.product, "auto-archive").code).toBe(0);
+      expect(existsSync(join(fixture.product, ".plans", "_archives", "250"))).toBe(true);
+      process.env.PLANS_SHARE_ARCHIVE_DAYS = "0";
+      const result = run(fixture.product, "auto-archive");
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(
+        "PLANS_SHARE_ARCHIVE_DAYS must be a positive number of days.",
+      );
+    } finally {
+      if (previous === undefined) delete process.env.PLANS_SHARE_ARCHIVE_DAYS;
+      else process.env.PLANS_SHARE_ARCHIVE_DAYS = previous;
+    }
+  });
+
+  it("suffixes ticket and session file collisions", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const plansDir = join(fixture.product, ".plans");
+    const ticketSpec = join(plansDir, "250", "A1-spec.md");
+    const session = join(plansDir, "_alcode", "20260101-101010.md");
+    mkdirSync(join(plansDir, "250"));
+    mkdirSync(join(plansDir, "_archives", "250"), { recursive: true });
+    mkdirSync(join(plansDir, "_alcode"));
+    mkdirSync(join(plansDir, "_archives", "_alcode"));
+    writeFileSync(ticketSpec, "new spec\n");
+    writeFileSync(join(plansDir, "_archives", "250", "A1-spec.md"), "old spec\n");
+    writeFileSync(session, "new session\n");
+    writeFileSync(join(plansDir, "_archives", "_alcode", "20260101-101010.md"), "old session\n");
+    age(ticketSpec, 10);
+    age(session, 10);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(existsSync(join(plansDir, "_archives", "250-2", "A1-spec.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260101-101010-2.md"))).toBe(true);
+    expect(result.stdout).toContain("Archived 250 → _archives/250-2");
+    expect(result.stdout).toContain(
+      "Archived _alcode/20260101-101010.md → _archives/_alcode/20260101-101010-2.md",
+    );
+  });
+
+  it("works in local mode without a publish hint", () => {
+    const fixture = makeFixture();
+    const plansDir = join(fixture.product, ".plans");
+    const spec = join(plansDir, "250", "A1-spec.md");
+    mkdirSync(join(plansDir, "250"), { recursive: true });
+    writeFileSync(spec, "spec\n");
+    age(spec, 10);
+
+    const result = run(fixture.product, "auto-archive");
+
+    expect(result.code).toBe(0);
+    expect(existsSync(join(plansDir, "_archives", "250", "A1-spec.md"))).toBe(true);
+    expect(result.stdout).not.toContain("Publish with:");
+  });
+});
+
+describe("plans-share archive", () => {
+  it("accepts a ticket id and a path", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const plansDir = join(fixture.product, ".plans");
+    mkdirSync(join(plansDir, "101"));
+    mkdirSync(join(plansDir, "102"));
+
+    const idResult = run(fixture.product, "archive", "101");
+    const pathResult = run(fixture.product, "archive", ".plans/102");
+
+    expect(idResult.code).toBe(0);
+    expect(pathResult.code).toBe(0);
+    expect(existsSync(join(plansDir, "_archives", "101"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "102"))).toBe(true);
+  });
+
+  it("rejects a missing directory", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = run(fixture.product, "archive", "missing");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("missing must be an existing directory directly under .plans");
+  });
+
+  it("rejects an underscore-prefixed name", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    mkdirSync(join(fixture.product, ".plans", "_private"));
+    const result = run(fixture.product, "archive", "_private");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("names starting with _ are not tickets");
+  });
+
+  it("rejects a missing argument", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const result = run(fixture.product, "archive");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Usage: plans-share archive <ticket-id | path>");
   });
 });

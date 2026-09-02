@@ -30,6 +30,10 @@ Use Spec-Plan-Execute when:
 - There are open design questions that need formal exploration
 - You're unsure — default to Spec-Plan-Execute
 
+## Catch Up
+
+A standalone utility (`/alcatchup`). It loads the ticket's history from its requests, specs, and summaries. It then follows the user's instructions or returns a short synthesis. To continue directly into a light workflow, use `/alcatchup then start an AAD: …`.
+
 ## Description
 
 A standalone utility (`/aldescription`). It reads specs and summaries that have been generated for a ticket and produces a concise description of what was implemented. Typically used to generate a PR/MR description once the work is done.
