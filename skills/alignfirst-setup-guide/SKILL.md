@@ -74,7 +74,9 @@ Inspect the repository before changing it. A prepared project has all of these:
 
 1. AlignFirst skills and their project-specific `AGENTS.md` or `CLAUDE.md` section.
 2. plans-share when a team plans repository exists.
-3. docmap, including project scripts and agent instructions.
+3. docmap, including project scripts and agent instructions. When the repository has no `docs/`
+   directory, bootstrap its documentation through
+   [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
 4. workspace, adapted to the project's runtime and development lifecycle, meeting
    [the AlignFirst Developer contract](references/workspace-setup.md#the-alignfirst-developer-contract).
 5. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,

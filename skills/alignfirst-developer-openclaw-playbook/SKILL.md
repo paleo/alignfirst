@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.31.0"
+  version: "0.32.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -46,7 +46,7 @@ Thread: recover the values the starter recorded via `message action: "read"`. It
 
 A development task owned by one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
 
-Use AlignFirst protocols only for work owned by one project. Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and other operational work to alcode without a protocol. A ticket ID may still identify the project workspaces involved.
+Use AlignFirst protocols only for work owned by one project. Delegate project bootstrap (creation and repository onboarding), a multi-project request with no main project, workspace cleanup, base-branch refresh, and other operational work to alcode without a protocol. A ticket ID may still identify the project workspaces involved.
 
 ## Who "the user" is depends on where the instruction lives
 

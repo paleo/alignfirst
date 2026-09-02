@@ -12,7 +12,9 @@ Install the docmap CLI in a consumer repo so humans and agents share one set of 
    ```
 
 3. **Install `@paleo/docmap`** as a dev dependency with the detected package manager: `npm install -D @paleo/docmap` (`pnpm add -D` / `yarn add -D` / `bun add -D`).
-4. **Ensure a `docs/` directory** exists (`mkdir docs` if missing).
+4. **Ensure a `docs/` directory** exists (`mkdir docs` if missing). When preparing a project for an
+   AlignFirst Developer, populate a directory created here through
+   [docmap-bootstrapping.md](docmap-bootstrapping.md); do not leave it empty.
 5. **Add the docmap section** to `AGENTS.md` (or `CLAUDE.md`):
 
    ```markdown
