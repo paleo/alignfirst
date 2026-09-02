@@ -385,6 +385,22 @@ describe("plans-share sync", () => {
 });
 
 describe("plans-share auto-archive", () => {
+  it("rejects arguments without archiving", () => {
+    const fixture = makeFixture();
+    runSetup(fixture);
+    const ticketDir = join(fixture.product, ".plans", "250");
+    const spec = join(ticketDir, "A1-spec.md");
+    mkdirSync(ticketDir);
+    writeFileSync(spec, "spec\n");
+    age(spec, 10);
+
+    const result = run(fixture.product, "auto-archive", "--dry-run");
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Unexpected argument: --dry-run");
+    expect(existsSync(ticketDir)).toBe(true);
+  });
+
   it("archives a stale ticket directory and prints the shared-mode publish hint", () => {
     const fixture = makeFixture();
     runSetup(fixture);
@@ -548,7 +564,7 @@ describe("plans-share archive", () => {
     mkdirSync(join(plansDir, "102"));
 
     const idResult = run(fixture.product, "archive", "101");
-    const pathResult = run(fixture.product, "archive", join(".plans", "102"));
+    const pathResult = run(fixture.product, "archive", ".plans/102");
 
     expect(idResult.code).toBe(0);
     expect(pathResult.code).toBe(0);

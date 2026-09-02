@@ -59,7 +59,7 @@ export function main(options?: MainOptions): number {
         runArchive(ctx, rest);
         return 0;
       case "auto-archive":
-        runAutoArchive(ctx);
+        runAutoArchive(ctx, rest);
         return 0;
       case "check":
         runCheck(ctx);

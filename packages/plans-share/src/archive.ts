@@ -1,15 +1,21 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, renameSync, statSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { CliError, type CliContext } from "./context.js";
 import { resolvePlansMode } from "./plans-path.js";
 
 const DEFAULT_ARCHIVE_DAYS = 7;
 const DAY_MS = 86_400_000;
 
-export function runAutoArchive(ctx: CliContext): void {
+export function runAutoArchive(ctx: CliContext, args: string[]): void {
+  rejectAutoArchiveArguments(args);
   const mode = resolvePlansMode(ctx);
   const archived = autoArchive(join(ctx.cwd, ".plans"), archiveThresholdDays(), ctx.stdout);
   if (mode.kind === "shared" && archived) ctx.stdout.write(`Publish with: ${ctx.syncCommand}\n`);
+}
+
+function rejectAutoArchiveArguments(args: string[]): void {
+  const [unexpected] = args;
+  if (unexpected !== undefined) throw new CliError(`Unexpected argument: ${unexpected}`);
 }
 
 export function runArchive(ctx: CliContext, args: string[]): void {
@@ -100,11 +106,15 @@ function resolveArchiveTarget(cwd: string, plansDir: string, args: string[]): st
   const [argument, unexpected] = args;
   if (argument === undefined) throw new CliError("Usage: plans-share archive <ticket-id | path>");
   if (unexpected !== undefined) throw new CliError(`Unexpected argument: ${unexpected}`);
-  const target = argument.includes(sep) ? resolve(cwd, argument) : join(plansDir, argument);
+  const target = isPathArgument(argument) ? resolve(cwd, argument) : join(plansDir, argument);
   const stats = statSync(target, { throwIfNoEntry: false });
   if (!stats?.isDirectory() || realpathSync(dirname(target)) !== realpathSync(plansDir))
     throw new CliError(`${argument} must be an existing directory directly under .plans.`);
   if (basename(target).startsWith("_"))
     throw new CliError(`${argument}: names starting with _ are not tickets.`);
   return target;
+}
+
+function isPathArgument(argument: string): boolean {
+  return argument.includes("/") || argument.includes("\\");
 }
