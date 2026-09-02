@@ -11,7 +11,7 @@ read_when:
 
 Layout: repository → `~/seed/workspace/` (snapshot) → `~/.openclaw/workspace/` (live). Backups under `~/backups/workspace-backups/<stamp>/`.
 
-`HEARTBEAT.md` is comment-only and `TOOLS.md` empty, on purpose — [gotchas.md](../gotchas.md#toolsmd-is-empty-on-purpose), [heartbeat](../gotchas.md#heartbeat-cost-is-a-main-session-problem). Keep them that way.
+`HEARTBEAT.md` is comment-only on purpose — [heartbeat](../gotchas.md#heartbeat-cost-is-a-main-session-problem). Keep it that way.
 
 ## Procedure
 
@@ -54,4 +54,4 @@ sudo /usr/local/sbin/alignfirst-developer-maintenance workspace -- \
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
 
-`AGENTS.md` and `TOOLS.md` cannot be removed: OpenClaw recreates a missing one from its own template, unlocked. Retire content by shipping the file empty, as `TOOLS.md` is.
+`AGENTS.md` cannot be removed: OpenClaw recreates a missing one from its own template, unlocked. Retire its content by shipping the file empty.

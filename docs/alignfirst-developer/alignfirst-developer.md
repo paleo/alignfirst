@@ -10,8 +10,7 @@ deployment, use the
 1. **Reference workspace** —
    [`alignfirst-developer-tests/workspace/`](../../alignfirst-developer-tests/workspace/). The
    `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
-   load into the system prompt every turn. `TOOLS.md` stays empty; its content lives in `AGENTS.md`
-   under `## Environment`. `AGENTS.md` sends every user message to the
+   load into the system prompt every turn. `AGENTS.md` sends every user message to the
    `alignfirst-developer-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the
    [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/)

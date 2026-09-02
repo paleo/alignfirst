@@ -36,15 +36,15 @@ sudo /usr/local/sbin/alignfirst-developer-kill
 
 ## Configuration and workspace files
 
-The workspace was applied during `04`. If it has changed since then, run [update-workspace.md](../operations/update-workspace.md), then rerun the kill switch before continuing. `TOOLS.md` is empty and `HEARTBEAT.md` comment-only, and both are locked all the same — see [gotchas.md](../gotchas.md).
+The workspace was applied during `04`. If it has changed since then, run [update-workspace.md](../operations/update-workspace.md), then rerun the kill switch before continuing. `HEARTBEAT.md` is comment-only, and locked all the same — see [gotchas.md](../gotchas.md).
 
 ```sh
 sudo chown {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
-  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
+  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
 sudo chmod 600 /home/{{SERVICE_USER}}/.openclaw/openclaw.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
+sudo chmod 644 /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
 sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
-  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,TOOLS,HEARTBEAT}.md
+  /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER,HEARTBEAT}.md
 ```
 
 The alproject configuration and guide are repository-managed; the registry stays service-owned and writable:

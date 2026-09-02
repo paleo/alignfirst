@@ -148,7 +148,6 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 - The allowed channel routes work into one thread; a message elsewhere gets no reply.
 - The coding agent runs every AlignFirst command through `alcode`, unattended.
 - Every model route uses OpenClaw's embedded agent runtime.
-- The workspace `TOOLS.md` compatibility placeholder is zero bytes; tool facts live in `AGENTS.md`.
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.

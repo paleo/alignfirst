@@ -39,9 +39,15 @@ coding agent: `skills remove` would delete the canonical copy for both.
 
 `@paleo/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `alproject` is unaffected: it reads git worktrees directly.
 
-## `TOOLS.md` is empty on purpose
+## Legacy `TOOLS.md`
 
-The tool notes live in the `## Environment` section of the workspace `AGENTS.md`. The file itself stays, zero bytes and immutable, because OpenClaw counts `TOOLS.md` and `AGENTS.md` among its required bootstrap files: a session that finds one missing recreates it from the upstream template, unlocked and service-writable. Both files land in every subagent prompt, so the template would be a live injection surface. Retire content by emptying the file, never by deleting it. Deleting it achieves nothing anyway: `apply-workspace.sh` mirrors `~/seed/workspace/*.md`, so the empty file returns on the next apply.
+Tool notes live in the `## Environment` section of the workspace `AGENTS.md`. OpenClaw 2026.8+ neither loads nor recreates `TOOLS.md`, and the seed no longer ships it. Installations hardened before its retirement still carry a zero-byte, immutable live copy that `openclaw doctor` warns about and `--fix` cannot delete (`chattr +i` blocks the unlink). Remove it through a maintenance window:
+
+```sh
+sudo /usr/local/sbin/alignfirst-developer-maintenance workspace -- \
+  rm /home/{{SERVICE_USER}}/.openclaw/workspace/TOOLS.md
+sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
+```
 
 ## Heartbeat cost is a main-session problem
 
