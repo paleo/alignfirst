@@ -10,8 +10,12 @@ AlignFirst enables AI agents to write the code you would write. It's distributed
 ## Installation
 
 ```bash
+npm install -g alignfirst
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst --skill al --skill alplan --skill alspec --skill aldescription --skill alreview --skill alcatchup --skill almerge
 ```
+
+The skills are stubs that run `npx -y alignfirst guide`. Protocol updates come with the CLI; run
+`npm update -g alignfirst` to receive them.
 
 > **Note:** We recommend installing these skills globally.
 >
@@ -133,7 +137,7 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
 1. The context window is limited, the compression mechanism is opaque, and we want to be able to continue an unfinished task in a fresh session.
 2. It's a way to keep track of what was agreed upon with the agent and what has been done.
 
-## Upgrade from v1 or v2
+## Upgrade from v1, v2 or v3
 
 1. Install the setup-guide skill:
 
@@ -141,7 +145,7 @@ Specs, plans, and summaries should be written in well-organized (git-ignored) lo
    npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
    ```
 
-2. Ask your agent to run the upgrade:
+2. Ask your agent to follow the setup guide's upgrade route:
 
    ```text
    Use your alignfirst-setup-guide skill. Upgrade AlignFirst in this project.

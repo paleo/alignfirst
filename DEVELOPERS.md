@@ -21,6 +21,8 @@ Run `npm run workspace -- --guide` to learn the full procedures.
 
 ## Everyday commands
 
+The tooling runs through the `alignfirst` CLI built in this workspace, so run `npm run build` first.
+
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | Build every package |

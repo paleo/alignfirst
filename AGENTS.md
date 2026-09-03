@@ -22,14 +22,13 @@ This repository is on *GitHub*.
 
 ## Packages
 
-- `@paleo/alcode` — coding agent wrapper for the AlignFirst developer.
-- `@paleo/alproject` — local project registry for the AlignFirst developer
+- `alignfirst` — the AlignFirst CLI: protocols, plans and docs
+- `@paleo/alcode` — coding agent wrapper and project discovery for the AlignFirst Developer
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans
 - `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
 - `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/plans-share` — share the `.plans` directory through a team plans repository
 - `@paleo/workspace` — run multiple git-worktree dev environments side by side
 
 ## Docmap - Seek Documentation
@@ -42,9 +41,7 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 
 Run `npm run workspace -- --guide` for the full procedures.
 
-## AlignFirst - Ticket ID, Commit Message, Branch Name
-
-_Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
+## AlignFirst - Commit Message, Branch Name
 
 Commit message convention: we use conventional commit, e.g., `feat: add new feature`. Do not mention the ticket ID. Do not add a "Co-Authored-By:" line.
 

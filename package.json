@@ -6,10 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "docmap": "docmap",
+    "docmap": "alignfirst docmap",
     "workspace": "node scripts/workspace.mjs",
-    "plans:setup": "plans-share setup --folder alignfirst",
-    "plans:sync": "plans-share sync --auto-archive",
+    "plans:setup": "alignfirst plans setup",
+    "plans:sync": "alignfirst sync --auto-archive",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "build": "npm run build --workspace @paleo/docmap && npm run build --workspaces --if-present",

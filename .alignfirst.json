@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "ticketPattern": "^\\d+$",
+  "plans": {
+    "folder": "alignfirst"
+  }
+}
