@@ -2,7 +2,7 @@
 #
 # Copies the deployment state of the service account into ~/backups/deployment/<stamp>/:
 # openclaw.json, the secret store, the gateway env file, the workspace files, environment.d,
-# the alproject registry when present, and OpenClaw's own archive of its SQLite state.
+# and OpenClaw's own archive of its SQLite state.
 #
 # Run as the service account:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
@@ -13,8 +13,6 @@ umask 077
 BACKUP_BASE="$HOME/backups/deployment"
 BACKUP_DIR=
 WORKSPACE="$HOME/.openclaw/workspace"
-# Unquoted so a ~-prefixed PROJECTS_ROOT expands.
-REGISTRY_FILE={{PROJECTS_ROOT}}/alproject-registry.json
 
 main() {
   check_user
@@ -24,7 +22,6 @@ main() {
   copy_file "$HOME/.openclaw/.env" openclaw.env
   copy_workspace
   copy_environment
-  copy_file "$REGISTRY_FILE" alproject-registry.json
   create_openclaw_archive
   chmod -R go-rwx "$BACKUP_DIR"
   echo "$BACKUP_DIR"

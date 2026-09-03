@@ -7,72 +7,109 @@ read_when:
 
 # Add a Project
 
-**Operator.** Run `alproject --guide` first: every project is a direct child of `{{PROJECTS_ROOT}}`, and the rendered `alproject-guide.md` describes the parent. The clone uses the service account's git access from `03`, so the repository must grant that account write access.
+**Operator.** Read the projects guide first. Every project is a direct child of `~/projects`, and the
+clone uses the service account's git access from `03`.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects --guide --root ~/projects'
+```
 
 ## Clone and prepare
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'git -C {{PROJECTS_ROOT}} clone <repository-url>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 ```
 
-A repository that lacks the AlignFirst Developer contract (AlignFirst skills, docmap, the workspace system, a `DEVELOPERS.md`) is prepared through the `alignfirst-setup-guide` skill, from a coding-agent session in the clone.
+Prepare the clone through the setup skill's **Prepare a Project for an AlignFirst Developer** route.
+It installs the CLI prerequisite and skills, writes `.alignfirst.json`, and configures docmap,
+workspace, and `DEVELOPERS.md`.
 
 <!-- TEAM_PLANS_SECTION -->
 ## Team plans
 
-The service account has its own clone of the team plans repository, under `{{PROJECTS_ROOT}}` beside the projects. It is a repository, not a project: it stays unregistered, as the rendered `alproject-guide.md` says. Clone it once:
+The service account keeps its plans clone beside the projects. Clone it with the service account's
+credentials when it is missing:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'git -C {{PROJECTS_ROOT}} clone <plans-repository-url>'
+sudo -H -u {{SERVICE_USER}} bash -lc '
+if [ ! -d ~/projects/{{PLANS_CLONE_NAME}}/.git ]; then
+  git -C ~/projects clone {{PLANS_REPOSITORY_URL}} {{PLANS_CLONE_NAME}}
+fi
+'
 ```
 
-Link each new project to it. Without this, `workspace setup` aborts on `plans-share check`:
+From the new project root, link the plans folder configured in `.alignfirst.json`:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd {{PROJECTS_ROOT}}/<repo> && npm install && npm run plans:setup -- {{PROJECTS_ROOT}}/<plans-clone>'
+sudo -H -u {{SERVICE_USER}} bash -lc '
+cd ~/projects/<repo>
+alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
+'
 ```
+
+Without a usable link, `workspace setup` aborts on `alignfirst plans check`.
 <!-- TEAM_PLANS_SECTION -->
 
-## Register
+## Claim ports
 
-A portless project registers with the bare command. When the project's wrapper declares ports, pass its `perWorkspace` and `maxWorkspaces`; an existing project claims its configured base, a new one omits `--base-port` and writes the returned base into its workspace configuration:
+A portless project needs no claim. For a wrapper with ports, calculate
+`size = perWorkspace × maxWorkspaces`, then reserve the complete project block:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- alproject register <repo>
-sudo -i -u {{SERVICE_USER}} -- alproject register <repo> --ports-per-workspace <n> --max-workspaces <n> --base-port <base-port>
+sudo -H -u {{SERVICE_USER}} bash -lc '
+alcode projects free-ports --root ~/projects --size <size>
+'
 ```
 
-Registration fails without changing the registry when the range is unavailable. Moving a registered project costs more than a `mv` — see [gotchas.md](../gotchas.md#moving-a-project-breaks-its-workspace-registry).
+Use the returned first and last ports while preparing the clone:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc '
+cd ~/projects/<repo>
+alignfirst setup --port-range <first>-<last> <other-setup-options>
+'
+```
+
+When setup already created `.alignfirst.json`, edit its `portRange` to the returned block. The
+workspace kernel checks the claim against its port scheme on every command. Confirm discovery:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+```
 
 ## Set up the workspace
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd {{PROJECTS_ROOT}}/<repo> && npm install && npm run workspace -- setup'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm install && npm run workspace -- setup'
 ```
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
-A project reachable through the gateway uses the `remote` profile instead. It reads `REMOTE_DEV_DOMAIN` from `environment.d/common.conf`:
+A project reachable through the gateway uses the `remote` profile instead. It reads
+`REMOTE_DEV_DOMAIN` from `environment.d/common.conf`:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd {{PROJECTS_ROOT}}/<repo> && npm run workspace -- setup --profile remote'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- setup --profile remote'
 ```
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 
 ## Smoke test
 
-Bring the dev server up, probe the URL it prints, bring it down:
+Bring the dev server up, probe the URL it prints, bring it down, then inspect the discovered project:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd {{PROJECTS_ROOT}}/<repo> && npm run dev -- up'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd {{PROJECTS_ROOT}}/<repo> && npm run dev -- down'
-sudo -i -u {{SERVICE_USER}} -- alproject status <repo>
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- down'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects status <repo> --root ~/projects'
 ```
 
 ## Remove
 
-```sh
-sudo -i -u {{SERVICE_USER}} -- alproject unregister <repo>
-```
+Remove every linked workspace through the project's workspace command, then delete the clone. The
+next listing no longer shows it:
 
-The clone stays on disk until deleted by hand; remove its workspaces first (`npm run workspace -- remove`), so no container or dev server is stranded.
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- remove <workspace>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+```

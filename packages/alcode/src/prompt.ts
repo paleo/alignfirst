@@ -10,16 +10,6 @@ export const PROTOCOLS = [
 
 export type Protocol = (typeof PROTOCOLS)[number];
 
-export const PROTOCOL_LABELS: Record<string, string> = {
-  spec: "spec",
-  aad: "AAD",
-  plan: "plan",
-  description: "description",
-  catchup: "catchup",
-  review: "review",
-  merge: "merge",
-};
-
 export interface PromptInput {
   protocol?: string;
   ticket?: string;
@@ -28,12 +18,12 @@ export interface PromptInput {
 
 export function buildPrompt(input: PromptInput): string {
   const { protocol, ticket, message } = input;
-  if (!protocol) return message ?? "";
-  return buildProtocolPrompt(PROTOCOL_LABELS[protocol], ticket, message);
+  if (protocol === undefined) return message ?? "";
+  return buildProtocolPrompt(protocol, ticket, message);
 }
 
-function buildProtocolPrompt(label: string, ticket?: string, message?: string): string {
-  const ticketPart = ticket ? ` Ticket ID = ${ticket}.` : "";
-  const messagePart = message ? `\n\n${message}` : "";
-  return `Run the _${label}_ protocol from the *alignfirst* skill.${ticketPart}${messagePart}`;
+function buildProtocolPrompt(protocol: string, ticket?: string, message?: string): string {
+  const ticketPart = ticket === undefined ? "" : ` Ticket ID = ${ticket}.`;
+  const messagePart = message === undefined ? "" : `\n\n${message}`;
+  return `Run \`alignfirst guide ${protocol}\` and follow the protocol.${ticketPart}${messagePart}`;
 }

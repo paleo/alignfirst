@@ -22,11 +22,11 @@ Run `secrets audit` from a login shell, as above: the file provider resolves fro
 ## Project routing
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- alproject list --json
-sudo -i -u {{SERVICE_USER}} -- alproject status <repo> --json
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --json --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects status <repo> --json --root ~/projects'
 ```
 
-`unregistered on filesystem` needs [add-project.md](operations/add-project.md); `registered but missing from filesystem` needs the clone restored or a deliberate `unregister`. Never edit the registry by hand, except for the moved-project case in [gotchas.md](gotchas.md#moving-a-project-breaks-its-workspace-registry).
+A project absent from the listing has no `.alignfirst.json` or sits outside a marked projects directory. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project-breaks-its-workspace-registry).
 
 ## Delegation
 

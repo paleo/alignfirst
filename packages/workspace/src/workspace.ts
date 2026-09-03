@@ -42,6 +42,7 @@ import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { refuseOldRegistry, runMigrate } from "./migrate.js";
 import { findOrphanNames } from "./orphans.js";
 import { wsCmd } from "./package-manager.js";
+import { checkPortClaim } from "./port-claim.js";
 import {
   firstPortOf,
   type PortsConfig,
@@ -353,6 +354,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   try {
     const ctx = detectWorktree();
+    checkPortClaim(ctx.currentWorktree, kernel.ports);
 
     if (command.kind === "migrate") {
       runMigrate(ctx, {

@@ -14,11 +14,11 @@ read_when:
 
 OpenClaw talks to Slack in Socket Mode: the gateway opens an outbound WebSocket, so the server needs no public URL, no webhook, and no inbound firewall rule. Two tokens are involved: a **bot token** (`xoxb-…`) that reads and posts messages, and an **app-level token** (`xapp-…`) that only opens the WebSocket.
 
-## Create the App from the Manifest
+## Create the App from JSON
 
-The manifest below keeps what a member of one **private** channel needs: read history and files, post and edit its own messages, read and add reactions, manage pins, see users, and run the `/openclaw` slash command. It omits the DM, group-DM, and Home-tab surfaces, so Slack cannot deliver a DM to the bot even if the gateway's `dmPolicy` drifts. It omits `channels:manage`, so the bot cannot invite, rename, or archive the channel.
+The JSON configuration below keeps what a member of one **private** channel needs: read history and files, post and edit its own messages, read and add reactions, manage pins, see users, and run the `/openclaw` slash command. It omits the DM, group-DM, and Home-tab surfaces, so Slack cannot deliver a DM to the bot even if the gateway's `dmPolicy` drifts. It omits `channels:manage`, so the bot cannot invite, rename, or archive the channel.
 
-> **User action required.** Go to <https://api.slack.com/apps/new> → **From a manifest** → pick the workspace → paste the JSON → **Create**. Leave **Distribution** off.
+> **User action required.** Go to <https://api.slack.com/apps/new>, choose the JSON configuration path, pick the workspace, paste the JSON, then select **Create**. Leave **Distribution** off.
 
 ```json
 {
@@ -95,13 +95,13 @@ After any scope or event change, Slack marks the app as needing re-installation:
 
 The seed allowlists that one channel (`channels.slack.channels`, `groupPolicy allowlist`) and disables inbound DMs (`dmPolicy disabled`). An invite elsewhere leaves the bot silent there.
 
-## What the Manifest Can't Confine
+## What the App Configuration Cannot Confine
 
 `users:read` is workspace-wide: it reads the whole member directory, and Slack offers no channel-scoped equivalent. `groups:read` covers the private channels the bot is a member of. The single-channel rule therefore rests on two other layers: the bot is invited to one channel (history and posting fail elsewhere with `not_in_channel`), and the gateway processes only the allowlisted channel ID.
 
 ## If the Channel Becomes Public
 
-The manifest is scoped to a private channel (`groups:*`, `message.groups`). Converting the channel to public cuts the bot off: Slack starts sending `message.channels`, which the app does not subscribe to, and history reads fail. To recover:
+The app configuration is scoped to a private channel (`groups:*`, `message.groups`). Converting the channel to public cuts the bot off: Slack starts sending `message.channels`, which the app does not subscribe to, and history reads fail. To recover:
 
 1. **OAuth & Permissions**: add the bot scopes `channels:history` and `channels:read`; drop the `groups:*` pair.
 2. **Event Subscriptions**: add `message.channels`, drop `message.groups`.
@@ -128,7 +128,7 @@ The manifest is scoped to a private channel (`groups:*`, `message.groups`). Conv
 
 Run it after `08`, as the operator, from the Slack client.
 
-1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
+1. In the allowlisted channel, request a small read-only task against a listed project (a question about the codebase, no change).
 2. The first reply opens a thread on your message. Its starter carries the task plus the known project path and ticket.
 3. Answer in the thread. The fresh thread session reads the thread history, delegates the read-only task, and reports in the same thread, never in the channel root.
 4. Post the same request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.

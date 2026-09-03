@@ -20,13 +20,11 @@ Repository specifics:
 
 ## Docmap - Seek Documentation
 
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+*Before* any investigation or code exploration, run `alignfirst docmap`, then read the relevant documentation. Mandatory for every task.
 
 Always read `docs/overview.md`.
 
-## AlignFirst - Ticket ID, Commit Message, Default Branch
-
-_Ticket ID:_ numeric, incremented from the highest existing directory in `.plans/`. This repository does not branch per ticket; ask the user when unsure.
+## AlignFirst - Commit Message and Default Branch
 
 _Commit message convention:_ Conventional Commits with a very short subject, e.g. `docs: tighten 04 seed section`. No body unless the change needs one. Do not mention the ticket ID.
 
@@ -37,7 +35,7 @@ _Default branch:_ `main`.
 
 In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `{{ADMIN_REPOSITORY_NAME}}/`). Plans are shared with the team through that repository and are never committed in this one.
 
-After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
+After every change in `.plans/`, run `alignfirst sync`.
 <!-- TEAM_PLANS_SECTION -->
 
 ## Workspaces

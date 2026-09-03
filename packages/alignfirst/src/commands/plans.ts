@@ -1,22 +1,13 @@
-import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-} from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
-import { gitOutput } from "../git.js";
+import { assertMainWorktreeRoot } from "../git.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { archiveEntry, archiveThresholdDays, autoArchive } from "../plans/archive.js";
+import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
 
 export function runPlans(ctx: CommandContext, args: string[]): number {
@@ -52,7 +43,7 @@ function runSetup(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans setup <clone-dir> [--folder <name>]\n`;
   const parsed = parseSetupArgs(ctx, args, usage);
   if (parsed === undefined) return 0;
-  checkMainWorktreeRoot(ctx);
+  assertMainWorktreeRoot(ctx.cwd);
   const cloneDir = resolve(ctx.cwd, parsed.dir);
   checkClone(ctx, cloneDir);
   const projectDir = join(cloneDir, parsed.folder);
@@ -96,18 +87,6 @@ function parseSetupArgs(
   return { dir: positionals[0], folder };
 }
 
-function checkMainWorktreeRoot(ctx: CommandContext): void {
-  const toplevel = gitOutput(ctx.cwd, "rev-parse", "--show-toplevel");
-  if (realpathSync(toplevel) !== realpathSync(ctx.cwd))
-    throw new CliError("Run this command from the repository root.");
-  const gitDir = gitOutput(ctx.cwd, "rev-parse", "--absolute-git-dir");
-  const commonDir = gitOutput(ctx.cwd, "rev-parse", "--git-common-dir");
-  if (realpathSync(gitDir) !== realpathSync(resolve(ctx.cwd, commonDir)))
-    throw new CliError(
-      "Run this command from the main worktree. Linked worktrees reach .plans through it.",
-    );
-}
-
 function checkClone(ctx: CommandContext, cloneDir: string): void {
   if (!existsSync(cloneDir))
     throw new CliError(
@@ -121,41 +100,6 @@ function checkClone(ctx: CommandContext, cloneDir: string): void {
     throw new CliError(
       `${cloneDir} is the product repository itself. Point ${ctx.form} plans setup at a clone of the team plans repository.`,
     );
-}
-
-function linkPlans(ctx: CommandContext, projectDir: string): void {
-  const plansPath = join(ctx.cwd, ".plans");
-  const stats = lstatSync(plansPath, { throwIfNoEntry: false });
-  if (stats?.isSymbolicLink()) {
-    if (existsSync(plansPath) && realpathSync(plansPath) === realpathSync(projectDir)) {
-      ctx.stdout.write(".plans already links to the plans repository.\n");
-      return;
-    }
-    rmSync(plansPath);
-  } else if (stats?.isDirectory()) {
-    migratePlansContent(ctx, plansPath, projectDir);
-  } else if (stats) {
-    throw new CliError(".plans exists and is not a directory.");
-  }
-  const target = relative(ctx.cwd, projectDir);
-  symlinkSync(target, plansPath);
-  ctx.stdout.write(`Linked .plans → ${target}\n`);
-  ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
-}
-
-function migratePlansContent(ctx: CommandContext, plansPath: string, projectDir: string): void {
-  const entries = readdirSync(plansPath);
-  const collisions = entries.filter((entry) => existsSync(join(projectDir, entry)));
-  if (collisions.length > 0)
-    throw new CliError(
-      `Cannot migrate .plans: already in ${projectDir}: ${collisions.join(", ")}. ` +
-        "Merge them manually, then re-run.",
-    );
-  for (const entry of entries)
-    cpSync(join(plansPath, entry), join(projectDir, entry), { recursive: true });
-  rmSync(plansPath, { recursive: true });
-  if (entries.length > 0)
-    ctx.stdout.write(`Migrated ${entries.length} entries from the local .plans directory.\n`);
 }
 
 function runCheck(ctx: CommandContext, args: string[]): number {

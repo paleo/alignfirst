@@ -39,6 +39,9 @@
     "lint": "biome check",
     "test": "vitest run"
   },
+  "dependencies": {
+    "arktype": "^2.2.3"
+  },
   "devDependencies": {
     "@types/node": "~24.13.3",
     "rimraf": "~6.1.3",

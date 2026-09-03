@@ -18,7 +18,7 @@ infra/openclaw/
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
 ├── bin/                # workspace, backup, kill-switch and maintenance scripts
-├── alproject/          # .alproject.json and alproject-guide.md
+├── projects/           # .alignfirst-projects.json
 ├── workspace/          # curated workspace files (AGENTS.md, IDENTITY.md, …)
 ├── heartbeat-scratch.md # the heartbeat job's comment-only checklist (step 7)
 └── coding-agent/       # global instruction file of the delegated coding agent
@@ -114,19 +114,19 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.s
 
 Later changes follow [update-workspace.md](../operations/update-workspace.md): once `06` has run, the files are immutable.
 
-## 6. alproject
+## 6. Projects marker
 
-Create the project parent, then install the configuration and the guide as root-owned files. The registry, `{{PROJECTS_ROOT}}/alproject-registry.json`, is created by the first registration and stays owned by the service account.
+Create the fixed project parent, install its marker as a root-owned file, then verify that an empty listing exits 0.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p {{PROJECTS_ROOT}}'
-projects_root=$(sudo -H -u {{SERVICE_USER}} bash -lc 'echo {{PROJECTS_ROOT}}')
-sudo install -m 644 -o root -g root /home/{{SERVICE_USER}}/seed/alproject/.alproject.json /home/{{SERVICE_USER}}/.alproject.json
-sudo install -m 644 -o root -g root /home/{{SERVICE_USER}}/seed/alproject/alproject-guide.md "$projects_root/alproject-guide.md"
-sudo -i -u {{SERVICE_USER}} -- alproject list
+sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/projects'
+sudo install -m 644 -o root -g root \
+  /home/{{SERVICE_USER}}/seed/projects/.alignfirst-projects.json \
+  /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
 ```
 
-An empty registry lists nothing and exits 0. Projects come later, through [add-project.md](../operations/add-project.md).
+Projects come later through [add-project.md](../operations/add-project.md).
 
 ## 7. Gateway unit
 
@@ -138,7 +138,7 @@ loginctl show-user {{SERVICE_USER}} | grep Linger
 # Expected: Linger=yes
 ```
 
-`openclaw gateway install` writes the user unit: `ExecStart` points at the installed `dist/index.js`, and the current `PATH` is baked in as `Environment=PATH=`. With the `.bash_profile` of `03`, that is `/usr/bin:…:~/.npm-system-global/bin`, which is what lets exec children find `alcode` and the coding agent.
+`openclaw gateway install` writes the user unit: `ExecStart` points at the installed `dist/index.js`, and the current `PATH` is baked in as `Environment=PATH=`. With the `.bash_profile` of `03`, that is `/usr/bin:…:~/.npm-system-global/bin`, which is what lets exec children find `alignfirst`, `alcode`, and the coding agent.
 
 The installer refuses group-writable unit paths, and the account's default umask creates them that way ([gotchas.md](../gotchas.md#gateway-install-refuses-group-writable-systemd-paths)). Strip the bit first:
 

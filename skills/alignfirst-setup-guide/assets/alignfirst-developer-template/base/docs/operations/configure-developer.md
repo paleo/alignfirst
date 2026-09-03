@@ -47,5 +47,5 @@ Run these commands only after the wrapper reports that hardening was restored an
 The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf`, and merges the coding agent's global instruction file. It does not touch:
 
 - `~/.openclaw/workspace/*.md` — [update-workspace.md](update-workspace.md).
-- `~/.alproject.json` and `alproject-guide.md` — [update-developer.md](update-developer.md).
+- `~/projects/.alignfirst-projects.json` — [update-developer.md](update-developer.md).
 - The provider and coding-agent logins — [04 § 10](../installations/04-openclaw.md#10-provider-login), [08 § Authenticate](../installations/08-coding-agent.md#authenticate).

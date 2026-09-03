@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { CliError } from "./cli-error.js";
 
@@ -12,6 +14,18 @@ export function git(dir: string, ...args: string[]): void {
 
 function gitFailure(args: string[]): CliError {
   return new CliError(`git ${args[0]} failed. See the git output above.`);
+}
+
+export function assertMainWorktreeRoot(cwd: string): void {
+  const toplevel = gitOutput(cwd, "rev-parse", "--show-toplevel");
+  if (realpathSync(toplevel) !== realpathSync(cwd))
+    throw new CliError("Run this command from the repository root.");
+  const gitDir = gitOutput(cwd, "rev-parse", "--absolute-git-dir");
+  const commonDir = gitOutput(cwd, "rev-parse", "--git-common-dir");
+  if (realpathSync(gitDir) !== realpathSync(resolve(cwd, commonDir)))
+    throw new CliError(
+      "Run this command from the main worktree. Linked worktrees reach .plans through it.",
+    );
 }
 
 export function gitOutput(dir: string, ...args: string[]): string {

@@ -1,7 +1,7 @@
 # Upgrade from AlignFirst v1
 
 This migration removes the v1 `_docs/` system while preserving project knowledge. Continue with the
-current setup reference after these steps.
+v3 upgrade reference after these steps.
 
 > **Note**: Commands shown are Unix-style. Adapt to your OS if needed (e.g., PowerShell on Windows).
 
@@ -91,9 +91,8 @@ Check if any `.md` files remain in `_docs/`.
 
 ## Finish the Upgrade
 
-Follow [alignfirst-skills-setup.md](alignfirst-skills-setup.md). Install the current `alignfirst`
-content skill and all seven command skills for the requested agent and scope, then reconcile `.plans`,
-`.gitignore`, and project instructions.
+Continue with [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md) for the CLI installation,
+project config, stub skills, and current commands.
 
 Summarize:
 
@@ -103,4 +102,4 @@ Summarize:
 - `.gitignore` updated
 - `AGENTS.md` cleaned
 - Whether documentation was migrated to `docs/` via docmap, or no remaining docs were found
-- The scope and agents that received the current AlignFirst skills
+- The scope and agents that received the v4 AlignFirst skills

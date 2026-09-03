@@ -8,6 +8,13 @@ export interface CliRangeResult {
   satisfied: boolean;
 }
 
+export function defaultCliRange(version: string): string {
+  const parsed = semver.parse(version);
+  if (parsed === null) throw new Error(`Invalid installed version: ${version}`);
+  const upper = parsed.major === 0 ? `0.${parsed.minor + 1}.0` : `${parsed.major + 1}.0.0`;
+  return `>=${version} <${upper}`;
+}
+
 export function checkCliRange(
   config: ProjectConfig | undefined,
   installedVersion: string,

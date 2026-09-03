@@ -18,7 +18,7 @@ The seed is the record of the OpenClaw configuration. No copy of `openclaw.json`
 - `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`, `coding-agent.conf`; `runtime.conf` is generated).
 - `infra/openclaw/workspace/` — the workspace files, applied by `apply-workspace.sh`.
 - `infra/openclaw/heartbeat-scratch.md` — the heartbeat job's checklist, pushed by `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)).
-- `infra/openclaw/alproject/` — `.alproject.json` (project parent, port range) and the guide appended to `alproject --guide`.
+- `infra/openclaw/projects/.alignfirst-projects.json` — the project parent, policy, and port range used by `alcode projects`.
 
 ## Module contract
 

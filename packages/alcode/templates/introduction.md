@@ -3,3 +3,5 @@ Run a coding agent through AlignFirst protocols with the `alcode` CLI. It wraps 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
 Run `alcode` from the root of the target project, so the agent works in the right repo. The project must contain a `.plans/` directory.
+
+The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).

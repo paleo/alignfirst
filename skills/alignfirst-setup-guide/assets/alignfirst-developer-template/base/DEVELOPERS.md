@@ -4,12 +4,12 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 
 ## Layout
 
-- `docs/` — runbooks and notes, listed by `npm run docmap`.
-- `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `alproject/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
+- `docs/` — runbooks and notes, listed by `alignfirst docmap`.
+- `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `projects/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
 - `scripts/workspace/` — the portless workspace wrapper.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->
-- `.plans/` — task plans. Symlinked across worktrees, and into a clone of the team plans repository so plans are shared with the team. Run `npm run plans:sync` after changing anything under it.
+- `.plans/` — task plans. Symlinked across worktrees, and into a clone of the team plans repository so plans are shared with the team. Run `alignfirst sync` after changing anything under it.
 <!-- TEAM_PLANS_SECTION -->
 - `.local/`, `.local-wt/` — shared notes and per-worktree state, gitignored.
 
@@ -21,7 +21,6 @@ Run `npm run workspace -- --guide` for the procedures.
 
 ## Conventions
 
-- _Ticket ID_: numeric, incremented from the highest existing directory in `.plans/`. Ask the user when unsure.
 - _Commit messages_: Conventional Commits, very short subject, no ticket ID.
 - _Default branch_: `main`.
 
@@ -29,9 +28,9 @@ Run `npm run workspace -- --guide` for the procedures.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run docmap` | Browse the documentation; read `docs/overview.md` first |
+| `alignfirst docmap` | Browse the documentation; read `docs/overview.md` first |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run validate` | docmap check and a syntax check of the wrapper |
 <!-- TEAM_PLANS_SECTION -->
-| `npm run plans:sync` | Publish and retrieve the task plans (`.plans`) |
+| `alignfirst sync` | Publish and retrieve the task plans (`.plans`) |
 <!-- TEAM_PLANS_SECTION -->

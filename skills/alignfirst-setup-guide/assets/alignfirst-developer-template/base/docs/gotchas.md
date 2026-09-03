@@ -37,7 +37,7 @@ coding agent: `skills remove` would delete the canonical copy for both.
 
 ## Moving a project breaks its workspace registry
 
-`@paleo/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `alproject` is unaffected: it reads git worktrees directly.
+`@paleo/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `alcode projects` reads the repaired git worktrees directly.
 
 ## Heartbeat cost is a main-session problem
 

@@ -5,8 +5,11 @@ import { CliError } from "./cli-error.js";
 import { resolveCommandForm } from "./command-form.js";
 import { runConfig } from "./commands/config.js";
 import { runDevelopers } from "./commands/developers.js";
+import { runDoctor } from "./commands/doctor.js";
 import { runDocmap } from "./commands/docmap.js";
+import { runGuide } from "./commands/guide.js";
 import { runPlans } from "./commands/plans.js";
+import { runSetup } from "./commands/setup.js";
 import { runSync } from "./commands/sync.js";
 import { runTicket } from "./commands/ticket.js";
 import type { CommandContext, Output } from "./context.js";
@@ -85,6 +88,8 @@ Usage:
 
 function dispatch(ctx: CommandContext, command: string, args: string[]): number | Promise<number> {
   switch (command) {
+    case "guide":
+      return runGuide(ctx, args);
     case "ticket":
       return runTicket(ctx, args);
     case "sync":
@@ -97,6 +102,10 @@ function dispatch(ctx: CommandContext, command: string, args: string[]): number 
       return runConfig(ctx, args);
     case "DEVELOPERS.md":
       return runDevelopers(ctx, args);
+    case "setup":
+      return runSetup(ctx, args);
+    case "doctor":
+      return runDoctor(ctx, args);
     default:
       throw new CliError(`Error: unknown command "${command}".\n\n${renderHelp(ctx)}`);
   }

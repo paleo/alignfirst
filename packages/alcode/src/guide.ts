@@ -33,6 +33,6 @@ export function renderGuide(
     .trimEnd();
 }
 
-function readTemplate(name: string): string {
+export function readTemplate(name: string): string {
   return readFileSync(new URL(`../templates/${name}`, import.meta.url), "utf-8");
 }

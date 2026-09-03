@@ -39,22 +39,24 @@ git config --global user.name "<name>"
 git config --global user.email "<email>"
 
 git clone git@{{SERVER_HOST}}-admin:<repository-path> ~/{{ADMIN_REPOSITORY_NAME}}
-cd ~/{{ADMIN_REPOSITORY_NAME}} && npm install
+cd ~/{{ADMIN_REPOSITORY_NAME}}
+npm install -g alignfirst
+npm install
 ```
 
 <!-- TEAM_PLANS_SECTION -->
 ## Team plans repository
 
-`.plans` is a symlink into a clone of the team plans repository (folder `{{ADMIN_REPOSITORY_NAME}}/`), cloned beside this repository with the same deploy key.
+`.plans` is a symlink into `~/projects/{{PLANS_CLONE_NAME}}/{{ADMIN_REPOSITORY_NAME}}`. Clone the team plans repository once with the operator's credentials.
 
-> **User action required.** Enable the deploy key on the plans repository too, with write access: `plans:sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
-
-`<plans-repository-path>` is the path part of the plans repository URL; `<plans-clone-path>` is where the clone lands (a sibling of `~/{{ADMIN_REPOSITORY_NAME}}`):
+> **User action required.** Enable the deploy key on the plans repository too, with write access: `alignfirst sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
 
 ```sh
-git clone git@{{SERVER_HOST}}-admin:<plans-repository-path> <plans-clone-path>
-cd ~/{{ADMIN_REPOSITORY_NAME}} && npm run plans:setup -- <plans-clone-path>
-npx --no plans-share check
+mkdir -p ~/projects
+git -C ~/projects clone {{PLANS_REPOSITORY_URL}} {{PLANS_CLONE_NAME}}
+cd ~/{{ADMIN_REPOSITORY_NAME}}
+alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
+alignfirst plans check
 ```
 <!-- TEAM_PLANS_SECTION -->
 
@@ -66,7 +68,7 @@ npx --no plans-share check
 cd ~/{{ADMIN_REPOSITORY_NAME}}
 mkdir -p .plans .local
 npm run workspace -- setup
-npm run docmap
+alignfirst docmap
 ```
 
 Continue with [03-toolchain.md](03-toolchain.md).

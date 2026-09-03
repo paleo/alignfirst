@@ -29,7 +29,7 @@ Then download Chromium as the service account. Resolve `playwright-core` from th
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw_entry=$(readlink -f "$(command -v openclaw)"); playwright_cli=$(node -e '\''const fs = require("node:fs"); const path = require("node:path"); const { createRequire } = require("node:module"); const fromOpenClaw = createRequire(process.argv[1]); let cli; try { const packageFile = fromOpenClaw.resolve("playwright-core/package.json"); cli = path.join(path.dirname(packageFile), "cli.js"); } catch {} if (!cli || !fs.existsSync(cli)) { const root = path.dirname(process.argv[1]); cli = [path.join(root, "node_modules/playwright-core/cli.js"), path.join(root, "dist/extensions/browser/node_modules/playwright-core/cli.js")].find(fs.existsSync); } if (!cli) throw new Error("OpenClaw playwright-core CLI not found"); process.stdout.write(cli);'\'' "$openclaw_entry"); node "$playwright_cli" install chromium'
 ```
 
-When Chromium fails to launch, list the unresolved direct dependencies. GTK and Vulkan load through `dlopen` and do not show here; Playwright's own manifest (`deb.deps` next to the binary) is the cross-check.
+When Chromium fails to launch, list the unresolved direct dependencies. GTK and Vulkan load through `dlopen` and do not show here; Playwright's own dependency list (`deb.deps` next to the binary) is the cross-check.
 
 ```sh
 sudo -u {{SERVICE_USER}} ldd /home/{{SERVICE_USER}}/.cache/ms-playwright/chromium-*/chrome-linux64/chrome | grep "not found"
@@ -64,7 +64,7 @@ sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 - `build-essential` — native npm bindings (node-gyp).
 - `fd-find`, `bat` — Debian renames the binaries to `fdfind` and `batcat`; the symlinks restore the upstream names.
 - `httpie` — `http` and `https`, JSON-aware client.
-- `yq` — the Ubuntu package is the Python jq wrapper; sufficient for YAML manifests and compose files.
+- `yq` — the Ubuntu package is the Python jq wrapper; sufficient for YAML and compose files.
 - `postgresql-client` — `psql` for remote databases; a containerized one is reached with `docker exec`.
 - `shellcheck`, `shfmt` — for the shell scripts the developer writes.
 

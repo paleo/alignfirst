@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  // TEAM_PLANS_SECTION
+  "plans": { "folder": "{{ADMIN_REPOSITORY_NAME}}" },
+  // TEAM_PLANS_SECTION
+  "ticketPattern": "^\\d+$"
+}

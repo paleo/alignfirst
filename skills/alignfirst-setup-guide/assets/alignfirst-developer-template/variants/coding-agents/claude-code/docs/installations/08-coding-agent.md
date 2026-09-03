@@ -60,12 +60,12 @@ sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-s
 ```sh
 sudo -i -u {{SERVICE_USER}}
 claude                    # /login, then follow the browser flow and paste the code; /exit
-cd {{PROJECTS_ROOT}} && claude   # accept "Trust this folder?", then /exit
+cd ~/projects && claude   # accept "Trust this folder?", then /exit
 claude auth status
 exit
 ```
 
-Trusting `{{PROJECTS_ROOT}}` once covers every project cloned under it; `alcode` starts `claude` inside the project directory, and an unanswered trust prompt would block the run.
+Trusting `~/projects` once covers every project cloned under it; `alcode` starts `claude` inside the project directory, and an unanswered trust prompt would block the run.
 
 ### Skills
 
@@ -139,7 +139,7 @@ After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode --guide | head'      # names claude as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide >/dev/null && echo alproject-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode projects --guide --root ~/projects >/dev/null && echo projects-ok'
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 11 skills: 4 shared, 7 commands
 ```
 

@@ -26,6 +26,9 @@ describe("renderGuide", () => {
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain("alcode status <session-file>");
       expect(guide).toContain("alcode usage");
+      expect(guide).toContain("alcode projects");
+      expect(guide).toContain("alignfirst");
+      expect(guide).not.toContain("reserve-side-ticket");
       expect(guide).toContain("current usage limits and reset times");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
       expect(guide).toContain("Stop AAD now. Start a spec instead (alignfirst).");

@@ -1,49 +1,23 @@
-# AlignFirst Skills Setup
+# AlignFirst Setup
 
-Install the AlignFirst content skill and seven human command skills, then configure the consumer
-repository. AlignFirst does not require docmap or workspace.
+Install the AlignFirst CLI and its eight stub skills, then configure the consumer repository.
+AlignFirst does not require the standalone docmap package or workspace.
 
-## Skill Model
+## Install the CLI
 
-`alignfirst` contains the protocols. `alspec`, `alplan`, `al`, `almerge`, `alreview`,
-`aldescription`, and `alcatchup` are human-invoked commands with `disable-model-invocation: true`.
-Repository discovery still lists all eight directories.
+Install the CLI globally on the developer's machine:
 
-Humans invoke commands with `/`, such as `/alspec`, in Claude Code, GitHub Copilot, and Cursor. Codex
-uses `$`, such as `$alspec`.
+```sh
+npm install -g alignfirst
+```
 
-## Configure the Project
-
-1. Create `.plans/` when absent and ensure `.gitignore` contains `.plans`.
-   - When upgrading from `.plans/**`, `!.plans/**/`, and `!.plans/**/*.shared.md`, replace that block
-     with `.plans`. Untrack committed `*.shared.md` files with `git rm --cached` and report them.
-2. Use the existing `AGENTS.md` or `CLAUDE.md`; create `AGENTS.md` when neither exists.
-3. Detect the ticket format from `git branch -a`, the commit convention from
-   `git log --oneline -20`, and the default branch from the remote HEAD. Ask only for a convention
-   that repository evidence cannot establish; allow the user to omit it.
-4. Extend the existing code-search ignore instruction with `.plans`.
-5. Add or update this section with the detected values. Omit convention lines without a value.
-
-   ```markdown
-   ## AlignFirst - Ticket ID, Commit Message, Default Branch
-
-   _Ticket ID:_ Format is `{DETECTED_FORMAT}`. Use the ticket ID if explicitly provided. Otherwise,
-   deduce it from the current branch name without confirmation. If unavailable, run
-   `git branch --show-current`. Ask the user only as a last resort.
-
-   _Commit message convention:_ `{DETECTED_CONVENTION}`
-
-   _Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
-   ```
-
-Preserve repository-specific instructions and adapt the heading when the project already uses an
-equivalent conventions section.
+Add `npm install -g alignfirst` to the README prerequisites so teammates install the same command.
 
 ## Install the Skills
 
-When installation is requested, run the matching command. Global symlink-based installation is the
-default because the commands are reusable across repositories. Omit `--global` for an explicitly
-project-local installation. Add `--copy` only where symlinks are unsuitable.
+The `alignfirst` skill runs the core guide. `alspec`, `alplan`, `al`, `almerge`, `alreview`,
+`aldescription`, and `alcatchup` run individual protocols. Humans invoke them with `/` in Claude
+Code, GitHub Copilot, and Cursor, or `$` in Codex.
 
 Discover the package without installing it:
 
@@ -80,9 +54,49 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
 
 Restart the target agent after installation. Use `npx -y skills update --global --yes` to update
 global skills, or `npx -y skills update --project --yes` for project skills. Remove an installation
-with `npx -y skills remove [--global] <skill-name> --yes`. Let the CLI manage `skills-lock.json`.
+with `npx -y skills remove [--global] <skill-name> --yes`. Let the skills CLI manage
+`skills-lock.json`.
 
-## Team Plans Repository
+## Configure the Project
 
-`.plans/` stays local by default. When the team has a dedicated plans repository, continue with
-[plans-share-setup.md](plans-share-setup.md). The AlignFirst skills behave identically in both modes.
+1. Detect the ticket pattern from the branch and ticket conventions already visible in the
+   repository:
+
+   - Issue numbers use `^\d+$`.
+   - Jira-like keys use `^[A-Z]+-\d+$`.
+   - Omit the pattern when the repository has no ticket convention.
+
+2. Run setup from the project root. Include only the applicable options:
+
+   ```sh
+   alignfirst setup --ticket-pattern '<regex>' [--plans-folder <name>] [--port-range <first>-<last>]
+   ```
+
+   The command writes `.alignfirst.json` with the compatible `cli` range, creates `.plans/`, updates
+   `.gitignore`, installs the skills, and adds the README prerequisite. A second run validates the
+   existing setup instead of rewriting it.
+
+3. Detect the commit-message convention from `git log --oneline -20` and the default branch from
+   the remote HEAD. Preserve repository-specific instructions and add or update this section in
+   `AGENTS.md` or `CLAUDE.md`:
+
+   ```markdown
+   ## AlignFirst - Commit Message and Default Branch
+
+   _Commit message convention:_ `{DETECTED_CONVENTION}`
+
+   _Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
+   ```
+
+   Omit a convention line when repository evidence cannot establish it. When the project uses a
+   team plans repository, add this sentence under the same section:
+
+   > After every change in `.plans/`, run `alignfirst sync`.
+
+4. Continue with [plans-setup.md](plans-setup.md) when the team has a plans repository.
+
+5. Run the final check:
+
+   ```sh
+   alignfirst doctor
+   ```

@@ -11,7 +11,7 @@ read_when:
 
 - **Host:** `{{SERVER_HOST}}`, Ubuntu 24.04, time zone `{{TIME_ZONE}}`.
 - **Admin account:** `{{SERVER_ADMIN_USER}}` (sudo, key-only SSH). Holds this repository at `~/{{ADMIN_REPOSITORY_NAME}}`.
-- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{DEVELOPER_NAME}}`, the delegated coding agent, `alcode`, `alproject`, and the managed projects under `{{PROJECTS_ROOT}}`.
+- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{DEVELOPER_NAME}}`, the delegated coding agent, `alignfirst`, `alcode`, and the managed projects under `~/projects`.
 - **Public IP:** deployment-specific, written `<vps-ip>` throughout the docs. Never substitute it from a guess.
 
 ## Request flow
@@ -20,9 +20,9 @@ read_when:
 channel message ({{DEVELOPER_NAME}} on the selected surface)
   → OpenClaw gateway (systemd --user unit, loopback :18789)
   → workspace AGENTS.md → alignfirst-developer-openclaw-playbook (thread routing, working session)
-  → alproject (project inventory, canonical paths, ports)
+  → alcode projects (project inventory, canonical paths, ports)
   → alcode (delegation) → coding agent
-  → project workspace under {{PROJECTS_ROOT}}
+  → project workspace under ~/projects
 ```
 
 The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `alcode` starts the agent selected by `ALIGNFIRST_CODE_AGENT`.
@@ -50,11 +50,11 @@ The dev-server range `{{PORT_RANGE_FIRST}}–{{PORT_RANGE_LAST}}` is closed.
 
 ## Projects
 
-`alproject` is the inventory; this repository keeps no project list.
+`alcode projects` discovers projects from `.alignfirst.json`; this repository keeps no project list.
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- alproject list
-sudo -i -u {{SERVICE_USER}} -- alproject status <repo>
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects status <repo> --root ~/projects'
 ```
 
 Adding one: [add-project.md](operations/add-project.md).

@@ -8,26 +8,26 @@ describe("buildPrompt", () => {
   });
 
   it("builds a protocol prompt with ticket and message", () => {
-    expect(buildPrompt({ protocol: "spec", ticket: "29", message: "Do X" })).toBe(
-      "Run the _spec_ protocol from the *alignfirst* skill. Ticket ID = 29.\n\nDo X",
+    expect(buildPrompt({ protocol: "spec", ticket: "1234", message: "m" })).toBe(
+      "Run `alignfirst guide spec` and follow the protocol. Ticket ID = 1234.\n\nm",
     );
   });
 
-  it("uses the AAD label for the aad protocol", () => {
+  it("uses the CLI protocol name", () => {
     expect(buildPrompt({ protocol: "aad", ticket: "1", message: "m" })).toBe(
-      "Run the _AAD_ protocol from the *alignfirst* skill. Ticket ID = 1.\n\nm",
+      "Run `alignfirst guide aad` and follow the protocol. Ticket ID = 1.\n\nm",
     );
   });
 
   it("omits the ticket and message parts when absent", () => {
     expect(buildPrompt({ protocol: "plan" })).toBe(
-      "Run the _plan_ protocol from the *alignfirst* skill.",
+      "Run `alignfirst guide plan` and follow the protocol.",
     );
   });
 
   it("builds the catchup protocol prompt", () => {
     expect(buildPrompt({ protocol: "catchup", ticket: "29", message: "What changed?" })).toBe(
-      "Run the _catchup_ protocol from the *alignfirst* skill. Ticket ID = 29.\n\nWhat changed?",
+      "Run `alignfirst guide catchup` and follow the protocol. Ticket ID = 29.\n\nWhat changed?",
     );
   });
 });

@@ -29,7 +29,7 @@ describe("alignfirst CLI", () => {
     expect(result.stderr).toContain("alignfirst ticket");
   });
 
-  it("guards project commands but exempts help, version and config", async () => {
+  it("guards project commands but exempts help, version, config and doctor", async () => {
     const cwd = temp();
     writeFileSync(
       join(cwd, ".alignfirst.json"),
@@ -45,6 +45,13 @@ describe("alignfirst CLI", () => {
     expect((await runMain(["--help"], { cwd })).code).toBe(0);
     expect((await runMain(["--version"], { cwd })).code).toBe(0);
     expect((await runMain(["config"], { cwd })).code).toBe(0);
+    expect((await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd })).code).toBe(0);
+  });
+
+  it("lets doctor report an invalid config", async () => {
+    const cwd = temp();
+    writeFileSync(join(cwd, ".alignfirst.json"), "{");
+    expect((await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd })).code).toBe(0);
   });
 });
 
