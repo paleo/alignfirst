@@ -13,7 +13,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { defaultCliRange } from "../src/version-guard.js";
+import { configureGit, git, makeTempDir, packageVersion, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -41,7 +42,7 @@ describe("setup command", () => {
     expect(result.code).toBe(0);
     expect(JSON.parse(readFileSync(join(fixture.project, ".alignfirst.json"), "utf-8"))).toEqual({
       schemaVersion: 1,
-      cli: ">=0.0.0 <0.1.0",
+      cli: defaultCliRange(packageVersion),
       ticketPattern: "^\\d+$",
       plans: { folder: "project" },
       portRange: { first: 8100, last: 8199 },

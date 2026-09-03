@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { main } from "../src/cli.js";
 import type { Output } from "../src/context.js";
+
+export const packageVersion = readPackageVersion();
 
 export interface Sink extends Output {
   text(): string;
@@ -62,4 +64,18 @@ export function configureGit(dir: string): void {
 
 export function git(dir: string, ...args: string[]): string {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf-8" }).trim();
+}
+
+function readPackageVersion(): string {
+  const manifest: unknown = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
+  );
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    !("version" in manifest) ||
+    typeof manifest.version !== "string"
+  )
+    throw new Error("alignfirst test: package.json is missing 'version'");
+  return manifest.version;
 }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeTempDir, runMain } from "./helpers.js";
+import { makeTempDir, packageVersion, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -19,7 +19,7 @@ describe("alignfirst CLI", () => {
     expect(help.stdout).toContain("alignfirst guide");
     expect(help.stdout).toContain("alignfirst doctor");
     const version = await runMain(["--version"], { cwd });
-    expect(version.stdout).toMatch(/^\d+\.\d+\.\d+\n$/);
+    expect(version.stdout).toBe(`${packageVersion}\n`);
   });
 
   it("reports an unknown command with help", async () => {
@@ -38,7 +38,7 @@ describe("alignfirst CLI", () => {
     mkdirSync(join(cwd, ".plans"));
     const guarded = await runMain(["ticket", "78"], { cwd });
     expect(guarded.stderr).toBe(
-      "alignfirst 0.0.0 is installed; this project requires >=1.0.0.\n" +
+      `alignfirst ${packageVersion} is installed; this project requires >=1.0.0.\n` +
         'Run a matching version:  npx -y alignfirst@">=1.0.0" ticket 78\n' +
         'Or install it globally:  npm install -g alignfirst@">=1.0.0"\n',
     );
