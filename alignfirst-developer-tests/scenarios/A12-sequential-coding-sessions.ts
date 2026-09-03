@@ -11,7 +11,7 @@ import {
   waitForCodingSessionSucceeded,
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { setupCodingAgentMock, type CodingAgentMockHandle } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
@@ -50,7 +50,6 @@ const isAlcodeLaunch = (call: AgentToolCall): boolean =>
 export default async function sequentialCodingSessions(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
   const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
@@ -64,7 +63,7 @@ export default async function sequentialCodingSessions(ctx: ScenarioContext): Pr
   // post — the exact shape of the trailing-leak incident — so sweep longer.
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
   await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

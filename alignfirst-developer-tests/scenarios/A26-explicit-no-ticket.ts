@@ -2,7 +2,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { expectCodingDelegation, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
@@ -21,7 +21,6 @@ const REQUEST_PATH = `${NIMBUS_PROJECT_PATH}/.plans/${RESERVED_TICKET_ID}/A1-req
 export default async function explicitNoTicket(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
   await seedPriorNoTicketWork();
-  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -66,7 +65,7 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
   if (delegation.cwd !== worktreeDir) {
     throw new Error(`coding ran from ${delegation.cwd}, expected linked worktree ${worktreeDir}`);
   }
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

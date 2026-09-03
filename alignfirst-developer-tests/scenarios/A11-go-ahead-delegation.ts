@@ -6,7 +6,7 @@ import {
   waitForCompletionReport,
 } from "./_lib/coding-session.ts";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import {
   extractCodingPrompt,
   isCodingProtocolPrompt,
@@ -38,7 +38,6 @@ const PROJECT = "nimbus";
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
   // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
   const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
@@ -57,7 +56,7 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
 
   await runSetupPhaseWithoutDelegation(ctx, codingAgent, starter);
   await runGoAheadPhase(ctx, starter.threadId, startCursor);
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

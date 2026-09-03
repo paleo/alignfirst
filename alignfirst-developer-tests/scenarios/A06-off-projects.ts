@@ -1,5 +1,4 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -22,14 +21,13 @@ const OFF_PROJECTS_CHAT_PROMPT =
   '"happy to help") with no concrete work content.';
 
 // The lookup contract is outcome-based: a message with no possible project
-// reference needs no `alproject list`, so this scenario asserts only what the
+// reference needs no `alcode projects list`, so this scenario asserts only what the
 // user can observe — social-only replies, no thread, no coding-agent call. The
 // mock stays installed to serve a lookup if one happens; either count is fine.
 // The lookup-when-it-matters case is A20-ambiguous-project-mention.
 export default async function offProjectsChat(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 

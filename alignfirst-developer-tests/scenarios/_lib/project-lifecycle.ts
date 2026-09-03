@@ -1,11 +1,20 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { AgentToolCall, ScenarioContext } from "@paleo/openclaw-test";
-import { execCommandOf } from "./agent-tool-calls.ts";
-import type { AlprojectMockCall } from "./mock-alproject.ts";
+import { execCommandOf, listsProjects } from "./agent-tool-calls.ts";
+import { PROJECT_CONFIG_FILENAME } from "./project-fixtures.ts";
 
 export interface WaitForLifecycleOptions {
   timeoutMs?: number;
   label: string;
+}
+
+export interface ProjectConfig {
+  portRange?: PortRange;
+}
+
+interface PortRange {
+  first: number;
+  last: number;
 }
 
 export async function waitForLifecycle(
@@ -32,17 +41,29 @@ export async function assertGatewayCommand(
   return result.stdout.trim();
 }
 
-export function assertAlprojectCallOrder(
-  calls: AlprojectMockCall[],
-  first: (call: AlprojectMockCall) => boolean,
-  second: (call: AlprojectMockCall) => boolean,
-  label: string,
-): void {
-  const firstIndex = calls.findIndex(first);
-  const secondIndex = calls.findIndex(second);
-  if (firstIndex === -1 || secondIndex === -1 || firstIndex >= secondIndex) {
-    throw new Error(`${label}: ${JSON.stringify(calls)}`);
+export async function waitForProjectListing(ctx: ScenarioContext, label: string): Promise<void> {
+  await ctx.waitForAgentToolCall(listsProjects, { label });
+}
+
+export function readProjectConfig(path: string): ProjectConfig | undefined {
+  const configPath = `${path}/${PROJECT_CONFIG_FILENAME}`;
+  if (!existsSync(configPath)) return;
+  const value: unknown = JSON.parse(readFileSync(configPath, "utf8"));
+  if (!isRecord(value)) throw new Error(`invalid project config: ${configPath}`);
+  const portRange = parsePortRange(value.portRange, configPath);
+  return portRange === undefined ? {} : { portRange };
+}
+
+function parsePortRange(value: unknown, configPath: string): PortRange | undefined {
+  if (value === undefined) return;
+  if (!isRecord(value) || typeof value.first !== "number" || typeof value.last !== "number") {
+    throw new Error(`invalid port range in project config: ${configPath}`);
   }
+  return { first: value.first, last: value.last };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

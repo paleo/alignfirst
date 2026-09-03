@@ -11,16 +11,31 @@ import {
 } from "node:fs";
 
 const TEMPLATE = "/opt/alignfirst-developer-tests/fixtures/template";
+const PRIMARY = "/home/claw/projects";
+const EXTERNAL = `${PRIMARY}/external-projects`;
+const LIFECYCLE = `${PRIMARY}/lifecycle-projects`;
+const PRIMARY_MARKER = {
+  description:
+    "Managed projects of the AlignFirst Developer test fixture. Adding a project is an operator's decision: ask before creating one.",
+  portRange: { first: 6500, last: 7700 },
+};
+const EXTERNAL_MARKER = {
+  description: "Projects hosted for external teams.",
+  portRange: { first: 6540, last: 6599 },
+};
+const LIFECYCLE_MARKER = {
+  description:
+    "Allowed parent for new lifecycle fixtures. Create Node.js projects with pnpm. Keep bootstrap work and the initial commit on main. Claim a port block with free-ports before writing the project config.",
+  portRange: { first: 6600, last: 6699 },
+};
 // Each fixture gets its own port block so two of them can run a dev server at
 // the same time. The template declares `maxWorkspaces: 10` over `perWorkspace: 2`,
 // so a fixture spans 20 ports from its base.
 const FIXTURES = [
-  { name: "nimbus", parent: "/home/claw/projects", basePort: 6500 },
-  { name: "lumen", parent: "/home/claw/projects", basePort: 6520 },
-  { name: "orion", parent: "/home/claw/external-projects", basePort: 6540 },
+  { name: "nimbus", parent: PRIMARY, basePort: 6500 },
+  { name: "lumen", parent: PRIMARY, basePort: 6520 },
+  { name: "orion", parent: EXTERNAL, basePort: 6540 },
 ];
-const FIXTURE_PARENTS = [...new Set(FIXTURES.map(({ parent }) => parent))];
-const EMPTY_FIXTURE_PARENTS = ["/home/claw/lifecycle-projects"];
 // Each fixture's `origin` is a bare repo alongside its working tree, so
 // `git fetch` + `git merge --ff-only origin/main` behave like a real up-to-date
 // clone (a remote-less fixture made the playbook's new-work path — fetch +
@@ -39,20 +54,26 @@ async function main() {
       await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
     }
   }
-  // Wipe everything under the fixture parents and origins unconditionally. The
+  // Wipe everything under the fixture root and origins unconditionally. The
   // fixture template lives in /opt/alignfirst-developer-tests/fixtures/ and is re-copied below.
   // pnpm's store is pinned to /home/claw/.pnpm-store via ~/.npmrc, so nothing
   // here is worth keeping.
-  for (const parent of [...FIXTURE_PARENTS, ...EMPTY_FIXTURE_PARENTS]) {
-    for (const entry of readdirSync(parent)) {
-      rmSync(`${parent}/${entry}`, { recursive: true, force: true });
-    }
+  for (const entry of readdirSync(PRIMARY)) {
+    rmSync(`${PRIMARY}/${entry}`, { recursive: true, force: true });
   }
+  createProjectsDirectory(PRIMARY, PRIMARY_MARKER);
+  createProjectsDirectory(EXTERNAL, EXTERNAL_MARKER);
+  createProjectsDirectory(LIFECYCLE, LIFECYCLE_MARKER);
   rmSync(ORIGINS, { recursive: true, force: true });
   mkdirSync(ORIGINS, { recursive: true });
   for (const fixture of FIXTURES) {
     await resetFixture(fixture);
   }
+}
+
+function createProjectsDirectory(path, marker) {
+  mkdirSync(path, { recursive: true });
+  writeFileSync(`${path}/.alignfirst-projects.json`, `${JSON.stringify(marker, null, 2)}\n`);
 }
 
 async function resetFixture({ name, parent, basePort }) {
@@ -103,6 +124,13 @@ function patchFixture(dst, name, basePort) {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   pkg.name = `@alignfirst-developer-tests/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+  const config = {
+    schemaVersion: 1,
+    ticketPattern: "^ABC-\\d+$",
+    portRange: { first: basePort, last: basePort + 19 },
+  };
+  writeFileSync(`${dst}/.alignfirst.json`, `${JSON.stringify(config, null, 2)}\n`);
 
   // Both entry points name the project, so the three otherwise identical copies
   // read distinctly — the app itself stays the "Comparables" product.

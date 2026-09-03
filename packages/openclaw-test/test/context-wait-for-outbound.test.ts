@@ -113,7 +113,7 @@ describe("waitForOutbound fail-fast", () => {
 
   it("ignores a cliMock from before the wait started", async () => {
     // Regression: a completed channel-phase CLI call must not trip a later wait.
-    const stale = { atMs: 1000, entry: makeCliMockEntry("alproject", ["list"]) };
+    const stale = { atMs: 1000, entry: makeCliMockEntry("alcode", ["projects", "list"]) };
     let now = 60_000;
     const deps: WaitForOutboundDeps = {
       accountId: "ch",

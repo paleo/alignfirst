@@ -10,7 +10,7 @@ import {
   escapeRegExp,
   waitForAnyWorktreeDir,
 } from "./_lib/fixture-state.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
@@ -34,7 +34,6 @@ const INVESTIGATION_FINDING =
 export default async function projectInvestigationQuestion(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   // streamDelayMs keeps the mock coding run alive past the launching turn (real runs take
   // minutes+): an exec that exits mid-turn gets its exit event consumed by the in-flight turn and
   // the completion wake never fires as its own turn — a fixture artifact, not a product behavior.
@@ -62,7 +61,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     ctx,
     codingAgent,
     {
-      rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an alignfirst protocol header. Expected: ticket ${TICKET_ID}; an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine); and "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject if the prompt looks like an alignfirst protocol invocation (\`Run the _spec_ protocol …\` etc.), the ticket is missing, or the question content is missing or unrelated.`,
+      rubric: `The captured invocation is a prompt sent to a coding agent via the alcode CLI, **without** an AlignFirst protocol header. Expected: ticket ${TICKET_ID}; an investigation/question delegation that conveys the user's question (export button failure when there are no comparables — paraphrases are fine); and "do not implement / talk first" (or equivalent). Do not judge the project or working directory — that is asserted structurally. Reject if the prompt looks like an AlignFirst protocol invocation (\`Run \`alignfirst guide spec\` and follow the protocol.\` etc.), the ticket is missing, or the question content is missing or unrelated.`,
       label: "coding-agent-investigation-delegation",
     },
   );
@@ -96,7 +95,7 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     timeoutMs: 240_000,
     label: "investigation-summary",
   });
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

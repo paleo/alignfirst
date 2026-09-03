@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { waitForCodingSessionSucceeded } from "./_lib/coding-session.ts";
 import { assertBranchForTicket, seedBranch, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import {
   expectCodingDelegation,
   extractCodingPrompt,
@@ -23,12 +23,11 @@ const REVIEW_RESULT =
 
 export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   await seedBranch(ctx, NIMBUS_PROJECT_PATH, TICKET_ID, "review-export");
   const codingAgent = setupCodingAgentMock(ctx, {
     streamDelayMs: 12_000,
     onPrompt: async (_scenario, cwd, prompt) => {
-      if (!/^Run the _review_ protocol/iu.test(prompt)) return;
+      if (!/^Run `alignfirst guide review` and follow the protocol\./u.test(prompt)) return;
       await writeReviewFile(cwd);
       return REVIEW_RESULT;
     },
@@ -59,7 +58,7 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
       "request has already been read.",
     label: "resource-url-deferred-to-working-session",
   });
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   const goAheadCursor = await sendInThread(ctx, starter.threadId, "Vas-y.");
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
@@ -69,7 +68,10 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
 
   const reviewCall = await expectCodingDelegation(ctx, codingAgent, {
     ticketId: TICKET_ID,
-    matches: (call) => /^Run the _review_ protocol/iu.test(extractCodingPrompt(call) ?? ""),
+    matches: (call) =>
+      /^Run `alignfirst guide review` and follow the protocol\./u.test(
+        extractCodingPrompt(call) ?? "",
+      ),
     rubric:
       "Grade only the captured alcode delegation text. Pass if it invokes the AlignFirst review " +
       `protocol for ticket ${TICKET_ID}. Reject only if the ticket is wrong or it invokes a change, ` +

@@ -5,7 +5,7 @@ import {
   isCodingProtocolPrompt,
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { ORION_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
@@ -18,7 +18,6 @@ const TICKET_ID = "ABC-0160";
 
 export default async function externalProjectPath(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -56,7 +55,7 @@ export default async function externalProjectPath(ctx: ScenarioContext): Promise
   if (delegation === undefined) {
     throw new Error(`coding delegation did not run from external worktree ${worktreePath}`);
   }
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

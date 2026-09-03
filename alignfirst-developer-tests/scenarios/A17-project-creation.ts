@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { ScenarioContext } from "@paleo/openclaw-test";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import type { AgentToolCall, ScenarioContext } from "@paleo/openclaw-test";
 import {
   extractCodingPrompt,
   isCodingProtocolPrompt,
@@ -8,9 +7,10 @@ import {
 } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import {
-  assertAlprojectCallOrder,
+  assertAgentCommandOrder,
   assertGatewayCommand,
   pathExists,
+  readProjectConfig,
   waitForLifecycle,
 } from "./_lib/project-lifecycle.ts";
 import { waitForReport } from "./_lib/outbound.ts";
@@ -36,10 +36,6 @@ const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/side-1/A1-request.md`;
 // artifacts: the defect is more likely here than in the bot.
 export default async function projectCreation(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx, {
-    guide: lifecycleGuide(),
-    registerBasePort: 6600,
-  });
   const codingAgent = setupCodingAgentMock(ctx, {
     onPrompt: async (scenario, cwd, prompt) => {
       if (cwd !== NOVA_PROJECT_PATH) return;
@@ -66,8 +62,8 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".local/, .gitignore. This minimal scaffold is deliberate and complete — nothing else is " +
-        "required before the initial commit on main."
+        ".local/, .gitignore, and .alignfirst.json. This minimal scaffold is deliberate and " +
+        "complete — nothing else is required before the initial commit on main."
       );
     },
   });
@@ -93,21 +89,25 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
   }
 
   // Completion is the initial commit (the loose ref appears when it lands on
-  // main) plus the registration. The lifecycle reference requires an inventory
-  // refresh for removal only — creation must not demand one.
+  // main) plus the prepared project config.
   await waitForLifecycle(
-    () =>
-      pathExists(`${NOVA_PROJECT_PATH}/.git/refs/heads/main`) &&
-      alproject.projects.some((project) => project.mainPath === NOVA_PROJECT_PATH),
-    // Creation is the suite's longest flow: guide reads, registration, the
+    () => {
+      const portRange = readProjectConfig(NOVA_PROJECT_PATH)?.portRange;
+      return (
+        pathExists(`${NOVA_PROJECT_PATH}/.git/refs/heads/main`) &&
+        portRange?.first === 6600 &&
+        portRange.last === 6607
+      );
+    },
+    // Creation is the suite's longest flow: guide reads, port allocation, the
     // delegated bootstrap, inspection, and the initial commit.
     { label: "project creation and initial commit", timeoutMs: 300_000 },
   );
 
-  assertCreationCalls(alproject.calls);
   assertSetupGuideDelegation(codingAgent.codingAgentCalls);
   await assertCreatedRepository(ctx);
   const agentCalls = await ctx.getAgentToolCalls();
+  assertCreationCalls(agentCalls);
   const linkedWorkspaceBeforeInitialCommit = agentCalls.some((call) => {
     const command = call.toolName === "exec" ? JSON.stringify(call.input) : "";
     return /workspace\s+setup[^;&|]*(?:\s-c\b|--create\b)/.test(command);
@@ -166,7 +166,7 @@ async function waitForCreationReport(
       message: wait.match.text,
       prompt:
         `Does this thread message report that the ${PROJECT} project has been CREATED and is ` +
-        "ready — the bootstrap or initial commit done, or the project registered — and report " +
+        "ready — the bootstrap or initial commit done, and its `.alignfirst.json` written — and report " +
         `the full allocated port range ${ALLOCATED_PORT_RANGE}? Any equivalent range notation ` +
         'counts. A launch or in-progress announcement ("the agent is working in the ' +
         'background", "je te fais signe") is NOT done.',
@@ -180,15 +180,6 @@ async function waitForCreationReport(
       );
     }
   }
-}
-
-function lifecycleGuide(): string {
-  return `# alproject guide
-
-Allowed parent for new lifecycle fixtures: ${LIFECYCLE_PROJECT_PARENT}
-
-Create Node.js projects with pnpm. Register only after Git initialization. Keep bootstrap work and the initial commit on main. Request port allocation with both dimensions.
-`;
 }
 
 async function commitNovaBootstrap(ctx: ScenarioContext, message: string): Promise<void> {
@@ -205,6 +196,11 @@ async function commitNovaBootstrap(ctx: ScenarioContext, message: string): Promi
 }
 
 async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
+  const config = JSON.stringify(
+    { schemaVersion: 1, portRange: { first: 6600, last: 6607 } },
+    null,
+    2,
+  );
   const result = await ctx.execInGateway(
     [
       "sh",
@@ -212,40 +208,36 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
       `cp -R /opt/alignfirst-developer-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
         `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
         `sed -i -e 's/base: 6500/base: 6600/' ` +
-        // Match the registration the bot performed (2 ports × 4 workspaces) —
+        // Match the project config the bot wrote (2 ports × 4 workspaces) —
         // a verifying bot treats a mismatched template as a bootstrap defect
         // and loops on fixing it.
         `-e 's/maxWorkspaces: 10/maxWorkspaces: ${MAX_WORKSPACES}/' ` +
-        `"${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs"`,
+        `"${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs" && ` +
+        `printf '%s\\n' '${config}' > "${NOVA_PROJECT_PATH}/.alignfirst.json"`,
     ],
     { timeoutMs: 30_000 },
   );
   if (result.exitCode !== 0) throw new Error(`creation bootstrap failed: ${result.stderr}`);
 }
 
-function assertCreationCalls(calls: ReturnType<typeof setupAlprojectMock>["calls"]): void {
-  // Match the effective registration, not an exploratory probe such as
-  // `register --help` (harmless — the mock rejects it without mutating).
-  const register = calls.find(
-    (call) => call.argv[0] === "register" && call.argv[1] === NOVA_PROJECT_PATH,
-  );
-  if (register === undefined) {
-    throw new Error(`missing register call for ${NOVA_PROJECT_PATH}: ${JSON.stringify(calls)}`);
-  }
-  assertOption(register.argv, "--ports-per-workspace", PORTS_PER_WORKSPACE);
-  assertOption(register.argv, "--max-workspaces", MAX_WORKSPACES);
-  assertAlprojectCallOrder(
+function assertCreationCalls(calls: AgentToolCall[]): void {
+  assertAgentCommandOrder(
     calls,
-    (call) => call.argv.length === 1 && call.argv[0] === "--guide",
-    (call) => call.argv[0] === "register" && call.argv[1] === NOVA_PROJECT_PATH,
-    "alproject guide must precede registration",
+    /alcode\s+projects\s+--guide\b/,
+    /git\s+init\b/,
+    "projects guide must precede git initialization",
   );
-}
-
-function assertOption(argv: string[], option: string, expected: string): void {
-  const index = argv.indexOf(option);
-  if (index === -1 || argv[index + 1] !== expected) {
-    throw new Error(`expected ${option} ${expected}: ${JSON.stringify(argv)}`);
+  const commands = calls
+    .filter((call) => call.toolName === "exec")
+    .map((call) => JSON.stringify(call.input));
+  const freePortsCommand = commands.find((command) =>
+    /alcode\s+projects\s+free-ports\b/.test(command),
+  );
+  if (freePortsCommand === undefined) {
+    throw new Error(`missing free-ports call: ${JSON.stringify(commands)}`);
+  }
+  if (!/--size(?:\s+|=)8\b/.test(freePortsCommand)) {
+    throw new Error(`free-ports call did not request size 8: ${JSON.stringify(commands)}`);
   }
 }
 

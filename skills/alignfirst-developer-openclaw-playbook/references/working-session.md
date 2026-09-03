@@ -32,7 +32,7 @@ Default rule: When the user asks you to handle or implement an existing ticket a
 
 ### Step 3 — Route project lifecycle work
 
-When the request creates a project, onboards a repository to clone, or physically removes a project, open [`project-lifecycle.md`](./runbooks/project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
+When the request creates a project, onboards a repository to clone, or physically removes a project, open [`project-lifecycle.md`](./runbooks/project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the listed PROJECT_PATH selected in the starter or supplied by the user.
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
@@ -44,7 +44,7 @@ For new single-project work where the user explicitly says there is no ticket:
 
 1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
 2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
-3. Run `alcode reserve-side-ticket` from PROJECT_PATH (`exec`). It creates the next free `.plans/side-N/` and prints `side-N`. Set TICKET_ID to that id.
+3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates `.plans/side-N/` and prints the directory; TICKET_ID is the `side-N` it reports.
 4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
 5. Run the documented plans synchronization command again when the project has one.
 
@@ -99,7 +99,7 @@ Skip this capture workflow for a multi-project request with no main project and 
 
 ### Multi-project and operational work
 
-Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alproject list --json` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alcode projects list --json --root ~/projects` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 
 ### What you delegate vs do
 
