@@ -4,8 +4,8 @@
 
 You need:
 
-- the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket)
-- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{CMD}} ticket <id> --next merge.summary.md` prints the file to create
+- the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket)
+- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{TICKET_CMD}} --next merge.summary.md` prints the file to create
 
 Identify and state these values before starting the protocol.
 
@@ -17,7 +17,7 @@ This protocol applies when a merge or rebase has produced conflicts, or when the
 
 Run `git status` to check for conflicts.
 
-**If there are no conflicts:** start the merge — use the incoming branch if the user provided one, otherwise ask which branch to merge. If the merge completes cleanly, you are done — no summary file needed. Otherwise, continue with the steps below.
+**If there are no conflicts:** start the merge — use the incoming branch if the user provided one, {{BASE_BRANCH_RULE}} If the merge completes cleanly, you are done — no summary file needed. Otherwise, continue with the steps below.
 
 ## 2. Investigate
 

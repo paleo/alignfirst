@@ -1,9 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-
-import { CliError } from "./cli-error.js";
-import type { CommandContext } from "./context.js";
 
 export const STUB_SKILLS = [
   "alignfirst",
@@ -40,27 +36,4 @@ function readSkillVersion(path: string): string | undefined {
   const metadata = /^metadata:\s*\r?\n((?:^[ \t]+.*(?:\r?\n|$))*)/m.exec(frontmatter)?.[1];
   if (metadata === undefined) return;
   return /^\s+version:\s*"?([^"\r\n]+)"?\s*$/m.exec(metadata)?.[1]?.trim();
-}
-
-export function installStubSkills(ctx: CommandContext, agents: string[]): void {
-  const skillArgs = STUB_SKILLS.flatMap((skill) => ["--skill", skill]);
-  const agentArgs = agents.flatMap((agent) => ["--agent", agent]);
-  try {
-    execFileSync(
-      "npx",
-      [
-        "-y",
-        "skills",
-        "add",
-        "https://github.com/paleo/alignfirst",
-        "--global",
-        "--yes",
-        ...skillArgs,
-        ...agentArgs,
-      ],
-      { cwd: ctx.cwd, env: ctx.env, stdio: "inherit" },
-    );
-  } catch {
-    throw new CliError("Failed to install the AlignFirst skills globally.");
-  }
 }

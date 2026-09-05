@@ -2,7 +2,7 @@
 
 ## Pre-requisites
 
-You need the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket).
+You need the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket).
 
 ## Steps
 

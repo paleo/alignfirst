@@ -1,20 +1,14 @@
 import { CliError } from "../cli-error.js";
 import { parseArgs } from "node:util";
 import type { CommandContext } from "../context.js";
-import { resolveProjectConfig, type ResolvedProjectConfig } from "../overlay.js";
 import { parseCommandArgs } from "../parse-args.js";
+import { resolveProjectConfig, type ResolvedProjectConfig } from "../project-config.js";
 import { cliRangeResult } from "../version-guard.js";
 
 interface ConfigReport {
-  source: "root" | "overlay" | null;
-  overlay: OverlayReport | null;
+  source: "root" | null;
   cli: CliReport | null;
   config: ResolvedProjectConfig["config"] | null;
-}
-
-interface OverlayReport {
-  dir: string;
-  matchedBy: "remote" | "paths";
 }
 
 interface CliReport {
@@ -27,7 +21,7 @@ export function runConfig(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} config [--json]\n`;
   const json = parseConfigArgs(ctx, args, usage);
   if (json === undefined) return 0;
-  const resolved = resolveProjectConfig(ctx.cwd, ctx.env, ctx.home);
+  const resolved = resolveProjectConfig(ctx.cwd);
   const report = buildConfigReport(ctx, resolved);
   ctx.stdout.write(json ? `${JSON.stringify(report, undefined, 2)}\n` : renderConfigReport(report));
   return 0;
@@ -58,11 +52,9 @@ function buildConfigReport(
   ctx: CommandContext,
   resolved: ResolvedProjectConfig | undefined,
 ): ConfigReport {
-  const overlay = resolved?.overlay;
   const cli = cliRangeResult(resolved?.config, ctx.version);
   return {
     source: resolved?.source ?? null,
-    overlay: overlay ? { dir: overlay.dir, matchedBy: overlay.matchedBy } : null,
     cli: cli ? { installed: ctx.version, range: cli.range, satisfied: cli.satisfied } : null,
     config: resolved?.config ?? null,
   };
@@ -70,8 +62,6 @@ function buildConfigReport(
 
 function renderConfigReport(report: ConfigReport): string {
   const lines = [`Source: ${report.source ?? "none"}`];
-  if (report.overlay)
-    lines.push(`Overlay: ${report.overlay.dir} (matched by ${report.overlay.matchedBy})`);
   if (report.cli)
     lines.push(
       `CLI range: ${report.cli.range}, ${report.cli.satisfied ? "satisfied" : "not satisfied"} by ${report.cli.installed}`,

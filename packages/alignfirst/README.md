@@ -21,9 +21,9 @@ Commands:
 - `sync` — Synchronize shared plans.
 - `plans` — Set up, check and archive plans.
 - `docmap` — Browse project documentation.
+- `conventions` — Print the effective project conventions.
+- `context` — Print the conventions and the documentation map.
 - `config` — Report the effective project configuration.
-- `DEVELOPERS.md` — Print the project developer guide.
-- `setup` — Prepare an AlignFirst project.
 - `doctor` — Diagnose an AlignFirst setup.
 
 Run `alignfirst --help` for command usage or `alignfirst guide` for the collaboration guide.

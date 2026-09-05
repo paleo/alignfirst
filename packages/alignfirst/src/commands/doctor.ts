@@ -1,27 +1,21 @@
 import { execFileSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
 
 import semver from "semver";
 
-import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
+import { resolveDefaultBranch } from "../default-branch.js";
 import { errorMessage } from "../errors.js";
 import { findExecutable } from "../executables.js";
-import {
-  findOverlay,
-  resolveProjectConfig,
-  resolveProjectFile,
-  type ResolvedProjectConfig,
-} from "../overlay.js";
-import { parseCommandArgs } from "../parse-args.js";
+import { parseBareCommandArgs } from "../parse-args.js";
 import { resolvePlansMode } from "../plans/mode.js";
+import { findStoppedRebase } from "../plans/rebase.js";
+import { resolveProjectConfig, type ResolvedProjectConfig } from "../project-config.js";
 import { findInstalledSkill, STUB_SKILLS } from "../skills.js";
 import { cliRangeResult } from "../version-guard.js";
-
-const PROJECT_CONFIG_NAME = ".alignfirst.json";
 
 interface DoctorLine {
   level: "ok" | "warn" | "error";
@@ -30,31 +24,19 @@ interface DoctorLine {
 
 export function runDoctor(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} doctor\n`;
-  if (parseDoctorArgs(ctx, args, usage)) return 0;
+  if (parseBareCommandArgs(ctx, args, usage)) return 0;
   writeSection(ctx, "CLI", () => inspectCli(ctx));
-  writeSection(ctx, "Config", () => inspectConfig(ctx));
+  let resolved: ResolvedProjectConfig | undefined;
+  writeSection(ctx, "Config", () => {
+    resolved = resolveProjectConfig(ctx.cwd);
+    return inspectConfig(ctx, resolved);
+  });
+  writeSection(ctx, "Git", () => inspectGit(ctx, resolved));
   writeSection(ctx, "Plans", () => inspectPlans(ctx));
   writeSection(ctx, "Docmap", () => inspectDocmap(ctx));
   writeSection(ctx, "Skills", () => inspectSkills(ctx));
-  writeSection(ctx, "Overlay", () => inspectOverlay(ctx));
   writeSection(ctx, "Companion", () => inspectCompanion(ctx));
   return 0;
-}
-
-function parseDoctorArgs(ctx: CommandContext, args: string[], usage: string): boolean {
-  const { values, positionals } = parseCommandArgs(usage, () =>
-    parseArgs({
-      args,
-      options: { help: { type: "boolean", short: "h", default: false } },
-      strict: true,
-      allowPositionals: true,
-    } as const),
-  );
-  if (positionals.length > 0)
-    throw new CliError(`Unexpected argument: ${positionals[0]}\n\n${usage}`);
-  if (!values.help) return false;
-  ctx.stdout.write(usage);
-  return true;
 }
 
 function writeSection(ctx: CommandContext, section: string, inspect: () => DoctorLine[]): void {
@@ -81,9 +63,11 @@ function inspectCli(ctx: CommandContext): DoctorLine[] {
   ];
 }
 
-function inspectConfig(ctx: CommandContext): DoctorLine[] {
-  const resolved = resolveProjectConfig(ctx.cwd, ctx.env, ctx.home);
-  const lines: DoctorLine[] = [{ level: "ok", text: `source ${configSource(resolved)}` }];
+function inspectConfig(
+  ctx: CommandContext,
+  resolved: ResolvedProjectConfig | undefined,
+): DoctorLine[] {
+  const lines: DoctorLine[] = [{ level: "ok", text: resolved?.source ?? "none" }];
   const result = cliRangeResult(resolved?.config, ctx.version);
   if (result === undefined) {
     lines.push({ level: "ok", text: "no cli range" });
@@ -98,13 +82,20 @@ function inspectConfig(ctx: CommandContext): DoctorLine[] {
   return lines;
 }
 
-function configSource(resolved: ResolvedProjectConfig | undefined): string {
-  if (resolved === undefined) return "none";
-  return resolved.source === "root" ? "root" : (resolved.overlay?.dir ?? "overlay");
+function inspectGit(
+  ctx: CommandContext,
+  resolved: ResolvedProjectConfig | undefined,
+): DoctorLine[] {
+  const branch = resolveDefaultBranch(ctx.cwd, resolved?.config);
+  if (branch === undefined) return [{ level: "warn", text: "default branch unresolved" }];
+  const source = branch.source === "config" ? "git.defaultBranch" : `cached ${branch.remote}/HEAD`;
+  return [{ level: "ok", text: `default branch ${branch.name} (${source})` }];
 }
 
 function inspectPlans(ctx: CommandContext): DoctorLine[] {
   const mode = resolvePlansMode(ctx.cwd, ctx.form);
+  if (mode.kind === "shared" && findStoppedRebase(mode.repoToplevel) !== undefined)
+    return [{ level: "error", text: `rebase stopped on a conflict in ${mode.repoToplevel}` }];
   return [
     {
       level: "ok",
@@ -114,11 +105,9 @@ function inspectPlans(ctx: CommandContext): DoctorLine[] {
 }
 
 function inspectDocmap(ctx: CommandContext): DoctorLine[] {
-  const overlay = findOverlay(ctx.cwd, ctx.env, ctx.home);
-  const docs = resolveProjectFile(ctx.cwd, overlay, "docs");
-  const source = docs?.source ?? "none";
+  const present = existsSync(join(ctx.cwd, "docs"));
   return [
-    { level: docs === undefined ? "warn" : "ok", text: `docs/ source ${source}` },
+    { level: "ok", text: `docs/ ${present ? "present" : "none"}` },
     { level: "ok", text: `embedded docmap ${readDocmapVersion()}` },
   ];
 }
@@ -139,28 +128,15 @@ function inspectSkills(ctx: CommandContext): DoctorLine[] {
   return STUB_SKILLS.map((name) => {
     const installed = findInstalledSkill(ctx.home, name);
     if (installed === undefined) return { level: "warn", text: `${name} missing` };
-    return {
-      level: "ok",
-      text: `${name} ${installed.version ?? "unknown"} (${installed.root})`,
-    };
+    const version = installed.version ?? "unknown";
+    const parsed = semver.parse(installed.version);
+    if (parsed === null || parsed.major < 4)
+      return {
+        level: "warn",
+        text: `${name} ${version} predates v4; update: npx -y skills update --global --yes`,
+      };
+    return { level: "ok", text: `${name} ${version} (${installed.root})` };
   });
-}
-
-function inspectOverlay(ctx: CommandContext): DoctorLine[] {
-  const configured = ctx.env.ALIGNFIRST_OVERLAYS;
-  if (configured === undefined || configured === "")
-    return [{ level: "ok", text: "no overlays directory" }];
-  const overlay = findOverlay(ctx.cwd, ctx.env, ctx.home);
-  if (overlay === undefined) return [{ level: "ok", text: "no overlay matches" }];
-  const lines: DoctorLine[] = [
-    { level: "ok", text: `${overlay.dir} (matched by ${overlay.matchedBy})` },
-  ];
-  for (const name of [PROJECT_CONFIG_NAME, "AGENTS.md", "DEVELOPERS.md", "docs"])
-    lines.push({
-      level: "ok",
-      text: `${name} ${resolveProjectFile(ctx.cwd, overlay, name)?.source ?? "none"}`,
-    });
-  return lines;
 }
 
 function inspectCompanion(ctx: CommandContext): DoctorLine[] {

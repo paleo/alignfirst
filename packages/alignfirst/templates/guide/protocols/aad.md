@@ -4,8 +4,8 @@
 
 You need:
 
-- the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket)
-- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{CMD}} ticket <id> --next AAD.summary.md` prints the file to create
+- the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket)
+- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{TICKET_CMD}} --next AAD.summary.md` prints the file to create
 
 Identify and state these values before starting the protocol.
 
@@ -54,7 +54,7 @@ Use subagents (your subagent tool) for distinct, isolated units of work when ben
 
 Finalize the summary file: replace the working notes with the final content described below.
 
-Start the summary with a header, then a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). The shorter the better. Omit any field with nothing to list. Always exclude `alignfirst` from skills.
+Start the summary with a header, then a suggested commit message {{COMMIT_RULE}}. The shorter the better. Omit any field with nothing to list. Always exclude `alignfirst` from skills.
 
 Example:
 

@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { CliError } from "../cli-error.js";
 import { gitOutput } from "../git.js";
+import { missingPlansError } from "./layout.js";
 
 export type PlansMode = SharedPlans | LocalPlans;
 
@@ -18,11 +19,7 @@ export interface LocalPlans {
 export function resolvePlansMode(cwd: string, form: string): PlansMode {
   const plansPath = join(cwd, ".plans");
   const stats = lstatSync(plansPath, { throwIfNoEntry: false });
-  if (!stats)
-    throw new CliError(
-      `.plans is missing. Clone the team plans repository, then run ${form} plans setup ` +
-        "(see the project documentation) — or create a plain .plans directory to keep plans local.",
-    );
+  if (!stats) throw missingPlansError(form);
   if (stats.isSymbolicLink() && !existsSync(plansPath))
     throw new CliError(
       `The .plans symlink is broken. Re-run ${form} plans setup with the clone location.`,

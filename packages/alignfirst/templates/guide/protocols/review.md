@@ -4,9 +4,9 @@
 
 You need:
 
-- the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket)
-- the CYCLE_LETTER and FILE_NUMBER — start a new cycle: `{{CMD}} ticket <id> --next review.md --new-cycle` prints the file to create
-- the **base branch** to compare against - use the branch provided by the user, or fall back to the default branch.
+- the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket)
+- the CYCLE_LETTER and FILE_NUMBER — start a new cycle: `{{TICKET_CMD}} --next review.md --new-cycle` prints the file to create
+- {{BASE_BRANCH_RULE}}
 
 Identify and state these values before starting the protocol.
 

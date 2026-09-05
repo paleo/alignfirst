@@ -2,16 +2,24 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import type { CommandContext } from "../context.js";
+import { CliError } from "../cli-error.js";
 import { git, gitOutput, gitSucceeds } from "../git.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
+import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
 
 export function runSync(ctx: CommandContext, args: string[]): number {
-  const usage = `Usage: ${ctx.form} sync [--auto-archive]\n`;
+  const usage = `Usage: ${ctx.form} sync [--auto-archive | --no-auto-archive]\n`;
   const options = parseSyncArgs(ctx, args, usage);
   if (options === undefined) return 0;
-  const thresholdDays = options.autoArchive ? archiveThresholdDays(ctx.env) : undefined;
+  const enabled =
+    options.autoArchive === true
+      ? true
+      : options.noAutoArchive === true
+        ? false
+        : (ctx.projectConfig?.config.plans?.autoArchive ?? false);
+  const thresholdDays = enabled ? archiveThresholdDays(ctx.env) : undefined;
   const mode = resolvePlansMode(ctx.cwd, ctx.form);
   const plansDir = join(ctx.cwd, ".plans");
   if (mode.kind === "local") {
@@ -20,12 +28,29 @@ export function runSync(ctx: CommandContext, args: string[]): number {
     return 0;
   }
   const repoDir = mode.repoToplevel;
-  if (hasHead(repoDir)) git(repoDir, "pull", "--rebase", "--autostash");
-  if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
+  assertNoStoppedRebase(repoDir, ctx.form);
   git(repoDir, "add", "-A");
   if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
-  if (hasHead(repoDir) && hasCommitsToSend(repoDir)) {
-    git(repoDir, "push", "--quiet", "-u", "origin", "HEAD");
+  if (hasUpstream(repoDir)) {
+    try {
+      git(repoDir, "pull", "--rebase");
+    } catch {
+      assertNoStoppedRebase(repoDir, ctx.form);
+      throw new CliError("git pull failed. See the git output above.");
+    }
+  }
+  if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {
+    git(repoDir, "add", "-A");
+    if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
+  }
+  if (hasCommitsToSend(repoDir)) {
+    try {
+      git(repoDir, "push", "--quiet", "-u", "origin", "HEAD");
+    } catch {
+      throw new CliError(
+        `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,
+      );
+    }
     ctx.stdout.write("Plans synchronized: local changes sent.\n");
   } else {
     ctx.stdout.write("Plans synchronized: nothing to send.\n");
@@ -35,6 +60,7 @@ export function runSync(ctx: CommandContext, args: string[]): number {
 
 interface SyncOptions {
   autoArchive: boolean;
+  noAutoArchive: boolean;
 }
 
 function parseSyncArgs(
@@ -47,6 +73,7 @@ function parseSyncArgs(
       args,
       options: {
         "auto-archive": { type: "boolean", default: false },
+        "no-auto-archive": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -56,11 +83,21 @@ function parseSyncArgs(
     ctx.stdout.write(usage);
     return;
   }
-  return { autoArchive: values["auto-archive"] };
+  if (values["auto-archive"] && values["no-auto-archive"])
+    throw new CliError(`--auto-archive and --no-auto-archive are mutually exclusive.\n\n${usage}`);
+  return {
+    autoArchive: values["auto-archive"],
+    noAutoArchive: values["no-auto-archive"],
+  };
 }
 
-function hasHead(dir: string): boolean {
-  return gitSucceeds(dir, "rev-parse", "--verify", "-q", "HEAD");
+function assertNoStoppedRebase(repoDir: string, form: string): void {
+  const stopped = findStoppedRebase(repoDir);
+  if (stopped !== undefined) throw new CliError(renderStoppedRebase(stopped, form));
+}
+
+function hasUpstream(dir: string): boolean {
+  return gitSucceeds(dir, "rev-parse", "--verify", "-q", "@{u}");
 }
 
 function hasStagedChanges(dir: string): boolean {
@@ -68,6 +105,7 @@ function hasStagedChanges(dir: string): boolean {
 }
 
 function hasCommitsToSend(dir: string): boolean {
+  if (!gitSucceeds(dir, "rev-parse", "--verify", "-q", "HEAD")) return false;
   if (!gitSucceeds(dir, "rev-parse", "--verify", "-q", "@{u}")) return true;
   return gitOutput(dir, "rev-list", "--count", "@{u}..HEAD") !== "0";
 }

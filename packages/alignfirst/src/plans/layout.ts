@@ -20,7 +20,13 @@ export function archivesDir(cwd: string): string {
 
 export function assertPlansGate(cwd: string, form: string): void {
   if (existsSync(plansDir(cwd))) return;
-  throw new CliError(
-    `Error: no \`.plans/\` directory found in the current directory. Run \`${form}\` from the root of an AlignFirst-managed project.`,
-  );
+  throw missingPlansError(form);
+}
+
+export function missingPlansMessage(form: string): string {
+  return `No .plans/ directory in the current directory.\nLocal plans:  mkdir .plans && echo .plans >> .gitignore\nTeam plans:   ${form} plans setup <clone-dir>`;
+}
+
+export function missingPlansError(form: string): CliError {
+  return new CliError(missingPlansMessage(form));
 }

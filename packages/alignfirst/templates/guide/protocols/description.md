@@ -4,8 +4,8 @@
 
 You need:
 
-- the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket)
-- the CYCLE_LETTER and FILE_NUMBER — start a new cycle: `{{CMD}} ticket <id> --next description.md --new-cycle` prints the file to create
+- the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket)
+- the CYCLE_LETTER and FILE_NUMBER — start a new cycle: `{{TICKET_CMD}} --next description.md --new-cycle` prints the file to create
 
 Identify and state these values before starting the protocol.
 
@@ -29,7 +29,7 @@ Identify and state these values before starting the protocol.
 [description body]
 ```
 
-Start with a suggested commit message (follow the convention you are aware of, or default to `<type>: [<ticket_id>] very short description`). Refine it from the suggested commit messages found in the specs and summaries you read. Keep it brief—usually 3-5 words for the description part. Shorter is better when it's clear.
+Start with a suggested commit message {{COMMIT_RULE}}. Refine it from the suggested commit messages found in the specs and summaries you read. Keep it brief—usually 3-5 words for the description part. Shorter is better when it's clear.
 
 ## Guidelines for the Description Body
 

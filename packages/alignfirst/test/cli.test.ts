@@ -17,7 +17,10 @@ describe("alignfirst CLI", () => {
     const help = await runMain([], { cwd });
     expect(help).toMatchObject({ code: 0, stderr: "" });
     expect(help.stdout).toContain("alignfirst guide");
+    expect(help.stdout).toContain("alignfirst conventions");
+    expect(help.stdout).toContain("alignfirst context");
     expect(help.stdout).toContain("alignfirst doctor");
+    expect(help.stdout).not.toContain("alignfirst setup");
     const version = await runMain(["--version"], { cwd });
     expect(version.stdout).toBe(`${packageVersion}\n`);
   });

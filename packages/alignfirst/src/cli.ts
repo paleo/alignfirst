@@ -4,16 +4,16 @@ import { homedir } from "node:os";
 import { CliError } from "./cli-error.js";
 import { resolveCommandForm } from "./command-form.js";
 import { runConfig } from "./commands/config.js";
-import { runDevelopers } from "./commands/developers.js";
+import { runContext } from "./commands/context.js";
+import { runConventions } from "./commands/conventions.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runDocmap } from "./commands/docmap.js";
 import { runGuide } from "./commands/guide.js";
 import { runPlans } from "./commands/plans.js";
-import { runSetup } from "./commands/setup.js";
 import { runSync } from "./commands/sync.js";
 import { runTicket } from "./commands/ticket.js";
 import type { CommandContext, Output } from "./context.js";
-import { resolveProjectConfig } from "./overlay.js";
+import { resolveProjectConfig } from "./project-config.js";
 import { checkCliRange } from "./version-guard.js";
 
 export interface MainOptions {
@@ -48,8 +48,7 @@ export async function main(options?: MainOptions): Promise<number> {
       return 0;
     }
     if (command !== "config" && command !== "doctor") {
-      ctx.projectConfig = resolveProjectConfig(ctx.cwd, ctx.env, ctx.home);
-      ctx.overlay = ctx.projectConfig?.overlay;
+      ctx.projectConfig = resolveProjectConfig(ctx.cwd);
       checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args]);
     }
     return dispatch(ctx, command, args);
@@ -74,12 +73,12 @@ function renderHelp(ctx: CommandContext): string {
 Usage:
   ${ctx.form} guide [<protocol>]
   ${ctx.form} ticket [<id>]
-  ${ctx.form} sync [--auto-archive]
+  ${ctx.form} sync [--auto-archive | --no-auto-archive]
   ${ctx.form} plans <command>
   ${ctx.form} docmap [<arguments>]
+  ${ctx.form} conventions
+  ${ctx.form} context
   ${ctx.form} config [--json]
-  ${ctx.form} DEVELOPERS.md
-  ${ctx.form} setup [<options>]
   ${ctx.form} doctor
   ${ctx.form} --help
   ${ctx.form} --version
@@ -98,12 +97,12 @@ function dispatch(ctx: CommandContext, command: string, args: string[]): number 
       return runPlans(ctx, args);
     case "docmap":
       return runDocmap(ctx, args);
+    case "conventions":
+      return runConventions(ctx, args);
+    case "context":
+      return runContext(ctx, args);
     case "config":
       return runConfig(ctx, args);
-    case "DEVELOPERS.md":
-      return runDevelopers(ctx, args);
-    case "setup":
-      return runSetup(ctx, args);
     case "doctor":
       return runDoctor(ctx, args);
     default:

@@ -108,7 +108,7 @@ function resolveTicketId(
   side: boolean,
   dryRun: boolean,
 ): TicketResolution {
-  const pattern = ctx.projectConfig?.config.ticketPattern;
+  const pattern = ctx.projectConfig?.config.ticketIdPattern;
   if (positional !== undefined) {
     validateTicketId(positional, pattern);
     return { id: positional };
@@ -116,7 +116,7 @@ function resolveTicketId(
   if (side) return { id: dryRun ? peekSideTicket(ctx.cwd) : reserveSideTicket(ctx.cwd) };
   if (pattern === undefined)
     throw new CliError(
-      "No ticket id given and .alignfirst.json has no ticketPattern: pass the id.",
+      "No ticket id given. Pass it.\nSetting ticketIdPattern in .alignfirst.json enables deduction from the current branch.",
     );
   const deduced = deduceTicketFromBranch(ctx.cwd, pattern);
   validateTicketId(deduced.id, pattern);

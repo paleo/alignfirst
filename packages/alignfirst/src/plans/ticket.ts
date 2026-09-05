@@ -26,6 +26,11 @@ export interface DeducedTicket {
   branch: string;
 }
 
+export type TicketDetection =
+  | { kind: "detected"; id: string; branch: string }
+  | { kind: "noMatch"; branch: string }
+  | { kind: "noBranch" };
+
 export function resolveTicketDir(
   cwd: string,
   id: string,
@@ -114,18 +119,25 @@ export function isPathSafeTicketId(id: string): boolean {
 export function validateTicketId(id: string, pattern?: string): void {
   if (!isPathSafeTicketId(id)) throw new CliError(`Invalid ticket id: ${id}`);
   if (pattern !== undefined && !new RegExp(pattern).test(id) && !SIDE_TICKET.test(id))
-    throw new CliError(`Ticket id "${id}" does not match ticketPattern "${pattern}".`);
+    throw new CliError(`Ticket id "${id}" does not match ticketIdPattern "${pattern}".`);
+}
+
+export function detectTicketFromBranch(cwd: string, pattern: string): TicketDetection {
+  const branch = gitOutputOrUndefined(cwd, "branch", "--show-current");
+  if (branch === undefined || branch === "") return { kind: "noBranch" };
+  const unanchored = pattern.replace(/^\^/, "").replace(/\$$/, "");
+  const match = new RegExp(unanchored).exec(branch);
+  if (!match) return { kind: "noMatch", branch };
+  return { kind: "detected", id: match[0], branch };
 }
 
 export function deduceTicketFromBranch(cwd: string, pattern: string): DeducedTicket {
-  const branch = gitOutputOrUndefined(cwd, "branch", "--show-current");
-  if (branch === undefined || branch === "")
+  const result = detectTicketFromBranch(cwd, pattern);
+  if (result.kind === "noBranch")
     throw new CliError("Cannot deduce a ticket id from a detached HEAD.");
-  const unanchored = pattern.replace(/^\^/, "").replace(/\$$/, "");
-  const match = new RegExp(unanchored).exec(branch);
-  if (!match)
+  if (result.kind === "noMatch")
     throw new CliError(
-      `Cannot deduce a ticket id from branch "${branch}" with pattern "${pattern}".`,
+      `Cannot deduce a ticket id from branch "${result.branch}" with pattern "${pattern}".`,
     );
-  return { id: match[0], branch };
+  return result;
 }

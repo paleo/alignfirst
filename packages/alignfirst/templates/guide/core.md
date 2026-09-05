@@ -14,9 +14,11 @@ An agent that does not know which protocol to use runs `{{CMD}} guide overview`.
 
 ## TASK_DIR Location
 
-**TASK_DIR** is `.plans/{TICKET_ID}/`. Run `{{CMD}} ticket <id>` and use the directory it prints. The command creates a missing directory, restores an archived one, and lists its entries.
+TASK_DIR holds the work files of a ticket. `{{TICKET_CMD}}` prints it and lists its entries; it creates a missing directory and restores an archived one.
 
-{{TICKET_ID_RULE}}
+{{TICKET_CONTEXT}}
+
+{{PLANS_STATE}}
 
 **Work without a ticket:** when the user says there is no ticket, run `{{CMD}} ticket --side`. Reuse an existing `side-N` directory when the user refers to that earlier work. Omit the ticket ID from commit messages.
 
@@ -36,18 +38,16 @@ Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
 **Example structure:**
 
 ```text
-.plans/
-├── 123/
-│   ├── A1-spec.md
-│   ├── A2-plan.md
-│   └── A3-AAD.summary.md
-│   └── B1-spec.md
+A1-spec.md
+A2-plan.md
+A3-AAD.summary.md
+B1-spec.md
 ```
 
 ## Notes
 
 - **TICKET_ID** is a unique identifier for the task, often an issue or ticket number.
-- `{{CMD}} ticket <id> --next <filename>` prints the next filename in the current cycle, the extension included (`--next spec.md` giving `.plans/123/A2-spec.md`).
+- `{{TICKET_CMD}} --next <filename>` prints the path of the next file in the current cycle, the extension included (`--next spec.md` giving `A2-spec.md`).
 - `--new-cycle` starts a new cycle.
 - The protocol or the user decides whether to continue the current cycle or start a new one.
 - Cycle letters and file numbers are internal. Never discuss them with the user.

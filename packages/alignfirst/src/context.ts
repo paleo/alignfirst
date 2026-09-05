@@ -1,4 +1,4 @@
-import type { Overlay, ResolvedProjectConfig } from "./overlay.js";
+import type { ResolvedProjectConfig } from "./project-config.js";
 
 export interface Output {
   write(text: string): void;
@@ -13,5 +13,4 @@ export interface CommandContext {
   form: string;
   version: string;
   projectConfig?: ResolvedProjectConfig;
-  overlay?: Overlay;
 }

@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,7 +17,6 @@ describe("config command", () => {
     expect((await runMain(["config"], { cwd })).stdout).toBe("Source: none\nCLI range: none\n");
     expect(JSON.parse((await runMain(["config", "--json"], { cwd })).stdout)).toEqual({
       source: null,
-      overlay: null,
       cli: null,
       config: null,
     });
@@ -27,34 +26,15 @@ describe("config command", () => {
     const cwd = temp();
     writeFileSync(
       join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0", ticketPattern: "^\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" }),
     );
     const result = await runMain(["config", "--json"], { cwd });
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       source: "root",
-      overlay: null,
       cli: { installed: packageVersion, range: ">=1.0.0", satisfied: false },
-      config: { schemaVersion: 1, cli: ">=1.0.0", ticketPattern: "^\\d+$" },
+      config: { schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" },
     });
-  });
-
-  it("reports the matched overlay even when the root wins", async () => {
-    const cwd = temp();
-    const overlays = join(cwd, "overlays");
-    const overlayDir = join(overlays, "project", "_project");
-    mkdirSync(overlayDir, { recursive: true });
-    writeFileSync(
-      join(overlayDir, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, project: { paths: [realpathSync(cwd)] } }),
-    );
-    writeFileSync(join(cwd, ".alignfirst.json"), '{"schemaVersion":1}');
-    const result = await runMain(["config"], {
-      cwd,
-      env: { ALIGNFIRST_OVERLAYS: overlays },
-    });
-    expect(result.stdout).toContain("Source: root");
-    expect(result.stdout).toContain(`Overlay: ${overlayDir} (matched by paths)`);
   });
 
   it("reports an invalid config as a CLI error", async () => {

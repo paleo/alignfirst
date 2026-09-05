@@ -43,6 +43,21 @@ describe("plans commands", () => {
     expect(result.stdout).toContain("Publish with: alignfirst sync");
   });
 
+  it("accepts --folder when it matches plans.folder", async () => {
+    const fixture = makeFixture();
+    writeFileSync(
+      join(fixture.product, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, plans: { folder: "product-plans" } }),
+    );
+    expect(
+      (
+        await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+          cwd: fixture.product,
+        })
+      ).code,
+    ).toBe(0);
+  });
+
   it("synchronizes shared plans", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
@@ -58,6 +73,53 @@ describe("plans commands", () => {
     );
   });
 
+  it("stops synchronization and diagnostics on a rebase conflict", async () => {
+    const fixture = makeFixture();
+    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+    });
+    const plan = join(fixture.product, ".plans", "78", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "78"));
+    writeFileSync(plan, "first\n");
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+
+    const other = join(fixture.root, "other-plans");
+    git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
+    writeFileSync(join(other, "product-plans", "78", "A1-spec.md"), "remote\n");
+    git(other, "add", "-A");
+    git(other, "commit", "--quiet", "-m", "remote");
+    git(other, "push", "--quiet");
+
+    writeFileSync(plan, "local\n");
+    const conflict = await runMain(["sync"], { cwd: fixture.product });
+    expect(conflict.code).toBe(1);
+    expect(conflict.stderr).toContain(
+      `Plans synchronization stopped on a conflict in ${fixture.clone}`,
+    );
+    expect(conflict.stderr).toContain("  product-plans/78/A1-spec.md");
+    expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
+      "remote",
+    );
+    expect((await runMain(["sync"], { cwd: fixture.product })).stderr).toContain(
+      "Plans synchronization stopped",
+    );
+    expect((await runMain(["plans", "check"], { cwd: fixture.product })).code).toBe(1);
+    expect(
+      (
+        await runMain(["doctor"], {
+          cwd: fixture.product,
+          env: { PATH: "" },
+          home: fixture.root,
+        })
+      ).stdout,
+    ).toContain("[error] Plans: rebase stopped on a conflict in");
+
+    writeFileSync(plan, "resolved\n");
+    git(fixture.clone, "add", "-A");
+    git(fixture.clone, "-c", "core.editor=true", "rebase", "--continue");
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+  });
+
   it("rejects conflicting, absent and missing-clone setup inputs", async () => {
     const fixture = makeFixture();
     writeFileSync(
@@ -70,7 +132,7 @@ describe("plans commands", () => {
           cwd: fixture.product,
         })
       ).stderr,
-    ).toContain("already sets plans.folder");
+    ).toContain('--folder "argument" differs from plans.folder "configured"');
     rmSync(join(fixture.product, ".alignfirst.json"));
     expect(
       (await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).stderr,
@@ -99,6 +161,52 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
     expect(automatic.stdout).toContain("Archived 79");
+  });
+
+  it("uses plans.autoArchive and honors --no-auto-archive", async () => {
+    const fixture = makeFixture();
+    writeFileSync(
+      join(fixture.product, ".alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        plans: { folder: "product-plans", autoArchive: true },
+      }),
+    );
+    await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product });
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    const staleFile = join(fixture.product, ".plans", "79", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "79"));
+    writeFileSync(staleFile, "stale\n");
+    utimesSync(staleFile, old, old);
+    const archived = await runMain(["sync"], {
+      cwd: fixture.product,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+    expect(archived.stdout).toContain("Archived 79");
+    expect(git(join(fixture.root, "remote.git"), "ls-tree", "-r", "HEAD", "--name-only")).toContain(
+      "product-plans/_archives/79/A1-spec.md",
+    );
+
+    const keptFile = join(fixture.product, ".plans", "80", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "80"));
+    writeFileSync(keptFile, "kept\n");
+    utimesSync(keptFile, old, old);
+    const kept = await runMain(["sync", "--no-auto-archive"], {
+      cwd: fixture.product,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+    expect(kept.stdout).not.toContain("Archived 80");
+    expect(existsSync(join(fixture.product, ".plans", "80"))).toBe(true);
+  });
+
+  it("rejects mutually exclusive synchronization options", async () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const result = await runMain(["sync", "--auto-archive", "--no-auto-archive"], {
+      cwd: fixture.product,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("mutually exclusive");
   });
 });
 

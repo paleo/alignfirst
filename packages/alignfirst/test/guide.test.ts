@@ -1,10 +1,10 @@
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROTOCOLS } from "../src/protocols.js";
-import { makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -145,39 +145,58 @@ describe("guide command", () => {
     expect(result.stdout).toContain("npx -y alignfirst guide spec --protocol-only");
   });
 
-  it("renders the configured ticket rule", async () => {
+  it("renders ticket detection and fallback variants", async () => {
     const cwd = temp();
+    configureGit(cwd);
+    git(cwd, "init", "--quiet");
+    writeFileSync(join(cwd, "README.md"), "project\n");
+    git(cwd, "add", "-A");
+    git(cwd, "commit", "--quiet", "-m", "init");
+    git(cwd, "checkout", "-q", "-b", "78/x");
     writeFileSync(
       join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketPattern: "^AF-\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
     );
-    const configured = await runMain(["guide"], { cwd });
-    expect(configured.stdout).toContain("Ticket IDs match `^AF-\\d+$`");
-    expect(configured.stdout).toContain("alignfirst ticket` without an id");
+    const detected = await runMain(["guide", "spec"], { cwd });
+    expect(detected.stdout).toContain("Current ticket: `78`");
+    expect(detected.stdout).toContain("alignfirst ticket --next spec.md --new-cycle");
 
-    const unconfigured = await runMain(["guide"], { cwd: temp() });
-    expect(unconfigured.stdout).toContain("Ask the user for the ticket ID when it is not given.");
+    git(cwd, "checkout", "-q", "main");
+    const noMatch = await runMain(["guide", "spec"], { cwd });
+    expect(noMatch.stdout).toContain("No ticket id on branch `main`");
+    expect(noMatch.stdout).toContain("alignfirst ticket <id> --next spec.md --new-cycle");
+
+    writeFileSync(join(cwd, ".alignfirst.json"), '{"schemaVersion":1}');
+    const noPattern = await runMain(["guide"], { cwd });
+    expect(noPattern.stdout).toContain("Ask the user for the ticket ID when it is not given.");
   });
 
-  it("appends overlay project conventions unless the root has them", async () => {
+  it("renders plans, commit, base branch, and conventions placeholders", async () => {
     const cwd = temp();
-    const overlays = join(cwd, "overlays");
-    const overlayDir = join(overlays, "project", "_project");
-    mkdirSync(overlayDir, { recursive: true });
+    const unconfigured = await runMain(["guide"], { cwd });
+    expect(unconfigured.stdout).toContain("No .plans/ directory in the current directory.");
+    expect(unconfigured.stdout).toContain("## Project conventions");
+
+    mkdirSync(join(cwd, ".plans"));
     writeFileSync(
-      join(overlayDir, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, project: { paths: [realpathSync(cwd)] } }),
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        git: {
+          defaultBranch: "main",
+          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+        },
+      }),
     );
-    writeFileSync(join(overlayDir, "AGENTS.md"), "Overlay convention.\n");
-    const env = { ALIGNFIRST_OVERLAYS: overlays };
-
-    const overlay = await runMain(["guide"], { cwd, env });
-    expect(overlay.stdout).toContain("## Project conventions\n\nOverlay convention.");
-
-    writeFileSync(join(cwd, "AGENTS.md"), "Root convention.\n");
-    const root = await runMain(["guide"], { cwd, env });
-    expect(root.stdout).not.toContain("## Project conventions");
-    expect(root.stdout).not.toContain("Overlay convention.");
+    const spec = await runMain(["guide", "spec", "--protocol-only"], { cwd });
+    expect(spec.stdout).toContain(
+      "(project convention: `type: [#ticketId] summary`; `type: summary` for `side-N`)",
+    );
+    const review = await runMain(["guide", "review", "--protocol-only"], { cwd });
+    expect(review.stdout).toContain("fall back to `main`, the default branch");
+    const merge = await runMain(["guide", "merge", "--protocol-only"], { cwd });
+    expect(merge.stdout).toContain("otherwise merge `main`, the default branch");
+    expect((await runMain(["guide"], { cwd })).stdout).not.toContain("## Project conventions");
   });
 });
 

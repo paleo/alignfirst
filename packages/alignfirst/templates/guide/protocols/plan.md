@@ -6,8 +6,8 @@
 
 You need:
 
-- the TASK_DIR — run `{{CMD}} ticket <id>` (`{{CMD}} ticket` alone deduces the id from the branch when the project defines a ticket format; `{{CMD}} ticket --side` when there is no ticket)
-- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{CMD}} ticket <id> --next plan.md` or `{{CMD}} ticket <id> --next main-plan.md` prints the file to create
+- the TASK_DIR — run `{{TICKET_CMD}}` (`{{CMD}} ticket --side` when there is no ticket)
+- the CYCLE_LETTER and FILE_NUMBER — continue the current cycle: `{{TICKET_CMD}} --next plan.md` or `{{TICKET_CMD}} --next main-plan.md` prints the file to create
 - a **spec file** in the TASK_DIR
 
 Identify and state these values before starting the protocol. If any of these pieces of information is missing, STOP AND ASK THE USER.
@@ -210,7 +210,7 @@ Note:
 
 Write the plan file(s) according to the determined structure:
 
-Use `{{CMD}} ticket <id> --next plan.md`, `{{CMD}} ticket <id> --next main-plan.md`, or `{{CMD}} ticket <id> --next plan-<descriptor>.md` to get the next number. Run one command per file.
+Use `{{TICKET_CMD}} --next plan.md`, `{{TICKET_CMD}} --next main-plan.md`, or `{{TICKET_CMD}} --next plan-<descriptor>.md` to get the next number. Run one command per file.
 
 **Single Plan**:
 

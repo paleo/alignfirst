@@ -5,10 +5,11 @@ import { parseArgs } from "node:util";
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { assertMainWorktreeRoot } from "../git.js";
-import { parseCommandArgs } from "../parse-args.js";
+import { parseBareCommandArgs, parseCommandArgs } from "../parse-args.js";
 import { archiveEntry, archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
+import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
 
 export function runPlans(ctx: CommandContext, args: string[]): number {
   const [command, ...rest] = args;
@@ -79,8 +80,10 @@ function parseSetupArgs(
   }
   if (positionals.length !== 1) throw new CliError(usage.trimEnd());
   const configFolder = ctx.projectConfig?.config.plans?.folder;
-  if (values.folder !== undefined && configFolder !== undefined)
-    throw new CliError(".alignfirst.json already sets plans.folder; drop --folder.");
+  if (values.folder !== undefined && configFolder !== undefined && values.folder !== configFolder)
+    throw new CliError(
+      `--folder "${values.folder}" differs from plans.folder "${configFolder}" in .alignfirst.json.`,
+    );
   const folder = values.folder ?? configFolder;
   if (folder === undefined)
     throw new CliError("Pass --folder <name> or set plans.folder in .alignfirst.json.");
@@ -104,8 +107,12 @@ function checkClone(ctx: CommandContext, cloneDir: string): void {
 
 function runCheck(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans check\n`;
-  if (handleBareHelp(ctx, args, usage)) return 0;
+  if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const mode = resolvePlansMode(ctx.cwd, ctx.form);
+  if (mode.kind === "shared") {
+    const stopped = findStoppedRebase(mode.repoToplevel);
+    if (stopped !== undefined) throw new CliError(renderStoppedRebase(stopped, ctx.form));
+  }
   if (mode.kind === "shared") ctx.stdout.write(".plans is linked to the team plans repository.\n");
   else
     ctx.stdout.write(
@@ -114,25 +121,9 @@ function runCheck(ctx: CommandContext, args: string[]): number {
   return 0;
 }
 
-function handleBareHelp(ctx: CommandContext, args: string[], usage: string): boolean {
-  const { values, positionals } = parseCommandArgs(usage, () =>
-    parseArgs({
-      args,
-      options: { help: { type: "boolean", short: "h", default: false } },
-      strict: true,
-      allowPositionals: true,
-    } as const),
-  );
-  if (positionals.length > 0)
-    throw new CliError(`Unexpected argument: ${positionals[0]}\n\n${usage}`);
-  if (!values.help) return false;
-  ctx.stdout.write(usage);
-  return true;
-}
-
 function runAutoArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans auto-archive\n`;
-  if (handleBareHelp(ctx, args, usage)) return 0;
+  if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const mode = resolvePlansMode(ctx.cwd, ctx.form);
   const archived = autoArchive(join(ctx.cwd, ".plans"), archiveThresholdDays(ctx.env), ctx.stdout);
   if (mode.kind === "shared" && archived) ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);

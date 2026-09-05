@@ -64,7 +64,7 @@ describe("ticket command", () => {
     git(cwd, "checkout", "-q", "-b", "78/unified-cli");
     writeFileSync(
       join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketPattern: "^\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
     );
     const result = await runMain(["ticket", "--json", "--next", "spec.md"], { cwd });
     expect(JSON.parse(result.stdout)).toEqual({
@@ -79,14 +79,23 @@ describe("ticket command", () => {
 
   it("requires the plans gate and validates configured ids", async () => {
     const cwd = makeProject(false);
-    expect((await runMain(["ticket", "78"], { cwd })).stderr).toContain("no `.plans/`");
+    expect((await runMain(["ticket", "78"], { cwd })).stderr).toContain(
+      "No .plans/ directory in the current directory.",
+    );
     mkdirSync(join(cwd, ".plans"));
     writeFileSync(
       join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketPattern: "^\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
     );
     expect((await runMain(["ticket", "abc"], { cwd })).stderr).toContain("does not match");
     expect((await runMain(["ticket", "side-2"], { cwd })).code).toBe(0);
+  });
+
+  it("explains how to enable branch deduction when no id or pattern is given", async () => {
+    const cwd = makeProject();
+    const result = await runMain(["ticket"], { cwd });
+    expect(result.stderr).toContain("No ticket id given. Pass it.");
+    expect(result.stderr).toContain("Setting ticketIdPattern");
   });
 });
 

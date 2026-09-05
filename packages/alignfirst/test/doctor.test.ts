@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,8 +16,11 @@ describe("doctor command", () => {
     const cwd = temp();
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    for (const section of ["CLI", "Config", "Plans", "Docmap", "Skills", "Overlay", "Companion"])
+    for (const section of ["CLI", "Config", "Git", "Plans", "Docmap", "Skills", "Companion"])
       expect(result.stdout).toContain(`] ${section}:`);
+    expect(result.stdout).toContain("[ok] Config: none");
+    expect(result.stdout).toContain("[warn] Git: default branch unresolved");
+    expect(result.stdout).toContain("[ok] Docmap: docs/ none");
     expect(result.stdout).toContain("[warn] Companion: alcode not installed");
   });
 
@@ -41,24 +44,26 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("] Plans:");
   });
 
-  it("reports a matching overlay and each effective file", async () => {
+  it("reports the configured default branch and skill generation", async () => {
     const cwd = temp();
-    const overlays = join(cwd, "overlays");
-    const overlayDir = join(overlays, "project", "_project");
-    mkdirSync(join(overlayDir, "docs"), { recursive: true });
     writeFileSync(
-      join(overlayDir, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, project: { paths: [realpathSync(cwd)] } }),
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, git: { defaultBranch: "main" } }),
     );
-    writeFileSync(join(overlayDir, "AGENTS.md"), "agents\n");
+    const skillDir = join(cwd, ".agents", "skills", "alignfirst");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), '---\nmetadata:\n  version: "3.12.0"\n---\n');
     const result = await runMain(["doctor"], {
       cwd,
-      env: { ALIGNFIRST_OVERLAYS: overlays, PATH: "" },
+      env: { PATH: "" },
       home: cwd,
     });
-    expect(result.stdout).toContain(`[ok] Overlay: ${overlayDir} (matched by paths)`);
-    expect(result.stdout).toContain("[ok] Overlay: AGENTS.md overlay");
-    expect(result.stdout).toContain("[ok] Overlay: DEVELOPERS.md none");
+    expect(result.stdout).toContain("[ok] Git: default branch main (git.defaultBranch)");
+    expect(result.stdout).toContain("[warn] Skills: alignfirst 3.12.0 predates v4");
+
+    writeFileSync(join(skillDir, "SKILL.md"), '---\nmetadata:\n  version: "4.0.0"\n---\n');
+    const current = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
+    expect(current.stdout).toContain("[ok] Skills: alignfirst 4.0.0");
   });
 
   it("reports the alcode version", async () => {
