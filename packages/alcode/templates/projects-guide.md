@@ -8,6 +8,7 @@ A project is a direct child whose `alignfirst config --json` report finds `.alig
 
 ```sh
 alcode projects list [--json] [--root <path>]
+alcode projects doctor [--root <path>]
 alcode projects status <path> [--json] [--root <path>]
 alcode projects init [--root <path>] [--description <text>] [--port-range <first>-<last>]
 alcode projects free-ports --size <n> [--json] [--root <path>]
@@ -15,6 +16,9 @@ alcode projects --guide [--root <path>]
 ```
 
 `--root` selects the projects directory. It defaults to the working directory.
+
+`doctor` is a read-only health gate. It exits successfully only when discovery completes with no
+inventory issues.
 
 ## Port claims
 

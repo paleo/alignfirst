@@ -43,6 +43,17 @@ export interface ProjectConfigView {
 export interface InventoryIssue {
   path: string;
   message: string;
+  conflict?: PortConflict;
+}
+
+export interface PortConflict {
+  left: ProjectPortClaim;
+  right: ProjectPortClaim;
+}
+
+interface ProjectPortClaim {
+  path: string;
+  portRange: PortRange;
 }
 
 interface ProjectCliDescription {
@@ -366,6 +377,10 @@ function reportOverlappingProjects(projects: DiscoveredProject[], issues: Invent
       issues.push({
         path: project.path,
         message: `port range ${formatRange(project.portRange)} overlaps ${other.name}`,
+        conflict: {
+          left: { path: other.path, portRange: other.portRange },
+          right: { path: project.path, portRange: project.portRange },
+        },
       });
     }
   }

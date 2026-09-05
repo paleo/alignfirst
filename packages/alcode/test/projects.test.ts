@@ -44,6 +44,7 @@ describe("projects command surface", () => {
     const fixture = makeFixture();
     const result = await runProjects(fixture, ["--help"], { env: {} });
     expect(result.code).toBe(0);
+    expect(result.stdout).toContain("alcode projects doctor [--root <path>]");
     expect(result.stdout).toContain("alcode projects free-ports --size <n>");
   });
 
@@ -108,12 +109,76 @@ describe("projects command surface", () => {
       ["status"],
       ["list", "extra"],
       ["init", "--json"],
+      ["doctor", "--json"],
       ["list", "--size", "2"],
       ["free-ports"],
       ["--guide", "list"],
     ]) {
       expect((await runProjects(fixture, args)).code).toBe(1);
     }
+  });
+});
+
+describe("project inventory doctor", () => {
+  it("reports a clean inventory", async () => {
+    const fixture = makeFixture({ portRange: range(8000, 8099) });
+    makeRepository(fixture.root, "healthy", { portRange: range(8000, 8049) });
+
+    const result = await runProjects(fixture, ["doctor"]);
+
+    expect(result).toEqual({
+      code: 0,
+      stdout: "[ok] Project inventory: 1 project, 1 directory\n",
+      stderr: "",
+    });
+  });
+
+  it("reports every overlapping pair with both project paths and ranges", async () => {
+    const fixture = makeFixture({ portRange: range(8000, 8099) });
+    const alpha = makeRepository(fixture.root, "alpha", { portRange: range(8000, 8050) });
+    const beta = makeRepository(fixture.root, "beta", { portRange: range(8020, 8070) });
+    const gamma = makeRepository(fixture.root, "gamma", { portRange: range(8040, 8090) });
+
+    const result = await runProjects(fixture, ["doctor"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim().split("\n")).toEqual([
+      `[error] Port conflict: ${JSON.stringify(alpha)} (8000..8050) overlaps ${JSON.stringify(beta)} (8020..8070)`,
+      `[error] Port conflict: ${JSON.stringify(alpha)} (8000..8050) overlaps ${JSON.stringify(gamma)} (8040..8090)`,
+      `[error] Port conflict: ${JSON.stringify(beta)} (8020..8070) overlaps ${JSON.stringify(gamma)} (8040..8090)`,
+    ]);
+  });
+
+  it("fails for invalid configuration and incomplete discovery", async () => {
+    const fixture = makeFixture({});
+    const nongit = join(fixture.root, "nongit");
+    mkdirSync(nongit);
+    writeProjectConfig(nongit, {});
+    const invalid = join(fixture.root, "invalid");
+    mkdirSync(invalid);
+    writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
+
+    const result = await runProjects(fixture, ["doctor"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain(
+      `[error] Project inventory: ${JSON.stringify(invalid)}: Invalid `,
+    );
+    expect(result.stdout).toContain(
+      `[error] Project inventory: ${JSON.stringify(nongit)}: not a git main worktree`,
+    );
+  });
+
+  it("renders discovery failures as a failing health line", async () => {
+    const fixture = makeFixture({ unknown: true });
+
+    const result = await runProjects(fixture, ["doctor"]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toMatch(/^\[error\] Project inventory: Invalid projects marker /u);
   });
 });
 

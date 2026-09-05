@@ -61,11 +61,17 @@ alcode projects free-ports --root ~/projects --size <size>
 '
 ```
 
-Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command. Confirm discovery:
+Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command.
+
+## Check the inventory
+
+After writing `.alignfirst.json` and before workspace setup, run the read-only inventory gate:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects doctor --root ~/projects'
 ```
+
+Stop when it reports an error. Resolve every configuration, discovery, and port conflict first.
 
 ## Set up the workspace
 

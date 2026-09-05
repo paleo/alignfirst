@@ -1,4 +1,4 @@
-import type { ProjectInventory } from "./discovery.js";
+import type { InventoryIssue, ProjectInventory } from "./discovery.js";
 import type { PortRange } from "./markers.js";
 import type { ProjectDetails } from "./status.js";
 
@@ -50,9 +50,41 @@ export function renderProjectListJson(inventory: ProjectInventory): string {
       portRange: project.portRange ?? null,
       workspaces: project.workspaces,
     })),
-    issues: inventory.issues,
+    issues: inventory.issues.map(({ path, message }) => ({ path, message })),
   };
   return renderJson(report);
+}
+
+export function renderProjectDoctor(inventory: ProjectInventory): string {
+  if (inventory.issues.length === 0) {
+    return (
+      `[ok] Project inventory: ${renderCount(inventory.projects.length, "project")}, ` +
+      `${renderCount(inventory.directories.length, "directory")}\n`
+    );
+  }
+  return `${inventory.issues.map(renderInventoryIssue).join("\n")}\n`;
+}
+
+function renderCount(value: number, singular: string): string {
+  return `${value} ${singular}${value === 1 ? "" : "s"}`;
+}
+
+function renderInventoryIssue(issue: InventoryIssue): string {
+  if (issue.conflict !== undefined) {
+    const { left, right } = issue.conflict;
+    return (
+      `[error] Port conflict: ${renderOutputValue(left.path)} (${renderRange(left.portRange)}) ` +
+      `overlaps ${renderOutputValue(right.path)} (${renderRange(right.portRange)})`
+    );
+  }
+  return (
+    `[error] Project inventory: ${renderOutputValue(issue.path)}: ` +
+    escapeControlCharacters(issue.message)
+  );
+}
+
+export function renderProjectDoctorFailure(message: string): string {
+  return `[error] Project inventory: ${escapeControlCharacters(message)}\n`;
 }
 
 export function renderProjectStatus(details: ProjectDetails): string {

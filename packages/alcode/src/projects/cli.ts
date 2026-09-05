@@ -16,6 +16,8 @@ import {
 import { findFreeBlock } from "./ports.js";
 import {
   renderPortRangeJson,
+  renderProjectDoctor,
+  renderProjectDoctorFailure,
   renderProjectList,
   renderProjectListJson,
   renderProjectStatus,
@@ -25,6 +27,7 @@ import { getProjectStatus } from "./status.js";
 
 const USAGE = `Usage:
   alcode projects list [--json] [--root <path>]
+  alcode projects doctor [--root <path>]
   alcode projects status <path> [--json] [--root <path>]
   alcode projects init [--root <path>] [--description <text>] [--port-range <first>-<last>]
   alcode projects free-ports --size <n> [--json] [--root <path>]
@@ -41,7 +44,7 @@ export interface ProjectsContext {
 }
 
 interface ProjectsArgs {
-  command?: "list" | "status" | "init" | "free-ports";
+  command?: "list" | "doctor" | "status" | "init" | "free-ports";
   path?: string;
   root?: string;
   json: boolean;
@@ -58,6 +61,7 @@ export function runProjects(ctx: ProjectsContext, tokens: string[]): number {
     ctx.stdout.write(USAGE);
     return 0;
   }
+  if (args.command === "doctor") return inspectProjectInventory(ctx, args.root);
   const root = resolveProjectsRoot(ctx, args.root);
   if (args.guide) {
     const marker = readMarker(root);
@@ -83,6 +87,22 @@ export function runProjects(ctx: ProjectsContext, tokens: string[]): number {
     return 0;
   }
   throw new Error("Invalid alcode projects command");
+}
+
+function inspectProjectInventory(ctx: ProjectsContext, rootOption: string | undefined): number {
+  try {
+    const root = resolveProjectsRoot(ctx, rootOption);
+    const inventory = inventoryFor(root, requireMarker(root), ctx);
+    ctx.stdout.write(renderProjectDoctor(inventory));
+    return inventory.issues.length === 0 ? 0 : 1;
+  } catch (error) {
+    ctx.stdout.write(renderProjectDoctorFailure(errorMessage(error)));
+    return 1;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function parseProjectsArgs(tokens: string[]): ProjectsArgs {
@@ -171,7 +191,13 @@ function assertNoCommandOptions(values: ParsedOptionValues): void {
 }
 
 function isProjectsCommand(value: string): value is ProjectsArgs["command"] & string {
-  return value === "list" || value === "status" || value === "init" || value === "free-ports";
+  return (
+    value === "list" ||
+    value === "doctor" ||
+    value === "status" ||
+    value === "init" ||
+    value === "free-ports"
+  );
 }
 
 function validatePositionals(command: string, path: string | undefined, extra: string[]): void {

@@ -77,13 +77,15 @@ Inspect the repository before changing it. A prepared project has all of these:
 1. The AlignFirst CLI as a prerequisite in `README.md`, the eight skills, and a bootstrap line in
    `AGENTS.md` or `CLAUDE.md`. `.alignfirst.json` is required for an AlignFirst Developer project and
    optional otherwise.
-2. The team plans repository through `alignfirst plans setup` when the team has one.
-3. docmap, including project scripts or CLI instructions. When the repository has no `docs/`
+2. A clean `alcode projects doctor --root <projects-directory>` result after writing
+   `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
+3. The team plans repository through `alignfirst plans setup` when the team has one.
+4. docmap, including project scripts or CLI instructions. When the repository has no `docs/`
    directory, bootstrap its documentation through
    [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
-4. workspace, adapted to the project's runtime and development lifecycle, meeting
+5. workspace, adapted to the project's runtime and development lifecycle, meeting
    [the AlignFirst Developer contract](references/workspace-setup.md#the-alignfirst-developer-contract).
-5. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
+6. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
 
 Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared

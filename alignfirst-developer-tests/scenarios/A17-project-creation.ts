@@ -47,6 +47,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         throw new Error("project bootstrap started before the side-1 request reservation");
       }
       await copyBootstrapTemplate(scenario);
+      await verifyProjectInventory(scenario);
       // A bot may delegate the initial commit itself ("create one initial
       // commit with message …", "run git commit -m …"); comply, like a real
       // alcode. The affirmative verb (or a literal `git commit`) guards
@@ -218,6 +219,14 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
     { timeoutMs: 30_000 },
   );
   if (result.exitCode !== 0) throw new Error(`creation bootstrap failed: ${result.stderr}`);
+}
+
+async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
+  await assertGatewayCommand(
+    ctx,
+    ["alcode", "projects", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
+    "project inventory doctor before workspace setup",
+  );
 }
 
 function assertCreationCalls(calls: AgentToolCall[]): void {
