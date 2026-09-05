@@ -18,7 +18,6 @@ Run `npm run workspace -- --guide` to learn the full procedures.
 - _Branch naming_: `<ticket-id>/<1-3-words>` (e.g. `123/my-feature`).
 - _Commit messages_: conventional commits, e.g. `feat: add new feature`. Do not mention the ticket ID.
 - _Default branch_: `main`.
-- _Design discussions and investigations_: systematically seek `alcode`'s opinion and ground conclusions in its findings.
 
 ## Everyday commands
 
