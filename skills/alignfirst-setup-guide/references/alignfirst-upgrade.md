@@ -13,13 +13,17 @@ Commands are Unix-style. Adapt them for another shell.
 
 ## Detect the Installed Version
 
-- **v1:** `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/` exists.
-- **v2:** `alignfirst/SKILL.md` exists under a canonical project skill root, but the skill has no
-  `references/` directory and its `metadata.version` is not `3.x`.
+- **v4:** the `alignfirst` skill has `metadata.version` beginning with `4.` or is a stub that runs
+  `alignfirst guide`. This signal wins even when legacy npm script names remain. A script that runs
+  `alignfirst` is not evidence of v3.
 - **v3:** the eight skills contain their full protocol content. Detect a `references/` directory
-  under the `alignfirst` skill, `metadata.version` beginning with `3.`,
-  [the retired plans package](alignfirst-upgrade-from-v3.md#remove-the-plans-package), or its setup
-  and sync scripts.
+  under the `alignfirst` skill or `metadata.version` beginning with `3.`. When v4 is absent, also
+  detect v3 from `@paleo/plans-share` or an active command that invokes `plans-share`.
+- **v2:** `alignfirst/SKILL.md` exists under a canonical project skill root, but the skill has no
+  `references/` directory and its metadata predates v3.
+- **v1:** `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/` exists.
+
+Apply explicit skill-version and stub signals before legacy file or command footprints.
 
 Inspect `skills-lock.json` through the current skills CLI when present. Ignore dependencies and
 generated output.
@@ -29,6 +33,8 @@ generated output.
 - v1: follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
 - v2: follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
 - v3: follow [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md).
+- v4: keep the current skills. When legacy plans artifacts remain, apply the cleanup, command sweep,
+  and verification sections of the v3 upgrade.
 - No detected installation: use [alignfirst-skills-setup.md](alignfirst-skills-setup.md).
 
 The v1 and v2 migrations preserve project knowledge and remove their legacy layouts. After either

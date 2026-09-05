@@ -3,11 +3,10 @@ name: alignfirst-setup-guide
 description: >-
   Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a
   consumer repository, or prepare a repository and Linux deployment for an AlignFirst Developer.
-compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or bun).
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.34.0"
+  version: "0.35.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
