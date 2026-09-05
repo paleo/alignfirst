@@ -80,7 +80,7 @@ describe("coding-agent selection", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain("sol, terra, luna");
-    expect(stdout.text()).toContain("alcode projects");
+    expect(stdout.text()).toContain("alcode projects (list | doctor | status");
     expect(stdout.text()).not.toContain("reserve-side-ticket");
     expect(stdout.text()).not.toContain("fable");
   });

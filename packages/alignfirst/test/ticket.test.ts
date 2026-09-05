@@ -56,6 +56,18 @@ describe("ticket command", () => {
     expect(existsSync(archive)).toBe(true);
   });
 
+  it("rejects unsafe --next filenames before creating the ticket", async () => {
+    const cwd = makeProject();
+
+    for (const filename of ["", ".", "..", "../outside.md", "nested/file.md", "nested\\file.md"]) {
+      const result = await runMain(["ticket", "78", "--next", filename], { cwd });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("--next must be a non-empty single path segment.");
+    }
+
+    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
+  });
+
   it("reserves side tickets across active and archived entries, including an EEXIST race", async () => {
     const cwd = makeProject();
     mkdirSync(join(cwd, ".plans", "_archives", "side-2"), { recursive: true });

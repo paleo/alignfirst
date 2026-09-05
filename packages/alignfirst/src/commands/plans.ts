@@ -11,6 +11,8 @@ import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
 
+const RESERVED_PLANS_FOLDERS = new Set([".git", ".plans", "_archives", "_project"]);
+
 export function runPlans(ctx: CommandContext, args: string[]): number {
   const [command, ...rest] = args;
   switch (command) {
@@ -55,6 +57,9 @@ function runSetup(ctx: CommandContext, args: string[]): number {
 function createPlansDirectory(cloneDir: string, folder: string): string {
   if (folder.length === 0 || folder === "." || folder === ".." || /[\\/]/u.test(folder)) {
     throw new CliError(`Plans folder "${folder}" must be a single path segment.`);
+  }
+  if (RESERVED_PLANS_FOLDERS.has(folder.toLowerCase())) {
+    throw new CliError(`Plans folder "${folder}" is reserved.`);
   }
   const cloneRoot = realpathSync(cloneDir);
   const projectDir = join(cloneRoot, folder);

@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { runAlignfirst } from "../alignfirst-cli.js";
 import { type PortRange, type ProjectsMarker, readMarker } from "./markers.js";
@@ -83,7 +83,12 @@ interface MainCandidate extends DirectoryCandidate {
 interface WalkState {
   directories: ProjectsDirectory[];
   candidates: DirectoryCandidate[];
+  directoryClaims: ScopedPortClaim[];
   issues: InventoryIssue[];
+}
+
+interface ScopedPortClaim extends ProjectPortClaim {
+  scope: string;
 }
 
 interface ProjectError {
@@ -95,11 +100,10 @@ export function buildInventory(
   marker: ProjectsMarker,
   ctx: InventoryContext,
 ): ProjectInventory {
-  const state: WalkState = { directories: [], candidates: [], issues: [] };
+  const state: WalkState = { directories: [], candidates: [], directoryClaims: [], issues: [] };
   walkProjectsDirectory(root, marker, undefined, state);
   const projects = classifyCandidates(state, ctx);
-  projects.sort((left, right) => left.path.localeCompare(right.path));
-  reportOverlappingProjects(projects, state.issues);
+  reportOverlappingClaims(projects, state.directoryClaims, state.issues);
   sortInventory(state.directories, projects, state.issues);
   return { root, directories: state.directories, projects, issues: state.issues };
 }
@@ -124,6 +128,13 @@ function walkProjectsDirectory(
       continue;
     }
     reportOutsideRange(candidate.path, childMarker.portRange, effectiveRange, state.issues);
+    if (childMarker.portRange !== undefined) {
+      state.directoryClaims.push({
+        scope: path,
+        path: candidate.path,
+        portRange: childMarker.portRange,
+      });
+    }
     walkProjectsDirectory(candidate.path, childMarker, effectiveRange, state);
   }
 }
@@ -186,6 +197,14 @@ function classifyCandidate(
   };
   if (mainWorktreeGitDirectory(candidate.path) === undefined) {
     state.issues.push({ path: candidate.path, message: "not a git main worktree" });
+  }
+  if (description.cli !== null && !description.cli.satisfied) {
+    state.issues.push({
+      path: candidate.path,
+      message:
+        `AlignFirst CLI ${description.cli.installed} does not satisfy required range ` +
+        description.cli.range,
+    });
   }
   reportOutsideRange(project.path, project.portRange, candidate.enclosingRange, state.issues);
   return [project];
@@ -364,22 +383,32 @@ function reportOutsideRange(
   });
 }
 
-function reportOverlappingProjects(projects: DiscoveredProject[], issues: InventoryIssue[]): void {
-  const ranged = projects.filter(
-    (project): project is DiscoveredProject & { portRange: PortRange } =>
-      project.portRange !== undefined,
+function reportOverlappingClaims(
+  projects: DiscoveredProject[],
+  directoryClaims: ScopedPortClaim[],
+  issues: InventoryIssue[],
+): void {
+  const claims = [
+    ...directoryClaims,
+    ...projects.flatMap((project): ScopedPortClaim[] =>
+      project.portRange === undefined
+        ? []
+        : [{ scope: project.directory, path: project.path, portRange: project.portRange }],
+    ),
+  ].toSorted(
+    (left, right) => left.scope.localeCompare(right.scope) || left.path.localeCompare(right.path),
   );
-  for (let index = 0; index < ranged.length; ++index) {
-    const project = ranged[index];
+  for (let index = 0; index < claims.length; ++index) {
+    const claim = claims[index];
     for (let previous = 0; previous < index; ++previous) {
-      const other = ranged[previous];
-      if (!rangesOverlap(project.portRange, other.portRange)) continue;
+      const other = claims[previous];
+      if (claim.scope !== other.scope || !rangesOverlap(claim.portRange, other.portRange)) continue;
       issues.push({
-        path: project.path,
-        message: `port range ${formatRange(project.portRange)} overlaps ${other.name}`,
+        path: claim.path,
+        message: `port range ${formatRange(claim.portRange)} overlaps ${basename(other.path)}`,
         conflict: {
           left: { path: other.path, portRange: other.portRange },
-          right: { path: project.path, portRange: project.portRange },
+          right: { path: claim.path, portRange: claim.portRange },
         },
       });
     }

@@ -88,6 +88,7 @@ function parseTicketArgs(
     throw new CliError(`A ticket id cannot be combined with --side.\n\n${usage}`);
   if (values["new-cycle"] && values.next === undefined)
     throw new CliError(`--new-cycle requires --next.\n\n${usage}`);
+  if (values.next !== undefined) validateNextFilename(values.next);
   const resolution = resolveTicketId(ctx, positionals[0], values.side, values["dry-run"]);
   return {
     ...resolution,
@@ -97,6 +98,12 @@ function parseTicketArgs(
     dryRun: values["dry-run"],
     side: values.side,
   };
+}
+
+function validateNextFilename(filename: string): void {
+  if (filename.length === 0 || filename === "." || filename === ".." || /[\\/]/u.test(filename)) {
+    throw new CliError("--next must be a non-empty single path segment.");
+  }
 }
 
 interface TicketResolution {

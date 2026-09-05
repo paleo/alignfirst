@@ -604,7 +604,7 @@ Usage:
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode status <session-file>
   alcode usage
-  alcode projects (list | status <path> | init | free-ports --size <n>) [--root <path>]
+  alcode projects (list | doctor | status <path> | init | free-ports --size <n>) [--root <path>]
   alcode projects --guide [--root <path>]
   alcode --guide
   alcode --openclaw-guide

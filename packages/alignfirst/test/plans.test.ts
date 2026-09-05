@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readlinkSync,
   rmSync,
   symlinkSync,
@@ -77,6 +78,24 @@ describe("plans commands", () => {
     expect(symlink.code).toBe(1);
     expect(symlink.stderr).toContain("must resolve inside");
     expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
+  });
+
+  it("rejects reserved plans folders before migrating local plans", async () => {
+    const fixture = makeFixture();
+    const localPlan = join(fixture.product, ".plans", "78", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "78"), { recursive: true });
+    writeFileSync(localPlan, "spec\n");
+
+    for (const folder of [".git", "_archives"]) {
+      const result = await runMain(["plans", "setup", fixture.clone, "--folder", folder], {
+        cwd: fixture.product,
+      });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`Plans folder "${folder}" is reserved.`);
+    }
+
+    expect(readFileSync(localPlan, "utf8")).toBe("spec\n");
+    expect(lstatSync(join(fixture.product, ".plans")).isDirectory()).toBe(true);
   });
 
   it("synchronizes shared plans", async () => {
