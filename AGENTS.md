@@ -4,6 +4,8 @@
 
 Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
 
+In design discussions and investigations, systematically seek `alcode`'s opinion and ground conclusions in its findings.
+
 ## Tooling
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
