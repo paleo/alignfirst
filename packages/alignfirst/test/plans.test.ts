@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -56,6 +57,26 @@ describe("plans commands", () => {
         })
       ).code,
     ).toBe(0);
+  });
+
+  it("keeps the plans folder inside the clone", async () => {
+    const fixture = makeFixture();
+    const traversal = await runMain(["plans", "setup", fixture.clone, "--folder", "../escaped"], {
+      cwd: fixture.product,
+    });
+    expect(traversal.code).toBe(1);
+    expect(traversal.stderr).toContain("must be a single path segment");
+    expect(existsSync(join(fixture.root, "escaped"))).toBe(false);
+
+    const outside = join(fixture.root, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, join(fixture.clone, "escaped-link"), "dir");
+    const symlink = await runMain(["plans", "setup", fixture.clone, "--folder", "escaped-link"], {
+      cwd: fixture.product,
+    });
+    expect(symlink.code).toBe(1);
+    expect(symlink.stderr).toContain("must resolve inside");
+    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
   });
 
   it("synchronizes shared plans", async () => {

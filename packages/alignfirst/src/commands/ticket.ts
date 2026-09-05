@@ -46,7 +46,9 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
   if (parsed === undefined) return 0;
   const result = resolveTicket(ctx, parsed);
   const next =
-    parsed.next === undefined ? undefined : nextFileName(result.dir, parsed.next, parsed.newCycle);
+    parsed.next === undefined
+      ? undefined
+      : nextFileName(result.entries, parsed.next, parsed.newCycle);
   if (parsed.json)
     ctx.stdout.write(`${JSON.stringify(jsonReport(ctx, parsed, result, next), undefined, 2)}\n`);
   else ctx.stdout.write(renderReport(ctx, parsed, result, next));

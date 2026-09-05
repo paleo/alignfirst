@@ -88,9 +88,13 @@ function readEntries(dir: string): Dirent[] {
   }
 }
 
-export function nextFileName(dir: string, filename: string, newCycle: boolean): string {
-  const prefixes = readEntries(dir).flatMap((entry) => {
-    const match = FILE_PREFIX.exec(entry.name);
+export function nextFileName(
+  entries: readonly string[],
+  filename: string,
+  newCycle: boolean,
+): string {
+  const prefixes = entries.flatMap((entry) => {
+    const match = FILE_PREFIX.exec(entry);
     return match ? [{ cycle: match[1], number: Number(match[2]) }] : [];
   });
   if (prefixes.length === 0) return `A1-${filename}`;

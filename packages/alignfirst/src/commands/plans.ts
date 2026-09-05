@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CliError } from "../cli-error.js";
@@ -47,10 +47,28 @@ function runSetup(ctx: CommandContext, args: string[]): number {
   assertMainWorktreeRoot(ctx.cwd);
   const cloneDir = resolve(ctx.cwd, parsed.dir);
   checkClone(ctx, cloneDir);
-  const projectDir = join(cloneDir, parsed.folder);
-  mkdirSync(projectDir, { recursive: true });
+  const projectDir = createPlansDirectory(cloneDir, parsed.folder);
   linkPlans(ctx, projectDir);
   return 0;
+}
+
+function createPlansDirectory(cloneDir: string, folder: string): string {
+  if (folder.length === 0 || folder === "." || folder === ".." || /[\\/]/u.test(folder)) {
+    throw new CliError(`Plans folder "${folder}" must be a single path segment.`);
+  }
+  const cloneRoot = realpathSync(cloneDir);
+  const projectDir = join(cloneRoot, folder);
+  mkdirSync(projectDir, { recursive: true });
+  const relativeTarget = relative(cloneRoot, realpathSync(projectDir));
+  if (
+    relativeTarget === "" ||
+    relativeTarget === ".." ||
+    relativeTarget.startsWith(`..${sep}`) ||
+    isAbsolute(relativeTarget)
+  ) {
+    throw new CliError(`Plans folder "${folder}" must resolve inside ${cloneRoot}.`);
+  }
+  return projectDir;
 }
 
 interface SetupOptions {

@@ -41,6 +41,21 @@ describe("ticket command", () => {
     expect(existsSync(join(cwd, ".plans", "79"))).toBe(false);
   });
 
+  it("computes a dry-run filename from archived entries", async () => {
+    const cwd = makeProject();
+    const archive = join(cwd, ".plans", "_archives", "99");
+    mkdirSync(archive, { recursive: true });
+    writeFileSync(join(archive, "C4-plan.md"), "plan");
+
+    const result = await runMain(["ticket", "99", "--next", "AAD.summary.md", "--dry-run"], {
+      cwd,
+    });
+
+    expect(result.stdout).toContain("Next file: .plans/99/C5-AAD.summary.md");
+    expect(existsSync(join(cwd, ".plans", "99"))).toBe(false);
+    expect(existsSync(archive)).toBe(true);
+  });
+
   it("reserves side tickets across active and archived entries, including an EEXIST race", async () => {
     const cwd = makeProject();
     mkdirSync(join(cwd, ".plans", "_archives", "side-2"), { recursive: true });
