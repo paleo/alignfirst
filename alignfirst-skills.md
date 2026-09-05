@@ -23,7 +23,7 @@ The skills are stubs that run `npx -y alignfirst guide`. Protocol updates come w
 
 ### Configure your project (optional)
 
-This adds `.plans` to `.gitignore` and an AlignFirst section to your `AGENTS.md` (or `CLAUDE.md`). Install the setup-guide skill temporarily:
+The guide adds `.plans` to `.gitignore`, the AlignFirst bootstrap line to `AGENTS.md` or `CLAUDE.md`, and an optional `.alignfirst.json`. Install the setup-guide skill temporarily:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide

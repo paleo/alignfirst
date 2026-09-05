@@ -127,7 +127,7 @@ function patchFixture(dst, name, basePort) {
 
   const config = {
     schemaVersion: 1,
-    ticketPattern: "^ABC-\\d+$",
+    ticketIdPattern: "^ABC-\\d+$",
     portRange: { first: basePort, last: basePort + 19 },
   };
   writeFileSync(`${dst}/.alignfirst.json`, `${JSON.stringify(config, null, 2)}\n`);

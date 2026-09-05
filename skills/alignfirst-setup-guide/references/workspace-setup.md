@@ -195,6 +195,9 @@ The system only works if agents know about it. The CLI self-documents via `works
   Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
   ```
 
+  Skip this line when the instruction file runs `alignfirst conventions` or `alignfirst context`;
+  those commands render the exclusions.
+
 On a project prepared for an AlignFirst Developer, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
 
 ### Project-specific facts the guide can't know
@@ -264,6 +267,6 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
-- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts.
+- [ ] **Wire agents** — a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts. Add the search-ignore line unless the instruction file runs `alignfirst conventions` or `alignfirst context`.
 - [ ] **Meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. On a managed project, also run `setup --profile remote` on the main worktree (gateway variant: with `REMOTE_DEV_DOMAIN` set to a placeholder domain), check the rewritten URLs there and in a new linked worktree, then restore the main files. A wrapper that merely loads proves nothing.

@@ -1,6 +1,8 @@
 # Repository Guidelines
 
-Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
+## AlignFirst
+
+Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
 
 ## Tooling
 
@@ -31,27 +33,11 @@ This repository is on *GitHub*.
 - `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
 - `@paleo/workspace` — run multiple git-worktree dev environments side by side
 
-## Docmap - Seek Documentation
-
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
-
 ## Workspaces
 
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
 
 Run `npm run workspace -- --guide` for the full procedures.
-
-## AlignFirst - Commit Message, Branch Name
-
-Commit message convention: we use conventional commit, e.g., `feat: add new feature`. Do not mention the ticket ID. Do not add a "Co-Authored-By:" line.
-
-Branch naming convention: `<ticket-id>/<1-3-words>`.
-
-### Team Plans Repository
-
-In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.
-
-After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
 
 ## Skills to read before editing
 

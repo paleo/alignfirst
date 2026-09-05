@@ -24,16 +24,19 @@ worktree's symlink.
 A contributor without access to the plans repository uses a plain `.plans` directory. The CLI
 accepts both modes. Run `alignfirst plans check` to report the current mode.
 
-`alignfirst sync --auto-archive` publishes changes and archives stale ticket directories and
-no-ticket session files under `_archives/`. `ALIGNFIRST_ARCHIVE_DAYS` sets the threshold in days and
-defaults to `7`.
+`alignfirst sync` publishes changes. Set `plans.autoArchive` to `true` in `.alignfirst.json` to archive
+stale ticket directories and no-ticket session files under `_archives/` on every synchronization.
+`ALIGNFIRST_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`.
 
 ## Configure the Project
 
-Set the project folder during the initial setup:
+Write the project folder into `.alignfirst.json`:
 
-```sh
-alignfirst setup --plans-folder project-a
+```json
+{
+  "schemaVersion": 1,
+  "plans": { "folder": "project-a", "autoArchive": true }
+}
 ```
 
 When `.alignfirst.json` already exists without `plans.folder`, supply the folder once while linking:
@@ -42,7 +45,8 @@ When `.alignfirst.json` already exists without `plans.folder`, supply the folder
 alignfirst plans setup <plans-clone-path> --folder project-a
 ```
 
-Ensure the instruction file says:
+With the `alignfirst conventions` or `alignfirst context` bootstrap line, the CLI delivers the sync
+instruction. Otherwise, ensure the instruction file says:
 
 > After every change in `.plans/`, run `alignfirst sync`.
 
@@ -56,7 +60,7 @@ Clone the plans repository with the developer's own credentials. From the projec
 ```sh
 git clone <plans-repository-url> ../myteam-plans
 alignfirst plans setup ../myteam-plans
-alignfirst sync --auto-archive
+alignfirst sync
 ```
 
 `alignfirst plans setup` creates the configured project folder in the clone, migrates an existing

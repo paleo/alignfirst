@@ -7,7 +7,7 @@ compatibility: Requires git and a Node.js package manager (npm, pnpm, yarn, or b
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.33.0"
+  version: "0.34.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -17,8 +17,8 @@ Route by the user's intent. Load only the references needed for that route.
 
 ## Terminology
 
-The **AlignFirst CLI** is the `alignfirst` npm package and bin. It serves the protocols through
-`alignfirst guide` and provides `ticket`, `sync`, `plans`, `docmap`, `config`, `setup`, and `doctor`.
+The **AlignFirst CLI** is the `alignfirst` npm package and bin. It provides `guide`, `ticket`, `sync`,
+`plans`, `docmap`, `conventions`, `context`, `config`, and `doctor`.
 
 The **AlignFirst skills** are eight stubs that run the CLI: `alignfirst`, `alspec`, `alplan`, `al`,
 `almerge`, `alreview`, `aldescription`, and `alcatchup`. The seven command skills keep
@@ -51,8 +51,8 @@ When the user asks what the project could adopt, inspect the repository and pres
 choices:
 
 - **AlignFirst** installs the CLI and the eight skills for collaborative specification, planning,
-  implementation, merge, review, description, and catch-up workflows. `alignfirst setup` performs
-  the mechanical project changes. A team plans repository is an optional sub-choice.
+  implementation, merge, review, description, and catch-up workflows. A team plans repository is an
+  optional sub-choice.
 - **docmap** makes the repository's `docs/` tree discoverable to agents and humans. It is available
   through the AlignFirst CLI or as the standalone `@paleo/docmap` package.
 - **workspace** creates isolated git-worktree development environments.
@@ -74,8 +74,9 @@ AlignFirst Developer builds and deploys the teammate itself.
 
 Inspect the repository before changing it. A prepared project has all of these:
 
-1. The AlignFirst CLI as a prerequisite in `README.md`, `.alignfirst.json` as its project config,
-   the eight skills, and their project-specific `AGENTS.md` or `CLAUDE.md` section.
+1. The AlignFirst CLI as a prerequisite in `README.md`, the eight skills, and a bootstrap line in
+   `AGENTS.md` or `CLAUDE.md`. `.alignfirst.json` is required for an AlignFirst Developer project and
+   optional otherwise.
 2. The team plans repository through `alignfirst plans setup` when the team has one.
 3. docmap, including project scripts or CLI instructions. When the repository has no `docs/`
    directory, bootstrap its documentation through
@@ -88,9 +89,6 @@ Inspect the repository before changing it. A prepared project has all of these:
 Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
 directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
 repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`.
-
-Every AlignFirst route uses `alignfirst setup` for its mechanical changes. The guide supplies the
-project-specific judgment and prose.
 
 ## Create an AlignFirst Developer
 
@@ -111,8 +109,9 @@ Detect existing footprints before proposing changes:
 
 - docmap: a `docmap` script, `@paleo/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
 - workspace: a `workspace` script or `@paleo/workspace`.
-- AlignFirst: `.alignfirst.json`, an AlignFirst CLI prerequisite in `README.md`, `.plans/`, an
-  AlignFirst instruction section, or a canonical skill installation.
+- AlignFirst: `.alignfirst.json`, an AlignFirst CLI prerequisite in `README.md`, `.plans/`, a
+  bootstrap line running `alignfirst conventions` or `alignfirst context`, an AlignFirst instruction
+  section, or a canonical skill installation.
 - team plans: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.
 - AlignFirst Developer preparation: the complete five-part contract above.
 

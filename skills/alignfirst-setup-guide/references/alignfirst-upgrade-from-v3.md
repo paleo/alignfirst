@@ -29,23 +29,27 @@ npm pkg delete scripts.plans:setup scripts.plans:sync
 ## Create the Project Config
 
 Detect the ticket pattern from the repository's branch and ticket conventions. Issue-number tickets
-use `^\d+$`; Jira-like keys use `^[A-Z]+-\d+$`; omit the option when there is no convention.
+use `^\d+$`; Jira-like keys use `^[A-Z]+-\d+$`; omit the field when there is no convention.
 
-If the old `plans:setup` script named a folder, preserve it with `--plans-folder`:
+Write `.alignfirst.json` by hand. Preserve the folder named by the old `plans:setup` script:
 
-```sh
-alignfirst setup --ticket-pattern '<regex>' [--plans-folder <old-folder>]
+```json
+{
+  "schemaVersion": 1,
+  "ticketIdPattern": "<regex>",
+  "plans": { "folder": "<old-folder>" },
+  "git": { "defaultBranch": "<detected-default-branch>" }
+}
 ```
 
-Include `--port-range <first>-<last>` when the workspace wrapper declares a port scheme. The command
-writes `.alignfirst.json`, keeps `.plans`, updates the README prerequisite, and installs the stubs.
+Add `portRange` when the workspace wrapper declares a port scheme. Keep `.plans`, update the README
+prerequisite, and install the stubs.
 
 ## Replace Project Commands
 
-In `AGENTS.md` or `CLAUDE.md`:
-
-- Replace `npm run plans:sync` with `alignfirst sync`.
-- Replace `npm run docmap` with `alignfirst docmap` when the project adopts docmap through the CLI.
+Replace the AlignFirst section in `AGENTS.md` or `CLAUDE.md` with the bootstrap line from
+`alignfirst-skills-setup.md`. Use `alignfirst context` when the project adopts docmap through the CLI;
+this also replaces the `npm run docmap` instruction.
 
 In `workspace.mjs`, replace the main-worktree plans check with:
 
@@ -73,5 +77,6 @@ Use `--project` instead of `--global` for a project-local installation. Finish b
 effective project:
 
 ```sh
+alignfirst config
 alignfirst doctor
 ```

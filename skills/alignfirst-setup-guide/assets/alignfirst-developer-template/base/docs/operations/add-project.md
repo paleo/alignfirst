@@ -61,17 +61,7 @@ alcode projects free-ports --root ~/projects --size <size>
 '
 ```
 
-Use the returned first and last ports while preparing the clone:
-
-```sh
-sudo -H -u {{SERVICE_USER}} bash -lc '
-cd ~/projects/<repo>
-alignfirst setup --port-range <first>-<last> <other-setup-options>
-'
-```
-
-When setup already created `.alignfirst.json`, edit its `portRange` to the returned block. The
-workspace kernel checks the claim against its port scheme on every command. Confirm discovery:
+Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command. Confirm discovery:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'

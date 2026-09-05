@@ -9,7 +9,7 @@
     "docmap": "alignfirst docmap",
     "workspace": "node scripts/workspace.mjs",
     "plans:setup": "alignfirst plans setup",
-    "plans:sync": "alignfirst sync --auto-archive",
+    "plans:sync": "alignfirst sync",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "build": "npm run build --workspace @paleo/docmap && npm run build --workspaces --if-present",

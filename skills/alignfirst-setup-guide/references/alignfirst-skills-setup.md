@@ -59,44 +59,77 @@ with `npx -y skills remove [--global] <skill-name> --yes`. Let the skills CLI ma
 
 ## Configure the Project
 
-1. Detect the ticket pattern from the branch and ticket conventions already visible in the
-   repository:
+Choose with the user between the following equal configurations. Both create `.plans/` and add it to
+`.gitignore`:
 
-   - Issue numbers use `^\d+$`.
-   - Jira-like keys use `^[A-Z]+-\d+$`.
-   - Omit the pattern when the repository has no ticket convention.
+```sh
+mkdir .plans
+printf '%s\n' .plans >> .gitignore
+```
 
-2. Run setup from the project root. Include only the applicable options:
+### Without `.alignfirst.json`
 
-   ```sh
-   alignfirst setup --ticket-pattern '<regex>' [--plans-folder <name>] [--port-range <first>-<last>]
-   ```
+Detect the commit-message convention, default branch, and ticket format. Preserve project-specific
+instructions and add or update this section in `AGENTS.md` or `CLAUDE.md`:
 
-   The command writes `.alignfirst.json` with the compatible `cli` range, creates `.plans/`, updates
-   `.gitignore`, installs the skills, and adds the README prerequisite. A second run validates the
-   existing setup instead of rewriting it.
+```markdown
+## AlignFirst
 
-3. Detect the commit-message convention from `git log --oneline -20` and the default branch from
-   the remote HEAD. Preserve repository-specific instructions and add or update this section in
-   `AGENTS.md` or `CLAUDE.md`:
+_Commit message convention:_ `{DETECTED_CONVENTION}`
 
-   ```markdown
-   ## AlignFirst - Commit Message and Default Branch
+_Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
 
-   _Commit message convention:_ `{DETECTED_CONVENTION}`
+_Ticket ID format:_ `{DETECTED_TICKET_FORMAT}`
+```
 
-   _Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
-   ```
+Omit any convention that repository evidence cannot establish. When the project uses a team plans
+repository, add: After every change in `.plans/`, run `alignfirst sync`.
 
-   Omit a convention line when repository evidence cannot establish it. When the project uses a
-   team plans repository, add this sentence under the same section:
+### With `.alignfirst.json`
 
-   > After every change in `.plans/`, run `alignfirst sync`.
+Detect the ticket format from branches and tickets: `^\d+$` for issue numbers,
+`^[A-Z]+-\d+$` for Jira-like keys, or no field without a convention. Detect the commit style with
+`git log --oneline -20`. Resolve the default branch with
+`git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user
+when several non-`origin` remotes exist.
 
-4. Continue with [plans-setup.md](plans-setup.md) when the team has a plans repository.
+Write `.alignfirst.json` with the agreed fields. Never add `cli`:
 
-5. Run the final check:
+```json
+{
+  "schemaVersion": 1,
+  "ticketIdPattern": "^\\d+$",
+  "plans": { "folder": "acme-web", "autoArchive": true },
+  "portRange": { "first": 8100, "last": 8299 },
+  "git": {
+    "defaultBranch": "main",
+    "branchNameTemplate": "{ticketId}/{slug-1-3-words}",
+    "commit": { "style": "conventionalCommit", "ticketReference": "bracketedHash" },
+    "agentCoauthoring": false
+  }
+}
+```
 
-   ```sh
-   alignfirst doctor
-   ```
+Keep only applicable optional fields. Replace any hand-written AlignFirst or docmap section in
+`AGENTS.md` or `CLAUDE.md` with one bootstrap line. Use `alignfirst context` when the project uses
+docmap and `alignfirst conventions` otherwise:
+
+```markdown
+## AlignFirst
+
+Before inspecting or changing this repository, run `alignfirst context` once from the repository root and follow its output.
+```
+
+### Local installation
+
+Use this only when the user requests a project-local CLI. Add the exact current `alignfirst` version
+as a dev dependency with the project package manager and install dependencies before invoking it.
+Write `npx alignfirst context` or `npx alignfirst conventions` in the instruction file and local skill
+stubs. A global installation is the default. No npm script is required.
+
+Continue with [plans-setup.md](plans-setup.md) when the team has a plans repository. Finish with:
+
+```sh
+alignfirst config
+alignfirst doctor
+```

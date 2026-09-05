@@ -9,12 +9,13 @@ Use this form when the project already requires the AlignFirst CLI. It adds no p
 1. Add `npm install -g alignfirst` to the README prerequisites.
 2. Ensure `docs/` exists. When preparing a project for an AlignFirst Developer, populate a newly
    created directory through [docmap-bootstrapping.md](docmap-bootstrapping.md).
-3. Add this section to `AGENTS.md` or `CLAUDE.md`:
+3. Remove any existing docmap section and add the AlignFirst bootstrap to `AGENTS.md` or
+   `CLAUDE.md`:
 
    ```markdown
-   ## Docmap - Seek Documentation
+   ## AlignFirst
 
-   *Before* any investigation or code exploration, run `alignfirst docmap`, then read the relevant documentation. Mandatory for every task.
+   Before inspecting or changing this repository, run `alignfirst context` once from the repository root and follow its output.
    ```
 
 4. Read the authoring guide with `alignfirst docmap --guide`.
