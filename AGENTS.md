@@ -25,7 +25,8 @@ This repository is on *GitHub*.
 ## Packages
 
 - `alignfirst` — the AlignFirst CLI: protocols, plans and docs
-- `@paleo/alcode` — coding agent wrapper and project discovery for the AlignFirst Developer
+- `@paleo/alcode` — coding agent wrapper for the AlignFirst Developer
+- `@paleo/alproject` — project inventory and port allocation for the AlignFirst Developer host
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans
 - `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios

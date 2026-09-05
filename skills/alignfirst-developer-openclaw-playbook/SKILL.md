@@ -31,14 +31,14 @@ One caveat everywhere: only the message that **ends your turn** is guaranteed to
 
 ## Projects
 
-`alcode projects list --json --root ~/projects` is the authoritative project inventory. Keep these values distinct:
+`alproject list --json --root ~/projects` is the authoritative project inventory. Keep these values distinct:
 
 - **PROJECT** — the main-worktree directory name shown to the user.
 - **PROJECT_PATH** — the canonical absolute main-worktree path returned by the inventory.
 
 PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace tooling, and lifecycle delegation. After workspace setup, use the returned linked-worktree path for branch work and `alcode`. Linked worktrees may live under any configured project parent.
 
-Channel/DM: obtain PROJECT and PROJECT_PATH from `alcode projects list --json --root ~/projects`, following the channel procedure. Never rely on memorized names.
+Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list --json --root ~/projects`, following the channel procedure. Never rely on memorized names.
 
 Thread: recover the values the starter recorded via `message action: "read"`. It always carries the task and may carry one or more projects, canonical paths, a ticket, and the full request. Resolve deferred values through the working-session procedure. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
 

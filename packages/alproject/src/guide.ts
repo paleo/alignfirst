@@ -1,14 +1,18 @@
+import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { readTemplate } from "../guide.js";
 import type { ProjectInventory, ProjectsDirectory } from "./discovery.js";
 import type { PortRange } from "./markers.js";
 
 export function renderProjectsGuide(inventory?: ProjectInventory): string {
-  const guide = readTemplate("projects-guide.md").trimEnd();
+  const guide = readTemplate("guide.md").trimEnd();
   if (inventory === undefined) return guide;
   const sections = inventory.directories.map((directory) => renderDirectory(inventory, directory));
   return `${guide}\n\n${sections.join("\n\n")}`;
+}
+
+function readTemplate(name: string): string {
+  return readFileSync(new URL(`../templates/${name}`, import.meta.url), "utf-8");
 }
 
 function renderDirectory(inventory: ProjectInventory, directory: ProjectsDirectory): string {

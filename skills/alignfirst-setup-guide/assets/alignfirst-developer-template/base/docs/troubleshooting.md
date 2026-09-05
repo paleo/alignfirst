@@ -22,8 +22,8 @@ Run `secrets audit` from a login shell, as above: the file provider resolves fro
 ## Project routing
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --json --root ~/projects'
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects status <repo> --json --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --json --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject status <repo> --json --root ~/projects'
 ```
 
 A project absent from the listing has no `.alignfirst.json` or sits outside a marked projects directory. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project-breaks-its-workspace-registry).

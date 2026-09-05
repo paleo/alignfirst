@@ -21,7 +21,7 @@ const OFF_PROJECTS_CHAT_PROMPT =
   '"happy to help") with no concrete work content.';
 
 // The lookup contract is outcome-based: a message with no possible project
-// reference needs no `alcode projects list`, so this scenario asserts only what the
+// reference needs no `alproject list`, so this scenario asserts only what the
 // user can observe — social-only replies, no thread, no coding-agent call. The
 // mock stays installed to serve a lookup if one happens; either count is fine.
 // The lookup-when-it-matters case is A20-ambiguous-project-mention.

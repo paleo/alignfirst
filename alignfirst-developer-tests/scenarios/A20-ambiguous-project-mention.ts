@@ -13,7 +13,7 @@ const PROJECT = "orion";
  * A casual message naming a listed project with no work framing. The
  * off-projects contract exempts only messages with no possible project
  * reference, and "orion" is exactly the word the bot cannot classify from
- * memory: it must consult `alcode projects list --json`, recognize the project, and open a
+ * memory: it must consult `alproject list --json`, recognize the project, and open a
  * thread whose starter carries the canonical path. Misclassifying the message
  * as small talk is the failure this scenario exists to catch.
  */

@@ -66,7 +66,7 @@ Follow [configure-developer.md](configure-developer.md) to re-seed through a con
 ```sh
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
 ```
 
 Finish with [08-coding-agent.md § Verification](../installations/08-coding-agent.md#verification) and the smoke test of [07-channel.md](../installations/07-channel.md) before reopening the channel to users.

@@ -27,13 +27,9 @@ alcode new --message "Execute the plan: .plans/AB-123/A2-plan.md"
 alcode new --protocol aad --no-ticket --message "Task description"
 alcode status .plans/AB-123/_alcode/20260829-135529.md
 alcode usage
-alcode projects list --root ~/projects
-alcode projects doctor --root ~/projects
 ```
 
 See `alcode --help` for all commands and options.
-
-Run `alcode projects --guide` before project lifecycle work.
 
 A new protocol session needs a ticket. `--no-ticket` makes `alcode` reserve the next side ticket through `alignfirst ticket --side` and pass it to the agent.
 

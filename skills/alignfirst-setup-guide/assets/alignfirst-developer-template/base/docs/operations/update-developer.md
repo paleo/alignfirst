@@ -1,7 +1,7 @@
 ---
 title: Update the Developer
 read_when:
-  - upgrading OpenClaw, the coding agent, alignfirst, alcode, ctx7 or the skills
+  - upgrading OpenClaw, the coding agent, alignfirst, alcode, alproject, ctx7 or the skills
 ---
 
 # Update the Developer
@@ -37,7 +37,7 @@ The prefix is root-owned and immutable ([06](../installations/06-security-harden
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance packages -- bash -lc '
 openclaw update --yes --no-restart --accept-capabilities
-/usr/bin/npm install -g alignfirst@latest @paleo/alcode@latest ctx7@latest
+/usr/bin/npm install -g alignfirst@latest @paleo/alcode@latest @paleo/alproject@latest ctx7@latest
 '
 ```
 
@@ -47,10 +47,10 @@ Update the coding agent through its package-scoped command: [08-coding-agent.md 
 
 `openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts, and the migration step below finishes what the lock interrupted.
 
-Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `alignfirst`, `@paleo/alcode`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
+Verify — the listing must show exactly six packages (`openclaw`, the coding agent, `alignfirst`, `@paleo/alcode`, `@paleo/alproject`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && alcode --help >/dev/null && echo alcode-ok && ctx7 --version && npm ls -g --depth=0'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && alcode --help >/dev/null && echo alcode-ok && alproject --version && ctx7 --version && npm ls -g --depth=0'
 ```
 
 ## Skills
@@ -85,7 +85,7 @@ Reinstall the repository-managed projects marker:
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance projects -- bash -lc '
 install -m 644 ~/seed/projects/.alignfirst-projects.json ~/projects/.alignfirst-projects.json
-alcode projects list --root ~/projects
+alproject list --root ~/projects
 '
 ```
 

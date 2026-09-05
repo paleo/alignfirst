@@ -162,7 +162,7 @@ After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode --guide | head'      # names codex as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode projects --guide --root ~/projects >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide --root ~/projects >/dev/null && echo projects-ok'
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 11 skills: 4 shared, 7 commands
 ```
 

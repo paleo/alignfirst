@@ -6,7 +6,6 @@ alcode new --message "..."
 alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
 alcode status <session-file>
 alcode usage
-alcode projects <subcommand>
 ```
 
 | Command | Description |
@@ -15,7 +14,6 @@ alcode projects <subcommand>
 | `resume <sessionId>` | Continue an existing session. |
 | `status <session-file>` | Reconcile and show one run's durable status. The path must be under `.plans/**/_alcode/`. Does not start a coding agent. |
 | `usage` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
-| `projects` | Discover and manage the projects of a projects directory; run `alcode projects --guide` before project lifecycle work. |
 
 | Option | Description |
 |--------|-------------|

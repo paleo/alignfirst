@@ -11,7 +11,7 @@ read_when:
 clone uses the service account's git access from `03`.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects --guide --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject --guide --root ~/projects'
 ```
 
 ## Clone and prepare
@@ -57,7 +57,7 @@ A portless project needs no claim. For a wrapper with ports, calculate
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
-alcode projects free-ports --root ~/projects --size <size>
+alproject free-ports --root ~/projects --size <size>
 '
 ```
 
@@ -68,7 +68,7 @@ Record the returned first and last ports as `portRange` in `.alignfirst.json` wh
 After writing `.alignfirst.json` and before workspace setup, run the read-only inventory gate:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects doctor --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject doctor --root ~/projects'
 ```
 
 Stop when it reports an error. Resolve every configuration, discovery, and port conflict first.
@@ -96,7 +96,7 @@ Bring the dev server up, probe the URL it prints, bring it down, then inspect th
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- down'
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects status <repo> --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject status <repo> --root ~/projects'
 ```
 
 ## Remove
@@ -107,5 +107,5 @@ next listing no longer shows it:
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- remove <workspace>'
 sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
 ```

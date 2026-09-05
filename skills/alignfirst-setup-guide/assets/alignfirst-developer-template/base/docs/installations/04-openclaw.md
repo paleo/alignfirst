@@ -123,7 +123,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/projects'
 sudo install -m 644 -o root -g root \
   /home/{{SERVICE_USER}}/seed/projects/.alignfirst-projects.json \
   /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-sudo -H -u {{SERVICE_USER}} bash -lc 'alcode projects list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
 ```
 
 Projects come later through [add-project.md](../operations/add-project.md).

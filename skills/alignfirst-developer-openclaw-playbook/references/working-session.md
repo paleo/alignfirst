@@ -99,7 +99,7 @@ Skip this capture workflow for a multi-project request with no main project and 
 
 ### Multi-project and operational work
 
-Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alcode projects list --json --root ~/projects` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alproject list --json --root ~/projects` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 
 ### What you delegate vs do
 

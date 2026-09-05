@@ -1,0 +1,50 @@
+{
+  "name": "@paleo/alproject",
+  "version": "1.1.0",
+  "license": "CC0-1.0",
+  "author": "Thomas MUR",
+  "description": "Discover the projects of an AlignFirst Developer host and allocate their port ranges.",
+  "keywords": [
+    "alignfirst",
+    "cli",
+    "git",
+    "projects",
+    "worktrees"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/alproject"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.19.0",
+  "type": "module",
+  "bin": {
+    "alproject": "bin/alproject.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "arktype": "^2.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "~24.13.3",
+    "rimraf": "~6.1.3",
+    "typescript": "~7.0.2",
+    "vitest": "~4.1.11"
+  }
+}

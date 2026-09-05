@@ -22,11 +22,12 @@ RUN apk add --no-cache git curl && \
 
 # PATH wrappers for the real CLIs. `/opt/alignfirst` is the read-only monorepo root
 # mount, so @paleo/docmap, arktype, and semver resolve through its root node_modules.
-# `alcode projects` spawns `alignfirst`. The mocked coding agent never runs the stub
+# `alproject` spawns `alignfirst`. The mocked coding agent never runs the stub
 # skills, so no `npx -y alignfirst` resolution is needed.
 RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
     printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alignfirst/bin/alignfirst.mjs "$@"\n' > /usr/local/bin/alignfirst && \
-    chmod +x /usr/local/bin/alcode /usr/local/bin/alignfirst
+    printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alproject/bin/alproject.mjs "$@"\n' > /usr/local/bin/alproject && \
+    chmod +x /usr/local/bin/alcode /usr/local/bin/alignfirst /usr/local/bin/alproject
 
 # PATH wrapper for the `openclaw` CLI. OpenClaw is only a local npm dependency
 # of /opt/openclaw-test/src (nothing puts its node_modules/.bin on the exec

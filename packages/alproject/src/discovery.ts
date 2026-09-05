@@ -1,7 +1,7 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { runAlignfirst } from "../alignfirst-cli.js";
+import { runAlignfirst } from "./alignfirst-cli.js";
 import { type PortRange, type ProjectsMarker, readMarker } from "./markers.js";
 import { containsRange, rangesOverlap } from "./ports.js";
 

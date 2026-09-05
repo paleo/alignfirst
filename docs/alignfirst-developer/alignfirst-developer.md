@@ -17,12 +17,12 @@ deployment, use the
    skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
    `channel-handling.md`. Its references own working sessions, channel handling, the `runbooks/`
    directory for project workspace setup and project lifecycle, and the `message` tool per surface.
-   Project discovery comes from `alcode projects --guide`; the delegation procedure comes from
+   Project discovery comes from `alproject --guide`; the delegation procedure comes from
    `alcode --openclaw-guide` only when delegation starts.
 3. **Regression-test harness** —
    [`alignfirst-developer-tests/`](../../alignfirst-developer-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
-   It bind-mounts the workspace, playbook skill, and monorepo root into the gateway, so `alcode` and `alignfirst` run from the checkout.
+   It bind-mounts the workspace, playbook skill, and monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout.
    The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
@@ -41,7 +41,7 @@ Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 
 
 ## The channel session only bootstraps a thread
 
-A channel/DM session runs `alcode projects list --json` before routing a message that may refer to a project. It resolves listed projects only, then records the known project paths, ticket, one-line task, and the full text of a detailed request. It opens a thread and ends the turn. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing project paths stay unresolved until the user selects a usable canonical path. The channel session never sets up a workspace, delegates to `alcode`, inspects a codebase, or reports a status — the thread session does all of that, whatever the user asked for and however explicit their green light was.
+A channel/DM session runs `alproject list --json` before routing a message that may refer to a project. It resolves listed projects only, then records the known project paths, ticket, one-line task, and the full text of a detailed request. It opens a thread and ends the turn. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing project paths stay unresolved until the user selects a usable canonical path. The channel session never sets up a workspace, delegates to `alcode`, inspects a codebase, or reports a status — the thread session does all of that, whatever the user asked for and however explicit their green light was.
 
 The cost is one round-trip: a thread session activates on the user's next message in that thread, so the starter ends by bringing the user back. It asks only for a value the channel can establish is required; otherwise it states that the next message launches the working session. Project creation and repository onboarding are the exceptions to the path requirement: the lifecycle procedure establishes the new canonical path. The gain is that everything substantive runs in a session whose plain text auto-streams to the right surface. The previous contract had the channel session finish the setup in-turn, which forced every post through `message`+`threadId` and made a leak to the channel root the standard failure (`alignfirst-developer-tests/artifacts/2026-07-15T10-31-39-655Z/`).
 

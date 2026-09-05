@@ -6,11 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { main, parseAlcodeArgs } from "../src/cli.js";
+import { main } from "../src/cli.js";
 
 const ALIGNFIRST_BIN = fileURLToPath(
   new URL("../../alignfirst/bin/alignfirst.mjs", import.meta.url),
 );
+const PACKAGE_JSON = fileURLToPath(new URL("../package.json", import.meta.url));
 
 let gitConfigDir: string;
 let gitConfigPath: string;
@@ -18,7 +19,7 @@ let originalGitConfig: string | undefined;
 const fixtureDirs: string[] = [];
 
 beforeAll(() => {
-  gitConfigDir = mkdtempSync(join(tmpdir(), "alcode-projects-git-"));
+  gitConfigDir = mkdtempSync(join(tmpdir(), "alproject-git-"));
   gitConfigPath = join(gitConfigDir, "gitconfig");
   writeFileSync(gitConfigPath, "");
   originalGitConfig = process.env.GIT_CONFIG_GLOBAL;
@@ -36,16 +37,21 @@ afterAll(() => {
 });
 
 describe("projects command surface", () => {
-  it("dispatches tokens unchanged and renders help without a coding-agent selection", async () => {
-    expect(parseAlcodeArgs(["node", "alcode", "projects", "list", "--json"])).toEqual({
-      kind: "projects",
-      tokens: ["list", "--json"],
-    });
+  it("renders help without a coding-agent selection", async () => {
     const fixture = makeFixture();
     const result = await runProjects(fixture, ["--help"], { env: {} });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("alcode projects doctor [--root <path>]");
-    expect(result.stdout).toContain("alcode projects free-ports --size <n>");
+    expect(result.stdout).toContain("alproject doctor [--root <path>]");
+    expect(result.stdout).toContain("alproject free-ports --size <n>");
+  });
+
+  it("prints the package version", async () => {
+    const fixture = makeFixture();
+    const result = await runProjects(fixture, ["--version"], { env: {} });
+    expect(result.code).toBe(0);
+    expect(readJson(PACKAGE_JSON)).toEqual(
+      expect.objectContaining({ version: result.stdout.trim() }),
+    );
   });
 
   it("requires a marker and expands --root ~/ against the injected home", async () => {
@@ -55,7 +61,7 @@ describe("projects command surface", () => {
     const result = await runProjects(fixture, ["list", "--root", "~/projects"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(".alignfirst-projects.json is missing");
-    expect(result.stderr).toContain("alcode projects init");
+    expect(result.stderr).toContain("alproject init");
     expect(result.stderr).toContain("--root <path>");
   });
 
@@ -65,7 +71,7 @@ describe("projects command surface", () => {
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("# `alcode projects` guide");
+    expect(result.stdout).toContain("# alproject guide");
     expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
   });
 
@@ -439,7 +445,7 @@ interface RunOverrides {
 }
 
 function makeFixture(marker?: object): Fixture {
-  const base = mkdtempSync(join(tmpdir(), "alcode-projects-"));
+  const base = mkdtempSync(join(tmpdir(), "alproject-"));
   fixtureDirs.push(base);
   const root = join(base, "projects");
   const home = join(base, "home");
@@ -457,10 +463,9 @@ async function runProjects(
   const stdout = makeSink();
   const stderr = makeSink();
   const env = { ...process.env };
-  delete env.ALIGNFIRST_CODE_AGENT;
   Object.assign(env, overrides.env);
   const code = await main({
-    argv: ["node", "alcode", "projects", ...args],
+    argv: ["node", "alproject", ...args],
     cwd: overrides.cwd ?? fixture.root,
     home: overrides.home ?? fixture.home,
     env: { ...env, GIT_CONFIG_GLOBAL: gitConfigPath },

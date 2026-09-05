@@ -1,8 +1,9 @@
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import type { RunOutput } from "../run-agent.js";
+import { DEFAULT_ALIGNFIRST_COMMAND } from "./alignfirst-cli.js";
 import { buildInventory, type ProjectInventory } from "./discovery.js";
 import { renderProjectsGuide } from "./guide.js";
 import {
@@ -26,20 +27,36 @@ import {
 import { getProjectStatus } from "./status.js";
 
 const USAGE = `Usage:
-  alcode projects list [--json] [--root <path>]
-  alcode projects doctor [--root <path>]
-  alcode projects status <path> [--json] [--root <path>]
-  alcode projects init [--root <path>] [--description <text>] [--port-range <first>-<last>]
-  alcode projects free-ports --size <n> [--json] [--root <path>]
-  alcode projects --guide [--root <path>]
+  alproject list [--json] [--root <path>]
+  alproject doctor [--root <path>]
+  alproject status <path> [--json] [--root <path>]
+  alproject init [--root <path>] [--description <text>] [--port-range <first>-<last>]
+  alproject free-ports --size <n> [--json] [--root <path>]
+  alproject --guide [--root <path>]
+  alproject --help
+  alproject --version
 `;
+
+export interface MainOptions {
+  argv?: string[];
+  stdout?: Output;
+  stderr?: Output;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  home?: string;
+  alignfirstCommand?: string[];
+}
+
+export interface Output {
+  write(text: string): void;
+}
 
 export interface ProjectsContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
   home: string;
-  stdout: RunOutput;
-  stderr: RunOutput;
+  stdout: Output;
+  stderr: Output;
   alignfirstCommand: string[];
 }
 
@@ -53,6 +70,37 @@ interface ProjectsArgs {
   description?: string;
   portRange?: PortRange;
   size?: number;
+}
+
+export async function main(options?: MainOptions): Promise<number> {
+  const argv = options?.argv ?? process.argv;
+  const stdout = options?.stdout ?? process.stdout;
+  const stderr = options?.stderr ?? process.stderr;
+  const cwd = options?.cwd ?? process.cwd();
+  const env = options?.env ?? process.env;
+  const home = options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir();
+  const alignfirstCommand = options?.alignfirstCommand ?? DEFAULT_ALIGNFIRST_COMMAND;
+  const tokens = argv.slice(2);
+
+  if (tokens[0] === "--version" || tokens[0] === "-v") {
+    stdout.write(`${readPackageVersion()}\n`);
+    return 0;
+  }
+
+  try {
+    return runProjects({ cwd, env, home, stdout, stderr, alignfirstCommand }, tokens);
+  } catch (error) {
+    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
+function readPackageVersion(): string {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version?: string;
+  };
+  if (pkg.version === undefined) throw new Error("alproject: package.json is missing 'version'");
+  return pkg.version;
 }
 
 export function runProjects(ctx: ProjectsContext, tokens: string[]): number {
@@ -86,7 +134,7 @@ export function runProjects(ctx: ProjectsContext, tokens: string[]): number {
     ctx.stdout.write(args.json ? renderPortRangeJson(range) : `${range.first}..${range.last}\n`);
     return 0;
   }
-  throw new Error("Invalid alcode projects command");
+  throw new Error("Invalid alproject command");
 }
 
 function inspectProjectInventory(ctx: ProjectsContext, rootOption: string | undefined): number {
@@ -246,7 +294,7 @@ function resolveProjectsRoot(ctx: ProjectsContext, rootOption: string | undefine
   return realpathSync(isAbsolute(expanded) ? expanded : resolve(ctx.cwd, expanded));
 }
 
-function initializeProjectsDirectory(root: string, args: ProjectsArgs, stdout: RunOutput): number {
+function initializeProjectsDirectory(root: string, args: ProjectsArgs, stdout: Output): number {
   const markerPath = join(root, MARKER_FILENAME);
   if (readMarker(root) !== undefined) throw new Error(`${markerPath} already exists.`);
   writeMarker(root, {
@@ -262,7 +310,7 @@ function requireMarker(root: string): ProjectsMarker {
   if (marker !== undefined) return marker;
   throw new Error(
     `${root} is not a projects directory: ${MARKER_FILENAME} is missing. ` +
-      "Run `alcode projects init` there, or pass --root <path>.",
+      "Run `alproject init` there, or pass --root <path>.",
   );
 }
 

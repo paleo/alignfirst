@@ -58,7 +58,7 @@ URL normalization gives `host/org/repo` for both the scp form `git@Host:org/repo
 - `setup --overlay [--plans-folder <name>] [--ticket-pattern <regex>] [--port-range <first>-<last>]`, run from the main worktree root of the untouched repository, required `ALIGNFIRST_OVERLAYS`. The overlay name was `--plans-folder`, else the repository directory's basename. It created `<overlays>/<name>/_project/`, wrote its `.alignfirst.json` with `project.remote` from the normalized `origin` URL when there was one, `project.paths` with the repository's real path, the given options and no `cli` range; an existing overlay directory was an error. When `ALIGNFIRST_OVERLAYS` was inside a git repository, `.plans` became a relative symlink to `<overlays>/<name>/`, the same link `plans setup` creates, otherwise `.plans` was created as a plain directory. Finally `.plans` was appended to `.git/info/exclude` unless `git check-ignore -q .plans` already succeeded.
 - `setup --adopt`, when the team adopts AlignFirst in the repository: moved the overlay's `.alignfirst.json` without its `project` key, then `AGENTS.md`, `DEVELOPERS.md` and `docs/` to the root, each only when the root lacked it, reporting the conflicts it left. It removed the `.plans` line from `.git/info/exclude` and the `_project/` directory when empty, and printed what remained for the agent: the `.plans` ignore rule and, on conflict, the `AGENTS.md` conventions to merge by hand.
 
-## Touchpoints in `alcode projects`
+## Touchpoints in `alproject`
 
 Discovery describes each child directory with `alignfirst config --json`. `source: overlay` listed the child as a project in overlay mode with the overlay directory recorded; `status` reported the overlay path as the config source. When `ALIGNFIRST_OVERLAYS` was set, every `<overlays>/*/_project/` directory that no listed project reported as its overlay was an issue, "unmatched overlay". The projects guide template described a project as a child whose config report finds a root or overlay config.
 
@@ -67,7 +67,7 @@ Discovery describes each child directory with `alignfirst config --json`. `sourc
 The removal kept the design compatible:
 
 - Every command reads the project config through one resolution function. Adding the overlay source changes that function alone.
-- The `config` report keeps its `source` field, `root` or `null`, so `overlay` can return as a value, and `alcode projects` keeps reading it.
+- The `config` report keeps its `source` field, `root` or `null`, so `overlay` can return as a value, and `alproject` keeps reading it.
 - `guide` keeps one append point for project conventions.
 
 ## Known weaknesses
@@ -88,4 +88,4 @@ The CLI changed since the implementation: conventions became structured fields o
 - Without `setup`, who creates the overlay? Either the setup guide writes the directory, the `project` key, the `.plans` symlink and the exclude entry by hand, or a single command returns for this one mechanical, multi-step operation.
 - Is `project.paths` worth keeping? It is per machine and was only a fallback for a repository without a remote.
 - Is `--adopt` needed on day one? It is the exit path from the feature and can come with the first team that adopts.
-- `config --json` should report the overlay only when it matched, so `alcode projects` can keep its "unmatched overlay" check.
+- `config --json` should report the overlay only when it matched, so `alproject` can keep its "unmatched overlay" check.

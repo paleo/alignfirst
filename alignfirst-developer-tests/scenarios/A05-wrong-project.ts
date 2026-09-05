@@ -9,7 +9,7 @@ import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 const WRONG_PROJECT = "aurora";
 
 /**
- * A project name absent from the `alcode projects list` result. The channel session checks the name
+ * A project name absent from the `alproject list` result. The channel session checks the name
  * while collecting the handoff values, so the starter says the project isn't
  * there and asks for the right one — then stops.
  */

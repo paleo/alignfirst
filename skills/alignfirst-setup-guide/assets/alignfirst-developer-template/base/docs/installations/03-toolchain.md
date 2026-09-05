@@ -50,7 +50,7 @@ The account has no sudo, so npm globals go to `~/.npm-system-global/`. Versions 
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -c 'printf "prefix=%s\n" "$HOME/.npm-system-global" > ~/.npmrc'
-sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g openclaw alignfirst @paleo/alcode ctx7
+sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g openclaw alignfirst @paleo/alcode @paleo/alproject ctx7
 ```
 
 Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). The seed in `04` requires it.
@@ -58,7 +58,7 @@ Install the selected coding agent under the same prefix: [08-coding-agent.md § 
 Verify:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst alcode ctx7'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst alcode alproject ctx7'
 # Expected: /usr/bin/node, /usr/bin/npm, then /home/{{SERVICE_USER}}/.npm-system-global/bin/… for the rest
 ```
 
@@ -95,4 +95,4 @@ sudo -i -u {{SERVICE_USER}} -- podman info --format '{{.Host.Security.Rootless}}
 # Expected: true
 ```
 
-`alcode projects` needs the projects marker installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).
+`alproject` needs the projects marker installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).

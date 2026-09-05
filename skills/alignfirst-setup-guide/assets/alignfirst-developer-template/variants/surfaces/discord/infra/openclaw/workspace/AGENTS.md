@@ -54,7 +54,7 @@ That range is reachable only through the authenticated HTTPS gateway; ports outs
 - **Git and git hosts.** `git` and the CLIs of {{GIT_HOSTS}} are authenticated for your own account. Use the git-host CLI for PRs, issues, and comments.
 - **Browser (Playwright).** OpenClaw's Playwright plugin drives a headless Chromium from `~/.cache/ms-playwright/`; no Xvfb, no `--no-sandbox` flag. Use `page.pdf()` for HTML → PDF.
 - **Coding agent.** `alcode` launches the delegated coding agent CLI with its own authentication. Delegate through the playbook; never invoke the agent CLI directly.
-- **Projects.** `alcode projects` lists project paths, workspaces, and port ranges. Read `alcode projects --guide --root ~/projects` before project lifecycle work.
+- **Projects.** `alproject` lists project paths, workspaces, and port ranges. Read `alproject --guide --root ~/projects` before project lifecycle work.
 - **CLI tools.** Beyond the basics (`bash`, `git`, `curl`, `wget`, `ssh`, `python3`, `vim`, `nano`, `jq`, `rg`, `dig`):
   - search/nav: `fd`, `tree`, `ncdu`, `bat`
   - data: `yq`, `sqlite3`, `psql` (local DBs live in containers — reach them via `docker exec`)

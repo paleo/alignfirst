@@ -15,7 +15,7 @@ This README only documents what is specific to this harness.
 cp .env.local.example .env.local
 # Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
 
-# Build the real alcode and alignfirst CLIs the gateway runs.
+# Build the real alcode, alignfirst, and alproject CLIs the gateway runs.
 npm run build --prefix ..
 
 npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first run only; env:build repeats it)
@@ -43,7 +43,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 - `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-developer-openclaw-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
-- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode` and `alignfirst` wrappers run both CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
+- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
 - [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
@@ -53,7 +53,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and port ranges. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
-`alcode projects` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
+`alproject` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
 ## Scenarios
 

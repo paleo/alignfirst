@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -8,7 +7,6 @@ import { type CodingAgent, createAgentAdapter, resolveCodingAgent } from "./codi
 import { type GuideVariant, renderGuide } from "./guide.js";
 import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
-import { runProjects } from "./projects/cli.js";
 import { buildAgentEnv, runAgent, type RunConfig, type RunOutput } from "./run-agent.js";
 import {
   applyCompletion,
@@ -42,7 +40,6 @@ export interface MainOptions {
   stderr?: RunOutput;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  home?: string;
   alignfirstCommand?: string[];
   modelResolver?: ExecutableModelResolver;
   usageReader?: UsageReader;
@@ -54,7 +51,6 @@ export type AlcodeCommand =
   | { kind: "guide"; variant: GuideVariant }
   | { kind: "status"; sessionFile: string }
   | { kind: "usage" }
-  | { kind: "projects"; tokens: string[] }
   | { kind: "session"; args: SessionArgs };
 
 // `resume` undefined means a new session.
@@ -74,7 +70,6 @@ export async function main(options?: MainOptions): Promise<number> {
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
   const env = options?.env ?? process.env;
-  const home = options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir();
   const alignfirstCommand = options?.alignfirstCommand ?? DEFAULT_ALIGNFIRST_COMMAND;
 
   let command: AlcodeCommand;
@@ -100,15 +95,6 @@ export async function main(options?: MainOptions): Promise<number> {
       return 1;
     }
   }
-  if (command.kind === "projects") {
-    try {
-      return runProjects({ cwd, env, home, stdout, stderr, alignfirstCommand }, command.tokens);
-    } catch (error) {
-      stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-      return 1;
-    }
-  }
-
   let agent: CodingAgent;
   try {
     agent = resolveCodingAgent(env);
@@ -223,8 +209,6 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
       return parseStatusCommand(tokens);
     case "usage":
       return parseBareCommand(tokens, "usage");
-    case "projects":
-      return { kind: "projects", tokens };
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
@@ -604,8 +588,6 @@ Usage:
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode status <session-file>
   alcode usage
-  alcode projects (list | doctor | status <path> | init | free-ports --size <n>) [--root <path>]
-  alcode projects --guide [--root <path>]
   alcode --guide
   alcode --openclaw-guide
   alcode -h, --help
@@ -616,8 +598,6 @@ Commands:
   resume <sessionId>    Continue an existing session.
   status <session-file> Reconcile and show one run's durable status. Does not start an agent.
   usage                 Show the selected coding agent's current usage limits and reset times.
-  projects              Discover and manage the projects of a projects directory. Run
-                        \`alcode projects --help\`.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.

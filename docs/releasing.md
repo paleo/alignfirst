@@ -93,10 +93,9 @@ environment.
    npm access set mfa=publish alignfirst
    ```
 
-2. Deprecate the replaced packages:
+2. Deprecate the replaced package:
 
    ```bash
-   npm deprecate @paleo/alproject@"*" "Replaced by alcode projects: npm install -g @paleo/alcode"
    npm deprecate @paleo/plans-share@"*" "Replaced by the alignfirst package: npm install -g alignfirst"
    ```
 

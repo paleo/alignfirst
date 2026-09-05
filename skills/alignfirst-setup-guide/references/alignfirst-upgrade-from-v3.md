@@ -10,8 +10,7 @@ retired project-discovery package:
 ```sh
 npm install -g alignfirst
 # AlignFirst Developer host only
-npm install -g alignfirst @paleo/alcode
-npm uninstall -g @paleo/alproject
+npm install -g alignfirst @paleo/alcode @paleo/alproject
 ```
 
 ## Remove the Plans Package
