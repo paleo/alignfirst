@@ -1,6 +1,6 @@
 ---
 title: Project Overlays
-summary: A future feature of the alignfirst CLI — keeping a project's AlignFirst files outside its repository. Records the design that was implemented on branch 78 and dropped before merge, its contracts, its weaknesses and the seams kept for it.
+summary: A future feature of the alignfirst CLI — keeping a project's AlignFirst files outside its repository. Records the design implemented on branch 78 and dropped before merge, its contracts, its weaknesses and the seams kept for it.
 read_when:
   - designing or implementing overlays in the alignfirst CLI
   - changing project config resolution, the `config` report or the guide's conventions section, which must stay overlay-compatible
@@ -9,7 +9,7 @@ read_when:
 
 # Project Overlays
 
-**Status: proposal.** The feature was implemented on branch `78/unified-cli` and dropped before the merge, because it had no user yet and touched most commands. Commit `0cb8cc4` holds the implementation: `git show 0cb8cc4:packages/alignfirst/src/overlay.ts` recovers the core, and `packages/alignfirst/test/overlay.test.ts` and `setup.test.ts` at the same commit hold the tests.
+**Status: proposal.** The feature was implemented on branch `78/unified-cli` and dropped before the merge, because it had no user yet and touched most commands. This document is the record of that design; the codebase will have changed by the time it returns, so a new implementation starts from these contracts rather than from the old code.
 
 ## Goal
 
