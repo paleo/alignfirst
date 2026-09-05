@@ -26,30 +26,23 @@ export interface DiscoveredProject {
   description: ProjectDescription;
   portRange?: PortRange;
   workspaces: string[];
-  overlay?: string;
 }
 
 export interface ProjectDescription {
-  source: "root" | "overlay" | null;
-  overlay: ProjectOverlayDescription | null;
+  source: "root" | null;
   cli: ProjectCliDescription | null;
   config: ProjectConfigView | null;
 }
 
 export interface ProjectConfigView {
-  ticketPattern?: string;
-  plans?: { folder: string };
+  ticketIdPattern?: string;
+  plans?: { folder?: string };
   portRange?: PortRange;
 }
 
 export interface InventoryIssue {
   path: string;
   message: string;
-}
-
-interface ProjectOverlayDescription {
-  dir: string;
-  matchedBy: "remote" | "paths";
 }
 
 interface ProjectCliDescription {
@@ -96,7 +89,6 @@ export function buildInventory(
   const projects = classifyCandidates(state, ctx);
   projects.sort((left, right) => left.path.localeCompare(right.path));
   reportOverlappingProjects(projects, state.issues);
-  reportUnmatchedOverlays(root, projects, state.issues, ctx);
   sortInventory(state.directories, projects, state.issues);
   return { root, directories: state.directories, projects, issues: state.issues };
 }
@@ -180,11 +172,8 @@ function classifyCandidate(
       ? {}
       : { portRange: description.config.portRange }),
     workspaces: [],
-    ...(description.source === "overlay" && description.overlay !== null
-      ? { overlay: description.overlay.dir }
-      : {}),
   };
-  if (description.source === "root" && mainWorktreeGitDirectory(candidate.path) === undefined) {
+  if (mainWorktreeGitDirectory(candidate.path) === undefined) {
     state.issues.push({ path: candidate.path, message: "not a git main worktree" });
   }
   reportOutsideRange(project.path, project.portRange, candidate.enclosingRange, state.issues);
@@ -214,27 +203,14 @@ function parseProjectDescription(value: unknown, path: string): ProjectDescripti
   const source = parseSource(value.source, path);
   return {
     source,
-    overlay: parseOverlay(value.overlay, path),
     cli: parseCli(value.cli, path),
     config: parseConfig(value.config, path),
   };
 }
 
 function parseSource(value: unknown, path: string): ProjectDescription["source"] {
-  if (value === "root" || value === "overlay" || value === null) return value;
+  if (value === "root" || value === null) return value;
   throw invalidDescription(path);
-}
-
-function parseOverlay(value: unknown, path: string): ProjectOverlayDescription | null {
-  if (value === null) return null;
-  if (
-    !isRecord(value) ||
-    typeof value.dir !== "string" ||
-    (value.matchedBy !== "remote" && value.matchedBy !== "paths")
-  ) {
-    throw invalidDescription(path);
-  }
-  return { dir: value.dir, matchedBy: value.matchedBy };
 }
 
 function parseCli(value: unknown, path: string): ProjectCliDescription | null {
@@ -253,23 +229,25 @@ function parseCli(value: unknown, path: string): ProjectCliDescription | null {
 function parseConfig(value: unknown, path: string): ProjectConfigView | null {
   if (value === null) return null;
   if (!isRecord(value)) throw invalidDescription(path);
-  const ticketPattern = value.ticketPattern;
+  const ticketIdPattern = value.ticketIdPattern;
   const plans = parsePlans(value.plans, path);
   const portRange = value.portRange;
-  if (ticketPattern !== undefined && typeof ticketPattern !== "string")
+  if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidDescription(path);
   if (portRange !== undefined && !isPortRange(portRange)) throw invalidDescription(path);
   return {
-    ...(ticketPattern === undefined ? {} : { ticketPattern }),
+    ...(ticketIdPattern === undefined ? {} : { ticketIdPattern }),
     ...(plans === undefined ? {} : { plans }),
     ...(portRange === undefined ? {} : { portRange }),
   };
 }
 
-function parsePlans(value: unknown, path: string): { folder: string } | undefined {
+function parsePlans(value: unknown, path: string): { folder?: string } | undefined {
   if (value === undefined) return;
-  if (!isRecord(value) || typeof value.folder !== "string") throw invalidDescription(path);
-  return { folder: value.folder };
+  if (!isRecord(value)) throw invalidDescription(path);
+  if (value.folder !== undefined && typeof value.folder !== "string")
+    throw invalidDescription(path);
+  return value.folder === undefined ? {} : { folder: value.folder };
 }
 
 function invalidDescription(path: string): Error {
@@ -390,51 +368,6 @@ function reportOverlappingProjects(projects: DiscoveredProject[], issues: Invent
         message: `port range ${formatRange(project.portRange)} overlaps ${other.name}`,
       });
     }
-  }
-}
-
-function reportUnmatchedOverlays(
-  root: string,
-  projects: DiscoveredProject[],
-  issues: InventoryIssue[],
-  ctx: InventoryContext,
-): void {
-  const configured = ctx.env.ALIGNFIRST_OVERLAYS;
-  if (configured === undefined || configured === "") return;
-  const overlaysRoot = realpathOrUndefined(expandHomePath(configured, ctx.home));
-  if (overlaysRoot === undefined) return;
-  const matched = new Set(
-    projects.flatMap(({ overlay }) => {
-      const path = overlay === undefined ? undefined : realpathOrUndefined(overlay);
-      return path === undefined ? [] : [path];
-    }),
-  );
-  for (const entry of readdirSync(overlaysRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const overlay = directoryRealpathOrUndefined(join(overlaysRoot, entry.name, "_project"));
-    if (overlay === undefined || matched.has(overlay)) continue;
-    issues.push({ path: overlay, message: `unmatched overlay: matches no project under ${root}` });
-  }
-}
-
-function expandHomePath(path: string, home: string): string {
-  return path.startsWith("~/") ? join(home, path.slice(2)) : path;
-}
-
-function realpathOrUndefined(path: string): string | undefined {
-  try {
-    return realpathSync(path);
-  } catch {
-    return;
-  }
-}
-
-function directoryRealpathOrUndefined(path: string): string | undefined {
-  try {
-    if (!lstatSync(path).isDirectory()) return;
-    return realpathSync(path);
-  } catch {
-    return;
   }
 }
 

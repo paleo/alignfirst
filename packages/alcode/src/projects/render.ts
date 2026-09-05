@@ -13,9 +13,6 @@ export function renderProjectList(inventory: ProjectInventory): string {
       `  Port range: ${renderRange(project.portRange)}`,
       `  Workspaces: ${renderValues(project.workspaces)}`,
     );
-    if (project.overlay !== undefined) {
-      lines.push(`  Overlay: ${renderOutputValue(project.overlay)}`);
-    }
   }
   lines.push("", "Directories:");
   if (inventory.directories.length === 0) lines.push("  (none)");
@@ -52,7 +49,6 @@ export function renderProjectListJson(inventory: ProjectInventory): string {
       directory: project.directory,
       portRange: project.portRange ?? null,
       workspaces: project.workspaces,
-      overlay: project.overlay ?? null,
     })),
     issues: inventory.issues,
   };
@@ -66,10 +62,9 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Path: ${renderOutputValue(details.path)}`,
     `  Directory: ${renderOutputValue(details.directory)}`,
     `  Remote host: ${renderNullableValue(details.remoteHost)}`,
-    `  Config source: ${renderOutputValue(details.configSource)}`,
     `  Port range: ${renderRange(details.portRange ?? undefined)}`,
     `  Plans folder: ${renderNullableValue(details.plansFolder)}`,
-    `  Ticket pattern: ${renderNullableValue(details.ticketPattern)}`,
+    `  Ticket id pattern: ${renderNullableValue(details.ticketIdPattern)}`,
     `  Workspaces: ${renderValues(details.workspaces)}`,
     "  Worktrees:",
   ];

@@ -12,10 +12,9 @@ export interface ProjectDetails {
   path: string;
   directory: string;
   remoteHost: string | null;
-  configSource: string;
   portRange: PortRange | null;
   plansFolder: string | null;
-  ticketPattern: string | null;
+  ticketIdPattern: string | null;
   workspaces: string[];
   worktrees: ProjectWorktree[];
 }
@@ -32,7 +31,7 @@ export function getProjectStatus(inventory: ProjectInventory, inputPath: string)
   if (project === undefined) {
     throw new Error(
       `${path} is not a project of ${inventory.root}. Pass the main-worktree path of a project ` +
-        "holding .alignfirst.json or matching an overlay.",
+        "holding .alignfirst.json.",
     );
   }
   return buildProjectDetails(project);
@@ -54,10 +53,9 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     path: project.path,
     directory: project.directory,
     remoteHost: readRemoteHost(project.path),
-    configSource: project.description.source === "root" ? "root" : (project.overlay ?? "root"),
     portRange: project.portRange ?? null,
     plansFolder: project.description.config?.plans?.folder ?? null,
-    ticketPattern: project.description.config?.ticketPattern ?? null,
+    ticketIdPattern: project.description.config?.ticketIdPattern ?? null,
     workspaces: project.workspaces,
     worktrees: readWorktrees(project.path),
   };

@@ -65,7 +65,7 @@ describe("projects command surface", () => {
     });
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("# `alcode projects` guide");
-    expect(result.stdout).toContain("alignfirst setup --port-range");
+    expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
   });
 
   it("initializes a marker, refuses overwrite, and validates its range", async () => {
@@ -123,7 +123,9 @@ describe("project discovery", () => {
     const alpha = makeRepository(fixture.root, "alpha", {
       portRange: range(8000, 8099),
     });
-    const portless = makeRepository(fixture.root, "portless", {});
+    const portless = makeRepository(fixture.root, "portless", {
+      plans: { autoArchive: true },
+    });
     const nested = makeProjectsDirectory(fixture.root, "nested", {
       description: "Nested",
       portRange: range(8500, 8599),
@@ -157,7 +159,6 @@ describe("project discovery", () => {
         directory: realpathSync(fixture.root),
         portRange: range(8000, 8099),
         workspaces: ["alpha-workspace"],
-        overlay: null,
       },
       {
         name: "beta",
@@ -165,7 +166,6 @@ describe("project discovery", () => {
         directory: realpathSync(nested),
         portRange: range(8500, 8549),
         workspaces: [],
-        overlay: null,
       },
       {
         name: "portless",
@@ -173,13 +173,12 @@ describe("project discovery", () => {
         directory: realpathSync(fixture.root),
         portRange: null,
         workspaces: [],
-        overlay: null,
       },
     ]);
     expect(report.issues).toEqual([]);
   });
 
-  it("reports range, worktree, config, overlap, and unmatched-overlay issues", async () => {
+  it("reports range, worktree, config, and overlap issues", async () => {
     const fixture = makeFixture({ portRange: range(8000, 8099) });
     makeRepository(fixture.root, "a", { portRange: range(8000, 8049) });
     makeRepository(fixture.root, "b", { portRange: range(8030, 8059) });
@@ -191,12 +190,7 @@ describe("project discovery", () => {
     mkdirSync(invalid);
     writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
     makeProjectsDirectory(fixture.root, "nested-outside", { portRange: range(9000, 9099) });
-    const overlays = join(fixture.base, "overlays");
-    mkdirSync(join(overlays, "orphan", "_project"), { recursive: true });
-
-    const result = await runProjects(fixture, ["list", "--json"], {
-      env: { ALIGNFIRST_OVERLAYS: overlays },
-    });
+    const result = await runProjects(fixture, ["list", "--json"]);
     expect(result.code).toBe(0);
     const report = JSON.parse(result.stdout);
     const messages = report.issues.map((issue: { message: string }) => issue.message);
@@ -209,42 +203,9 @@ describe("project discovery", () => {
         (message: string) => message.startsWith("Invalid ") && message.includes(".alignfirst.json"),
       ),
     ).toBe(true);
-    expect(messages).toContain(
-      `unmatched overlay: matches no project under ${realpathSync(fixture.root)}`,
-    );
     expect(report.projects.some((project: { name: string }) => project.name === "invalid")).toBe(
       false,
     );
-  });
-
-  it("discovers an overlay project and reports unmatched overlays", async () => {
-    const fixture = makeFixture({ portRange: range(8000, 8999) });
-    const project = makeRepository(fixture.root, "overlay-project");
-    const overlays = join(fixture.base, "overlays");
-    const overlay = makeOverlay(overlays, "matched", project, {
-      ticketPattern: "^OV-\\d+$",
-      plans: { folder: "overlay-project" },
-      portRange: range(8200, 8299),
-    });
-    mkdirSync(join(overlays, "orphan", "_project"), { recursive: true });
-
-    const result = await runProjects(fixture, ["list", "--json"], {
-      env: { ALIGNFIRST_OVERLAYS: overlays },
-    });
-    expect(result.code).toBe(0);
-    const report = JSON.parse(result.stdout);
-    expect(report.projects[0]).toMatchObject({
-      name: "overlay-project",
-      path: project,
-      overlay: realpathSync(overlay),
-      portRange: range(8200, 8299),
-    });
-    expect(report.issues).toEqual([
-      {
-        path: realpathSync(join(overlays, "orphan", "_project")),
-        message: `unmatched overlay: matches no project under ${realpathSync(fixture.root)}`,
-      },
-    ]);
   });
 
   it("fails the listing when alignfirst is missing", async () => {
@@ -262,7 +223,7 @@ describe("project status", () => {
   it("renders root project details and rejects a linked-worktree path", async () => {
     const fixture = makeFixture({ portRange: range(8000, 8999) });
     const project = makeRepository(fixture.root, "project", {
-      ticketPattern: "^P-\\d+$",
+      ticketIdPattern: "^P-\\d+$",
       plans: { folder: "project-plans" },
       portRange: range(8000, 8099),
     });
@@ -278,10 +239,9 @@ describe("project status", () => {
       path: project,
       directory: realpathSync(fixture.root),
       remoteHost: "github.com",
-      configSource: "root",
       portRange: range(8000, 8099),
       plansFolder: "project-plans",
-      ticketPattern: "^P-\\d+$",
+      ticketIdPattern: "^P-\\d+$",
       workspaces: ["project-workspace"],
       worktrees: [
         { branch: "main", name: "project", path: project },
@@ -293,30 +253,13 @@ describe("project status", () => {
     expect(text.stdout).toContain("Project:\n");
     expect(text.stdout).toContain('  Remote host: "github.com"');
     expect(text.stdout).toContain("  Port range: 8000..8099");
+    expect(text.stdout).toContain('  Ticket id pattern: "^P-\\\\d+$"');
+    expect(text.stdout).not.toContain("Config source:");
 
     const rejected = await runProjects(fixture, ["status", workspace]);
     expect(rejected.code).toBe(1);
     expect(rejected.stderr).toContain("is not a project of");
     expect(rejected.stderr).toContain("main-worktree path");
-  });
-
-  it("renders overlay config as the status source", async () => {
-    const fixture = makeFixture({ portRange: range(8000, 8999) });
-    const project = makeRepository(fixture.root, "overlay-project");
-    const overlays = join(fixture.base, "overlays");
-    const overlay = makeOverlay(overlays, "project", project, {
-      plans: { folder: "team" },
-      portRange: range(8300, 8399),
-    });
-    const result = await runProjects(fixture, ["status", project, "--json"], {
-      env: { ALIGNFIRST_OVERLAYS: overlays },
-    });
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      configSource: realpathSync(overlay),
-      plansFolder: "team",
-      portRange: range(8300, 8399),
-    });
   });
 });
 
@@ -431,13 +374,6 @@ function writeProjectConfig(directory: string, config: object): void {
     join(directory, ".alignfirst.json"),
     `${JSON.stringify({ schemaVersion: 1, ...config }, undefined, 2)}\n`,
   );
-}
-
-function makeOverlay(overlays: string, name: string, project: string, config: object): string {
-  const overlay = join(overlays, name, "_project");
-  mkdirSync(overlay, { recursive: true });
-  writeProjectConfig(overlay, { ...config, project: { paths: [realpathSync(project)] } });
-  return overlay;
 }
 
 function addWorktree(main: string, worktree: string, branch: string): void {
