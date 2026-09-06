@@ -17,7 +17,8 @@
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
     "ci:version": "changeset version && npm i",
-    "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && changeset publish"
+    "release:smoke": "node scripts/release-smoke.mjs",
+    "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && npm run release:smoke && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "~2.5.10",
