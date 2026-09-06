@@ -1,54 +1,23 @@
-# AlignFirst Guide
+# Shared Conventions
 
-An agent that does not know which protocol to use runs `{{CMD}} guide overview`.
+## Task directory
 
-## Protocols
-
-- **Technical Specification** (_spec_, or _alspec_): `{{CMD}} guide spec --protocol-only`
-- **Implementation Plans** (_plan_, or _alplan_): `{{CMD}} guide plan --protocol-only`
-- **Align-and-Do Protocol** (_AAD_): `{{CMD}} guide aad --protocol-only`
-- **Catch Up** (_catchup_, or _alcatchup_): `{{CMD}} guide catchup --protocol-only`
-- **Merge** (_merge_, or _almerge_): `{{CMD}} guide merge --protocol-only`
-- **Code Review** (_alreview_): `{{CMD}} guide review --protocol-only`
-- **Description** (_aldescription_): `{{CMD}} guide description --protocol-only`
-
-## TASK_DIR Location
-
-TASK_DIR holds the work files of a ticket. `{{TICKET_CMD}}` prints it and lists its entries; it creates a missing directory and restores an archived one.
+TASK_DIR holds a ticket's work files. TICKET_ID identifies the task, usually by its issue or ticket number.
 
 {{TICKET_CONTEXT}}
 
+`{{TICKET_CMD}}` prints TASK_DIR and its entries, creates a missing directory, and restores an archived one. Adding `--next <filename>` also prints the next file path.
+
 {{PLANS_STATE}}
 
-**Work without a ticket:** when the user says there is no ticket, run `{{CMD}} ticket --side`. Reuse an existing `side-N` directory when the user refers to that earlier work. Omit the ticket ID from commit messages.
+When the user says there is no ticket, run `{{CMD}} ticket --side`. Reuse an existing `side-N` directory when the user refers to earlier work. Omit the ticket ID from commit messages.
 
-## File Naming Convention
+## Work files
 
-Format: `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`
+Files use `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`, such as `A1-spec.md` or `A2-AAD.summary.md`.
 
-**Common file types:**
+Use `{{TICKET_CMD}} --next <filename>` to get the next path in the current cycle, including the extension. For example, `--next spec.md` may return a path ending in `A2-spec.md`. Add `--new-cycle` when the protocol or user calls for a new cycle.
 
-- `spec` - technical specification
-- `plan` - implementation plan
-- `AAD.summary` - AAD summary document
-- `description` - PR/MR description
-- `review` - code review report
-- `merge.summary` - merge conflicts resolution summary
+Common file types are `spec`, `plan`, `AAD.summary`, `description`, `review`, and `merge.summary`. Use another type when needed.
 
-**Example structure:**
-
-```text
-A1-spec.md
-A2-plan.md
-A3-AAD.summary.md
-B1-spec.md
-```
-
-## Notes
-
-- **TICKET_ID** is a unique identifier for the task, often an issue or ticket number.
-- `{{TICKET_CMD}} --next <filename>` prints the path of the next file in the current cycle, the extension included (`--next spec.md` giving `A2-spec.md`).
-- `--new-cycle` starts a new cycle.
-- The protocol or the user decides whether to continue the current cycle or start a new one.
-- Cycle letters and file numbers are internal. Never discuss them with the user.
-- New file types are welcome.
+Cycle letters and file numbers are internal. Never discuss them with the user.

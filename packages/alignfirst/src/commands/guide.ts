@@ -135,9 +135,15 @@ function renderGuide(ctx: CommandContext, options: GuideOptions): string {
   if (options.protocolOnly && options.protocol !== undefined)
     return applyPlaceholders(readProtocolTemplate(options.protocol), placeholders);
   const core = renderCoreGuide(ctx, placeholders);
-  if (options.protocol === undefined) return core;
+  if (options.protocol === undefined) return `${readGuideTemplate("selection.md")}\n\n${core}`;
   const protocol = applyPlaceholders(readProtocolTemplate(options.protocol), placeholders);
-  return `${core.trimEnd()}\n\n${protocol.trimEnd()}`;
+  const [title, ...sections] = protocol.split("\n\n");
+  return [
+    title,
+    "This guide includes the selected protocol and shared conventions. Read both before starting.",
+    ...sections,
+    core,
+  ].join("\n\n");
 }
 
 function renderReviewerGuide(perspective: Perspective, modules: ReviewModule[]): string {

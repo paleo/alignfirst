@@ -9,4 +9,4 @@ metadata:
   repository: https://github.com/paleo/alignfirst
 ---
 
-Run `npx -y alignfirst guide catchup` and follow the protocol. Do not use your own plan mode.
+Follow the `catchup` protocol guide if it is already in context. Otherwise, run `npx -y alignfirst guide catchup` and follow it; the output includes shared conventions. Do not use your own plan mode.

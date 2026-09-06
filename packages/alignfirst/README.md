@@ -44,11 +44,11 @@ The guide installs the selected components and configures the repository. Remove
 - `config` — Report the effective project configuration.
 - `doctor` — Diagnose an AlignFirst setup.
 
-Run `alignfirst --help` for command usage or `alignfirst guide` for the collaboration guide.
+Run `alignfirst --help` for command usage or `alignfirst guide` to choose a protocol. `alignfirst guide <protocol>` prints the selected protocol followed by shared conventions. Add `--protocol-only` when those conventions are already in context.
 
 ## Agent skills
 
-Eight optional Agent Skill stubs expose the CLI to GitHub Copilot, Cursor, Claude Code, and Codex. The skills contain no protocols; they invoke `npx alignfirst guide`.
+Eight optional Agent Skill stubs expose the CLI to GitHub Copilot, Cursor, Claude Code, and Codex. They reuse guides already in context and load missing guides through `npx -y alignfirst guide`.
 
 Install them globally:
 

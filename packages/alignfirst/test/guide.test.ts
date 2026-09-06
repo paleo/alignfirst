@@ -13,27 +13,38 @@ afterEach(() => {
 });
 
 describe("guide command", () => {
-  it("renders the core guide by default", async () => {
+  it("renders protocol selection and shared conventions by default", async () => {
     const result = await runMain(["guide"], { cwd: temp() });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain("# AlignFirst Guide");
-    expect(result.stdout).toContain("alignfirst guide spec --protocol-only");
+    expect(result.stdout).toContain("alignfirst guide spec");
+    expect(result.stdout.indexOf("# Shared Conventions")).toBeGreaterThan(
+      result.stdout.indexOf("## Choose a protocol"),
+    );
     expect(result.stdout).not.toContain("# How to Write a Technical Specification");
     expect(result.stdout.endsWith("\n")).toBe(true);
     expect(result.stdout.endsWith("\n\n")).toBe(false);
   });
 
-  it("renders a protocol after the core or alone", async () => {
+  it("renders every complete protocol before shared conventions, without the catalogue", async () => {
     const cwd = temp();
-    const combined = await runMain(["guide", "spec"], { cwd });
-    const coreIndex = combined.stdout.indexOf("# AlignFirst Guide");
-    const protocolIndex = combined.stdout.indexOf("# How to Write a Technical Specification");
-    expect(coreIndex).toBeGreaterThanOrEqual(0);
-    expect(protocolIndex).toBeGreaterThan(coreIndex);
-
-    const protocolOnly = await runMain(["guide", "spec", "--protocol-only"], { cwd });
-    expect(protocolOnly.stdout).toContain("# How to Write a Technical Specification");
-    expect(protocolOnly.stdout).not.toContain("# AlignFirst Guide");
+    const selection = await runMain(["guide"], { cwd });
+    const shared = selection.stdout.slice(selection.stdout.indexOf("# Shared Conventions"));
+    for (const protocol of PROTOCOLS) {
+      const combined = await runMain(["guide", protocol], { cwd });
+      const protocolOnly = await runMain(["guide", protocol, "--protocol-only"], { cwd });
+      expect(combined.code).toBe(0);
+      expect(protocolOnly.code).toBe(0);
+      const [title, ...sections] = protocolOnly.stdout.trimEnd().split("\n\n");
+      expect(combined.stdout.startsWith(`${title}\n\n`)).toBe(true);
+      expect(combined.stdout).toContain(
+        "This guide includes the selected protocol and shared conventions. Read both before starting.",
+      );
+      expect(combined.stdout.endsWith(`${sections.join("\n\n")}\n\n${shared}`)).toBe(true);
+      expect(combined.stdout).not.toContain("# AlignFirst Guide");
+      expect(combined.stdout).not.toContain("guide overview");
+      expect(protocolOnly.stdout).not.toContain("# Shared Conventions");
+    }
   });
 
   it("renders every protocol and the overview", async () => {
@@ -46,6 +57,7 @@ describe("guide command", () => {
     const overview = await runMain(["guide", "overview"], { cwd });
     expect(overview.stdout).toContain("# AlignFirst Overview");
     expect(overview.stdout).not.toContain("# AlignFirst Guide");
+    expect(overview.stdout).not.toContain("# Shared Conventions");
   });
 
   it("rejects invalid protocol selections", async () => {
@@ -90,6 +102,7 @@ describe("guide command", () => {
     expect(typescriptIndex).toBeGreaterThan(perspectiveIndex);
     expect(javascriptIndex).toBeGreaterThan(typescriptIndex);
     expect(result.stdout).not.toContain("# AlignFirst Guide");
+    expect(result.stdout).not.toContain("# Shared Conventions");
     expect(result.stdout).not.toContain("# How to Write a Code Review Report");
   });
 
@@ -142,7 +155,7 @@ describe("guide command", () => {
       cwd: temp(),
       env: { npm_config_user_agent: "npm/11.0.0 node/v22.0.0" },
     });
-    expect(result.stdout).toContain("npx -y alignfirst guide spec --protocol-only");
+    expect(result.stdout).toContain("npx -y alignfirst guide spec");
   });
 
   it("renders ticket detection and fallback variants", async () => {
