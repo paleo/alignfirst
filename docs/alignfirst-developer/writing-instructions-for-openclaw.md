@@ -42,7 +42,7 @@ Channel/DM and thread sessions behave differently; phrase as "Channel/DM: …. T
 
 Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project, canonical project path, ticket, and task with `message action: "read"` on the thread. A detailed request also needs its complete original text in the starter. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never rerun discovery to replace the recorded path, reconstruct it from the project name, or infer a project from a ticket prefix (`ABC-…` is a label, not a project namespace).
 
-This is why the channel session's starter is the only place the handoff values can live, and why it must state the task rather than assume the user will restate it. The message that wakes the thread session is often content-free ("vas-y", "ok").
+This is why the visible starter must state the task rather than assume the user will restate it. The handoff plugin also carries the exact starter inside an escaped user-content block, so a fresh targeted wake does not depend on parent-history inheritance. Neither carrier is permission to reconstruct missing values.
 
 ## Don't treat a derived value as redundant
 
@@ -54,7 +54,7 @@ This is a common cause of an otherwise-correct run failing an assertion. Concret
 
 The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the agent drops the second one — correctly, from its point of view: the user can already see them.
 
-This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter is the thread's record, and the thread session opens with a bare setup signal that restates nothing.
+This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the plugin seed activates it without a content-free human follow-up, and the thread session's next visible output reports new state rather than repeating the starter.
 
 So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
 

@@ -58,10 +58,22 @@ The seed allowlists that one channel (`channels.discord.guilds`, `groupPolicy al
 
 Run it after `08`, as the operator, from the Discord client.
 
-1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
-2. The channel session creates one named thread on your message. Its starter carries the task plus the known project path and ticket. The channel root receives no duplicate starter and no setup message.
-3. Answer in the thread. The fresh thread session reads its own history, delegates the read-only task, and reports in the same thread.
-4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens, no work starts.
-5. The channel root received neither the report nor a duplicate completion.
+First verify the effective gateway configuration:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw plugins inspect thread-handoff --json --runtime
+sudo -i -u {{SERVICE_USER}} -- openclaw config get tools.alsoAllow --json
+sudo -i -u {{SERVICE_USER}} -- openclaw config get \
+  'channels.discord.guilds.{{DISCORD_GUILD_ID}}.channels.{{DISCORD_CHANNEL_ID}}.autoThread'
+```
+
+The plugin must be loaded, `thread_handoff` allowed, and `autoThread` must be `false` at the
+allowlisted channel.
+
+1. Send small talk in the allowlisted channel. It receives one channel-root reply and no thread.
+2. Request a complete small read-only project task. One named thread and one starter appear; work begins without a follow-up and reports in that same thread.
+3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
+4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens and no work starts.
+5. Confirm that the channel root received neither a duplicate starter nor a completion report.
 
 When a negative check fails, stop the gateway (`sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway`) and correct the allowlist or the delivery settings before further use.

@@ -12,7 +12,7 @@ Three roles, named as the runbooks name them:
 
 The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the root-owned maintenance wrapper before every protected change. The wrapper contains the service account, unlocks only named scopes, runs one command as that account, and restores hardening through an exit trap. From there:
 
-- `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only).
+- `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the external handoff plugin's durable state).
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `{{PROJECTS_ROOT}}` — the managed projects, the `alproject` registry and, with team plans, the service account's own clone of the plans repository (a repository, never a project).
@@ -148,6 +148,9 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 - The allowed channel routes work into one thread; a message elsewhere gets no reply.
 - The coding agent runs every AlignFirst command through `alcode`, unattended.
 - Every model route uses OpenClaw's embedded agent runtime.
+- `thread-handoff` is loaded as an external plugin, `thread_handoff` is allowed, Slack effective
+  `replyToMode` is `off` or Discord channel `autoThread` is `false`, and a complete request starts in
+  its regular thread session without a human nudge.
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.

@@ -24,9 +24,12 @@ sudo install -m 755 -o root -g root infra/openclaw/bin/developer-maintenance.sh 
 
 ## Back up
 
-Before a core bump, keep the state the migrations will rewrite: configuration, SQLite stores, workspace files ([recover-developer.md](recover-developer.md#restore)):
+Before a core bump, stop the gateway so both OpenClaw and the independent thread-handoff database
+close consistently, then keep the state the migrations will rewrite
+([recover-developer.md](recover-developer.md#restore)):
 
 ```sh
+sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
 ```
 
@@ -37,11 +40,15 @@ The prefix is root-owned and immutable ([06](../installations/06-security-harden
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance packages -- bash -lc '
 openclaw update --yes --no-restart --accept-capabilities
+openclaw plugins update thread-handoff --accept-capabilities
 /usr/bin/npm install -g @paleo/alproject@latest @paleo/alcode@latest ctx7@latest
 '
 ```
 
 `--accept-capabilities` accepts the plugins' reviewed capability changes. Without it the post-update plugin sync stops with an unresolved review, which `openclaw update repair --accept-capabilities` finishes.
+
+`thread-handoff` is an independent npm plugin, so its explicit update is separate from the core and
+official channel-plugin update. Its state directory remains in place across package replacement.
 
 Update the coding agent through its package-scoped command: [08-coding-agent.md § Update](../installations/08-coding-agent.md#update).
 

@@ -37,7 +37,7 @@ configure_surface() {
   set_scalar channels.discord.groupPolicy allowlist
   # Per-channel key is `enabled` (DiscordGuildChannelConfig). The whole map, so a re-seed with a new
   # channel ID replaces the old one.
-  local channel_config="{\"$DISCORD_CHANNEL_ID\":{\"enabled\":true,\"requireMention\":false}}"
+  local channel_config="{\"$DISCORD_CHANNEL_ID\":{\"enabled\":true,\"requireMention\":false,\"autoThread\":false}}"
   set_json channels.discord.guilds "{\"$DISCORD_GUILD_ID\":{\"channels\":$channel_config}}"
   # Completed paragraphs as they finish; no tool-progress previews in the channel.
   set_json channels.discord.streaming '{"mode":"block","preview":{"toolProgress":false}}'

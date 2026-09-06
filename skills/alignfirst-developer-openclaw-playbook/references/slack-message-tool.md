@@ -10,7 +10,11 @@ For `target`, pass `chat_id` exactly as provided, including its `channel:` prefi
 
 ## Supported actions
 
-Slack supports `read`, `react`, `edit`, `delete`, `search`, and `sendAttachment`. Plain replies auto-thread, and Slack threads have no name. Slack has no `send`, `thread-create`, or `thread-reply` action.
+Slack supports `send`, `read`, `react`, `edit`, `delete`, `search`, and `sendAttachment`. The channel dispatcher uses `send` with an explicit `threadId` for the starter; cross-surface messages and attachments also use explicit actions. Ordinary replies in the current thread use plain delivery and must not be duplicated through `message`. Slack threads have no name and Slack has no `thread-create` or `thread-reply` action.
+
+```jsonc
+{ "action": "send", "channel": "<Slack surface id>", "target": "<channel chat_id>", "threadId": "<triggering root timestamp>", "message": "<starter>" }
+```
 
 ## Reactions
 

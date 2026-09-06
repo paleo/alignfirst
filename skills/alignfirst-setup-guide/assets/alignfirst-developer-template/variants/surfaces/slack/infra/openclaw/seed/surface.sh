@@ -39,12 +39,13 @@ configure_surface() {
   set_scalar channels.slack.groupPolicy allowlist
   # The whole map, so a re-seed with a new channel ID replaces the old one. Invite the bot there.
   set_json channels.slack.channels \
-    "{\"$SLACK_CHANNEL_ID\":{\"enabled\":true,\"requireMention\":false}}"
+    "{\"$SLACK_CHANNEL_ID\":{\"enabled\":true,\"requireMention\":false,\"replyToMode\":\"off\"}}"
   # Completed paragraphs as they finish; no tool-progress previews in the channel.
   set_json channels.slack.streaming '{"mode":"block","preview":{"toolProgress":false}}'
-  # Every reply threads on the triggering message; a thread runs as a fresh session that
-  # ingests up to 100 prior thread messages on its first turn.
-  set_scalar channels.slack.replyToMode all
+  # Channel replies stay at root unless the playbook explicitly sends the starter with a
+  # threadId. Inbound thread replies retain their canonical thread route.
+  set_scalar channels.slack.replyToMode off
+  unset_key channels.slack.replyToModeByChatType
   set_json channels.slack.thread \
     '{"historyScope":"thread","inheritParent":false,"initialHistoryLimit":100}'
   # The name must match the slash command declared in the Slack app manifest (07-channel.md).

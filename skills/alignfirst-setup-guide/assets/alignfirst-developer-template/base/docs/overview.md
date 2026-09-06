@@ -19,7 +19,8 @@ read_when:
 ```text
 channel message ({{DEVELOPER_NAME}} on the selected surface)
   → OpenClaw gateway (systemd --user unit, loopback :18789)
-  → workspace AGENTS.md → alignfirst-developer-openclaw-playbook (thread routing, working session)
+  → playbook channel triage → native starter → durable thread-handoff wake
+  → regular thread session claims startup
   → alproject (project inventory, canonical paths, ports)
   → alcode (delegation) → coding agent
   → project workspace under {{PROJECTS_ROOT}}
@@ -30,7 +31,7 @@ The runtime model and the coding agent are independent choices: OpenClaw authent
 ## Ownership
 
 - This repository, in the admin account, describes the deployment. The service account never reads it; it works from the snapshot `~{{SERVICE_USER}}/seed/`, refreshed by the operator with `rsync` ([04 § 2](installations/04-openclaw.md#2-snapshot)).
-- `~{{SERVICE_USER}}/.openclaw/`: `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from the snapshot), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only).
+- `~{{SERVICE_USER}}/.openclaw/`: `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from the snapshot), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the external handoff plugin's durable state).
 - The gateway unit is written by `openclaw gateway install`; the environment comes from `~/.config/environment.d/`, installed by the seed.
 - Configuration, workspace files, skills, the coding agent's instructions and the npm prefix are immutable once [06](installations/06-security-hardening.md) has run.
 

@@ -2,7 +2,7 @@
 #
 # Copies the deployment state of the service account into ~/backups/deployment/<stamp>/:
 # openclaw.json, the secret store, the gateway env file, the workspace files, environment.d,
-# the alproject registry when present, and OpenClaw's own archive of its SQLite state.
+# the alproject registry when present, OpenClaw's archive, and thread-handoff's independent state.
 #
 # Run as the service account:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
@@ -26,6 +26,7 @@ main() {
   copy_environment
   copy_file "$REGISTRY_FILE" alproject-registry.json
   create_openclaw_archive
+  copy_thread_handoff_state
   chmod -R go-rwx "$BACKUP_DIR"
   echo "$BACKUP_DIR"
 }
@@ -35,6 +36,19 @@ main() {
 # already copied.
 create_openclaw_archive() {
   openclaw backup create --output "$BACKUP_DIR" --no-include-workspace --verify >/dev/null
+}
+
+# The gateway must be stopped before backup.sh runs. Preserve every SQLite crash-state file rather
+# than assuming the main database contains a completed checkpoint.
+copy_thread_handoff_state() {
+  local source="$HOME/.openclaw/thread-handoff" file
+  if [ ! -d "$source" ]; then
+    echo "[backup] absent, skipped: $source" >&2
+    return
+  fi
+  for file in "$source"/state.sqlite "$source"/state.sqlite-wal "$source"/state.sqlite-shm; do
+    if [ -f "$file" ]; then copy_file "$file" "thread-handoff/${file##*/}"; fi
+  done
 }
 
 create_backup_dir() {

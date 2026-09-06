@@ -1,6 +1,6 @@
 # Channel handling
 
-You're running in a channel (Slack) or channel/DM (Discord). Your job is to triage the incoming message and, when it signals work, open a thread and end the turn. The work itself always happens in the thread session.
+You're running in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
 
 ## Project lookup
 
@@ -30,12 +30,12 @@ Never reconstruct PROJECT_PATH from PROJECT.
 
 **First decision: is the message actionable?** A message is actionable when it asks you to do, investigate, change, or advise on something, even when it names no recognized project or ticket. A project or ticket mention, project creation, repository onboarding, and project removal are also actionable.
 
-- **Not actionable** (greeting, small talk, unrelated chatter) — off-projects chatter. Reply as a colleague, not a service: match the social tone; a reciprocal question is fine. The user knows what you do — no project mentions and no availability offers ("prêt si besoin", "happy to lend a hand"), now or on later small-talk turns. A quiet turn deserves a short reply, never an offer to fill it. On Discord, channel reply; on Slack, normal reply (auto-threaded).
+- **Not actionable** (greeting, small talk, unrelated chatter) — off-projects chatter. Reply at the channel root as a colleague, not a service: match the social tone; a reciprocal question is fine. The user knows what you do — no project mentions and no availability offers ("prêt si besoin", "happy to lend a hand"), now or on later small-talk turns. A quiet turn deserves a short reply, never an offer to fill it.
 - **Actionable** — open a thread and hand off, following the three steps below. Missing PROJECT, PROJECT_PATH, TICKET_ID, or TASK values become questions in the starter when it makes sense.
 
-## Actionable message: open the thread, then stop
+## Actionable message: deliver and activate the thread, then stop
 
-This session does three things: collect what the thread session needs, open the thread, end the turn.
+This session collects the handoff, delivers one starter, calls `thread_handoff start`, and ends.
 
 Everything else waits for the thread session — lifecycle work, workspace, branch, worktree, `alcode`, codebase questions, status reports, coding. This holds for every request, including an explicit green light ("lance directement, ne me demande pas de validation"): that green light applies in the thread, where a session is free to act on it without asking again.
 
@@ -64,11 +64,11 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 
 The tool returns the thread's `chat_id` — that is the THREAD_ID.
 
-**Slack** — Slack threads have no name, so there is nothing to create or rename, and this surface has no `message` `send`, `thread-create`, or `thread-reply`. The starter is delivered by Step 3's turn end.
+**Slack** — Slack threads have no name. Call `message` with `action: "send"`, `target` set to the raw current `chat_id`, `threadId` set to the triggering message timestamp, `message` set to the Step 3 starter, and `channel` set to the current surface. The bare root timestamp is the THREAD_ID. Slack has no `thread-create`, `thread-reply`, or rename action.
 
 ### Step 3 — The starter message, then end the turn
 
-A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter is its whole inheritance and stays the thread's record of the work. It ends with an ask that brings the user back — the thread session activates on the user's next message in the thread.
+A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter stays the visible record; the plugin seed carries the same exact user context into the fresh session.
 
 Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Add the request block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
 
@@ -96,12 +96,12 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - An unresolved PROJECT for ordinary single-project work → state that the name is not in the project inventory, then ask for the registered project path.
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
-- A resource URL that may provide the project or ticket → ask for neither; state that the user's
-  next message launches the thread session, which inspects the URL.
-- A multi-project request, or a request that may not need a project → ask for no main project; state that the user's next message launches the thread session, which routes the work.
-- Nothing else needs an answer → state that the user's next message launches the thread session. Do not claim that you are checking or starting the work now.
+- A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
+- A multi-project request, or a request that may not need a project → ask for no main project; state that the working session will route the work.
+- Nothing else needs an answer → state the intended continuation in this thread. Do not claim that project work has already begun.
 
-For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path. Then end the turn:
+For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 
-- **Discord** — the starter already went out through `thread-create`, and free-form text auto-streams to the parent channel: your final answer is exactly `NO_REPLY`.
-- **Slack** — ending the turn on the starter IS its delivery: write it as your final answer and stop. A `message` call to "make sure it posts" fails on this surface and drops a visible ⚠️ failure notice into the thread.
+After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. On `queued` or `alreadyStarted`, end with exactly `NO_REPLY`; do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
+
+In a DM or group DM, `start` is unsupported. Explain that project work must be requested from a supported channel; do not promise automatic thread activation there.

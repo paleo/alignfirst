@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `alignfirst-developer-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on the first user message, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
+This is the mechanism the `alignfirst-developer-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message or trusted handoff activation, tells the agent to load that skill and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
 
 ## Character budgets
 
@@ -74,7 +74,7 @@ One surface = one session at a time. Two surfaces = two transcripts, no shared s
 For Discord today:
 
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
-- Thread messages → the thread's bound session: a subagent we spawned with `thread: true`, or, with auto-thread routing enabled (Slack-style), a fresh thread-session OpenClaw spins up on first inbound message in the thread.
+- Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. A targeted plugin system wake can start that same regular session before the first human reply.
 
 ### Outbound delivery (the surprising part)
 
@@ -104,21 +104,21 @@ Three viable shapes for handling a Discord thread, given the above:
 
 1. **Parent-relayed subagent** (matches defaults). Spawn a thread-bound subagent; it works headless; the parent relays its single final summary into the thread. No live progress.
 2. **Subagent uses `message` with explicit target** (against OpenClaw guidance). Pass the thread channel ID into the subagent's bootstrap; have it call `message` for each progress step. Supports live progress, fragile, fights the system prompt.
-3. **Auto-thread routing — no subagent**. Configure the Discord channel so the bot's reply auto-opens a thread and subsequent thread messages route to a fresh thread session (the Slack model). Channel and thread sessions are siblings, each owning its surface. Loses subagent isolation; matches the per-surface session model naturally.
+3. **Explicit thread plus targeted regular-session wake — no subagent**. Deliver a native starter only when the channel triage selects project work, then enqueue a system event to the canonical thread session. Channel and thread sessions are siblings, each owning its surface.
 
-**Chosen for AlignFirst Developer:** Path 3, with a Discord twist. Slack uses the built-in auto-thread (`replyToMode: "all"`), so every reply auto-threads. On Discord, that knob (`autoThread`) would thread *every* channel message, which we don't want — the channel session decides when to open a thread via `message` `action: "thread-create"`, and follow-up thread messages route to a fresh per-thread session.
+**Chosen for AlignFirst Developer:** Path 3. Discord keeps channel `autoThread: false` and uses anchored `message thread-create`. Slack keeps `replyToMode: "off"` and uses `message send` with an explicit root timestamp. `@paleo/openclaw-thread-handoff` observes the confirmed native result, persists a pending handoff in its own SQLite database, and queues a targeted system event plus immediate heartbeat request. This starts the regular canonical thread session without `sessions_send`, a bound subagent, a human nudge, or an official-plugin trust exception.
 
 ### Wiring it up
 
-The channel session opens a thread on demand via the `message` tool with `action: "thread-create"` (`extensions/discord/src/channel-actions.ts`, handler in `extensions/discord/src/actions/`). Subsequent posts in the thread go through `message` `action: "thread-reply"`. Routing of the user's follow-up messages to a fresh per-thread session is handled by `resolveThreadSessionKeys` (`extensions/discord/src/monitor/`) and depends only on the message's `threadId`, not on how the thread was created.
+The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and wakes it; later user messages resolve to it normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
 
-The `message` and `browser` tools are profile-gated. The `coding` profile excludes both. The supported widening knob is `tools.alsoAllow` (merged in `src/agents/pi-tools.policy.ts`):
+The `message`, `browser`, and optional `thread_handoff` tools are profile-gated. The supported widening knob is `tools.alsoAllow` (merged in `src/agents/pi-tools.policy.ts`):
 
 ```jsonc
 {
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["message", "browser"]
+    "alsoAllow": ["message", "browser", "thread_handoff"]
   }
 }
 ```
@@ -127,9 +127,9 @@ Without `message` in `alsoAllow`, the channel session falls back to raw Discord 
 
 ### Discord vs Slack thread history — upstream gap
 
-When a fresh thread session activates on Discord on the user's follow-up, its transcript starts **empty** — Slack injects a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100) prior messages, but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
+When a fresh thread session activates on Discord, its transcript starts **empty** — Slack can inject a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100), but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-Workaround: the thread playbook ([`working-session.md`](../../skills/alignfirst-developer-openclaw-playbook/references/working-session.md)) instructs the agent to call `message` `action: "read"` with its bound `threadId` whenever its transcript is empty. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) is written for this case.
+Workaround: the handoff seed carries an escaped copy of the exact starter and trusted routing identifiers. After claiming it, the thread playbook also calls `message` `action: "read"` so newer human answers and existing workspace state participate. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool.ts`) supports the same read path.
 
 ## `expectsCompletionMessage` — let a thread subagent speak for itself
 

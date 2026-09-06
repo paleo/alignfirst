@@ -47,6 +47,7 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
 | `alproject-registry.json` | `{{PROJECTS_ROOT}}/alproject-registry.json` | — |
+| `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 
 ```sh
 sudo /usr/local/sbin/alignfirst-developer-maintenance config -- install -m 600 \
@@ -54,7 +55,12 @@ sudo /usr/local/sbin/alignfirst-developer-maintenance config -- install -m 600 \
   /home/{{SERVICE_USER}}/.openclaw/openclaw.json
 ```
 
-The archive `*-openclaw-backup.tar.gz` holds the SQLite state (sessions, cron jobs and their scratch, plugin consent, device pairing) and the auth profiles. Unpack it with `openclaw backup restore <archive> --target <dir>`, then copy the needed files under `~/.openclaw/` through the `config` maintenance scope, gateway stopped.
+The archive `*-openclaw-backup.tar.gz` holds OpenClaw-owned SQLite state (sessions, cron jobs and
+their scratch, plugin consent, device pairing) and auth profiles. The adjacent `thread-handoff/`
+files are the external plugin's independent database and any WAL/SHM crash state; restore that set
+together while the gateway is stopped. See the package README before retiring claimed records.
+Unpack the OpenClaw archive with `openclaw backup restore <archive> --target <dir>`, then copy the
+needed files under `~/.openclaw/` through the `config` maintenance scope.
 
 Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env` and `environment.d/` from the repository and `.env`. Prefer the backup for the workspace files and the registry, which the seed does not write.
 

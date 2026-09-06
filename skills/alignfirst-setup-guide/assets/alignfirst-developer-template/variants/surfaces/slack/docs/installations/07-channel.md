@@ -128,9 +128,21 @@ The manifest is scoped to a private channel (`groups:*`, `message.groups`). Conv
 
 Run it after `08`, as the operator, from the Slack client.
 
-1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
-2. The first reply opens a thread on your message. Its starter carries the task plus the known project path and ticket.
-3. Answer in the thread. The fresh thread session reads the thread history, delegates the read-only task, and reports in the same thread, never in the channel root.
-4. Post the same request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.
+First verify the effective gateway configuration:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw plugins inspect thread-handoff --json --runtime
+sudo -i -u {{SERVICE_USER}} -- openclaw config get tools.alsoAllow --json
+sudo -i -u {{SERVICE_USER}} -- openclaw config get channels.slack.replyToMode
+sudo -i -u {{SERVICE_USER}} -- openclaw config get channels.slack.channels --json
+```
+
+The plugin must be loaded, `thread_handoff` allowed, and both the global and allowlisted-channel
+`replyToMode` values must be `off`.
+
+1. Send small talk in the allowlisted channel. It receives one channel-root reply and no thread.
+2. Request a complete small read-only project task. One starter appears under the request and work begins without a follow-up. The report returns in that same thread, never at the root.
+3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
+4. Post the same project request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.
 
 When a negative check fails, stop the gateway (`sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway`) and correct the allowlist or the DM policy before further use.

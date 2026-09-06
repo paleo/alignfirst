@@ -151,8 +151,8 @@ configure_common() {
 
   echo "[seed] tools"
   set_scalar tools.profile coding
-  # The coding profile omits `message` and `browser`; the playbook needs both.
-  set_json tools.alsoAllow '["message","browser"]'
+  # The coding profile omits these tools; the playbook needs all three.
+  set_json tools.alsoAllow '["message","browser","thread_handoff"]'
   set_json agents.defaults.sandbox.browser.headless true
   set_scalar messages.groupChat.visibleReplies automatic
 
@@ -174,8 +174,11 @@ configure_common() {
     "[\"$GATEWAY_DASHBOARD_ORIGIN\",\"http://127.0.0.1:18789\"]"
 
   echo "[seed] plugins — explicit allowlist"
+  install_plugin_once @paleo/openclaw-thread-handoff
+  openclaw plugins enable thread-handoff --accept-capabilities
   # A provider served by an additional OpenClaw plugin (a runtime harness, for example) needs
   # `install_plugin_once`, its id appended to `plugins.allow` here and `openclaw plugins enable`;
   # the runbook 04 shows the form.
-  set_json plugins.allow "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\"]"
+  set_json plugins.allow \
+    "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\",\"thread-handoff\"]"
 }
