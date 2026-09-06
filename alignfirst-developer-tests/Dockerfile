@@ -69,13 +69,13 @@ COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
 RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.8.2 && \
+        npm:@openclaw/codex@2026.9.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.8.2 && \
+        npm:@openclaw/zai-provider@2026.9.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.8.2 && \
+        npm:@openclaw/perplexity-plugin@2026.9.2 && \
     OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force
@@ -85,7 +85,7 @@ RUN npm ci --include=dev && \
 # distinct projects (nimbus, lumen, and external-parent orion) with per-name patches.
 COPY --chown=claw:claw projects-fixture/template/ /opt/alignfirst-developer-tests/fixtures/template/
 RUN cd /opt/alignfirst-developer-tests/fixtures/template && \
-    pnpm install --frozen-lockfile --prod=false
+    pnpm install --frozen-lockfile
 
 # Install AlignFirst skills under /home/claw/.agents/skills/ (the path OpenClaw scans).
 RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
