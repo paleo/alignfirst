@@ -185,7 +185,7 @@ describe("project inventory doctor", () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toContain(`[error] Project inventory: ${JSON.stringify(project)}:`);
     expect(result.stdout).toMatch(
-      /AlignFirst CLI \d+\.\d+\.\d+ does not satisfy required range >=99\.0\.0/u,
+      /AlignFirst CLI \d+\.\d+\.\d+(?:[-+]\S+)? does not satisfy required range >=99\.0\.0/u,
     );
   });
 

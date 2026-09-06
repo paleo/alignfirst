@@ -55,7 +55,7 @@ describe("coding-agent selection", () => {
   it("keeps --version agent-independent", async () => {
     const stdout = makeSink();
     expect(await main({ argv: ["node", "alcode", "--version"], env: {}, stdout })).toBe(0);
-    expect(stdout.text()).toMatch(/^\d+\.\d+\.\d+\n$/);
+    expect(stdout.text()).toMatch(/^\d+\.\d+\.\d+(?:[-+]\S+)?\n$/);
   });
 
   it("rejects missing and invalid selectors before help", async () => {
