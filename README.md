@@ -2,16 +2,13 @@
 
 Companion products for AI-assisted software work. They can be used independently.
 
-## AlignFirst skills
+## `alignfirst` CLI
 
-Collaborative spec/plan/AAD/merge/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
-The protocols run through the `alignfirst` CLI. Install it with `npm install -g alignfirst`; see
-[the CLI README](packages/alignfirst/README.md).
+The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](packages/alignfirst/README.md) for installation and usage.
 
-### Team plans repository
+### Agent skills
 
-`alignfirst plans setup` and `alignfirst sync` share the `.plans` directory among a team through a
-dedicated plans repository. See [the CLI README](packages/alignfirst/README.md).
+Eight Agent Skill stubs expose the CLI through commands such as `/alspec` in Claude Code and `$alspec` in Codex. See [the Agent skills section](packages/alignfirst/README.md#agent-skills).
 
 ## Docmap - Agent-discoverable documentation
 
@@ -36,7 +33,6 @@ AlignFirst Developer is an AI teammate for software work, currently packaged on 
 Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
 
 ```bash
-npm install -g alignfirst
 npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
 ```
 
