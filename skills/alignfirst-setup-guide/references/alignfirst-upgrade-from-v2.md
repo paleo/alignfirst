@@ -1,7 +1,7 @@
 # Upgrade from AlignFirst v2
 
 Remove the v2 agent-skills installation while preserving project-specific instructions and custom
-skills. Continue with the current setup reference after these steps.
+skills. Continue with the v3 upgrade reference after these steps.
 
 Commands are Unix-style. Adapt them for another shell.
 
@@ -46,9 +46,8 @@ otherwise leave them untouched.
 
 ## Finish the Upgrade
 
-Follow [alignfirst-skills-setup.md](alignfirst-skills-setup.md). Install the current `alignfirst`
-content skill and all seven command skills for the requested agent and scope, then reconcile `.plans`,
-`.gitignore`, and project instructions.
+Continue with [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md) for the CLI installation,
+project config, stub skills, and current commands.
 
 Summarize the removed legacy files, plan migration, preserved custom skills, and the scope and agents
-that received the current AlignFirst skills.
+that received the v4 AlignFirst skills.

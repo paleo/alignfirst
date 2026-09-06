@@ -1,6 +1,7 @@
 export const PRIMARY_PROJECT_PARENT = "/home/claw/projects";
-export const EXTERNAL_PROJECT_PARENT = "/home/claw/external-projects";
-export const LIFECYCLE_PROJECT_PARENT = "/home/claw/lifecycle-projects";
+export const EXTERNAL_PROJECT_PARENT = `${PRIMARY_PROJECT_PARENT}/external-projects`;
+export const LIFECYCLE_PROJECT_PARENT = `${PRIMARY_PROJECT_PARENT}/lifecycle-projects`;
+export const PROJECT_CONFIG_FILENAME = ".alignfirst.json";
 
 export const NIMBUS_PROJECT_PATH = `${PRIMARY_PROJECT_PARENT}/nimbus`;
 export const LUMEN_PROJECT_PATH = `${PRIMARY_PROJECT_PARENT}/lumen`;

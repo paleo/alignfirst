@@ -1,7 +1,7 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
 import { statusNoBranchRubric } from "./_lib/common-constants.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
@@ -25,7 +25,6 @@ const TICKET_ID = "ABC-090";
 export default async function statusNoBranch(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -71,7 +70,7 @@ export default async function statusNoBranch(ctx: ScenarioContext): Promise<void
 
   assertNoWorktreeDirs(ctx);
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");

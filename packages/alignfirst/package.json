@@ -1,0 +1,54 @@
+{
+  "name": "alignfirst",
+  "version": "0.0.0",
+  "license": "CC0-1.0",
+  "author": "Thomas MUR",
+  "description": "The AlignFirst CLI: protocols, plans and docs in one command.",
+  "keywords": [
+    "alignfirst",
+    "cli",
+    "ai",
+    "agent",
+    "plans",
+    "docmap"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paleo/alignfirst.git",
+    "directory": "packages/alignfirst"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "npm@11.19.0",
+  "type": "module",
+  "bin": {
+    "alignfirst": "bin/alignfirst.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clear": "rimraf dist/*",
+    "lint": "biome check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@paleo/docmap": "~0.9.1",
+    "arktype": "^2.2.3",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "~24.13.3",
+    "@types/semver": "~7.8.0",
+    "rimraf": "~6.1.3",
+    "typescript": "~7.0.2",
+    "vitest": "~4.1.11"
+  }
+}

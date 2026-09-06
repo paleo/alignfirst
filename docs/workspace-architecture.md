@@ -97,6 +97,10 @@ The `ports` config group is resolved once per invocation, and a workspace's port
 
 Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column. The main worktree is never stale — its index is 0 by definition, and never stored.
 
+## Port claim check
+
+Every workspace command compares `portRange` in the current worktree's `.alignfirst.json` with the whole block reserved by the `ports` scheme. A missing project config skips the check. The `alignfirst` CLI owns the file's schema; the workspace kernel reads only the two range integers.
+
 ## Registry migration
 
 `workspace migrate-registry-0.30` converts a pre-`workspaces.json` registry (`slots.json`, keyed by port) in place, from the main worktree only. Every other command fails fast while `slots.json` exists, so an old registry never reads as "no workspaces". Worktrees, their gitignored content and running dev-servers are untouched.
@@ -132,4 +136,3 @@ Healing splits by destructiveness:
 `workspace --guide` prints `templates/guide.md`, expanded by [`guide.ts`](../packages/workspace/src/guide.ts). The prose lives in the template; the command blocks stay in code, so their `#` comments align whatever the package-manager prefix costs (`npm run workspace -- ` against `pnpm workspace `).
 
 Three config-driven flags gate the template: `DEV` (a `devServerScript` is declared), `PORTS` (a `ports` group is declared) and `PROFILES` (a non-empty `setupProfiles` map is declared). `{{#NAME}}…{{/NAME}}` keeps a block when the flag is on, `{{^NAME}}…{{/NAME}}` when it is off. Inside the `PROFILES` block, `{{LIST:profiles}}` expands to one `` `name` — description`` line per declared profile. Markers own their line and one regex handles both forms, so a stripped block leaves no stray blank line. A setup-only project therefore reads a guide with no dev-server section and a workspace definition that mentions only symlinks and config files.
-

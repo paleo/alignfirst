@@ -2,6 +2,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
+import { DEFAULT_ALIGNFIRST_COMMAND, reserveSideTicket } from "./alignfirst-cli.js";
 import { type CodingAgent, createAgentAdapter, resolveCodingAgent } from "./coding-agent.js";
 import { type GuideVariant, renderGuide } from "./guide.js";
 import { type ExecutableModelResolver, resolveExecutableModel, resolveModels } from "./models.js";
@@ -13,7 +14,6 @@ import {
   listSessionRecords,
   readPidStartTime,
   reconcileSessionFile,
-  reserveSideTicket,
   resolveSessionFilePath,
   type SessionFrontmatter,
   type SessionRecord,
@@ -40,6 +40,7 @@ export interface MainOptions {
   stderr?: RunOutput;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  alignfirstCommand?: string[];
   modelResolver?: ExecutableModelResolver;
   usageReader?: UsageReader;
 }
@@ -50,7 +51,6 @@ export type AlcodeCommand =
   | { kind: "guide"; variant: GuideVariant }
   | { kind: "status"; sessionFile: string }
   | { kind: "usage" }
-  | { kind: "reserveSideTicket" }
   | { kind: "session"; args: SessionArgs };
 
 // `resume` undefined means a new session.
@@ -70,6 +70,7 @@ export async function main(options?: MainOptions): Promise<number> {
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
   const env = options?.env ?? process.env;
+  const alignfirstCommand = options?.alignfirstCommand ?? DEFAULT_ALIGNFIRST_COMMAND;
 
   let command: AlcodeCommand;
   try {
@@ -83,15 +84,6 @@ export async function main(options?: MainOptions): Promise<number> {
     stdout.write(`${readPackageVersion()}\n`);
     return 0;
   }
-  if (command.kind === "reserveSideTicket") {
-    const gateError = assertPlansGate(cwd);
-    if (gateError) {
-      stderr.write(`${gateError}\n`);
-      return 1;
-    }
-    stdout.write(`${reserveSideTicket(cwd)}\n`);
-    return 0;
-  }
   if (command.kind === "status") {
     try {
       const sessionFilePath = resolveStatusSessionFile(cwd, command.sessionFile);
@@ -103,7 +95,6 @@ export async function main(options?: MainOptions): Promise<number> {
       return 1;
     }
   }
-
   let agent: CodingAgent;
   try {
     agent = resolveCodingAgent(env);
@@ -144,6 +135,7 @@ export async function main(options?: MainOptions): Promise<number> {
     env,
     stdout,
     stderr,
+    alignfirstCommand,
     modelResolver: options?.modelResolver ?? resolveExecutableModel,
   });
 }
@@ -217,8 +209,6 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
       return parseStatusCommand(tokens);
     case "usage":
       return parseBareCommand(tokens, "usage");
-    case "reserve-side-ticket":
-      return parseBareCommand(tokens, "reserveSideTicket");
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
@@ -283,7 +273,7 @@ function parseResumeCommand(tokens: string[]): AlcodeCommand {
   };
 }
 
-function parseBareCommand(tokens: string[], kind: "usage" | "reserveSideTicket"): AlcodeCommand {
+function parseBareCommand(tokens: string[], kind: "usage"): AlcodeCommand {
   const { values } = parseArgs({
     args: tokens,
     options: { help: { type: "boolean", short: "h", default: false } },
@@ -340,6 +330,7 @@ interface RunContext {
   env: NodeJS.ProcessEnv;
   stdout: RunOutput;
   stderr: RunOutput;
+  alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
 }
 
@@ -350,7 +341,7 @@ interface RunContext {
 // session id and status, and the `---- Result ----` block carries the outcome for a waking agent
 // (or a human).
 async function runSession(args: SessionArgs, agent: CodingAgent, ctx: RunContext): Promise<number> {
-  const { cwd, env, stdout, stderr, modelResolver } = ctx;
+  const { cwd, env, stdout, stderr, alignfirstCommand, modelResolver } = ctx;
 
   const gateError = assertPlansGate(cwd);
   if (gateError) {
@@ -367,7 +358,15 @@ async function runSession(args: SessionArgs, agent: CodingAgent, ctx: RunContext
   }
 
   const now = new Date();
-  const ticket = args.noTicket ? reserveSideTicket(cwd) : resolveTicket(args, records);
+  let ticket: string | undefined;
+  try {
+    ticket = args.noTicket
+      ? reserveSideTicket(alignfirstCommand, cwd)
+      : resolveTicket(args, records);
+  } catch (error) {
+    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
   const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
   writeInitialSessionFile(sessionFilePath, buildFrontmatter(args, agent, now, realCwd, ticket));
   stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
@@ -589,7 +588,6 @@ Usage:
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode status <session-file>
   alcode usage
-  alcode reserve-side-ticket
   alcode --guide
   alcode --openclaw-guide
   alcode -h, --help
@@ -600,20 +598,22 @@ Commands:
   resume <sessionId>    Continue an existing session.
   status <session-file> Reconcile and show one run's durable status. Does not start an agent.
   usage                 Show the selected coding agent's current usage limits and reset times.
-  reserve-side-ticket   Reserve the next side ticket for work without a ticket: creates
-                        .plans/side-N/ and prints side-N.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.
   --ticket <id>         Ticket ID. \`new --protocol\` requires it, or --no-ticket.
-  --no-ticket           Work without a ticket: reserves the next side ticket (side-N) and passes
-                        it to the agent. new only, requires --protocol.
+  --no-ticket           Work without a ticket: reserves the next side ticket through
+                        \`alignfirst ticket --side\` and passes it to the agent. new only,
+                        requires --protocol.
   -m, --message "..."   Message to send. Required for spec, aad, and when no --protocol.
   --model <model>       Model for a new session: one of ${models.join(", ")}. Omit to use the
                         default model.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
                         (\`meta:\`). alcode never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
+
+Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for side tickets and the
+delegated protocols.
 
 Env:
   ALIGNFIRST_CODE_AGENT            Required coding agent: claude or codex (selected: ${agent}).

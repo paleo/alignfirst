@@ -188,8 +188,9 @@ export interface SessionRecord {
   frontmatter: SessionFrontmatter;
 }
 
-// Lists every session record for a project root: `.plans/_alcode/*.md` plus each ticket's
-// `.plans/<ticket>/_alcode/*.md`. The session files are the registry — no separate registry file.
+// Lists every active session record for a project root: `.plans/_alcode/*.md` plus each ticket's
+// `.plans/<ticket>/_alcode/*.md`. Archived tickets keep their session files but leave the registry.
+// The session files are the registry — no separate registry file.
 // Self-healing: a `running` record whose pid is gone is a stale leftover from an interrupted run;
 // it gets sealed in passing so the launch guards never block on dead state. The returned records
 // reflect the post-healing state.
@@ -197,7 +198,7 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
   const plansDir = join(cwd, ".plans");
   const sessionDirs = [join(plansDir, "_alcode")];
   for (const entry of readEntries(plansDir)) {
-    if (entry.isDirectory() && entry.name !== "_alcode") {
+    if (entry.isDirectory() && !entry.name.startsWith("_")) {
       sessionDirs.push(join(plansDir, entry.name, "_alcode"));
     }
   }
@@ -211,35 +212,6 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
     }
   }
   return records;
-}
-
-// Work without a ticket: reserves the next free `side-N` under `.plans/`, following the alignfirst
-// skill's side-ticket convention. The non-recursive mkdir is the reservation: EEXIST means a
-// concurrent reservation took the id, so the loop moves on to the next one.
-export function reserveSideTicket(cwd: string): string {
-  const plansDir = join(cwd, ".plans");
-  const highest = Math.max(
-    highestSideTicket(plansDir),
-    highestSideTicket(join(plansDir, "_archives")),
-  );
-  for (let n = highest + 1; ; ++n) {
-    const ticket = `side-${n}`;
-    try {
-      mkdirSync(join(plansDir, ticket));
-      return ticket;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    }
-  }
-}
-
-function highestSideTicket(dir: string): number {
-  let highest = 0;
-  for (const entry of readEntries(dir)) {
-    const match = entry.isDirectory() ? entry.name.match(/^side-(\d+)$/) : null;
-    if (match) highest = Math.max(highest, Number(match[1]));
-  }
-  return highest;
 }
 
 function readEntries(dir: string): Dirent[] {

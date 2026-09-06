@@ -7,7 +7,7 @@
 # Usage:
 #   alignfirst-developer-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
-# Scopes: config, workspace, packages, skills, alproject, instructions, agent-skills.
+# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills.
 
 set -Eeuo pipefail
 
@@ -15,8 +15,7 @@ SERVICE_USER={{SERVICE_USER}}
 SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
-PROJECTS_ROOT_SPEC='{{PROJECTS_ROOT}}'
-PROJECTS_ROOT=
+PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-developer-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
@@ -56,7 +55,7 @@ parse_arguments() {
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
     scope=$1
     case "$scope" in
-      config|workspace|packages|skills|alproject|instructions|agent-skills) ;;
+      config|workspace|packages|skills|projects|instructions|agent-skills) ;;
       *) echo "Unknown maintenance scope: $scope" >&2; exit 2 ;;
     esac
     if [[ "$seen" = *" $scope "* ]]; then
@@ -81,12 +80,6 @@ parse_arguments() {
 
 resolve_paths() {
   local config="$ADMIN_REPOSITORY/infra/openclaw/environment.d/coding-agent.conf"
-  case "$PROJECTS_ROOT_SPEC" in
-    '~/'*) PROJECTS_ROOT="$SERVICE_HOME/${PROJECTS_ROOT_SPEC:2}" ;;
-    /*) PROJECTS_ROOT=$PROJECTS_ROOT_SPEC ;;
-    *) echo "PROJECTS_ROOT must be absolute or start with ~/: $PROJECTS_ROOT_SPEC" >&2; exit 1 ;;
-  esac
-
   if [ -r "$config" ]; then
     CODING_AGENT=$(sed -n 's/^ALIGNFIRST_CODE_AGENT=//p' "$config" | tail -1)
   fi
@@ -145,10 +138,9 @@ unlock_skills() {
   fi
 }
 
-unlock_alproject() {
-  chattr -i "$SERVICE_HOME/.alproject.json" "$PROJECTS_ROOT/alproject-guide.md"
-  chown "$SERVICE_USER:$SERVICE_USER" \
-    "$SERVICE_HOME/.alproject.json" "$PROJECTS_ROOT/alproject-guide.md"
+unlock_projects() {
+  chattr -i "$PROJECTS_MARKER"
+  chown "$SERVICE_USER:$SERVICE_USER" "$PROJECTS_MARKER"
 }
 
 unlock_instructions() {
@@ -223,10 +215,10 @@ restore_skills() {
   return "$status"
 }
 
-restore_alproject() {
-  chown root:root "$SERVICE_HOME/.alproject.json" "$PROJECTS_ROOT/alproject-guide.md" &&
-    chmod 644 "$SERVICE_HOME/.alproject.json" "$PROJECTS_ROOT/alproject-guide.md" &&
-    chattr +i "$SERVICE_HOME/.alproject.json" "$PROJECTS_ROOT/alproject-guide.md"
+restore_projects() {
+  chown root:root "$PROJECTS_MARKER" &&
+    chmod 644 "$PROJECTS_MARKER" &&
+    chattr +i "$PROJECTS_MARKER"
 }
 
 restore_instructions() {

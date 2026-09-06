@@ -14,7 +14,6 @@ import {
   readCompletion,
   readPidStartTime,
   reconcileSessionFile,
-  reserveSideTicket,
   resolveSessionFilePath,
   serializeFrontmatter,
   writeInitialSessionFile,
@@ -221,48 +220,6 @@ describe("session file lifecycle", () => {
   });
 });
 
-describe("reserveSideTicket", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "alcode-side-"));
-    mkdirSync(join(dir, ".plans"));
-  });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-  it("starts at side-1 and creates the directory", () => {
-    expect(reserveSideTicket(dir)).toBe("side-1");
-    expect(existsSync(join(dir, ".plans", "side-1"))).toBe(true);
-  });
-
-  it("takes one above the highest side-N directory, ignoring other names", () => {
-    mkdirSync(join(dir, ".plans", "side-1"));
-    mkdirSync(join(dir, ".plans", "side-3"));
-    mkdirSync(join(dir, ".plans", "side-notes"));
-    mkdirSync(join(dir, ".plans", "42"));
-    expect(reserveSideTicket(dir)).toBe("side-4");
-  });
-
-  it("takes one above the highest archived side ticket", () => {
-    mkdirSync(join(dir, ".plans", "side-1"));
-    mkdirSync(join(dir, ".plans", "_archives", "side-5"), { recursive: true });
-    mkdirSync(join(dir, ".plans", "_archives", "side-5-2"));
-    expect(reserveSideTicket(dir)).toBe("side-6");
-    expect(existsSync(join(dir, ".plans", "side-6"))).toBe(true);
-  });
-
-  it("skips a candidate whose creation loses to an existing entry", () => {
-    mkdirSync(join(dir, ".plans", "side-1"));
-    writeFileSync(join(dir, ".plans", "side-2"), ""); // not a directory: invisible to the scan
-    expect(reserveSideTicket(dir)).toBe("side-3");
-    expect(existsSync(join(dir, ".plans", "side-3"))).toBe(true);
-  });
-
-  it("reserves consecutive ids on successive calls", () => {
-    expect(reserveSideTicket(dir)).toBe("side-1");
-    expect(reserveSideTicket(dir)).toBe("side-2");
-  });
-});
-
 describe("listSessionRecords", () => {
   let dir: string;
   beforeEach(() => {
@@ -297,6 +254,11 @@ describe("listSessionRecords", () => {
     );
     const records = listSessionRecords(dir);
     expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
+  });
+
+  it("ignores session records under archived tickets", () => {
+    seedRecord("_archives/29/_alcode", "archived.md", makeFrontmatter({ status: "succeeded" }));
+    expect(listSessionRecords(dir)).toEqual([]);
   });
 
   it("skips non-md files and files without a frontmatter block", () => {

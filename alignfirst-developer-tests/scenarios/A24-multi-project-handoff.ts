@@ -1,6 +1,5 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { escapeRe } from "./_lib/common-constants.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { expectNoProtocolDelegation, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { LUMEN_PROJECT_PATH, NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
@@ -11,7 +10,6 @@ const TASK = "Rafraîchis les branches de base de nimbus et lumen.";
 
 export default async function multiProjectHandoff(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx, {
     defaultResult: "Base branch refreshed from origin/main. Dependencies are current.",
   });
@@ -67,7 +65,7 @@ async function expectBaseRefreshDelegation(
       `protocol. Pass when the prompt asks the coding agent, from the ${project} project, to ` +
       "refresh the base branch from its remote and perform any required dependency, build, or " +
       "migration refresh. Reject an AlignFirst protocol invocation in the prompt " +
-      "(`Run the _spec_ protocol …` and similar).",
+      "(`Run `alignfirst guide spec` and follow the protocol.` and similar).",
     label: `${project}-base-refresh-delegation`,
     timeoutMs: 300_000,
   });

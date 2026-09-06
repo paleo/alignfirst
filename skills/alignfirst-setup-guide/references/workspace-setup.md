@@ -53,7 +53,7 @@ Suggest `.local/` by default, even when the repo has no such directory yet: a gi
 
 `runtimeDir` (`.local-wt/` above) stays per-worktree, but the kernel symlinks its `workspace-registry/` sub-directory to the main worktree's, so every worktree reads one registry.
 
-The main worktree's `.plans` may itself be a symlink — into a clone of a team plans repository (see [plans-share-setup.md](plans-share-setup.md)); the symlink chain resolves on its own.
+The main worktree's `.plans` may itself be a symlink — into a clone of a team plans repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own.
 
 ### Contiguous port scheme
 
@@ -125,7 +125,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 - `ports` — optional group: `base` (first port of the main worktree's block), `maxWorkspaces` (main included, required), `perWorkspace` (defaults to `names.length`; required with `compute`), and exactly one of `names` (consecutive ports from `firstPort`) or `compute({ index, firstPort })` (full control; computed ports must stay within the block). Omit the whole group for [portless mode](#portless-mode). See [The workspace registry](#the-workspace-registry).
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree", fallback? }`, `{ kind: "committed", path }`, or `{ kind: "content", content }`. Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, ports, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
-- `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, profile?, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking a plans clone, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work. `profile` is set only during `setup --profile <name>`: check the profile's external requirements here (an environment variable, a reachable host) to fail before any file is written.
+- `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, profile?, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the plans clone with `alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work. `profile` is set only during `setup --profile <name>`: check the profile's external requirements here (an environment variable, a reachable host) to fail before any file is written.
 - `setupProfiles: { <name>: { description, apply } }` — optional; enables `setup --profile <name>`. The kernel checks the name and lists each `description` (one line) in `--help` and `--guide`. `apply({ name, ports, currentWorktree, mainWorktree, isMainWorktree, log })` runs on the **main worktree only**, after `gitignoredFiles` are seeded, and rewrites the ignored files for that environment. The profile rewrites the ignored main files once; linked worktrees inherit them through `mainWorktree` sources, so patchers stay profile-agnostic. Check every computed change before the first write, leave unrelated files untouched, and **MUST be idempotent** — reapplying the same profile produces the same files.
 - `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@paleo/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
 - `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.purgeData` for non-derivable ids. Swallow errors.
@@ -195,6 +195,9 @@ The system only works if agents know about it. The CLI self-documents via `works
   Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
   ```
 
+  Skip this line when the instruction file runs `alignfirst conventions` or `alignfirst context`;
+  those commands render the exclusions.
+
 On a project prepared for an AlignFirst Developer, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
 
 ### Project-specific facts the guide can't know
@@ -252,7 +255,7 @@ Public-IP variant: the same section without the `export` line, introduced by "Wh
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design the port scheme.** *(ports)* Ports per environment? `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Document the resulting layout in `docs/`.
+- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Set `.alignfirst.json`'s `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
@@ -264,6 +267,6 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
-- [ ] **Wire agents** — a search-ignore line, a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts.
+- [ ] **Wire agents** — a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts. Add the search-ignore line unless the instruction file runs `alignfirst conventions` or `alignfirst context`.
 - [ ] **Meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. On a managed project, also run `setup --profile remote` on the main worktree (gateway variant: with `REMOTE_DEV_DOMAIN` set to a placeholder domain), check the rewritten URLs there and in a new linked worktree, then restore the main files. A wrapper that merely loads proves nothing.

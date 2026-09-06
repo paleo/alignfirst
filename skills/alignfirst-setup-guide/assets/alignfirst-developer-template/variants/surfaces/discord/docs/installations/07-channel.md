@@ -58,7 +58,7 @@ The seed allowlists that one channel (`channels.discord.guilds`, `groupPolicy al
 
 Run it after `08`, as the operator, from the Discord client.
 
-1. In the allowlisted channel, request a small read-only task against a registered project (a question about the codebase, no change).
+1. In the allowlisted channel, request a small read-only task against a listed project (a question about the codebase, no change).
 2. The channel session creates one named thread on your message. Its starter carries the task plus the known project path and ticket. The channel root receives no duplicate starter and no setup message.
 3. Answer in the thread. The fresh thread session reads its own history, delegates the read-only task, and reports in the same thread.
 4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens, no work starts.

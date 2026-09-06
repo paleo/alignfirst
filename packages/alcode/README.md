@@ -2,6 +2,8 @@
 
 Run a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) protocols from the terminal. `alcode` wraps a coding-agent CLI for non-interactive use: it invokes a protocol (`spec`, `plan`, `aad`, …), streams the run to a per-call session file under `.plans/`, and returns the result.
 
+Prerequisite: install the `alignfirst` CLI on `PATH` with `npm install -g alignfirst`.
+
 Run `alcode --guide` for the full delegation guide. When an OpenClaw agent is the caller, run `alcode --openclaw-guide` instead: the same manual, with the OpenClaw-specific run instructions (`exec` with `background: true` + `timeout: 0`, and the completion-wake procedure).
 
 ## Execution model
@@ -29,7 +31,7 @@ alcode usage
 
 See `alcode --help` for all commands and options.
 
-A new protocol session needs a ticket. `--no-ticket` makes `alcode` reserve the next side ticket (`side-N` under `.plans/`) and pass it to the agent.
+A new protocol session needs a ticket. `--no-ticket` makes `alcode` reserve the next side ticket through `alignfirst ticket --side` and pass it to the agent.
 
 `alcode status <session-file>` reconciles and shows a run's durable status. If a recorded process is gone, the command seals the session file as `status: failed`, `exitReason: terminated`. New Linux records also store the process start time to detect pid reuse. The command accepts session files under the current project's `.plans/**/_alcode/` tree and does not start a coding agent.
 

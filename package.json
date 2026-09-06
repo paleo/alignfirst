@@ -6,18 +6,19 @@
     "packages/*"
   ],
   "scripts": {
-    "docmap": "docmap",
+    "docmap": "alignfirst docmap",
     "workspace": "node scripts/workspace.mjs",
-    "plans:setup": "plans-share setup --folder alignfirst",
-    "plans:sync": "plans-share sync --auto-archive",
+    "plans:setup": "alignfirst plans setup",
+    "plans:sync": "alignfirst sync",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @paleo/docmap && npm run build --workspaces --if-present",
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
     "ci:version": "changeset version && npm i",
-    "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && changeset publish"
+    "release:smoke": "node scripts/release-smoke.mjs",
+    "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && npm run release:smoke && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "~2.5.10",

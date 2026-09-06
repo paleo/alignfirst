@@ -49,13 +49,12 @@ sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
 
 Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the agent can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the agent-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-developer.md](../operations/update-developer.md#smoke-test) restores it.
 
-The alproject configuration and guide are repository-managed; the registry stays service-owned and writable:
+The projects marker is repository-managed and immutable:
 
 ```sh
-projects_root=$(sudo -H -u {{SERVICE_USER}} bash -lc 'echo {{PROJECTS_ROOT}}')
-sudo chown root:root /home/{{SERVICE_USER}}/.alproject.json "$projects_root/alproject-guide.md"
-sudo chmod 644 /home/{{SERVICE_USER}}/.alproject.json "$projects_root/alproject-guide.md"
-sudo chattr +i /home/{{SERVICE_USER}}/.alproject.json "$projects_root/alproject-guide.md"
+sudo chown root:root /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
+sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
+sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
 ## Skills and instructions
@@ -73,7 +72,7 @@ The coding agent's own skill directory and global instruction file: [08-coding-a
 
 ## Global packages
 
-`~/.npm-system-global/` holds `openclaw`, the coding agent, `@paleo/alcode`, `@paleo/alproject` and `ctx7`. Contract: as the service account, `npm install -g` fails with `EACCES`; project-level installs still work.
+`~/.npm-system-global/` holds `openclaw`, the coding agent, `alignfirst`, `@paleo/alcode` and `ctx7`. Contract: as the service account, `npm install -g` fails with `EACCES`; project-level installs still work.
 
 ```sh
 sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
@@ -83,7 +82,7 @@ sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-developer-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `alproject`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-developer-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -104,14 +103,13 @@ As the service account, every write must fail with `Operation not permitted` or 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alproject.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> {{PROJECTS_ROOT}}/alproject-guide.md'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.agents/skills/alignfirst/SKILL.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -i -u {{SERVICE_USER}} -- /usr/bin/npm install -g cowsay
 ```
 
-Still working: reads of the instructions and skills, `alproject register`/`unregister`, writes under `~/.openclaw/workspace/scratch/`, `npm install` inside a project, the coding agent's authentication and session state.
+Still working: reads of the instructions, skills and project listing; writes under `~/.openclaw/workspace/scratch/`; `npm install` inside a project; the coding agent's authentication and session state.
 
 Rootless podman closes the bind-mount bypass: container root maps to the service account, which cannot override the flag.
 

@@ -1,6 +1,8 @@
 # Repository Guidelines
 
-Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
+## AlignFirst
+
+Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
 
 ## Tooling
 
@@ -22,39 +24,21 @@ This repository is on *GitHub*.
 
 ## Packages
 
-- `@paleo/alcode` — coding agent wrapper for the AlignFirst developer.
-- `@paleo/alproject` — local project registry for the AlignFirst developer
+- `alignfirst` — the AlignFirst CLI: protocols, plans and docs
+- `@paleo/alcode` — coding agent wrapper for the AlignFirst Developer
+- `@paleo/alproject` — project inventory and port allocation for the AlignFirst Developer host
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans
 - `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
 - `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/plans-share` — share the `.plans` directory through a team plans repository
 - `@paleo/workspace` — run multiple git-worktree dev environments side by side
-
-## Docmap - Seek Documentation
-
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
 
 ## Workspaces
 
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
 
 Run `npm run workspace -- --guide` for the full procedures.
-
-## AlignFirst - Ticket ID, Commit Message, Branch Name
-
-_Ticket ID_: Format is numeric. Use the ticket ID if explicitly provided. Otherwise, deduce it from the current branch name (no confirmation needed). If the branch name is unavailable, get it via `git branch --show-current`. Only ask the user as a last resort.
-
-Commit message convention: we use conventional commit, e.g., `feat: add new feature`. Do not mention the ticket ID. Do not add a "Co-Authored-By:" line.
-
-Branch naming convention: `<ticket-id>/<1-3-words>`.
-
-### Team Plans Repository
-
-In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `alignfirst/`). Plans are shared with the team through that repository and are never committed in this one.
-
-After every change in `.plans/`, synchronize the plans: `npm run plans:sync`.
 
 ## Skills to read before editing
 

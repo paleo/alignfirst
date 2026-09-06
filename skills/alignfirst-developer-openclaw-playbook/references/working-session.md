@@ -28,11 +28,13 @@ The channel deliberately leaves some values for this session:
 - A request may need no project. Do not ask for one until the work itself requires project files.
 - Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 4 instead of asking for an external ID.
 
+As soon as PROJECT_PATH and TICKET_ID are known, and before any project work, run `alignfirst sync`, then `alignfirst ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TASK_DIR before alcode can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
+
 Default rule: When the user asks you to handle or implement an existing ticket and a configured account gives you access to its platform, inspect the ticket before workspace setup. If its state is To do or equivalent and its assignee is either empty or your account, ensure it is assigned to your account and move it to In progress or equivalent when that state exists.
 
 ### Step 3 — Route project lifecycle work
 
-When the request creates a project, onboards a repository to clone, or physically removes a project, open [`project-lifecycle.md`](./runbooks/project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the registered PROJECT_PATH selected in the starter or supplied by the user.
+When the request creates a project, onboards a repository to clone, or physically removes a project, open [`project-lifecycle.md`](./runbooks/project-lifecycle.md), read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the listed PROJECT_PATH selected in the starter or supplied by the user.
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
@@ -42,11 +44,11 @@ Skip this step for project lifecycle and operational work. A new project's boots
 
 For new single-project work where the user explicitly says there is no ticket:
 
-1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill. Retain the project's plans synchronization command when one is documented.
-2. Run the documented plans synchronization command when the project has one, so identifier selection sees the current shared task set.
-3. Run `alcode reserve-side-ticket` from PROJECT_PATH (`exec`). It creates the next free `.plans/side-N/` and prints `side-N`. Set TICKET_ID to that id.
-4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
-5. Run the documented plans synchronization command again when the project has one.
+1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill.
+2. Run `alignfirst sync`, so identifier selection sees the current shared task set.
+3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates `.plans/side-N/` and prints the directory; TICKET_ID is the `side-N` it reports.
+4. Write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
+5. Run `alignfirst sync`.
 
 The bot owns this reservation and the request capture; the coding agent receives TICKET_ID. Do not use `alcode new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 
@@ -88,10 +90,11 @@ Only when the message is unambiguously about chat content ("summarize this threa
 When one project owns a detailed user explanation, preserve it before delegation:
 
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
-2. Read the `alignfirst` skill for TASK_DIR and filename conventions. Create the next `-request.md` file, such as `.plans/{TICKET_ID}/A1-request.md`, containing the complete request text recorded in the starter's request block. Keep its language. You may fix typos; preserve every detail.
-3. When ticket editing is available, add the request-file path relative to the project to the ticket description.
-4. Run the project's documented plans synchronization command.
-5. Continue through project workspace setup and alcode as usual.
+2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and retain the reported next-file path.
+3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
+4. Run `alignfirst sync`.
+5. When ticket editing is available, add the request-file path relative to the project to the ticket description.
+6. Continue through project workspace setup and alcode as usual.
 
 When Step 4 reserved a side ticket `side-N`, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
 
@@ -99,7 +102,7 @@ Skip this capture workflow for a multi-project request with no main project and 
 
 ### Multi-project and operational work
 
-Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alproject list --json` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to alcode without an AlignFirst protocol. Refresh `alproject list --json --root ~/projects` when the affected project set is not already recorded. Run one project-bound alcode session from each affected PROJECT_PATH and coordinate their results in the thread. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 
 ### What you delegate vs do
 
@@ -127,13 +130,13 @@ The agent usually has no question. When it does, answer it: a technical question
 
 ### Plan files are alcode's material
 
-Before acting on any file the user names under `.plans/`, run the project's documented plans synchronization command when it has one. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
+Before acting on any file the user names under `.plans/`, run `alignfirst sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to alcode, as the delegation guide describes.
 
 For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, read the `alignfirst` skill. Project instructions only define whether and how the directory is shared.
 
 ### Hand-written changes in `.plans/`
 
-Some projects share `.plans/` through a sync command, documented in `DEVELOPERS.md`. After writing or editing a file there yourself, run the sync. A change written by alcode needs nothing — alcode syncs its own.
+After writing or editing any file under `.plans/` yourself, run `alignfirst sync`. A change written by alcode needs nothing — alcode syncs its own.
 
 ### The project's entry points
 
@@ -187,7 +190,7 @@ Delegate the sequence to alcode.
 ### Status update
 
 - Check status from the recorded linked-worktree path. The takeover sync in `runbooks/project-workspace-setup.md` has already fetched and merged the remote branch, so you are reporting the latest state.
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`catchup` protocol — it synthesizes the `*spec.md`/`*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via alcode (`catchup` protocol — it synthesizes the `*request.md`, `*spec.md`, and `*summary.md` history). Don't browse the source to describe the code; that's a separate alcode delegation.
 
 ### Dev-server while working
 

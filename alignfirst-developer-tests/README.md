@@ -15,8 +15,8 @@ This README only documents what is specific to this harness.
 cp .env.local.example .env.local
 # Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
 
-# Build the real alcode CLI the gateway runs (packages/alcode/dist must exist).
-npm run build --workspace @paleo/alcode --prefix ..
+# Build the real alcode, alignfirst, and alproject CLIs the gateway runs.
+npm run build --prefix ..
 
 npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first run only; env:build repeats it)
 npm install
@@ -43,21 +43,21 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 - `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-developer-openclaw-playbook` skill, bind-mounted into the gateway. Playbook edits iterate live, no rebuild.
-- `ALIGNFIRST_CODE_DIR` — host path to `packages/alcode` (build it first). Live-mounted read-only at `/opt/alcode`; the `/usr/local/bin/alcode` wrapper runs `node /opt/alcode/bin/alcode.mjs`. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `templates/`, so guide edits iterate live).
+- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
-- [`docker-compose.yml`](docker-compose.yml) — shared fixture volumes on gateway + runner at `/home/claw/projects`, `/home/claw/external-projects`, and `/home/claw/lifecycle-projects`; the skill + alcode bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](projects-fixture/template/). `nimbus` and `lumen` live under `/home/claw/projects`; `orion` lives under the second explicit fixture parent `/home/claw/external-projects`. Each carries a project-specific package name, `README.md` and `DEVELOPERS.md` headings, port block (6500, 6520, and 6540), and an untracked `.plans/` directory for alcode's project gate.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](projects-fixture/template/). `nimbus` and `lumen` live under `/home/claw/projects`; `orion` lives under `/home/claw/projects/external-projects`. Each project has `.alignfirst.json`, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
 
-`/home/claw/lifecycle-projects` resets to an empty allowed parent. The creation scenario uses it for `nova`, isolated from the standard projects. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
+The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and port ranges. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
-The absolute parents are harness storage details. Scenarios obtain canonical main paths from the mocked `alproject list` result and pass those paths through starter, workspace, and coding-agent assertions. The `alproject` shim emits the CLI's labelled list format, supports per-scenario project records and additional-directory groups, and records argv, cwd, and call order. Lifecycle scenarios configure guide, registration, and unregistration responses; successful mutations update subsequent list output.
+`alproject` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A26`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A21` and `A23`–`A26`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`): it sends the channel message, waits for the starter, and asserts the channel session stopped right there — one thread post, no second one, no worktree on disk, no coding-agent call, nothing substantive leaked to the channel root. `sendInThread` then wakes the thread session, which owns the actual work. A scenario that seeds a worktree first passes its absolute path as `seededWorktreePaths` so the check still catches anything the channel session created.
 
@@ -65,14 +65,14 @@ Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstra
 
 `A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
 
-`A17` creates and registers `nova`, bootstraps it on `main` without an AlignFirst protocol, and checks the initial commit. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that filesystem and registry state remain intact.
+`A17` creates and prepares `nova`, bootstraps it on `main` without an AlignFirst protocol, and checks the initial commit. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that the filesystem and project config remain intact.
 
 `A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
 
-Rebuild the alcode package and harness image before focused coverage:
+Rebuild the CLIs and harness image before focused coverage:
 
 ```sh
-npm run build --workspace @paleo/alcode --prefix ..
+npm run build --prefix ..
 npm run env:build
 
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
@@ -96,6 +96,6 @@ This harness always tests the **local** `@paleo/openclaw-*` sources, never npmjs
 
 - [`openclaw.json`](openclaw.json) · [`docker-compose.yml`](docker-compose.yml) · [`Dockerfile`](Dockerfile) · [`package.json`](package.json) · [`scripts/vendor-packages.mjs`](scripts/vendor-packages.mjs) — committed.
 - `vendor/` (gitignored) — locally-built `@paleo/openclaw-*` tarballs, regenerated by `npm run vendor`.
-- `.env.local` (gitignored) — API keys, workspace/skill/alcode paths, and `ALIGNFIRST_CODE_AGENT`.
+- `.env.local` (gitignored) — API keys, workspace/skill/repository paths, and `ALIGNFIRST_CODE_AGENT`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `raw-stream.jsonl` (opt-in). Session transcripts live in the gateway's SQLite store; each cell's artifact dir archives them as `transcripts.json`.

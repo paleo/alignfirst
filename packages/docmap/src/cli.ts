@@ -26,6 +26,7 @@ export interface MainOptions {
   stderr?: { write(s: string): void };
   cwd?: string;
   userAgent?: string;
+  commands?: PackageManagerCommands;
 }
 
 export function main(options?: MainOptions): number {
@@ -46,7 +47,7 @@ export function main(options?: MainOptions): number {
 
   // Fold an explicit `--root` into every suggested command so each one is copy-pasteable against the
   // same custom root; `showRootOption` then drops the now-redundant `--root <path>` help row.
-  const pm = commandsWithRoot(detectPackageManager(cwd, userAgent), root);
+  const pm = commandsWithRoot(options?.commands ?? detectPackageManager(cwd, userAgent), root);
   const showRootOption = root === undefined;
 
   // Mode precedence (each prints only its own output, then returns): version → help → guide →
@@ -164,7 +165,7 @@ interface HelpOptions {
   showRootOption: boolean;
 }
 
-interface PackageManagerCommands {
+export interface PackageManagerCommands {
   base: string;
   withArgs: string;
 }

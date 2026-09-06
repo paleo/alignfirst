@@ -24,6 +24,10 @@
   "bin": {
     "docmap": "bin/docmap.mjs"
   },
+  "exports": {
+    ".": "./dist/cli.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "bin",
     "dist",

@@ -2,13 +2,13 @@
 
 Companion products for AI-assisted software work. They can be used independently.
 
-## AlignFirst skills
+## `alignfirst` CLI
 
-Collaborative spec/plan/AAD/merge/review protocols. See [alignfirst-skills.md](alignfirst-skills.md).
+The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](packages/alignfirst/README.md) for installation and usage.
 
-### Team plans repository
+### Agent skills
 
-`@paleo/plans-share` shares the `.plans` directory of the AlignFirst skills among a team, through a dedicated plans repository. See [packages/plans-share/README.md](packages/plans-share/README.md).
+Eight Agent Skill stubs expose the CLI through commands such as `/alspec` in Claude Code and `$alspec` in Codex. See [the Agent skills section](packages/alignfirst/README.md#agent-skills).
 
 ## Docmap - Agent-discoverable documentation
 

@@ -1,6 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
-import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { expectCodingDelegation, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { waitForReport } from "./_lib/outbound.ts";
@@ -18,7 +18,6 @@ const REQUEST = `Sur nimbus, réorganise la page d'export.
 
 export default async function detailedRequestHandoff(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -40,7 +39,7 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
       "the user's next message launches the working session), and claims no work has started.",
     label: "detailed-request-preserved",
   });
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   const firstWakeCursor = await sendInThread(ctx, starter.threadId, "Vas-y.");
   const ticketQuestion = await waitForReport(

@@ -12,23 +12,22 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm via Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. `claude`, `codex`, `gh`, and `alproject` are shimmed. `alcode` runs for real,
+# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `alcode` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl && \
     corepack enable && corepack prepare pnpm@latest --activate && \
-    for name in claude codex gh alproject; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
-    mkdir -p /home/claw/projects /home/claw/external-projects /home/claw/lifecycle-projects && \
-    chown claw:claw /home/claw/projects /home/claw/external-projects \
-      /home/claw/lifecycle-projects
+    for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
+    mkdir -p /home/claw/projects && \
+    chown claw:claw /home/claw/projects
 
-# PATH wrapper for the real `@paleo/alcode` CLI. The package's built output is
-# live-mounted at /opt/alcode (`${ALIGNFIRST_CODE_DIR}:/opt/alcode:ro` in the compose
-# overlay), so alcode edits iterate without a rebuild — mirroring the skill
-# live-mount. `/usr/local/bin` sits after `/opt/openclaw-test/mocks/bin` in
-# PATH, so this wrapper is only reached for `alcode` (never shimmed), while
-# alcode's own coding-agent subprocess still hits the shim.
-RUN printf '#!/bin/sh\nexec node /opt/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
-    chmod +x /usr/local/bin/alcode
+# PATH wrappers for the real CLIs. `/opt/alignfirst` is the read-only monorepo root
+# mount, so @paleo/docmap, arktype, and semver resolve through its root node_modules.
+# `alproject` spawns `alignfirst`. The mocked coding agent never runs the stub
+# skills, so no `npx -y alignfirst` resolution is needed.
+RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
+    printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alignfirst/bin/alignfirst.mjs "$@"\n' > /usr/local/bin/alignfirst && \
+    printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alproject/bin/alproject.mjs "$@"\n' > /usr/local/bin/alproject && \
+    chmod +x /usr/local/bin/alcode /usr/local/bin/alignfirst /usr/local/bin/alproject
 
 # PATH wrapper for the `openclaw` CLI. OpenClaw is only a local npm dependency
 # of /opt/openclaw-test/src (nothing puts its node_modules/.bin on the exec
@@ -81,8 +80,8 @@ RUN npm ci --include=dev && \
     npm cache clean --force
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
-# from here to each configured fixture parent at scenario start, materializing the
-# distinct projects (nimbus, lumen, and external-parent orion) with per-name patches.
+# from here into the nested fixture tree at scenario start, materializing nimbus,
+# lumen, and external-team project orion with per-name patches.
 COPY --chown=claw:claw projects-fixture/template/ /opt/alignfirst-developer-tests/fixtures/template/
 RUN cd /opt/alignfirst-developer-tests/fixtures/template && \
     pnpm install --frozen-lockfile --prod=false

@@ -1,13 +1,9 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { escapeRe } from "./_lib/common-constants.ts";
-import { setupAlprojectMock, registeredProject } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
-import {
-  EXTERNAL_PROJECT_PARENT,
-  NIMBUS_PROJECT_PATH,
-  PRIMARY_PROJECT_PARENT,
-} from "./_lib/project-fixtures.ts";
+import { assertGatewayCommand, waitForProjectListing } from "./_lib/project-lifecycle.ts";
+import { EXTERNAL_PROJECT_PARENT, NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
@@ -17,12 +13,7 @@ const DUPLICATE_PATH = `${EXTERNAL_PROJECT_PARENT}/${PROJECT}`;
 
 export default async function duplicateProjectName(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  const alproject = setupAlprojectMock(ctx, {
-    projects: [
-      registeredProject(PROJECT, NIMBUS_PROJECT_PATH, PRIMARY_PROJECT_PARENT),
-      registeredProject(PROJECT, DUPLICATE_PATH, EXTERNAL_PROJECT_PARENT),
-    ],
-  });
+  await seedDuplicateProject(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
@@ -51,8 +42,22 @@ export default async function duplicateProjectName(ctx: ScenarioContext): Promis
       "or coding has started.",
     label: "duplicate-project-path-choice",
   });
-  alproject.assertListCallCount(1);
+  await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
+}
+
+async function seedDuplicateProject(ctx: ScenarioContext): Promise<void> {
+  await assertGatewayCommand(
+    ctx,
+    ["git", "init", "-q", "-b", "main", DUPLICATE_PATH],
+    "duplicate project git initialization",
+  );
+  const config = JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$" }, null, 2);
+  await assertGatewayCommand(
+    ctx,
+    ["sh", "-c", `printf '%s\\n' '${config}' > '${DUPLICATE_PATH}/.alignfirst.json'`],
+    "duplicate project configuration",
+  );
 }

@@ -1,7 +1,7 @@
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/cli.js";
+import { main, type PackageManagerCommands } from "../src/cli.js";
 import { extractFallbackTitle } from "../src/parser.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -30,7 +30,12 @@ function run(args: string[], fixtureDir: string) {
   return invoke(["node", "docmap", "--root", fixtureDir, ...args], process.cwd());
 }
 
-function invoke(argv: string[], cwd: string, userAgent?: string) {
+function invoke(
+  argv: string[],
+  cwd: string,
+  userAgent?: string,
+  commands?: PackageManagerCommands,
+) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = main({
@@ -47,6 +52,7 @@ function invoke(argv: string[], cwd: string, userAgent?: string) {
     },
     cwd,
     userAgent,
+    commands,
   });
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
@@ -874,5 +880,32 @@ describe("package-manager prefix in help", () => {
     expect(out).toContain("docmap --guide");
     expect(out).not.toContain("npm run docmap");
     expect(out).not.toContain("npx @paleo/docmap");
+  });
+});
+
+describe("injected command prefix", () => {
+  const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
+
+  it("renders the injected prefix in full and short help", () => {
+    const full = invoke(["node", "docmap", "--help"], "/", undefined, commands).stdout;
+    const short = invoke(["node", "docmap"], "/", undefined, commands).stdout;
+    expect(full).toContain("alignfirst docmap --check");
+    expect(full).toContain("alignfirst docmap --guide");
+    expect(short).toContain("alignfirst docmap --guide");
+  });
+
+  it("renders the injected prefix in the guide", () => {
+    const out = invoke(["node", "docmap", "--guide"], "/", undefined, commands).stdout;
+    expect(out).toContain("alignfirst docmap --check");
+  });
+
+  it("folds --root into the injected prefix", () => {
+    const out = invoke(
+      ["node", "docmap", "--root", "my docs", "--help"],
+      "/",
+      undefined,
+      commands,
+    ).stdout;
+    expect(out).toContain("alignfirst docmap --root 'my docs' --check");
   });
 });

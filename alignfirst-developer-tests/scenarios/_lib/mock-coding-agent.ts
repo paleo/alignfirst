@@ -511,7 +511,7 @@ function parseWorktreeRequest(
 }
 
 const CODING_PROTOCOL_RE =
-  /^Run the _(spec|AAD|plan|description|catchup|review|merge)_ protocol from the \*alignfirst\* skill\./;
+  /^Run `alignfirst guide (spec|plan|aad|description|catchup|review|merge)` and follow the protocol\./;
 
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
@@ -698,5 +698,5 @@ export async function expectCodingDelegation(
 }
 
 function defaultCodingDelegationRubric(ticketId: string): string {
-  return `The message is a prompt sent to a coding agent via the \`alcode\` CLI. Expected: an alignfirst protocol invocation — \`Run the _spec_ protocol …\`, \`Run the _AAD_ protocol …\`, \`Run the _plan_ protocol …\`, etc. — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an alignfirst protocol invocation.`;
+  return `The message is a prompt sent to a coding agent via the \`alcode\` CLI. Expected: an AlignFirst protocol invocation — \`Run \`alignfirst guide spec\` and follow the protocol. Ticket ID = …\`, or the equivalent with another lowercase protocol name — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an AlignFirst protocol invocation.`;
 }

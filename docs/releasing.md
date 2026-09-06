@@ -57,9 +57,9 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
 1. Register the trusted publisher for each package, with npm CLI ≥ 11.19 and logged in as the owner. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 
    ```bash
-   for pkg in @paleo/alcode @paleo/docmap @paleo/openclaw-channel-mock-core \
+   for pkg in alignfirst @paleo/alcode @paleo/docmap @paleo/openclaw-channel-mock-core \
               @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock \
-              @paleo/openclaw-test @paleo/plans-share @paleo/workspace; do
+              @paleo/openclaw-test @paleo/workspace; do
      npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
    done
    npm trust list @paleo/docmap   # spot-check
@@ -78,6 +78,26 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    ```
 
 3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
+
+## Owner steps for the AlignFirst CLI
+
+The first **release: version packages** PR bumps `alignfirst` to `0.1.0`. Do not let its publish job
+run before the manual publish: publish the built tarball from that commit by hand, then approve the
+environment.
+
+1. Publish `alignfirst@0.1.0` once from a machine logged in to npm, because a trusted publisher binds
+   to an existing package. Then configure trusted publishing and MFA:
+
+   ```bash
+   npm trust github alignfirst --repo paleo/alignfirst --file release.yml --env release --allow-publish
+   npm access set mfa=publish alignfirst
+   ```
+
+2. Deprecate the replaced package:
+
+   ```bash
+   npm deprecate @paleo/plans-share@"*" "Replaced by the alignfirst package: npm install -g alignfirst"
+   ```
 
 ## Two-factor authentication and tokens
 

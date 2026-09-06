@@ -4,12 +4,11 @@
   "type": "module",
   "engines": { "node": ">=22.11.0" },
   "scripts": {
-    "docmap": "docmap",
+    "docmap": "alignfirst docmap",
     "workspace": "node scripts/workspace/workspace.mjs",
-    "validate": "npm run docmap -- --check && node --check scripts/workspace/workspace.mjs"
+    "validate": "alignfirst docmap --check && node --check scripts/workspace/workspace.mjs"
   },
   "devDependencies": {
-    "@paleo/docmap": "~0.9.1",
     "@paleo/workspace": "~0.32.0"
   }
 }

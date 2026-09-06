@@ -1,0 +1,7 @@
+{
+  "description": "Every project is a direct child of ~/projects. Adding a project is an operator's decision: ask before creating one.",
+  // TEAM_PLANS_SECTION
+  "description": "Every project is a direct child of ~/projects. Adding a project is an operator's decision: ask before creating one. The plans clone at ~/projects/{{PLANS_CLONE_NAME}} is a repository, not a project.",
+  // TEAM_PLANS_SECTION
+  "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} }
+}

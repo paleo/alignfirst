@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "ticketIdPattern": "^\\d+$",
+  "plans": {
+    "folder": "alignfirst",
+    "autoArchive": true
+  },
+  "git": {
+    "defaultBranch": "main",
+    "branchNameTemplate": "{ticketId}/{slug-1-3-words}",
+    "commit": {
+      "style": "conventionalCommit"
+    },
+    "agentCoauthoring": false
+  }
+}

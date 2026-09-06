@@ -21,6 +21,8 @@ Run `npm run workspace -- --guide` to learn the full procedures.
 
 ## Everyday commands
 
+The tooling runs through the `alignfirst` CLI built in this workspace, so run `npm run build` first.
+
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | Build every package |
@@ -29,3 +31,5 @@ Run `npm run workspace -- --guide` to learn the full procedures.
 | `npm run docmap` | Browse the project documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run plans:sync` | Publish and retrieve the task plans (`.plans`) |
+
+In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a team plans repository clone. The folder is shared with the team and never committed here.

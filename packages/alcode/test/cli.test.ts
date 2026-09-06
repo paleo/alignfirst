@@ -1,15 +1,8 @@
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -29,6 +22,10 @@ import {
   readCompletion,
   writeInitialSessionFile,
 } from "../src/session-file.js";
+
+const ALIGNFIRST_BIN = fileURLToPath(
+  new URL("../../alignfirst/bin/alignfirst.mjs", import.meta.url),
+);
 
 function parse(tokens: string[]): SessionArgs {
   const command = parseAlcodeArgs(["node", "alcode", ...tokens]);
@@ -58,7 +55,7 @@ describe("coding-agent selection", () => {
   it("keeps --version agent-independent", async () => {
     const stdout = makeSink();
     expect(await main({ argv: ["node", "alcode", "--version"], env: {}, stdout })).toBe(0);
-    expect(stdout.text()).toMatch(/^\d+\.\d+\.\d+\n$/);
+    expect(stdout.text()).toMatch(/^\d+\.\d+\.\d+(?:[-+]\S+)?\n$/);
   });
 
   it("rejects missing and invalid selectors before help", async () => {
@@ -83,6 +80,7 @@ describe("coding-agent selection", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain("sol, terra, luna");
+    expect(stdout.text()).not.toContain("reserve-side-ticket");
     expect(stdout.text()).not.toContain("fable");
   });
 });
@@ -106,9 +104,6 @@ describe("parseAlcodeArgs", () => {
       sessionFile: ".plans/1/_alcode/run.md",
     });
     expect(parseAlcodeArgs(["node", "alcode", "usage"])).toEqual({ kind: "usage" });
-    expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket"])).toEqual({
-      kind: "reserveSideTicket",
-    });
   });
 
   it("reads `new` options into camelCase fields", () => {
@@ -147,9 +142,6 @@ describe("parseAlcodeArgs", () => {
     expect(parseAlcodeArgs(["node", "alcode", "resume", "-h"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "status", "--help"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "usage", "--help"])).toEqual({ kind: "help" });
-    expect(parseAlcodeArgs(["node", "alcode", "reserve-side-ticket", "-h"])).toEqual({
-      kind: "help",
-    });
   });
 
   it("rejects a missing or unknown command", () => {
@@ -166,7 +158,6 @@ describe("parseAlcodeArgs", () => {
     );
     expect(() => parse(["status", "--message", "go"])).toThrow();
     expect(() => parse(["usage", "extra"])).toThrow();
-    expect(() => parse(["reserve-side-ticket", "extra"])).toThrow();
     expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
     expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow("exactly one <sessionId>");
   });
@@ -417,40 +408,6 @@ describe("usage", () => {
   });
 });
 
-describe("reserve-side-ticket", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "alcode-reserve-"));
-  });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-  it("prints the reserved id and creates its directory, without a coding agent", async () => {
-    mkdirSync(join(dir, ".plans", "side-1"), { recursive: true });
-    const stdout = makeSink();
-    const code = await main({
-      argv: ["node", "alcode", "reserve-side-ticket"],
-      cwd: dir,
-      env: {},
-      stdout,
-    });
-    expect(code).toBe(0);
-    expect(stdout.text()).toBe("side-2\n");
-    expect(existsSync(join(dir, ".plans", "side-2"))).toBe(true);
-  });
-
-  it("requires a .plans directory", async () => {
-    const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "alcode", "reserve-side-ticket"],
-      cwd: dir,
-      env: {},
-      stderr,
-    });
-    expect(code).toBe(1);
-    expect(stderr.text()).toContain("no `.plans/` directory");
-  });
-});
-
 describe("resolveTicket", () => {
   function record(overrides: Partial<SessionFrontmatter>): SessionRecord {
     return {
@@ -551,7 +508,7 @@ describe("buildRunConfig", () => {
       undefined,
     );
     expect(config.prompt).toBe(
-      "Run the _plan_ protocol from the *alignfirst* skill. Ticket ID = 30.",
+      "Run `alignfirst guide plan` and follow the protocol. Ticket ID = 30.",
     );
     expect(config.resume).toBe("abc");
   });
@@ -701,10 +658,8 @@ describe("launch guards", () => {
     });
   });
 
-  it("reserves the next side ticket for --no-ticket", async () => {
+  it("reserves the next side ticket through alignfirst for --no-ticket", async () => {
     mkdirSync(join(dir, ".plans", "side-1"));
-    mkdirSync(join(dir, ".plans", "side-3"));
-    mkdirSync(join(dir, ".plans", "side-notes"));
     const stdout = makeSink();
     const code = await main({
       argv: ["node", "alcode", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
@@ -712,16 +667,32 @@ describe("launch guards", () => {
       env: { ALIGNFIRST_CODE_AGENT: "claude" },
       stdout,
       stderr: makeSink(),
+      alignfirstCommand: ["node", ALIGNFIRST_BIN],
       modelResolver: async () => {
         throw new Error("stop before spawning");
       },
     });
 
     expect(code).toBe(1);
-    expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-4", "_alcode")}`);
+    expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-2", "_alcode")}`);
     const [record] = listSessionRecords(dir);
-    expect(record.frontmatter.ticket).toBe("side-4");
+    expect(record.frontmatter.ticket).toBe("side-2");
     expect(record.frontmatter.command).toBe('alcode new --protocol aad --no-ticket --message "go"');
+  });
+
+  it("reports a missing alignfirst executable before writing a session file", async () => {
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "alcode", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
+      cwd: dir,
+      env: { ALIGNFIRST_CODE_AGENT: "claude" },
+      stderr,
+      alignfirstCommand: ["/nonexistent/alignfirst"],
+    });
+
+    expect(code).toBe(1);
+    expect(stderr.text()).toContain("alignfirst is not installed");
+    expect(listSessionRecords(dir)).toEqual([]);
   });
 
   it("rejects a protocol run while another run is active in the same worktree", async () => {
