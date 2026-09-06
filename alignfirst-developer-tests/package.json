@@ -20,6 +20,7 @@
     "@paleo/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",
     "@paleo/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
     "@paleo/openclaw-test": "file:vendor/openclaw-test.tgz",
+    "@paleo/openclaw-thread-handoff": "file:vendor/openclaw-thread-handoff.tgz",
     "openclaw": "2026.9.2"
   },
   "devDependencies": {

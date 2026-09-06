@@ -92,3 +92,15 @@ npm test --workspace @paleo/openclaw-thread-handoff
 npm run typecheck --workspace @paleo/openclaw-thread-handoff
 npm run lint --workspace @paleo/openclaw-thread-handoff
 ```
+
+The ordinary test command excludes the real-gateway suite. To exercise the package as an external
+plugin against the pinned OpenClaw 2026.9.2 runtime, including Slack/Discord delivery, duplicate
+starts, same-session continuation, and abrupt restart recovery:
+
+```bash
+KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @paleo/openclaw-thread-handoff
+```
+
+Retained fixtures are written under `/tmp/thread-handoff-*` with gateway logs, provider requests,
+plugin SQLite state, configuration, and workspace files. Omit the environment variable for normal
+automatic cleanup.

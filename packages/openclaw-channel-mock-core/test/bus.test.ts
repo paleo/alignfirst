@@ -100,11 +100,50 @@ describe("bus HTTP round-trip", () => {
     expect(search.messages.map((m) => m.text)).toEqual(["thread message"]);
   });
 
+  it("retains a Discord thread anchor and resolves a thread channel send to its parent", async () => {
+    const created = await post<{
+      thread: { id: string; conversationId: string; parentMessageId?: string };
+    }>(fixture.baseUrl, "/v1/actions/thread-create", {
+      conversationId: "Project-With-Case",
+      title: "T",
+      parentMessageId: "anchor-1",
+    });
+    expect(created.thread.parentMessageId).toBe("anchor-1");
+    const sent = await post<{ message: { conversation: { id: string }; threadId?: string } }>(
+      fixture.baseUrl,
+      "/v1/outbound/message",
+      { to: `channel:${created.thread.id}`, text: "wake" },
+    );
+    expect(sent.message).toMatchObject({
+      conversation: { id: "Project-With-Case" },
+      threadId: created.thread.id,
+    });
+  });
+
   it("GET /health and /v1/state work", async () => {
     const healthResp = await fetch(`${fixture.baseUrl}/health`);
     expect(healthResp.status).toBe(200);
     const stateResp = await fetch(`${fixture.baseUrl}/v1/state`);
     const state = (await stateResp.json()) as { cursor: number };
     expect(typeof state.cursor).toBe("number");
+  });
+
+  it("injects a one-shot native delivery failure", async () => {
+    await post(fixture.baseUrl, "/v1/test/fail-next", {
+      operation: "outbound-message",
+      message: "planned delivery failure",
+    });
+    await expect(
+      post(fixture.baseUrl, "/v1/outbound/message", {
+        to: "channel:sample-project",
+        text: "first",
+      }),
+    ).rejects.toThrow(/planned delivery failure/);
+    await expect(
+      post(fixture.baseUrl, "/v1/outbound/message", {
+        to: "channel:sample-project",
+        text: "retry",
+      }),
+    ).resolves.toMatchObject({ message: { text: "retry" } });
   });
 });

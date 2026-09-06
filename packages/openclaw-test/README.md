@@ -33,7 +33,9 @@ Edit `openclaw.json`:
 
 - `agents.entries.main.model` — default `provider/model` ref; `run --model` overrides it per run.
 - `agents.entries.main.workspace` — host path to your OpenClaw workspace. Field name is **`workspace`**, not `workspaceDir`.
-- `channels.slack-mock.blockStreaming: true` — set this when running Slack scenarios under auto-thread, otherwise the agent's reply dribbles into the thread token-by-token.
+- `channels.slack-mock.replyToMode` — `"all"` (default) routes eligible roots and replies through
+  one thread session; `"off"` leaves root turns in the channel session and threads only explicit
+  replies. `blockStreaming: true` keeps streamed replies as one bus message.
 
 ## Env vars (`.env.local`)
 
@@ -110,7 +112,9 @@ Each worker gets its own gateway logs dir (`.gateway-logs/w<i>/`) and a private 
 ## Channels
 
 - `discord-mock` — full Discord-shaped surface; no auto-thread.
-- `slack-mock` — restricted Slack-shaped surface (`react` / `read` / `edit` / `delete` / `reactions` / `search`); bare-channel inbounds auto-thread on the triggering message.
+- `slack-mock` — Slack-shaped surface with `send`, `react`, `read`, `edit`, `delete`, `reactions`,
+  and `search`. It supports `replyToMode: "off" | "all"`; fake thread creation/rename actions stay
+  disabled.
 
 Assert on `conversation.id` / `threadId`, not envelope formatting.
 

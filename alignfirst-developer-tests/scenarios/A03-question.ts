@@ -14,7 +14,7 @@ import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-030";
@@ -51,8 +51,6 @@ export default async function projectInvestigationQuestion(ctx: ScenarioContext)
     ticketId: TICKET_ID,
     codingAgent,
   });
-  await sendInThread(ctx, starter.threadId, "Vas-y.");
-
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
     timeoutMs: 180_000,
   });

@@ -11,6 +11,7 @@ import type {
   QaBusCreateThreadInput,
   QaBusDeleteMessageInput,
   QaBusEditMessageInput,
+  QaBusFailNextInput,
   QaBusInboundMessageInput,
   QaBusOutboundMessageInput,
   QaBusPollInput,
@@ -94,6 +95,10 @@ export async function handleQaBusRequest(params: {
         writeJson(params.res, 200, {
           message: params.state.addOutboundMessage(body as unknown as QaBusOutboundMessageInput),
         });
+        return true;
+      case "/v1/test/fail-next":
+        params.state.failNext(body as unknown as QaBusFailNextInput);
+        writeJson(params.res, 200, { ok: true });
         return true;
       case "/v1/actions/thread-create":
         writeJson(params.res, 200, {

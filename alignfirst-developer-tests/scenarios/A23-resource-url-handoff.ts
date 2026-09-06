@@ -12,7 +12,7 @@ import { setupGhMock, type GhCall } from "./_lib/mock-gh.ts";
 import { waitForReport } from "./_lib/outbound.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PULL_REQUEST_URL = "https://github.com/acme/nimbus/pull/42";
 const TICKET_ID = "ABC-0230";
@@ -61,7 +61,7 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
   });
   alproject.assertListCallCount(1);
 
-  const goAheadCursor = await sendInThread(ctx, starter.threadId, "Vas-y.");
+  const goAheadCursor = starter.nextCursor;
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
     timeoutMs: 180_000,
   });

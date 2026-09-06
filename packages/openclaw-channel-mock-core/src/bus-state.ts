@@ -17,6 +17,8 @@ import type {
   QaBusDeleteMessageInput,
   QaBusEditMessageInput,
   QaBusEvent,
+  QaBusFailNextInput,
+  QaBusFaultOperation,
   QaBusInboundMessageInput,
   QaBusMessage,
   QaBusOutboundMessageInput,
@@ -53,6 +55,7 @@ export function createQaBusState() {
   const conversations = new Map<string, QaBusConversation>();
   const threads = new Map<string, QaBusThread>();
   const messages = new Map<string, QaBusMessage>();
+  const faults = new Map<QaBusFaultOperation, string>();
   const events: QaBusEvent[] = [];
   let cursor = 0;
   const waiters = createQaBusWaiterStore(() =>
@@ -79,6 +82,13 @@ export function createQaBusState() {
     const created = { ...conversation };
     conversations.set(created.id, created);
     return created;
+  };
+
+  const consumeFault = (operation: QaBusFaultOperation) => {
+    const fault = faults.get(operation);
+    if (!fault) return;
+    faults.delete(operation);
+    throw new Error(fault);
   };
 
   const createMessage = (params: {
@@ -122,6 +132,7 @@ export function createQaBusState() {
       conversations.clear();
       threads.clear();
       messages.clear();
+      faults.clear();
       events.length = 0;
       // Keep the cursor monotonic across resets so long-poll clients do not
       // miss fresh events after the bus is cleared mid-session.
@@ -150,8 +161,17 @@ export function createQaBusState() {
       return cloneMessage(message);
     },
     addOutboundMessage(input: QaBusOutboundMessageInput) {
+      consumeFault("outbound-message");
       const accountId = normalizeAccountId(input.accountId);
-      const { conversation, threadId } = normalizeConversationFromTarget(input.to);
+      const normalizedTarget = normalizeConversationFromTarget(input.to);
+      const storedThread =
+        normalizedTarget.threadId === undefined
+          ? threads.get(normalizedTarget.conversation.id)
+          : undefined;
+      const conversation = storedThread
+        ? ensureConversation({ id: storedThread.conversationId, kind: "channel" })
+        : normalizedTarget.conversation;
+      const threadId = storedThread?.id ?? normalizedTarget.threadId;
       const message = createMessage({
         direction: "outbound",
         accountId,
@@ -169,6 +189,7 @@ export function createQaBusState() {
       return cloneMessage(message);
     },
     createThread(input: QaBusCreateThreadInput) {
+      consumeFault("thread-create");
       const accountId = normalizeAccountId(input.accountId);
       const thread: QaBusThread = {
         // The conversation prefix keeps thread SESSIONS attributable to their conversation: with
@@ -181,11 +202,18 @@ export function createQaBusState() {
         title: input.title,
         createdAt: input.timestamp ?? Date.now(),
         createdBy: input.createdBy?.trim() || DEFAULT_BOT_ID,
+        parentMessageId: input.parentMessageId?.trim() || undefined,
       };
       threads.set(thread.id, thread);
       ensureConversation({ id: input.conversationId, kind: "channel" });
       pushEvent({ kind: "thread-created", accountId, thread: { ...thread } });
       return { ...thread };
+    },
+    failNext(input: QaBusFailNextInput) {
+      if (input.operation !== "outbound-message" && input.operation !== "thread-create") {
+        throw new Error(`unsupported test bus fault operation: ${String(input.operation)}`);
+      }
+      faults.set(input.operation, input.message?.trim() || `injected ${input.operation} failure`);
     },
     renameThread(input: QaBusRenameThreadInput) {
       const accountId = normalizeAccountId(input.accountId);

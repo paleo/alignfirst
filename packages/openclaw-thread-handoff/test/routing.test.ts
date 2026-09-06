@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HandoffError } from "../src/errors.js";
-import { assertSupportedSource, resolveHandoffRoute } from "../src/routing.js";
+import { assertSupportedSource, readSourceContext, resolveHandoffRoute } from "../src/routing.js";
 import type { PluginConfiguration, SourceContext } from "../src/types.js";
 
 const configuration: PluginConfiguration = {
@@ -42,6 +42,29 @@ describe("handoff routing", () => {
     expect(() => assertSupportedSource(sourceContext({ sessionKey }), configuration)).toThrow(
       HandoffError,
     );
+  });
+
+  it("recovers heartbeat claim identity from the trusted delivery route", () => {
+    expect(
+      readSourceContext(
+        {
+          agentId: "main",
+          sessionKey: "agent:main:slack:channel:c1:thread:171.abc",
+          sessionId: "target-session",
+          deliveryContext: {
+            channel: "slack",
+            to: "channel:C1",
+            accountId: "workspace-1",
+            threadId: "171.ABC",
+          },
+        },
+        configuration,
+      ),
+    ).toMatchObject({
+      channelId: "slack",
+      parentConversationId: "C1",
+      accountId: "workspace-1",
+    });
   });
 });
 

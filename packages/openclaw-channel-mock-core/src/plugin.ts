@@ -127,7 +127,7 @@ export function createChannelMockPlugin(params: {
                   : parsed.chatType === "group"
                     ? "group"
                     : "channel",
-              id: buildQaTarget(parsed),
+              id: parsed.conversationId,
             },
             chatType: parsed.chatType,
             from: `${channelId}:${accountId ?? DEFAULT_ACCOUNT_ID}`,
@@ -183,7 +183,19 @@ export function createChannelMockPlugin(params: {
     // launch, and what lets its exit wake reply into the originating thread instead of the channel
     // root. Discord-shaped channels stay without the hook — real Discord doesn't define one.
     ...(surface === "slack"
-      ? { threading: { buildToolContext: buildSlackShapedThreadingToolContext } }
+      ? {
+          threading: {
+            threadAddressing: "message" as const,
+            scopedAccountReplyToMode: {
+              resolveAccount: (cfg: CoreConfig, accountId?: string | null) =>
+                helpers.resolveAccount({ cfg, accountId }),
+              resolveReplyToMode: (account: ResolvedChannelMockAccount) =>
+                account.config.replyToMode ?? "all",
+            },
+            allowExplicitReplyTagsWhenOff: false,
+            buildToolContext: buildSlackShapedThreadingToolContext,
+          },
+        }
       : {}),
     outbound: {
       base: {
@@ -217,6 +229,8 @@ export function createChannelMockPlugin(params: {
 // mock's target shapes. Thread ids here are plain strings (the auto-thread is rooted on the inbound
 // message id — Slack's `thread_ts = ts`), so no ts-format normalization is needed.
 function buildSlackShapedThreadingToolContext(params: {
+  cfg: CoreConfig;
+  accountId?: string | null;
   context: ChannelThreadingContext;
   hasRepliedRef?: { value: boolean };
 }): ChannelThreadingToolContext {
@@ -236,8 +250,7 @@ function buildSlackShapedThreadingToolContext(params: {
       ? { currentChannelId: currentMessagingTarget, currentMessagingTarget }
       : {}),
     ...(currentThreadTs !== undefined ? { currentThreadTs } : {}),
-    // The slack surface is auto-thread by construction (`replyToMode: "all"` equivalent).
-    replyToMode: "all",
+    replyToMode: hasExplicitThreadTarget ? "all" : (context.ReplyToMode ?? "all"),
     hasRepliedRef,
     sameChannelThreadRequired: hasExplicitThreadTarget,
   };

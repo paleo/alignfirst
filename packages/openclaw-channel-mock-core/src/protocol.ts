@@ -63,6 +63,7 @@ export type QaBusThread = {
   title: string;
   createdAt: number;
   createdBy: string;
+  parentMessageId?: string;
 };
 
 export type QaBusEvent =
@@ -113,6 +114,7 @@ export type QaBusCreateThreadInput = {
   conversationId: string;
   title: string;
   createdBy?: string;
+  parentMessageId?: string;
   timestamp?: number;
 };
 
@@ -166,6 +168,13 @@ export type QaBusPollInput = {
 export type QaBusPollResult = {
   cursor: number;
   events: QaBusEvent[];
+};
+
+export type QaBusFaultOperation = "outbound-message" | "thread-create";
+
+export type QaBusFailNextInput = {
+  operation: QaBusFaultOperation;
+  message?: string;
 };
 
 export type QaBusStateSnapshot = {

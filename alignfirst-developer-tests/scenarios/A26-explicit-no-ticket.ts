@@ -8,7 +8,7 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const RESERVED_TICKET_ID = "side-2";
 const REQUEST = `Sur nimbus, sans ticket, améliore le bouton d'export.
@@ -36,12 +36,11 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
     attachTo: starter.entry,
     message: starter.match.text,
     rubric:
-      "A thread starter preserving the explicit no-ticket nimbus request. It asks only for a " +
-      "reply to launch the working session and does not ask for an external ticket ID.",
+      "A thread starter preserving the explicit no-ticket nimbus request. It starts the working " +
+      "session without asking for an external ticket ID or a mechanical follow-up.",
     label: "explicit-no-ticket-starter",
   });
 
-  await sendInThread(ctx, starter.threadId, "Vas-y sans ticket.");
   const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
   if (!capturedRequest.includes(REQUEST)) {
     throw new Error(`side-2 request omitted details: ${JSON.stringify(capturedRequest)}`);

@@ -33,9 +33,7 @@ function listActions(params: {
   const account = helpers.resolveAccount({ cfg, accountId });
   const isSlack = surface === "slack";
   const actions = new Set<ChannelMessageActionName>();
-  if (!isSlack) {
-    actions.add("send");
-  }
+  actions.add("send");
   if (account.config.actions?.messages !== false) {
     actions.add("read");
     actions.add("edit");
@@ -57,9 +55,9 @@ function listActions(params: {
 
 function readSendText(params: Record<string, unknown>) {
   return (
-    readStringParam(params, "message", { allowEmpty: true }) ??
-    readStringParam(params, "text", { allowEmpty: true }) ??
-    readStringParam(params, "content", { allowEmpty: true })
+    readStringParam(params, "message", { allowEmpty: true, trim: false }) ??
+    readStringParam(params, "text", { allowEmpty: true, trim: false }) ??
+    readStringParam(params, "content", { allowEmpty: true, trim: false })
   );
 }
 
@@ -128,7 +126,6 @@ function resolveDestination(params: Record<string, unknown>): string | undefined
 }
 
 const SLACK_DISABLED_ACTIONS = new Set([
-  "send",
   "sendMessage",
   "thread-create",
   "thread-reply",
@@ -233,6 +230,17 @@ export function createChannelMockMessageActions(params: {
             threadId,
             actionParams,
           });
+          if (surface === "slack") {
+            return jsonResult({
+              ok: true,
+              result: {
+                messageId: message.id,
+                channelId: parsed.conversationId,
+                ...(threadId ? { threadTs: threadId } : {}),
+              },
+              ...threadRename,
+            });
+          }
           return jsonResult({ message, ...threadRename });
         }
         case "thread-create": {
@@ -255,22 +263,32 @@ export function createChannelMockMessageActions(params: {
             conversationId,
             title,
             createdBy: account.botUserId,
+            parentMessageId: readStringParam(actionParams, "messageId"),
           });
           const body = readSendText(actionParams);
           const target = `thread:${conversationId}/${thread.id}`;
           if (body !== undefined && body.trim() !== "") {
-            const { message } = await sendQaBusMessage({
-              baseUrl,
-              accountId: account.accountId,
-              to: target,
-              text: body,
-              senderId: account.botUserId,
-              senderName: account.botDisplayName,
-              threadId: thread.id,
-            });
-            return jsonResult({ thread, threadId: thread.id, target, message });
+            try {
+              await sendQaBusMessage({
+                baseUrl,
+                accountId: account.accountId,
+                to: target,
+                text: body,
+                senderId: account.botUserId,
+                senderName: account.botDisplayName,
+                threadId: thread.id,
+              });
+            } catch (error) {
+              return jsonResult({
+                ok: true,
+                partial: true,
+                thread,
+                warning: "Discord thread was created, but its initial message was not delivered.",
+                initialMessageError: error instanceof Error ? error.message : String(error),
+              });
+            }
           }
-          return jsonResult({ thread, threadId: thread.id, target });
+          return jsonResult({ ok: true, thread });
         }
         case "thread-reply": {
           const destination = resolveDestination(actionParams);

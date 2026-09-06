@@ -163,13 +163,8 @@ export async function handleInbound(params: {
     threadId: inbound.threadId,
   });
   const toolCalls: QaBusToolCall[] = [];
-  // The route resolves against the conversation ROOT, as the real plugins do (Slack routes on the
-  // channel id, Discord re-keys the thread in `resolveInboundSessionKey`) — the thread id never
-  // shapes the routing peer.
-  const rootTarget = buildQaTarget({
-    chatType: inbound.conversation.kind,
-    conversationId: inbound.conversation.id,
-  });
+  // The SDK adds the peer-kind prefix while building the session key. Supplying the already-routable
+  // target here would produce `channel:channel:<id>` instead of the native canonical route.
   const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
     cfg: params.config as OpenClawConfig,
     channel: params.channelId,
@@ -181,7 +176,7 @@ export async function handleInbound(params: {
           : inbound.conversation.kind === "group"
             ? "group"
             : "channel",
-      id: rootTarget,
+      id: inbound.conversation.id,
     },
     runtime: runtime.channel,
     sessionStore: params.config.session?.store,
@@ -232,19 +227,20 @@ export async function handleInbound(params: {
     return;
   }
 
-  // Slack auto-threads a root inbound on the triggering message itself: the thread id IS the root
-  // message's id (Slack's `thread_ts = ts`) and no thread object is created — exactly what the real
-  // Slack plugin does under `replyToMode: "all"` (`resolveSlackThreadContext`). The turn stays on
-  // the channel session (the session key ignores this id); the id is surfaced as `MessageThreadId`
-  // below so OpenClaw captures it as the turn's current thread — that's what lets a background-exec
-  // exit wake reply back into the thread instead of the channel root.
-  const autoThreadId = params.autoThread && !inbound.threadId ? inbound.id : undefined;
+  // Slack `all` roots on the triggering message itself (`thread_ts = ts`). Both the root turn and
+  // later replies therefore use the same thread-scoped session. `off` leaves roots on the channel.
+  const replyToMode = params.account.config.replyToMode ?? "all";
+  const autoThreadId =
+    params.surface === "slack" && params.autoThread && replyToMode === "all" && !inbound.threadId
+      ? inbound.id
+      : undefined;
+  const effectiveThreadId = inbound.threadId ?? autoThreadId;
 
   const sessionKey = resolveInboundSessionKey({
     surface: params.surface,
     channelId: params.channelId,
     route,
-    threadId: inbound.threadId,
+    threadId: effectiveThreadId,
   });
   const buildSessionEnvelope =
     sessionKey === route.sessionKey
@@ -299,6 +295,7 @@ export async function handleInbound(params: {
     MessageSid: inbound.id,
     MessageSidFull: inbound.id,
     ReplyToId: inbound.replyToId,
+    ReplyToMode: params.surface === "slack" ? replyToMode : undefined,
     Timestamp: inbound.timestamp,
     OriginatingChannel: params.channelId,
     OriginatingTo: target,
@@ -363,11 +360,10 @@ export async function handleInbound(params: {
  * Discord: a thread IS a channel, so the key is built from the thread's own id
  * (`message-handler.context.ts` — `buildAgentSessionKey` with peer `{ kind: "channel" }`, then
  * `resolveThreadSessionKeys` with `useSuffix: false`, an identity). Slack: the channel session key
- * gets the default `:thread:<threadTs>` suffix (`prepare-routing.ts`). Root inbounds — including
- * Slack auto-thread roots, whose `autoThreadId` never touches the session key — stay on the
- * channel session.
+ * gets the default `:thread:<threadTs>` suffix (`prepare-routing.ts`). Off-mode roots stay on the
+ * channel session; all-mode roots and later replies share the root message's thread suffix.
  */
-function resolveInboundSessionKey(params: {
+export function resolveInboundSessionKey(params: {
   surface: ChannelSurface;
   channelId: string;
   route: { agentId: string; sessionKey: string };

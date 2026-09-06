@@ -7,7 +7,7 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-080";
@@ -36,8 +36,6 @@ export default async function statusBranchOnly(ctx: ScenarioContext): Promise<vo
     projectPath: NIMBUS_PROJECT_PATH,
     codingAgent,
   });
-  await sendInThread(ctx, starter.threadId, "Vas-y.");
-
   const worktreeDir = await waitForWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, BRANCH_DESC, {
     timeoutMs: 120_000,
   });

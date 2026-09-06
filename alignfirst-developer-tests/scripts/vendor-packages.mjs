@@ -26,6 +26,7 @@ const PACKAGES = [
   { name: "@paleo/openclaw-channel-mock-core", tarball: "openclaw-channel-mock-core.tgz" },
   { name: "@paleo/openclaw-discord-mock", tarball: "openclaw-discord-mock.tgz" },
   { name: "@paleo/openclaw-slack-mock", tarball: "openclaw-slack-mock.tgz" },
+  { name: "@paleo/openclaw-thread-handoff", tarball: "openclaw-thread-handoff.tgz" },
   { name: "@paleo/openclaw-test", tarball: "openclaw-test.tgz" },
 ];
 

@@ -1,6 +1,10 @@
 # @paleo/openclaw-slack-mock
 
-Synthetic Slack-shaped OpenClaw channel plugin. Registers as channel `slack-mock`. Restricted Slack-shaped action surface: `read`, `edit`, `delete`, `react`, `reactions`, `search`. No `send` / `thread-create` / `thread-reply`. Bare-channel inbounds auto-thread: the first agent outbound creates a thread anchored on the inbound message id; every subsequent outbound from the same turn lands in that thread.
+Synthetic Slack-shaped OpenClaw channel plugin. Registers as channel `slack-mock`. Its
+Slack-shaped action surface includes `send`, `read`, `edit`, `delete`, `react`, `reactions`, and
+`search`; fake thread creation, replies, and renames stay unavailable. `send` returns Slack's native
+`{ ok: true, result: { messageId, channelId, threadTs? } }` receipt shape and preserves starter text
+exactly.
 
 Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
 
@@ -27,13 +31,19 @@ In your `openclaw.json`:
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
       "botDisplayName": "OpenClaw Test",
-      "allowFrom": ["*"]
+      "allowFrom": ["*"],
+      "replyToMode": "off"
     }
   }
 }
 ```
 
 `enabled: true` must be **static**. Auto-enable for `origin: "config"` plugins is timing-sensitive against the plan-resolution `explicitlyEnabled` check.
+
+`replyToMode` supports `"off"` and `"all"`. The default is `"all"` for compatibility: an eligible
+root message routes through a thread session keyed by that root message ID, and later replies use
+the same session. With `"off"`, roots use the channel session and explicit replies use a thread
+session. Account-level configuration may override the top-level mode.
 
 ## Target format
 

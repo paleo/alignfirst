@@ -5,4 +5,6 @@ export interface Step {
   entry: OutboundReceivedEntry;
   threadId: string;
   nextCursor: number;
+  sourceSessionKey?: string;
+  targetSessionKey?: string;
 }

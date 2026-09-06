@@ -24,6 +24,7 @@ export type ChannelMockAccountConfig = {
     }
   >;
   defaultTo?: string;
+  replyToMode?: "off" | "all";
   actions?: ChannelMockActionConfig;
 };
 

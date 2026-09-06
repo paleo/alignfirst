@@ -1,6 +1,6 @@
 ---
 title: OpenClaw Test Harness Architecture
-summary: How the four `@paleo/openclaw-*` packages fit together — bus, gateway, runner, channel plugins, mocked CLIs, artifact layout, and the OpenClaw quirks the harness papers over.
+summary: How the generic `@paleo/openclaw-*` harness packages and consumer plugins fit together — bus, gateway, runner, channel plugins, mocked CLIs, and artifact layout.
 read_when:
   - onboarding to the test-runner codebase
   - debugging a scenario that misbehaves at the harness layer
@@ -10,7 +10,9 @@ read_when:
 
 # OpenClaw Test Harness Architecture
 
-Four packages drive automated regression tests against an OpenClaw workspace. Consumers depend on all four; only `openclaw-test` is the entry point.
+Four generic packages drive automated regression tests against an OpenClaw workspace. Only
+`openclaw-test` is the entry point. The AlignFirst Developer consumer additionally loads the
+`openclaw-thread-handoff` gateway plugin; it is not imposed on generic harness consumers.
 
 | Package | Role |
 | --- | --- |
@@ -18,7 +20,7 @@ Four packages drive automated regression tests against an OpenClaw workspace. Co
 | `@paleo/openclaw-channel-mock-core` | Shared channel library — bus client, action handlers, plugin/setup factories, account helpers. Not consumed directly. |
 | `@paleo/openclaw-discord-mock` | Thin wrapper. Registers as channel `discord-mock`, `surface: "discord"`, `autoThread: false`. |
 | `@paleo/openclaw-slack-mock` | Thin wrapper. Registers as channel `slack-mock`, `surface: "slack"`, `autoThread: true`. |
-| `@paleo/openclaw-thread-handoff` | Gateway plugin. Converts confirmed native starter delivery into a durable targeted wake for the ordinary thread session. |
+| `@paleo/openclaw-thread-handoff` | Consumer gateway plugin. Converts confirmed native starter delivery into a durable targeted wake for the ordinary thread session. |
 
 The two wrappers exist side-by-side in one gateway and share a single bus. The runner picks which channel(s) to drive per scenario; `accountId = channelId` keeps per-channel bus state segregated.
 
@@ -146,7 +148,11 @@ Both channels register together on every gateway boot. The runner selects which 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 
 - `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. Free-form agent text without a tool call lands in the parent channel.
-- `slack-mock` — `surface: "slack"`, `autoThread: true`. Restricted surface (`react` / `read` / `edit` / `delete` / `reactions` / `search`). Bare-channel inbounds auto-thread on the triggering message; every subsequent outbound from the same turn lands in that thread.
+- `slack-mock` — `surface: "slack"`, `autoThread: true`. Slack-shaped surface with `send`,
+  `react`, `read`, `edit`, `delete`, `reactions`, and `search`; fake thread creation/rename actions
+  remain disabled. `replyToMode: "all"` is the compatibility default and routes an eligible root
+  plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots
+  in the channel session and routes only explicit replies through a thread session.
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. `chat_id` envelope shape is **not** rewritten — scenarios assert on `conversation.id` / `threadId`, not envelope formatting.
 
@@ -167,7 +173,24 @@ Canonical destination param is `to`. Accepted shapes:
 
 Resolved in the order `to → target → channelId` to match the normalizer's output.
 
-Plugin actions and `send` route through different handlers in `message-action-runner.ts`. Only `send` triggers the delivery mirror, which historically tripped a lock-fence race (`EmbeddedAttemptSessionTakeoverError`). Plugin actions don't set `ctx.mirror` and never trip the race. Workspace-driven outbound that needs a thread should use `thread-create` + `thread-reply` rather than `send`.
+Plugin actions and `send` route through different handlers in `message-action-runner.ts`. The mocks
+preserve that distinction. Slack `send` reports `{ ok: true, result: { messageId, channelId,
+threadTs? } }`; Discord `thread-create` reports `{ ok: true, thread }` and retains its parent-message
+anchor. A Discord starter-delivery failure is returned as an explicit partial result. The handoff
+plugin accepts only confirmed native results and never infers success from requested arguments.
+
+The AlignFirst Developer consumer sets Slack to `replyToMode: "off"`. Its parent channel session
+posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
+wakes the canonical target session; that session claims before work. Scenario assertions correlate
+tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
+final `NO_REPLY`.
+
+The deterministic external-plugin suite uses the real OpenClaw 2026.9.2 executable, a scripted
+local provider, the synthetic bus, and disposable state. Run it with
+`KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
+@paleo/openclaw-thread-handoff`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
+provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
+both surfaces, canonical continuation, duplicate starts, and abrupt pending/post-claim restarts.
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 

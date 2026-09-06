@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { execMatches, inputOf, invokesAlcode, readsFile } from "./agent-tool-calls.ts";
 import { escapeRe, STARTER_HANDS_OFF_RUBRIC } from "./common-constants.ts";
 import type { CodingAgentMockHandle } from "./mock-coding-agent.ts";
 import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./outbound.ts";
@@ -24,19 +25,14 @@ export interface ChannelBootstrapOptions {
   /** Worktree paths seeded before the run; anything else on disk is the channel session's. */
   seededWorktreePaths?: string[];
   starterTimeoutMs?: number;
-  /** How long the channel session must stay silent after the starter. */
-  quietMs?: number;
+  /** Runs immediately after native starter delivery, before waiting for the start call. */
+  afterStarter?: (threadId: string) => Promise<void>;
 }
 
 /**
- * Drive the channel session through its whole job: open a thread carrying the
- * handoff values, then end the turn.
- *
- * Since the thread session only activates on the user's next message in the
- * thread, the starter is the channel session's single post — and everything
- * else (workspace, alcode, codebase, status) belongs to the thread session.
- * This asserts that contract structurally: one thread post, no second one, no
- * worktree on disk, no coding-agent call.
+ * Open a thread, confirm its native starter and durable handoff, then return as
+ * soon as the target session is eligible to run. Target work may already be in
+ * progress before the parent turn emits its final `NO_REPLY`.
  */
 export async function bootstrapThreadFromChannel(
   ctx: ScenarioContext,
@@ -53,6 +49,7 @@ export async function bootstrapThreadFromChannel(
   ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
 
   assertStarterValues(ctx, wait.match.text, opts);
+  await opts.afterStarter?.(threadId);
 
   await ctx.judgeLLM({
     attachTo: wait.entry,
@@ -61,16 +58,20 @@ export async function bootstrapThreadFromChannel(
     label: "starter-hands-off",
   });
 
-  await assertChannelSessionStopped(ctx, {
+  const handoff = await assertChannelSessionHandedOff(ctx, {
     threadId,
     sinceCursor: wait.nextCursor,
     startCursor,
-    quietMs: opts.quietMs,
-    codingAgent: opts.codingAgent,
-    seededWorktreePaths: opts.seededWorktreePaths,
   });
 
-  return { match: wait.match, entry: wait.entry, threadId, nextCursor: wait.nextCursor };
+  return {
+    match: wait.match,
+    entry: wait.entry,
+    threadId,
+    nextCursor: wait.nextCursor,
+    sourceSessionKey: handoff.sourceSessionKey,
+    targetSessionKey: handoff.targetSessionKey,
+  };
 }
 
 /**
@@ -114,27 +115,62 @@ function assertStarterValues(
   }
 }
 
-interface ChannelSessionStoppedOptions {
+interface ChannelSessionHandedOffOptions {
   threadId: string;
   sinceCursor: number;
   startCursor: number;
-  quietMs?: number;
-  codingAgent?: CodingAgentMockHandle;
-  seededWorktreePaths?: string[];
 }
 
-async function assertChannelSessionStopped(
+async function assertChannelSessionHandedOff(
   ctx: ScenarioContext,
-  opts: ChannelSessionStoppedOptions,
-): Promise<void> {
-  await ctx.expectNoOutbound((m) => m.direction === "outbound" && m.threadId === opts.threadId, {
-    withinMs: opts.quietMs ?? 10_000,
-    sinceCursor: opts.sinceCursor,
+  opts: ChannelSessionHandedOffOptions,
+): Promise<{ sourceSessionKey: string; targetSessionKey?: string }> {
+  const startCall = await ctx.waitForAgentToolCall(
+    (call) => {
+      const input = inputOf(call);
+      return (
+        call.toolName === "thread_handoff" &&
+        input.action === "start" &&
+        input.threadId === opts.threadId
+      );
+    },
+    { label: "parent session starts the durable thread handoff", timeoutMs: 120_000 },
+  );
+  if (!startCall.sessionKey) {
+    throw new Error("thread_handoff start is missing session attribution");
+  }
+  if (startCall.sessionKey.toLowerCase().includes(opts.threadId.toLowerCase())) {
+    throw new Error(`thread_handoff start ran from the target session: ${startCall.sessionKey}`);
+  }
+  const calls = await ctx.getAgentToolCalls();
+  const parentCalls = calls.filter((call) => call.sessionKey === startCall.sessionKey);
+  const starts = parentCalls.filter((call) => {
+    const input = inputOf(call);
+    return call.toolName === "thread_handoff" && input.action === "start";
   });
+  ctx.assertLength(starts, 1, "parent session issued exactly one handoff start");
+  const starterPosts = parentCalls.filter(
+    (call) => call.toolName === "message" && JSON.stringify(call.result).includes(opts.threadId),
+  );
+  ctx.assertLength(starterPosts, 1, "one confirmed native starter created the handoff target");
+  const forbidden = parentCalls.filter(
+    (call) =>
+      readsFile(call, "DEVELOPERS.md") ||
+      readsFile(call, "README.md") ||
+      invokesAlcode(call) ||
+      execMatches(call, /\b(workspace|worktree|git\s+(?:-C\s+\S+\s+)?(?:status|log|show|diff))\b/i),
+  );
+  ctx.assertLength(forbidden, 0, "parent session performed no target work");
   await assertNoChannelRootLeak(ctx, { sinceCursor: opts.startCursor });
-  assertWorktreePaths(ctx, opts.seededWorktreePaths ?? []);
-  if (opts.codingAgent) assertNoCodingAgentCalls(opts.codingAgent);
-  ctx.log("channel session stopped at the starter — OK");
+  const resultText = JSON.stringify(startCall.result ?? {});
+  const targetSessionKey = readJsonString(resultText, "sessionKey");
+  ctx.log(`parent session handed off to ${targetSessionKey ?? opts.threadId} — OK`);
+  return { sourceSessionKey: startCall.sessionKey, targetSessionKey };
+}
+
+function readJsonString(value: string, field: string): string | undefined {
+  const match = new RegExp(`\\"${field}\\"\\s*:\\s*\\"([^\\"]+)\\"`).exec(value);
+  return match?.[1];
 }
 
 /** Sends a user message into the thread, waking a thread session. Returns the pre-send cursor. */

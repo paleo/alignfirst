@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveHistoryScope } from "../src/plugin-actions.js";
+import { createChannelMockAccountHelpers } from "../src/accounts.js";
+import { resolveInboundSessionKey } from "../src/inbound.js";
 
 describe("resolveHistoryScope", () => {
   it("parses a composite thread target passed as threadId (envelope chat_id shape)", () => {
@@ -47,5 +49,60 @@ describe("resolveHistoryScope", () => {
 
   it("resolves to an empty scope when nothing is given", () => {
     expect(resolveHistoryScope({})).toEqual({});
+  });
+});
+
+describe("Slack session routing", () => {
+  it("keeps off-mode roots on the account-qualified channel session", () => {
+    expect(
+      resolveInboundSessionKey({
+        surface: "slack",
+        channelId: "slack-mock",
+        route: {
+          agentId: "main",
+          sessionKey: "agent:main:slack-mock:account:Team-A:channel:Project-X",
+        },
+        threadId: undefined,
+      }),
+    ).toBe("agent:main:slack-mock:account:Team-A:channel:Project-X");
+  });
+
+  it("routes an all-mode root and its later reply to exactly the same session", () => {
+    const route = {
+      agentId: "main",
+      sessionKey: "agent:main:slack-mock:account:Team-A:channel:Project-X",
+    };
+    const root = resolveInboundSessionKey({
+      surface: "slack",
+      channelId: "slack-mock",
+      route,
+      threadId: "Root-Message-ID",
+    });
+    const reply = resolveInboundSessionKey({
+      surface: "slack",
+      channelId: "slack-mock",
+      route,
+      threadId: "Root-Message-ID",
+    });
+    expect(root).toBe(reply);
+    expect(root).toContain(":thread:root-message-id");
+  });
+
+  it("inherits replyToMode and permits an account override", () => {
+    const helpers = createChannelMockAccountHelpers({ channelId: "slack-mock" });
+    const cfg = {
+      channels: {
+        "slack-mock": {
+          baseUrl: "http://bus",
+          replyToMode: "all" as const,
+          accounts: {
+            "Team-A": { baseUrl: "http://a", replyToMode: "off" as const },
+            "Team-B": { baseUrl: "http://b" },
+          },
+        },
+      },
+    };
+    expect(helpers.resolveAccount({ cfg, accountId: "Team-A" }).config.replyToMode).toBe("off");
+    expect(helpers.resolveAccount({ cfg, accountId: "Team-B" }).config.replyToMode).toBe("all");
   });
 });

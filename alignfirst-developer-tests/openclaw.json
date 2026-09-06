@@ -4,16 +4,27 @@
     "auth": { "mode": "none" }
   },
   "plugins": {
+    "allow": ["codex", "discord-mock", "slack-mock", "thread-handoff"],
     "load": {
       "paths": [
         "/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock",
-        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock",
+        "/opt/openclaw-test/src/node_modules/@paleo/openclaw-thread-handoff"
       ]
     },
     "entries": {
       "codex": { "enabled": true },
       "discord-mock": { "enabled": true },
-      "slack-mock": { "enabled": true }
+      "slack-mock": { "enabled": true },
+      "thread-handoff": {
+        "enabled": true,
+        "config": {
+          "channelSurfaces": {
+            "slack-mock": "slack",
+            "discord-mock": "discord"
+          }
+        }
+      }
     },
     "slots": { "memory": "none" }
   },
@@ -26,7 +37,7 @@
   "update": { "checkOnStart": false },
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["message", "browser"],
+    "alsoAllow": ["message", "browser", "thread_handoff"],
     "deny": ["ask_user"]
   },
   "models": {
@@ -120,6 +131,7 @@
       "botUserId": "openclaw",
       "botDisplayName": "myclaw",
       "allowFrom": ["*"],
+      "replyToMode": "off",
       "blockStreaming": true
     }
   }

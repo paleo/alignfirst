@@ -27,13 +27,14 @@ export function readSourceContext(
   context: OpenClawPluginToolContext,
   configuration: PluginConfiguration,
 ): SourceContext | undefined {
+  const deliveryContext = readDeliveryContext(context.deliveryContext);
   const agentId = nonempty(context.agentId);
   const sessionKey = nonempty(context.sessionKey);
   const sessionId = nonempty(context.sessionId);
-  const channelId = nonempty(context.messageChannel);
-  const parentConversationId = nonempty(context.nativeChannelId);
-  const accountId = nonempty(context.agentAccountId);
-  const deliveryContext = readDeliveryContext(context.deliveryContext);
+  const channelId = nonempty(context.messageChannel) ?? deliveryContext?.channel;
+  const parentConversationId =
+    nonempty(context.nativeChannelId) ?? readConversationId(deliveryContext?.to);
+  const accountId = nonempty(context.agentAccountId) ?? deliveryContext?.accountId;
   if (!agentId || !sessionKey || !sessionId || !channelId || !parentConversationId) return;
   if (!configuration.channelSurfaces[channelId]) return;
   return {
@@ -45,6 +46,14 @@ export function readSourceContext(
     parentConversationId,
     ...(deliveryContext ? { deliveryContext } : {}),
   };
+}
+
+function readConversationId(target: string | undefined): string | undefined {
+  if (!target) return;
+  const thread = /^thread:([^/]+)\/.+/u.exec(target);
+  if (thread) return thread[1];
+  const routed = /^(?:channel|group|dm):(.+)$/u.exec(target);
+  return routed?.[1];
 }
 
 function readDeliveryContext(value: unknown): DeliveryRoute | undefined {

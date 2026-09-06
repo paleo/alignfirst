@@ -98,20 +98,42 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
       text: "first thread message",
     })) as { content: Array<{ text: string }> };
     const payload = JSON.parse(created.content[0].text);
-    expect(payload.threadId).toBeTruthy();
-    expect(payload.message).toBeTruthy();
+    expect(payload).toMatchObject({ ok: true, thread: { title: "Topic" } });
+    expect(payload.thread.id).toBeTruthy();
     const snap = fixture.bus.state.getSnapshot();
     expect(snap.threads.length).toBe(1);
     expect(snap.messages.length).toBe(1);
     expect(snap.messages[0].text).toBe("first thread message");
-    expect(snap.messages[0].threadId).toBe(payload.threadId);
+    expect(snap.messages[0].threadId).toBe(payload.thread.id);
   });
 
   it("thread-create without text creates the thread only", async () => {
-    await runHandler(fixture, "thread-create", { to: "sample-project", title: "Topic" });
+    const result = (await runHandler(fixture, "thread-create", {
+      to: "sample-project",
+      title: "Topic",
+      messageId: "anchor-123",
+    })) as { content: Array<{ text: string }> };
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      ok: true,
+      thread: { conversationId: "sample-project", parentMessageId: "anchor-123" },
+    });
     const snap = fixture.bus.state.getSnapshot();
     expect(snap.threads.length).toBe(1);
     expect(snap.messages.length).toBe(0);
+  });
+
+  it("resolves a native thread channel target back to its stored parent", async () => {
+    const thread = fixture.bus.state.createThread({
+      accountId: "default",
+      conversationId: "Sample-Project",
+      title: "T",
+    });
+    await runHandler(fixture, "send", { to: `channel:${thread.id}`, text: "wake" });
+    expect(fixture.bus.state.getSnapshot().messages.at(-1)).toMatchObject({
+      conversation: { id: "Sample-Project" },
+      threadId: thread.id,
+    });
   });
 
   it("thread-reply posts to the thread", async () => {

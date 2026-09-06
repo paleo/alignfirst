@@ -5,7 +5,7 @@ import { expectNoProtocolDelegation, setupCodingAgentMock } from "./_lib/mock-co
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { LUMEN_PROJECT_PATH, NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const TASK = "Rafraîchis les branches de base de nimbus et lumen.";
 
@@ -39,13 +39,10 @@ export default async function multiProjectHandoff(ctx: ScenarioContext): Promise
     message: starter.match.text,
     rubric:
       "A thread-opening handoff for refreshing the base branches of both nimbus and lumen. It " +
-      "does not ask the user to choose one main project or supply a ticket. It brings the user " +
-      "back — an explicit ask for a reply, or a statement that the user's next message launches " +
-      "the working session; that future-tense promise is the handoff, not an action claim. " +
-      "Reject only a claim that a refresh already ran or is currently running.",
-    label: "multi-project-deferred-to-working-session",
+      "does not ask the user to choose one main project, supply a ticket, or send a mechanical " +
+      "follow-up. It states that the complete work is starting in the working session.",
+    label: "multi-project-explicit-working-session",
   });
-  await sendInThread(ctx, starter.threadId, "Vas-y.");
   await expectBaseRefreshDelegation(ctx, codingAgent, "nimbus", NIMBUS_PROJECT_PATH);
   await expectBaseRefreshDelegation(ctx, codingAgent, "lumen", LUMEN_PROJECT_PATH);
 

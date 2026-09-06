@@ -1,6 +1,7 @@
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import type {
   QaBusInboundMessageInput,
+  QaBusFaultOperation,
   QaBusMessage,
   QaBusPollResult,
   QaBusSearchMessagesInput,
@@ -17,6 +18,8 @@ export type {
   QaBusDeleteMessageInput,
   QaBusEditMessageInput,
   QaBusEvent,
+  QaBusFailNextInput,
+  QaBusFaultOperation,
   QaBusInboundMessageInput,
   QaBusMessage,
   QaBusOutboundMessageInput,
@@ -173,12 +176,21 @@ export async function sendQaBusMessage(params: {
   return await postJson<{ message: QaBusMessage }>(params.baseUrl, "/v1/outbound/message", params);
 }
 
+export async function failNextQaBusOperation(params: {
+  baseUrl: string;
+  operation: QaBusFaultOperation;
+  message?: string;
+}) {
+  return await postJson<{ ok: true }>(params.baseUrl, "/v1/test/fail-next", params);
+}
+
 export async function createQaBusThread(params: {
   baseUrl: string;
   accountId: string;
   conversationId: string;
   title: string;
   createdBy?: string;
+  parentMessageId?: string;
 }) {
   return await postJson<{ thread: QaBusThread }>(
     params.baseUrl,

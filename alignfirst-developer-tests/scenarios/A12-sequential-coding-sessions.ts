@@ -84,11 +84,7 @@ async function runFirstDelegation(
     ticketId: TICKET_ID,
     codingAgent,
   });
-  const phase1Cursor = await sendInThread(
-    ctx,
-    starter.threadId,
-    "Vas-y, préviens-moi ici quand c'est terminé.",
-  );
+  const phase1Cursor = starter.nextCursor;
 
   await expectDelegationChain(ctx, {
     threadId: starter.threadId,

@@ -1,4 +1,6 @@
+import { failNextQaBusOperation } from "@paleo/openclaw-channel-mock-core";
 import type { ScenarioContext } from "@paleo/openclaw-test";
+import { inputOf } from "./_lib/agent-tool-calls.ts";
 import { setupAlprojectMock } from "./_lib/mock-alproject.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -8,29 +10,41 @@ import { waitForSetupAck } from "./_lib/setup-ack.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
-const TICKET_ID = "ABC-020";
 const PROJECT = "nimbus";
+const TICKET_ID = "ABC-0280";
 
-/**
- * Project and ticket both supplied in the channel message — nothing is missing,
- * and the channel session opens the thread and activates its working session.
- */
-export default async function projectDetectionWithTicket(ctx: ScenarioContext): Promise<void> {
+/** The first native delivery fails once; retry must reuse the original target and starter. */
+export default async function recoverableHandoffFailure(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
   const alproject = setupAlprojectMock(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
+  await failNextQaBusOperation({
+    baseUrl: "http://bus:43123",
+    operation: ctx.channel === "slack-mock" ? "outbound-message" : "thread-create",
+    message: "planned recoverable starter failure",
+  });
 
   const starter = await bootstrapThreadFromChannel(ctx, {
     text:
-      `Nouvelle fonctionnalité à implémenter sur ${PROJECT} : passer le bouton d'export en gras. ` +
-      `Ticket ${TICKET_ID}.`,
+      `Nouvelle fonctionnalité sur ${PROJECT}: passer le bouton d'export en gras. ` +
+      `Ticket ${TICKET_ID}. Si la livraison du starter échoue une fois, réessaie sur la même cible.`,
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
     codingAgent,
   });
+  const calls = await ctx.getAgentToolCalls();
+  const failedNativeCalls = calls.filter((call) => {
+    const input = inputOf(call);
+    return (
+      call.toolName === "message" &&
+      (input.action === "send" || input.action === "thread-create") &&
+      JSON.stringify(call.result).includes("planned recoverable starter failure")
+    );
+  });
+  ctx.assertLength(failedNativeCalls, 1, "one recoverable native starter failure observed");
 
   const ack = await waitForSetupAck(ctx, {
     threadId: starter.threadId,
@@ -45,7 +59,6 @@ export default async function projectDetectionWithTicket(ctx: ScenarioContext): 
   });
   alproject.assertListCallCount(1);
 
-  ctx.log({ attachTo: ack.entry, label: "setup ack received" });
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }

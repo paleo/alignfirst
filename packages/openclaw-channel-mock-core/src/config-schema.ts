@@ -34,6 +34,7 @@ const ChannelMockAccountConfigSchema = z
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groups: z.record(z.string(), ChannelMockGroupConfigSchema).optional(),
     defaultTo: z.string().optional(),
+    replyToMode: z.enum(["off", "all"]).optional(),
     actions: ChannelMockActionConfigSchema.optional(),
   })
   .strict();

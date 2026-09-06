@@ -35,14 +35,13 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
     message: starter.match.text,
     rubric:
       "A thread-opening handoff for the detailed French nimbus request. It preserves all three " +
-      "requirements in their original language. It defers ticket creation or collection to the " +
-      "working session, brings the user back (an explicit ask for a reply, or a statement that " +
-      "the user's next message launches the working session), and claims no work has started.",
+      "requirements in their original language and defers ticket collection to the working " +
+      "session without asking for a content-free activation message.",
     label: "detailed-request-preserved",
   });
   alproject.assertListCallCount(1);
 
-  const firstWakeCursor = await sendInThread(ctx, starter.threadId, "Vas-y.");
+  const firstWakeCursor = starter.nextCursor;
   const ticketQuestion = await waitForReport(
     ctx,
     (message) =>

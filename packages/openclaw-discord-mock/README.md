@@ -1,6 +1,11 @@
 # @paleo/openclaw-discord-mock
 
-Synthetic Discord-shaped OpenClaw channel plugin. Registers as channel `discord-mock`. Full Discord-shaped action surface: `send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`. `thread-create` posts an optional `text` / `message` / `content` atomically with the new thread; free-form agent text without a tool call lands in the parent channel.
+Synthetic Discord-shaped OpenClaw channel plugin. Registers as channel `discord-mock`. Full
+Discord-shaped action surface: `send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`,
+`delete`, `search`. `thread-create` retains the supplied parent-message anchor and returns Discord's
+native `{ ok: true, thread }` shape. If the thread exists but its optional starter fails, the result
+is explicitly partial and is not a confirmed handoff receipt. Free-form agent text without a tool
+call lands in the parent channel.
 
 Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
 

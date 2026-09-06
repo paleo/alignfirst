@@ -11,7 +11,7 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 // A<S> → ABC-0<S>N (README convention); scenario A10 → ABC-010N, first ticket ABC-0100.
 const TICKET_ID = "ABC-0100";
@@ -55,11 +55,7 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
     codingAgent,
   });
   const threadId = starter.threadId;
-  const goAheadCursor = await sendInThread(
-    ctx,
-    threadId,
-    "Vas-y, préviens-moi ici quand c'est terminé.",
-  );
+  const goAheadCursor = starter.nextCursor;
 
   // The coding-agent subprocess is a cliMock, not an OpenClaw agent tool call.
   const alcodeCall = await ctx.waitForAgentToolCall(

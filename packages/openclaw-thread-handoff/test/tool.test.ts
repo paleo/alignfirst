@@ -24,7 +24,29 @@ describe("thread_handoff tool", () => {
       status: "alreadyStarted",
       handoffId: first.details && readString(first.details, "handoffId"),
     });
-    expect(fixture.enqueue).toHaveBeenCalledTimes(2);
+    expect(fixture.enqueue).toHaveBeenCalledTimes(1);
+    fixture.store.close();
+  });
+
+  it("retries a duplicate start whose first enqueue never succeeded", async () => {
+    const fixture = toolFixture();
+    const pending = handoff({
+      routeKey: '["main","slack","workspace-1","agent:main:slack:channel:C1:thread:100.200"]',
+      handoffId: "retry-handoff",
+      sessionKey: "agent:main:slack:channel:C1",
+      sessionId: "source-uuid",
+      channelId: "slack",
+      accountId: "workspace-1",
+      parentConversationId: "C1",
+      threadId: "100.200",
+      targetSessionKey: "agent:main:slack:channel:C1:thread:100.200",
+    });
+    fixture.store.insertHandoff(pending);
+
+    await expect(
+      fixture.tool.execute("retry", { action: "start", threadId: "100.200" }),
+    ).resolves.toMatchObject({ details: { status: "alreadyStarted" } });
+    expect(fixture.enqueue).toHaveBeenCalledTimes(1);
     fixture.store.close();
   });
 

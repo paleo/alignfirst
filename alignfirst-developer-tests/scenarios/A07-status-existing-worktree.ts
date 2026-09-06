@@ -8,11 +8,7 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import {
-  assertWorktreePaths,
-  bootstrapThreadFromChannel,
-  sendInThread,
-} from "./_lib/thread-bootstrap.ts";
+import { assertWorktreePaths, bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-070";
@@ -43,8 +39,6 @@ export default async function statusExistingWorktree(ctx: ScenarioContext): Prom
     codingAgent,
     seededWorktreePaths: [seededWorktreePath],
   });
-  await sendInThread(ctx, starter.threadId, "Vas-y.");
-
   // Matched at conversation level on purpose: a report that leaked to the
   // channel root fails on the placement assert below, with the real cause,
   // instead of surfacing as a wait timeout.

@@ -95,7 +95,9 @@ async function executeAction(
           "This target already belongs to different delivery evidence.",
         );
       }
-      if (existing.state === "pending") await params.service.enqueue(existing);
+      if (existing.state === "pending" && existing.lastEnqueuedAt === undefined) {
+        await params.service.enqueue(existing);
+      }
       return {
         status: "alreadyStarted",
         handoffId: existing.handoffId,
@@ -127,7 +129,9 @@ async function executeAction(
           "This target already belongs to different delivery evidence.",
         );
       }
-      if (inserted.record.state === "pending") await params.service.enqueue(inserted.record);
+      if (inserted.record.state === "pending" && inserted.record.lastEnqueuedAt === undefined) {
+        await params.service.enqueue(inserted.record);
+      }
       return {
         status: "alreadyStarted",
         handoffId: inserted.record.handoffId,
