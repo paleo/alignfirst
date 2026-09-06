@@ -38,7 +38,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 - [`alignfirst-developer-tests/package.json`](../../alignfirst-developer-tests/package.json) — the exact `"openclaw"` pin.
 - [`alignfirst-developer-tests/Dockerfile`](../../alignfirst-developer-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
-- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` — `~`-ranged dev dependencies; a patch release needs no edit, a minor one does.
+- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock,thread-handoff}/package.json` — `~`-ranged dev dependencies; a patch release needs no edit, a minor one does.
 
 Then rebuild the harness image: `npm run env:build` in `alignfirst-developer-tests/`.
 

@@ -59,7 +59,8 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    ```bash
    for pkg in @paleo/alcode @paleo/docmap @paleo/openclaw-channel-mock-core \
               @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock \
-              @paleo/openclaw-test @paleo/plans-share @paleo/workspace; do
+              @paleo/openclaw-test @paleo/openclaw-thread-handoff \
+              @paleo/plans-share @paleo/workspace; do
      npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
    done
    npm trust list @paleo/docmap   # spot-check

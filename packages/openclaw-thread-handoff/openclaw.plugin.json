@@ -1,0 +1,18 @@
+{
+  "id": "thread-handoff",
+  "name": "Thread Handoff",
+  "description": "Starts regular thread sessions after confirmed native thread delivery.",
+  "activation": { "onStartup": true },
+  "contracts": { "tools": ["thread_handoff"] },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "channelSurfaces": {
+        "type": "object",
+        "additionalProperties": { "enum": ["slack", "discord"] },
+        "default": { "slack": "slack", "discord": "discord" }
+      }
+    }
+  }
+}

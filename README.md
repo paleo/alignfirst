@@ -20,7 +20,7 @@ Collaborative spec/plan/AAD/merge/review protocols. See [alignfirst-skills.md](a
 
 ## OpenClaw Test toolkit
 
-`@paleo/openclaw-test` and three companion channel packages: they are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
+`@paleo/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. `@paleo/openclaw-thread-handoff` durably activates the ordinary thread session after a confirmed native starter delivery. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md) and [packages/openclaw-thread-handoff/README.md](packages/openclaw-thread-handoff/README.md).
 
 ## AlignFirst Developer
 
