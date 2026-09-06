@@ -47,8 +47,8 @@ For new single-project work where the user explicitly says there is no ticket:
 1. Read `{PROJECT_PATH}/DEVELOPERS.md` and the `alignfirst` skill.
 2. Run `alignfirst sync`, so identifier selection sees the current shared task set.
 3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates `.plans/side-N/` and prints the directory; TICKET_ID is the `side-N` it reports.
-4. Immediately write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
-5. Immediately run `alignfirst sync`.
+4. Write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
+5. Run `alignfirst sync`.
 
 The bot owns this reservation and the request capture; the coding agent receives TICKET_ID. Do not use `alcode new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 
@@ -92,7 +92,7 @@ When one project owns a detailed user explanation, preserve it before delegation
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
 2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and retain the reported next-file path.
 3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
-4. Immediately run `alignfirst sync`.
+4. Run `alignfirst sync`.
 5. When ticket editing is available, add the request-file path relative to the project to the ticket description.
 6. Continue through project workspace setup and alcode as usual.
 
@@ -136,7 +136,7 @@ For the `.plans/` directory's task directories, cycles, filenames, and artifact 
 
 ### Hand-written changes in `.plans/`
 
-After writing or editing any file under `.plans/` yourself, immediately run `alignfirst sync`. Coding agents synchronize their own `.plans/` changes through project conventions. The wrapper's later final update to an alcode session file need not be synchronized.
+After writing or editing any file under `.plans/` yourself, run `alignfirst sync`. A change written by alcode needs nothing — alcode syncs its own.
 
 ### The project's entry points
 
