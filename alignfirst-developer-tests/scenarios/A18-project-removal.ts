@@ -58,7 +58,7 @@ export default async function projectRemoval(ctx: ScenarioContext): Promise<void
   const calls = await ctx.getAgentToolCalls();
   assertAgentCommandOrder(
     calls,
-    /alcode\s+projects\s+--guide\b/,
+    /alproject\s+--guide\b/,
     /\brm\s+-rf?\s+\S*nimbus|workspace\s+remove/,
     "guide must precede removal",
   );

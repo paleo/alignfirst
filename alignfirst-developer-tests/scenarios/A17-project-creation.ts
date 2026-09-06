@@ -224,7 +224,7 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
 async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["alcode", "projects", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
+    ["alproject", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
     "project inventory doctor before workspace setup",
   );
 }
@@ -232,16 +232,14 @@ async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
 function assertCreationCalls(calls: AgentToolCall[]): void {
   assertAgentCommandOrder(
     calls,
-    /alcode\s+projects\s+--guide\b/,
+    /alproject\s+--guide\b/,
     /git\s+init\b/,
-    "projects guide must precede git initialization",
+    "alproject guide must precede git initialization",
   );
   const commands = calls
     .filter((call) => call.toolName === "exec")
     .map((call) => JSON.stringify(call.input));
-  const freePortsCommand = commands.find((command) =>
-    /alcode\s+projects\s+free-ports\b/.test(command),
-  );
+  const freePortsCommand = commands.find((command) => /alproject\s+free-ports\b/.test(command));
   if (freePortsCommand === undefined) {
     throw new Error(`missing free-ports call: ${JSON.stringify(commands)}`);
   }

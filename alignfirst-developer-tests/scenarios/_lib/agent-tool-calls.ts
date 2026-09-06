@@ -1,6 +1,6 @@
 import type { AgentToolCall } from "@paleo/openclaw-test";
 
-const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])alcode\s+projects\s+list\b.*--json/;
+const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])alproject\s+list\b.*--json/;
 
 export function inputOf(call: AgentToolCall): Record<string, unknown> {
   return call.input && typeof call.input === "object"
