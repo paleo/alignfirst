@@ -41,7 +41,7 @@ The workspace tooling owns worktrees. Run its main-worktree commands from PROJEC
 
 A project whose `DEVELOPERS.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
 
-First, check what already exists for the {TICKET_ID} — two checks, both required:
+First, fetch remote refs from PROJECT_PATH with `git fetch --prune`. Then check what already exists for the {TICKET_ID} — two checks, both required:
 
 - **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
 - **Registered workspaces**: `DEVELOPERS.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
@@ -52,7 +52,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → new-work intent: in PROJECT_PATH, pull the base branch (`git fetch` + fast-forward) so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A pull that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH. Status request with no branch: nothing exists yet — tell the user there's no work for this ticket, end turn.
+3. **No branch** → new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH. For a status request, report that no workspace or code work exists and include any request, spec, and summary files listed by the ticket preflight, then end the turn.
 
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `alcode` from that linked workspace, never PROJECT_PATH.
 
@@ -74,12 +74,11 @@ Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspac
 
 1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have alcode commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
-3. **Fetch.** `git fetch`.
-4. **Merge the remote branch.** If the branch has a remote counterpart, merge it into the local branch to catch up. Delegate to alcode (`merge` protocol) when it doesn't fast-forward or conflicts.
-5. **Catch up with the base branch.** If the freshly-fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 8 tells the user what came in.
-6. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
-7. **Check for an open MR/PR** on this branch and note its state.
-8. **Report what changed.** If the fetch/merge pulled in new commits (remote or base), post a one-line summary so the user knows the ground shifted.
+3. **Merge the remote branch.** If the branch has a remote counterpart, merge its freshly fetched ref into the local branch to catch up. Delegate to alcode (`merge` protocol) when it doesn't fast-forward or conflicts.
+4. **Catch up with the base branch.** If the freshly fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
+5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
+6. **Check for an open MR/PR** on this branch and note its state.
+7. **Report what changed.** If either merge brought in new commits, post a one-line summary so the user knows the ground shifted.
 
 ## Step 6 — Status request: the work content
 
@@ -88,9 +87,9 @@ Only for a status request; otherwise skip to Step 7. The Step 4 banner comes fir
 The `[WORKSPACE]` banner answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
-- **The ticket's AlignFirst artifacts** via `alcode` (`catchup` protocol, run from the worktree): it loads the ticket's `*spec.md` / `*summary.md` local files in the agent's session and returns a synthesis of them.
+- **The ticket's AlignFirst artifacts** via `alcode` (`catchup` protocol, run from the worktree): it loads the ticket's `*request.md`, `*spec.md`, and `*summary.md` files in the agent's session and returns a synthesis of them.
 
-Combine them into the report and post it in the thread; lean on the `catchup` protocol whenever the spec/summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
+Combine them into the report and post it in the thread; lean on the `catchup` protocol whenever the request, spec, or summary history matters. What you must **not** do is browse the source to describe how the code works — that's a delegation to alcode, not part of a status report.
 
 ## Step 7 — Start the work
 
