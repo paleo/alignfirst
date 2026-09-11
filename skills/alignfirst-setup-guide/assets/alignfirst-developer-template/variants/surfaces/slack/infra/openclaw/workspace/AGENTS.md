@@ -4,7 +4,9 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On every user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
+On `[OpenClaw heartbeat poll]` for a native exec-exit notice after `alcode`, end immediately on exactly `HEARTBEAT_OK`; read nothing and call no tool. The chained `thread-handoff wake` reply run already owns the completion report. A direct `alcode run finished …` message is that plugin reply run, not the native notice.
+
+On every other user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
 
 When a channel message requires project work and you are not already in a thread, use the **playbook** to send one explicit starter with the triggering timestamp as `threadId`, then activate it through `thread_handoff`. Ordinary conversation stays at the channel root.
 
