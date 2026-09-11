@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBus, injectQaBusInboundMessage } from "@paleo/openclaw-channel-mock-core";
+import { buildAgentSessionKey, resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { SILENT_TOKEN } from "../../src/thread-handoff/service.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
@@ -19,6 +20,10 @@ const RACING_HUMAN = "RACING_HUMAN_REPLY";
 const RACING_HUMAN_HANDLED = "RACING_HUMAN_HANDLED";
 const HUMAN_DURING_SEED = "HUMAN_DURING_SEED_REPLY";
 const HUMAN_DURING_SEED_HANDLED = "HUMAN_DURING_SEED_HANDLED";
+const HUMAN_THREAD_ROOT = "HUMAN_THREAD_ROOT";
+const HUMAN_THREAD_START = "HUMAN_THREAD_START";
+const HUMAN_THREAD_STARTED = "HUMAN_THREAD_STARTED";
+const REFUSED_CHANNEL_WAKE = "REFUSED_CHANNEL_WAKE";
 const execFileAsync = promisify(execFile);
 
 type Surface = "slack" | "discord";
@@ -225,10 +230,7 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
     },
   );
 
-  // Known failing: OpenClaw 2026.9.3 drops a channel inbound that arrives while an `agent`-method
-  // run holds the session ("restart recovery claim changed before agent adoption"). The seed and
-  // completion-wake turns use that method. Remove `.fails` when the wake path changes.
-  it.fails.each(["slack", "discord"] as const)(
+  it.each(["slack", "discord"] as const)(
     "delivers a %s human message sent while the seed turn runs",
     async (surface) => {
       const options: FixtureOptions = { stallSeedReplyMs: 8_000 };
@@ -294,12 +296,10 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
         await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
       ) as Array<{ targetSessionKey: string }>;
       await runOpenClaw(fixture, [
-        "agent",
+        "thread-handoff",
+        "wake",
         "--session-key",
         records[0]?.targetSessionKey ?? "missing-session",
-        "--deliver",
-        "--timeout",
-        "0",
         "--message",
         CHAINED_WAKE,
       ]);
@@ -307,6 +307,76 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
       expect(reported.threadId).toBe(marker.threadId);
     },
   );
+
+  it.each(["slack", "discord"] as const)(
+    "wakes a human-started %s thread through its last route",
+    async (surface) => {
+      const fixture = await startFixture(surface);
+      const root = await injectRootMessage(fixture, "Project-X", HUMAN_THREAD_ROOT);
+      const threadId =
+        surface === "slack"
+          ? root.message.id
+          : fixture.bus.state.createThread({
+              accountId: fixture.channelId,
+              conversationId: "Project-X",
+              title: "Human-started work",
+              createdBy: "User-A",
+              parentMessageId: root.message.id,
+            }).id;
+
+      await injectQaBusInboundMessage({
+        baseUrl: serverUrl(fixture.busServer),
+        input: {
+          accountId: fixture.channelId,
+          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
+          senderId: "User-A",
+          senderName: "User A",
+          text: HUMAN_THREAD_START,
+          threadId,
+        },
+      });
+      const started = await waitForMessage(
+        fixture,
+        (message) => message.text === HUMAN_THREAD_STARTED,
+      );
+      expect(started.threadId).toBe(threadId);
+
+      await runOpenClaw(fixture, [
+        "thread-handoff",
+        "wake",
+        "--session-key",
+        buildHumanThreadSessionKey(fixture, threadId),
+        "--message",
+        CHAINED_WAKE,
+      ]);
+      const reported = await waitForMessage(fixture, (message) => message.text === WAKE_REPORTED);
+      expect(reported.threadId).toBe(threadId);
+    },
+  );
+
+  it("refuses a Slack channel session wake", async () => {
+    const fixture = await startFixture("slack");
+    await injectRootMessage(fixture, "Project-X", "Start before refusing the channel wake.");
+    await waitForMessage(fixture, (message) => message.text === MARKER);
+    const records = JSON.parse(
+      await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+    ) as Array<{ targetSessionKey: string }>;
+    const channelSessionKey = (records[0]?.targetSessionKey ?? "").replace(/:thread:[^:]+$/u, "");
+
+    await expect(
+      runOpenClaw(fixture, [
+        "thread-handoff",
+        "wake",
+        "--session-key",
+        channelSessionKey,
+        "--message",
+        REFUSED_CHANNEL_WAKE,
+      ]),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Slack thread wake requires a thread session."),
+    });
+    expect(providerContentIncludes(fixture, REFUSED_CHANNEL_WAKE)).toBe(false);
+  });
 
   it.each(["slack", "discord"] as const)(
     "starts two concurrent %s handoffs behind a running sibling turn",
@@ -583,9 +653,11 @@ function createProviderScript(
     if (tail.includes("Continue in this same thread.")) {
       return { content: "SAME_SESSION_CONTINUED" };
     }
+    if (tail.includes(CHAINED_WAKE)) return { content: WAKE_REPORTED };
+    if (latestUserText.includes(HUMAN_THREAD_ROOT)) return { content: "NO_REPLY" };
+    if (latestUserText.includes(HUMAN_THREAD_START)) return { content: HUMAN_THREAD_STARTED };
     if (latestUserText.includes(RACING_HUMAN)) return { content: RACING_HUMAN_HANDLED };
     if (latestUserText.includes(HUMAN_DURING_SEED)) return { content: HUMAN_DURING_SEED_HANDLED };
-    if (tail.includes(CHAINED_WAKE)) return { content: WAKE_REPORTED };
     if (all.includes("[thread-handoff:v1]")) {
       if (options.holdFirstSeed) return { content: SILENT_TOKEN };
       const snapshot = bus.state.getSnapshot();
@@ -679,6 +751,21 @@ function createProviderScript(
           id: `native-starter-${callSequence}`,
         };
   };
+}
+
+function buildHumanThreadSessionKey(fixture: Fixture, threadId: string): string {
+  const channelSessionKey = buildAgentSessionKey({
+    agentId: "main",
+    channel: fixture.channelId,
+    peer: { kind: "channel", id: "Project-X" },
+  });
+  return fixture.surface === "slack"
+    ? resolveThreadSessionKeys({ baseSessionKey: channelSessionKey, threadId }).sessionKey
+    : buildAgentSessionKey({
+        agentId: "main",
+        channel: fixture.channelId,
+        peer: { kind: "channel", id: threadId },
+      });
 }
 
 function resolveThreadId(

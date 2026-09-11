@@ -1,12 +1,12 @@
 import type { OpenClawPluginApi, PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
+import { dispatchTurn } from "./dispatch.js";
 import type { HandoffStore } from "./state.js";
-import { resolveTurnTimeoutSeconds, runSeedTurn, type SeedTurnResult } from "./turn.js";
-import type { HandoffRecord } from "./types.js";
+import type { HandoffRecord, PluginConfiguration, TurnRequest } from "./types.js";
+import { errorMessage } from "./values.js";
 
 export const MAX_ATTEMPTS = 10;
 export const SCAN_INTERVAL_MS = 30_000;
 export const ATTEMPT_SPACING_MS = 60_000;
-export const INITIAL_ATTEMPT_DELAY_MS = 2_000;
 export const SILENT_TOKEN = "HEARTBEAT_OK";
 
 export interface HandoffService {
@@ -18,19 +18,18 @@ export interface HandoffService {
 
 export interface HandoffServiceParams {
   runtime: OpenClawPluginApi["runtime"];
+  configuration: PluginConfiguration;
   getStore: () => HandoffStore;
   logger: PluginLogger;
   now?: () => number;
   scanIntervalMs?: number;
   attemptSpacingMs?: number;
-  initialAttemptDelayMs?: number;
 }
 
 export function createHandoffService(params: HandoffServiceParams): HandoffService {
   const now = params.now ?? Date.now;
   const scanIntervalMs = params.scanIntervalMs ?? SCAN_INTERVAL_MS;
   const attemptSpacingMs = params.attemptSpacingMs ?? ATTEMPT_SPACING_MS;
-  const initialAttemptDelayMs = params.initialAttemptDelayMs ?? INITIAL_ATTEMPT_DELAY_MS;
   const targetWork = new Map<string, Promise<unknown>>();
   const inFlight = new Map<string, Promise<void>>();
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -43,17 +42,18 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
       const starting = Promise.resolve();
       inFlight.set(record.handoffId, starting);
       try {
-        if (record.attemptCount === 0) {
-          await bindTargetRoute(params.runtime, record);
-          await delayInitialAttempt(initialAttemptDelayMs);
-        }
         const updated = params.getStore().recordAttempt(record.routeKey, now());
         if (updated?.state !== "pending") return;
-        const turn = runSeedTurn({
-          record: updated,
-          seed: buildSeed(updated),
-          turnTimeoutSeconds: resolveTurnTimeoutSeconds(params.runtime),
-        });
+        const surface = params.configuration.channelSurfaces[updated.channelId];
+        const turn = surface
+          ? dispatchTurn({
+              runtime: params.runtime,
+              logger: params.logger,
+              request: buildSeedRequest(updated, surface),
+            })
+          : Promise.reject(
+              new Error(`Channel ${updated.channelId} is not configured for handoff.`),
+            );
         const completion = finishAttempt(params, updated, turn, now).finally(() => {
           if (inFlight.get(updated.handoffId) === completion) inFlight.delete(updated.handoffId);
         });
@@ -73,7 +73,7 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
         if (scan || stopped) return;
         scan = recoverPending(service, params, inFlight, now(), attemptSpacingMs)
           .catch((error) =>
-            params.logger.error(`thread-handoff recovery failed: ${message(error)}`),
+            params.logger.error(`thread-handoff recovery failed: ${errorMessage(error)}`),
           )
           .finally(() => {
             scan = undefined;
@@ -89,30 +89,6 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
     },
   };
   return service;
-}
-
-async function delayInitialAttempt(delayMs: number): Promise<void> {
-  if (delayMs <= 0) return;
-  await new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
-async function bindTargetRoute(
-  runtime: OpenClawPluginApi["runtime"],
-  record: HandoffRecord,
-): Promise<void> {
-  const cfg = runtime.config.current();
-  const delivery = record.deliveryContext;
-  await runtime.channel.session.updateLastRoute({
-    storePath: runtime.channel.session.resolveStorePath(cfg.session?.store, {
-      agentId: record.agentId,
-    }),
-    sessionKey: record.targetSessionKey,
-    channel: delivery.channel,
-    to: delivery.to,
-    ...(delivery.accountId ? { accountId: delivery.accountId } : {}),
-    ...(delivery.threadId ? { threadId: delivery.threadId } : {}),
-    createIfMissing: true,
-  });
 }
 
 async function recoverPending(
@@ -139,29 +115,46 @@ async function recoverPending(
           })
           .catch((error) =>
             params.logger.error(
-              `thread-handoff recovery failed for ${record.handoffId}: ${message(error)}`,
+              `thread-handoff recovery failed for ${record.handoffId}: ${errorMessage(error)}`,
             ),
           ),
       ),
   );
 }
 
+function buildSeedRequest(record: HandoffRecord, surface: "slack" | "discord"): TurnRequest {
+  return {
+    sessionKey: record.targetSessionKey,
+    agentId: record.agentId,
+    channelId: record.channelId,
+    surface,
+    route: record.deliveryContext,
+    parentConversationId: record.parentConversationId,
+    message: buildSeed(record),
+    messageId: `thread-handoff:${record.handoffId}:${record.attemptCount}`,
+  };
+}
+
 async function finishAttempt(
   params: HandoffServiceParams,
   record: HandoffRecord,
-  turn: Promise<SeedTurnResult>,
+  turn: Promise<void>,
   now: () => number,
 ): Promise<void> {
-  const result = await turn;
+  let failure: unknown;
+  try {
+    await turn;
+  } catch (error) {
+    failure = error;
+  }
   const current = params.getStore().recordAttemptEnd(record.routeKey, now());
-  if (result.exitCode === 0) {
+  if (failure === undefined) {
     params.logger.debug?.(
       `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} completed`,
     );
   } else {
-    const detail = result.stderrTail || `exit code ${result.exitCode ?? "unknown"}`;
     params.logger.warn(
-      `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} failed: ${detail}`,
+      `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} failed: ${errorMessage(failure)}`,
     );
   }
   if (current?.state === "pending" && current.attemptCount >= MAX_ATTEMPTS) {
@@ -211,8 +204,4 @@ async function serializeTarget<T>(
   } finally {
     if (work.get(targetSessionKey) === current) work.delete(targetSessionKey);
   }
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

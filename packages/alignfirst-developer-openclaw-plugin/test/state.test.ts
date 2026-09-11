@@ -24,6 +24,9 @@ describe("handoff SQLite state", () => {
       ),
     ).toMatchObject({ starterText: "Please do the work." });
     expect(second.findHandoffByRoute("route-1")).toMatchObject({ handoffId: "handoff-1" });
+    expect(second.findHandoffByTarget(handoff().targetSessionKey)).toMatchObject({
+      handoffId: "handoff-1",
+    });
     expect(statSync(resolveDatabasePath(stateDir)).mode & 0o777).toBe(0o600);
     expect(statSync(`${stateDir}/thread-handoff`).mode & 0o777).toBe(0o700);
     second.close();

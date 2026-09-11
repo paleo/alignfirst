@@ -1,6 +1,20 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import {
+  addGatewayClientOptions,
+  callGatewayFromCli,
+  type GatewayRpcOpts,
+} from "openclaw/plugin-sdk/gateway-runtime";
+import type { OpenClawConfig, OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { createHandoffStore, type HandoffStore } from "./state.js";
 import type { DeliveryReceipt, HandoffRecord } from "./types.js";
+import { WAKE_METHOD, type WakeResult } from "./wake.js";
+
+const CLIENT_TIMEOUT_MARGIN_MS = 30_000;
+const MAX_CLIENT_TIMEOUT_MS = 2_147_483_647;
+
+export interface WakeCommandOptions extends GatewayRpcOpts {
+  sessionKey: string;
+  message: string;
+}
 
 export function registerThreadHandoffCli(api: OpenClawPluginApi): void {
   api.registerCli(
@@ -26,6 +40,18 @@ export function registerThreadHandoffCli(api: OpenClawPluginApi): void {
         .action((handoffId: string, options: { force?: boolean }) =>
           retireHandoff(api, handoffId, options.force === true),
         );
+      addGatewayClientOptions(
+        command
+          .command("wake")
+          .description("Start a reply run on a thread session with a message")
+          .requiredOption("--session-key <key>", "Target thread session key")
+          .requiredOption("--message <text>", "Message that starts the turn"),
+      ).action(
+        (
+          options: WakeCommandOptions,
+          wake: { getOptionValueSource(name: string): string | undefined },
+        ) => wakeThreadSession(api, options, wake.getOptionValueSource("timeout") === "default"),
+      );
     },
     {
       descriptors: [
@@ -37,6 +63,51 @@ export function registerThreadHandoffCli(api: OpenClawPluginApi): void {
         },
       ],
     },
+  );
+}
+
+export async function wakeThreadSession(
+  api: OpenClawPluginApi,
+  options: WakeCommandOptions,
+  timeoutIsDefault: boolean,
+): Promise<void> {
+  const timeout = timeoutIsDefault
+    ? String(resolveWakeClientTimeoutMs(api.runtime))
+    : options.timeout;
+  const result = await callGatewayFromCli(
+    WAKE_METHOD,
+    {
+      url: options.url,
+      port: options.port,
+      token: options.token,
+      password: options.password,
+      timeout,
+    },
+    { sessionKey: options.sessionKey, message: options.message },
+    { mode: "cli", scopes: ["operator.write", "operator.read"] },
+  );
+  if (!isWakeResult(result)) throw new Error("Invalid thread wake response from the gateway.");
+  if (result.status === "failed") throw new Error(result.error);
+  process.stdout.write("Thread wake completed.\n");
+}
+
+function resolveWakeClientTimeoutMs(runtime: OpenClawPluginApi["runtime"]): number {
+  const cfg = runtime.config.current();
+  if (cfg.agents?.defaults?.timeoutSeconds === 0) return MAX_CLIENT_TIMEOUT_MS;
+  return (
+    runtime.agent.resolveAgentTimeoutMs({
+      // The resolver only reads configuration; the runtime exposes it as readonly.
+      cfg: cfg as OpenClawConfig,
+    }) + CLIENT_TIMEOUT_MARGIN_MS
+  );
+}
+
+function isWakeResult(value: unknown): value is WakeResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const status = Reflect.get(value, "status");
+  return (
+    status === "completed" ||
+    (status === "failed" && typeof Reflect.get(value, "error") === "string")
   );
 }
 

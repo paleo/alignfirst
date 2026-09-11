@@ -5,6 +5,18 @@ export interface DeliveryRoute {
   threadId?: string;
 }
 
+export interface TurnRequest {
+  sessionKey: string;
+  agentId: string;
+  channelId: string;
+  surface: "slack" | "discord";
+  route: DeliveryRoute;
+  /** Unknown only for a human-started Discord thread without a handoff record. */
+  parentConversationId?: string;
+  message: string;
+  messageId: string;
+}
+
 export interface SourceContext {
   agentId: string;
   sessionKey: string;

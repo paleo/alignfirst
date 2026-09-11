@@ -1,6 +1,6 @@
 # @paleo/alignfirst-developer-openclaw-plugin
 
-The OpenClaw gateway plugin for AlignFirst Developer. It currently provides thread handoff: starting a regular channel-thread session after a native message action delivers its visible starter. Delivery evidence and pending handoffs survive gateway restart in a plugin-owned SQLite database.
+The OpenClaw gateway plugin for AlignFirst Developer. It currently provides thread handoff: after a native message action delivers its visible starter, the plugin starts the regular channel-thread session through a reply run it dispatches itself. Delivery evidence and pending handoffs survive gateway restart in a plugin-owned SQLite database.
 
 ## Install and enable
 
@@ -69,16 +69,13 @@ supported.
 
 ## Turn start and persistence
 
-The plugin commits a pending record before starting the canonical thread session through
-`openclaw gateway call agent`. The regular turn has an explicit reply channel, target, account, and
-Slack thread ID. Before the first attempt, the plugin also binds that route to the session so later
-`openclaw agent --session-key … --deliver` turns reach the same thread. The seed tells the receiver
-to load its playbook and claim the explicit handoff before task effects. The exact starter is
-serialized inside a JSON user-content block; it is not plugin instruction text.
+The plugin commits a pending record before dispatching the seed as a reply run through the channel-inbound path. Its plugin-built context has no sender or command authority and sets `WasMentioned: false`. OpenClaw delivers final replies to the thread through its durable outbound path, and the reply run records the session's last route. The gateway process does not need an `openclaw` executable on its `PATH`.
 
-Each seed gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the
-48-hour OpenClaw default and the unlimited `0` value. The `openclaw` executable must be on the
-gateway process's `PATH`.
+The seed tells the receiver to load its playbook and claim the explicit handoff before task effects. The exact starter is serialized inside a JSON user-content block; it is not plugin instruction text. A claimed seed with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
+
+Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start the session's next reply run. The command calls the `alignfirst-developer.wake` gateway method and blocks until the turn ends. It accepts configured regular channel-thread sessions with a recorded delivery route; Slack also requires a thread suffix and thread route. The agent runs it through `exec` after `alcode` completes.
+
+Each seed gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
 
 The database is `<stateDir>/thread-handoff/state.sqlite`, where `stateDir` comes from
 `api.runtime.state.resolveStateDir()`. It uses WAL, full synchronous durability, a `0700` directory,
@@ -93,6 +90,8 @@ Use `openclaw thread-handoff list [--json]` to inspect handoffs with their attem
 claimer identity. Use `openclaw thread-handoff receipts [--json]` to inspect active delivery
 receipts without starter text. `openclaw thread-handoff retire <handoff-id>` removes a claimed
 record; add `--force` for a pending record, typically a parked one.
+
+Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start a reply run on a managed or human-started thread session.
 
 Opening a database created by plugin 0.2.0 migrates it automatically to schema 2. The migration
 preserves pending attempt history and claimed records.
@@ -114,8 +113,7 @@ npm run lint --workspace @paleo/alignfirst-developer-openclaw-plugin
 ```
 
 The ordinary test command excludes the real-gateway suite. To exercise the package as an external
-plugin against the pinned OpenClaw 2026.9.3 runtime, including Slack/Discord delivery, duplicate
-starts, same-session continuation, and abrupt restart recovery:
+plugin against the pinned OpenClaw 2026.9.3 runtime, including Slack/Discord delivery, concurrent human messages, explicit wakes, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @paleo/alignfirst-developer-openclaw-plugin

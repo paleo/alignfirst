@@ -8,22 +8,18 @@ import {
   SILENT_TOKEN,
 } from "../src/thread-handoff/service.js";
 import { createHandoffStore } from "../src/thread-handoff/state.js";
-import { buildSeedTurnParams, type SeedTurnResult } from "../src/thread-handoff/turn.js";
 import { handoff, temporaryStateDir } from "./helpers.js";
 
-const runSeedTurn = vi.hoisted(() => vi.fn());
+const dispatchTurn = vi.hoisted(() => vi.fn());
 
-vi.mock("../src/thread-handoff/turn.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/thread-handoff/turn.js")>()),
-  runSeedTurn,
-}));
+vi.mock("../src/thread-handoff/dispatch.js", () => ({ dispatchTurn }));
 
 describe("handoff turn start and recovery", () => {
   beforeEach(() => {
-    runSeedTurn.mockReset().mockResolvedValue({ exitCode: 0, stderrTail: "" });
+    dispatchTurn.mockReset().mockResolvedValue(undefined);
   });
 
-  it("starts Slack and Discord turns with exact delivery params and configured timeout", async () => {
+  it("starts Slack and Discord reply runs with exact turn requests", async () => {
     const fixture = serviceFixture();
     const slack = handoff();
     const discord = handoff({
@@ -41,52 +37,45 @@ describe("handoff turn start and recovery", () => {
     await fixture.service.startTurn(slack);
     await fixture.service.startTurn(discord);
 
-    expect(fixture.updateLastRoute).toHaveBeenNthCalledWith(1, {
-      storePath: "/state/main/sessions.json",
-      sessionKey: slack.targetSessionKey,
-      channel: "slack",
-      to: "channel:C1",
-      accountId: "workspace-1",
-      threadId: "100.200",
-      createIfMissing: true,
+    const updatedSlack = { ...slack, attemptCount: 1, lastAttemptedAt: 100_000 };
+    expect(dispatchTurn).toHaveBeenNthCalledWith(1, {
+      runtime: fixture.runtime,
+      logger: fixture.logger,
+      request: {
+        sessionKey: slack.targetSessionKey,
+        agentId: "main",
+        channelId: "slack",
+        surface: "slack",
+        route: slack.deliveryContext,
+        parentConversationId: "C1",
+        message: buildSeed(updatedSlack),
+        messageId: "thread-handoff:handoff-1:1",
+      },
     });
-
-    expect(runSeedTurn).toHaveBeenNthCalledWith(1, {
-      record: expect.objectContaining({ handoffId: "handoff-1", attemptCount: 1 }),
-      seed: buildSeed({ ...slack, attemptCount: 1, lastAttemptedAt: 100_000 }),
-      turnTimeoutSeconds: 90,
-    });
-    expect(buildSeedTurnParams(slack, "seed", 90)).toEqual({
-      message: "seed",
-      sessionKey: slack.targetSessionKey,
-      agentId: "main",
-      deliver: true,
-      replyChannel: "slack",
-      replyTo: "channel:C1",
-      replyAccountId: "workspace-1",
-      threadId: "100.200",
-      timeout: 90,
-      idempotencyKey: "thread-handoff:handoff-1:0",
-    });
-    expect(buildSeedTurnParams(discord, "seed", 90)).toEqual({
-      message: "seed",
-      sessionKey: discord.targetSessionKey,
-      agentId: "main",
-      deliver: true,
-      replyChannel: "discord",
-      replyTo: "channel:T1",
-      timeout: 90,
-      idempotencyKey: "thread-handoff:handoff-2:0",
+    const updatedDiscord = { ...discord, attemptCount: 1, lastAttemptedAt: 100_000 };
+    expect(dispatchTurn).toHaveBeenNthCalledWith(2, {
+      runtime: fixture.runtime,
+      logger: fixture.logger,
+      request: {
+        sessionKey: discord.targetSessionKey,
+        agentId: "main",
+        channelId: "discord",
+        surface: "discord",
+        route: discord.deliveryContext,
+        parentConversationId: "C1",
+        message: buildSeed(updatedDiscord),
+        messageId: "thread-handoff:handoff-2:1",
+      },
     });
     fixture.store.close();
   });
 
   it("records the attempt before spawning and suppresses concurrent starts and recovery", async () => {
-    const deferred = createDeferred<SeedTurnResult>();
+    const deferred = createDeferred<void>();
     const fixture = serviceFixture();
     const record = handoff();
     fixture.store.insertHandoff(record);
-    runSeedTurn.mockImplementationOnce(() => {
+    dispatchTurn.mockImplementationOnce(() => {
       expect(fixture.store.findHandoffByRoute(record.routeKey)?.attemptCount).toBe(1);
       return deferred.promise;
     });
@@ -94,25 +83,12 @@ describe("handoff turn start and recovery", () => {
     await fixture.service.startTurn(record);
     await fixture.service.startTurn(record);
     await fixture.service.start();
-    expect(runSeedTurn).toHaveBeenCalledTimes(1);
+    expect(dispatchTurn).toHaveBeenCalledTimes(1);
     await fixture.service.stop();
-    deferred.resolve({ exitCode: 0, stderrTail: "" });
+    deferred.resolve(undefined);
     await vi.waitFor(() =>
       expect(fixture.store.findHandoffByRoute(record.routeKey)?.lastAttemptedAt).toBe(100_000),
     );
-    fixture.store.close();
-  });
-
-  it("gives an already-dispatched human reply time to adopt a fresh target session", async () => {
-    const fixture = serviceFixture({ initialAttemptDelayMs: 10 });
-    const record = handoff();
-    fixture.store.insertHandoff(record);
-
-    const starting = fixture.service.startTurn(record);
-    await Promise.resolve();
-    expect(runSeedTurn).not.toHaveBeenCalled();
-    await starting;
-    expect(runSeedTurn).toHaveBeenCalledOnce();
     fixture.store.close();
   });
 
@@ -121,14 +97,14 @@ describe("handoff turn start and recovery", () => {
     const fixture = serviceFixture({ now: () => times.shift() ?? 101_000 });
     const record = handoff();
     fixture.store.insertHandoff(record);
-    runSeedTurn.mockResolvedValueOnce({ exitCode: null, stderrTail: "openclaw not found" });
+    dispatchTurn.mockRejectedValueOnce(new Error("dispatch refused"));
 
     await fixture.service.startTurn(record);
     await vi.waitFor(() =>
       expect(fixture.store.findHandoffByRoute(record.routeKey)?.lastAttemptedAt).toBe(101_000),
     );
     expect(fixture.logger.warn).toHaveBeenCalledWith(
-      "thread-handoff handoff-1 start attempt 1 failed: openclaw not found",
+      "thread-handoff handoff-1 start attempt 1 failed: dispatch refused",
     );
     fixture.store.close();
   });
@@ -163,7 +139,7 @@ describe("handoff turn start and recovery", () => {
     );
 
     await fixture.service.start();
-    expect(runSeedTurn).toHaveBeenCalledTimes(1);
+    expect(dispatchTurn).toHaveBeenCalledTimes(1);
     await vi.waitFor(() =>
       expect(fixture.logger.warn).toHaveBeenCalledWith(expect.stringContaining("stays pending")),
     );
@@ -214,17 +190,10 @@ function createDeferred<T>(): {
   return { promise, resolve };
 }
 
-function serviceFixture(options: { now?: () => number; initialAttemptDelayMs?: number } = {}) {
+function serviceFixture(options: { now?: () => number } = {}) {
   const store = createHandoffStore(temporaryStateDir());
   const runtime = {
-    config: { current: () => ({ agents: { defaults: { timeoutSeconds: 90 } } }) },
-    agent: { resolveAgentTimeoutMs: vi.fn(() => 90_000) },
-    channel: {
-      session: {
-        resolveStorePath: vi.fn(() => "/state/main/sessions.json"),
-        updateLastRoute: vi.fn(async () => null),
-      },
-    },
+    config: { current: () => ({}) },
   } as unknown as OpenClawPluginApi["runtime"];
   const logger = {
     debug: vi.fn(),
@@ -235,14 +204,13 @@ function serviceFixture(options: { now?: () => number; initialAttemptDelayMs?: n
   return {
     store,
     runtime,
-    updateLastRoute: runtime.channel.session.updateLastRoute,
     logger,
     service: createHandoffService({
       runtime,
+      configuration: { channelSurfaces: { slack: "slack", discord: "discord" } },
       getStore: () => store,
       logger: logger as unknown as PluginLogger,
       now: options.now ?? (() => 100_000),
-      initialAttemptDelayMs: options.initialAttemptDelayMs ?? 0,
     }),
   };
 }

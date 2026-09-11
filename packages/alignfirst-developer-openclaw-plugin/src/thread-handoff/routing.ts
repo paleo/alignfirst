@@ -49,7 +49,7 @@ export function readSourceContext(
   };
 }
 
-function readConversationId(target: string | undefined): string | undefined {
+export function readConversationId(target: string | undefined): string | undefined {
   if (!target) return;
   const thread = /^thread:([^/]+)\/.+/u.exec(target);
   if (thread) return thread[1];

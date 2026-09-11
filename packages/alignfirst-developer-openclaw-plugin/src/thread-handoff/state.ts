@@ -14,6 +14,7 @@ export interface HandoffStore {
   findReceipt(identity: ReceiptIdentity, now: number): DeliveryReceipt | undefined;
   listReceipts(now: number): DeliveryReceipt[];
   findHandoffByRoute(routeKey: string): HandoffRecord | undefined;
+  findHandoffByTarget(targetSessionKey: string): HandoffRecord | undefined;
   insertHandoff(record: HandoffRecord): { inserted: boolean; record: HandoffRecord };
   claimHandoff(identity: ClaimIdentity, now: number): ClaimResult;
   recordAttempt(routeKey: string, startedAt: number): HandoffRecord | undefined;
@@ -150,6 +151,7 @@ function createStoreOperations(database: DatabaseSync): HandoffStore {
     findReceipt: (identity, now) => findReceipt(database, identity, now),
     listReceipts: (now) => listReceipts(database, now),
     findHandoffByRoute: (routeKey) => findHandoffByRoute(database, routeKey),
+    findHandoffByTarget: (targetSessionKey) => findHandoffByTarget(database, targetSessionKey),
     insertHandoff: (record) => insertHandoff(database, record),
     claimHandoff: (identity, now) => claimHandoff(database, identity, now),
     recordAttempt: (routeKey, startedAt) => recordAttempt(database, routeKey, startedAt),
@@ -214,6 +216,18 @@ function findReceipt(
 
 function findHandoffByRoute(database: DatabaseSync, routeKey: string): HandoffRecord | undefined {
   return runStateOperation("read a handoff", () => readHandoffByRoute(database, routeKey));
+}
+
+function findHandoffByTarget(
+  database: DatabaseSync,
+  targetSessionKey: string,
+): HandoffRecord | undefined {
+  return runStateOperation("read a handoff", () => {
+    const row = database
+      .prepare("SELECT record_json FROM handoffs WHERE target_session_key = ?")
+      .get(targetSessionKey) as JsonRow;
+    return row ? parseHandoff(row.record_json) : undefined;
+  });
 }
 
 function insertHandoff(
