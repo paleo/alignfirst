@@ -154,7 +154,8 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 - Every model route uses OpenClaw's embedded agent runtime.
 - `alignfirst-developer` is loaded as an external plugin, `thread_handoff` is allowed, Slack effective
   `replyToMode` is `off` or Discord channel `autoThread` is `false`, and a complete request starts in
-  its regular thread session without a human nudge.
+  its regular thread session through a regular agent turn, without a human nudge; the `openclaw` CLI
+  runs as the service user from the gateway host.
 - Managed-project workspaces are isolated; reports return to the originating thread.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.

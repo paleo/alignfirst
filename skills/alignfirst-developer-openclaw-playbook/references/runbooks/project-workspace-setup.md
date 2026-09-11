@@ -95,4 +95,6 @@ Combine them into the report and post it in the thread; use `--catchup` whenever
 
 The workspace is ready, so get to it: announce what you're about to do in one line, then do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
 
+When the work is an `alcode` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the alcode session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
+
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

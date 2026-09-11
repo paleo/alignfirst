@@ -26,7 +26,7 @@ configure_surface() {
   openclaw plugins enable slack --accept-capabilities
 
   echo "[seed] Slack channel — Socket Mode, single channel, DMs disabled"
-  # Inbound DMs are disabled, so heartbeat wake reports never target a DM. The explicit value
+  # Inbound DMs are disabled, so heartbeat reports never target a DM. The explicit value
   # also stops doctor's security check from asking for a pin.
   set_scalar agents.defaults.heartbeat.directPolicy block
   set_json channels.slack.enabled true

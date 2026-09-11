@@ -57,7 +57,8 @@ Run these inside the gateway container:
 openclaw thread-handoff list --json
 openclaw thread-handoff receipts --json
 openclaw system event --session-key <key> --mode now --text '<event>'
-openclaw agent --session-key <key> --message '<message>' --deliver
+openclaw gateway call agent --params '{"sessionKey":"<key>","message":"<message>","deliver":true,"replyChannel":"<channel>","replyTo":"<target>","replyAccountId":"<account>","threadId":"<thread>","timeout":<seconds>}' --expect-final
+openclaw agent --session-key <key> --deliver --timeout 0 --message '<message>'
 
 sqlite3 -readonly ~/.openclaw/thread-handoff/state.sqlite \
   "select count(*) from receipts; select count(*) from handoffs;"
@@ -69,7 +70,7 @@ sqlite3 -readonly ~/.openclaw/agents/main/agent/openclaw-agent.sqlite \
 
 The `transcript_events` columns are `session_id`, `seq`, `event_json`, and `created_at` in OpenClaw 2026.9.3. Confirm them after an upgrade with `.schema transcript_events`.
 
-The `system event` command uses the gateway `wake` RPC, the same heartbeat-gated pipe the plugin calls in-process. The `agent` command runs a regular turn in the named session and is not heartbeat-gated.
+The `gateway call agent --expect-final` command is the plugin's own path, with the same `sessionKey`, `message`, `deliver`, `replyChannel`, `replyTo`, `replyAccountId`, `threadId`, and `timeout` parameters. The `openclaw agent --session-key <key> --deliver --timeout 0 --message …` command is the alcode guide's chained wake. Both start regular turns. The `system event` command uses the heartbeat-gated gateway `wake` RPC.
 
 For deeper traces, set the gateway variables documented in [OpenClaw Context Engineering](./openclaw-context-engineering.md#debugging-see-what-the-model-actually-receives): `OPENCLAW_ANTHROPIC_PAYLOAD_LOG`, `OPENCLAW_RAW_STREAM`, `OPENCLAW_CACHE_TRACE`, and `OPENCLAW_DEBUG_MODEL_PAYLOAD`.
 

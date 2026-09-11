@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `alignfirst-developer-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message or trusted handoff activation, tells the agent to load the skill from OpenClaw's managed `~/.openclaw/skills/` directory and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). Neither coding agent scans this managed directory. None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
+This is the mechanism the `alignfirst-developer-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message, including a `[thread-handoff:v1]` seed message, tells the agent to load the skill from OpenClaw's managed `~/.openclaw/skills/` directory and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). Neither coding agent scans this managed directory. None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
 
 ## Character budgets
 
@@ -42,9 +42,13 @@ Over-budget files are truncated with a marker. Keep workspace files under these 
 
 The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; the listing shows it as `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.
 
-The general silence convention is `NO_REPLY`, with the heartbeat and wake exception below. The stock heartbeat prompt (`src/auto-reply/heartbeat.ts`) follows the scratch and ends in `NO_REPLY`, and OpenClaw sends it verbatim as the scheduled user message, so neither the harness nor the deployment seed overrides `agents.defaults.heartbeat.prompt`. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
+The general silence convention is `NO_REPLY`, with the heartbeat exception below. The stock heartbeat prompt (`src/auto-reply/heartbeat.ts`) follows the scratch and ends in `NO_REPLY`, and OpenClaw sends it verbatim as the scheduled user message, so neither the harness nor the deployment seed overrides `agents.defaults.heartbeat.prompt`. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
-OpenClaw 2026.9.3 loses a post-tool `NO_REPLY` from its reply accumulator, then mistakes the silent turn for a missing summary. Its isolated finalizer receives no conversation context and can emit an unsolicited answer. Silent heartbeat and event-wake turns use the supported `HEARTBEAT_OK` acknowledgement: handoffs awaiting a human value, duplicate seeds, and coding wakes whose run is still pending or already reported. OpenClaw suppresses this token without triggering finalization. Ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect. The deterministic gateway suite covers both surfaces.
+OpenClaw 2026.9.3 loses a post-tool `NO_REPLY` from its reply accumulator, then mistakes the silent turn for a missing summary. Its isolated finalizer receives no conversation context and can emit an unsolicited answer. Silent heartbeat turns use the supported `HEARTBEAT_OK` acknowledgement. OpenClaw suppresses this token without triggering finalization. Ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
+
+Heartbeat wakes cannot provide reliable handoff concurrency or runtime. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds. AlignFirst Developer therefore starts handoffs and alcode completions as regular turns.
+
+Regular turns started by the `agent` method also use `HEARTBEAT_OK` when they have nothing to report. The deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply.
 
 ## Background model runs disabled by the harness and the seed
 
@@ -74,7 +78,7 @@ One surface = one session at a time. Two surfaces = two transcripts, no shared s
 For Discord today:
 
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
-- Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. A targeted plugin system wake can start that same regular session before the first human reply.
+- Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a regular turn before the first human reply.
 
 ### Outbound delivery (the surprising part)
 
@@ -103,13 +107,13 @@ Practical consequences, verified on the harness (2026-07-28, trajectory-vs-bus d
 Two supported shapes handle a Discord thread:
 
 1. **Parent-relayed subagent** (matches defaults). Spawn a thread-bound subagent; it works headless; the parent relays its single final summary into the thread. No live progress.
-2. **Explicit thread plus targeted regular-session wake — no subagent**. Deliver a native starter only when the channel triage selects project work, then enqueue a system event to the canonical thread session. Channel and thread sessions are siblings, each owning its surface.
+2. **Explicit thread plus targeted regular-session turn — no subagent**. Deliver a native starter only when the channel triage selects project work, then start a regular turn on the canonical thread session through the gateway `agent` method. Channel and thread sessions are siblings, each owning its surface.
 
-**Chosen for AlignFirst Developer:** Path 2. Discord keeps channel `autoThread: false` and uses anchored `message thread-create`. Slack keeps `replyToMode: "off"` and uses `message send` with an explicit root timestamp. `@paleo/alignfirst-developer-openclaw-plugin` observes the confirmed native result, persists a pending handoff in its own SQLite database, and queues a targeted system event plus immediate heartbeat request. This starts the regular canonical thread session without `sessions_send`, a bound subagent, a human nudge, or an official-plugin trust exception.
+**Chosen for AlignFirst Developer:** Path 2. Discord keeps channel `autoThread: false` and uses anchored `message thread-create`. Slack keeps `replyToMode: "off"` and uses `message send` with an explicit root timestamp. `@paleo/alignfirst-developer-openclaw-plugin` observes the confirmed native result, persists a pending handoff in its own SQLite database, and starts a regular turn on the canonical thread session through `openclaw gateway call agent` with `sessionKey`, `deliver`, `replyChannel`, `replyTo`, `replyAccountId`, and `threadId`. The turn's budget is `agents.defaults.timeoutSeconds`. This starts the session without `sessions_send`, a bound subagent, a human nudge, or an official-plugin trust exception.
 
 ### Wiring it up
 
-The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and wakes it; later user messages resolve to it normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
+The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and starts a regular turn on it. Before the first turn, the plugin records the route as the session's last route so a later target-less `openclaw agent --deliver` reaches the thread. Later user messages resolve to the route normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
 
 #### Delivery receipt shapes
 
@@ -136,9 +140,9 @@ When a fresh thread session activates on Discord, its transcript starts **empty*
 
 Workaround: the handoff seed carries an escaped copy of the exact starter and trusted routing identifiers, so the seed turn needs no history read. On a later human turn the thread playbook calls `message` `action: "read"` so newer answers and the `[WORKSPACE]` state participate. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
 
-### Heartbeat turns deny external-plugin reads
+### Turns without an inbound channel message deny external-plugin reads
 
-A heartbeat-driven turn, the handoff seed included, forces `requireExplicitMessageTarget` and mints no trusted message-action context (`src/auto-reply/reply/agent-runner-embedded-candidate.ts`). The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. This is why the seed turn must not read the thread, and why the mock channels cannot show what a real deployment would return there.
+A heartbeat turn and a turn started by the `agent` method mint no trusted message-action context. The auto-reply path is implemented in `src/auto-reply/reply/agent-runner-embedded-candidate.ts`; the `agent` command path mints none. The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. The deterministic suite verifies the gate for the `agent` method. This is why the seed turn must not read the thread, and why the mock channels cannot show what a real deployment would return there.
 
 ## `expectsCompletionMessage` — control the parent handoff
 

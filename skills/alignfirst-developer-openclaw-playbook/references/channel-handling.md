@@ -97,10 +97,10 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
 - A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the working session will route the work.
-- Nothing else needs an answer → state the intended continuation in this thread. Do not claim that project work has already begun.
+- Nothing else needs an answer → state that the thread is ready and its session takes over, in the user's language (for example, "Le thread est prêt, sa session prend le relais."). Do not say that this channel session handles anything, and do not claim that project work has begun.
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 
-After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. On `queued` or `alreadyStarted`, end with exactly `NO_REPLY`; do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
+After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end with exactly `NO_REPLY`; do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
 
 In a DM or group DM, `start` is unsupported. Explain that project work must be requested from a supported channel; do not promise automatic thread activation there.

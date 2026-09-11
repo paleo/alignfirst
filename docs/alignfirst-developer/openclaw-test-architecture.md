@@ -20,7 +20,7 @@ Four generic packages drive automated regression tests against an OpenClaw works
 | `@paleo/openclaw-channel-mock-core` | Shared channel library — bus client, action handlers, plugin/setup factories, account helpers. Not consumed directly. |
 | `@paleo/openclaw-discord-mock` | Thin wrapper. Registers as channel `discord-mock`, `surface: "discord"`, `autoThread: false`. |
 | `@paleo/openclaw-slack-mock` | Thin wrapper. Registers as channel `slack-mock`, `surface: "slack"`, `autoThread: true`. |
-| `@paleo/alignfirst-developer-openclaw-plugin` | AlignFirst Developer's OpenClaw capabilities, registered as `alignfirst-developer`. Thread handoff converts confirmed native starter delivery into a durable wake for the ordinary thread session. |
+| `@paleo/alignfirst-developer-openclaw-plugin` | AlignFirst Developer's OpenClaw capabilities, registered as `alignfirst-developer`. Thread handoff converts confirmed native starter delivery into a regular agent turn on the ordinary thread session. |
 
 The two wrappers exist side-by-side in one gateway and share a single bus. The runner picks which channel(s) to drive per scenario; `accountId = channelId` keeps per-channel bus state segregated.
 
@@ -156,7 +156,7 @@ Both channels register together on every gateway boot. The runner selects which 
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. Envelope targets follow the native surface: a Discord thread is `channel:<thread-id>`, while a Slack thread is `thread:<channel-id>/<thread-ts>`. The bus generates numeric snowflake-shaped thread IDs and records each thread’s parent conversation. Transcript collection uses that ownership to include thread sessions without embedding scenario names in their IDs.
 
-The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. In a heartbeat turn, the handoff seed included, that gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The playbook keeps the thread read out of the seed turn for that reason; do not chase a mock fix.
+The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. In a turn without an inbound channel message, the seed turn included, that gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Turns without an inbound channel message deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The playbook keeps the thread read out of the seed turn for that reason; do not chase a mock fix.
 
 Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.3 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
 
@@ -181,7 +181,7 @@ Plugin actions and prepared sends route through different handlers in `message-a
 
 The AlignFirst Developer consumer sets Slack to `replyToMode: "off"`. Its parent channel session
 posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
-wakes the canonical target session; that session claims before work. Scenario assertions correlate
+starts the canonical target session with a regular turn; that session claims before work. Scenario assertions correlate
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
 final `NO_REPLY`.
 
@@ -190,7 +190,9 @@ local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @paleo/alignfirst-developer-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
 provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
-both surfaces, canonical continuation, duplicate starts, and abrupt pending/post-claim restarts.
+both surfaces: a regular-turn seed with its reply in the thread, concurrent starts behind a running
+sibling turn, a re-claim inside the seed turn, the silent seed turn, the chained `openclaw agent`
+wake, and pending and post-claim restart recovery.
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 
@@ -248,7 +250,7 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 
 - **`agents.entries.*.workspace`, not `workspaceDir`.** Agent entries read `workspace`.
 - **`gateway.mode: "local"` required.** Without it, startup fails with `existing config is missing gateway.mode`.
-- **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered wake report (2026.8+), and the owner route never resolves to a group. Scenarios assert wake reports in the conversation under test, which `"last"` targets.
+- **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered heartbeat report (2026.8+), and the owner route never resolves to a group. Scenarios assert heartbeat reports in the conversation under test, which `"last"` targets.
 
 ## Scenario loading
 

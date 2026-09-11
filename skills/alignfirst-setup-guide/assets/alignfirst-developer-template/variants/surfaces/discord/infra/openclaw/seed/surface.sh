@@ -25,7 +25,7 @@ configure_surface() {
   openclaw plugins enable discord --accept-capabilities
 
   echo "[seed] Discord channel — single guild channel, DMs by pairing"
-  # A wake report follows the last conversation, which may be a paired DM. The explicit value
+  # A heartbeat report follows the last conversation, which may be a paired DM. The explicit value
   # (the default) also stops doctor's security check from asking for a pin.
   set_scalar agents.defaults.heartbeat.directPolicy allow
   set_json channels.discord.enabled true

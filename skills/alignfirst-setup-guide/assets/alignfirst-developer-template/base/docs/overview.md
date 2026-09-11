@@ -19,7 +19,7 @@ read_when:
 ```text
 channel message ({{DEVELOPER_NAME}} on the selected surface)
   → OpenClaw gateway (systemd --user unit, loopback :18789)
-  → playbook channel triage → native starter → durable thread-handoff wake
+  → playbook channel triage → native starter → durable handoff → regular thread turn
   → regular thread session claims startup
   → alproject (project inventory, canonical paths, ports)
   → alcode (delegation) → coding agent

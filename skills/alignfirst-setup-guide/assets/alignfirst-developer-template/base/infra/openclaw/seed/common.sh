@@ -118,14 +118,15 @@ configure_common() {
   unset_key plugins.entries.memory-core
 
   echo "[seed] heartbeat — on, one periodic tick a day"
-  # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
-  # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
-  # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
-  # session, no workspace bootstrap, deferred run), so they are cleared.
+  # Heartbeat stays on for the periodic tick and the native exec-exit notice. Thread handoff and
+  # alcode completion start regular agent turns and do not depend on it. `every` only governs
+  # periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from it.
+  # Clearing isolatedSession, lightContext and activeHours preserves the periodic tick's session,
+  # workspace bootstrap and reply route.
   set_scalar agents.defaults.heartbeat.every "24h"
   # Explicit target: the implicit owner-DM default prepends a one-time operator-facing
-  # "First heartbeat alert" preamble to the first delivered wake report, and the
-  # owner route never resolves to a group. Wake reports must follow the ticket conversation,
+  # "First heartbeat alert" preamble to the first delivered heartbeat report, and the
+  # owner route never resolves to a group. Heartbeat reports must follow the ticket conversation,
   # which "last" targets.
   set_scalar agents.defaults.heartbeat.target "last"
   # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.

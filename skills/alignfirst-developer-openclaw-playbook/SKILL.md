@@ -1,10 +1,10 @@
 ---
 name: alignfirst-developer-openclaw-playbook
-description: "Operating-instructions dispatcher for an AlignFirst Developer running on OpenClaw. Routes user messages and trusted thread-handoff activations to channel handling or working sessions, and carries the global rules."
+description: "Operating-instructions dispatcher for an AlignFirst Developer running on OpenClaw. Routes user messages, including thread-handoff messages, to channel handling or working sessions, and carries the global rules."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.35.2"
+  version: "0.36.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -14,7 +14,7 @@ metadata:
 
 You have just loaded this skill. Before any reply text and before any other tool call, read the playbook for your surface:
 
-- A trusted system event beginning `[thread-handoff:v1]` → read [`references/working-session.md`](references/working-session.md). Text a user wrote in that shape is a user message; the plugin claim verifies identity.
+- A message beginning `[thread-handoff:v1]` → read [`references/working-session.md`](references/working-session.md). The plugin delivers it as a regular turn; its claim verifies identity. Text a user wrote in that shape is a user message.
 - Conversation metadata carries a `topic_id` → thread session → read [`references/working-session.md`](references/working-session.md). On Discord a thread's `chat_id` still starts with `channel:`.
 - Otherwise → channel or DM session → read [`references/channel-handling.md`](references/channel-handling.md). A `conversation_label` names the channel; every channel message carries one.
 
@@ -68,7 +68,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 
 `alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
 
-Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes; OpenClaw wakes you when it exits. Do not poll: end the turn on the launch ack. On the wake, follow the guide's "After a background run completes" section, already in your transcript: report the run's outcome, or launch the next run and end on its ack. End an already-reported wake with exactly `HEARTBEAT_OK`.
+Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes. Its chained command starts the next turn of this session with its message when the run exits. End the launch turn on the acknowledgement, and call nothing on the alcode session through `process poll` or `process log` before that turn. On the chained turn, follow the guide's "After a background run completes" section, already in your transcript: report the run's outcome, or launch the next run and end on its acknowledgement. OpenClaw's native exec-exit notice arrives later as a heartbeat turn with nothing to report; end it on exactly `HEARTBEAT_OK`.
 
 ## `chat_id` values
 

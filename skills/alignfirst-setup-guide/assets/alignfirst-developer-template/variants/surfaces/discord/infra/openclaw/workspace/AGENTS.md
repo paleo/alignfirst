@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On every user message or trusted thread-handoff activation, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff seeds before task effects.
+On every user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to create one anchored thread with its starter, then activate it through `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -33,7 +33,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat or wake turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A trusted handoff seed determines whether its request is ready to proceed or must wait for a human value. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
 
 ## No ticket-system access
 

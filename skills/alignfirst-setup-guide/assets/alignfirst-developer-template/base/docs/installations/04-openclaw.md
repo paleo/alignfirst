@@ -100,7 +100,7 @@ An installed agent-harness plugin cannot claim this deployment's turns because t
 `openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
 authentication, or chat commands.
 
-The seed installs `@paleo/alignfirst-developer-openclaw-plugin` as **AlignFirst Developer** (ID `alignfirst-developer`) and enables its optional `thread_handoff` tool. This plugin supplies the Developer's OpenClaw capabilities. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
+The seed installs `@paleo/alignfirst-developer-openclaw-plugin` as **AlignFirst Developer** (ID `alignfirst-developer`) and enables its optional `thread_handoff` tool. This plugin supplies the Developer's OpenClaw capabilities. Thread handoff starts the thread session through a regular agent turn by running the `openclaw` CLI from the gateway process. The gateway unit therefore needs `openclaw` on its `PATH`; `gateway-path.conf`, installed in this runbook, already puts `/opt/{{SERVICE_USER}}/bin` there. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
 
 ## Model-specific parameters
 
