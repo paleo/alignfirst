@@ -27,7 +27,7 @@ const threadHandoffParameters = Type.Union([
   Type.Object(
     {
       action: Type.Literal("claim"),
-      handoffId: Type.Optional(Type.String({ minLength: 1 })),
+      handoffId: Type.Optional(Type.String()),
     },
     { additionalProperties: false },
   ),
@@ -191,10 +191,18 @@ function parseInput(value: unknown): ToolInput {
   }
   if (record.action === "claim") {
     if (keys.some((key) => key !== "action" && key !== "handoffId")) return invalidInput();
-    const handoffId = optionalString(record.handoffId);
+    const handoffId = blankAsAbsent(record.handoffId);
     return { action: "claim", ...(handoffId ? { handoffId } : {}) };
   }
   return invalidInput();
+}
+
+// A human turn without a seed sometimes sends `handoffId: ""` rather than omitting the field.
+function blankAsAbsent(value: unknown): string | undefined {
+  if (value === undefined) return;
+  if (typeof value !== "string") return invalidInput();
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 function requiredString(value: unknown): string {

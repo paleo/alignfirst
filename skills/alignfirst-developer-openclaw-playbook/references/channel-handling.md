@@ -96,8 +96,10 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
-- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the working session will route the work.
-- Nothing else needs an answer → state that the thread is ready and its session takes over, in the user's language (for example, "Le thread est prêt, sa session prend le relais."). Do not say that this channel session handles anything, and do not claim that project work has begun.
+- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the thread is ready.
+- Nothing else needs an answer → state that the thread is ready, in the user's language (for example, "The thread is ready.").
+
+Whichever case applies, the `{ask}` never says that this channel session handles the work, and never says that work has begun.
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 

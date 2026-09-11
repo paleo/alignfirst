@@ -93,6 +93,21 @@ describe("thread_handoff tool", () => {
     ).rejects.toThrow(/invalidTarget/);
     fixture.store.close();
   });
+
+  it("treats a blank handoffId as a claim without an id", async () => {
+    const fixture = toolFixture();
+    fixture.store.insertHandoff(handoff());
+    const target = toolFixture(
+      null,
+      { sessionKey: handoff().targetSessionKey, nativeChannelId: "C1" },
+      fixture.store,
+      "run-1",
+    );
+    await expect(
+      target.tool.execute("claim-blank", { action: "claim", handoffId: "" }),
+    ).resolves.toMatchObject({ details: { status: "claimed" } });
+    fixture.store.close();
+  });
 });
 
 function toolFixture(

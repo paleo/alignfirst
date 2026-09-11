@@ -27,7 +27,7 @@ alcode usage
 | `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
-The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
 `alcode status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
 

@@ -14,7 +14,7 @@ In the 2026-09-10 incident, the seed said an `alreadyClaimed` result meant a dup
 
 ## Name who supplies a value
 
-"The starter's question is still unanswered" let Terra count its own inventory lookup as the answer: the seed turn re-ran `alproject list --json` and posted the result (A05 and A22 Slack, 2026-09-08). When a rule waits for a value, say where it comes from: "no human message has supplied it".
+"The starter's question is still unanswered" let Terra count its own inventory lookup as the answer: the seed turn re-ran `alproject list --json` and posted the result (A05 and A22 Slack, 2026-09-08). When a rule waits for a value, say where it comes from: "no human message has supplied it". Name the scope with the same care: "any human message of this turn" excluded a reply that had arrived one turn earlier, and a seed turn holding the ticket in its own transcript ended on `HEARTBEAT_OK` (A27 Discord, 2026-09-11).
 
 ## State the exception before the rule it excepts
 

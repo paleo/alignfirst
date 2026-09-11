@@ -24,11 +24,11 @@ Call `thread_handoff` once per turn, before history reads, workspace setup, dele
 - **Seed turn**, with or without a human message: `{ "action": "claim", "handoffId": "<copied from the seed>" }`. The handoff ID is opaque and is not the thread ID; `claim` takes no other field.
 - **First human turn** of a thread that received no seed: `{ "action": "claim" }`.
 
-On a seed turn with no human message, `alreadyClaimed` means another turn owns this handoff; end on exactly `HEARTBEAT_OK`. A `claimed` result activates the recorded request: recover its context in Step 2 and start work when its required values are present, without waiting for a human follow-up. On a human turn, continue whatever the result: `claimed`, `alreadyClaimed`, or `none`. On a claim error, stop and report the failure in the thread.
+On a seed turn that carries no human message, `alreadyClaimed` means another turn owns this handoff; end on exactly `HEARTBEAT_OK`. A `claimed` result activates the recorded request: recover its context in Step 2 and start work when its required values are present, without waiting for a human follow-up. On a human turn, continue whatever the result: `claimed`, `alreadyClaimed`, or `none`. On a claim error, stop and report the failure in the thread.
 
 ### Step 2 — Recover the thread context
 
-- **Seed turn**: the seed's `starterText` is the thread's only message. Work from it, plus any human message of this turn. Do not call `message read`.
+- **Seed turn**: work from the seed's `starterText` and the human messages already in your transcript, this turn's included; together they are the whole thread. Do not call `message read`.
 - **Human turn**: call `message` `action: "read"` with the current channel and the bare thread ID from conversation metadata, and combine the history with your transcript.
 
 Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. The starter's values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook or the multi-project procedure asks for it. Later thread messages supply missing values; they do not rewrite the recorded request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.

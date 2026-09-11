@@ -17,6 +17,8 @@ const CHAINED_WAKE = "alcode run finished — read its session file and report t
 const WAKE_REPORTED = "WAKE_REPORTED";
 const RACING_HUMAN = "RACING_HUMAN_REPLY";
 const RACING_HUMAN_HANDLED = "RACING_HUMAN_HANDLED";
+const HUMAN_DURING_SEED = "HUMAN_DURING_SEED_REPLY";
+const HUMAN_DURING_SEED_HANDLED = "HUMAN_DURING_SEED_HANDLED";
 const execFileAsync = promisify(execFile);
 
 type Surface = "slack" | "discord";
@@ -28,6 +30,8 @@ type FixtureOptions = {
   silenceAfterClaim?: boolean;
   stallChannelReplyMs?: number;
   stallEndsAt?: number;
+  stallSeedReplyMs?: number;
+  seedStallStartedAt?: number;
 };
 
 type Fixture = {
@@ -218,6 +222,48 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
       expect(fixture.gatewayLog.join("")).not.toContain(
         "restart recovery claim changed before agent adoption",
       );
+    },
+  );
+
+  // Known failing: OpenClaw 2026.9.3 drops a channel inbound that arrives while an `agent`-method
+  // run holds the session ("restart recovery claim changed before agent adoption"). The seed and
+  // completion-wake turns use that method. Remove `.fails` when the wake path changes.
+  it.fails.each(["slack", "discord"] as const)(
+    "delivers a %s human message sent while the seed turn runs",
+    async (surface) => {
+      const options: FixtureOptions = { stallSeedReplyMs: 8_000 };
+      const fixture = await startFixture(surface, options);
+      const rootMessage = await injectRootMessage(fixture, "Project-X", "Start, reply mid-seed.");
+      await waitUntil(
+        () => options.seedStallStartedAt !== undefined,
+        20_000,
+        () => `the seed turn did not enter its scripted stall\n${fixture.gatewayLog.join("")}`,
+      );
+      const threadId =
+        surface === "slack"
+          ? rootMessage.message.id
+          : fixture.bus.state.getSnapshot().threads[0]?.id;
+      if (!threadId) throw new Error("native thread ID was not observed");
+
+      await injectQaBusInboundMessage({
+        baseUrl: serverUrl(fixture.busServer),
+        input: {
+          accountId: fixture.channelId,
+          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
+          senderId: "User-A",
+          senderName: "User A",
+          text: HUMAN_DURING_SEED,
+          threadId,
+        },
+      });
+
+      await waitForMessage(fixture, (message) => message.text === MARKER);
+      const handled = await waitForMessage(
+        fixture,
+        (message) => message.text === HUMAN_DURING_SEED_HANDLED,
+        30_000,
+      );
+      expect(handled.threadId).toBe(threadId);
     },
   );
 
@@ -538,6 +584,7 @@ function createProviderScript(
       return { content: "SAME_SESSION_CONTINUED" };
     }
     if (latestUserText.includes(RACING_HUMAN)) return { content: RACING_HUMAN_HANDLED };
+    if (latestUserText.includes(HUMAN_DURING_SEED)) return { content: HUMAN_DURING_SEED_HANDLED };
     if (tail.includes(CHAINED_WAKE)) return { content: WAKE_REPORTED };
     if (all.includes("[thread-handoff:v1]")) {
       if (options.holdFirstSeed) return { content: SILENT_TOKEN };
@@ -563,6 +610,10 @@ function createProviderScript(
           };
         }
         if (options.silenceAfterClaim) return { content: SILENT_TOKEN };
+        if (options.stallSeedReplyMs !== undefined && options.seedStallStartedAt === undefined) {
+          options.seedStallStartedAt = Date.now();
+          return { content: MARKER, delayMs: options.stallSeedReplyMs };
+        }
         return { content: MARKER };
       }
       const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(all)?.[1];
