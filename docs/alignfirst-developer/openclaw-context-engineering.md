@@ -44,15 +44,19 @@ The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron
 
 The general silence convention is `NO_REPLY`. OpenClaw 2026.9.3 can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
 
-The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. The harness and deployment seed currently set an `[OpenClaw heartbeat poll]` instruction requesting immediate `HEARTBEAT_OK`. Native exec completions take a separate `buildExecEventPrompt` branch in `src/infra/heartbeat-runner-prompt.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
+The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. OpenClaw's stock prompt instructs `NO_REPLY`, and with the key unset it wins over any workspace instruction. The harness and deployment seed currently set an `[OpenClaw heartbeat poll]` instruction requesting immediate `HEARTBEAT_OK`. Native exec completions take a separate `buildExecEventPrompt` branch in `src/infra/heartbeat-runner-prompt.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
+
+System events are held in memory (2026.9.x): a queued event does not survive a gateway restart. They are peeked at prompt build and consumed after delivery, so an event survives an aborted heartbeat turn. `enqueueSystemEvent` returns `false` both for a rejection and, with `replace: true`, when an identical event for the same `contextKey` is still queued.
+
+The background `exec` acknowledgement ends with "Use process (list/poll/log/…) for follow-up". On a takeover turn with a 600-second budget, that sentence led the model to poll a backgrounded `alcode` run fifty-five times until the turn was aborted with nothing posted. The delegation guide forbids any `process` call on an `alcode` session.
 
 The saved transcript is not a copy of the live heartbeat prompt. `buildReplyPromptEnvelopeBase` in `src/auto-reply/reply/prompt-prelude.ts` substitutes `HEARTBEAT_TRANSCRIPT_PROMPT` (`[OpenClaw heartbeat poll]`) when saving heartbeat user messages. A transcript showing that marker does not establish which instructions the model received. Use provider payloads to inspect the live prompt. Existing workspace rules that match the marker apply only when that text is actually present in the current prompt.
 
-A direct `alcode run finished …` message arrives through the plugin's reply pipeline and owns the completion report. The enclosing background exec may subsequently emit a native completion notice. When testing that notice, observe the actual event; a generic injected `system event` exercises a different prompt branch.
+A completion message chained onto a background `exec` and OpenClaw's native exec completion notice take different prompt branches. When testing the notice, observe the actual event; a generic injected `system event` exercises a different branch. The saved transcript shows the `[OpenClaw heartbeat poll]` marker for both, so it cannot tell them apart either.
 
 Native notices have no short delivery deadline. In `src/infra/heartbeat-cooldown.ts`, a new exec event arriving after the 30-second spacing window can defer until the next configured tick; the harness cadence is 24 hours. Closely spaced events may instead coalesce and run after the spacing window. Completion tests therefore require the real chained process to exit, its report to arrive, and the thread to settle. They record native notices when observed and make no claim about deferred notices outside the observation window.
 
-Heartbeat wakes cannot provide reliable handoff concurrency or runtime. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds. AlignFirst Developer therefore dispatches handoffs and alcode completions as reply runs.
+Heartbeat wakes cannot start a thread reliably. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty, whatever the intent; `immediate` bypasses only the per-agent active-run check. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds, against 48 hours for a regular turn. In production on 2026-09-10, two review requests thirty seconds apart left one thread unstarted until a human wrote in it. The plugin therefore dispatches the takeover nudge as a reply run. The `alcode` completion path stays OpenClaw's own; see [`openclaw-plugin.md`](./openclaw-plugin.md).
 
 Plugin-dispatched reply runs use `HEARTBEAT_OK` when they have nothing to report. The deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply.
 
@@ -85,6 +89,8 @@ For Discord today:
 
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
 - Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
+
+A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.3; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
 
 ### Outbound delivery (the surprising part)
 
@@ -119,7 +125,9 @@ Two supported shapes handle a Discord thread:
 
 ### Wiring it up
 
-The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and dispatches a reply run on it. The reply run records the session's last route itself, which a later `openclaw thread-handoff wake` reads to reach the thread. Later user messages resolve to the route normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
+The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and dispatches a reply run on it. The reply run records the session's last route itself. Later user messages resolve to the route normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
+
+Two tool-call pitfalls seen in production and model runs. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into the turn; the call has to be made again. A Discord `thread-reply` carrying both `target` and `threadId` fails with core's "conflicting target and delivery alias values"; Terra hit it routinely and lost thirty seconds per post on the retry.
 
 #### Delivery receipt shapes
 
@@ -149,6 +157,8 @@ The channel therefore posts the complete request in the visible starter. After t
 ### Heartbeat and `agent`-method turns deny external-plugin reads
 
 A heartbeat turn and a turn started by the `agent` method mint no message-action capability. The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. The deterministic suite verifies the gate for the `agent` method.
+
+The `agent` method has a second defect for a thread start: its turn is not a channel reply run. A human message posted in the thread while that turn runs finds no run to queue behind, falls into durable turn admission, fails the session-entry claim in `restart-recovery-claim.ts` (`inbound dispatch failed … restart recovery claim changed before agent adoption`) and is lost. Five model runs showed zero occurrences of the human text in the thread transcript. A turn dispatched through `runtime.channel.inbound.dispatchReply` queues the human message normally.
 
 The plugin's reply runs mint the message-action turn capability without a sender ID. A takeover turn can therefore recover its request through a thread-history read, just as a human turn can. The read uses the current channel, full `chat_id` as `target`, and bare thread ID. The later pre-coding read catches a hold or scope correction queued during setup.
 

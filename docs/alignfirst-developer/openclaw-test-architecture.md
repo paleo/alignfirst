@@ -164,6 +164,29 @@ Discord renames an existing thread through `send` with `threadName`, targeting t
 
 Each `openclaw.plugin.json` declares a minimal `channelConfigs.<id>.schema` (`type: "object"`, `additionalProperties: true`) to silence the gateway's `channel plugin manifest declares <id> without channelConfigs metadata` warning. The static schema is intentionally permissive — the runtime plugin owns the real config schema via `buildChannelMockConfigSchema`. `label` / `selectionLabel` / `docsPath` / `blurb` still come from the runtime plugin.
 
+## What the harness cannot show
+
+Facts established on ticket 80 about the limits of the mocks and the runner. Each one produced a result that looked green or red for the wrong reason.
+
+- **Native read gates.** `providerOwnedReadGates` is honored for bundled plugins only. The mocks cannot show what native Slack or Discord return to a conversation read on a heartbeat or `agent`-method turn.
+- **Target forms only the mock accepts.** The Slack mock splits a `thread:<channel>/<ts>` target; neither the outbound target normalizer nor the native Slack plugin does. A plugin relying on that form passes the suite and fails in production. Check every target shape against the native plugin source.
+- **Slack root routing.** The Slack mock once kept an eligible root message in the channel session, while native Slack under `replyToMode: "all"` routes it straight into the thread session. Compare each routing rule with `threading.ts` before trusting a scenario.
+- **A bare `system event` is not an exec completion.** The former A29 injected a generic system event to imitate the native exec-completion notice. They take different prompt branches, and the saved transcript shows the same `[OpenClaw heartbeat poll]` marker for both. Only the real chained process exiting produces the real notice, and OpenClaw's cooldown may defer that notice beyond any test window.
+- **The scripted provider proves nothing about a model.** The deterministic plugin suite establishes delivery and persistence paths. Whether a conversation model follows the playbook is a separate question, answered only by model runs.
+- **A scenario cannot see a turn end.** The context exposes tool calls and outbounds, never a turn's final `NO_REPLY` or `HEARTBEAT_OK`. Silence is asserted through a fixed quiet window, and a turn slower than the window passes the check vacuously.
+- **No gateway restart inside a cell.** The runner recreates the stack per cell, so persistence across a restart belongs to the deterministic suite, with SIGKILL, preserved WAL/SHM files and a real process restart.
+- **No Chromium in the image.** The `browser` tool loads and fails at use time.
+- **Cost is partial.** The `openai` provider carries no pricing in `openclaw.json`, so Terra's agent cost always reads `$0`; only its judge cost is real.
+- **The 30-second mock run hides harm.** Sonnet ran ninety-six `alcode` executions in one day in the foreground with a 60-second timeout. Against a real coding agent those runs would be killed; against the mock they pass.
+
+## Harness defect or product defect
+
+A29 failed three times after fixes to two real harness races (a report wait that accepted progress, a baseline captured while a heartbeat turn was open). Only a clean 0/3 after those fixes established that the remaining failure was the product's: OpenClaw's stock heartbeat prompt. Fix the harness races first, then rerun; a product conclusion drawn while a harness race is open is worthless.
+
+Assertions that passed for the wrong reason were a recurring class: a one-shot fault consumed by whichever outbound reached the bus first, a hard-coded bus URL, a `NO_REPLY` sweep reading a single page of events, options no scenario still checked. When an assertion goes green after a change, ask what it would take to make it red.
+
+The rule for failing scenarios: never make a test pass by adding a mechanical kickoff message, suppressing a failure, removing an assertion or substituting a different session model. A mechanism failure found while working on the harness belongs to the plugin; report it rather than patching around it.
+
 ## Target normalizer + plugin-action vs send
 
 OpenClaw's `normalizeMessageActionInput` runs before any `"to"`-mode plugin handler (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`). It rewrites `channelId` → `target` → `to` and deletes the original `channelId` key. A handler that reads `channelId` directly is broken-by-construction. `channel-mock-core`'s `resolveDestination` always reads `to` first.
