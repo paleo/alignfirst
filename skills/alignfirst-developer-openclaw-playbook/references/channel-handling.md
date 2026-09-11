@@ -1,6 +1,8 @@
 # Channel handling
 
-You're running in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+If conversation metadata contains `topic_id`, you are already in a thread. Read [`working-session.md`](working-session.md) and continue there before any lookup or thread creation.
+
+Otherwise, you are in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
 
 ## Project lookup
 
@@ -67,7 +69,7 @@ The tool returns the thread's `chat_id` — that is the THREAD_ID.
 
 ### Step 3 — The starter message, then end the turn
 
-A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter stays the visible record; the plugin seed carries the same exact user context into the fresh session.
+A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter is the visible record the thread session reads after the service activates it.
 
 Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Add the request block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
 

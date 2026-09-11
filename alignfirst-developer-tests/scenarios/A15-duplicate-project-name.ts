@@ -4,6 +4,7 @@ import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertGatewayCommand, waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { EXTERNAL_PROJECT_PARENT, NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
+import { expectSilentSeedTurn } from "./_lib/silent-seed-turn.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
@@ -41,6 +42,7 @@ export default async function duplicateProjectName(ctx: ScenarioContext): Promis
       "or coding has started.",
     label: "duplicate-project-path-choice",
   });
+  await expectSilentSeedTurn(ctx, starter);
   await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");

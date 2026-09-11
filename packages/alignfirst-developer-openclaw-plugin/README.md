@@ -56,7 +56,7 @@ The claim result has this contract:
 | `alreadyClaimed` | Another run owns the handoff. The result includes `claimedAt`. |
 | `none` | No handoff matches an ordinary human turn in the target thread. |
 
-The handoff ID is optional for an ordinary human turn in the target thread.
+The receiving turn calls `thread_handoff { "action": "claim" }` once before task effects. The tool resolves the handoff from the current thread session; an explicit handoff ID remains an optional API parameter.
 
 Inputs are strict. Errors begin with a stable reason code: `unsupportedContext`,
 `unverifiedThreadDelivery`, `conflictingHandoff`, `invalidTarget`, or
@@ -69,17 +69,17 @@ supported.
 
 ## Turn start and persistence
 
-The plugin commits a pending record before dispatching the seed as a reply run through the
-channel-inbound path. Its plugin-built context has no sender or command authority and sets
+The plugin commits a pending record before dispatching `Take over this thread.` from `AlignFirst Service` as a reply run through the
+channel-inbound path. Its plugin-built context sets the service display name without a human sender ID or command authority, and sets
 `WasMentioned: false`. These plugin-dispatched turns disable block streaming so their complete
 final payload reaches OpenClaw's durable outbound path. The reply run records the session's last
 route. The gateway process does not need an `openclaw` executable on its `PATH`.
 
-The seed tells the receiver to load its playbook and claim the explicit handoff before task effects. The exact starter is serialized inside a JSON user-content block; it is not plugin instruction text. A claimed seed with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
+The message body is static: it carries no starter copy, routing fields, or handoff ID. The playbook routes by thread metadata, claims the current session, and reads the visible starter and human replies through thread history. The nudge supplies no missing input or approval. A takeover turn with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 
-Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start the session's next reply run. The command calls the `alignfirst-developer.wake` gateway method and blocks until the turn ends. It accepts configured regular channel-thread sessions with a recorded delivery route; Slack also requires a thread suffix and thread route. The agent runs it through `exec` after `alcode` completes.
+Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start the session's next reply run. The command calls the `alignfirst-developer.wake` gateway method and blocks until the turn ends. It accepts managed or human-started regular channel-thread sessions with a recorded delivery route; Slack also requires a thread suffix and thread route. The agent runs it through `exec` after `alcode` completes.
 
-Each seed gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
+Each takeover turn gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
 
 The database is `<stateDir>/thread-handoff/state.sqlite`, where `stateDir` comes from
 `api.runtime.state.resolveStateDir()`. It uses WAL, full synchronous durability, a `0700` directory,
@@ -94,8 +94,6 @@ Use `openclaw thread-handoff list [--json]` to inspect handoffs with their attem
 claimer identity. Use `openclaw thread-handoff receipts [--json]` to inspect active delivery
 receipts without starter text. `openclaw thread-handoff retire <handoff-id>` removes a claimed
 record; add `--force` for a pending record, typically a parked one.
-
-Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start a reply run on a managed or human-started thread session.
 
 Opening a database created by plugin 0.2.0 migrates it automatically to schema 2. The migration
 preserves pending attempt history and claimed records.

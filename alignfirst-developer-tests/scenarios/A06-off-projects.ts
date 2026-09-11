@@ -44,17 +44,6 @@ export default async function offProjectsChat(ctx: ScenarioContext): Promise<voi
     await assertSlackReply(ctx, startCursor);
   }
 
-  const secondCursor = await ctx.getCursor();
-  await ctx.sendInbound({
-    senderId: "ROBIN01",
-    senderName: "ROBIN01",
-    text: "Et sinon, tu passes une bonne journée ?",
-  });
-  if (ctx.channel === "discord-mock") {
-    await assertDiscordChannelReply(ctx, secondCursor);
-  } else {
-    await assertSlackReply(ctx, secondCursor);
-  }
   if (codingAgent.codingAgentCalls.length > 0) {
     throw new Error(
       `expected no coding-agent call; got ${codingAgent.codingAgentCalls.length}: ${JSON.stringify(

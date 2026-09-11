@@ -8,7 +8,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md). A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a native heartbeat poll.
 
-On every other user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
+On every other activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a channel message requires project work and you are not already in a thread, use the **playbook** to send one explicit starter with the triggering timestamp as `threadId`, then activate it through `thread_handoff`. Ordinary conversation stays at the channel root.
 
@@ -24,7 +24,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 
 ```jsonc
 { "action": "send", "channel": "slack", "target": "<channel chat_id>", "threadId": "<triggering root timestamp>", "message": "<starter>" }
-{ "action": "read", "channel": "slack", "threadId": "<bare thread id>", "limit": 50 }
+{ "action": "read", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "sendAttachment", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
@@ -36,7 +36,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-A message beginning `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
+A message beginning `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A service activation or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The playbook uses thread history to determine whether work proceeds or waits for a human value.
 
 ## No ticket-system access
 

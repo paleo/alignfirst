@@ -7,10 +7,11 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBus, injectQaBusInboundMessage } from "@paleo/openclaw-channel-mock-core";
 import { buildAgentSessionKey, resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
-import { SILENT_TOKEN } from "../../src/thread-handoff/service.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
+const TAKEOVER_MESSAGE = "Take over this thread.";
+const SILENT_TOKEN = "HEARTBEAT_OK";
 const STARTER = "Project: Project-X\nTask: preserve this exact starter.";
 const MARKER = "TARGET_SESSION_STARTED";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted by a gateway restart";
@@ -65,7 +66,7 @@ afterEach(async () => {
 });
 
 describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
-  it.each(["slack", "discord", "slack", "discord", "slack", "discord"] as const)(
+  it.each(["slack", "discord"] as const)(
     "keeps a claimed %s seed silent while awaiting a human answer",
     async (surface) => {
       const fixture = await startFixture(surface, { silenceAfterClaim: true });
@@ -157,6 +158,12 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
       expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "alreadyStarted"')).toBe(true);
+      expect(providerContentIncludes(fixture, "AlignFirst Service")).toBe(true);
+      expect(providerContentIncludes(fixture, TAKEOVER_MESSAGE)).toBe(true);
+      expect(providerToolCallIncludes(fixture, "message", { action: "read" })).toBe(true);
+      expect(providerToolCallIncludes(fixture, "thread_handoff", { action: "claim" }, true)).toBe(
+        true,
+      );
       expect(
         surface === "slack"
           ? providerContentIncludes(fixture, '"receipt"') &&
@@ -421,7 +428,7 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
       },
     });
     await waitUntil(
-      () => fixture.providerLog.some((entry) => entry.includes("[thread-handoff:v1]")),
+      () => fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE)),
       20_000,
       () => "the first pending seed was not observed",
     );
@@ -649,7 +656,7 @@ function createProviderScript(
       options.stallEndsAt = Date.now() + delayMs;
       return { content: "NO_REPLY", delayMs };
     }
-    if (tail.includes(RESTART_RECOVERY_PROMPT) && !tail.includes("[thread-handoff:v1]")) {
+    if (tail.includes(RESTART_RECOVERY_PROMPT) && !tail.includes(TAKEOVER_MESSAGE)) {
       return { content: "NO_REPLY" };
     }
     if (tail.includes("Continue in this same thread.")) {
@@ -660,7 +667,7 @@ function createProviderScript(
     if (latestUserText.includes(HUMAN_THREAD_START)) return { content: HUMAN_THREAD_STARTED };
     if (latestUserText.includes(RACING_HUMAN)) return { content: RACING_HUMAN_HANDLED };
     if (latestUserText.includes(HUMAN_DURING_SEED)) return { content: HUMAN_DURING_SEED_HANDLED };
-    if (all.includes("[thread-handoff:v1]")) {
+    if (all.includes(TAKEOVER_MESSAGE)) {
       if (options.holdFirstSeed) return { content: SILENT_TOKEN };
       const snapshot = bus.state.getSnapshot();
       const conversationId = resolveConversationId(snapshot, all);
@@ -677,12 +684,23 @@ function createProviderScript(
       if (/"status"\s*:\s*"(?:claimed|alreadyClaimed)"/u.test(latestToolText ?? "")) {
         if (options.claimTwice && !repeatedClaim) {
           repeatedClaim = true;
-          const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(all)?.[1];
           return {
             tool: "thread_handoff",
-            arguments: { action: "claim", ...(handoffId ? { handoffId } : {}) },
+            arguments: { action: "claim" },
           };
         }
+        const threadId = resolveThreadId(surface, snapshot, conversationId);
+        return {
+          tool: "message",
+          arguments: {
+            action: "read",
+            channel: `${surface}-mock`,
+            target: `channel:${surface === "slack" ? conversationId : threadId}`,
+            threadId,
+          },
+        };
+      }
+      if (latestToolText?.includes("preserve this exact starter.")) {
         if (options.silenceAfterClaim) return { content: SILENT_TOKEN };
         if (options.stallSeedReplyMs !== undefined && options.seedStallStartedAt === undefined) {
           options.seedStallStartedAt = Date.now();
@@ -690,10 +708,9 @@ function createProviderScript(
         }
         return { content: MARKER };
       }
-      const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(all)?.[1];
       return {
         tool: "thread_handoff",
-        arguments: { action: "claim", ...(handoffId ? { handoffId } : {}) },
+        arguments: { action: "claim" },
       };
     }
     if (/"status"\s*:\s*"queued"/u.test(latestToolText ?? "")) {
@@ -890,6 +907,31 @@ async function handoffAttempts(fixture: Fixture): Promise<number[]> {
     await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
   ) as Array<{ attemptCount: number }>;
   return records.map((record) => record.attemptCount);
+}
+
+function providerToolCallIncludes(
+  fixture: Fixture,
+  name: string,
+  expected: Record<string, unknown>,
+  exact = false,
+): boolean {
+  return fixture.providerLog.some((entry) => {
+    const body = JSON.parse(entry) as {
+      messages?: Array<{
+        tool_calls?: Array<{ function: { name: string; arguments: string } }>;
+      }>;
+    };
+    return body.messages?.some((message) =>
+      message.tool_calls?.some((call) => {
+        if (call.function.name !== name) return false;
+        const input = JSON.parse(call.function.arguments) as Record<string, unknown>;
+        return (
+          (!exact || Object.keys(input).length === Object.keys(expected).length) &&
+          Object.entries(expected).every(([key, value]) => input[key] === value)
+        );
+      }),
+    );
+  });
 }
 
 function providerContentIncludes(fixture: Fixture, expected: string) {

@@ -6,11 +6,15 @@ Hard-won notes from tightening the `myclaw` workspace files (`alignfirst-develop
 
 No "Important:", no all-caps emphasis, no triple-bullet restatement of the same point. There are a lot of things that matter. The more you insist, the more diluted later content becomes.
 
-## The seed and the playbook state one rule
+## Keep the activation message static
 
-The handoff seed (`buildSeed` in the plugin's `service.ts`) and `working-session.md` both tell the thread session when to stay silent. When they disagree, the seed wins: it is the turn's user message. On 2026-09-07 the seed said "End silently **only** when the claim is alreadyClaimed…" while the playbook said a claimed seed turn whose starter already asked a question ends on `NO_REPLY`; Terra obeyed the seed and repeated the question (Terra A05 Slack, artifact `17-51-00-682Z`). When a rule changes in one place, reread the other. A rule that must hold in the seed turn itself goes in the seed: Terra kept re-running the inventory in that turn through two playbook rewordings (3 of 7 A22 cells) and stopped once the seed forbade the lookup (4 of 4, 2026-09-08).
+The plugin sends exactly `Take over this thread.` from `AlignFirst Service`. The playbook owns claim, history recovery, waiting for missing input, and delegation. Keep task details in the visible starter and human replies; keep routing and sender identity in the plugin context.
 
-In the 2026-09-10 incident, the seed said an `alreadyClaimed` result meant a duplicate wake. The model called `claim` again two minutes into setup, read its own claim as a duplicate, and abandoned the turn. A rule the model can re-check cheaply must be idempotent, or the re-check must be forbidden explicitly; this seed now does both.
+Earlier seeds duplicated instructions and copied the starter into JSON. Conflicting silence rules caused repeated questions in the 2026-09-07 Terra A05 Slack run (`17-51-00-682Z`). On 2026-09-10, a second claim during setup made the model mistake its own active handoff for a duplicate and abandon work. The current tool makes same-run claims idempotent, and the playbook claims once per turn. Those incidents explain the invariants; they do not justify restoring procedural seed text.
+
+## Inspect the live prompt before changing instructions
+
+OpenClaw saves heartbeat user messages as `[OpenClaw heartbeat poll]`, even when the live prompt contains different instructions. The former A29 injected a generic system event to imitate a native exec completion; those events use different prompt branches. Repeated wording changes against the transcript marker could not establish a fix for the real completion notice. Inspect provider payloads and reproduce the actual event before revising operating instructions.
 
 ## Name who supplies a value
 
@@ -54,21 +58,21 @@ Channel/DM and thread sessions behave differently; phrase as "Channel/DM: …. T
 
 ## The thread is its own source of truth
 
-Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project, canonical project path, ticket, and task from the handoff seed's starter, or with `message action: "read"` on a human turn. A detailed request also needs its complete original text in the starter. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never rerun discovery to replace the recorded path, reconstruct it from the project name, or infer a project from a ticket prefix (`ABC-…` is a label, not a project namespace).
+Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project, canonical project path, ticket, and task with `message action: "read"` on both takeover and human turns. A detailed request also needs its complete original text in the starter. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never rerun discovery to replace the recorded path, reconstruct it from the project name, or infer a project from a ticket prefix (`ABC-…` is a label, not a project namespace).
 
-This is why the visible starter must state the task rather than assume the user will restate it. The handoff plugin also carries the exact starter inside an escaped user-content block, so its regular seed turn does not depend on parent-history inheritance. Neither carrier is permission to reconstruct missing values.
+The visible starter must state the task and preserve a detailed request in full. The static nudge starts history recovery; it supplies no missing values or additional approval.
 
 ## Don't treat a derived value as redundant
 
 When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the agent to drop X from the ack. Collapse to: "Post `<form including X>`".
 
-This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
+This is a common cause of an otherwise-correct run failing an assertion. Historical example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
 
 ## The other side: a value already on screen gets dropped
 
 The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the agent drops the second one — correctly, from its point of view: the user can already see them.
 
-This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the plugin seed activates it without a content-free human follow-up, and the thread session's next visible output reports new state rather than repeating the starter.
+This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the static service message activates the session, and the thread session's next visible output reports new state rather than repeating the starter.
 
 So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
 
@@ -85,7 +89,7 @@ Lesson: the file the agent reads *first* on a turn sets its frame. If that file 
 If the same agent ignores a procedure on one run and follows it on another, the doc is probably ambiguous, not unlucky — but confirm the rate before rewriting. A single failure in ten green runs is variance, not a defect; tightening a 90%-reliable instruction can over-constrain the sibling paths. Measure first:
 
 ```sh
-npm run e2e -- --channel discord-mock --iterations 10 --max-failures 10 A1-new-work-to-be-done
+npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
 ```
 
 `--max-failures` defaults to `1` (aborts the pair after the second failure), so raise it to see the full pass/fail rate; omit `--stop-on-fail`. Only if the failure rate is material, tighten the structure — one sentence, one template, one ordering — and re-run to confirm the fix sticks across iterations.

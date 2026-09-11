@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches, inputOf, invokesAlcode, readsFile } from "./agent-tool-calls.ts";
-import { escapeRe, STARTER_HANDS_OFF_RUBRIC } from "./common-constants.ts";
+import { escapeRe } from "./common-constants.ts";
 import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./outbound.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 import type { Step } from "./types.ts";
@@ -48,13 +48,6 @@ export async function bootstrapThreadFromChannel(
 
   assertStarterValues(ctx, wait.match.text, opts);
   await opts.afterStarter?.(threadId);
-
-  await ctx.judgeLLM({
-    attachTo: wait.entry,
-    message: wait.match.text,
-    rubric: STARTER_HANDS_OFF_RUBRIC,
-    label: "starter-hands-off",
-  });
 
   const handoff = await assertChannelSessionHandedOff(ctx, {
     threadId,

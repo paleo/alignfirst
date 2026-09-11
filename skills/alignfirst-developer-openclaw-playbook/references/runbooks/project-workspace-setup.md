@@ -93,7 +93,7 @@ Combine them into the report and post it in the thread; use `--catchup` whenever
 
 ## Step 7 — Start the work
 
-The workspace is ready. Before a coding delegation, apply the seed-turn race checkpoint in `SKILL.md`. Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
+The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in `SKILL.md`. Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
 
 When the work is an `alcode` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the alcode session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 

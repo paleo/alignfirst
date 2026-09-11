@@ -1,10 +1,6 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
-import { execMatches, invokesAlcode, invokesCodingAgentDirectly } from "./_lib/agent-tool-calls.ts";
-import {
-  waitForBackgroundStartedAck,
-  waitForCodingSessionSucceeded,
-  waitForCompletionReport,
-} from "./_lib/coding-session.ts";
+import { inputOf } from "./_lib/agent-tool-calls.ts";
+import { expectDelegationChain } from "./_lib/delegation-chain.ts";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
 import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import {
@@ -25,16 +21,7 @@ import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
 const TICKET_ID = "ABC-0110";
 const PROJECT = "nimbus";
 
-/**
- * An explicit hold, then the green light — two turns in the work thread.
- *
- * The thread session starts work without asking for validation (that gate is gone), so the way to
- * separate setup from coding is for the user to withhold the green light themselves. Phase 1 does
- * exactly that: "prépare le workspace, ne lance aucun travail de code sans mon feu vert" must
- * produce a workspace and no coding-protocol call. Phase 2 releases it and asserts the launch path
- * from the incident `.plans/30/D1-spec.md`: a backgrounded alcode exec (`background: true`,
- * `timeoutSeconds: 0`) whose exec-exit wake lands the completion report back in the same thread.
- */
+/** A hold during takeover, then two sequential coding runs with one final report each. */
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
@@ -51,6 +38,13 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
     ticketId: TICKET_ID,
+    afterStarter: async (threadId) => {
+      await sendInThread(
+        ctx,
+        threadId,
+        "Prépare le workspace, mais ne lance aucun travail de code sans mon feu vert.",
+      );
+    },
   });
 
   await runSetupPhaseWithoutDelegation(ctx, codingAgent, starter);
@@ -70,12 +64,6 @@ async function runSetupPhaseWithoutDelegation(
   codingAgent: CodingAgentMockHandle,
   starter: Step,
 ): Promise<void> {
-  await sendInThread(
-    ctx,
-    starter.threadId,
-    "Prépare le workspace, mais ne lance aucun travail de code sans mon feu vert.",
-  );
-
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
     timeoutMs: 180_000,
   });
@@ -93,85 +81,41 @@ async function runSetupPhaseWithoutDelegation(
   ctx.log("no coding-protocol coding-agent call before the go-ahead — OK");
 }
 
-/**
- * Phase 2 — the go-ahead releases the hold. The session must delegate through alcode as a
- * background exec and, on the exec-exit wake, report completion in the same thread.
- */
 async function runGoAheadPhase(
   ctx: ScenarioContext,
   threadId: string,
   startCursor: number,
 ): Promise<void> {
-  const goAheadCursor = await sendInThread(
-    ctx,
-    threadId,
+  for (const [index, text] of [
     "Feu vert : lance le travail. Préviens-moi ici quand c'est terminé.",
-  );
-
-  // The launch invocation, not the `alcode --openclaw-guide` read (also an alcode exec, but
-  // without the background fields). Its coding-agent subprocess is a cliMock, never an OpenClaw
-  // agent tool call, so a direct coding-agent exec at this level is the incident's wrong path.
-  const alcodeCall = await ctx.waitForAgentToolCall(
-    (c) => invokesAlcode(c) && !execMatches(c, /--openclaw-guide/),
-    { label: "thread session delegates to the alcode CLI", timeoutMs: 180_000 },
-  );
-  if (invokesCodingAgentDirectly(alcodeCall)) {
-    throw new Error(
-      `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(alcodeCall.input)}`,
-    );
-  }
-  // The incident's regression: the agent passed a finite timeout (300/600) instead of the
-  // guide-mandated `background: true, timeoutSeconds: 0` (OpenClaw 2026.8 exec field names).
-  const input = (alcodeCall.input ?? {}) as { background?: unknown; timeoutSeconds?: unknown };
-  ctx.assertEqual(input.background, true, "alcode exec: background === true");
-  ctx.assertEqual(input.timeoutSeconds, 0, "alcode exec: timeoutSeconds === 0");
-
-  // The started ack, classified by a batch judge over the thread's outbounds (tolerant of
-  // phrasing/language and interleaved reasoning narration).
-  await waitForBackgroundStartedAck(ctx, {
-    conversationId: ctx.conversationId,
-    threadId,
-    sinceCursor: goAheadCursor,
-    timeoutMs: 150_000,
-    label: "background-started-ack",
-  });
-
-  const sessionFilePath = await waitForCodingSessionSucceeded(ctx, {
-    ticketId: TICKET_ID,
-    timeoutMs: 120_000,
-  });
-  ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
-
-  // Scan from BEFORE the ack (goAheadCursor): the batch judge picks the FINISHED report out of the
-  // thread window, distinguishing it from the earlier ack and any launch banner.
-  await waitForCompletionWake(ctx, threadId, goAheadCursor);
-
-  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
-  await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
-}
-
-/**
- * The completion-wake wait, with a diagnostic on timeout: the gateway's `last-heartbeat` is logged
- * before rethrowing — a stale `ts` distinguishes a wake-scheduler wedge (the incident) from a slow
- * model turn.
- */
-async function waitForCompletionWake(ctx: ScenarioContext, threadId: string, sinceCursor: number) {
-  try {
-    return await waitForCompletionReport(ctx, {
-      conversationId: ctx.conversationId,
+    "Deuxième étape : ajoute une infobulle « Exporter les données » sur ce bouton. Préviens-moi quand c'est terminé.",
+  ].entries()) {
+    const notBefore = new Date().toISOString();
+    const sinceCursor = await sendInThread(
+      ctx,
       threadId,
-      sinceCursor,
-      timeoutMs: 420_000,
-      label: "completion-wake-report",
-    });
-  } catch (error) {
-    const hb = await ctx.execInGateway(["openclaw", "gateway", "call", "last-heartbeat"], {
-      timeoutMs: 15_000,
-    });
-    ctx.log(
-      `last-heartbeat on completion timeout (exit ${hb.exitCode}): ` +
-        `${hb.stdout.trim()}${hb.stderr.trim() ? ` | stderr: ${hb.stderr.trim()}` : ""}`,
+      `${text} Cette étape se termine après l'implémentation, les tests et la vérification locale : ` +
+        "ne lance aucune revue de code et n'ouvre aucune PR.",
     );
-    throw error;
+    await expectDelegationChain(ctx, {
+      threadId,
+      ticketId: TICKET_ID,
+      sinceCursor,
+      notBefore,
+      launchIndex: index + 1,
+    });
   }
+  const calls = await ctx.getAgentToolCalls();
+  ctx.assertLength(
+    calls.filter(
+      (call) =>
+        call.sessionKey?.toLowerCase().includes(threadId.toLowerCase()) === true &&
+        call.toolName === "thread_handoff" &&
+        inputOf(call).action === "start",
+    ),
+    0,
+    "working thread never starts another handoff",
+  );
+  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
 }

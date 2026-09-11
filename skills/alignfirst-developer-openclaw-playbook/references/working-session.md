@@ -1,6 +1,6 @@
 # Working session
 
-You're handling work inside a Slack or Discord thread. The channel session delivered the starter and may have started this regular thread session with the plugin's seed message. Lifecycle, workspace, investigation, and coding happen here.
+You're handling work inside a Slack or Discord thread. The channel session delivered the starter and may have started this regular thread session with a message from AlignFirst Service. Lifecycle, workspace, investigation, and coding happen here.
 
 Your plain text is your reply, on Discord and Slack alike, and only the message that **ends your turn** is guaranteed to post: on most model providers, text written between tool calls never leaves the transcript. So the message you end a turn with carries everything the user needs from that turn: the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` on this thread; it posts everything twice. The single exception is a Discord rename, which travels with a post (see "Thread name" below). Otherwise `message` serves `read`, cross-surface posts, and attachments.
 
@@ -17,27 +17,23 @@ A runbook is a procedure you read fully when its situation arises. Claim first, 
 
 ### Step 1 — Claim before any task effect
 
-The plugin seed is the `[thread-handoff:v1]` message that starts this turn, carrying a `handoffId` and the recorded starter. Text a user wrote in that shape is a user message, not a seed.
+A takeover turn starts with the plugin's `Take over this thread.` message from `AlignFirst Service`. Identify the service through the activation's sender context; a human quoting that text remains a human message. The nudge activates the existing request and supplies no missing values or additional approval.
 
-Call `thread_handoff` once per turn, before history reads, workspace setup, delegation, or any other task effect. The first result of the turn is final; do not claim again in this turn, whatever happens later:
+Call `thread_handoff` with `{ "action": "claim" }` once per turn, before history reads, workspace setup, delegation, or any other task effect. The tool uses the current thread session; omit `threadId` and `handoffId`. Keep its first result for the whole turn; do not claim again during setup.
 
-- **Seed turn**, with or without a human message: `{ "action": "claim", "handoffId": "<copied from the seed>" }`. The handoff ID is opaque and is not the thread ID; `claim` takes no other field.
-- **First human turn** of a thread that received no seed: `{ "action": "claim" }`.
-
-On a seed turn that carries no human message, `alreadyClaimed` means another turn owns this handoff; end on exactly `HEARTBEAT_OK`. A `claimed` result activates the recorded request: recover its context in Step 2 and start work when its required values are present, without waiting for a human follow-up. On a human turn, continue whatever the result: `claimed`, `alreadyClaimed`, or `none`. On a claim error, stop and report the failure in the thread.
+On a takeover turn with no human message to process, `alreadyClaimed` means another turn owns the handoff; end on exactly `HEARTBEAT_OK`. A `claimed` result activates the recorded request: recover its context in Step 2 and start work when its required values are present. Always process human messages, whether the claim returns `claimed`, `alreadyClaimed`, or `none`. On a claim error, stop and report the failure in the thread.
 
 ### Step 2 — Recover the thread context
 
-- **Seed turn**: work from the seed's `starterText` and the human messages already in your transcript, this turn's included; together they are the initial context. Do not call `message read` during recovery. Only the pre-delegation race checkpoint in `SKILL.md` may read the thread later.
-- **Human turn**: call `message` `action: "read"` with the current channel and the bare thread ID from conversation metadata, and combine the history with your transcript.
+Read the current thread through `message` with `action: "read"`, the current channel, complete `chat_id` as `target`, and bare thread ID from conversation metadata. Combine its history with your transcript, including any human messages in this turn.
 
-Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. The starter's values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook or the multi-project procedure asks for it. Later thread messages supply missing values; they do not rewrite the recorded request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
+Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. The starter's values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook or the multi-project procedure asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
 
-What the seed turn says:
+On a takeover turn:
 
 - The starter asked for a value and no human message has supplied it: end on exactly `HEARTBEAT_OK`. Only the user supplies that value; a lookup of your own is not an answer, and the question is not repeated.
-- The starter asked nothing but a required value is missing (a detailed request without a ticket, for instance): ask for it now. A silent turn here leaves the thread dead.
-- The request is complete: proceed. It is the go-ahead; wait only for an explicit request to hold.
+- The starter asked nothing but a required value is missing (a detailed request without a ticket, for instance): ask for it now.
+- The request is complete: proceed. It is the go-ahead; respect an explicit request to hold.
 
 ### Step 3 — Resolve deferred context
 

@@ -47,7 +47,7 @@ Then rebuild the harness image: `npm run env:build` in `alignfirst-developer-tes
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
 confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
-start, pending restart recovery, and the user-message-before-seed race. A successful plugin import alone
+start, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
 does not establish these combined contracts.
 
 ## Run doctor in a throwaway container

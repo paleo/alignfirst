@@ -84,9 +84,8 @@ export async function runWorkspaceFlow(
 /**
  * Best-effort check on the workspace report block: assert its shape when the
  * agent posts it, tolerate a session that reports readiness conversationally
- * and skips the template. Its format is pinned by A07/A08/A09, where the report
- * IS the deliverable; on a work request the agent often goes straight to the
- * coding delegation instead.
+ * and skips the template. Filesystem and scenario-specific outcome checks establish readiness; on a work request
+ * the agent often goes straight to the coding delegation instead.
  *
  * Polls rather than `waitForOutbound`: a wait that times out records a failed
  * entry on the report, which no amount of catching undoes — and the point here
@@ -128,7 +127,7 @@ export async function settleOnWorkspaceReport(
       if (/\[WORKSPACE\]/.test(m.text)) {
         ctx.log("workspace report carries the [WORKSPACE] tag");
       } else {
-        ctx.log("workspace report without the [WORKSPACE] tag — tolerated here, pinned by A08");
+        ctx.log("workspace report without the [WORKSPACE] tag — accepted");
       }
       return;
     }

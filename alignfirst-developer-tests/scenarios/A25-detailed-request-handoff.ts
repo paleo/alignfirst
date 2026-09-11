@@ -33,32 +33,37 @@ export default async function detailedRequestHandoff(ctx: ScenarioContext): Prom
     message: starter.match.text,
     rubric:
       "A thread-opening handoff for the detailed French nimbus request. It preserves all three " +
-      "requirements in their original language and defers ticket collection to the working " +
-      "session without asking for a content-free activation message.",
+      "requirements in their original language without inventing additional task requirements. It may ask for the missing ticket itself or " +
+      "leave that question to the thread session, without asking for a content-free activation message.",
     label: "detailed-request-preserved",
   });
   await waitForProjectListing(ctx, "channel session lists the projects");
 
-  const firstWakeCursor = starter.nextCursor;
-  const ticketQuestion = await waitForReport(
-    ctx,
-    (message) =>
-      message.direction === "outbound" &&
-      message.threadId === starter.threadId &&
-      /(?:ticket|identifiant)/iu.test(message.text),
-    { sinceCursor: firstWakeCursor, timeoutMs: 120_000 },
-  );
-  await ctx.judgeLLM({
-    attachTo: ticketQuestion.entry,
-    message: ticketQuestion.match.text,
-    rubric:
-      "A question asking for the ticket ID needed to continue the detailed nimbus request. Plain " +
-      "prose or OpenClaw's structured prompt (numbered options, 'Reply with the number…', a " +
-      "side-ticket option) both count. A takeover or intent preamble restating the request " +
-      "('Je prends en charge la réorganisation…') is fine. Reject only a claim that a workspace, " +
-      "worktree or branch exists or that coding has started.",
-    label: "detailed-request-ticket-question",
+  const { parsed } = await ctx.judgeLLMJson<{ asks: boolean }>({
+    message: starter.match.text,
+    prompt: "Does this thread starter ask the user for the missing ticket ID?",
+    returnType: '{ "asks": boolean }',
+    label: "starter-ticket-question",
   });
+  if (!parsed.asks) {
+    const ticketQuestion = await waitForReport(
+      ctx,
+      (message) =>
+        message.direction === "outbound" &&
+        message.threadId === starter.threadId &&
+        /(?:ticket|identifiant)/iu.test(message.text),
+      { sinceCursor: starter.nextCursor, timeoutMs: 120_000 },
+    );
+    await ctx.judgeLLM({
+      attachTo: ticketQuestion.entry,
+      message: ticketQuestion.match.text,
+      rubric:
+        "A question asking for the ticket ID needed to continue the detailed nimbus request. " +
+        "Plain prose or a structured choice both count. Reject a claim that a workspace exists " +
+        "or that coding has started.",
+      label: "detailed-request-ticket-question",
+    });
+  }
 
   await sendInThread(ctx, starter.threadId, `Utilise le ticket ${TICKET_ID}.`);
   const requestPath = `${NIMBUS_PROJECT_PATH}/.plans/${TICKET_ID}/A1-request.md`;

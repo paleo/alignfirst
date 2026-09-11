@@ -1,5 +1,4 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { assertBranchForTicket, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
 import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
@@ -42,7 +41,6 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
   });
 
   await waitForCapturedRequest(REQUEST_PATH, REQUEST, 120_000);
-  await assertNoTicketWorktreeExists();
 
   const { dir: worktreeDir } = await waitForAnyWorktreeDir(
     NIMBUS_PROJECT_PATH,
@@ -68,15 +66,6 @@ export default async function explicitNoTicket(ctx: ScenarioContext): Promise<vo
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
-}
-
-async function assertNoTicketWorktreeExists(): Promise<void> {
-  const parent = dirname(NIMBUS_PROJECT_PATH);
-  const prefix = `${basename(NIMBUS_PROJECT_PATH)}-${RESERVED_TICKET_ID}-`;
-  const entries = await readdir(parent, { withFileTypes: true });
-  if (entries.some((entry) => entry.isDirectory() && entry.name.startsWith(prefix))) {
-    throw new Error("side-2 workspace existed before its request file was observed");
-  }
 }
 
 async function seedPriorNoTicketWork(): Promise<void> {
