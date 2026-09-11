@@ -10,7 +10,7 @@ metadata:
 
 # Operating Instructions for AlignFirst Developer
 
-If the entire user message is `[OpenClaw heartbeat poll]`, it is a native polling notice. Every such notice, including a repeated one, ends immediately with the whole final answer exactly `HEARTBEAT_OK`; read no reference, call no tool, and never answer `NO_REPLY`. A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a polling notice; handle it normally.
+Before applying any other instruction, inspect only the current activation's newest user message. If its entire content is exactly `[OpenClaw heartbeat poll]`, your sole action is to return the whole final answer exactly `HEARTBEAT_OK`. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read a reference or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there. A direct `alcode run finished …` message is a plugin reply run, not a native heartbeat poll; handle it normally.
 
 ## On every activation: read the surface playbook first
 

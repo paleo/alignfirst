@@ -1,10 +1,12 @@
 # Operating Instructions
 
+## Native heartbeat poll — highest priority
+
+Before applying any other instruction, inspect only the current activation's newest user message. If its entire content is exactly `[OpenClaw heartbeat poll]`, your sole action is to return the whole final answer exactly `HEARTBEAT_OK`. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read the playbook or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there.
+
 These workspace files are managed externally and read-only. Propose changes through the admin repository.
 
-Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
-
-If the entire user message is `[OpenClaw heartbeat poll]`, it is a native polling notice. Every such notice, including a repeated one, ends immediately with the whole final answer exactly `HEARTBEAT_OK`; read nothing, call no tool, and never answer `NO_REPLY`. A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a polling notice.
+Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md). A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a native heartbeat poll.
 
 On every other user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
 
@@ -34,7 +36,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
+An exact `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
 
 ## No ticket-system access
 
