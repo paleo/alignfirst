@@ -9,7 +9,7 @@ const CLAIM_TIMEOUT_MS = 120_000;
 const QUIET_WINDOW_MS = 90_000;
 
 /**
- * The plugin starts the thread session with a regular seed turn. When the starter already asked
+ * The plugin starts the thread session with a seed reply run. When the starter already asked
  * the user for a missing value, the turn claims the handoff, reads no thread history, and ends on
  * the silent token. The quiet-window check is token-agnostic because a suppressed token produces
  * no outbound message. Call this after `bootstrapThreadFromChannel` and the starter judgment; it
@@ -33,7 +33,7 @@ export async function expectSilentSeedTurn(ctx: ScenarioContext, starter: Step):
       inputOf(call).action === "read",
   );
   ctx.assertLength(reads, 0, "seed turn read no thread history");
-  ctx.log("regular seed turn: claimed, no post, no history read — OK");
+  ctx.log("seed reply run: claimed, no post, no history read — OK");
   return cursor;
 }
 

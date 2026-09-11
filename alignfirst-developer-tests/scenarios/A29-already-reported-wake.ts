@@ -4,7 +4,7 @@ import { inputOf } from "./_lib/agent-tool-calls.ts";
 import {
   waitForBackgroundStartedAck,
   waitForCodingSessionSucceeded,
-  waitForCompletionReport,
+  waitForFinalWorkflowCompletionReport,
 } from "./_lib/coding-session.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
@@ -20,6 +20,8 @@ interface WakeObservation {
   terminals: string[];
   toolNames: string[];
   finalizations: number;
+  messageCount: number;
+  openTurn: boolean;
   observedAt: number;
 }
 
@@ -55,8 +57,9 @@ export default async function alreadyReportedWake(ctx: ScenarioContext): Promise
     label: "background-started-ack",
   });
   await waitForCodingSessionSucceeded(ctx, { ticketId: TICKET_ID, timeoutMs: 120_000 });
-  // The completion report arrives on the chained regular turn.
-  await waitForCompletionReport(ctx, {
+  // The final completion report arrives on the chained `thread-handoff wake` reply run. Wait for
+  // the whole requested workflow so the native duplicate cannot race a later verification step.
+  await waitForFinalWorkflowCompletionReport(ctx, {
     conversationId: ctx.conversationId,
     threadId: starter.threadId,
     sinceCursor: starter.nextCursor,
@@ -65,11 +68,14 @@ export default async function alreadyReportedWake(ctx: ScenarioContext): Promise
   });
   await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor, withinMs: 15_000 });
 
-  const before = await inspectWake(ctx, sessionKey, 0);
+  // The native exec-exit heartbeat can already be in flight when the final report lands. Let that
+  // turn finish before taking the timestamp baseline; otherwise its terminal is misattributed to
+  // the duplicate event injected below.
+  const before = await waitForWakeQuiescence(ctx, sessionKey);
   ctx.assertEqual(before.finalizations, 0, "handoff and completion needed no isolated finalizer");
   const cursor = await ctx.getCursor();
   // This duplicate follows the native exec-exit notice path: a heartbeat turn that must settle on
-  // HEARTBEAT_OK because the chained regular turn already reported the run.
+  // HEARTBEAT_OK because the chained wake reply run already reported the run.
   const wake = await ctx.execInGateway([
     "openclaw",
     "system",
@@ -126,4 +132,24 @@ async function waitForWakeTerminal(
     await setTimeout(1_000);
   }
   throw new Error("Duplicate completion wake never produced a terminal assistant message");
+}
+
+async function waitForWakeQuiescence(
+  ctx: ScenarioContext,
+  sessionKey: string,
+): Promise<WakeObservation> {
+  const deadline = Date.now() + 180_000;
+  let stableCount = -1;
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    const observation = await inspectWake(ctx, sessionKey, 0);
+    if (observation.messageCount !== stableCount || observation.openTurn) {
+      stableCount = observation.messageCount;
+      stableSince = Date.now();
+    } else if (Date.now() - stableSince >= 3_000) {
+      return observation;
+    }
+    await setTimeout(1_000);
+  }
+  throw new Error("Thread session did not settle before duplicate completion wake");
 }

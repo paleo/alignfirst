@@ -33,8 +33,8 @@ const launchedSince = (notBefore: string) => (call: AgentToolCall) =>
   isAlcodeLaunch(call) && call.startedAt !== undefined && call.startedAt >= notBefore;
 
 /**
- * Regression for the regular-turn chained wake. The alcode guide chains
- * `openclaw agent --session-key <KEY> --deliver --timeout 0 --message …` onto every launch. The
+ * Regression for the chained wake reply run. The alcode guide chains
+ * `openclaw thread-handoff wake --session-key <KEY> --message …` onto every launch. The
  * previous mechanism chained `openclaw system event`; its heartbeat-cooldown gate could lose later
  * completion reports.
  *
@@ -121,7 +121,7 @@ interface DelegationChainOptions {
 }
 
 /**
- * One delegation's full chain: the alcode launch exec with the guide's chained regular turn, the
+ * One delegation's full chain: the alcode launch exec with the guide's chained wake reply run, the
  * started ack, the `status: succeeded` session file started by this phase, and the completion
  * report in the work thread.
  */
@@ -149,12 +149,10 @@ async function expectDelegationChain(
   if (command === undefined) throw new Error("alcode launch call carries no exec command");
   ctx.assertRegex(
     command,
-    /openclaw agent/,
-    `launch #${launchIndex}: chains an \`openclaw agent\` turn`,
+    /openclaw thread-handoff wake/,
+    `launch #${launchIndex}: chains an \`openclaw thread-handoff wake\` turn`,
   );
   ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: wake targets a --session-key`);
-  ctx.assertRegex(command, /--deliver/, `launch #${launchIndex}: chained turn delivers its reply`);
-  ctx.assertRegex(command, /--timeout 0/, `launch #${launchIndex}: chained turn has no timeout`);
   const launchStartedAt = launch.startedAt;
   if (launchStartedAt === undefined) {
     throw new Error(`alcode launch #${launchIndex} has no start timestamp`);

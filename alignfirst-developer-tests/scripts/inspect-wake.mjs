@@ -41,8 +41,20 @@ function main() {
       const log = readFileSync(`${LOG_DIRECTORY}/${name}`, "utf8");
       return count + [...log.matchAll(/running isolated finalization/gu)].length;
     }, 0);
+    const lastMessage = messages.at(-1);
+    const openTurn =
+      lastMessage?.role === "user" ||
+      lastMessage?.role === "toolResult" ||
+      (lastMessage?.role === "assistant" && lastMessage.stopReason === "toolUse");
     process.stdout.write(
-      JSON.stringify({ terminals, toolNames, finalizations, observedAt: Date.now() }),
+      JSON.stringify({
+        terminals,
+        toolNames,
+        finalizations,
+        messageCount: messages.length,
+        openTurn,
+        observedAt: Date.now(),
+      }),
     );
   } finally {
     database.close();

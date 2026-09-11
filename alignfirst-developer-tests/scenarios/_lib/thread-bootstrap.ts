@@ -27,7 +27,7 @@ export interface ChannelBootstrapOptions {
 
 /**
  * Open a thread, confirm its native starter and durable handoff, then return after the plugin
- * starts the thread session with a regular turn. Target work may already be in progress before
+ * starts the thread session with a reply run. Target work may already be in progress before
  * the parent turn emits its final `NO_REPLY`.
  */
 export async function bootstrapThreadFromChannel(

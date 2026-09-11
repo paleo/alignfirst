@@ -32,6 +32,14 @@ const COMPLETION_RUBRIC =
   "workspace/launch announcement that carries a ✅ only for setup readiness ('Status: ready ✅ | " +
   "Lancement…').";
 
+const FINAL_WORKFLOW_COMPLETION_RUBRIC =
+  "This is a single message an assistant posted in a chat thread after implementing a coding " +
+  "task whose requested scope includes tests and local verification. PASS only if it reports that " +
+  "the implementation, tests, and local verification are all complete and gives their outcome. " +
+  "The message must be the final report for the whole requested workflow. FAIL if any requested " +
+  "step is still pending, or if the assistant announces that it will now inspect logs, gather " +
+  "proof, run checks, verify the result, or return with another report.";
+
 const FINDINGS_RUBRIC =
   "This is a single message an assistant posted in a chat thread after delegating a read-only " +
   "investigation (a 'look into this' task, not a code change) to a coding agent that has finished. PASS " +
@@ -77,6 +85,14 @@ export async function waitForCompletionReport(
   opts: JudgedReportOptions,
 ): Promise<Candidate> {
   return collectAndJudge(ctx, opts, COMPLETION_RUBRIC, "completion report");
+}
+
+/** Wait for a final report after implementation, tests, and local verification all complete. */
+export async function waitForFinalWorkflowCompletionReport(
+  ctx: ScenarioContext,
+  opts: JudgedReportOptions,
+): Promise<Candidate> {
+  return collectAndJudge(ctx, opts, FINAL_WORKFLOW_COMPLETION_RUBRIC, "final workflow report");
 }
 
 /**

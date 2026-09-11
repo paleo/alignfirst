@@ -64,11 +64,11 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`). It sends the
 channel message, waits for exactly one confirmed native starter and one `thread_handoff start`, and
 checks the parent session's attributed tool trace for target work. The plugin starts the thread
-session with a regular turn; complete requests need no mechanical follow-up. `sendInThread` remains for
+session with a reply run; complete requests need no mechanical follow-up. `sendInThread` remains for
 genuine missing values, explicit holds, confirmations, and later requests. Target work may begin
 before the parent emits its final `NO_REPLY`, so assertions follow the starter's original cursor.
 
-`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, pinning the guide's chained `openclaw agent` completion turn. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
+`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, pinning the guide's chained `openclaw thread-handoff wake` completion turn. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
 
 `A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
 
@@ -76,7 +76,7 @@ before the parent emits its final `NO_REPLY`, so assertions follow the starter's
 
 `A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
 
-`A29-already-reported-wake` limits its request to implementation and local verification, excluding review and PR work. It completes the delegation, injects the native exec-exit notice path (`openclaw system event`) after the report, and requires a terminal `HEARTBEAT_OK` with no outbound message or isolated finalizer. It also checks that the preceding human-turn handoff and completion needed no finalizer.
+`A29-already-reported-wake` limits its request to implementation and local verification, excluding review and PR work. It completes the delegation on the chained wake reply run, then injects the native exec-exit notice path (`openclaw system event`). The duplicate requires a terminal `HEARTBEAT_OK` with no outbound message or isolated finalizer. It also checks that the preceding human-turn handoff and completion needed no finalizer.
 
 `A27-human-reply-racing-startup` sends a genuine missing-ticket answer immediately after native
 starter delivery. `A28-recoverable-handoff-failure` injects one test-bus delivery failure, then
