@@ -602,6 +602,8 @@ function buildConfig(params: {
         workspace: params.workspace,
         maxConcurrent: 4,
         heartbeat: { target: "last" },
+        blockStreamingDefault: "on",
+        blockStreamingBreak: "text_end",
       },
       entries: { main: { name: "Main" } },
     },

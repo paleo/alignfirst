@@ -69,7 +69,11 @@ supported.
 
 ## Turn start and persistence
 
-The plugin commits a pending record before dispatching the seed as a reply run through the channel-inbound path. Its plugin-built context has no sender or command authority and sets `WasMentioned: false`. OpenClaw delivers final replies to the thread through its durable outbound path, and the reply run records the session's last route. The gateway process does not need an `openclaw` executable on its `PATH`.
+The plugin commits a pending record before dispatching the seed as a reply run through the
+channel-inbound path. Its plugin-built context has no sender or command authority and sets
+`WasMentioned: false`. These plugin-dispatched turns disable block streaming so their complete
+final payload reaches OpenClaw's durable outbound path. The reply run records the session's last
+route. The gateway process does not need an `openclaw` executable on its `PATH`.
 
 The seed tells the receiver to load its playbook and claim the explicit handoff before task effects. The exact starter is serialized inside a JSON user-content block; it is not plugin instruction text. A claimed seed with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 

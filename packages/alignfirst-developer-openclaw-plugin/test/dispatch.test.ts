@@ -1,8 +1,39 @@
-import { describe, expect, it } from "vitest";
-import { buildLastRoute, buildTurnContext } from "../src/thread-handoff/dispatch.js";
+import type { OpenClawPluginApi, PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
+import { describe, expect, it, vi } from "vitest";
+import { buildLastRoute, buildTurnContext, dispatchTurn } from "../src/thread-handoff/dispatch.js";
 import type { TurnRequest } from "../src/thread-handoff/types.js";
 
 describe("thread-handoff reply dispatch", () => {
+  it("disables block streaming so the durable adapter receives the final payload", async () => {
+    const dispatchReply = vi.fn(async () => undefined);
+    const runtime = {
+      config: { current: () => ({}) },
+      channel: {
+        inbound: { dispatchReply },
+        reply: {
+          finalizeInboundContext: (context: Record<string, unknown>) => context,
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(),
+        },
+        session: {
+          resolveStorePath: () => "/state/main/sessions.json",
+          recordInboundSession: vi.fn(),
+        },
+      },
+    } as unknown as OpenClawPluginApi["runtime"];
+    const logger = { warn: vi.fn() } as unknown as PluginLogger;
+
+    await dispatchTurn({ runtime, logger, request: slackRequest() });
+
+    expect(dispatchReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyOptions: { disableBlockStreaming: true },
+        delivery: expect.objectContaining({
+          durable: { to: "channel:C1", threadId: "100.200", replyToId: null },
+        }),
+      }),
+    );
+  });
+
   it("builds a senderless Slack thread context and last route", () => {
     const request = slackRequest();
     const before = Date.now();

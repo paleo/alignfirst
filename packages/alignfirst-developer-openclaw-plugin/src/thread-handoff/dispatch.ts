@@ -36,6 +36,7 @@ export async function dispatchTurn(params: {
         logger.warn(`thread-handoff delivery failed (${info.kind}): ${errorMessage(error)}`),
     },
     replyPipeline: {},
+    replyOptions: { disableBlockStreaming: true },
     record: {
       updateLastRoute: buildLastRoute(request),
       onRecordError: (error) =>
