@@ -28,7 +28,7 @@ On a seed turn that carries no human message, `alreadyClaimed` means another tur
 
 ### Step 2 — Recover the thread context
 
-- **Seed turn**: work from the seed's `starterText` and the human messages already in your transcript, this turn's included; together they are the whole thread. Do not call `message read`.
+- **Seed turn**: work from the seed's `starterText` and the human messages already in your transcript, this turn's included; together they are the initial context. Do not call `message read` during recovery. Only the pre-delegation race checkpoint in `SKILL.md` may read the thread later.
 - **Human turn**: call `message` `action: "read"` with the current channel and the bare thread ID from conversation metadata, and combine the history with your transcript.
 
 Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. The starter's values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook or the multi-project procedure asks for it. Later thread messages supply missing values; they do not rewrite the recorded request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.

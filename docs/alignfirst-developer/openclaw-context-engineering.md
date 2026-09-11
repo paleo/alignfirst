@@ -138,13 +138,13 @@ Without `message` in `alsoAllow`, the channel session falls back to raw Discord 
 
 When a fresh thread session activates on Discord, its transcript starts **empty** — Slack can inject a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100), but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-Workaround: the handoff seed carries an escaped copy of the exact starter and trusted routing identifiers, so the seed turn needs no history read. On a later human turn the thread playbook calls `message` `action: "read"` so newer answers and the `[WORKSPACE]` state participate. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
+Workaround: the handoff seed carries an escaped copy of the exact starter and trusted routing identifiers, so its initial recovery needs no history read. Immediately before a seed turn's first coding delegation, the playbook reads the thread once to catch human instructions queued during setup. On a later human turn it reads again so newer answers and the `[WORKSPACE]` state participate. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
 
 ### Heartbeat and `agent`-method turns deny external-plugin reads
 
 A heartbeat turn and a turn started by the `agent` method mint no message-action capability. The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. The deterministic suite verifies the gate for the `agent` method.
 
-The plugin's reply runs mint the message-action turn capability without a sender ID. A seed turn may therefore read its thread through an external plugin as a human turn may. The playbook still instructs the seed to use its carried starter instead, preserving the Discord history-gap workaround and avoiding the token cost of a redundant read.
+The plugin's reply runs mint the message-action turn capability without a sender ID. A seed turn may therefore read its thread through an external plugin as a human turn may. The playbook uses the carried starter for initial recovery, then spends one read only before a coding delegation. This preserves the Discord history-gap workaround while catching a hold or scope correction queued during a long setup.
 
 ## `expectsCompletionMessage` — control the parent handoff
 
