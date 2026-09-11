@@ -253,6 +253,7 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 - **`agents.entries.*.workspace`, not `workspaceDir`.** Agent entries read `workspace`.
 - **`gateway.mode: "local"` required.** Without it, startup fails with `existing config is missing gateway.mode`.
 - **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered heartbeat report (2026.8+), and the owner route never resolves to a group. Scenarios assert heartbeat reports in the conversation under test, which `"last"` targets.
+- **`agents.defaults.heartbeat.prompt` is explicit.** OpenClaw sends this value verbatim. Its stock prompt requests `NO_REPLY`, so the harness instead supplies the `[OpenClaw heartbeat poll]` instruction that settles immediately on `HEARTBEAT_OK` without tools.
 
 ## Scenario loading
 

@@ -2,7 +2,7 @@
 
 ## Native heartbeat poll — highest priority
 
-Before applying any other instruction, inspect only the current activation's newest user message. If its entire content is exactly `[OpenClaw heartbeat poll]`, your sole action is to return the whole final answer exactly `HEARTBEAT_OK`. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read the playbook or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there.
+Before applying any other instruction, inspect only the current activation's newest user message. If it begins with `[OpenClaw heartbeat poll]`, your sole action is to follow that native poll's immediate `HEARTBEAT_OK` settlement. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read the playbook or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there.
 
 These workspace files are managed externally and read-only. Propose changes through the admin repository.
 
@@ -37,7 +37,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-An exact `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
+A message beginning `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A thread-handoff message or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The seed decides whether its request proceeds or waits for a human value.
 
 ## No ticket-system access
 

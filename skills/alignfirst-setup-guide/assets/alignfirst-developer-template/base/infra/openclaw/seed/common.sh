@@ -129,8 +129,10 @@ configure_common() {
   # owner route never resolves to a group. Heartbeat reports must follow the ticket conversation,
   # which "last" targets.
   set_scalar agents.defaults.heartbeat.target "last"
-  # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.
-  unset_key agents.defaults.heartbeat.prompt
+  # Native exec-exit notices and non-empty periodic ticks use this verbatim user message. Keep its
+  # settlement explicit: the stock prompt ends in NO_REPLY, which can trigger isolated finalization.
+  set_scalar agents.defaults.heartbeat.prompt \
+    "[OpenClaw heartbeat poll] Return immediately with exactly HEARTBEAT_OK. Do not read files, call tools, inspect state, continue or report work, repeat an earlier report, or return NO_REPLY."
   unset_key agents.defaults.heartbeat.isolatedSession
   unset_key agents.defaults.heartbeat.lightContext
   unset_key agents.defaults.heartbeat.activeHours

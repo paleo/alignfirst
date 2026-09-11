@@ -183,6 +183,8 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-s
 
 A comment-only scratch makes the daily tick skip its model call ([gotchas.md](../gotchas.md#heartbeat-cost-is-a-main-session-problem)). The scratch carries no immutable flag; `06` records the accepted gap.
 
+The seed also sets `agents.defaults.heartbeat.prompt` explicitly. OpenClaw sends that prompt verbatim for native exec-exit notices and any non-empty periodic tick; the configured text requires an immediate, tool-free `HEARTBEAT_OK`. Do not restore the stock prompt: its `NO_REPLY` instruction can trigger an isolated finalizer.
+
 ## 8. Podman socket
 
 `DOCKER_HOST` is already in `~/.config/environment.d/runtime.conf`; the socket it names comes from the user manager (lingering keeps it across reboots):
