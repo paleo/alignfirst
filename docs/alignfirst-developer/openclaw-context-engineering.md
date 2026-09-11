@@ -46,9 +46,9 @@ The general silence convention is `NO_REPLY`, with the heartbeat exception below
 
 OpenClaw 2026.9.3 loses a post-tool `NO_REPLY` from its reply accumulator, then mistakes the silent turn for a missing summary. Its isolated finalizer receives no conversation context and can emit an unsolicited answer. Silent heartbeat turns use the supported `HEARTBEAT_OK` acknowledgement. OpenClaw suppresses this token without triggering finalization. Ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
 
-Heartbeat wakes cannot provide reliable handoff concurrency or runtime. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds. AlignFirst Developer therefore starts handoffs and alcode completions as regular turns.
+Heartbeat wakes cannot provide reliable handoff concurrency or runtime. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds. AlignFirst Developer therefore dispatches handoffs and alcode completions as reply runs.
 
-Regular turns started by the `agent` method also use `HEARTBEAT_OK` when they have nothing to report. The deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply.
+Plugin-dispatched reply runs use `HEARTBEAT_OK` when they have nothing to report. The deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply.
 
 ## Background model runs disabled by the harness and the seed
 
@@ -78,7 +78,7 @@ One surface = one session at a time. Two surfaces = two transcripts, no shared s
 For Discord today:
 
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
-- Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a regular turn before the first human reply.
+- Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
 
 ### Outbound delivery (the surprising part)
 
@@ -107,13 +107,13 @@ Practical consequences, verified on the harness (2026-07-28, trajectory-vs-bus d
 Two supported shapes handle a Discord thread:
 
 1. **Parent-relayed subagent** (matches defaults). Spawn a thread-bound subagent; it works headless; the parent relays its single final summary into the thread. No live progress.
-2. **Explicit thread plus targeted regular-session turn — no subagent**. Deliver a native starter only when the channel triage selects project work, then start a regular turn on the canonical thread session through the gateway `agent` method. Channel and thread sessions are siblings, each owning its surface.
+2. **Explicit thread plus plugin-dispatched reply run — no subagent**. Deliver a native starter only when the channel triage selects project work, then dispatch a reply run on the canonical thread session. Channel and thread sessions are siblings, each owning its surface.
 
-**Chosen for AlignFirst Developer:** Path 2. Discord keeps channel `autoThread: false` and uses anchored `message thread-create`. Slack keeps `replyToMode: "off"` and uses `message send` with an explicit root timestamp. `@paleo/alignfirst-developer-openclaw-plugin` observes the confirmed native result, persists a pending handoff in its own SQLite database, and starts a regular turn on the canonical thread session through `openclaw gateway call agent` with `sessionKey`, `deliver`, `replyChannel`, `replyTo`, `replyAccountId`, and `threadId`. The turn's budget is `agents.defaults.timeoutSeconds`. This starts the session without `sessions_send`, a bound subagent, a human nudge, or an official-plugin trust exception.
+**Chosen for AlignFirst Developer:** Path 2. Discord keeps channel `autoThread: false` and uses anchored `message thread-create`. Slack keeps `replyToMode: "off"` and uses `message send` with an explicit root timestamp. `@paleo/alignfirst-developer-openclaw-plugin` observes the confirmed native result, persists a pending handoff in its own SQLite database, and calls `runtime.channel.inbound.dispatchReply` with a plugin-built context: no sender, `WasMentioned: false`, and command interpretation suppressed. Core owns final delivery through the adapter's `durable` option with `to`, `threadId`, and `replyToId: null`. The turn's budget is `agents.defaults.timeoutSeconds`. This starts the session without `sessions_send`, a bound subagent, a human nudge, or an official-plugin trust exception.
 
 ### Wiring it up
 
-The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and starts a regular turn on it. Before the first turn, the plugin records the route as the session's last route so a later target-less `openclaw agent --deliver` reaches the thread. Later user messages resolve to the route normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
+The channel session opens a Discord thread through `message thread-create`, or populates a Slack thread through `message send` with explicit `threadId`. Native Slack automatic root routing would also derive the thread key, but it is disabled so ordinary channel conversation stays at root. The handoff plugin derives that same public canonical route and dispatches a reply run on it. The reply run records the session's last route itself, which a later `openclaw thread-handoff wake` reads to reach the thread. Later user messages resolve to the route normally. Ordinary replies in the active thread use normal delivery, not another message-tool send.
 
 #### Delivery receipt shapes
 
@@ -140,9 +140,11 @@ When a fresh thread session activates on Discord, its transcript starts **empty*
 
 Workaround: the handoff seed carries an escaped copy of the exact starter and trusted routing identifiers, so the seed turn needs no history read. On a later human turn the thread playbook calls `message` `action: "read"` so newer answers and the `[WORKSPACE]` state participate. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
 
-### Turns without an inbound channel message deny external-plugin reads
+### Heartbeat and `agent`-method turns deny external-plugin reads
 
-A heartbeat turn and a turn started by the `agent` method mint no trusted message-action context. The auto-reply path is implemented in `src/auto-reply/reply/agent-runner-embedded-candidate.ts`; the `agent` command path mints none. The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. The deterministic suite verifies the gate for the `agent` method. This is why the seed turn must not read the thread, and why the mock channels cannot show what a real deployment would return there.
+A heartbeat turn and a turn started by the `agent` method mint no message-action capability. The host gate in `src/channels/plugins/message-action-dispatch.ts` then rejects every conversation-read action (`read`, `search`, `react`, …) of an **external** channel plugin, whatever target the model passes: `Delegated <channel>:read requires the exact current conversation and account for this plugin.` Bundled Slack and Discord declare `providerOwnedReadGates: true`, skip that gate, and fall back to their own channel allow policy. The deterministic suite verifies the gate for the `agent` method.
+
+The plugin's reply runs mint the message-action turn capability without a sender ID. A seed turn may therefore read its thread through an external plugin as a human turn may. The playbook still instructs the seed to use its carried starter instead, preserving the Discord history-gap workaround and avoiding the token cost of a redundant read.
 
 ## `expectsCompletionMessage` — control the parent handoff
 

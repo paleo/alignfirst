@@ -13,9 +13,9 @@ Under OpenClaw, background it through the `exec` tool:
 - Before the first `alcode` run of this session, call the `session_status` tool and read the `Session:` line from its result — that is this session's key. Obtain it once, reuse it for every run of this session.
 - The exec command chains a completion wake onto the run:
 
-  `alcode <command> <options> ; openclaw agent --session-key <KEY> --deliver --timeout 0 --message "alcode run finished — read its session file and report to the user"`
+  `alcode <command> <options> ; openclaw thread-handoff wake --session-key <KEY> --message "alcode run finished — read its session file and report to the user"`
 
-  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake arrives as that message in this session. `--timeout 0` gives the wake turn no time limit.
+  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake arrives as that message in this session.
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
 - The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an alcode run. Call no `process` action on the alcode session, before or after the acknowledgement, including `poll` and `log`. The wake turn locates the session file with `alcode status --ticket <id>` (or `--no-ticket`).
@@ -28,9 +28,9 @@ Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp
 
 ## After a background run completes
 
-The chained `openclaw agent` command starts the next turn of this session with its message when the backgrounded `alcode` exits. A run counts as pending while it is running **and until its outcome is reported**.
+The chained `openclaw thread-handoff wake` command starts the next turn of this session as a message when the backgrounded `alcode` exits and blocks until that turn ends, so the background exec itself completes after the report. A run counts as pending while it is running **and until its outcome is reported**.
 
-The chained `openclaw agent` command blocks until the wake turn ends, so the background exec itself completes after the report. OpenClaw's native exec-exit notice then arrives as a later heartbeat turn with nothing to report. End that turn with exactly `HEARTBEAT_OK`.
+OpenClaw's native exec-exit notice then arrives as a later heartbeat turn with nothing to report. End that turn with exactly `HEARTBEAT_OK`.
 
 When the completion message arrives, do exactly this:
 

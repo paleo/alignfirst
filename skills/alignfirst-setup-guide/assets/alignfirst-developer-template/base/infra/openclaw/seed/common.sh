@@ -119,7 +119,7 @@ configure_common() {
 
   echo "[seed] heartbeat — on, one periodic tick a day"
   # Heartbeat stays on for the periodic tick and the native exec-exit notice. Thread handoff and
-  # alcode completion start regular agent turns and do not depend on it. `every` only governs
+  # alcode completion start reply runs through the plugin and do not depend on it. `every` only governs
   # periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from it.
   # Clearing isolatedSession, lightContext and activeHours preserves the periodic tick's session,
   # workspace bootstrap and reply route.

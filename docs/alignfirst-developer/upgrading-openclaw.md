@@ -34,8 +34,8 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/alignfirst-developer-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace.ts`. A file the runtime stopped reading must leave the template and its `chattr` lists; 2026.8.1 retired `HEARTBEAT.md` this way and the check above did not catch it.
 - Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. A default that turns on a background behavior (a scheduled model run, a memory feature, a telemetry ping) appears there and nowhere doctor looks; see [Propagate](#propagate-to-the-deployment-template).
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@paleo/alignfirst-developer-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
-- Recheck the `agent` gateway method parameters the plugin uses. `AgentParamsSchema` in `packages/gateway-protocol/src/schema/agent.ts` must still accept `deliver`, `replyChannel`, `replyTo`, `replyAccountId`, `threadId`, `timeout`, and `idempotencyKey`; `openclaw gateway call --expect-final` must still wait for the final result.
-- Recheck the silent token on heartbeat turns (`HEARTBEAT_OK`) and regular turns started by the `agent` method (`HEARTBEAT_OK`). Use the deterministic gateway suite as the judge.
+- Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, scoped `registerGatewayMethod`, `callGatewayFromCli`, `addGatewayClientOptions`, and `getSessionEntry` / `deliveryContextFromSession` from `openclaw/plugin-sdk/session-store-runtime`.
+- Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs. Use the deterministic gateway suite as the judge.
 
 ## Bump the pins
 
@@ -46,7 +46,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 Then rebuild the harness image: `npm run env:build` in `alignfirst-developer-tests/`.
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
-confirmed native receipt, trusted tool context, exact canonical thread delivery, regular-turn session
+confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
 start, pending restart recovery, and the user-message-before-seed race. A successful plugin import alone
 does not establish these combined contracts.
 

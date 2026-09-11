@@ -17,10 +17,12 @@ describe("renderGuide", () => {
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(openclawInstructions).toContain("`background: true` and `timeoutSeconds: 0`");
     expect(openclawInstructions).toContain(
-      "openclaw agent --session-key <KEY> --deliver --timeout 0",
+      "openclaw thread-handoff wake --session-key <KEY> --message",
     );
     expect(openclawInstructions).toContain("alcode status --ticket <id>");
     expect(openclawInstructions).toContain("`~` is not expanded there");
+    expect(openclawInstructions).not.toContain("openclaw agent");
+    expect(openclawInstructions).not.toContain("--timeout 0");
     expect(openclawInstructions).not.toContain("system event");
     expect(openclawInstructions).not.toContain("--meta");
     expect(openclawInstructions).not.toContain("thread-reply");
