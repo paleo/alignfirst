@@ -55,6 +55,7 @@ export default async function alreadyReportedWake(ctx: ScenarioContext): Promise
     label: "background-started-ack",
   });
   await waitForCodingSessionSucceeded(ctx, { ticketId: TICKET_ID, timeoutMs: 120_000 });
+  // The completion report arrives on the chained regular turn.
   await waitForCompletionReport(ctx, {
     conversationId: ctx.conversationId,
     threadId: starter.threadId,
@@ -67,6 +68,8 @@ export default async function alreadyReportedWake(ctx: ScenarioContext): Promise
   const before = await inspectWake(ctx, sessionKey, 0);
   ctx.assertEqual(before.finalizations, 0, "handoff and completion needed no isolated finalizer");
   const cursor = await ctx.getCursor();
+  // This duplicate follows the native exec-exit notice path: a heartbeat turn that must settle on
+  // HEARTBEAT_OK because the chained regular turn already reported the run.
   const wake = await ctx.execInGateway([
     "openclaw",
     "system",

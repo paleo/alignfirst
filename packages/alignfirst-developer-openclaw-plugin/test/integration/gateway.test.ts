@@ -15,6 +15,8 @@ const MARKER = "TARGET_SESSION_STARTED";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted by a gateway restart";
 const CHAINED_WAKE = "alcode run finished — read its session file and report to the user";
 const WAKE_REPORTED = "WAKE_REPORTED";
+const RACING_HUMAN = "RACING_HUMAN_REPLY";
+const RACING_HUMAN_HANDLED = "RACING_HUMAN_HANDLED";
 const execFileAsync = promisify(execFile);
 
 type Surface = "slack" | "discord";
@@ -181,6 +183,41 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
             (message) => message.direction === "outbound" && message.text === MARKER,
           ),
       ).toHaveLength(1);
+    },
+  );
+
+  it.each(["slack", "discord"] as const)(
+    "preserves a %s human reply racing the first seed turn",
+    async (surface) => {
+      const fixture = await startFixture(surface);
+      const rootMessage = await injectRootMessage(fixture, "Project-X", "Start with a reply.");
+      await waitForMessage(fixture, (message) => message.text === STARTER);
+      const threadId =
+        surface === "slack"
+          ? rootMessage.message.id
+          : fixture.bus.state.getSnapshot().threads[0]?.id;
+      if (!threadId) throw new Error("native thread ID was not observed");
+
+      await injectQaBusInboundMessage({
+        baseUrl: serverUrl(fixture.busServer),
+        input: {
+          accountId: fixture.channelId,
+          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
+          senderId: "User-A",
+          senderName: "User A",
+          text: RACING_HUMAN,
+          threadId,
+        },
+      });
+
+      const handled = await waitForMessage(
+        fixture,
+        (message) => message.text === RACING_HUMAN_HANDLED,
+      );
+      expect(handled.threadId).toBe(threadId);
+      expect(fixture.gatewayLog.join("")).not.toContain(
+        "restart recovery claim changed before agent adoption",
+      );
     },
   );
 
@@ -482,6 +519,13 @@ function createProviderScript(
     const latestToolResult = tailMessages.findLast((message) => message.role === "tool")?.content;
     const latestToolText =
       typeof latestToolResult === "string" ? latestToolResult : JSON.stringify(latestToolResult);
+    const latestUserText = allMessages
+      .filter((message) => message.role === "user")
+      .slice(-2)
+      .map((message) =>
+        typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+      )
+      .join("\n");
     if (all.includes("Keep this turn busy.")) {
       const delayMs = options.stallChannelReplyMs ?? 0;
       options.stallEndsAt = Date.now() + delayMs;
@@ -493,6 +537,7 @@ function createProviderScript(
     if (tail.includes("Continue in this same thread.")) {
       return { content: "SAME_SESSION_CONTINUED" };
     }
+    if (latestUserText.includes(RACING_HUMAN)) return { content: RACING_HUMAN_HANDLED };
     if (tail.includes(CHAINED_WAKE)) return { content: WAKE_REPORTED };
     if (all.includes("[thread-handoff:v1]")) {
       if (options.holdFirstSeed) return { content: SILENT_TOKEN };

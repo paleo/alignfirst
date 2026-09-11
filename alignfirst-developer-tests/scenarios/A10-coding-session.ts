@@ -25,8 +25,8 @@ const PROJECT = "nimbus";
  *
  * The thread session then runs the whole chain. It delegates to the `alcode` CLI, never to the
  * selected coding agent directly. Alcode runs its child in the foreground and
- * blocks; OpenClaw backgrounds the exec, lets the agent post a "started" ack, and — when alcode
- * exits — wakes the SAME thread session. The woken agent reads alcode's session file and reports
+ * blocks; OpenClaw backgrounds the exec and lets the agent post a "started" ack. The chained
+ * `openclaw agent` turn then wakes the same thread session to read alcode's session file and report
  * the outcome in the thread, no `--meta` needed since the session owns the surface.
  *
  * We assert four things: alcode is the exec the agent runs, an immediate "started in the
@@ -87,9 +87,9 @@ export default async function codingSession(ctx: ScenarioContext): Promise<void>
   });
   ctx.log(`coding-session file succeeded: ${sessionFilePath}`);
 
-  // Completion wake: when the backgrounded alcode exec exits, OpenClaw wakes THIS thread session
-  // (native `tools.exec.notifyOnExit` → system event + heartbeat). The woken agent reads the session
-  // file and reports in the thread — the same session, so the completion carries the thread's id.
+  // Completion wake: the chained `openclaw agent` turn wakes this thread session to read the session
+  // file and report in the thread. The native `tools.exec.notifyOnExit` heartbeat arrives later with
+  // nothing to report.
   // A batch judge picks the FINISHED report out of the thread window, distinguishing it from the
   // earlier ack and any launch banner. Generous timeout: a real LLM wake turn,
   // and the playbook's wrap-up (manual test, log review, review, draft PR) can

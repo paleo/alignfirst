@@ -9,10 +9,11 @@ const CLAIM_TIMEOUT_MS = 120_000;
 const QUIET_WINDOW_MS = 90_000;
 
 /**
- * The seed turn is a heartbeat wake of the thread session. When the starter already asked the
- * user for a missing value, the turn has nothing to say: it claims the handoff, reads no thread
- * history, and ends on the heartbeat acknowledgement. Call it after `bootstrapThreadFromChannel` and the starter
- * judgment; it returns the bus cursor after the quiet window so a caller can continue the thread.
+ * The plugin starts the thread session with a regular seed turn. When the starter already asked
+ * the user for a missing value, the turn claims the handoff, reads no thread history, and ends on
+ * the silent token. The quiet-window check is token-agnostic because a suppressed token produces
+ * no outbound message. Call this after `bootstrapThreadFromChannel` and the starter judgment; it
+ * returns the bus cursor after the quiet window so a caller can continue the thread.
  */
 export async function expectSilentSeedTurn(ctx: ScenarioContext, starter: Step): Promise<number> {
   const claim = await ctx.waitForAgentToolCall(
@@ -32,7 +33,7 @@ export async function expectSilentSeedTurn(ctx: ScenarioContext, starter: Step):
       inputOf(call).action === "read",
   );
   ctx.assertLength(reads, 0, "seed turn read no thread history");
-  ctx.log("silent seed turn: claimed, no post, no history read — OK");
+  ctx.log("regular seed turn: claimed, no post, no history read — OK");
   return cursor;
 }
 

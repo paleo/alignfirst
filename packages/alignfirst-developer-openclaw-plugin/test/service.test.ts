@@ -103,6 +103,19 @@ describe("handoff turn start and recovery", () => {
     fixture.store.close();
   });
 
+  it("gives an already-dispatched human reply time to adopt a fresh target session", async () => {
+    const fixture = serviceFixture({ initialAttemptDelayMs: 10 });
+    const record = handoff();
+    fixture.store.insertHandoff(record);
+
+    const starting = fixture.service.startTurn(record);
+    await Promise.resolve();
+    expect(runSeedTurn).not.toHaveBeenCalled();
+    await starting;
+    expect(runSeedTurn).toHaveBeenCalledOnce();
+    fixture.store.close();
+  });
+
   it("logs failed attempts and records their end time", async () => {
     const times = [100_000, 101_000];
     const fixture = serviceFixture({ now: () => times.shift() ?? 101_000 });
@@ -201,7 +214,7 @@ function createDeferred<T>(): {
   return { promise, resolve };
 }
 
-function serviceFixture(options: { now?: () => number } = {}) {
+function serviceFixture(options: { now?: () => number; initialAttemptDelayMs?: number } = {}) {
   const store = createHandoffStore(temporaryStateDir());
   const runtime = {
     config: { current: () => ({ agents: { defaults: { timeoutSeconds: 90 } } }) },
@@ -229,6 +242,7 @@ function serviceFixture(options: { now?: () => number } = {}) {
       getStore: () => store,
       logger: logger as unknown as PluginLogger,
       now: options.now ?? (() => 100_000),
+      initialAttemptDelayMs: options.initialAttemptDelayMs ?? 0,
     }),
   };
 }

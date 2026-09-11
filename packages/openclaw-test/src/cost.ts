@@ -4,6 +4,7 @@ import type { JudgeUsage } from "./judge.js";
 // "provider/model" refs. Add models as needed.
 const JUDGE_PRICING: Record<string, { input: number; output: number }> = {
   "anthropic/claude-haiku-4-5": { input: 1.0, output: 5.0 },
+  "openrouter/anthropic/claude-haiku-4.5": { input: 1.0, output: 5.0 },
 };
 
 const warnedUnknownModels = new Set<string>();

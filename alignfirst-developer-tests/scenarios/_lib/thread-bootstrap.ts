@@ -26,9 +26,9 @@ export interface ChannelBootstrapOptions {
 }
 
 /**
- * Open a thread, confirm its native starter and durable handoff, then return as
- * soon as the target session is eligible to run. Target work may already be in
- * progress before the parent turn emits its final `NO_REPLY`.
+ * Open a thread, confirm its native starter and durable handoff, then return after the plugin
+ * starts the thread session with a regular turn. Target work may already be in progress before
+ * the parent turn emits its final `NO_REPLY`.
  */
 export async function bootstrapThreadFromChannel(
   ctx: ScenarioContext,
@@ -37,10 +37,12 @@ export async function bootstrapThreadFromChannel(
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({ senderId: SENDER_ID, senderName: SENDER_ID, text: opts.text });
 
-  const wait = await waitForStarter(ctx, {
-    sinceCursor: startCursor,
-    timeoutMs: opts.starterTimeoutMs,
-  });
+  const wait = opts.afterStarter
+    ? await waitForStarterBeforeImmediateReply(ctx, opts, startCursor)
+    : await waitForStarter(ctx, {
+        sinceCursor: startCursor,
+        timeoutMs: opts.starterTimeoutMs,
+      });
   const threadId = requireThreadId(wait);
   ctx.log({ attachTo: wait.entry, label: `starter received in thread ${threadId}` });
 
@@ -68,6 +70,29 @@ export async function bootstrapThreadFromChannel(
     sourceSessionKey: handoff.sourceSessionKey,
     targetSessionKey: handoff.targetSessionKey,
   };
+}
+
+async function waitForStarterBeforeImmediateReply(
+  ctx: ScenarioContext,
+  opts: ChannelBootstrapOptions,
+  sinceCursor: number,
+) {
+  const projectPath = opts.projectPath;
+  if (projectPath === undefined) {
+    throw new Error("an immediate starter follow-up requires an exact project path");
+  }
+  return ctx.waitForOutbound(
+    (message) =>
+      message.direction === "outbound" &&
+      message.conversation.id === ctx.conversationId &&
+      message.threadId !== undefined &&
+      message.text.includes(projectPath),
+    {
+      timeoutMs: opts.starterTimeoutMs ?? 150_000,
+      sinceCursor,
+      failFastUnmatchedOutbounds: false,
+    },
+  );
 }
 
 /**

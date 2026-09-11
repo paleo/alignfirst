@@ -33,21 +33,17 @@ const launchedSince = (notBefore: string) => (call: AgentToolCall) =>
   isAlcodeLaunch(call) && call.startedAt !== undefined && call.startedAt >= notBefore;
 
 /**
- * Regression for the heartbeat-cooldown wake gate: OpenClaw defers `event`-intent wakes whenever `now < nextDueMs`, and any
- * heartbeat run re-arms `nextDueMs = now + every` (24h here, as in production). A fresh gateway's
- * FIRST exec-exit wake always takes the never-ran-before bootstrap path — which is why every
- * one-delegation scenario stayed green while production lost completion reports. The SECOND
- * backgrounded run in the same cell is what exposes the gate: after the first wake run, the native
- * exec-exit notify sits a full interval away and is silently dropped. The alcode guide therefore
- * chains `openclaw system event --text … --mode now --session-key <KEY>` onto every launch — a
- * targeted `immediate`-intent wake the cooldown never defers.
+ * Regression for the regular-turn chained wake. The alcode guide chains
+ * `openclaw agent --session-key <KEY> --deliver --timeout 0 --message …` onto every launch. The
+ * previous mechanism chained `openclaw system event`; its heartbeat-cooldown gate could lose later
+ * completion reports.
  *
  * Two sequential delegations in one thread. The channel session only opens the thread, so both
  * launches come from the thread session: phase 1 on the user's handoff message, phase 2 on a
  * follow-up work request. Each launch exec must carry the chained wake (structural pin of the
  * guide-driven mechanism), and each run must produce a started ack, a `status: succeeded` session
  * file, and a completion report in the same thread — the second completion report is the
- * regression payload: without the chained wake it never arrives.
+ * regression payload: it proves that the completion report of a later run arrives.
  */
 export default async function sequentialCodingSessions(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
@@ -125,9 +121,9 @@ interface DelegationChainOptions {
 }
 
 /**
- * One delegation's full chain: the alcode launch exec (with the chained `openclaw system event`
- * wake — the guide-driven mechanism this scenario pins), the started ack, the `status: succeeded`
- * session file started by this phase, and the completion report in the work thread.
+ * One delegation's full chain: the alcode launch exec with the guide's chained regular turn, the
+ * started ack, the `status: succeeded` session file started by this phase, and the completion
+ * report in the work thread.
  */
 async function expectDelegationChain(
   ctx: ScenarioContext,
@@ -153,10 +149,12 @@ async function expectDelegationChain(
   if (command === undefined) throw new Error("alcode launch call carries no exec command");
   ctx.assertRegex(
     command,
-    /openclaw system event/,
-    `launch #${launchIndex}: chains an \`openclaw system event\` wake`,
+    /openclaw agent/,
+    `launch #${launchIndex}: chains an \`openclaw agent\` turn`,
   );
   ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: wake targets a --session-key`);
+  ctx.assertRegex(command, /--deliver/, `launch #${launchIndex}: chained turn delivers its reply`);
+  ctx.assertRegex(command, /--timeout 0/, `launch #${launchIndex}: chained turn has no timeout`);
   const launchStartedAt = launch.startedAt;
   if (launchStartedAt === undefined) {
     throw new Error(`alcode launch #${launchIndex} has no start timestamp`);

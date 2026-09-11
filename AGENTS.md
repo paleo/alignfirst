@@ -16,6 +16,10 @@ Run `npx -y alignfirst context` from the repository root, _before_ reading any o
 
 **Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`.
 
+**Model-test policy**: Run model-driven matrices with Terra first. Once green, run the smallest
+representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a
+Sonnet-specific failure.
+
 **Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Publishing runs from CI through npm trusted publishing — see `docs/releasing.md`.
 
 **Workspace scripts** (root): `build`, `test`, `clear`, `lint`, `lint:fix` — all fan out to packages via `npm run <name> --workspaces --if-present`.

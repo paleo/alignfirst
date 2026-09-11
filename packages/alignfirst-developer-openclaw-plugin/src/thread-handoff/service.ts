@@ -6,6 +6,7 @@ import type { HandoffRecord } from "./types.js";
 export const MAX_ATTEMPTS = 10;
 export const SCAN_INTERVAL_MS = 30_000;
 export const ATTEMPT_SPACING_MS = 60_000;
+export const INITIAL_ATTEMPT_DELAY_MS = 2_000;
 export const SILENT_TOKEN = "HEARTBEAT_OK";
 
 export interface HandoffService {
@@ -22,12 +23,14 @@ export interface HandoffServiceParams {
   now?: () => number;
   scanIntervalMs?: number;
   attemptSpacingMs?: number;
+  initialAttemptDelayMs?: number;
 }
 
 export function createHandoffService(params: HandoffServiceParams): HandoffService {
   const now = params.now ?? Date.now;
   const scanIntervalMs = params.scanIntervalMs ?? SCAN_INTERVAL_MS;
   const attemptSpacingMs = params.attemptSpacingMs ?? ATTEMPT_SPACING_MS;
+  const initialAttemptDelayMs = params.initialAttemptDelayMs ?? INITIAL_ATTEMPT_DELAY_MS;
   const targetWork = new Map<string, Promise<unknown>>();
   const inFlight = new Map<string, Promise<void>>();
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -40,7 +43,10 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
       const starting = Promise.resolve();
       inFlight.set(record.handoffId, starting);
       try {
-        if (record.attemptCount === 0) await bindTargetRoute(params.runtime, record);
+        if (record.attemptCount === 0) {
+          await bindTargetRoute(params.runtime, record);
+          await delayInitialAttempt(initialAttemptDelayMs);
+        }
         const updated = params.getStore().recordAttempt(record.routeKey, now());
         if (updated?.state !== "pending") return;
         const turn = runSeedTurn({
@@ -83,6 +89,11 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
     },
   };
   return service;
+}
+
+async function delayInitialAttempt(delayMs: number): Promise<void> {
+  if (delayMs <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function bindTargetRoute(

@@ -13,7 +13,7 @@ This README only documents what is specific to this harness.
 
 ```sh
 cp .env.local.example .env.local
-# Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
+# Edit .env.local — fill OPENROUTER_API_KEY and select ALIGNFIRST_CODE_AGENT
 
 # Build the real alcode, alignfirst, and alproject CLIs the gateway runs.
 npm run build --prefix ..
@@ -45,7 +45,9 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 - `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-developer-openclaw-playbook` skill, bind-mounted at `/home/claw/.openclaw/skills/alignfirst-developer-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
-- [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at
+  `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`;
+  `OPENCLAW_TEST_JUDGE_MODEL=openrouter/anthropic/claude-haiku-4.5` on `runner`.
 
 ## Fixtures
 
@@ -61,12 +63,12 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 
 Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`). It sends the
 channel message, waits for exactly one confirmed native starter and one `thread_handoff start`, and
-checks the parent session's attributed tool trace for target work. The plugin wakes the thread
-session automatically; complete requests need no mechanical follow-up. `sendInThread` remains for
+checks the parent session's attributed tool trace for target work. The plugin starts the thread
+session with a regular turn; complete requests need no mechanical follow-up. `sendInThread` remains for
 genuine missing values, explicit holds, confirmations, and later requests. Target work may begin
 before the parent emits its final `NO_REPLY`, so assertions follow the starter's original cursor.
 
-`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, exposing the heartbeat-cooldown wake gate. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
+`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, pinning the guide's chained `openclaw agent` completion turn. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
 
 `A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
 
@@ -74,7 +76,7 @@ before the parent emits its final `NO_REPLY`, so assertions follow the starter's
 
 `A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
 
-`A29-already-reported-wake` limits its request to implementation and local verification, excluding review and PR work. It completes the delegation, injects a duplicate completion event into the same thread session, and requires a terminal `HEARTBEAT_OK` with no outbound message or isolated finalizer. It also checks that the preceding human-turn handoff and completion needed no finalizer.
+`A29-already-reported-wake` limits its request to implementation and local verification, excluding review and PR work. It completes the delegation, injects the native exec-exit notice path (`openclaw system event`) after the report, and requires a terminal `HEARTBEAT_OK` with no outbound message or isolated finalizer. It also checks that the preceding human-turn handoff and completion needed no finalizer.
 
 `A27-human-reply-racing-startup` sends a genuine missing-ticket answer immediately after native
 starter delivery. `A28-recoverable-handoff-failure` injects one test-bus delivery failure, then
@@ -99,6 +101,10 @@ ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A27-human-reply-racing-
 ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
 npm run e2e -- --model gpt-5.6-terra --channel all --all
 ```
+
+Run each focused or full matrix with Terra first. Once that matrix is green, run the smallest
+representative Sonnet check needed for compatibility. Expand Sonnet coverage only to diagnose a
+failure specific to Sonnet.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
