@@ -7,7 +7,7 @@ import { git, gitOutput, gitSucceeds } from "../git.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
-import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
+import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
 
 export function runSync(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} sync [--auto-archive | --no-auto-archive]\n`;
@@ -35,8 +35,9 @@ export function runSync(ctx: CommandContext, args: string[]): number {
     try {
       git(repoDir, "pull", "--rebase");
     } catch {
-      assertNoStoppedRebase(repoDir, ctx.form);
-      throw new CliError("git pull failed. See the git output above.");
+      if (findStoppedRebase(repoDir) === undefined)
+        throw new CliError("git pull failed. See the git output above.");
+      resolveStoppedRebase(repoDir, ctx.stdout);
     }
   }
   if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {

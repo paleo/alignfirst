@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { findStoppedRebase } from "../src/plans/rebase.js";
 import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
@@ -114,7 +115,7 @@ describe("plans commands", () => {
     );
   });
 
-  it("stops synchronization and diagnostics on a rebase conflict", async () => {
+  it("resolves a content conflict by keeping the local version", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
@@ -133,17 +134,74 @@ describe("plans commands", () => {
 
     writeFileSync(plan, "local\n");
     const conflict = await runMain(["sync"], { cwd: fixture.product });
-    expect(conflict.code).toBe(1);
-    expect(conflict.stderr).toContain(
-      `Plans synchronization stopped on a conflict in ${fixture.clone}`,
+    expect(conflict.code).toBe(0);
+    expect(conflict.stdout).toContain(
+      "Resolved product-plans/78/A1-spec.md: kept the local version.",
     );
-    expect(conflict.stderr).toContain("  product-plans/78/A1-spec.md");
+    expect(readFileSync(plan, "utf8")).toBe("local\n");
     expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
-      "remote",
+      "local",
     );
-    expect((await runMain(["sync"], { cwd: fixture.product })).stderr).toContain(
-      "Plans synchronization stopped",
+    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  });
+
+  it("keeps both paths on a rename conflict", async () => {
+    const fixture = makeFixture();
+    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+    });
+    const plan = join(fixture.product, ".plans", "78", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "78"));
+    writeFileSync(plan, "first\n");
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+
+    const other = join(fixture.root, "other-plans");
+    git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
+    mkdirSync(join(other, "product-plans", "_archives", "78"), { recursive: true });
+    git(other, "mv", "product-plans/78/A1-spec.md", "product-plans/_archives/78/A1-spec.md");
+    git(other, "commit", "--quiet", "-m", "archive");
+    git(other, "push", "--quiet");
+
+    writeFileSync(plan, "local\n");
+    git(fixture.clone, "config", "merge.renames", "false");
+    const conflict = await runMain(["sync"], { cwd: fixture.product });
+    expect(conflict.code).toBe(0);
+    expect(conflict.stdout).toContain(
+      "Resolved product-plans/78/A1-spec.md: kept the paths present in the working tree.",
     );
+    expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
+      "local",
+    );
+    expect(
+      git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/_archives/78/A1-spec.md"),
+    ).toBe("first");
+  });
+
+  it("leaves a rebase it did not start alone", async () => {
+    const fixture = makeFixture();
+    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+    });
+    const plan = join(fixture.product, ".plans", "78", "A1-spec.md");
+    mkdirSync(join(fixture.product, ".plans", "78"));
+    writeFileSync(plan, "first\n");
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+
+    const other = join(fixture.root, "other-plans");
+    git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
+    writeFileSync(join(other, "product-plans", "78", "A1-spec.md"), "remote\n");
+    git(other, "add", "-A");
+    git(other, "commit", "--quiet", "-m", "remote");
+    git(other, "push", "--quiet");
+
+    writeFileSync(plan, "local\n");
+    git(fixture.clone, "add", "-A");
+    git(fixture.clone, "commit", "--quiet", "-m", "local");
+    expect(() => git(fixture.clone, "pull", "--rebase")).toThrow();
+
+    const conflict = await runMain(["sync"], { cwd: fixture.product });
+    expect(conflict.code).toBe(1);
+    expect(conflict.stderr).toContain("Plans synchronization stopped on a conflict");
     expect((await runMain(["plans", "check"], { cwd: fixture.product })).code).toBe(1);
     expect(
       (
@@ -202,6 +260,35 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
     expect(automatic.stdout).toContain("Archived 79");
+  });
+
+  it("keeps running session files and their ticket directories", async () => {
+    const fixture = makeFixture();
+    const plansDir = join(fixture.product, ".plans");
+    const sessionDir = join(plansDir, "_alcode");
+    const ticketSessionDir = join(plansDir, "79", "_alcode");
+    mkdirSync(sessionDir, { recursive: true });
+    mkdirSync(ticketSessionDir, { recursive: true });
+    const running = join(sessionDir, "20260901-100000.md");
+    const succeeded = join(sessionDir, "20260901-110000.md");
+    const ticketSession = join(ticketSessionDir, "20260901-120000.md");
+    writeFileSync(running, "---\nstatus: running\n---\n");
+    writeFileSync(succeeded, "---\nstatus: succeeded\n---\n");
+    writeFileSync(ticketSession, "---\nstatus: running\n---\n");
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    for (const path of [running, succeeded, ticketSession]) utimesSync(path, old, old);
+
+    const result = await runMain(["plans", "auto-archive"], {
+      cwd: fixture.product,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+
+    expect(result.stdout).toContain("Archived _alcode/20260901-110000.md");
+    expect(existsSync(running)).toBe(true);
+    expect(existsSync(succeeded)).toBe(false);
+    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-110000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "79"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "79"))).toBe(false);
   });
 
   it("archives a ticket given through the plans clone path", async () => {
