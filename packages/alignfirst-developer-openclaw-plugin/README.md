@@ -47,8 +47,16 @@ The plugin observes successful native `message` actions but never creates a thre
   nonempty starter and returned thread ID. A partial result is rejected.
 - `thread_handoff { "action": "start", "threadId": "..." }` returns `queued` or
   `alreadyStarted`, plus the opaque handoff ID and canonical target session key.
-- `thread_handoff { "action": "claim", "handoffId": "..." }` returns `claimed`,
-  `alreadyClaimed`, or `none`. The ID is optional for an ordinary human turn in the target thread.
+
+The claim result has this contract:
+
+| Status | Meaning |
+| --- | --- |
+| `claimed` | The first claim, or a repeated claim by the same run. |
+| `alreadyClaimed` | Another run owns the handoff. The result includes `claimedAt`. |
+| `none` | No handoff matches an ordinary human turn in the target thread. |
+
+The handoff ID is optional for an ordinary human turn in the target thread.
 
 Inputs are strict. Errors begin with a stable reason code: `unsupportedContext`,
 `unverifiedThreadDelivery`, `conflictingHandoff`, `invalidTarget`, or
@@ -59,23 +67,35 @@ Starts are limited to distinct regular parent-channel sessions. DMs, group DMs, 
 ACP, subagent, cron, global/shared, already-threaded, and ambiguous cross-account routes are not
 supported.
 
-## Wake and persistence
+## Turn start and persistence
 
-Before requesting a wake, the plugin commits a pending record and queues one replaceable system
-event for the canonical thread session. The event tells the receiver to load its playbook and claim
-the explicit handoff before task effects. The exact starter is serialized inside a JSON user-content
-block; it is not plugin instruction text.
+The plugin commits a pending record before starting the canonical thread session through
+`openclaw gateway call agent`. The regular turn has an explicit reply channel, target, account, and
+Slack thread ID. Before the first attempt, the plugin also binds that route to the session so later
+`openclaw agent --session-key … --deliver` turns reach the same thread. The seed tells the receiver
+to load its playbook and claim the explicit handoff before task effects. The exact starter is
+serialized inside a JSON user-content block; it is not plugin instruction text.
+
+Each seed gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the
+48-hour OpenClaw default and the unlimited `0` value. The `openclaw` executable must be on the
+gateway process's `PATH`.
 
 The database is `<stateDir>/thread-handoff/state.sqlite`, where `stateDir` comes from
 `api.runtime.state.resolveStateDir()`. It uses WAL, full synchronous durability, a `0700` directory,
 and a `0600` database file. Receipts expire after one hour and are capped at 10,000 active entries.
-Handoffs have a separate 10,000-record cap and do not expire automatically. A pending record is
-re-seeded and woken at startup and every 30 seconds, ten times at most. After the tenth wake the
-record parks: the plugin logs one warning, stops waking the target, and keeps the record claimable
-for the next human message in the thread. Claimed records remain as duplicate-start protection;
-native OpenClaw recovery, not this plugin, owns interrupted work after claim.
+Handoffs have a separate 10,000-record cap and do not expire automatically. The plugin scans
+pending records at startup and every 30 seconds. It starts at most ten attempts, with at least 60
+seconds after an attempt ends before the next one. A record still pending after the tenth attempt
+stays claimable by the next human message in the thread. Claimed records remain as duplicate-start
+protection; native OpenClaw recovery owns interrupted work after claim.
 
-Use `openclaw thread-handoff list [--json]` to inspect handoffs with their wake counts and `openclaw thread-handoff receipts [--json]` to inspect active delivery receipts without starter text. `openclaw thread-handoff retire <handoff-id>` removes a claimed record; add `--force` for a pending record, typically a parked one.
+Use `openclaw thread-handoff list [--json]` to inspect handoffs with their attempt counts and
+claimer identity. Use `openclaw thread-handoff receipts [--json]` to inspect active delivery
+receipts without starter text. `openclaw thread-handoff retire <handoff-id>` removes a claimed
+record; add `--force` for a pending record, typically a parked one.
+
+Opening a database created by plugin 0.2.0 migrates it automatically to schema 2. The migration
+preserves pending attempt history and claimed records.
 
 For a backup, stop the gateway and let the plugin close/checkpoint its connection, then copy the
 database together with any WAL/SHM crash-state files; alternatively use a SQLite-consistent backup.

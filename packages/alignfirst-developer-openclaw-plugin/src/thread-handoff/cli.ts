@@ -55,7 +55,7 @@ export function renderHandoffs(records: HandoffRecord[], json: boolean): string 
   return records
     .map(
       (record) =>
-        `${record.handoffId}\t${record.state}\t${record.enqueueCount} wakes\t${record.targetSessionKey}\t${record.createdAt}`,
+        `${record.handoffId}\t${record.state}\t${record.attemptCount} attempts\t${record.targetSessionKey}\t${record.createdAt}`,
     )
     .join("\n");
 }

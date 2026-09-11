@@ -4,6 +4,7 @@ import { jsonResult } from "openclaw/plugin-sdk/tool-results";
 import { type Static, Type } from "typebox";
 import { HandoffError } from "./errors.js";
 import type { ReceiptCoordinator } from "./receipts.js";
+import type { RunIdCache } from "./run-ids.js";
 import {
   assertSupportedSource,
   createHandoffRecord,
@@ -38,6 +39,7 @@ export interface ThreadHandoffToolParams {
   context: OpenClawPluginToolContext;
   configuration: PluginConfiguration;
   receipts: ReceiptCoordinator;
+  runIds: RunIdCache;
   getStore: () => HandoffStore;
   service: HandoffService;
   now?: () => number;
@@ -79,10 +81,13 @@ function claimHandoff(
   source: SourceContext,
   handoffId: string | undefined,
 ): ToolSuccess {
+  const runId = params.runIds.read(source.sessionKey, source.sessionId);
   const result = params.getStore().claimHandoff(
     {
       targetSessionKey: source.sessionKey,
       agentId: source.agentId,
+      sessionId: source.sessionId,
+      ...(runId !== undefined ? { runId } : {}),
       ...(source.accountId ? { accountId: source.accountId } : {}),
       ...(handoffId ? { handoffId } : {}),
     },
@@ -91,7 +96,12 @@ function claimHandoff(
   if (handoffId && result.status === "none") {
     throw new HandoffError("invalidTarget", "The requested handoff does not exist.");
   }
-  return { status: result.status };
+  return {
+    status: result.status,
+    ...(result.status === "alreadyClaimed" && result.record?.claimedAt !== undefined
+      ? { claimedAt: result.record.claimedAt }
+      : {}),
+  };
 }
 
 async function startHandoff(
@@ -130,7 +140,7 @@ async function startHandoff(
       if (!evidenceMatches(inserted.record, receipt)) throw conflictingHandoff();
       return resumeExisting(params.service, inserted.record);
     }
-    await params.service.enqueue(record);
+    await params.service.startTurn(record);
     return { status: "queued", handoffId: record.handoffId, sessionKey: record.targetSessionKey };
   });
 }
@@ -158,12 +168,12 @@ function conflictingHandoff(): HandoffError {
   );
 }
 
-/** A record whose first enqueue never completed gets its seed now; otherwise nothing to redo. */
+/** A record whose first attempt never started gets its seed now; otherwise nothing to redo. */
 async function resumeExisting(
   service: HandoffService,
   record: HandoffRecord,
 ): Promise<ToolSuccess> {
-  if (record.state === "pending" && record.enqueueCount === 0) await service.enqueue(record);
+  if (record.state === "pending" && record.attemptCount === 0) await service.startTurn(record);
   return {
     status: "alreadyStarted",
     handoffId: record.handoffId,

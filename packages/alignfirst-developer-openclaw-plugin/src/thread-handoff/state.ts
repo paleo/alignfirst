@@ -6,7 +6,7 @@ import type { DeliveryReceipt, HandoffRecord, ReceiptIdentity } from "./types.js
 
 const DATABASE_DIRECTORY_MODE = 0o700;
 const DATABASE_FILE_MODE = 0o600;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const STORE_CAPACITY = 10_000;
 
 export interface HandoffStore {
@@ -16,7 +16,8 @@ export interface HandoffStore {
   findHandoffByRoute(routeKey: string): HandoffRecord | undefined;
   insertHandoff(record: HandoffRecord): { inserted: boolean; record: HandoffRecord };
   claimHandoff(identity: ClaimIdentity, now: number): ClaimResult;
-  recordEnqueue(routeKey: string, enqueuedAt: number): HandoffRecord | undefined;
+  recordAttempt(routeKey: string, startedAt: number): HandoffRecord | undefined;
+  recordAttemptEnd(routeKey: string, endedAt: number): HandoffRecord | undefined;
   listPending(query: PendingQuery): HandoffRecord[];
   listHandoffs(): HandoffRecord[];
   retireHandoff(handoffId: string, options: RetireOptions): boolean;
@@ -26,6 +27,8 @@ export interface HandoffStore {
 export interface ClaimIdentity {
   targetSessionKey: string;
   agentId: string;
+  sessionId: string;
+  runId?: string;
   accountId?: string;
   handoffId?: string;
 }
@@ -35,11 +38,11 @@ export interface ClaimResult {
   record?: HandoffRecord;
 }
 
-/** Pending records last enqueued before `now - retryIntervalMs`, with fewer than `maxEnqueues`. */
+/** Pending records last attempted before `now - spacingMs`, with fewer than `maxAttempts`. */
 export interface PendingQuery {
   now: number;
-  retryIntervalMs: number;
-  maxEnqueues: number;
+  spacingMs: number;
+  maxAttempts: number;
 }
 
 export interface RetireOptions {
@@ -81,6 +84,10 @@ function openDatabase(databasePath: string): DatabaseSync {
 function initializeSchema(database: DatabaseSync): void {
   const row = database.prepare("PRAGMA user_version").get() as { user_version: number };
   if (row.user_version === SCHEMA_VERSION) return;
+  if (row.user_version === 1) {
+    migrateSchema1(database);
+    return;
+  }
   if (row.user_version !== 0) {
     throw new Error(`Unsupported thread-handoff database schema ${row.user_version}.`);
   }
@@ -102,13 +109,38 @@ function initializeSchema(database: DatabaseSync): void {
         target_session_key TEXT NOT NULL UNIQUE,
         handoff_id TEXT NOT NULL UNIQUE,
         state TEXT NOT NULL CHECK (state IN ('pending', 'claimed')),
-        enqueue_count INTEGER NOT NULL DEFAULT 0,
-        last_enqueued_at INTEGER,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_attempted_at INTEGER,
         record_json TEXT NOT NULL
       ) STRICT;
-      CREATE INDEX handoffs_pending_idx ON handoffs (state, enqueue_count, last_enqueued_at);
-      PRAGMA user_version = 1;
+      CREATE INDEX handoffs_pending_idx ON handoffs (state, attempt_count, last_attempted_at);
+      PRAGMA user_version = 2;
     `);
+  });
+}
+
+function migrateSchema1(database: DatabaseSync): void {
+  inTransaction(database, () => {
+    database.exec("ALTER TABLE handoffs RENAME COLUMN enqueue_count TO attempt_count;");
+    database.exec("ALTER TABLE handoffs RENAME COLUMN last_enqueued_at TO last_attempted_at;");
+    const rows = database
+      .prepare("SELECT route_key, record_json FROM handoffs")
+      .all() as unknown as MigrationRow[];
+    const update = database.prepare("UPDATE handoffs SET record_json = ? WHERE route_key = ?");
+    for (const row of rows) {
+      const record = parseRecord(row.record_json, "handoff");
+      const { enqueueCount, lastEnqueuedAt, ...rest } = record;
+      update.run(
+        JSON.stringify({
+          ...rest,
+          schemaVersion: 2,
+          attemptCount: enqueueCount,
+          ...(lastEnqueuedAt !== undefined ? { lastAttemptedAt: lastEnqueuedAt } : {}),
+        }),
+        row.route_key,
+      );
+    }
+    database.exec("PRAGMA user_version = 2;");
   });
 }
 
@@ -120,7 +152,8 @@ function createStoreOperations(database: DatabaseSync): HandoffStore {
     findHandoffByRoute: (routeKey) => findHandoffByRoute(database, routeKey),
     insertHandoff: (record) => insertHandoff(database, record),
     claimHandoff: (identity, now) => claimHandoff(database, identity, now),
-    recordEnqueue: (routeKey, enqueuedAt) => recordEnqueue(database, routeKey, enqueuedAt),
+    recordAttempt: (routeKey, startedAt) => recordAttempt(database, routeKey, startedAt),
+    recordAttemptEnd: (routeKey, endedAt) => recordAttemptEnd(database, routeKey, endedAt),
     listPending: (query) => listPending(database, query),
     listHandoffs: () => listHandoffs(database),
     retireHandoff: (handoffId, options) => retireHandoff(database, handoffId, options),
@@ -195,7 +228,7 @@ function insertHandoff(
       database
         .prepare(
           `INSERT INTO handoffs (
-             route_key, target_session_key, handoff_id, state, enqueue_count, last_enqueued_at,
+             route_key, target_session_key, handoff_id, state, attempt_count, last_attempted_at,
              record_json
            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
@@ -204,8 +237,8 @@ function insertHandoff(
           record.targetSessionKey,
           record.handoffId,
           record.state,
-          record.enqueueCount,
-          record.lastEnqueuedAt ?? null,
+          record.attemptCount,
+          record.lastAttemptedAt ?? null,
           JSON.stringify(record),
         );
       return { inserted: true, record };
@@ -227,8 +260,18 @@ function claimHandoff(database: DatabaseSync, identity: ClaimIdentity, now: numb
       if (!row) return { status: "none" };
       const record = parseHandoff(row.record_json);
       assertClaimIdentity(record, identity);
-      if (record.state === "claimed") return { status: "alreadyClaimed", record };
-      const claimed: HandoffRecord = { ...record, state: "claimed", claimedAt: now };
+      if (record.state === "claimed") {
+        return { status: sameClaimant(record, identity) ? "claimed" : "alreadyClaimed", record };
+      }
+      const claimed: HandoffRecord = {
+        ...record,
+        state: "claimed",
+        claimedAt: now,
+        claimedBy: {
+          sessionId: identity.sessionId,
+          ...(identity.runId !== undefined ? { runId: identity.runId } : {}),
+        },
+      };
       const result = database
         .prepare(
           `UPDATE handoffs SET state = 'claimed', record_json = ?
@@ -238,9 +281,18 @@ function claimHandoff(database: DatabaseSync, identity: ClaimIdentity, now: numb
       if (result.changes === 1) return { status: "claimed", record: claimed };
       const current = readHandoffByRoute(database, record.routeKey);
       if (!current) return { status: "none" };
-      return { status: "alreadyClaimed", record: current };
+      return {
+        status: sameClaimant(current, identity) ? "claimed" : "alreadyClaimed",
+        record: current,
+      };
     }),
   );
+}
+
+function sameClaimant(record: HandoffRecord, identity: ClaimIdentity): boolean {
+  if (!record.claimedBy) return false;
+  if (identity.runId !== undefined) return record.claimedBy.runId === identity.runId;
+  return record.claimedBy.runId === undefined && record.claimedBy.sessionId === identity.sessionId;
 }
 
 function findClaimRow(database: DatabaseSync, identity: ClaimIdentity): JsonRow {
@@ -265,26 +317,47 @@ function assertClaimIdentity(record: HandoffRecord, identity: ClaimIdentity): vo
   }
 }
 
-function recordEnqueue(
+function recordAttempt(
   database: DatabaseSync,
   routeKey: string,
-  enqueuedAt: number,
+  startedAt: number,
 ): HandoffRecord | undefined {
-  return runStateOperation("record a handoff enqueue", () =>
+  return runStateOperation("record a handoff attempt", () =>
     inTransaction(database, () => {
       const current = readHandoffByRoute(database, routeKey);
       if (current?.state !== "pending") return current;
       const updated: HandoffRecord = {
         ...current,
-        enqueueCount: current.enqueueCount + 1,
-        lastEnqueuedAt: enqueuedAt,
+        attemptCount: current.attemptCount + 1,
+        lastAttemptedAt: startedAt,
       };
       database
         .prepare(
-          `UPDATE handoffs SET enqueue_count = ?, last_enqueued_at = ?, record_json = ?
+          `UPDATE handoffs SET attempt_count = ?, last_attempted_at = ?, record_json = ?
            WHERE route_key = ? AND state = 'pending'`,
         )
-        .run(updated.enqueueCount, enqueuedAt, JSON.stringify(updated), routeKey);
+        .run(updated.attemptCount, startedAt, JSON.stringify(updated), routeKey);
+      return updated;
+    }),
+  );
+}
+
+function recordAttemptEnd(
+  database: DatabaseSync,
+  routeKey: string,
+  endedAt: number,
+): HandoffRecord | undefined {
+  return runStateOperation("record a handoff attempt end", () =>
+    inTransaction(database, () => {
+      const current = readHandoffByRoute(database, routeKey);
+      if (current?.state !== "pending") return current;
+      const updated: HandoffRecord = { ...current, lastAttemptedAt: endedAt };
+      database
+        .prepare(
+          `UPDATE handoffs SET last_attempted_at = ?, record_json = ?
+           WHERE route_key = ? AND state = 'pending'`,
+        )
+        .run(endedAt, JSON.stringify(updated), routeKey);
       return updated;
     }),
   );
@@ -295,11 +368,11 @@ function listPending(database: DatabaseSync, query: PendingQuery): HandoffRecord
     const rows = database
       .prepare(
         `SELECT record_json FROM handoffs
-         WHERE state = 'pending' AND enqueue_count < ?
-           AND (last_enqueued_at IS NULL OR last_enqueued_at <= ?)
-         ORDER BY COALESCE(last_enqueued_at, 0), rowid`,
+         WHERE state = 'pending' AND attempt_count < ?
+           AND (last_attempted_at IS NULL OR last_attempted_at <= ?)
+         ORDER BY COALESCE(last_attempted_at, 0), rowid`,
       )
-      .all(query.maxEnqueues, query.now - query.retryIntervalMs) as unknown as StoredJsonRow[];
+      .all(query.maxAttempts, query.now - query.spacingMs) as unknown as StoredJsonRow[];
     return rows.map((row) => parseHandoff(row.record_json));
   });
 }
@@ -405,7 +478,7 @@ function parseReceipt(json: string): DeliveryReceipt {
 function parseHandoff(json: string): HandoffRecord {
   const value = parseRecord(json, "handoff");
   if (
-    value.schemaVersion !== 1 ||
+    value.schemaVersion !== 2 ||
     typeof value.routeKey !== "string" ||
     typeof value.handoffId !== "string" ||
     typeof value.targetSessionKey !== "string" ||
@@ -413,7 +486,7 @@ function parseHandoff(json: string): HandoffRecord {
     typeof value.sessionKey !== "string" ||
     typeof value.threadId !== "string" ||
     typeof value.starterText !== "string" ||
-    typeof value.enqueueCount !== "number" ||
+    typeof value.attemptCount !== "number" ||
     (value.state !== "pending" && value.state !== "claimed")
   ) {
     throw new Error("Invalid handoff record.");
@@ -436,3 +509,4 @@ function parseRecord(json: string, label: string): Record<string, unknown> {
 
 type StoredJsonRow = { record_json: string };
 type JsonRow = StoredJsonRow | undefined;
+type MigrationRow = StoredJsonRow & { route_key: string };

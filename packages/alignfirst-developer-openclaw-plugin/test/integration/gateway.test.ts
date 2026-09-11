@@ -1,23 +1,31 @@
-import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBus, injectQaBusInboundMessage } from "@paleo/openclaw-channel-mock-core";
+import { SILENT_TOKEN } from "../../src/thread-handoff/service.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
 const STARTER = "Project: Project-X\nTask: preserve this exact starter.";
 const MARKER = "TARGET_SESSION_STARTED";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted by a gateway restart";
+const CHAINED_WAKE = "alcode run finished — read its session file and report to the user";
+const WAKE_REPORTED = "WAKE_REPORTED";
+const execFileAsync = promisify(execFile);
 
 type Surface = "slack" | "discord";
 
 type FixtureOptions = {
+  claimTwice?: boolean;
   duplicateStart?: boolean;
   holdFirstSeed?: boolean;
   silenceAfterClaim?: boolean;
+  stallChannelReplyMs?: number;
+  stallEndsAt?: number;
 };
 
 type Fixture = {
@@ -28,6 +36,7 @@ type Fixture = {
   busServer: Server;
   providerServer: Server;
   gateway: ChildProcessWithoutNullStreams;
+  gatewayPort: number;
   gatewayLog: string[];
   providerLog: string[];
   configPath: string;
@@ -45,7 +54,7 @@ afterEach(async () => {
 });
 
 describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
-  it.each(["slack", "discord"] as const)(
+  it.each(["slack", "discord", "slack", "discord", "slack", "discord"] as const)(
     "keeps a claimed %s seed silent while awaiting a human answer",
     async (surface) => {
       const fixture = await startFixture(surface, { silenceAfterClaim: true });
@@ -119,6 +128,8 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
         sessionId: string;
         parentConversationId: string;
         accountId: string;
+        attemptCount: number;
+        claimedBy: { sessionId: string };
       }>;
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
@@ -127,7 +138,10 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
         parentConversationId: "Project-X",
         accountId: fixture.channelId,
       });
-      expect(records[0].sessionId).toMatch(/^[0-9a-f-]{36}$/u);
+      expect(records[0]).toMatchObject({
+        attemptCount: 1,
+        claimedBy: { sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/u) },
+      });
       expect(records[0].targetSessionKey.toLowerCase()).toContain(expectedThreadId.toLowerCase());
       expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
@@ -170,6 +184,76 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
     },
   );
 
+  it.each(["slack", "discord"] as const)(
+    "keeps a repeated %s claim idempotent inside the seed turn",
+    async (surface) => {
+      const fixture = await startFixture(surface, { claimTwice: true });
+      await injectRootMessage(fixture, "Project-X", "Start a task and claim it twice.");
+      await waitForMessage(fixture, (message) => message.text === MARKER);
+      expect(providerContentCount(fixture, '"status": "claimed"')).toBeGreaterThanOrEqual(2);
+      expect(
+        fixture.bus.state
+          .getSnapshot()
+          .messages.filter(
+            (message) => message.direction === "outbound" && message.text === MARKER,
+          ),
+      ).toHaveLength(1);
+    },
+  );
+
+  it.each(["slack", "discord"] as const)(
+    "delivers a chained %s wake through the session's persisted route",
+    async (surface) => {
+      const fixture = await startFixture(surface);
+      await injectRootMessage(fixture, "Project-X", "Start before the chained wake.");
+      const marker = await waitForMessage(fixture, (message) => message.text === MARKER);
+      const records = JSON.parse(
+        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      ) as Array<{ targetSessionKey: string }>;
+      await runOpenClaw(fixture, [
+        "agent",
+        "--session-key",
+        records[0]?.targetSessionKey ?? "missing-session",
+        "--deliver",
+        "--timeout",
+        "0",
+        "--message",
+        CHAINED_WAKE,
+      ]);
+      const reported = await waitForMessage(fixture, (message) => message.text === WAKE_REPORTED);
+      expect(reported.threadId).toBe(marker.threadId);
+    },
+  );
+
+  it.each(["slack", "discord"] as const)(
+    "starts two concurrent %s handoffs behind a running sibling turn",
+    async (surface) => {
+      const options: FixtureOptions = { stallChannelReplyMs: 8_000 };
+      const fixture = await startFixture(surface, options);
+      await injectRootMessage(fixture, "Project-X", "Keep this turn busy.");
+      await waitUntil(
+        () => options.stallEndsAt !== undefined,
+        5_000,
+        () => "the sibling turn did not enter its scripted stall",
+      );
+      await Promise.all([
+        injectRootMessage(fixture, "Project-Y", "Start task Y."),
+        injectRootMessage(fixture, "Project-Z", "Start task Z."),
+      ]);
+      await waitUntil(
+        () => outboundMessages(fixture, MARKER).length === 2,
+        20_000,
+        () => `concurrent handoffs did not finish\n${fixture.gatewayLog.join("")}`,
+      );
+      const stallEndsAt = options.stallEndsAt;
+      if (stallEndsAt === undefined) throw new Error("the sibling stall deadline is unavailable");
+      expect(
+        outboundMessages(fixture, MARKER).every((message) => message.timestamp < stallEndsAt),
+      ).toBe(true);
+      expect(await handoffStates(fixture)).toEqual(["claimed", "claimed"]);
+    },
+  );
+
   it("recovers one pending Slack startup across abrupt and post-claim restarts", async () => {
     const options = { holdFirstSeed: true };
     const fixture = await startFixture("slack", options);
@@ -196,18 +280,19 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
 
     options.holdFirstSeed = false;
     await restartGateway(fixture, "SIGKILL");
-    await waitForMessage(fixture, (message) => message.text === MARKER, 45_000);
+    await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
     expect(await handoffStates(fixture)).toEqual(["claimed"]);
+    expect(await handoffAttempts(fixture)).toEqual([2]);
 
     await restartGateway(fixture, "SIGKILL");
-    await new Promise((resolveWait) => setTimeout(resolveWait, 31_000));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
     expect(
       fixture.bus.state
         .getSnapshot()
         .messages.filter((message) => message.direction === "outbound" && message.text === MARKER),
     ).toHaveLength(1);
     expect(await handoffStates(fixture)).toEqual(["claimed"]);
-  }, 90_000);
+  }, 300_000);
 
   it.each(["slack", "discord"] as const)(
     "retries one failed %s native starter without duplicating delivery",
@@ -265,6 +350,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   await listen(providerServer);
   const channelId = `${surface}-mock`;
   const configPath = resolve(root, "openclaw.json");
+  const gatewayPort = await reservePort();
   await writeFile(
     configPath,
     `${JSON.stringify(
@@ -274,6 +360,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
         workspace,
         busUrl: serverUrl(busServer),
         providerUrl: serverUrl(providerServer),
+        gatewayPort,
       }),
       null,
       2,
@@ -287,7 +374,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
     "--runtime",
   ]);
   const gatewayLog: string[] = [];
-  const gateway = await launchGateway(configPath, stateDir, gatewayLog);
+  const gateway = await launchGateway(configPath, stateDir, gatewayPort, gatewayLog);
   const fixture = {
     root,
     surface,
@@ -296,6 +383,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
     busServer,
     providerServer,
     gateway,
+    gatewayPort,
     gatewayLog,
     providerLog,
     configPath,
@@ -312,9 +400,10 @@ function buildConfig(params: {
   workspace: string;
   busUrl: string;
   providerUrl: string;
+  gatewayPort: number;
 }) {
   return {
-    gateway: { mode: "local", auth: { mode: "none" } },
+    gateway: { mode: "local", port: params.gatewayPort, auth: { mode: "none" } },
     update: { checkOnStart: false },
     plugins: {
       allow: [params.channelId, "alignfirst-developer"],
@@ -358,6 +447,7 @@ function buildConfig(params: {
       defaults: {
         model: "scripted/handoff-script",
         workspace: params.workspace,
+        maxConcurrent: 4,
         heartbeat: { target: "last" },
       },
       entries: { main: { name: "Main" } },
@@ -381,43 +471,56 @@ function createProviderScript(
 ) {
   let callSequence = 0;
   let repeatedStart = false;
+  let repeatedClaim = false;
   return (body: Record<string, unknown>) => {
     if (options.silenceAfterClaim && !Array.isArray(body.tools)) return { content: "NO_REPLY" };
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const tailMessages = messages.slice(-4) as Array<{ role?: unknown; content?: unknown }>;
+    const allMessages = messages as Array<{ role?: unknown; content?: unknown }>;
+    const tailMessages = allMessages.slice(-4);
     const tail = JSON.stringify(tailMessages);
+    const all = JSON.stringify(allMessages);
     const latestToolResult = tailMessages.findLast((message) => message.role === "tool")?.content;
     const latestToolText =
       typeof latestToolResult === "string" ? latestToolResult : JSON.stringify(latestToolResult);
+    if (all.includes("Keep this turn busy.")) {
+      const delayMs = options.stallChannelReplyMs ?? 0;
+      options.stallEndsAt = Date.now() + delayMs;
+      return { content: "NO_REPLY", delayMs };
+    }
     if (tail.includes(RESTART_RECOVERY_PROMPT) && !tail.includes("[thread-handoff:v1]")) {
       return { content: "NO_REPLY" };
     }
     if (tail.includes("Continue in this same thread.")) {
       return { content: "SAME_SESSION_CONTINUED" };
     }
-    if (tail.includes("[thread-handoff:v1]")) {
-      if (options.holdFirstSeed) return { content: "NO_REPLY" };
+    if (tail.includes(CHAINED_WAKE)) return { content: WAKE_REPORTED };
+    if (all.includes("[thread-handoff:v1]")) {
+      if (options.holdFirstSeed) return { content: SILENT_TOKEN };
       const snapshot = bus.state.getSnapshot();
-      if (snapshot.messages.some((message) => message.text === MARKER)) {
+      const conversationId = resolveConversationId(snapshot, all);
+      if (
+        snapshot.messages.some(
+          (message) => message.text === MARKER && message.conversation.id === conversationId,
+        )
+      ) {
         return { content: "NO_REPLY" };
       }
       if (latestToolText?.includes('"status": "error"')) {
         return { content: "HANDOFF_CLAIM_FAILED" };
       }
       if (/"status"\s*:\s*"(?:claimed|alreadyClaimed)"/u.test(latestToolText ?? "")) {
-        if (options.silenceAfterClaim) return { content: "HEARTBEAT_OK" };
-        const threadId = resolveThreadId(surface, snapshot);
-        return {
-          tool: "message",
-          arguments: {
-            action: "send",
-            to: surface === "slack" ? "channel:Project-X" : `channel:${threadId}`,
-            ...(surface === "slack" ? { threadId } : {}),
-            message: MARKER,
-          },
-        };
+        if (options.claimTwice && !repeatedClaim) {
+          repeatedClaim = true;
+          const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(all)?.[1];
+          return {
+            tool: "thread_handoff",
+            arguments: { action: "claim", ...(handoffId ? { handoffId } : {}) },
+          };
+        }
+        if (options.silenceAfterClaim) return { content: SILENT_TOKEN };
+        return { content: MARKER };
       }
-      const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(tail)?.[1];
+      const handoffId = /handoffId[\\"': ]+([0-9a-f-]{36})/iu.exec(all)?.[1];
       return {
         tool: "thread_handoff",
         arguments: { action: "claim", ...(handoffId ? { handoffId } : {}) },
@@ -426,7 +529,9 @@ function createProviderScript(
     if (/"status"\s*:\s*"queued"/u.test(latestToolText ?? "")) {
       if (options.duplicateStart && !repeatedStart) {
         repeatedStart = true;
-        const threadId = resolveThreadId(surface, bus.state.getSnapshot());
+        const snapshot = bus.state.getSnapshot();
+        const conversationId = resolveConversationId(snapshot, all);
+        const threadId = resolveThreadId(surface, snapshot, conversationId);
         return { tool: "thread_handoff", arguments: { action: "start", threadId } };
       }
       return { content: "NO_REPLY" };
@@ -435,16 +540,23 @@ function createProviderScript(
       return { content: "NO_REPLY" };
     }
     const snapshot = bus.state.getSnapshot();
+    const conversationId = resolveConversationId(snapshot, all);
     if (
       snapshot.messages.some(
-        (message) => message.direction === "outbound" && message.text === STARTER,
+        (message) =>
+          message.direction === "outbound" &&
+          message.text === STARTER &&
+          message.conversation.id === conversationId,
       )
     ) {
-      const threadId = resolveThreadId(surface, snapshot);
+      const threadId = resolveThreadId(surface, snapshot, conversationId);
       return { tool: "thread_handoff", arguments: { action: "start", threadId } };
     }
     const root = snapshot.messages.find(
-      (message) => message.direction === "inbound" && !message.threadId,
+      (message) =>
+        message.direction === "inbound" &&
+        !message.threadId &&
+        message.conversation.id === conversationId,
     );
     if (!root) throw new Error("provider received a root turn before the bus message existed");
     callSequence += 1;
@@ -453,7 +565,7 @@ function createProviderScript(
           tool: "message",
           arguments: {
             action: "send",
-            to: "channel:Project-X",
+            to: `channel:${conversationId}`,
             threadId: root.id,
             message: STARTER,
           },
@@ -463,8 +575,8 @@ function createProviderScript(
           tool: "message",
           arguments: {
             action: "thread-create",
-            to: "channel:Project-X",
-            threadName: "Project-X work",
+            to: `channel:${conversationId}`,
+            threadName: `${conversationId} work`,
             messageId: root.id,
             message: STARTER,
           },
@@ -476,13 +588,30 @@ function createProviderScript(
 function resolveThreadId(
   surface: Surface,
   snapshot: ReturnType<ReturnType<typeof createBus>["state"]["getSnapshot"]>,
+  conversationId: string,
 ) {
   const threadId =
     surface === "slack"
-      ? snapshot.messages.find((message) => message.direction === "inbound")?.id
-      : snapshot.threads[0]?.id;
+      ? snapshot.messages.find(
+          (message) =>
+            message.direction === "inbound" &&
+            !message.threadId &&
+            message.conversation.id === conversationId,
+        )?.id
+      : snapshot.threads.find((thread) => thread.conversationId === conversationId)?.id;
   if (!threadId) throw new Error("provider could not resolve the native thread id");
   return threadId;
+}
+
+function resolveConversationId(
+  snapshot: ReturnType<ReturnType<typeof createBus>["state"]["getSnapshot"]>,
+  messages: string,
+): string {
+  const conversation = snapshot.conversations.findLast((candidate) =>
+    messages.includes(candidate.id),
+  );
+  if (!conversation) throw new Error("provider could not resolve the conversation");
+  return conversation.id;
 }
 
 async function handleProvider(
@@ -493,6 +622,7 @@ async function handleProvider(
     tool?: string;
     arguments?: Record<string, unknown>;
     id?: string;
+    delayMs?: number;
   },
   providerLog: string[],
 ) {
@@ -506,6 +636,7 @@ async function handleProvider(
   const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
   providerLog.push(JSON.stringify(body));
   const next = script(body);
+  if (next.delayMs) await new Promise((resolveWait) => setTimeout(resolveWait, next.delayMs));
   response.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache",
@@ -556,11 +687,24 @@ async function waitForMessage(
   return found;
 }
 
+function outboundMessages(fixture: Fixture, text: string) {
+  return fixture.bus.state
+    .getSnapshot()
+    .messages.filter((message) => message.direction === "outbound" && message.text === text);
+}
+
 async function handoffStates(fixture: Fixture): Promise<string[]> {
   const records = JSON.parse(
     await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
   ) as Array<{ state: string }>;
   return records.map((record) => record.state);
+}
+
+async function handoffAttempts(fixture: Fixture): Promise<number[]> {
+  const records = JSON.parse(
+    await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+  ) as Array<{ attemptCount: number }>;
+  return records.map((record) => record.attemptCount);
 }
 
 function providerContentIncludes(fixture: Fixture, expected: string) {
@@ -572,15 +716,46 @@ function providerContentIncludes(fixture: Fixture, expected: string) {
   });
 }
 
+function providerContentCount(fixture: Fixture, expected: string): number {
+  return fixture.providerLog.filter((entry) => {
+    const body = JSON.parse(entry) as { messages?: Array<{ content?: unknown }> };
+    return body.messages?.some(
+      (message) => typeof message.content === "string" && message.content.includes(expected),
+    );
+  }).length;
+}
+
+async function injectRootMessage(fixture: Fixture, conversationId: string, text: string) {
+  return await injectQaBusInboundMessage({
+    baseUrl: serverUrl(fixture.busServer),
+    input: {
+      accountId: fixture.channelId,
+      conversation: { kind: "channel", id: conversationId, title: conversationId },
+      senderId: "User-A",
+      senderName: "User A",
+      text,
+    },
+  });
+}
+
 async function restartGateway(fixture: Fixture, signal: NodeJS.Signals) {
   await killGateway(fixture.gateway, signal);
   fixture.gatewayLog.push(`\n--- gateway restart after ${signal} ---\n`);
-  fixture.gateway = await launchGateway(fixture.configPath, fixture.stateDir, fixture.gatewayLog);
+  fixture.gateway = await launchGateway(
+    fixture.configPath,
+    fixture.stateDir,
+    fixture.gatewayPort,
+    fixture.gatewayLog,
+  );
 }
 
-async function launchGateway(configPath: string, stateDir: string, gatewayLog: string[]) {
+async function launchGateway(
+  configPath: string,
+  stateDir: string,
+  port: number,
+  gatewayLog: string[],
+) {
   const readyOffset = gatewayLog.length;
-  const port = await reservePort();
   const gateway = spawn(OPENCLAW, ["gateway", "--port", String(port), "--verbose"], {
     cwd: REPO_ROOT,
     env: buildOpenClawEnv(configPath, stateDir),
@@ -605,11 +780,12 @@ async function runConfiguredOpenClaw(
   stateDir: string,
   args: string[],
 ): Promise<string> {
-  return execFileSync(OPENCLAW, args, {
+  const result = await execFileAsync(OPENCLAW, args, {
     cwd: REPO_ROOT,
     env: buildOpenClawEnv(configPath, stateDir),
     encoding: "utf8",
   });
+  return result.stdout;
 }
 
 function buildOpenClawEnv(configPath: string, stateDir: string): NodeJS.ProcessEnv {
@@ -619,6 +795,7 @@ function buildOpenClawEnv(configPath: string, stateDir: string): NodeJS.ProcessE
   }
   return {
     ...env,
+    PATH: `${resolve(REPO_ROOT, "node_modules/.bin")}:${env.PATH ?? ""}`,
     OPENCLAW_CONFIG_PATH: configPath,
     OPENCLAW_STATE_DIR: stateDir,
     OPENCLAW_NO_UPDATE_CHECK: "1",
@@ -641,12 +818,44 @@ async function stopFixture(fixture: Fixture) {
 
 async function killGateway(gateway: ChildProcessWithoutNullStreams, signal: NodeJS.Signals) {
   if (gateway.exitCode !== null) return;
+  const childPids = await readChildPids(gateway.pid);
   gateway.kill(signal);
   await Promise.race([
     new Promise<void>((resolveExit) => gateway.once("exit", () => resolveExit())),
     new Promise<void>((resolveWait) => setTimeout(resolveWait, 5_000)),
   ]);
   if (gateway.exitCode === null) gateway.kill("SIGKILL");
+  await waitForProcessExit(childPids, 5_000);
+}
+
+async function readChildPids(parentPid: number | undefined): Promise<number[]> {
+  if (parentPid === undefined) return [];
+  try {
+    const contents = await readFile(`/proc/${parentPid}/task/${parentPid}/children`, "utf8");
+    return contents
+      .trim()
+      .split(/\s+/u)
+      .filter((value) => value.length > 0)
+      .map(Number);
+  } catch {
+    return [];
+  }
+}
+
+async function waitForProcessExit(processIds: number[], timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (processIds.some((processId) => processExists(processId)) && Date.now() < deadline) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+}
+
+function processExists(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function listen(server: Server) {

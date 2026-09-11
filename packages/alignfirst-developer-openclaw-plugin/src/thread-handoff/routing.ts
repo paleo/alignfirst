@@ -168,7 +168,7 @@ export function createHandoffRecord(params: {
   createdAt: number;
 }): HandoffRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     routeKey: params.route.routeKey,
     handoffId: params.handoffId,
     targetSessionKey: params.route.targetSessionKey,
@@ -185,7 +185,7 @@ export function createHandoffRecord(params: {
     starterText: params.receipt.starterText,
     deliveryContext: params.route.deliveryContext,
     createdAt: params.createdAt,
-    enqueueCount: 0,
+    attemptCount: 0,
     state: "pending",
   };
 }

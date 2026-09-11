@@ -1,14 +1,11 @@
-import type {
-  OpenClawPluginApi,
-  OpenClawPluginToolContext,
-  PluginLogger,
-} from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi } from "vitest";
 import type { ReceiptCoordinator } from "../src/thread-handoff/receipts.js";
-import { createHandoffService } from "../src/thread-handoff/service.js";
+import { createRunIdCache } from "../src/thread-handoff/run-ids.js";
+import type { HandoffService } from "../src/thread-handoff/service.js";
 import { createHandoffStore, type HandoffStore } from "../src/thread-handoff/state.js";
 import { createThreadHandoffTool } from "../src/thread-handoff/tool.js";
-import type { DeliveryReceipt } from "../src/thread-handoff/types.js";
+import type { DeliveryReceipt, HandoffRecord } from "../src/thread-handoff/types.js";
 import { handoff, receipt, temporaryStateDir } from "./helpers.js";
 
 describe("thread_handoff tool", () => {
@@ -25,11 +22,11 @@ describe("thread_handoff tool", () => {
       status: "alreadyStarted",
       handoffId: first.details && readString(first.details, "handoffId"),
     });
-    expect(fixture.enqueue).toHaveBeenCalledTimes(1);
+    expect(fixture.startTurn).toHaveBeenCalledTimes(1);
     fixture.store.close();
   });
 
-  it("retries a duplicate start whose first enqueue never succeeded", async () => {
+  it("retries a duplicate start whose first attempt never started", async () => {
     const fixture = toolFixture();
     const pending = handoff({
       routeKey: '["main","slack","workspace-1","agent:main:slack:channel:C1:thread:100.200"]',
@@ -47,7 +44,7 @@ describe("thread_handoff tool", () => {
     await expect(
       fixture.tool.execute("retry", { action: "start", threadId: "100.200" }),
     ).resolves.toMatchObject({ details: { status: "alreadyStarted" } });
-    expect(fixture.enqueue).toHaveBeenCalledTimes(1);
+    expect(fixture.startTurn).toHaveBeenCalledTimes(1);
     fixture.store.close();
   });
 
@@ -62,7 +59,7 @@ describe("thread_handoff tool", () => {
     fixture.store.close();
   });
 
-  it("claims only from the trusted target session and reports repeated claims", async () => {
+  it("claims idempotently in one run and reports another run with claimedAt", async () => {
     const fixture = toolFixture();
     fixture.store.insertHandoff(handoff());
     const target = toolFixture(
@@ -72,13 +69,25 @@ describe("thread_handoff tool", () => {
         nativeChannelId: "C1",
       },
       fixture.store,
+      "run-1",
     );
     await expect(
       target.tool.execute("claim-1", { action: "claim", handoffId: "handoff-1" }),
     ).resolves.toMatchObject({ details: { status: "claimed" } });
     await expect(
       target.tool.execute("claim-2", { action: "claim", handoffId: "handoff-1" }),
-    ).resolves.toMatchObject({ details: { status: "alreadyClaimed" } });
+    ).resolves.toMatchObject({ details: { status: "claimed" } });
+    const otherRun = toolFixture(
+      null,
+      { sessionKey: handoff().targetSessionKey, nativeChannelId: "C1" },
+      fixture.store,
+      "run-2",
+    );
+    await expect(
+      otherRun.tool.execute("claim-3", { action: "claim", handoffId: "handoff-1" }),
+    ).resolves.toMatchObject({
+      details: { status: "alreadyClaimed", claimedAt: expect.any(Number) },
+    });
     await expect(
       fixture.tool.execute("wrong", { action: "claim", handoffId: "handoff-1" }),
     ).rejects.toThrow(/invalidTarget/);
@@ -90,6 +99,7 @@ function toolFixture(
   availableReceipt: DeliveryReceipt | null = receipt(),
   contextOverrides: Partial<OpenClawPluginToolContext> = {},
   providedStore?: HandoffStore,
+  runId = "run-1",
 ) {
   const store = providedStore ?? createHandoffStore(temporaryStateDir());
   const waitForReceipt = vi.fn().mockResolvedValue(availableReceipt);
@@ -98,16 +108,15 @@ function toolFixture(
     observe: vi.fn(),
     waitForReceipt,
   } as unknown as ReceiptCoordinator;
-  const enqueue = vi.fn(() => true);
-  const runtime = {
-    system: { enqueueSystemEvent: enqueue, requestHeartbeat: vi.fn() },
-  } as unknown as OpenClawPluginApi["runtime"];
-  const logger = {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as unknown as PluginLogger;
+  const startTurn = vi.fn(async (record: HandoffRecord) => {
+    store.recordAttempt(record.routeKey, Date.now());
+  });
+  const service: HandoffService = {
+    startTurn,
+    runForTarget: async (_targetSessionKey, operation) => operation(),
+    start: async () => undefined,
+    stop: async () => undefined,
+  };
   const context: OpenClawPluginToolContext = {
     agentId: "main",
     sessionKey: "agent:main:slack:channel:C1",
@@ -117,15 +126,17 @@ function toolFixture(
     nativeChannelId: "C1",
     ...contextOverrides,
   };
-  const service = createHandoffService({ runtime, getStore: () => store, logger });
+  const runIds = createRunIdCache();
+  runIds.remember({ sessionKey: context.sessionKey, sessionId: context.sessionId, runId });
   return {
     store,
-    enqueue,
+    startTurn,
     waitForReceipt,
     tool: createThreadHandoffTool({
       context,
       configuration: { channelSurfaces: { slack: "slack" } },
       receipts,
+      runIds,
       getStore: () => store,
       service,
     }),
