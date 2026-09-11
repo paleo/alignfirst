@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On `[OpenClaw heartbeat poll]` for a native exec-exit notice after `alcode`, end immediately on exactly `HEARTBEAT_OK`; read nothing and call no tool. The chained `thread-handoff wake` reply run already owns the completion report. A direct `alcode run finished …` message is that plugin reply run, not the native notice.
+If the entire user message is `[OpenClaw heartbeat poll]`, it is a native polling notice. Every such notice, including a repeated one, ends immediately with the whole final answer exactly `HEARTBEAT_OK`; read nothing, call no tool, and never answer `NO_REPLY`. A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a polling notice.
 
 On every other user message, including a message beginning `[thread-handoff:v1]`, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff messages before task effects.
 
