@@ -10,12 +10,12 @@ Use this form when the project already requires the AlignFirst CLI. It adds no p
 2. Ensure `docs/` exists. When preparing a project for an AlignFirst Developer, populate a newly
    created directory through [docmap-bootstrapping.md](docmap-bootstrapping.md).
 3. Remove any existing docmap section and add the AlignFirst bootstrap to `AGENTS.md` or
-   `CLAUDE.md`:
+   `CLAUDE.md`. Place it before every other section whenever possible:
 
    ```markdown
-   ## AlignFirst
+   ## Project conventions and documentation
 
-   Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
+   Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
    ```
 
 4. Read the authoring guide with `npx alignfirst docmap --guide`.

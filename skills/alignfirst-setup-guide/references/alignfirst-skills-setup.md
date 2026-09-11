@@ -19,7 +19,7 @@ Offer this in the README as a convenience and use the bare command when describi
 
 `alspec`, `alplan`, `al`, `almerge`, `alreview`, and `aldescription` select individual protocols. `alcatchup` loads ticket history; `alcatchupaad` and `alcatchupspec` load history before starting AAD or specification. Skills reuse guides already in context; each named guide includes the ticket directory and work file rules. Humans invoke them with `/` in Claude Code, GitHub Copilot, and Cursor, or `$` in Codex.
 
-The `alignfirst` skill lets the agent recognize a protocol named in prose. The `alignfirst context` bootstrap line provides this, so the skill is needed only for the configuration without `.alignfirst.json`.
+The `alignfirst` skill lets the agent recognize a protocol named in prose. The `alignfirst context` bootstrap section provides this, so the skill is needed only for the configuration without `.alignfirst.json`.
 
 Discover the package without installing it:
 
@@ -89,7 +89,7 @@ _Ticket ID format:_ `{DETECTED_TICKET_FORMAT}`
 
 Omit any convention that repository evidence cannot establish. When the project uses a team plans
 repository, add: After every change in `.plans/`, run `npx alignfirst sync`. Add `--skill alignfirst` to
-the skills command above, since no bootstrap line describes the protocols.
+the skills command above, since no bootstrap section describes the protocols.
 
 ### With `.alignfirst.json`
 
@@ -122,20 +122,20 @@ fetched. The version guard reports a mismatch and gives the exact
 ```
 
 Keep only applicable optional fields. Replace any hand-written AlignFirst or docmap section in
-`AGENTS.md` or `CLAUDE.md` with one bootstrap line. Its output carries the conventions, the
-documentation map when `docs/` exists, and the protocol aliases:
+`AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
+possible:
 
 ```markdown
-## AlignFirst
+## Project conventions and documentation
 
-Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
 ```
 
 ### Local installation
 
 By default a project declares no `alignfirst` dependency. Add one only when the user asks for a pinned CLI, or when the repository gates installation on publication age or provenance and so cannot accept an on-demand fetch.
 
-Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx alignfirst context`, which then resolves the pinned binary. No npm script is required.
+Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
 
 The CLI brings `@paleo/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@paleo/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
 

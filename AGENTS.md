@@ -1,8 +1,8 @@
 # Repository Guidelines
 
-## AlignFirst
+## Project conventions and documentation
 
-Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
 
 ## Tooling
 
