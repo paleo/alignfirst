@@ -4,6 +4,7 @@ import { jsonResult } from "openclaw/plugin-sdk/tool-results";
 import { type Static, Type } from "typebox";
 import { HandoffError } from "./errors.js";
 import type { ReceiptCoordinator } from "./receipts.js";
+import type { RunIdCache } from "./run-ids.js";
 import {
   assertSupportedSource,
   createHandoffRecord,
@@ -14,6 +15,7 @@ import {
 import type { HandoffService } from "./service.js";
 import type { HandoffStore } from "./state.js";
 import type { HandoffRecord, PluginConfiguration, SourceContext, ToolSuccess } from "./types.js";
+import { nonempty } from "./values.js";
 
 const threadHandoffParameters = Type.Union([
   Type.Object(
@@ -26,7 +28,7 @@ const threadHandoffParameters = Type.Union([
   Type.Object(
     {
       action: Type.Literal("claim"),
-      handoffId: Type.Optional(Type.String({ minLength: 1 })),
+      handoffId: Type.Optional(Type.String()),
     },
     { additionalProperties: false },
   ),
@@ -38,6 +40,7 @@ export interface ThreadHandoffToolParams {
   context: OpenClawPluginToolContext;
   configuration: PluginConfiguration;
   receipts: ReceiptCoordinator;
+  runIds: RunIdCache;
   getStore: () => HandoffStore;
   service: HandoffService;
   now?: () => number;
@@ -79,10 +82,13 @@ function claimHandoff(
   source: SourceContext,
   handoffId: string | undefined,
 ): ToolSuccess {
+  const runId = params.runIds.read(source.sessionKey, source.sessionId);
   const result = params.getStore().claimHandoff(
     {
       targetSessionKey: source.sessionKey,
       agentId: source.agentId,
+      sessionId: source.sessionId,
+      ...(runId !== undefined ? { runId } : {}),
       ...(source.accountId ? { accountId: source.accountId } : {}),
       ...(handoffId ? { handoffId } : {}),
     },
@@ -91,7 +97,12 @@ function claimHandoff(
   if (handoffId && result.status === "none") {
     throw new HandoffError("invalidTarget", "The requested handoff does not exist.");
   }
-  return { status: result.status };
+  return {
+    status: result.status,
+    ...(result.status === "alreadyClaimed" && result.record?.claimedAt !== undefined
+      ? { claimedAt: result.record.claimedAt }
+      : {}),
+  };
 }
 
 async function startHandoff(
@@ -130,7 +141,7 @@ async function startHandoff(
       if (!evidenceMatches(inserted.record, receipt)) throw conflictingHandoff();
       return resumeExisting(params.service, inserted.record);
     }
-    await params.service.enqueue(record);
+    await params.service.startTurn(record);
     return { status: "queued", handoffId: record.handoffId, sessionKey: record.targetSessionKey };
   });
 }
@@ -158,12 +169,12 @@ function conflictingHandoff(): HandoffError {
   );
 }
 
-/** A record whose first enqueue never completed gets its seed now; otherwise nothing to redo. */
+/** A record whose first attempt never started gets its seed now; otherwise nothing to redo. */
 async function resumeExisting(
   service: HandoffService,
   record: HandoffRecord,
 ): Promise<ToolSuccess> {
-  if (record.state === "pending" && record.enqueueCount === 0) await service.enqueue(record);
+  if (record.state === "pending" && record.attemptCount === 0) await service.startTurn(record);
   return {
     status: "alreadyStarted",
     handoffId: record.handoffId,
@@ -181,10 +192,17 @@ function parseInput(value: unknown): ToolInput {
   }
   if (record.action === "claim") {
     if (keys.some((key) => key !== "action" && key !== "handoffId")) return invalidInput();
-    const handoffId = optionalString(record.handoffId);
+    const handoffId = blankAsAbsent(record.handoffId);
     return { action: "claim", ...(handoffId ? { handoffId } : {}) };
   }
   return invalidInput();
+}
+
+// A human turn without a seed sometimes sends `handoffId: ""` rather than omitting the field.
+function blankAsAbsent(value: unknown): string | undefined {
+  if (value === undefined) return;
+  if (typeof value !== "string") return invalidInput();
+  return nonempty(value);
 }
 
 function requiredString(value: unknown): string {

@@ -51,8 +51,8 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
 }
 
 // `alcode` at a word boundary — bare, absolute path (`/usr/local/bin/alcode …`), or after a shell
-// separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained-wake
-// launch shape) — but not a substring of another token.
+// separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained
+// completion-event launch shape) — but not a substring of another token.
 const ALCODE_INVOCATION_RE = /(^|[\s/;(&|])alcode(\s|$)/;
 // Only alcode may launch a coding agent. Its subprocess appears as a cliMock entry rather than an
 // OpenClaw agent tool call.

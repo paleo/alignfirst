@@ -95,8 +95,12 @@ function buildClaudeStreamResponse(sessionId: string, result: string): string {
   return `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
 }
 
+// Every alias alcode advertises resolves here: an agent that picks `--model astra` for a light task
+// otherwise gets "the bundled catalog contains no matching model" (A12 Slack, 2026-09-11T15-30-11).
 const CODEX_MODEL_CATALOG = {
   models: [
+    { slug: "gpt-5.5-astra" },
+    { slug: "gpt-5.6-astra" },
     { slug: "gpt-5.5-sol" },
     { slug: "gpt-5.6-sol" },
     { slug: "gpt-5.5-terra" },
@@ -543,14 +547,19 @@ const CODING_PROTOCOL_RE =
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
 // branch", and the agent is told to verify a completed run — so the claim has
 // to hold up: the change must be in the worktree, committed, and be the change
-// the result describes.
+// the result describes. Each edit is idempotent, like a real coding agent's: a
+// repeated tooltip run — the agent asked for a "fix" after checking a dev server
+// started before the commit — left two, three, then four `title` attributes and
+// the agent never declared the work done (A12 Slack, artifacts 2026-09-11T15-13-47).
 const BOLD_BUTTON_EDIT = "s/font-weight: normal/font-weight: bold/";
-const TOOLTIP_EDIT = `s|<button id="export-button"|<button id="export-button" title="Exporter les données"|`;
+const TOOLTIP_EDIT = `/title="Exporter les données"/! s|<button id="export-button"|<button id="export-button" title="Exporter les données"|`;
+const GENERIC_EDIT =
+  "/<!-- updated -->/! s|<h1>Comparables</h1>|<h1>Comparables</h1><!-- updated -->|";
 
 function codingEditFor(prompt: string): string {
   if (TOOLTIP_INTENT_RE.test(prompt)) return TOOLTIP_EDIT;
   if (BOLD_INTENT_RE.test(prompt)) return BOLD_BUTTON_EDIT;
-  return "s|<h1>Comparables</h1>|<h1>Comparables</h1><!-- updated -->|";
+  return GENERIC_EDIT;
 }
 
 /**
@@ -570,8 +579,8 @@ async function commitMockCodingChange(
       "sh",
       "-c",
       `cd "${cwd}" && sed -i '${codingEditFor(prompt)}' home-page.mjs && ` +
-        "git add home-page.mjs && " +
-        `git -c user.email=mock@local -c user.name=mock commit -q -m 'feat: apply the requested change'`,
+        "git add home-page.mjs && (git diff --cached --quiet || " +
+        `git -c user.email=mock@local -c user.name=mock commit -q -m 'feat: apply the requested change')`,
     ],
     { timeoutMs: 30_000 },
   );

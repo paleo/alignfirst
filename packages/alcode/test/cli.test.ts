@@ -101,7 +101,15 @@ describe("parseAlcodeArgs", () => {
     });
     expect(parseAlcodeArgs(["node", "alcode", "status", ".plans/1/_alcode/run.md"])).toEqual({
       kind: "status",
-      sessionFile: ".plans/1/_alcode/run.md",
+      target: { kind: "file", sessionFile: ".plans/1/_alcode/run.md" },
+    });
+    expect(parseAlcodeArgs(["node", "alcode", "status", "--ticket", "AB-1"])).toEqual({
+      kind: "status",
+      target: { kind: "ticket", ticket: "AB-1" },
+    });
+    expect(parseAlcodeArgs(["node", "alcode", "status", "--no-ticket"])).toEqual({
+      kind: "status",
+      target: { kind: "noTicket" },
     });
     expect(parseAlcodeArgs(["node", "alcode", "usage"])).toEqual({ kind: "usage" });
   });
@@ -153,8 +161,16 @@ describe("parseAlcodeArgs", () => {
   it("rejects unknown options, stray positionals, and a resume without an id", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
-    expect(() => parseAlcodeArgs(["node", "alcode", "status"])).toThrow(
-      "exactly one <session-file>",
+    const statusTargetError = "exactly one of <session-file>, --ticket <id> or --no-ticket";
+    expect(() => parseAlcodeArgs(["node", "alcode", "status"])).toThrow(statusTargetError);
+    expect(() => parseAlcodeArgs(["node", "alcode", "status", "x.md", "--ticket", "1"])).toThrow(
+      statusTargetError,
+    );
+    expect(() =>
+      parseAlcodeArgs(["node", "alcode", "status", "--ticket", "1", "--no-ticket"]),
+    ).toThrow(statusTargetError);
+    expect(() => parseAlcodeArgs(["node", "alcode", "status", "--ticket", "../other"])).toThrow(
+      "--ticket must be a single path segment",
     );
     expect(() => parse(["status", "--message", "go"])).toThrow();
     expect(() => parse(["usage", "extra"])).toThrow();
@@ -265,12 +281,16 @@ describe("status", () => {
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  function writeStatusRecord(pid: number): void {
-    writeInitialSessionFile(sessionFilePath, {
+  function writeStatusRecord(
+    pid: number,
+    path: string = sessionFilePath,
+    ticket: string | null = "1",
+  ): void {
+    writeInitialSessionFile(path, {
       status: "running",
       agent: "claude",
       protocol: "review",
-      ticket: "1",
+      ticket,
       model: null,
       sessionId: "sess-42",
       command: "alcode new --protocol review --ticket 1",
@@ -318,6 +338,55 @@ describe("status", () => {
     ).toBe(0);
     expect(stdout.text()).toContain("status: running\n");
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("running");
+  });
+
+  it("selects the newest same-stamp ticket run by numeric suffix", async () => {
+    const firstPath = join(dir, ".plans", "1", "_alcode", "20260829-115529.md");
+    const secondPath = join(dir, ".plans", "1", "_alcode", "20260829-115529-2.md");
+    writeStatusRecord(process.pid, firstPath);
+    writeStatusRecord(process.pid, secondPath);
+    const stdout = makeSink();
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", "--ticket", "1"],
+        cwd: dir,
+        env: {},
+        stdout,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toContain("sessionFile: .plans/1/_alcode/20260829-115529-2.md\n");
+  });
+
+  it("selects the newest no-ticket run", async () => {
+    const noTicketPath = join(dir, ".plans", "_alcode", "20260829-115529.md");
+    writeStatusRecord(process.pid, noTicketPath, null);
+    const stdout = makeSink();
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", "--no-ticket"],
+        cwd: dir,
+        env: {},
+        stdout,
+      }),
+    ).toBe(0);
+    expect(stdout.text()).toContain("sessionFile: .plans/_alcode/20260829-115529.md\n");
+  });
+
+  it("reports an empty scoped session directory", async () => {
+    mkdirSync(join(dir, ".plans", "1", "_alcode"), { recursive: true });
+    const stderr = makeSink();
+
+    expect(
+      await main({
+        argv: ["node", "alcode", "status", "--ticket", "1"],
+        cwd: dir,
+        env: {},
+        stderr,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toBe("Error: no session file under .plans/1/_alcode/.\n");
   });
 
   it("rejects files outside the session-record tree", async () => {

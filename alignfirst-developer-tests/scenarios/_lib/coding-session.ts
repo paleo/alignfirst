@@ -8,7 +8,7 @@ import { EXTERNAL_PROJECT_PARENT, PRIMARY_PROJECT_PARENT } from "./project-fixtu
 // and mis-catches reasoning narration ("let me launch the coding agent first…") as if it were the ack.
 // The judge reads intent. Each thread outbound is judged as it arrives (single-message rubric — the
 // framing the judge handles reliably); interleaved narration simply judges false and is skipped rather
-// than failing the run. `waitForBackgroundStartedAck` / `waitForCompletionReport` below own this.
+// than failing the run. `waitForBackgroundStartedAck` / `waitForFinalWorkflowCompletionReport` below own this.
 
 const STARTED_ACK_RUBRIC =
   "This is a single message an assistant posted in a chat thread after a user asked it to run a coding " +
@@ -21,16 +21,13 @@ const STARTED_ACK_RUBRIC =
   "first', 'OK, branch is clean'), a bare [WORKSPACE] setup banner with no launch statement, or a " +
   "claim that the work is already FINISHED.";
 
-const COMPLETION_RUBRIC =
-  "This is a single message an assistant posted in a chat thread while running a coding task. Judge " +
-  "completion of the delegated coding run. PASS if it reports that the run FINISHED and relays " +
-  "the outcome (change done, or a result summary, often with a ✅): 'c'est fait', 'the coding agent " +
-  "finished successfully', 'j'ai terminé', '✅ … terminé'. A completed coding result still passes when " +
-  "pushing, opening a PR, CI, or another downstream step awaits a decision. FAIL if implementation " +
-  "itself is awaiting a decision, or the message merely says the work is still " +
-  "starting or in progress ('je te préviens dès que c'est terminé', 'je lance le travail'), or is a " +
-  "workspace/launch announcement that carries a ✅ only for setup readiness ('Status: ready ✅ | " +
-  "Lancement…').";
+const FINAL_WORKFLOW_COMPLETION_RUBRIC =
+  "This is a single message an assistant posted in a chat thread after implementing a coding " +
+  "task whose requested scope includes tests and local verification. PASS only if it reports that " +
+  "the implementation, tests, and local verification are all complete and gives their outcome. " +
+  "The message must be the final report for the whole requested workflow. FAIL if any requested " +
+  "step is still pending, or if the assistant announces that it will now inspect logs, gather " +
+  "proof, run checks, verify the result, or return with another report.";
 
 const FINDINGS_RUBRIC =
   "This is a single message an assistant posted in a chat thread after delegating a read-only " +
@@ -67,16 +64,12 @@ export async function waitForBackgroundStartedAck(
   return collectAndJudge(ctx, opts, STARTED_ACK_RUBRIC, "background-started ack");
 }
 
-/**
- * Wait for the completion report — the agent relaying to the user, in the thread, that the delegated
- * coding run finished. Call only after the session file reached `succeeded` (the ground truth). Tolerant
- * of phrasing and language; a still-in-progress ack or a launch banner does not satisfy it (see COMPLETION_RUBRIC).
- */
-export async function waitForCompletionReport(
+/** Wait for a final report after implementation, tests, and local verification all complete. */
+export async function waitForFinalWorkflowCompletionReport(
   ctx: ScenarioContext,
   opts: JudgedReportOptions,
 ): Promise<Candidate> {
-  return collectAndJudge(ctx, opts, COMPLETION_RUBRIC, "completion report");
+  return collectAndJudge(ctx, opts, FINAL_WORKFLOW_COMPLETION_RUBRIC, "final workflow report");
 }
 
 /**

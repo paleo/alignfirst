@@ -214,6 +214,25 @@ export function listSessionRecords(cwd: string): SessionRecord[] {
   return records;
 }
 
+export function findNewestSessionFile(dir: string): string | undefined {
+  let newestName: string | undefined;
+  let newestStamp: string | undefined;
+  let newestSuffix = -1;
+  for (const entry of readEntries(dir)) {
+    if (!entry.isFile()) continue;
+    const match = /^(\d{8}-\d{6})(?:-(\d+))?\.md$/.exec(entry.name);
+    if (!match) continue;
+    const stamp = match[1];
+    const suffix = Number(match[2] ?? 0);
+    if (newestStamp !== undefined && stamp < newestStamp) continue;
+    if (stamp === newestStamp && suffix <= newestSuffix) continue;
+    newestName = entry.name;
+    newestStamp = stamp;
+    newestSuffix = suffix;
+  }
+  return newestName === undefined ? undefined : join(dir, newestName);
+}
+
 function readEntries(dir: string): Dirent[] {
   try {
     return readdirSync(dir, { withFileTypes: true });

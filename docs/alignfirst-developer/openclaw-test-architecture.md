@@ -20,7 +20,7 @@ Four generic packages drive automated regression tests against an OpenClaw works
 | `@paleo/openclaw-channel-mock-core` | Shared channel library — bus client, action handlers, plugin/setup factories, account helpers. Not consumed directly. |
 | `@paleo/openclaw-discord-mock` | Thin wrapper. Registers as channel `discord-mock`, `surface: "discord"`, `autoThread: false`. |
 | `@paleo/openclaw-slack-mock` | Thin wrapper. Registers as channel `slack-mock`, `surface: "slack"`, `autoThread: true`. |
-| `@paleo/alignfirst-developer-openclaw-plugin` | AlignFirst Developer's OpenClaw capabilities, registered as `alignfirst-developer`. Thread handoff converts confirmed native starter delivery into a durable wake for the ordinary thread session. |
+| `@paleo/alignfirst-developer-openclaw-plugin` | AlignFirst Developer's OpenClaw capabilities, registered as `alignfirst-developer`. Thread handoff converts confirmed native starter delivery into a reply run on the canonical thread session. |
 
 The two wrappers exist side-by-side in one gateway and share a single bus. The runner picks which channel(s) to drive per scenario; `accountId = channelId` keeps per-channel bus state segregated.
 
@@ -156,13 +156,36 @@ Both channels register together on every gateway boot. The runner selects which 
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. Envelope targets follow the native surface: a Discord thread is `channel:<thread-id>`, while a Slack thread is `thread:<channel-id>/<thread-ts>`. The bus generates numeric snowflake-shaped thread IDs and records each thread’s parent conversation. Transcript collection uses that ownership to include thread sessions without embedding scenario names in their IDs.
 
-The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. In a heartbeat turn, the handoff seed included, that gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The playbook keeps the thread read out of the seed turn for that reason; do not chase a mock fix.
+The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
 Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.3 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
 
 **Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
 
 Each `openclaw.plugin.json` declares a minimal `channelConfigs.<id>.schema` (`type: "object"`, `additionalProperties: true`) to silence the gateway's `channel plugin manifest declares <id> without channelConfigs metadata` warning. The static schema is intentionally permissive — the runtime plugin owns the real config schema via `buildChannelMockConfigSchema`. `label` / `selectionLabel` / `docsPath` / `blurb` still come from the runtime plugin.
+
+## What the harness cannot show
+
+Facts established on ticket 80 about the limits of the mocks and the runner. Each one produced a result that looked green or red for the wrong reason.
+
+- **Native read gates.** `providerOwnedReadGates` is honored for bundled plugins only. The mocks cannot show what native Slack or Discord return to a conversation read on a heartbeat or `agent`-method turn.
+- **Target forms only the mock accepts.** The Slack mock splits a `thread:<channel>/<ts>` target; neither the outbound target normalizer nor the native Slack plugin does. A plugin relying on that form passes the suite and fails in production. Check every target shape against the native plugin source.
+- **Slack root routing.** The Slack mock once kept an eligible root message in the channel session, while native Slack under `replyToMode: "all"` routes it straight into the thread session. Compare each routing rule with `threading.ts` before trusting a scenario.
+- **A bare `system event` is not an exec completion.** The former A29 injected a generic system event to imitate the native exec-completion notice. They take different prompt branches, and the saved transcript shows the same `[OpenClaw heartbeat poll]` marker for both. Only the real chained process exiting produces the real notice, and OpenClaw's cooldown may defer that notice beyond any test window.
+- **The scripted provider proves nothing about a model.** The deterministic plugin suite establishes delivery and persistence paths. Whether a conversation model follows the playbook is a separate question, answered only by model runs.
+- **A scenario cannot see a turn end.** The context exposes tool calls and outbounds, never a turn's final `NO_REPLY` or `HEARTBEAT_OK`. Silence is asserted through a fixed quiet window, and a turn slower than the window passes the check vacuously.
+- **No gateway restart inside a cell.** The runner recreates the stack per cell, so persistence across a restart belongs to the deterministic suite, with SIGKILL, preserved WAL/SHM files and a real process restart.
+- **No Chromium in the image.** The `browser` tool loads and fails at use time.
+- **Cost is partial.** The `openai` provider carries no pricing in `openclaw.json`, so Terra's agent cost always reads `$0`; only its judge cost is real.
+- **The 30-second mock run hides harm.** Sonnet ran ninety-six `alcode` executions in one day in the foreground with a 60-second timeout. Against a real coding agent those runs would be killed; against the mock they pass.
+
+## Harness defect or product defect
+
+A29 failed three times after fixes to two real harness races (a report wait that accepted progress, a baseline captured while a heartbeat turn was open). Only a clean 0/3 after those fixes established that the remaining failure was the product's: OpenClaw's stock heartbeat prompt. Fix the harness races first, then rerun; a product conclusion drawn while a harness race is open is worthless.
+
+Assertions that passed for the wrong reason were a recurring class: a one-shot fault consumed by whichever outbound reached the bus first, a hard-coded bus URL, a `NO_REPLY` sweep reading a single page of events, options no scenario still checked. When an assertion goes green after a change, ask what it would take to make it red.
+
+The rule for failing scenarios: never make a test pass by adding a mechanical kickoff message, suppressing a failure, removing an assertion or substituting a different session model. A mechanism failure found while working on the harness belongs to the plugin; report it rather than patching around it.
 
 ## Target normalizer + plugin-action vs send
 
@@ -181,7 +204,7 @@ Plugin actions and prepared sends route through different handlers in `message-a
 
 The AlignFirst Developer consumer sets Slack to `replyToMode: "off"`. Its parent channel session
 posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
-wakes the canonical target session; that session claims before work. Scenario assertions correlate
+dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical target session. That session claims with `{ "action": "claim" }` and reads thread history before work. Scenario assertions correlate
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
 final `NO_REPLY`.
 
@@ -190,7 +213,11 @@ local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @paleo/alignfirst-developer-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
 provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
-both surfaces, canonical continuation, duplicate starts, and abrupt pending/post-claim restarts.
+both surfaces: a static takeover with its reply in the thread, a human message delivered while the takeover
+turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
+takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery.
+
+The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 
@@ -226,7 +253,9 @@ Without `attachTo`, judges and other attachments fall back to the **current entr
 
 Authoritative types: `packages/openclaw-test/src/report.ts`.
 
-OpenClaw (2026.8+) persists each session's transcript as SQLite rows in the gateway's per-agent store (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`, table `transcript_events`, with `session_nodes` mapping `session_key` → `current_session_id`). A session key can span several `session_windows` rows — compaction, reset, or recovery mints a successor session id — so the dump unions every window of the key, keeping earlier tool calls and costs across a mid-run rollover. The runner reads transcripts, not the trajectory diagnostics: the `trajectory_runtime_events` payloads run through OpenClaw's diagnostic projection, which caps the whole payload at ~64 nodes — a `model.completed` snapshot loses every message past the first few, so tool calls from any real turn are unrecoverable there. The transcript is the full-fidelity record the gateway itself replays, appended per message — tool calls become visible as they happen, not at turn end.
+OpenClaw (2026.8+) persists each session's transcript as SQLite rows in the gateway's per-agent store (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`, table `transcript_events`, with `session_nodes` mapping `session_key` → `current_session_id`). A session key can span several `session_windows` rows — compaction, reset, or recovery mints a successor session id — so the dump unions every window of the key, keeping earlier tool calls and costs across a mid-run rollover. The runner reads transcripts, not the trajectory diagnostics: the `trajectory_runtime_events` payloads run through OpenClaw's diagnostic projection, which caps the whole payload at ~64 nodes — a `model.completed` snapshot loses every message past the first few, so tool calls from any real turn are unrecoverable there. The transcript is the conversation record the gateway itself replays, appended per message — tool calls become visible as they happen, not at turn end.
+
+Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
 
 The store lives outside the shared mounts and dies with the per-cell stack recreation, so the runner extracts a conversation's session transcripts through the exec-watcher RPC: `transcript-dump.js` (in this package's dist, mounted into the gateway) queries the store with `node:sqlite` (session keys matched on the conversation ID and its bus-owned thread IDs) and writes the result as JSON into the shared IPC volume (stdout would hit the watcher's 1 MiB cap). The runner saves the fetched transcripts as `transcripts.json` in the cell's artifact dir for post-mortems.
 
@@ -248,7 +277,8 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 
 - **`agents.entries.*.workspace`, not `workspaceDir`.** Agent entries read `workspace`.
 - **`gateway.mode: "local"` required.** Without it, startup fails with `existing config is missing gateway.mode`.
-- **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered wake report (2026.8+), and the owner route never resolves to a group. Scenarios assert wake reports in the conversation under test, which `"last"` targets.
+- **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered heartbeat report (2026.8+), and the owner route never resolves to a group. Scenarios assert heartbeat reports in the conversation under test, which `"last"` targets.
+- **`agents.defaults.heartbeat.prompt` is unset.** Generic heartbeats use OpenClaw's stock prompt. Native exec completions use a separate runtime prompt. A generic injected `system event` is therefore unsuitable evidence for exec-completion behavior.
 
 ## Scenario loading
 

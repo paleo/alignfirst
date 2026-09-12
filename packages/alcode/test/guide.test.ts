@@ -13,10 +13,20 @@ describe("renderGuide", () => {
 
   it("renders the OpenClaw variant with its run and wake instructions", () => {
     const guide = renderGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS);
+    const openclawInstructions = guide.slice(0, guide.indexOf("## CLI reference"));
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
-    expect(guide).toContain("`background: true` and `timeoutSeconds: 0`");
-    expect(guide).toContain("plain heartbeat poll");
-    expect(guide).toContain("`~` is not expanded there");
+    expect(openclawInstructions).toContain("`background: true` and `timeoutSeconds: 0`");
+    expect(openclawInstructions).toContain("openclaw system event");
+    expect(openclawInstructions).toContain("--mode now");
+    expect(openclawInstructions).toContain("--session-key <KEY>");
+    expect(openclawInstructions).toContain("alcode status --ticket <id>");
+    expect(openclawInstructions).toContain("`~` is not expanded there");
+    expect(openclawInstructions).not.toContain("openclaw agent");
+    expect(openclawInstructions).not.toContain("--timeout 0");
+    expect(openclawInstructions).not.toContain("thread-handoff wake");
+    expect(openclawInstructions).not.toContain("--meta");
+    expect(openclawInstructions).not.toContain("thread-reply");
+    expect(openclawInstructions).not.toContain("process log");
   });
 
   it("shares the introduction and the CLI reference across variants", () => {
@@ -24,7 +34,7 @@ describe("renderGuide", () => {
       const guide = renderGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("## CLI reference");
-      expect(guide).toContain("alcode status <session-file>");
+      expect(guide).toContain("alcode status (<session-file> | --ticket <id> | --no-ticket)");
       expect(guide).toContain("alcode usage");
       expect(guide).toContain("alignfirst");
       expect(guide).not.toContain("reserve-side-ticket");
@@ -38,7 +48,7 @@ describe("renderGuide", () => {
   it("requires stale-run reconciliation before completion reporting", () => {
     for (const variant of ["generic", "openclaw"] as const) {
       const guide = renderGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
-      expect(guide).toContain("Run `alcode status <session-file>`");
+      expect(guide).toContain("`alcode status` checks that a `running` process");
     }
   });
 

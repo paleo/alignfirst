@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { waitForCodingSessionSucceeded } from "./_lib/coding-session.ts";
-import { assertBranchForTicket, seedBranch, waitForAnyWorktreeDir } from "./_lib/fixture-state.ts";
+import { assertBranch, seedWorktree } from "./_lib/fixture-state.ts";
 import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import {
   expectCodingDelegation,
@@ -12,7 +12,7 @@ import { setupGhMock, type GhCall } from "./_lib/mock-gh.ts";
 import { waitForReport } from "./_lib/outbound.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
-import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
+import { assertWorktreePaths, bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PULL_REQUEST_URL = "https://github.com/acme/nimbus/pull/42";
 const TICKET_ID = "ABC-0230";
@@ -27,7 +27,7 @@ const REVIEW_RESULT =
 
 export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  await seedBranch(ctx, NIMBUS_PROJECT_PATH, TICKET_ID, "review-export");
+  const worktreeDir = await seedWorktree(ctx, NIMBUS_PROJECT_PATH, TICKET_ID, "review-export");
   const codingAgent = setupCodingAgentMock(ctx, {
     streamDelayMs: 12_000,
     onPrompt: async (_scenario, cwd, prompt) => {
@@ -64,10 +64,7 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
   await waitForProjectListing(ctx, "channel session lists the projects");
 
   const goAheadCursor = starter.nextCursor;
-  const { dir: worktreeDir } = await waitForAnyWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, {
-    timeoutMs: 180_000,
-  });
-  assertBranchForTicket(worktreeDir, TICKET_ID);
+  assertBranch(worktreeDir, SOURCE_BRANCH);
 
   const reviewCall = await expectCodingDelegation(ctx, codingAgent, {
     ticketId: TICKET_ID,
@@ -108,6 +105,8 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
     label: "pull-request-review-outcome",
   });
 
+  assertWorktreePaths(ctx, [worktreeDir]);
+  assertBranch(worktreeDir, SOURCE_BRANCH);
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
 }

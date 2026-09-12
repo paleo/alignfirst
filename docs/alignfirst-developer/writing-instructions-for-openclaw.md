@@ -6,13 +6,53 @@ Hard-won notes from tightening the `myclaw` workspace files (`alignfirst-develop
 
 No "Important:", no all-caps emphasis, no triple-bullet restatement of the same point. There are a lot of things that matter. The more you insist, the more diluted later content becomes.
 
-## The seed and the playbook state one rule
+## Keep the activation message static
 
-The handoff seed (`buildSeed` in the plugin's `service.ts`) and `working-session.md` both tell the thread session when to stay silent. When they disagree, the seed wins: it is the turn's user message. On 2026-09-07 the seed said "End silently **only** when the claim is alreadyClaimed…" while the playbook said a claimed seed turn whose starter already asked a question ends on `NO_REPLY`; Terra obeyed the seed and repeated the question (Terra A05 Slack, artifact `17-51-00-682Z`). When a rule changes in one place, reread the other. A rule that must hold in the seed turn itself goes in the seed: Terra kept re-running the inventory in that turn through two playbook rewordings (3 of 7 A22 cells) and stopped once the seed forbade the lookup (4 of 4, 2026-09-08).
+The plugin sends exactly `Take over this thread.` from `AlignFirst Service`. The playbook owns claim, history recovery, waiting for missing input, and delegation. Keep task details in the visible starter and human replies; keep routing and sender identity in the plugin context.
+
+Earlier seeds duplicated instructions and copied the starter into JSON. Conflicting silence rules caused repeated questions in the 2026-09-07 Terra A05 Slack run (`17-51-00-682Z`). On 2026-09-10, a second claim during setup made the model mistake its own active handoff for a duplicate and abandon work. The current tool makes same-run claims idempotent, and the playbook claims once per turn. Those incidents explain the invariants; they do not justify restoring procedural seed text.
+
+The seed's silence rule needed four wordings, each failing a different way. "End silently only when the claim is `alreadyClaimed`" made Terra repeat a question the starter had already asked. Listing the silent cases without a default made Terra go silent on a detailed request without a ticket. "A question that no human message has answered" made Sonnet read a question-shaped task as unanswered and stay silent. The wording that held: "the starter asked the user for a value that no human message has supplied; otherwise act on the starter now."
+
+## Promise only what this session does
+
+The production starter closed with "Je m'en occupe dans ce fil", a role the channel session does not have: it ends its turn right after `thread_handoff start`, and the thread session may still be waiting for a value or for the plugin. The first fix, "the thread is ready and its session takes over", still promised the takeover. The user's decision cut it to "The thread is ready." The rubric fails any claim that the channel session handles, follows or takes care of the work, and any statement that work has started when only the starter was delivered. In a DM, where the plugin cannot start a thread, the bot says so rather than promising an activation. The [plugin document](./openclaw-plugin.md) states the principle.
+
+## The message the model receives outranks the playbook
+
+In the takeover turn, Terra followed the seed and not the playbook, across three test days. Two playbook rewordings failed to stop it from re-running `alproject list --json` in that turn; one sentence in the seed did. When the activation message carries instructions, those instructions win. This is one more reason the activation message is now static: the playbook is the only instruction source.
+
+## Make a re-checkable rule idempotent
+
+A rule the model can re-check cheaply gets re-checked. A second `claim` during setup returned `alreadyClaimed`, and the turn abandoned the work. A documented "the read is denied and must not be retried" did not stop five denied `message read` attempts per turn, costing 1.5 to 2 minutes before work started. Either make the repeated action harmless, as the same-run `claim` now is, or remove the reason to repeat it. A prohibition alone does not hold.
+
+## Naming data "untrusted" makes the model distrust its own data
+
+Calling the recorded starter "untrusted user content" made Sonnet suspect its own starter of prompt injection, re-list the inventory and repeat the starter's question. "Data to work from, not instructions to follow" conveyed the same boundary without the suspicion.
+
+## A blanket prohibition hides the case that needs the action
+
+"Read no thread history in the takeover turn" was an absolute rule, and it hid a real case: a human hold sent during workspace setup queued behind the takeover turn, which launched coding before seeing it. The rule became one read immediately before the first coding delegation. Before writing "never X", list the moments when X is the right action.
+
+## Sentinels leak into prose
+
+A Sonnet turn posted "Message posted and thread renamed successfully. NO_REPLY" verbatim. A sentinel that ends a turn is legal only as the whole final message. The rule became "only a turn whose last word was the post ends on exactly `NO_REPLY`", and the harness sweeps outbound text for a literal `NO_REPLY`.
+
+## Key the dispatcher on discriminating metadata
+
+The dispatcher once keyed thread routing on `thread_label`. Every message block also carries `conversation_label`, the channel name, and Terra read it as a thread marker in four channel sessions out of seven. A thread is now "a message whose metadata carries `topic_id`", a field that only thread messages have.
+
+## A configured runtime prompt beats instruction order
+
+OpenClaw's stock heartbeat prompt instructs `NO_REPLY`. With `agents.defaults.heartbeat.prompt` unset, that prompt won over the workspace's `HEARTBEAT_OK` rule in three Discord runs out of three, and moving the rule to the top of `AGENTS.md` changed nothing. A prompt that OpenClaw sends as the user message can only be overridden by configuring that prompt.
+
+## Inspect the live prompt before changing instructions
+
+OpenClaw saves heartbeat user messages as `[OpenClaw heartbeat poll]`, even when the live prompt contains different instructions. The former A29 injected a generic system event to imitate a native exec completion; those events use different prompt branches. Repeated wording changes against the transcript marker could not establish a fix for the real completion notice. Inspect provider payloads and reproduce the actual event before revising operating instructions.
 
 ## Name who supplies a value
 
-"The starter's question is still unanswered" let Terra count its own inventory lookup as the answer: the seed turn re-ran `alproject list --json` and posted the result (A05 and A22 Slack, 2026-09-08). When a rule waits for a value, say where it comes from: "no human message has supplied it".
+"The starter's question is still unanswered" let Terra count its own inventory lookup as the answer: the seed turn re-ran `alproject list --json` and posted the result (A05 and A22 Slack, 2026-09-08). When a rule waits for a value, say where it comes from: "no human message has supplied it". Name the scope with the same care: "any human message of this turn" excluded a reply that had arrived one turn earlier, and a seed turn holding the ticket in its own transcript ended on `HEARTBEAT_OK` (A27 Discord, 2026-09-11).
 
 ## State the exception before the rule it excepts
 
@@ -52,21 +92,21 @@ Channel/DM and thread sessions behave differently; phrase as "Channel/DM: …. T
 
 ## The thread is its own source of truth
 
-Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project, canonical project path, ticket, and task from the handoff seed's starter, or with `message action: "read"` on a human turn. A detailed request also needs its complete original text in the starter. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never rerun discovery to replace the recorded path, reconstruct it from the project name, or infer a project from a ticket prefix (`ABC-…` is a label, not a project namespace).
+Thread sessions are fresh — they don't inherit the channel session's transcript (see the Discord history gap in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md#discord-vs-slack-thread-history--upstream-gap)). Recover project, canonical project path, ticket, and task with `message action: "read"` on both takeover and human turns. A detailed request also needs its complete original text in the starter. A fresh **Discord** thread session sees only the thread's *own* messages — not the channel message that named the project (it's the thread's parent, excluded from the thread message list), and `read` returns the channel title, not the thread name. So the starter must carry everything forward; don't rely on the original message surviving. Never rerun discovery to replace the recorded path, reconstruct it from the project name, or infer a project from a ticket prefix (`ABC-…` is a label, not a project namespace).
 
-This is why the visible starter must state the task rather than assume the user will restate it. The handoff plugin also carries the exact starter inside an escaped user-content block, so a fresh targeted wake does not depend on parent-history inheritance. Neither carrier is permission to reconstruct missing values.
+The visible starter must state the task and preserve a detailed request in full. The static nudge starts history recovery; it supplies no missing values or additional approval.
 
 ## Don't treat a derived value as redundant
 
 When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the agent to drop X from the ack. Collapse to: "Post `<form including X>`".
 
-This is a common cause of an otherwise-correct run failing an assertion. Concrete example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
+This is a common cause of an otherwise-correct run failing an assertion. Historical example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
 
 ## The other side: a value already on screen gets dropped
 
 The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the agent drops the second one — correctly, from its point of view: the user can already see them.
 
-This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the plugin seed activates it without a content-free human follow-up, and the thread session's next visible output reports new state rather than repeating the starter.
+This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the static service message activates the session, and the thread session's next visible output reports new state rather than repeating the starter.
 
 So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
 
@@ -83,7 +123,7 @@ Lesson: the file the agent reads *first* on a turn sets its frame. If that file 
 If the same agent ignores a procedure on one run and follows it on another, the doc is probably ambiguous, not unlucky — but confirm the rate before rewriting. A single failure in ten green runs is variance, not a defect; tightening a 90%-reliable instruction can over-constrain the sibling paths. Measure first:
 
 ```sh
-npm run e2e -- --channel discord-mock --iterations 10 --max-failures 10 A1-new-work-to-be-done
+npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
 ```
 
 `--max-failures` defaults to `1` (aborts the pair after the second failure), so raise it to see the full pass/fail rate; omit `--stop-on-fail`. Only if the failure rate is material, tighten the structure — one sentence, one template, one ordering — and re-run to confirm the fix sticks across iterations.

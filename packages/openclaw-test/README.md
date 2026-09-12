@@ -40,15 +40,14 @@ Edit `openclaw.json`:
 ## Env vars (`.env.local`)
 
 ```sh
-ANTHROPIC_API_KEY=sk-ant-…
+ANTHROPIC_API_KEY=sk-ant-… # Required for an Anthropic agent or judge.
+OPENROUTER_API_KEY=sk-or-… # Required for an OpenRouter agent or judge.
 OPENCLAW_WORKSPACE_DIR=/path/to/your/openclaw-workspace
 
 # Model catalog: full LiteLLM refs. `run --model` picks by bare id (suffix after the last "/").
 OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-4-6,custom-openrouter/qwen/qwen3.6-plus
 OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-4-6
 
-# Required only when running an OpenRouter model.
-OPENROUTER_API_KEY=
 ```
 
 See `.env.local.example` for the optional overrides (paths, raw stream log).
@@ -121,7 +120,11 @@ Assert on `conversation.id` / `threadId`, not envelope formatting.
 
 ## Judge model
 
-Defaults to `anthropic/claude-haiku-4-5`. Override via `OPENCLAW_TEST_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). The judge is **not** an OpenClaw agent — don't configure it in `openclaw.json`.
+Defaults to `anthropic/claude-haiku-4-5`. Override it via `OPENCLAW_TEST_JUDGE_MODEL` on
+the `runner` service (set in your consumer overlay). Direct Anthropic refs use
+`anthropic/<model>`; OpenRouter refs use `openrouter/<model>`, for example
+`openrouter/anthropic/claude-haiku-4.5`. The judge is **not** an OpenClaw agent — don't
+configure it in `openclaw.json`.
 
 ## Attribution
 

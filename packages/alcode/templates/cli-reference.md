@@ -5,7 +5,7 @@ alcode new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
 alcode new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
 alcode new --message "..."
 alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
-alcode status <session-file>
+alcode status (<session-file> | --ticket <id> | --no-ticket)
 alcode usage
 ```
 
@@ -13,23 +13,23 @@ alcode usage
 |---------|-------------|
 | `new` | Start a new session. |
 | `resume <sessionId>` | Continue an existing session. |
-| `status <session-file>` | Reconcile and show one run's durable status. The path must be under `.plans/**/_alcode/`. Does not start a coding agent. |
+| `status` | Reconcile and show one run's durable status. Give the session file, or `--ticket <id>` / `--no-ticket` to select the newest run of that scope. Does not start a coding agent. |
 | `usage` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
 
 | Option | Description |
 |--------|-------------|
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `review`, `merge`. Optional. |
-| `--ticket <id>` | Ticket ID. `new --protocol` requires it, or `--no-ticket`. |
-| `--no-ticket` | Work without a ticket: `alcode` reserves the next side ticket through `alignfirst ticket --side` and passes it to the agent. `new` only, with a protocol. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
+| `--ticket <id>` | Ticket ID. With `status`, selects that ticket's newest run. `new --protocol` requires it, or `--no-ticket`. |
+| `--no-ticket` | With `status`, selects the newest run outside a ticket. With `new --protocol`, `alcode` reserves the next side ticket through `alignfirst ticket --side` and passes it to the agent. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
 | `--message "..."` | Message to send, written in English. `-m` is the short form. Required for `spec`, `aad`, and when neither `--protocol` nor `--catchup` is given. A message file also satisfies this requirement. |
 | `--message-file <path>` | Read a UTF-8 message file; `-` reads stdin. Mutually exclusive with `--message`. |
 | `--catchup` | Load the ticket history before the protocol and message. `new` only, requires a ticket. Alone, it returns a short synthesis. |
 | `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `alcode` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
-The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`alcode status <session-file>` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+`alcode status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
 
 `alcode` requires the `alignfirst` CLI on `PATH`. The delegated agent runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.
 

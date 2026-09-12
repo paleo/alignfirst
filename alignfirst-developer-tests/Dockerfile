@@ -31,8 +31,8 @@ RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alcode/bin/alcode.mjs 
 
 # PATH wrapper for the `openclaw` CLI. OpenClaw is only a local npm dependency
 # of /opt/openclaw-test/src (nothing puts its node_modules/.bin on the exec
-# PATHs), yet the alcode guide chains `openclaw system event …` onto every
-# delegated run for the completion wake. The server's `--auth none` flag does
+# PATHs), yet the alcode guide chains `openclaw system event …` onto every delegated
+# run for the completion wake. The server's `--auth none` flag does
 # not exempt the CLI: it checks credentials client-side from the config, so
 # openclaw.json also declares `gateway.auth.mode: "none"`.
 RUN printf '#!/bin/sh\nexec /opt/openclaw-test/src/node_modules/.bin/openclaw "$@"\n' > /usr/local/bin/openclaw && \

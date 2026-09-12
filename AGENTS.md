@@ -1,8 +1,8 @@
 # Repository Guidelines
 
-## AlignFirst
+## Project conventions and documentation
 
-Before inspecting or changing this repository, run `npx alignfirst context` once from the repository root and follow its output.
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
 
 ## Tooling
 
@@ -15,6 +15,10 @@ Before inspecting or changing this repository, run `npx alignfirst context` once
 **Linter / formatter**: Biome (`biome.json` at root). `npm run lint` / `npm run lint:fix`.
 
 **Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`.
+
+**Model-test policy**: Run model-driven matrices with Terra first. Once green, run the smallest
+representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a
+Sonnet-specific failure.
 
 **Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Publishing runs from CI through npm trusted publishing — see `docs/releasing.md`.
 

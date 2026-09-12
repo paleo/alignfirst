@@ -1,6 +1,8 @@
 # Channel handling
 
-You're running in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+If conversation metadata contains `topic_id`, you are already in a thread. Read [`working-session.md`](working-session.md) and continue there before any lookup or thread creation.
+
+Otherwise, you are in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
 
 ## Project lookup
 
@@ -67,7 +69,7 @@ The tool returns the thread's `chat_id` — that is the THREAD_ID.
 
 ### Step 3 — The starter message, then end the turn
 
-A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter stays the visible record; the plugin seed carries the same exact user context into the fresh session.
+A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter is the visible record the thread session reads after the service activates it.
 
 Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Add the request block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
 
@@ -96,11 +98,13 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
-- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the working session will route the work.
-- Nothing else needs an answer → state the intended continuation in this thread. Do not claim that project work has already begun.
+- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the thread is ready.
+- Nothing else needs an answer → state that the thread is ready, in the user's language (for example, "The thread is ready.").
+
+Whichever case applies, the `{ask}` never says that this channel session handles the work, and never says that work has begun.
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 
-After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. On `queued` or `alreadyStarted`, end with exactly `NO_REPLY`; do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
+After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end with exactly `NO_REPLY`; do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
 
 In a DM or group DM, `start` is unsupported. Explain that project work must be requested from a supported channel; do not promise automatic thread activation there.

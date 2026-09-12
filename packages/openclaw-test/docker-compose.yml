@@ -72,6 +72,7 @@ services:
       OPENCLAW_TEST_BUS_URL: http://bus:43123
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     entrypoint: ["node", "/opt/openclaw-test/src/dist/runner.js"]
     volumes: *common-volumes
     depends_on:

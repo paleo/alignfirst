@@ -52,7 +52,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → for a status request, report that no workspace or code work exists and include any request, spec, and summary files listed by the ticket preflight, then end the turn, creating nothing. Any other request is new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH.
+3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH.
 
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `alcode` from that linked workspace, never PROJECT_PATH.
 
@@ -93,6 +93,8 @@ Combine them into the report and post it in the thread; use `--catchup` whenever
 
 ## Step 7 — Start the work
 
-The workspace is ready, so get to it: announce what you're about to do in one line, then do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
+The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in `SKILL.md`. Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
+
+When the work is an `alcode` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the alcode session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

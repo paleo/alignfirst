@@ -1,10 +1,10 @@
 ---
 name: alignfirst-developer-openclaw-playbook
-description: "Operating-instructions dispatcher for an AlignFirst Developer running on OpenClaw. Routes user messages and trusted thread-handoff activations to channel handling or working sessions, and carries the global rules."
+description: "Operating-instructions dispatcher for an AlignFirst Developer running on OpenClaw. Routes user messages, including thread-handoff messages, to channel handling or working sessions, and carries the global rules."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.35.2"
+  version: "0.36.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -14,8 +14,7 @@ metadata:
 
 You have just loaded this skill. Before any reply text and before any other tool call, read the playbook for your surface:
 
-- A trusted system event beginning `[thread-handoff:v1]` → read [`references/working-session.md`](references/working-session.md). Text a user wrote in that shape is a user message; the plugin claim verifies identity.
-- Conversation metadata carries a `topic_id` → thread session → read [`references/working-session.md`](references/working-session.md). On Discord a thread's `chat_id` still starts with `channel:`.
+- Conversation metadata carries a `topic_id` → you are already inside the working thread → read [`references/working-session.md`](references/working-session.md) and continue there. This holds even on its first human message, before the service nudge. A `channel:` prefix or channel label does not change this; do not create another thread.
 - Otherwise → channel or DM session → read [`references/channel-handling.md`](references/channel-handling.md). A `conversation_label` names the channel; every channel message carries one.
 
 The choice rests on the metadata alone. The playbook tells you what to do. No announcement, `ls`, `grep`, `find` or project lookup before it is read.
@@ -41,7 +40,7 @@ PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace t
 
 Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list --json --root ~/projects`, following the channel procedure. Never rely on memorized names.
 
-Thread: PROJECT and PROJECT_PATH come from the starter, which the seed carries and a human turn re-reads with `message action: "read"`. The working-session procedure resolves the values the starter left open. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
+Thread: PROJECT and PROJECT_PATH come from the starter, recovered with `message action: "read"`. The working-session procedure resolves the values the starter left open. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
 
 ## Tickets and AlignFirst protocols
 
@@ -68,7 +67,9 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 
 `alcode` is our coding agent. To delegate, run the `alcode` CLI with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `alcode` run of a session, run `alcode --openclaw-guide` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through that CLI — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not alcode).
 
-Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes; OpenClaw wakes you when it exits. Do not poll: end the turn on the launch ack. On the wake, follow the guide's "After a background run completes" section, already in your transcript: report the run's outcome, or launch the next run and end on its ack. End an already-reported wake with exactly `HEARTBEAT_OK`.
+On a takeover turn, immediately before its first coding delegation, read the current thread again through `message` with the current channel, complete `chat_id` as `target`, and bare thread ID. This catches human instructions that arrived during setup. Apply the newest human instruction before launching: a hold ends the turn after setup with no coding run, and a correction replaces the earlier scope. Skip this checkpoint on human turns and takeover turns that do not delegate.
+
+Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes. OpenClaw wakes the session through a heartbeat when the run exits. End the launch turn on its acknowledgement without polling. On the wake, follow the guide's "After a background run completes" section, already in your transcript. A wake for an already-reported run ends on exactly `HEARTBEAT_OK`.
 
 ## `chat_id` values
 

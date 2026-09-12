@@ -5,6 +5,17 @@ export interface DeliveryRoute {
   threadId?: string;
 }
 
+export interface TurnRequest {
+  sessionKey: string;
+  agentId: string;
+  channelId: string;
+  surface: "slack" | "discord";
+  route: DeliveryRoute;
+  parentConversationId: string;
+  message: string;
+  messageId: string;
+}
+
 export interface SourceContext {
   agentId: string;
   sessionKey: string;
@@ -27,7 +38,7 @@ export interface DeliveryReceipt extends SourceContext {
 }
 
 export interface HandoffRecord extends SourceContext {
-  schemaVersion: 1;
+  schemaVersion: 2;
   routeKey: string;
   handoffId: string;
   targetSessionKey: string;
@@ -36,10 +47,11 @@ export interface HandoffRecord extends SourceContext {
   starterText: string;
   deliveryContext: DeliveryRoute;
   createdAt: number;
-  enqueueCount: number;
-  lastEnqueuedAt?: number;
+  attemptCount: number;
+  lastAttemptedAt?: number;
   state: "pending" | "claimed";
   claimedAt?: number;
+  claimedBy?: { sessionId: string; runId?: string };
 }
 
 export interface ReceiptIdentity {
@@ -56,6 +68,7 @@ export interface ToolSuccess {
   status: "queued" | "alreadyStarted" | "claimed" | "alreadyClaimed" | "none";
   handoffId?: string;
   sessionKey?: string;
+  claimedAt?: number;
 }
 
 export type HandoffErrorCode =

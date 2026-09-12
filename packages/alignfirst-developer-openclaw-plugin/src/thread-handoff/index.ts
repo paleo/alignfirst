@@ -1,6 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { registerThreadHandoffCli } from "./cli.js";
 import { createReceiptCoordinator } from "./receipts.js";
+import { createRunIdCache } from "./run-ids.js";
 import { createHandoffService } from "./service.js";
 import { createHandoffStore, type HandoffStore, resolveDatabasePath } from "./state.js";
 import { createThreadHandoffTool } from "./tool.js";
@@ -20,10 +21,17 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
     return store;
   };
   const receipts = createReceiptCoordinator({ configuration, getStore, logger: api.logger });
-  const service = createHandoffService({ runtime: api.runtime, getStore, logger: api.logger });
+  const runIds = createRunIdCache();
+  const service = createHandoffService({
+    runtime: api.runtime,
+    configuration,
+    getStore,
+    logger: api.logger,
+  });
 
   api.registerTool(
-    (context) => createThreadHandoffTool({ context, configuration, receipts, getStore, service }),
+    (context) =>
+      createThreadHandoffTool({ context, configuration, receipts, runIds, getStore, service }),
     { name: "thread_handoff", optional: true },
   );
   api.on("after_tool_call", (event, context) => {
@@ -37,6 +45,9 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
       },
       context,
     );
+  });
+  api.on("before_tool_call", (event, context) => {
+    if (event.toolName === "thread_handoff") runIds.remember(context);
   });
   registerThreadHandoffCli(api);
   if (api.registrationMode !== "full") return;

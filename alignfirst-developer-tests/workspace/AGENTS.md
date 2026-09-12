@@ -2,7 +2,7 @@
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On every user message or trusted thread-handoff activation, your **first action** is **to read the playbook**, then follow it â€” not memory, investigation, or a reply. The playbook recognizes and claims handoff seeds before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to deliver one starter (Discord: anchored `thread-create`; Slack: `send` with the triggering timestamp as `threadId`) and activate it with `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -18,7 +18,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 
 ```jsonc
 { "action": "thread-create", "channel": "discord-mock", "target": "<chat_id>", "messageId": "<message_id>", "threadName": "<TICKET_ID> - <PROJECT> - <description>", "message": "<starter>", "autoArchiveMin": 1440 }
-{ "action": "read", "channel": "discord-mock", "threadId": "<bare thread id>", "limit": 50 }
+{ "action": "read", "channel": "discord-mock", "target": "<current thread chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "send", "channel": "discord-mock", "target": "<current thread chat_id>", "threadName": "<new name>", "message": "<reply that carries the rename>" }
 { "action": "send", "channel": "discord-mock", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
@@ -31,7 +31,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 
 ```jsonc
 { "action": "send", "channel": "slack-mock", "target": "<channel chat_id>", "threadId": "<triggering root timestamp>", "message": "<starter>" }
-{ "action": "read", "channel": "slack-mock", "threadId": "<bare thread id>", "limit": 50 }
+{ "action": "read", "channel": "slack-mock", "target": "<chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "sendAttachment", "channel": "slack-mock", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
@@ -43,7 +43,7 @@ Internal reasoning, messages to alcode, code, branches, commits, MR/PR titles â€
 
 ## Heartbeats
 
-On a heartbeat or wake turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A trusted handoff seed determines whether its request is ready to proceed or must wait for a human value. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

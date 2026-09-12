@@ -39,18 +39,19 @@ user message
   → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --openclaw-guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion wake arrives — the guide's own chained `openclaw system event` command, not OpenClaw's native exec-exit notify, which the heartbeat cooldown gates (see `.plans/32/B1-upstream-issue.md`).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --openclaw-guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
 
 ## The channel session only bootstraps a thread
 
-A channel session answers ordinary conversation at the root. For project work, it runs `alproject list --json --root ~/projects`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably queues a targeted system wake and the channel turn ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
+A channel session answers ordinary conversation at the root. For project work, it runs `alproject list --json --root ~/projects`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably records the handoff and dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical thread session, with core delivering into the thread. The channel turn then ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
 
-The fresh regular thread session recognizes the plugin seed, claims its opaque handoff before task effects, combines the seed's exact starter context with thread history, and proceeds without a mechanical user nudge. It waits silently only for genuinely missing input or an explicit hold. Completion and later user turns stay on the same canonical thread session. Project creation and repository onboarding remain exceptions to the initial path requirement. The older manual-follow-up contract and, before it, channel-owned setup both produced avoidable routing failures; the historical artifact at `alignfirst-developer-tests/artifacts/2026-07-15T10-31-39-655Z/` documents the latter.
+The fresh thread session routes by `topic_id`, calls `thread_handoff` with `{ "action": "claim" }`, and reads its own history before acting. The visible starter carries the request; the static service message only starts the turn. When the starter already asks for missing input, the takeover waits quietly until a human supplies it. An explicit hold remains in force. A final history read before coding catches human instructions that arrived during setup. Completion and later user turns stay on the same canonical thread session. Project creation and repository onboarding remain exceptions to the initial path requirement. The older manual-follow-up contract and, before it, channel-owned setup both produced avoidable routing failures; the historical artifact at `alignfirst-developer-tests/artifacts/2026-07-15T10-31-39-655Z/` documents the latter.
 
-A regular agent turn could alternatively start the thread session through the gateway `agent` RPC behind `openclaw agent --session-key`, or through in-process `runtime.agent.runEmbeddedAgent` if external plugins can access it. That availability is unverified; the seed would arrive as a user message, and delivery routing to a Slack thread target remains untested. The current wake path stays `enqueueSystemEvent` plus `requestHeartbeat` with `source: "notifications-event"`, `intent: "immediate"`, and `reason: "wake"`: the production failure occurred before any wake. Revisit the alternative only after reproducing a wake failure.
+The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate serialized every wake behind the agent's running turns and capped each turn at 600 seconds. The plugin's principles and the approaches tried before are in [`openclaw-plugin.md`](./openclaw-plugin.md). `HEARTBEAT_OK` remains the silence token for plugin reply runs as well as native heartbeat turns; it does not select their dispatch mechanism.
 
 ## Reading order for maintainers
 
+- [`openclaw-plugin.md`](./openclaw-plugin.md) — what the plugin is for, the principles that bound it, and what was tried and dropped. Read this before changing how a thread starts.
 - [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) — what OpenClaw auto-loads, the surface/session/subagent model, Discord thread routing, debug env vars. Read this first before touching layer 1 or 2.
 - [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics for authoring layer 1 / layer 2 files so they survive a hot model and the test suite.
 - [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) — the harness internals (topology, Dockerfiles, mocked CLIs, scenarios, artifacts, judge).
@@ -66,13 +67,15 @@ npm install
 mkdir -p artifacts .gateway-logs   # create as your user so Docker doesn't make them root-owned
 npm run env:build                  # only after image-affecting changes
 npm run env:up
-npm run e2e -- --channel discord-mock A1-new-work-to-be-done
+npm run e2e -- --model gpt-5.6-terra --channel discord-mock A01-new-work-to-be-done
 npm run env:down
 ```
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Runs are written to **timestamped** subdirs, so they accumulate without colliding — wiping the directory destroys prior runs for no reason. `mkdir -p` is enough to avoid root-owned dirs.
 
-Scenario ids are the full filename stem (`A1-new-work-to-be-done`, not `A1`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md#doc-obedience-is-per-iteration).
+Run model matrices with Terra first. After they pass, use A11 on Slack for the smallest Sonnet compatibility check.
+
+Scenario ids are the full filename stem (`A01-new-work-to-be-done`, not `A01`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md#doc-obedience-is-per-iteration).
 
 ## Deployment
 

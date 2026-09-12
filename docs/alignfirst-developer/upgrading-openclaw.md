@@ -33,8 +33,9 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files. Doctor does not flag silent behavior shifts (the 2026.8 subagent bootstrap narrowing, for example) — only this re-reading catches them.
 - Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/alignfirst-developer-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace.ts`. A file the runtime stopped reading must leave the template and its `chattr` lists; 2026.8.1 retired `HEARTBEAT.md` this way and the check above did not catch it.
 - Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. A default that turns on a background behavior (a scheduled model run, a memory feature, a telemetry ping) appears there and nowhere doctor looks; see [Propagate](#propagate-to-the-deployment-template).
-- Recheck the public plugin tool/hook context, routing helpers, state-root resolver, system-event and heartbeat APIs required by `@paleo/alignfirst-developer-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
-- Recheck silent post-tool heartbeat and event wakes on both surfaces. OpenClaw 2026.9.3 requires the `HEARTBEAT_OK` workaround documented in [context engineering](openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply). Retire it only after deterministic gateway tests show that `NO_REPLY` suppresses delivery without invoking isolated finalization. Until then, keep acknowledgements token-only and verify their suppression after each upgrade.
+- Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@paleo/alignfirst-developer-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
+- Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, the core gateway `wake` method used by `openclaw system event`, and the heartbeat exec-completion prompt.
+- Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs. Use the deterministic gateway suite as the judge.
 
 ## Bump the pins
 
@@ -45,8 +46,8 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 Then rebuild the harness image: `npm run env:build` in `alignfirst-developer-tests/`.
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
-confirmed native receipt, trusted tool context, exact canonical thread delivery, targeted fresh-session
-wake, pending restart recovery, and the user-message-before-seed race. A successful plugin import alone
+confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
+start, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
 does not establish these combined contracts.
 
 ## Run doctor in a throwaway container

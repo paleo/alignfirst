@@ -11,6 +11,7 @@ import { buildAgentEnv, runAgent, type RunConfig, type RunOutput } from "./run-a
 import {
   applyCompletion,
   assertPlansGate,
+  findNewestSessionFile,
   listSessionRecords,
   readPidStartTime,
   reconcileSessionFile,
@@ -36,6 +37,10 @@ const SESSION_OPTIONS = {
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
+const TICKET_PATH_ERROR =
+  "Error: --ticket must be a single path segment " +
+  "(letters, digits, '.', '-', '_'); no path separators or '..'.";
+
 export interface MainOptions {
   argv?: string[];
   stdout?: RunOutput;
@@ -51,9 +56,14 @@ export type AlcodeCommand =
   | { kind: "version" }
   | { kind: "help" }
   | { kind: "guide"; variant: GuideVariant }
-  | { kind: "status"; sessionFile: string }
+  | { kind: "status"; target: StatusTarget }
   | { kind: "usage" }
   | { kind: "session"; args: SessionArgs };
+
+export type StatusTarget =
+  | { kind: "file"; sessionFile: string }
+  | { kind: "ticket"; ticket: string }
+  | { kind: "noTicket" };
 
 // `resume` undefined means a new session.
 export interface SessionArgs {
@@ -90,7 +100,7 @@ export async function main(options?: MainOptions): Promise<number> {
   }
   if (command.kind === "status") {
     try {
-      const sessionFilePath = resolveStatusSessionFile(cwd, command.sessionFile);
+      const sessionFilePath = resolveStatusTargetSessionFile(cwd, command.target);
       const completion = reconcileSessionFile(sessionFilePath);
       stdout.write(renderSessionStatus(cwd, sessionFilePath, completion.frontmatter));
       return 0;
@@ -149,6 +159,17 @@ export async function main(options?: MainOptions): Promise<number> {
     alignfirstCommand,
     modelResolver: options?.modelResolver ?? resolveExecutableModel,
   });
+}
+
+function resolveStatusTargetSessionFile(cwd: string, target: StatusTarget): string {
+  if (target.kind === "file") return resolveStatusSessionFile(cwd, target.sessionFile);
+  const relativeDir =
+    target.kind === "ticket" ? `.plans/${target.ticket}/_alcode/` : ".plans/_alcode/";
+  const sessionFilePath = findNewestSessionFile(resolve(cwd, relativeDir));
+  if (sessionFilePath === undefined) {
+    throw new Error(`Error: no session file under ${relativeDir}.`);
+  }
+  return resolveStatusSessionFile(cwd, sessionFilePath);
 }
 
 function loadMessage(args: SessionArgs, cwd: string): void {
@@ -239,15 +260,28 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
 function parseStatusCommand(tokens: string[]): AlcodeCommand {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { help: { type: "boolean", short: "h", default: false } },
+    options: {
+      ticket: { type: "string" },
+      "no-ticket": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
     strict: true,
     allowPositionals: true,
   });
   if (values.help) return { kind: "help" };
-  if (positionals.length !== 1) {
-    throw new Error("Error: `alcode status` takes exactly one <session-file>.");
+  const targetCount =
+    positionals.length + Number(values.ticket !== undefined) + Number(values["no-ticket"]);
+  if (targetCount !== 1) {
+    throw new Error(
+      "Error: `alcode status` takes exactly one of <session-file>, --ticket <id> or --no-ticket.",
+    );
   }
-  return { kind: "status", sessionFile: positionals[0] };
+  if (values.ticket !== undefined) {
+    if (!isPathSafeTicket(values.ticket)) throw new Error(TICKET_PATH_ERROR);
+    return { kind: "status", target: { kind: "ticket", ticket: values.ticket } };
+  }
+  if (values["no-ticket"]) return { kind: "status", target: { kind: "noTicket" } };
+  return { kind: "status", target: { kind: "file", sessionFile: positionals[0] } };
 }
 
 function parseNewCommand(tokens: string[]): AlcodeCommand {
@@ -339,10 +373,7 @@ export function validateSessionArgs(
     return `Error: --protocol ${args.protocol} requires --message.`;
   }
   if (args.ticket !== undefined && !isPathSafeTicket(args.ticket)) {
-    return (
-      "Error: --ticket must be a single path segment " +
-      "(letters, digits, '.', '-', '_'); no path separators or '..'."
-    );
+    return TICKET_PATH_ERROR;
   }
   return;
 }
@@ -629,7 +660,7 @@ Usage:
   alcode new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
   alcode new --message "..."
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
-  alcode status <session-file>
+  alcode status (<session-file> | --ticket <id> | --no-ticket)
   alcode usage
   alcode --guide
   alcode --openclaw-guide
@@ -639,7 +670,8 @@ Usage:
 Commands:
   new                   Start a new session; prints its Session ID at the end.
   resume <sessionId>    Continue an existing session.
-  status <session-file> Reconcile and show one run's durable status. Does not start an agent.
+  status                Reconcile and show one run's durable status: the given file, or the newest
+                        run of the ticket (or of no-ticket work). Does not start an agent.
   usage                 Show the selected coding agent's current usage limits and reset times.
 
 Options (new, resume):

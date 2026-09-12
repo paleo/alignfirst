@@ -49,7 +49,7 @@ export function readSourceContext(
   };
 }
 
-function readConversationId(target: string | undefined): string | undefined {
+export function readConversationId(target: string | undefined): string | undefined {
   if (!target) return;
   const thread = /^thread:([^/]+)\/.+/u.exec(target);
   if (thread) return thread[1];
@@ -168,7 +168,7 @@ export function createHandoffRecord(params: {
   createdAt: number;
 }): HandoffRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     routeKey: params.route.routeKey,
     handoffId: params.handoffId,
     targetSessionKey: params.route.targetSessionKey,
@@ -185,7 +185,7 @@ export function createHandoffRecord(params: {
     starterText: params.receipt.starterText,
     deliveryContext: params.route.deliveryContext,
     createdAt: params.createdAt,
-    enqueueCount: 0,
+    attemptCount: 0,
     state: "pending",
   };
 }

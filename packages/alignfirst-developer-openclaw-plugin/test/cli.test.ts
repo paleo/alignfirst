@@ -4,12 +4,25 @@ import { handoff, receipt } from "./helpers.js";
 
 describe("thread-handoff list rendering", () => {
   it("renders JSON without starter text while preserving handoff metadata", () => {
-    const record = handoff({ starterText: "private starter text" });
+    const record = handoff({
+      starterText: "private starter text",
+      state: "claimed",
+      claimedAt: 2_000,
+      claimedBy: { sessionId: "target-uuid", runId: "run-1" },
+    });
     const output = renderHandoffs([record], true);
     const { starterText, ...metadata } = record;
     expect(JSON.parse(output)).toEqual([metadata]);
     expect(output).not.toContain(starterText);
     expect(record.starterText).toBe(starterText);
+    expect(JSON.parse(output)[0].claimedBy).toEqual({
+      sessionId: "target-uuid",
+      runId: "run-1",
+    });
+  });
+
+  it("renders attempt counts in text output", () => {
+    expect(renderHandoffs([handoff({ attemptCount: 3 })], false)).toContain("3 attempts");
   });
 });
 

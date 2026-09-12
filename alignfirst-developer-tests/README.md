@@ -13,7 +13,7 @@ This README only documents what is specific to this harness.
 
 ```sh
 cp .env.local.example .env.local
-# Edit .env.local — fill ANTHROPIC_API_KEY and select ALIGNFIRST_CODE_AGENT
+# Edit .env.local — fill OPENROUTER_API_KEY and select ALIGNFIRST_CODE_AGENT
 
 # Build the real alcode, alignfirst, and alproject CLIs the gateway runs.
 npm run build --prefix ..
@@ -22,7 +22,7 @@ npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first 
 npm install
 npm run env:build
 npm run env:up
-npm run e2e -- --channel all --all
+npm run e2e -- --model gpt-5.6-terra --channel all A11-go-ahead-delegation
 npm run env:down
 ```
 
@@ -45,7 +45,9 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 - `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-developer-openclaw-playbook` skill, bind-mounted at `/home/claw/.openclaw/skills/alignfirst-developer-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
-- [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL=anthropic/claude-haiku-4-5` on `runner`.
+- [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at
+  `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`;
+  `OPENCLAW_TEST_JUDGE_MODEL=openrouter/anthropic/claude-haiku-4.5` on `runner`.
 
 ## Fixtures
 
@@ -57,50 +59,59 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` (skipped by the runner's discovery). Current scenarios: `A01`–`A21` and `A23`–`A29`.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 21 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
-Almost every one starts with `bootstrapThreadFromChannel` (`_lib/thread-bootstrap.ts`). It sends the
-channel message, waits for exactly one confirmed native starter and one `thread_handoff start`, and
-checks the parent session's attributed tool trace for target work. The plugin wakes the thread
-session automatically; complete requests need no mechanical follow-up. `sendInThread` remains for
-genuine missing values, explicit holds, confirmations, and later requests. Target work may begin
-before the parent emits its final `NO_REPLY`, so assertions follow the starter's original cursor.
+`bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
-`A10` exercises the real `alcode` foreground run driven as an OpenClaw background exec and rejects direct Claude or Codex launches. `A11` covers an explicit user hold. `A12` chains two delegations in one thread, exposing the heartbeat-cooldown wake gate. `A13` drives alcode directly for deterministic selected-agent new/resume coverage and Codex failure handling. The shared mock serves a bundled Codex model catalog and both agents' JSONL protocols.
+| Scenario | Coverage and consolidation |
+| --- | --- |
+| A01 | Missing ticket and scope, quiet takeover, human answer, workspace and delegation; Discord title gains the supplied ticket. |
+| A02 | Complete request starts automatically on external project `orion`; canonical path survives through delegation. Absorbs A16. |
+| A03 | A question selects a read-only investigation and reports its findings. |
+| A04 | Ticket supplied without a project: ask which project and wait. |
+| A05 | An unknown project name must be corrected before work starts. |
+| A06 | Small talk stays social and starts no project work. One message suffices; the former second message had no additional assertion. |
+| A09 | Status progresses from no branch to an externally created branch and its attached workspace. A repeated status with no state change is omitted; A23 covers existing-workspace reuse. Checks actual filesystem state and report meaning, with no template requirement. Its mock reports status without claiming implementation work. Preserves A08's existing-branch choice; A23 covers A07's discovery of a workspace that predates the session. |
+| A11 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Preserves A10's alcode/background contract and A12's later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward, replacing A29's artificial event. |
+| A13 | Deterministic alcode new/resume, selected-agent protocol, catchup, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
+| A14 | With one listed project, a ticket-only request selects it automatically. |
+| A15 | Duplicate project names require choosing a canonical path; takeover waits for the answer. |
+| A17 | New project creation, initial commit, and setup on main without a ticket protocol. The report confirms completion; CLI and filesystem assertions verify port allocation without requiring the report to repeat configuration fields. |
+| A19 | A preparation request asks for the exact paths before confirmation, followed by failed removal of a dirty worktree, preservation of all paths/config, then cleanup and an explicitly reconfirmed successful retry. Absorbs A18's ordered deletion, final inventory refresh after removal, and sibling-directory protection. |
+| A20 | A casual mention of a listed project is recognized as project work. |
+| A21 | A concrete action with neither project nor ticket still opens a thread and asks for its project. |
+| A23 | A PR URL carries through resource resolution, ticket recovery, review delegation, and reported findings. The fresh thread discovers and reuses a preexisting registered workspace, preserving A07’s cold-discovery boundary without another startup. |
+| A24 | One multi-project request delegates a base refresh separately in each canonical project. |
+| A25 | A multiline request survives the starter and request-file capture before coding. Its missing-ticket question may appear in the starter or the thread. |
+| A26 | Explicit no-ticket work reserves the next side ticket and captures the complete request. File observation does not require setup to remain paused while the test polls. |
+| A27 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
+| A28 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
 
-`A06` pins first-turn lookup caching across two off-project messages. `A14` covers sole-project inference, `A15` duplicate-name path selection, and `A16` carries an external canonical path through workspace setup and delegation.
+A04, A14 and A21 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A25 distinguish a missing task description from a complete detailed request. A27 keeps its startup race separate from A11's explicit hold. A07, A08, A10, A12, A16, A18 and A29 have no standalone files; A22 was already absent.
 
-`A17` creates and prepares `nova`, bootstraps it on `main` without an AlignFirst protocol, and checks the initial commit. `A18` confirms exact paths before removing a linked workspace and its main worktree. `A19` makes workspace removal fail on an uncommitted file and checks that the filesystem and project config remain intact.
+Starter values, canonical paths, full detailed requests, and actual session ownership are checked structurally. Scenario-specific judges cover meaning where needed, including missing-information questions and A25’s request fidelity. The former generic starter judge repeated these checks at every thread bootstrap and rejected valid summaries; it is removed.
 
-`A23` resolves a PR URL through review and its reported outcome. `A24` carries a multi-project base refresh through one no-protocol delegation per project. `A25` captures a detailed request before workspace setup and coding. `A26` reserves the next side ticket `side-N` before workspace setup for explicit no-ticket work.
+The quiet-takeover helper observes a claim, a history read and a terminal turn before checking that the starter's question was not repeated. It does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
-`A29-already-reported-wake` limits its request to implementation and local verification, excluding review and PR work. It completes the delegation, injects a duplicate completion event into the same thread session, and requires a terminal `HEARTBEAT_OK` with no outbound message or isolated finalizer. It also checks that the preceding human-turn handoff and completion needed no finalizer.
+From this directory, rebuild the CLIs and harness image, then run 20 conversation scenarios on both surfaces with Terra. Run the deterministic A13 contract once for the selected coding agent.
 
-`A27-human-reply-racing-startup` sends a genuine missing-ticket answer immediately after native
-starter delivery. `A28-recoverable-handoff-failure` injects one test-bus delivery failure, then
-requires one successful starter and automatic work without creating a replacement target.
-
-`A01`, `A04`, `A05` and `A21` open a thread whose starter asks for a value, then pin the
-silent seed turn (`_lib/silent-seed-turn.ts`): the thread session claims the handoff, posts nothing
-for 90 s and reads no thread history.
-
-Rebuild the CLIs and harness image before focused coverage:
-
-```sh
+```bash
 npm run build --prefix ..
 npm run env:build
 
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel discord-mock A13-alcode-agent-contract
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A06-off-projects A14-sole-project-inference A15-duplicate-project-name A16-external-project-path
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A17-project-creation A18-project-removal A19-project-removal-failure
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A23-resource-url-handoff A24-multi-project-handoff A25-detailed-request-handoff A26-explicit-no-ticket
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A10-coding-session A12-sequential-coding-sessions
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel all A27-human-reply-racing-startup A28-recoverable-handoff-failure
-ALIGNFIRST_CODE_AGENT=claude npm run e2e -- --channel all A13-alcode-agent-contract A10-coding-session
-npm run e2e -- --model gpt-5.6-terra --channel all --all
+scenario_names=()
+for scenario_file in scenarios/A*.ts; do
+  case "$scenario_file" in scenarios/A13-*) continue ;; esac
+  scenario_name="${scenario_file##*/}"
+  scenario_names+=("${scenario_name%.ts}")
+done
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenario_names[@]}"
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A13-alcode-agent-contract
 ```
 
-**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A10` → `ABC-0100`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A11 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. If the selected coding agent changes to Claude, run A13 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+
+**Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
 ## Vendored packages
 

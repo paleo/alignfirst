@@ -35,7 +35,7 @@ services:
 
   runner:
     environment:
-      OPENCLAW_TEST_JUDGE_MODEL: anthropic/claude-haiku-4-5
+      OPENCLAW_TEST_JUDGE_MODEL: openrouter/anthropic/claude-haiku-4.5
       ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
     volumes:
       - fixture-projects:/home/claw/projects

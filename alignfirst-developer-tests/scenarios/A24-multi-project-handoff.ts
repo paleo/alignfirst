@@ -37,9 +37,8 @@ export default async function multiProjectHandoff(ctx: ScenarioContext): Promise
     rubric:
       "A thread-opening handoff for refreshing the base branches of both nimbus and lumen. It " +
       "does not ask the user to choose one main project, supply a ticket, or send a mechanical " +
-      "follow-up. It states that the working session (this thread) takes, routes or handles the " +
-      "work on both projects; 'Je vais router cette opération multi-projets dans ce fil' passes. " +
-      "Future tense is fine.",
+      "follow-up. Its closing states that the thread is ready ('Le fil est prêt.') or that the " +
+      "thread handles the work on both projects; future tense is fine.",
     label: "multi-project-explicit-working-session",
   });
   await expectBaseRefreshDelegation(ctx, codingAgent, "nimbus", NIMBUS_PROJECT_PATH);

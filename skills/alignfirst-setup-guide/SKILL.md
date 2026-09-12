@@ -6,7 +6,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.36.0"
+  version: "0.37.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -23,7 +23,8 @@ The **AlignFirst skills** are stubs that run the CLI. The nine command skills `a
 `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec` keep
 `disable-model-invocation: true`; humans invoke them as `/alspec` in Claude Code, GitHub Copilot,
 Cursor, or `$alspec` in Codex. The optional `alignfirst` skill lets the agent recognize a protocol
-named in prose; a project whose instruction file runs `alignfirst context` provides this itself.
+named in prose; a project whose instruction file starts with the canonical `alignfirst context`
+section provides this itself.
 
 `alignfirst-setup-guide` and `alignfirst-developer-openclaw-playbook` are separate skills. A team
 plans repository is an optional CLI mode configured through `alignfirst plans setup`.
@@ -74,9 +75,9 @@ AlignFirst Developer builds and deploys the teammate itself.
 
 Inspect the repository before changing it. A prepared project has all of these:
 
-1. A bootstrap line in `AGENTS.md` or `CLAUDE.md`. The README may offer a global AlignFirst CLI
-   installation as a convenience. `.alignfirst.json` is required for an AlignFirst Developer project
-   and optional otherwise.
+1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed before every other section
+   whenever possible. The README may offer a global AlignFirst CLI installation as a convenience.
+   `.alignfirst.json` is required for an AlignFirst Developer project and optional otherwise.
 2. A clean `alproject doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
 3. The team plans repository through `alignfirst plans setup` when the team has one.
@@ -112,7 +113,7 @@ Detect existing footprints before proposing changes:
 
 - docmap: a `docmap` script, `@paleo/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
 - workspace: a `workspace` script or `@paleo/workspace`.
-- AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap line running `alignfirst context` or
+- AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
   `npx alignfirst context`, an AlignFirst instruction section, or a canonical skill installation.
 - team plans: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.
 - AlignFirst Developer preparation: the complete seven-part contract above.

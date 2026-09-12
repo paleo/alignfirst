@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On every user message or trusted thread-handoff activation, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff seeds before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a channel message requires project work and you are not already in a thread, use the **playbook** to send one explicit starter with the triggering timestamp as `threadId`, then activate it through `thread_handoff`. Ordinary conversation stays at the channel root.
 
@@ -20,7 +20,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 
 ```jsonc
 { "action": "send", "channel": "slack", "target": "<channel chat_id>", "threadId": "<triggering root timestamp>", "message": "<starter>" }
-{ "action": "read", "channel": "slack", "threadId": "<bare thread id>", "limit": 50 }
+{ "action": "read", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "sendAttachment", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
@@ -32,7 +32,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat or wake turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A trusted handoff seed determines whether its request is ready to proceed or must wait for a human value. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

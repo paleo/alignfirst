@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-On every user message or trusted thread-handoff activation, your **first action** is **to read the playbook**, then follow it — not memory, investigation, or a reply. The playbook recognizes and claims handoff seeds before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to create one anchored thread with its starter, then activate it through `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -20,7 +20,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 
 ```jsonc
 { "action": "thread-create", "channel": "discord", "target": "<chat_id>", "messageId": "<message_id>", "threadName": "<TICKET_ID> - <PROJECT> - <description>", "message": "<starter>", "autoArchiveMin": 1440 }
-{ "action": "read", "channel": "discord", "threadId": "<bare thread id>", "limit": 50 }
+{ "action": "read", "channel": "discord", "target": "<current thread chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "send", "channel": "discord", "target": "<current thread chat_id>", "threadName": "<new name>", "message": "<reply that carries the rename>" }
 { "action": "send", "channel": "discord", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
@@ -33,7 +33,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat or wake turn with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A trusted handoff seed determines whether its request is ready to proceed or must wait for a human value. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

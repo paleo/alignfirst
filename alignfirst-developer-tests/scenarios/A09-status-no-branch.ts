@@ -1,70 +1,105 @@
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { execMatches } from "./_lib/agent-tool-calls.ts";
-import { statusNoBranchRubric } from "./_lib/common-constants.ts";
+import { statusBranchOnlyRubric, statusNoBranchRubric } from "./_lib/common-constants.ts";
+import { assertBranch, seedBranch, waitForWorktreeDir } from "./_lib/fixture-state.ts";
 import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, waitForReport } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { assertNoWorktreeDirs, bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
+import {
+  assertNoWorktreeDirs,
+  assertWorktreePaths,
+  bootstrapThreadFromChannel,
+  sendInThread,
+} from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
 const TICKET_ID = "ABC-090";
+const BRANCH_DESC = "export-bold";
+const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 
-/**
- * A status request on a ticket nobody started. The channel session hands off
- * like any other request; the thread session runs the setup procedure, finds no branch
- * (project-workspace-setup.md Step 4 sub-path 3) and reports that nothing
- * exists — without creating a worktree.
- */
-export default async function statusNoBranch(ctx: ScenarioContext): Promise<void> {
-  ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
+/** One status thread follows a ticket from absent work, to an existing branch, to a workspace. */
+export default async function ticketStatusLifecycle(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
-  setupCodingAgentMock(ctx);
+  setupCodingAgentMock(ctx, {
+    defaultResult:
+      `Status for ${TICKET_ID}: the existing branch ${BRANCH} is clean and identical to main. ` +
+      "Its linked workspace is ready. No implementation commits, pull request, or task artifacts exist.",
+  });
   setupGhMock(ctx);
-
   const startCursor = await ctx.getCursor();
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: `Où en est ${TICKET_ID} sur ${PROJECT} ?`,
     project: PROJECT,
     projectPath: NIMBUS_PROJECT_PATH,
+    ticketId: TICKET_ID,
   });
-  const ticketRe = new RegExp(`\\b${TICKET_ID}\\b`);
-  const absenceRe =
-    /\b(no branch|aucune branche|pas de branche|pas de worktree|no work|aucun travail|rien (n'a |de |encore|started|encore commenc)|nothing (yet|started|to))\b/i;
-  const reportWait = await waitForReport(
+  await expectAbsentWork(ctx, starter.threadId, starter.nextCursor);
+  assertNoWorktreeDirs(ctx);
+
+  await seedBranch(ctx, NIMBUS_PROJECT_PATH, TICKET_ID, BRANCH_DESC);
+  const branchCursor = await sendInThread(
     ctx,
-    (m) =>
-      m.direction === "outbound" &&
-      m.threadId === starter.threadId &&
-      m.id !== starter.match.id &&
-      ticketRe.test(m.text) &&
-      absenceRe.test(m.text),
-    {
-      sinceCursor: starter.nextCursor,
-    },
+    starter.threadId,
+    `J'ai avancé sur ${TICKET_ID} depuis. Vérifie à nouveau son état actuel.`,
   );
-  ctx.log({ attachTo: reportWait.entry, label: "no-branch report received" });
+  const worktreeDir = await waitForWorktreeDir(NIMBUS_PROJECT_PATH, TICKET_ID, BRANCH_DESC, {
+    timeoutMs: 180_000,
+  });
+  assertBranch(worktreeDir, BRANCH);
+  await expectWorkspaceStatus(ctx, starter.threadId, branchCursor);
+  assertWorktreePaths(ctx, [worktreeDir]);
+
+  await ctx.waitForAgentToolCall((call) => execMatches(call, /alcode\s+--openclaw-guide\b/), {
+    label: "thread reads the alcode delegation guide",
+    timeoutMs: 120_000,
+  });
+  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  await waitForProjectListing(ctx, "channel session lists the projects");
+  ctx.markScenarioAsEnded("PASS");
+}
+
+async function expectAbsentWork(
+  ctx: ScenarioContext,
+  threadId: string,
+  sinceCursor: number,
+): Promise<void> {
+  const report = await waitForReport(
+    ctx,
+    (message) =>
+      message.direction === "outbound" &&
+      message.threadId === threadId &&
+      message.text.includes(TICKET_ID),
+    { sinceCursor },
+  );
   await ctx.judgeLLM({
-    attachTo: reportWait.entry,
-    message: reportWait.match.text,
+    attachTo: report.entry,
+    message: report.match.text,
     rubric: statusNoBranchRubric(TICKET_ID),
     label: "status-no-branch",
   });
+}
 
-  // project-workspace-setup.md prerequisite: run the delegation manual on every
-  // setup turn — including the no-branch sub-path. The call can come late in a
-  // long turn — hence the generous timeout.
-  await ctx.waitForAgentToolCall((c) => execMatches(c, /alcode\s+--openclaw-guide\b/), {
-    label: "agent runs `alcode --openclaw-guide`",
-    timeoutMs: 120_000,
+async function expectWorkspaceStatus(
+  ctx: ScenarioContext,
+  threadId: string,
+  sinceCursor: number,
+): Promise<void> {
+  const report = await waitForReport(
+    ctx,
+    (message) =>
+      message.direction === "outbound" &&
+      message.conversation.id === ctx.conversationId &&
+      message.text.includes(TICKET_ID),
+    { sinceCursor },
+  );
+  ctx.assertEqual(report.match.threadId, threadId, "status report stays in the thread");
+  await ctx.judgeLLM({
+    attachTo: report.entry,
+    message: report.match.text,
+    rubric: statusBranchOnlyRubric(TICKET_ID, BRANCH),
+    label: "status-existing-branch",
   });
-
-  assertNoWorktreeDirs(ctx);
-  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
-  await waitForProjectListing(ctx, "channel session lists the projects");
-
-  ctx.markScenarioAsEnded("PASS");
-  ctx.log("PASS");
 }

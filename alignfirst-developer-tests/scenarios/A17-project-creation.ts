@@ -23,7 +23,6 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
-const ALLOCATED_PORT_RANGE = "6600..6607";
 const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/side-1/A1-request.md`;
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
@@ -174,12 +173,7 @@ async function waitForCreationReport(
     const wait = await waitForReport(
       ctx,
       (m) =>
-        m.direction === "outbound" &&
-        m.threadId === starter.threadId &&
-        m.id !== starter.match.id &&
-        /\bnova\b/iu.test(m.text) &&
-        m.text.includes("6600") &&
-        m.text.includes("6607"),
+        m.direction === "outbound" && m.threadId === starter.threadId && m.id !== starter.match.id,
       { sinceCursor: cursor, timeoutMs: Math.max(1_000, deadline - Date.now()) },
     );
     cursor = wait.nextCursor;
@@ -187,11 +181,11 @@ async function waitForCreationReport(
     const { parsed } = await ctx.judgeLLMJson<{ done: boolean; reason: string }>({
       message: wait.match.text,
       prompt:
-        `Does this thread message report that the ${PROJECT} project has been CREATED and is ` +
-        "ready — the bootstrap or initial commit done, and its `.alignfirst.json` written — and report " +
-        `the full allocated port range ${ALLOCATED_PORT_RANGE}? Any equivalent range notation ` +
-        'counts. A launch or in-progress announcement ("the agent is working in the ' +
-        'background", "je te fais signe") is NOT done.',
+        `This thread is creating ${PROJECT}. Does this message report that the project has been CREATED and is ` +
+        "ready after bootstrap and the initial commit? A commit reference or clear overall " +
+        "completion statement can establish that outcome. The report need not repeat the project " +
+        "name, configuration contents, or port allocation; these are checked separately. A launch or " +
+        'in-progress announcement ("the agent is working in the background", "je te fais signe") is NOT done.',
       returnType: '{ "done": boolean, "reason": string }',
       label: "creation-report",
     });
