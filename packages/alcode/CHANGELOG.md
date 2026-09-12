@@ -1,5 +1,11 @@
 # @paleo/alcode
 
+## 0.16.0
+
+### Minor Changes
+
+- bf37177: Added `alcode status --ticket <id>` and `--no-ticket` to inspect the newest run in either scope.
+
 ## 0.15.0
 
 ### Minor Changes
