@@ -87,7 +87,7 @@ printf '\ncase $- in *i*) . /opt/{{SERVICE_USER}}/libexec/init.bash ;; esac\n' |
   sudo -H -u {{SERVICE_USER}} tee -a /home/{{SERVICE_USER}}/.bashrc > /dev/null
 ```
 
-The `environment.d` bridge stays before `init.bash`; the runtime initialization must be the profile's last line. `.bashrc` runs it for interactive non-login shells and avoids initializing fnm twice when `.profile` sources `.bashrc` during login.
+The `environment.d` bridge stays before `init.bash`; the runtime initialization must be the profile's last line. A shell-local guard prevents the `.profile` and `.bash_profile` paths from initializing fnm twice. `project-shell` clears that guard and inherited fnm state before every OpenClaw exec login shell.
 
 ## 4. npm prefix and global CLIs
 
@@ -113,6 +113,8 @@ ALIGNFIRST_CODE_AGENT=<claude|codex> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
+
+The harness covers independent and inherited gateway shells, repeated initialization, declaration edge cases, output on both streams, protected-command precedence and process ownership.
 
 ## 5. Other package managers
 

@@ -12,13 +12,13 @@ Behaviors that look like bugs and are intentional, with the reason. Read the rel
 
 `/opt/{{SERVICE_USER}}/bin/openclaw` always executes the protected package with `/usr/bin/node`. The gateway unit uses the same system Node and a PATH without fnm. Protected-prefix changes use `/opt/{{SERVICE_USER}}/libexec/admin-npm`.
 
-OpenClaw's startup shell snapshot omits fnm's state variables, so a copied `cd` hook cannot select project versions. Its `SHELL` is `/opt/{{SERVICE_USER}}/libexec/project-shell`, which starts a login shell and rebuilds fnm state for every exec call.
+OpenClaw exports a startup shell snapshot that can include an fnm multishell path and initialization marker. Its `SHELL` is `/opt/{{SERVICE_USER}}/libexec/project-shell`, which removes that inherited state before a login shell builds an independent fnm environment for each exec call.
 
-`openclaw gateway install --force` rewrites the unit. The service-owned `20-system-node-path.conf` drop-in survives and restores the fixed PATH and `project-shell`; foreign ownership makes the installer refuse the service definition. Recheck the effective unit after every forced install.
+`openclaw gateway install --force` rewrites the unit and may start the gateway before the refreshed drop-in is loaded. Reinstall the service-owned `20-system-node-path.conf`, reload systemd, then restart. Verify the running process; foreign ownership makes the installer refuse the service definition.
 
 `openclaw doctor` may suggest fnm directories for the service PATH. Ignore that recommendation: fnm belongs to project shells, not the gateway.
 
-An absent or unparseable Node declaration keeps fnm's default. A valid declaration for an unavailable version aborts shell startup. The `cd` hook reports a missing version but retains the current selection; run `fnm use` explicitly after `cd` in the same call when the selection must be certain.
+An absent declaration or malformed `engines.node` keeps fnm's default. An invalid or unavailable version file aborts shell startup. An empty `.nvmrc` selects fnm's `system` alias, `/usr/bin/node`, instead of the default. The `cd` hook reports a missing version but retains the current selection; run `fnm use` explicitly after `cd` in the same call when the selection must be certain.
 
 A background command that must own its process uses `exec node …`. A shell kept alive around a background child can orphan that child when the shell is killed.
 
@@ -84,6 +84,12 @@ While a kernel upgrade is pending, package postinsts raise a "Newer kernel avail
 ## Config-writing commands fail while `openclaw.json` is immutable
 
 Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Run it through the `config` scope of the root-owned maintenance wrapper: [configure-developer.md](operations/configure-developer.md).
+
+## A thread the agent has posted in can forbid silence
+
+The silent-reply sentinel is only honored on an undirected turn: `allowEmptyAssistantReplyAsSilent` requires `!isDirectedTurn`. Implicit mentions make a turn directed, and the kind `bot_thread_participant` covers *every* later message in a thread the agent has spoken in — which is the normal state of a work thread. The agent's `NO_REPLY` is then read as an empty response, retried once, and posted to the channel as `⚠️ Agent couldn't generate a response.` — a false failure a human is likely to answer, at a few thousand output tokens each time.
+
+The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on. `agents.defaults.silentReply.group: "disallow"` is not the fix — it removes the sentinel from the prompt and makes the agent answer everything.
 
 ## `MEDIA:` and `message` attachments read different media roots
 

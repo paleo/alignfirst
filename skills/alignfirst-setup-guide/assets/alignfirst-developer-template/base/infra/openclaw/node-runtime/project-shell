@@ -1,2 +1,12 @@
 #!/bin/bash
+# OpenClaw exports a startup shell snapshot; every exec needs independent fnm state.
+inherited_fnm_bin=${FNM_MULTISHELL_PATH:+$FNM_MULTISHELL_PATH/bin}
+if [ -n "$inherited_fnm_bin" ]; then
+  PATH=:$PATH:
+  PATH=${PATH//:$inherited_fnm_bin:/:}
+  PATH=${PATH#:}
+  PATH=${PATH%:}
+  export PATH
+fi
+unset inherited_fnm_bin FNM_MULTISHELL_PATH ALIGNFIRST_NODE_INIT
 exec /bin/bash --login "$@"

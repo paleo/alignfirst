@@ -217,7 +217,7 @@ A new OpenClaw release can retire keys the seed sets, turn on new defaults and w
 
 ## Gateway unit and restart
 
-After an OpenClaw version bump, doctor may report a unit installed by an older version. `ExecStart` already points at the updated code. Refresh the unit, then start the contained gateway. The installer refuses group-writable paths ([gotchas.md](../gotchas.md#gateway-install-refuses-group-writable-systemd-paths)), hence the `chmod`:
+After an OpenClaw version bump, doctor may report a unit installed by an older version. Refresh the unit and drop-in, then restart the contained gateway. `gateway install --force` may start it early, so `start` would preserve the old process environment. The installer refuses group-writable paths ([gotchas.md](../gotchas.md#gateway-install-refuses-group-writable-systemd-paths)), hence the `chmod`:
 
 ```sh
 sudo install -d -m 755 -o {{SERVICE_USER}} -g {{SERVICE_USER}} \
@@ -229,9 +229,13 @@ sudo install -m 644 -o {{SERVICE_USER}} -g {{SERVICE_USER}} \
   ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/node-runtime/gateway-path.conf \
   /home/{{SERVICE_USER}}/.config/systemd/user/openclaw-gateway.service.d/20-system-node-path.conf
 sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reload
+sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- systemctl --user cat openclaw-gateway.service
-# Expected: ExecStart uses /usr/bin/node; the refreshed drop-in sets SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell and a PATH without fnm
-sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
+sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p KillMode --value openclaw-gateway.service
+gateway_pid=$(sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p MainPID --value openclaw-gateway.service)
+sudo readlink -f "/proc/$gateway_pid/exe"
+sudo cat "/proc/$gateway_pid/environ" | tr '\0' '\n' | grep -E '^(PATH|SHELL)='
+# Expected: KillMode=mixed; /usr/bin/node; PATH has no fnm entry; SHELL is /opt/{{SERVICE_USER}}/libexec/project-shell
 ```
 
 ## Smoke test
@@ -242,8 +246,14 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
+sudo -H -u {{SERVICE_USER}} bash <<'EOF'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> ALIGNFIRST_CODE_AGENT=<claude|codex> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+/opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
+  --session-id "$(cat /proc/sys/kernel/random/uuid)" \
+  --message "$runtime_prompt" --json
+EOF
 ```
 
-Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat:main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). `apply-heartbeat-scratch.sh` reports the scratch unchanged, or pushes `infra/openclaw/heartbeat-scratch.md` back when the release or the agent rewrote it ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)).
+Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat:main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). `apply-heartbeat-scratch.sh` reports the scratch unchanged, or pushes `infra/openclaw/heartbeat-scratch.md` back when the release or the agent rewrote it ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)). The private gateway turn must return `RUNTIME_OK`; a direct harness pass does not cover OpenClaw's exported shell snapshot.
 
 Once the release has run for a while, `openclaw update cleanup --dry-run` (gateway stopped) previews the retirement of the archived pre-migration files; run it without `--dry-run` to reclaim the space.

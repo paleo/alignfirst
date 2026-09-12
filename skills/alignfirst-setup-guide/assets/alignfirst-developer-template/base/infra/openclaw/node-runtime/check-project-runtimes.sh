@@ -14,7 +14,11 @@ main() {
   run_check "independent shell selections" check_independent_shells
   run_check "recursive declarations and cd reselection" check_recursive_selection
   run_check "missing declared version aborts startup" check_missing_version
-  run_check "unparseable declaration keeps the default" check_unparseable_declaration
+  run_check "invalid version declaration aborts startup" check_invalid_version
+  run_check "malformed engine keeps the default" check_malformed_engine
+  run_check "empty version files select system Node" check_empty_versions
+  run_check "repeated initialization keeps one multishell" check_repeated_initialization
+  run_check "inherited gateway snapshot is isolated" check_inherited_gateway_snapshot
   run_check "profile output stays silent" check_silent_profile
   run_check "audited commands resist runtime shadows" check_command_precedence
   run_check "developer CLIs execute" check_cli_commands
@@ -44,10 +48,14 @@ validate_environment() {
 prepare_fixtures() {
   fixture_root=$(mktemp -d)
   mkdir -p "$fixture_root/default" "$fixture_root/pinned/nested" \
-    "$fixture_root/missing" "$fixture_root/garbage"
+    "$fixture_root/missing" "$fixture_root/invalid" "$fixture_root/bad-engine" \
+    "$fixture_root/empty" "$fixture_root/whitespace"
   printf '%s\n' "$PINNED_NODE" > "$fixture_root/pinned/.node-version"
   printf '%s\n' '999.999.999' > "$fixture_root/missing/.node-version"
-  printf '%s\n' 'not-a-node-version' > "$fixture_root/garbage/.nvmrc"
+  printf '%s\n' 'not-a-node-version' > "$fixture_root/invalid/.nvmrc"
+  printf '%s\n' '{"engines":{"node":"@@@"}}' > "$fixture_root/bad-engine/package.json"
+  : > "$fixture_root/empty/.nvmrc"
+  printf '   \n' > "$fixture_root/whitespace/.nvmrc"
 }
 
 run_check() {
@@ -86,16 +94,14 @@ check_independent_shells() {
 }
 
 check_recursive_selection() {
-  local output
-  output=$(DEFAULT_DIR="$fixture_root/default" PINNED_DIR="$fixture_root/pinned/nested" \
+  DEFAULT_DIR="$fixture_root/default" PINNED_DIR="$fixture_root/pinned/nested" \
     "$PROJECT_SHELL" -c '
+      set -e
       cd "$PINNED_DIR"
-      printf "%s\n" "$(node -p process.versions.node)"
+      test "$(node -p process.versions.node)" = "${PINNED_NODE#v}"
       cd "$DEFAULT_DIR"
-      printf "%s\n" "$(node -p process.versions.node)"
-    ' 2>/dev/null) || return 1
-  [ "$output" = "${PINNED_NODE#v}
-${DEFAULT_NODE#v}" ]
+      test "$(node -p process.versions.node)" = "${DEFAULT_NODE#v}"
+    ' >/dev/null 2>&1
 }
 
 check_missing_version() {
@@ -107,17 +113,65 @@ check_missing_version() {
   [ -z "$output" ]
 }
 
-check_unparseable_declaration() {
+check_invalid_version() {
   local output
-  output=$(cd "$fixture_root/garbage" && "$PROJECT_SHELL" -c 'node -p process.versions.node' \
-    2>/dev/null) || return 1
+  if output=$(cd "$fixture_root/invalid" && \
+    "$PROJECT_SHELL" -c 'printf should-not-run' 2>/dev/null); then
+    return 1
+  fi
+  [ -z "$output" ]
+}
+
+check_malformed_engine() {
+  local output
+  output=$(cd "$fixture_root/bad-engine" && \
+    "$PROJECT_SHELL" -c 'node -p process.versions.node' 2>/dev/null) || return 1
   [ "$output" = "${DEFAULT_NODE#v}" ]
+}
+
+check_empty_versions() {
+  local path
+  for path in "$fixture_root/empty" "$fixture_root/whitespace"; do
+    [ "$(cd "$path" && "$PROJECT_SHELL" -c 'command -v node' 2>/dev/null)" = \
+      /usr/bin/node ] || return 1
+  done
+}
+
+check_repeated_initialization() {
+  local output
+  output=$(cd "$fixture_root/pinned" && "$PROJECT_SHELL" -c '
+    set -e
+    initial_multishell=$FNM_MULTISHELL_PATH
+    . /opt/{{SERVICE_USER}}/libexec/init.bash
+    test "$FNM_MULTISHELL_PATH" = "$initial_multishell"
+    test "$(node -p process.versions.node)" = "${PINNED_NODE#v}"
+    printf initialization-stable
+  ' 2>&1) || return 1
+  [ "$output" = initialization-stable ]
+}
+
+check_inherited_gateway_snapshot() {
+  local output
+  output=$(PINNED_DIR="$fixture_root/pinned" "$PROJECT_SHELL" -c '
+    set -e
+    stale_fnm_bin=$FNM_MULTISHELL_PATH/bin
+    export ALIGNFIRST_NODE_INIT=1 STALE_FNM_BIN=$stale_fnm_bin
+    builtin cd "$PINNED_DIR"
+    "$PROJECT_SHELL" -c '\''
+      set -e
+      test "$(node -p process.versions.node)" = "${PINNED_NODE#v}"
+      test "$FNM_MULTISHELL_PATH/bin" != "$STALE_FNM_BIN"
+      case ":$PATH:" in *":$STALE_FNM_BIN:"*) exit 1 ;; esac
+      printf snapshot-isolated
+    '\''
+  ' 2>&1) || return 1
+  [ "$output" = snapshot-isolated ]
 }
 
 check_silent_profile() {
   local output
   output=$(cd "$fixture_root/default" && "$PROJECT_SHELL" -c 'printf profile-is-silent' \
-    2>/dev/null) || return 1
+    2>&1) || return 1
   [ "$output" = profile-is-silent ]
 }
 
@@ -169,7 +223,7 @@ check_cli_commands() {
 }
 
 check_background_process() {
-  local expected_executable process_executable process_pid
+  local expected_executable process_pid
   expected_executable=$(cd "$fixture_root/pinned/nested" && \
     "$PROJECT_SHELL" -c 'readlink -f "$(command -v node)"' 2>/dev/null) || return 1
   (
@@ -177,21 +231,21 @@ check_background_process() {
     exec "$PROJECT_SHELL" -c "exec node -e 'setInterval(() => {}, 1000)'"
   ) >/dev/null 2>&1 &
   process_pid=$!
-  if ! wait_for_process "$process_pid"; then
+  if ! wait_for_executable "$process_pid" "$expected_executable"; then
     kill "$process_pid" 2>/dev/null || true
     wait "$process_pid" 2>/dev/null || true
     return 1
   fi
-  process_executable=$(readlink -f "/proc/$process_pid/exe")
   kill "$process_pid"
   wait "$process_pid" 2>/dev/null || true
-  [ "$process_executable" = "$expected_executable" ] && ! kill -0 "$process_pid" 2>/dev/null
+  ! kill -0 "$process_pid" 2>/dev/null
 }
 
-wait_for_process() {
-  local process_pid=$1 attempt
-  for attempt in 1 2 3 4 5; do
-    [ -e "/proc/$process_pid/exe" ] && return 0
+wait_for_executable() {
+  local process_pid=$1 expected_executable=$2 attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    [ "$(readlink -f "/proc/$process_pid/exe" 2>/dev/null)" = "$expected_executable" ] && \
+      return 0
     sleep 0.1
   done
   return 1

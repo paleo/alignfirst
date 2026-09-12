@@ -155,10 +155,15 @@ sudo install -o {{SERVICE_USER}} -g {{SERVICE_USER}} -m 644 \
   /home/{{SERVICE_USER}}/seed/node-runtime/gateway-path.conf \
   /home/{{SERVICE_USER}}/.config/systemd/user/openclaw-gateway.service.d/20-system-node-path.conf
 sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reload
-sudo -i -u {{SERVICE_USER}} -- systemctl --user enable --now openclaw-gateway.service
+sudo -i -u {{SERVICE_USER}} -- systemctl --user enable openclaw-gateway.service
+sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway.service
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway.service
 sudo -i -u {{SERVICE_USER}} -- systemctl --user cat openclaw-gateway.service
-# Expected: ExecStart names /usr/bin/node and ~/.npm-system-global/lib/node_modules/openclaw; effective PATH has no fnm entry; SHELL is /opt/{{SERVICE_USER}}/libexec/project-shell
+sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p KillMode --value openclaw-gateway.service
+gateway_pid=$(sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p MainPID --value openclaw-gateway.service)
+sudo readlink -f "/proc/$gateway_pid/exe"
+sudo cat "/proc/$gateway_pid/environ" | tr '\0' '\n' | grep -E '^(PATH|SHELL)='
+# Expected: KillMode=mixed; /usr/bin/node; PATH has no fnm entry; SHELL is /opt/{{SERVICE_USER}}/libexec/project-shell
 ```
 
 ### Browser sandbox
@@ -182,6 +187,11 @@ sudo install -o {{SERVICE_USER}} -g {{SERVICE_USER}} -m 644 \
 sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reload
 sudo -i -u {{SERVICE_USER}} -- systemctl --user restart openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- systemctl --user cat openclaw-gateway.service
+sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p KillMode --value openclaw-gateway.service
+gateway_pid=$(sudo -i -u {{SERVICE_USER}} -- systemctl --user show -p MainPID --value openclaw-gateway.service)
+sudo readlink -f "/proc/$gateway_pid/exe"
+sudo cat "/proc/$gateway_pid/environ" | tr '\0' '\n' | grep -E '^(PATH|SHELL)='
+# Expected: KillMode=mixed; /usr/bin/node; PATH has no fnm entry; SHELL is /opt/{{SERVICE_USER}}/libexec/project-shell
 ```
 
 ### Heartbeat scratch

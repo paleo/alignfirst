@@ -123,6 +123,7 @@ The app configuration is scoped to a private channel (`groups:*`, `message.group
 - Rotating a token: regenerate it (reinstall for `xoxb-`, delete and recreate for `xapp-`), edit `infra/openclaw/.env`, then follow `../operations/configure-developer.md` (snapshot, re-seed, `openclaw secrets reload`).
 - Startup logs one `[slack] channel resolve failed … missing_scope: channels:read` line: the plugin tries a public-channel lookup, fails on the trimmed scopes, and falls back to the configured channel map. Cosmetic; do not add the scope.
 - `openclaw doctor` warns that `groupPolicy` is `allowlist` while `allowFrom` is empty. False positive: Slack's allowlist is the channel map, not a sender list. Do not add `allowFrom`.
+- The seed disables `channels.slack.implicitMentions.threadParticipation`. Leave it off: Slack otherwise treats every message in a thread the bot has posted in as directed at it, and the bot answers a turn meant to be silent with `⚠️ Agent couldn't generate a response.` ([gotchas.md](../gotchas.md#a-thread-the-agent-has-posted-in-can-forbid-silence)).
 
 ## Smoke Test
 
@@ -144,5 +145,6 @@ The plugin must be loaded, `thread_handoff` allowed, and both the global and all
 2. Request a complete small read-only task against a listed project. One starter appears under the request and work begins without a follow-up. The report returns in that same thread, never at the root.
 3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
 4. Post the same project request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.
+5. In a thread the bot has already replied in, write a message addressed to another human. The bot stays silent and posts nothing — no `⚠️ Agent couldn't generate a response.`
 
 When a negative check fails, stop the gateway (`sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway`) and correct the allowlist or the DM policy before further use.

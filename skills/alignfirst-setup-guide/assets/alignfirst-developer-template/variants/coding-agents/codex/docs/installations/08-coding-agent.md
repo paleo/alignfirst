@@ -169,4 +169,17 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide --root ~/projects >/d
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 3 skills
 ```
 
+Exercise the runtime harness through the real gateway. This catches shell-snapshot state that a direct invocation cannot reproduce:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash <<'EOF'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> ALIGNFIRST_CODE_AGENT=codex /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+/opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
+  --session-id "$(cat /proc/sys/kernel/random/uuid)" \
+  --message "$runtime_prompt" --json
+EOF
+```
+
+The private turn must return `RUNTIME_OK`.
+
 The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: codex`.

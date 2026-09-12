@@ -157,6 +157,7 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
   its regular thread session through a reply run the plugin dispatches, without a human nudge; for
   the wake command, the `openclaw` CLI runs as the service user from the gateway host.
 - Managed-project workspaces are isolated; reports return to the originating thread.
+- The runtime harness passes directly and through a private gateway agent turn; each exec shell selects the project runtime independently of OpenClaw's startup snapshot.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.
 - `openclaw secrets audit` reports no plaintext, unresolved or shadowed reference and no store residue; every credential in `openclaw.json` is a file SecretRef; the gateway environment holds no secret.

@@ -46,6 +46,15 @@ The session file under the project's `.plans/<ticket>/_alcode/` carries the exit
 
 Run the smoke test of [07-channel.md](installations/07-channel.md). Check the allowlisted channel, the session binding and the thread destination before touching the playbook.
 
+A `⚠️ Agent couldn't generate a response.` in a thread is usually not a model failure: the agent chose silence and the runtime refused the sentinel. Two journal lines about twenty seconds apart identify it, and the transcript holds the sentinel the agent actually returned:
+
+```sh
+sudo journalctl _SYSTEMD_USER_UNIT=openclaw-gateway.service --since today --no-pager \
+  | grep -E "empty response|incomplete turn detected"
+```
+
+See [gotchas.md](gotchas.md#a-thread-the-agent-has-posted-in-can-forbid-silence).
+
 ## Incidents
 
 Record each one in `.reports/` with the commands run and the outcome, without secret values.
