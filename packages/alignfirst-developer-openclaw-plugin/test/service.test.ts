@@ -105,6 +105,63 @@ describe("handoff turn start and recovery", () => {
     fixture.store.close();
   });
 
+  it("contains attempt-end persistence failures in the detached completion", async () => {
+    const deferred = createDeferred<void>();
+    const fixture = serviceFixture();
+    const record = handoff();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    fixture.store.insertHandoff(record);
+    dispatchTurn.mockReturnValueOnce(deferred.promise);
+    vi.spyOn(fixture.store, "recordAttemptEnd").mockImplementation(() => {
+      throw new Error("attempt end unavailable");
+    });
+
+    try {
+      await fixture.service.startTurn(record);
+      deferred.resolve(undefined);
+      await vi.waitFor(() =>
+        expect(fixture.logger.error).toHaveBeenCalledWith(
+          expect.stringContaining(
+            "handoff-1 could not finish its start attempt: attempt end unavailable",
+          ),
+        ),
+      );
+      await nextEventLoopTurn();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      await fixture.service.stop();
+      fixture.store.close();
+    }
+  });
+
+  it("contains post-attempt logging failures even when fallback logging fails", async () => {
+    const fixture = serviceFixture();
+    const record = handoff();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    fixture.store.insertHandoff(record);
+    dispatchTurn.mockRejectedValueOnce(new Error("dispatch refused"));
+    fixture.logger.warn.mockImplementationOnce(() => {
+      throw new Error("warning unavailable");
+    });
+    fixture.logger.error.mockImplementationOnce(() => {
+      throw new Error("error logging unavailable");
+    });
+
+    try {
+      await fixture.service.startTurn(record);
+      await vi.waitFor(() => expect(fixture.logger.error).toHaveBeenCalledTimes(1));
+      await nextEventLoopTurn();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      await fixture.service.stop();
+      fixture.store.close();
+    }
+  });
+
   it("respects attempt spacing and the cap, then logs the parked warning once", async () => {
     const fixture = serviceFixture();
     fixture.store.insertHandoff(
@@ -163,6 +220,10 @@ function createDeferred<T>(): {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+async function nextEventLoopTurn(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 function serviceFixture(options: { now?: () => number } = {}) {

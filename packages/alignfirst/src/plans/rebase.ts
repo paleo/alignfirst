@@ -65,12 +65,17 @@ function conflictedPathStages(repoDir: string, path: string): Set<number> {
 
 function continueRebase(repoDir: string): void {
   const args = ["-c", "core.editor=true", "rebase", "--continue"];
-  if (gitSucceeds(repoDir, ...args)) return;
-  if (gitSucceeds(repoDir, "diff", "--cached", "--quiet")) {
-    git(repoDir, "rebase", "--skip");
-    return;
+  try {
+    git(repoDir, ...args);
+  } catch (error) {
+    const stopped = findStoppedRebase(repoDir);
+    if (stopped?.conflictedFiles.length) return;
+    if (stopped && gitSucceeds(repoDir, "diff", "--cached", "--quiet")) {
+      git(repoDir, "rebase", "--skip");
+      return;
+    }
+    throw error;
   }
-  git(repoDir, ...args);
 }
 
 export function renderStoppedRebase(stopped: StoppedRebase, form: string): string {

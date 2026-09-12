@@ -215,11 +215,9 @@ local provider, the synthetic bus, and disposable state. Run it with
 provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
 both surfaces: a static takeover with its reply in the thread, a human message delivered while the takeover
 turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
-takeover turn, a chained `openclaw thread-handoff wake` through the persisted route, a wake of a
-human-started thread, and pending and post-claim restart recovery. It also covers a refused Slack
-channel-session wake.
+takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery.
 
-The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-wake.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
+The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 
@@ -280,7 +278,7 @@ Prefer structural assertions over `judgeLLM`; reserve the judge for free-form co
 - **`agents.entries.*.workspace`, not `workspaceDir`.** Agent entries read `workspace`.
 - **`gateway.mode: "local"` required.** Without it, startup fails with `existing config is missing gateway.mode`.
 - **`agents.defaults.heartbeat.target: "last"`.** The implicit owner-DM default prepends a one-time "First heartbeat alert" preamble to the first delivered heartbeat report (2026.8+), and the owner route never resolves to a group. Scenarios assert heartbeat reports in the conversation under test, which `"last"` targets.
-- **`agents.defaults.heartbeat.prompt` is explicit.** The harness supplies a generic heartbeat instruction requesting `HEARTBEAT_OK`. Native exec completions use a separate runtime prompt; this setting does not control them. A generic injected `system event` is therefore unsuitable evidence for exec-completion behavior.
+- **`agents.defaults.heartbeat.prompt` is unset.** Generic heartbeats use OpenClaw's stock prompt. Native exec completions use a separate runtime prompt. A generic injected `system event` is therefore unsuitable evidence for exec-completion behavior.
 
 ## Scenario loading
 

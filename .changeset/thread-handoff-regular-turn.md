@@ -2,4 +2,4 @@
 "@paleo/alignfirst-developer-openclaw-plugin": minor
 ---
 
-Started thread sessions with a static "Take over this thread." message from AlignFirst Service through the reply pipeline, added `thread-handoff wake` for subsequent turns, made claims idempotent for the claiming run, reported attempts and claimer identity, and migrated 0.2.0 databases automatically.
+Thread sessions now start with a static "Take over this thread." message from AlignFirst Service. Repeated claims by the same run return `claimed`. `openclaw thread-handoff list` exposes attempt counts and claimer identity. Databases from 0.2.0 migrate automatically and cannot be downgraded without deletion.

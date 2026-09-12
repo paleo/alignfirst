@@ -118,21 +118,19 @@ configure_common() {
   unset_key plugins.entries.memory-core
 
   echo "[seed] heartbeat — on, one periodic tick a day"
-  # Heartbeat stays on for the periodic tick and the native exec-exit notice. Thread handoff and
-  # alcode completion start reply runs through the plugin and do not depend on it. `every` only governs
-  # periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from it.
-  # Clearing isolatedSession, lightContext and activeHours preserves the periodic tick's session,
-  # workspace bootstrap and reply route.
+  # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
+  # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
+  # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
+  # session, no workspace bootstrap, deferred run), so they are cleared. Thread handoff itself
+  # does not depend on heartbeat.
   set_scalar agents.defaults.heartbeat.every "24h"
   # Explicit target: the implicit owner-DM default prepends a one-time operator-facing
   # "First heartbeat alert" preamble to the first delivered heartbeat report, and the
   # owner route never resolves to a group. Heartbeat reports must follow the ticket conversation,
   # which "last" targets.
   set_scalar agents.defaults.heartbeat.target "last"
-  # Native exec-exit notices and non-empty periodic ticks use this verbatim user message. Keep its
-  # settlement explicit: the stock prompt ends in NO_REPLY, which can trigger isolated finalization.
-  set_scalar agents.defaults.heartbeat.prompt \
-    "[OpenClaw heartbeat poll] Return immediately with exactly HEARTBEAT_OK. Do not read files, call tools, inspect state, continue or report work, repeat an earlier report, or return NO_REPLY."
+  # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.
+  unset_key agents.defaults.heartbeat.prompt
   unset_key agents.defaults.heartbeat.isolatedSession
   unset_key agents.defaults.heartbeat.lightContext
   unset_key agents.defaults.heartbeat.activeHours

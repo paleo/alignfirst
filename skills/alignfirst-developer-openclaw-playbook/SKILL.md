@@ -4,13 +4,11 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.38.0"
+  version: "0.39.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
 # Operating Instructions for AlignFirst Developer
-
-Before applying any other instruction, inspect only the current activation's newest user message. If it begins with `[OpenClaw heartbeat poll]`, your sole action is to follow that native poll's immediate `HEARTBEAT_OK` settlement. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read a reference or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there. A direct `alcode run finished …` message is a plugin reply run, not a native heartbeat poll; handle it normally.
 
 ## On every activation: read the surface playbook first
 
@@ -71,7 +69,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 
 On a takeover turn, immediately before its first coding delegation, read the current thread again through `message` with the current channel, complete `chat_id` as `target`, and bare thread ID. This catches human instructions that arrived during setup. Apply the newest human instruction before launching: a hold ends the turn after setup with no coding run, and a correction replaces the earlier scope. Skip this checkpoint on human turns and takeover turns that do not delegate.
 
-Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes. Its chained `openclaw thread-handoff wake` command asks the plugin to start the next turn of this session with its message when the run exits. End the launch turn on the acknowledgement, and call nothing on the alcode session through `process poll` or `process log` before that turn. On the chained turn, follow the guide's "After a background run completes" section, already in your transcript: report the run's outcome, or launch the next run and end on its acknowledgement. OpenClaw's native exec-exit notice arrives later as a heartbeat turn with nothing to report; end it on exactly `HEARTBEAT_OK`.
+Coding runs are long. Run `alcode` through `exec` in the background (`background: true`, `timeoutSeconds: 0`), as the guide describes. OpenClaw wakes the session through a heartbeat when the run exits. End the launch turn on its acknowledgement without polling. On the wake, follow the guide's "After a background run completes" section, already in your transcript. A wake for an already-reported run ends on exactly `HEARTBEAT_OK`.
 
 ## `chat_id` values
 

@@ -41,9 +41,9 @@ describe("thread-handoff reply dispatch", () => {
     const after = Date.now();
 
     expect(context).toEqual({
-      Body: "Wake the thread.",
-      BodyForAgent: "Wake the thread.",
-      RawBody: "Wake the thread.",
+      Body: "Take over this thread.",
+      BodyForAgent: "Take over this thread.",
+      RawBody: "Take over this thread.",
       CommandBody: "",
       CommandInterpretationSuppressed: true,
       CommandAuthorized: false,
@@ -89,7 +89,7 @@ describe("thread-handoff reply dispatch", () => {
       surface: "discord",
       route: { channel: "discord", to: "channel:T1" },
       parentConversationId: "C1",
-      message: "Wake the thread.",
+      message: "Take over this thread.",
       messageId: "message-2",
     };
 
@@ -108,28 +108,6 @@ describe("thread-handoff reply dispatch", () => {
       to: "channel:T1",
     });
   });
-
-  it("falls back to the Discord thread id when its parent is unknown", () => {
-    const request: TurnRequest = {
-      sessionKey: "agent:main:discord:channel:T1",
-      agentId: "main",
-      channelId: "discord",
-      surface: "discord",
-      route: { channel: "discord", to: "channel:T1" },
-      message: "Wake the thread.",
-      messageId: "message-3",
-    };
-    const context = buildTurnContext(request);
-
-    expect(context).toMatchObject({
-      NativeChannelId: "T1",
-      GroupChannel: "T1",
-      ConversationLabel: "T1",
-      GroupSubject: "T1",
-      MessageThreadId: "T1",
-    });
-    expect(context).not.toHaveProperty("ThreadParentId");
-  });
 });
 
 function slackRequest(): TurnRequest {
@@ -145,7 +123,7 @@ function slackRequest(): TurnRequest {
       threadId: "100.200",
     },
     parentConversationId: "C1",
-    message: "Wake the thread.",
+    message: "Take over this thread.",
     messageId: "message-1",
   };
 }

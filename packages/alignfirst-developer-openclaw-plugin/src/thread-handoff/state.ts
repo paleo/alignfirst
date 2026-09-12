@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HandoffError } from "./errors.js";
 import type { DeliveryReceipt, HandoffRecord, ReceiptIdentity } from "./types.js";
+import { errorMessage } from "./values.js";
 
 const DATABASE_DIRECTORY_MODE = 0o700;
 const DATABASE_FILE_MODE = 0o600;
@@ -14,7 +15,6 @@ export interface HandoffStore {
   findReceipt(identity: ReceiptIdentity, now: number): DeliveryReceipt | undefined;
   listReceipts(now: number): DeliveryReceipt[];
   findHandoffByRoute(routeKey: string): HandoffRecord | undefined;
-  findHandoffByTarget(targetSessionKey: string): HandoffRecord | undefined;
   insertHandoff(record: HandoffRecord): { inserted: boolean; record: HandoffRecord };
   claimHandoff(identity: ClaimIdentity, now: number): ClaimResult;
   recordAttempt(routeKey: string, startedAt: number): HandoffRecord | undefined;
@@ -151,7 +151,6 @@ function createStoreOperations(database: DatabaseSync): HandoffStore {
     findReceipt: (identity, now) => findReceipt(database, identity, now),
     listReceipts: (now) => listReceipts(database, now),
     findHandoffByRoute: (routeKey) => findHandoffByRoute(database, routeKey),
-    findHandoffByTarget: (targetSessionKey) => findHandoffByTarget(database, targetSessionKey),
     insertHandoff: (record) => insertHandoff(database, record),
     claimHandoff: (identity, now) => claimHandoff(database, identity, now),
     recordAttempt: (routeKey, startedAt) => recordAttempt(database, routeKey, startedAt),
@@ -216,18 +215,6 @@ function findReceipt(
 
 function findHandoffByRoute(database: DatabaseSync, routeKey: string): HandoffRecord | undefined {
   return runStateOperation("read a handoff", () => readHandoffByRoute(database, routeKey));
-}
-
-function findHandoffByTarget(
-  database: DatabaseSync,
-  targetSessionKey: string,
-): HandoffRecord | undefined {
-  return runStateOperation("read a handoff", () => {
-    const row = database
-      .prepare("SELECT record_json FROM handoffs WHERE target_session_key = ?")
-      .get(targetSessionKey) as JsonRow;
-    return row ? parseHandoff(row.record_json) : undefined;
-  });
 }
 
 function insertHandoff(
@@ -467,10 +454,6 @@ function runStateOperation<T>(description: string, operation: () => T): T {
 
 function persistentStateError(message: string, cause: unknown): HandoffError {
   return new HandoffError("unavailablePersistentState", message, cause);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function parseReceipt(json: string): DeliveryReceipt {

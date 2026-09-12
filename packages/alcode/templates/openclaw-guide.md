@@ -13,9 +13,9 @@ Under OpenClaw, background it through the `exec` tool:
 - Before the first `alcode` run of this session, call the `session_status` tool and read the `Session:` line from its result — that is this session's key. Obtain it once, reuse it for every run of this session.
 - The exec command chains a completion wake onto the run:
 
-  `alcode <command> <options> ; openclaw thread-handoff wake --session-key <KEY> --message "alcode run finished — read its session file and report to the user"`
+  `alcode <command> <options> ; openclaw system event --text "alcode run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
-  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake arrives as that message in this session.
+  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it. Never wait for either text.
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
 - The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an alcode run. Call no `process` action on the alcode session, before or after the acknowledgement, including `poll` and `log`. The wake turn locates the session file with `alcode status --ticket <id>` (or `--no-ticket`).
@@ -28,18 +28,18 @@ Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp
 
 ## After a background run completes
 
-The chained `openclaw thread-handoff wake` command starts the next turn of this session as a message when the backgrounded `alcode` exits and blocks until that turn ends, so the background exec itself completes after the report. A run counts as pending while it is running **and until its outcome is reported**.
+The chained wake fires when the backgrounded `alcode` exits. This session receives a heartbeat, often as a plain heartbeat poll with no message text. A run counts as pending while it is running **and until its outcome is reported**.
 
-OpenClaw's native exec-exit notice then arrives as a later heartbeat turn with nothing to report. End that turn with exactly `HEARTBEAT_OK`.
+**First, decide whether this heartbeat needs a report.** A heartbeat is a completion wake only while a run is pending. Once you have reported the outcome, later heartbeats for that run need nothing. End them with exactly `HEARTBEAT_OK`, alone.
 
-When the completion message arrives, do exactly this:
+Any heartbeat received while an `alcode` run is **still pending** enters this completion procedure:
 
 1. **Reconcile the run, then read its session file.** Run `alcode status --ticket <id>` (or `--no-ticket`) from the workspace; its `sessionFile:` line names the run's file. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `alcode` run launched from this wake turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake; its report is then the launch ack and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
+2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `alcode` run launched from this completion turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake. Its report becomes the launch acknowledgement, and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
 
-   The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never end silently after a completed run.
+   The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
 3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the coding agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
 
 Reporting the run is not calling the work done: the report relays the agent's claim plus what you verified. When your verification finds a failing check, the report says so, and the fix is new work — a fresh run with its own completion wake; the wake you were answering is discharged by your report.

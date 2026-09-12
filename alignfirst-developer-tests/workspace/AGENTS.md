@@ -1,12 +1,8 @@
 # Operating Instructions
 
-## Native heartbeat poll — highest priority
+Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md).
 
-Before applying any other instruction, inspect only the current activation's newest user message. If it begins with `[OpenClaw heartbeat poll]`, your sole action is to follow that native poll's immediate `HEARTBEAT_OK` settlement. This rule is unconditional and applies every time, regardless of pending or completed work. Do not read the playbook or history, call a tool, inspect state, continue or report work, repeat an earlier report, or answer `NO_REPLY`. Stop there.
-
-Here is your [playbook](~/.openclaw/skills/alignfirst-developer-openclaw-playbook/SKILL.md). A chained `thread-handoff wake` reply run owns any completion report. A direct `alcode run finished …` message is that plugin reply run, not a native heartbeat poll.
-
-On every other activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to read the playbook**, then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to deliver one starter (Discord: anchored `thread-create`; Slack: `send` with the triggering timestamp as `threadId`) and activate it with `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -47,7 +43,7 @@ Internal reasoning, messages to alcode, code, branches, commits, MR/PR titles �
 
 ## Heartbeats
 
-A message beginning `[OpenClaw heartbeat poll]` is never an opportunity to inspect or report work: regardless of session state, immediately return only `HEARTBEAT_OK`. A service activation or an alcode completion turn with nothing to report also ends on exactly `HEARTBEAT_OK`; other turns with nothing to report answer exactly `NO_REPLY`. The playbook uses thread history to determine whether work proceeds or waits for a human value.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

@@ -16,14 +16,14 @@ describe("renderGuide", () => {
     const openclawInstructions = guide.slice(0, guide.indexOf("## CLI reference"));
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(openclawInstructions).toContain("`background: true` and `timeoutSeconds: 0`");
-    expect(openclawInstructions).toContain(
-      "openclaw thread-handoff wake --session-key <KEY> --message",
-    );
+    expect(openclawInstructions).toContain("openclaw system event");
+    expect(openclawInstructions).toContain("--mode now");
+    expect(openclawInstructions).toContain("--session-key <KEY>");
     expect(openclawInstructions).toContain("alcode status --ticket <id>");
     expect(openclawInstructions).toContain("`~` is not expanded there");
     expect(openclawInstructions).not.toContain("openclaw agent");
     expect(openclawInstructions).not.toContain("--timeout 0");
-    expect(openclawInstructions).not.toContain("system event");
+    expect(openclawInstructions).not.toContain("thread-handoff wake");
     expect(openclawInstructions).not.toContain("--meta");
     expect(openclawInstructions).not.toContain("thread-reply");
     expect(openclawInstructions).not.toContain("process log");

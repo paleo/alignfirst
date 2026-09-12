@@ -25,7 +25,7 @@ export interface DelegationChainOptions {
 }
 
 /**
- * One delegation's full chain: the alcode launch exec with the guide's chained wake reply run, the
+ * One delegation's full chain: the alcode launch exec with the guide's chained system event, the
  * started ack, the `status: succeeded` session file started by this phase, and the completion
  * report in the work thread.
  */
@@ -58,16 +58,17 @@ export async function expectDelegationChain(
   if (typeof input !== "object" || input === null) throw new Error("Missing exec input");
   ctx.assertEqual("background" in input && input.background, true, "alcode runs in background");
   ctx.assertEqual("timeoutSeconds" in input && input.timeoutSeconds, 0, "alcode has no timeout");
-  // Structural pin of the chained completion wake — the outcome-level asserts below would also
+  // Structural pin of the chained completion event — the outcome-level asserts below would also
   // pass on a bootstrap-path native wake (phase 1 always does), so assert the mechanism itself.
   const command = execCommandOf(launch);
   if (command === undefined) throw new Error("alcode launch call carries no exec command");
   ctx.assertRegex(
     command,
-    /openclaw thread-handoff wake/,
-    `launch #${launchIndex}: chains an \`openclaw thread-handoff wake\` turn`,
+    /openclaw system event/,
+    `launch #${launchIndex}: chains an \`openclaw system event\` command`,
   );
-  ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: wake targets a --session-key`);
+  ctx.assertRegex(command, /--mode now/, `launch #${launchIndex}: event uses --mode now`);
+  ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: event targets a session key`);
   const launchStartedAt = launch.startedAt;
   if (launchStartedAt === undefined) {
     throw new Error(`alcode launch #${launchIndex} has no start timestamp`);

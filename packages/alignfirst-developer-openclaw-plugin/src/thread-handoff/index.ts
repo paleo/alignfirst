@@ -7,7 +7,6 @@ import { createHandoffStore, type HandoffStore, resolveDatabasePath } from "./st
 import { createThreadHandoffTool } from "./tool.js";
 import type { PluginConfiguration } from "./types.js";
 import { asRecord } from "./values.js";
-import { registerWakeMethod } from "./wake.js";
 
 export const DEFAULT_CHANNEL_SURFACES: PluginConfiguration["channelSurfaces"] = {
   slack: "slack",
@@ -35,7 +34,6 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
       createThreadHandoffTool({ context, configuration, receipts, runIds, getStore, service }),
     { name: "thread_handoff", optional: true },
   );
-  registerWakeMethod(api, { configuration, getStore, logger: api.logger });
   api.on("after_tool_call", (event, context) => {
     receipts.observe(
       {

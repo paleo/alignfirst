@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 
-const DATABASE_PATH = "/home/claw/.openclaw/agents/main/agent/openclaw-agent.sqlite";
+const TRANSCRIPT_DATABASE_PATH = "/home/claw/.openclaw/agents/main/agent/openclaw-agent.sqlite";
 
 export interface ThreadObservation {
   messageCount: number;
@@ -45,7 +45,9 @@ interface RuntimeEvent {
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [sessionKey, launchId] = process.argv.slice(2);
   if (sessionKey === undefined) throw new Error("session key required");
-  process.stdout.write(JSON.stringify(inspectSession(DATABASE_PATH, sessionKey, launchId)));
+  process.stdout.write(
+    JSON.stringify(inspectSession(TRANSCRIPT_DATABASE_PATH, sessionKey, launchId)),
+  );
 }
 
 export function inspectSession(

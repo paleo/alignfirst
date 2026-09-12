@@ -11,8 +11,7 @@ export interface TurnRequest {
   channelId: string;
   surface: "slack" | "discord";
   route: DeliveryRoute;
-  /** Unknown only for a human-started Discord thread without a handoff record. */
-  parentConversationId?: string;
+  parentConversationId: string;
   message: string;
   messageId: string;
 }

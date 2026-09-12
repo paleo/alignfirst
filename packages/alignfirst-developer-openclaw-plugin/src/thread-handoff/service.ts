@@ -5,8 +5,8 @@ import type { HandoffRecord, PluginConfiguration, TurnRequest } from "./types.js
 import { errorMessage } from "./values.js";
 
 export const MAX_ATTEMPTS = 10;
-export const SCAN_INTERVAL_MS = 30_000;
 export const ATTEMPT_SPACING_MS = 60_000;
+const SCAN_INTERVAL_MS = 30_000;
 
 export interface HandoffService {
   startTurn(record: HandoffRecord): Promise<void>;
@@ -53,9 +53,15 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
           : Promise.reject(
               new Error(`Channel ${updated.channelId} is not configured for handoff.`),
             );
-        const completion = finishAttempt(params, updated, turn, now).finally(() => {
-          if (inFlight.get(updated.handoffId) === completion) inFlight.delete(updated.handoffId);
-        });
+        const completion = finishAttempt(params, updated, turn, now)
+          .finally(() => {
+            if (inFlight.get(updated.handoffId) === completion) {
+              inFlight.delete(updated.handoffId);
+            }
+          })
+          .catch((error) => {
+            reportCompletionFailure(params.logger, updated.handoffId, error);
+          });
         inFlight.set(updated.handoffId, completion);
       } finally {
         if (inFlight.get(record.handoffId) === starting) inFlight.delete(record.handoffId);
@@ -146,20 +152,34 @@ async function finishAttempt(
   } catch (error) {
     failure = error;
   }
-  const current = params.getStore().recordAttemptEnd(record.routeKey, now());
-  if (failure === undefined) {
-    params.logger.debug?.(
-      `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} completed`,
-    );
-  } else {
-    params.logger.warn(
-      `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} failed: ${errorMessage(failure)}`,
-    );
+  try {
+    const current = params.getStore().recordAttemptEnd(record.routeKey, now());
+    if (failure === undefined) {
+      params.logger.debug?.(
+        `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} completed`,
+      );
+    } else {
+      params.logger.warn(
+        `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} failed: ${errorMessage(failure)}`,
+      );
+    }
+    if (current?.state === "pending" && current.attemptCount >= MAX_ATTEMPTS) {
+      params.logger.warn(
+        `thread-handoff ${record.handoffId} stays pending after ${current.attemptCount} start attempts; it remains claimable by the next human message in the thread; inspect it with: openclaw thread-handoff list`,
+      );
+    }
+  } catch (error) {
+    reportCompletionFailure(params.logger, record.handoffId, error);
   }
-  if (current?.state === "pending" && current.attemptCount >= MAX_ATTEMPTS) {
-    params.logger.warn(
-      `thread-handoff ${record.handoffId} stays pending after ${current.attemptCount} start attempts; it remains claimable by the next human message in the thread; inspect it with: openclaw thread-handoff list`,
+}
+
+function reportCompletionFailure(logger: PluginLogger, handoffId: string, error: unknown): void {
+  try {
+    logger.error(
+      `thread-handoff ${handoffId} could not finish its start attempt: ${errorMessage(error)}`,
     );
+  } catch {
+    // A detached completion chain must not reject when its final error report fails.
   }
 }
 

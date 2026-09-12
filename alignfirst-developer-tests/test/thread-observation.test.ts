@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { inspectSession } from "../scripts/inspect-wake.ts";
+import { inspectSession } from "../scripts/inspect-thread.ts";
 
 const SESSION_KEY = "agent:main:discord:channel:thread-1";
 

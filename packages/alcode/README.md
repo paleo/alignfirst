@@ -4,13 +4,13 @@ Run a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) pro
 
 Prerequisite: install the `alignfirst` CLI on `PATH` with `npm install -g alignfirst`.
 
-Run `alcode --guide` for the full delegation guide. When an OpenClaw agent is the caller, run `alcode --openclaw-guide` instead: the same manual, with the OpenClaw-specific run instructions (`exec` with `background: true` + `timeout: 0`, and the completion-wake procedure).
+Run `alcode --guide` for the full delegation guide. When an OpenClaw agent is the caller, run `alcode --openclaw-guide` instead: the same manual, with the OpenClaw-specific run instructions (`exec` with `background: true` + `timeoutSeconds: 0`, and the completion-wake procedure).
 
 ## Execution model
 
 `alcode` runs the coding agent as a direct **foreground** child of its own process: it streams a live transcript to stdout and to a per-run session file (with a YAML frontmatter status lifecycle `running` → `succeeded`/`failed`), and blocks until the agent exits. It never backgrounds or detaches itself.
 
-Coding runs can be very long: the caller always runs `alcode` as a background task and owns the backgrounding. Under OpenClaw the agent invokes `alcode` through the `exec` tool with `background: true` and `timeout: 0`, chaining `openclaw system event --mode now --session-key <key>` onto the command as prescribed by the guide; that immediate wake fires when the run finishes, and the woken agent reads the session file for the result. This keeps the run's lifecycle owned by one supervisor (the caller) instead of a detached process phoning back in. The session file is the durable result handoff: frontmatter `sessionId` + status, and the `---- Result ----` block.
+Coding runs can be very long: the caller always runs `alcode` as a background task and owns the backgrounding. Under OpenClaw the agent invokes `alcode` through the `exec` tool with `background: true` and `timeoutSeconds: 0`, chaining `openclaw system event --mode now --session-key <key>` onto the command as prescribed by the guide. When the run finishes, the completion turn locates its session file with `alcode status --ticket <id>` or `--no-ticket` and reads the result. This keeps the run's lifecycle owned by one supervisor (the caller) instead of a detached process phoning back in. The session file is the durable result handoff: frontmatter `sessionId` + status, and the `---- Result ----` block.
 
 If `alcode` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`) so it never stays frozen at `running`, then send `SIGTERM` to the coding-agent child, giving it a short grace to tear down its own subprocesses before a `SIGKILL` backstop guarantees no orphan is left behind. Only a `SIGKILL` of `alcode` itself (uncatchable) can leave a stale `running` status.
 

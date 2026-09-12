@@ -104,8 +104,7 @@
       "heartbeat": {
         "every": "24h",
         "target": "last",
-        "directPolicy": "allow",
-        "prompt": "[OpenClaw heartbeat poll] Return immediately with exactly HEARTBEAT_OK. Do not read files, call tools, inspect state, continue or report work, repeat an earlier report, or return NO_REPLY."
+        "directPolicy": "allow"
       },
       "compaction": { "memoryFlush": { "enabled": false } },
       "blockStreamingDefault": "on",

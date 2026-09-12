@@ -48,7 +48,6 @@ export async function dispatchTurn(params: {
 export function buildTurnContext(request: TurnRequest): Record<string, unknown> {
   const conversationId = readConversationId(request.route.to);
   if (!conversationId) throw new Error(`Invalid delivery target: ${request.route.to}`);
-  const groupId = request.parentConversationId ?? conversationId;
   const messageThreadId = request.surface === "slack" ? request.route.threadId : conversationId;
   return {
     Body: request.message,
@@ -65,16 +64,13 @@ export function buildTurnContext(request: TurnRequest): Record<string, unknown> 
     From: request.route.to,
     To: request.route.to,
     OriginatingTo: request.route.to,
-    NativeChannelId:
-      request.surface === "slack"
-        ? (request.parentConversationId ?? conversationId)
-        : conversationId,
+    NativeChannelId: request.surface === "slack" ? request.parentConversationId : conversationId,
     ChatType: "group",
-    GroupChannel: groupId,
-    ConversationLabel: groupId,
-    GroupSubject: groupId,
+    GroupChannel: request.parentConversationId,
+    ConversationLabel: request.parentConversationId,
+    GroupSubject: request.parentConversationId,
     MessageThreadId: messageThreadId,
-    ...(request.parentConversationId ? { ThreadParentId: request.parentConversationId } : {}),
+    ThreadParentId: request.parentConversationId,
     WasMentioned: false,
     SenderName: "AlignFirst Service",
     MessageSid: request.messageId,

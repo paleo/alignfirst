@@ -73,11 +73,11 @@ The plugin commits a pending record before dispatching `Take over this thread.` 
 channel-inbound path. Its plugin-built context sets the service display name without a human sender ID or command authority, and sets
 `WasMentioned: false`. These plugin-dispatched turns disable block streaming so their complete
 final payload reaches OpenClaw's durable outbound path. The reply run records the session's last
-route. The gateway process does not need an `openclaw` executable on its `PATH`.
+route. The plugin's in-process nudge does not need an `openclaw` executable on the gateway's `PATH`.
 
 The message body is static: it carries no starter copy, routing fields, or handoff ID. The playbook routes by thread metadata, claims the current session, and reads the visible starter and human replies through thread history. The nudge supplies no missing input or approval. A takeover turn with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 
-Use `openclaw thread-handoff wake --session-key <key> --message <text>` to start the session's next reply run. The command calls the `alignfirst-developer.wake` gateway method and blocks until the turn ends. It accepts managed or human-started regular channel-thread sessions with a recorded delivery route; Slack also requires a thread suffix and thread route. The agent runs it through `exec` after `alcode` completes.
+The plugin starts the thread session and does nothing after that. Alcode completion uses OpenClaw's own completion path.
 
 Each takeover turn gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
 
@@ -96,7 +96,7 @@ receipts without starter text. `openclaw thread-handoff retire <handoff-id>` rem
 record; add `--force` for a pending record, typically a parked one.
 
 Opening a database created by plugin 0.2.0 migrates it automatically to schema 2. The migration
-preserves pending attempt history and claimed records.
+preserves pending attempt history and claimed records. To downgrade to 0.2.0, stop the gateway and delete `<stateDir>/thread-handoff/state.sqlite`. Deletion loses pending handoffs.
 
 For a backup, stop the gateway and let the plugin close/checkpoint its connection, then copy the
 database together with any WAL/SHM crash-state files; alternatively use a SQLite-consistent backup.
@@ -115,7 +115,7 @@ npm run lint --workspace @paleo/alignfirst-developer-openclaw-plugin
 ```
 
 The ordinary test command excludes the real-gateway suite. To exercise the package as an external
-plugin against the pinned OpenClaw 2026.9.3 runtime, including Slack/Discord delivery, concurrent human messages, explicit wakes, duplicate starts, same-session continuation, and abrupt restart recovery:
+plugin against the pinned OpenClaw 2026.9.3 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @paleo/alignfirst-developer-openclaw-plugin

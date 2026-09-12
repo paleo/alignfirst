@@ -100,7 +100,7 @@ An installed agent-harness plugin cannot claim this deployment's turns because t
 `openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
 authentication, or chat commands.
 
-The seed installs `@paleo/alignfirst-developer-openclaw-plugin` as **AlignFirst Developer** (ID `alignfirst-developer`) and enables its optional `thread_handoff` tool. This plugin supplies the Developer's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `alcode`, the agent runs `openclaw thread-handoff wake` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
+The seed installs `@paleo/alignfirst-developer-openclaw-plugin` as **AlignFirst Developer** (ID `alignfirst-developer`) and enables its optional `thread_handoff` tool. This plugin supplies the Developer's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `alcode`, the agent runs `openclaw system event` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
 
 ## Model-specific parameters
 
@@ -182,8 +182,6 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-s
 ```
 
 A comment-only scratch makes the daily tick skip its model call ([gotchas.md](../gotchas.md#heartbeat-cost-is-a-main-session-problem)). The scratch carries no immutable flag; `06` records the accepted gap.
-
-The seed also sets `agents.defaults.heartbeat.prompt` explicitly. OpenClaw sends that prompt verbatim for native exec-exit notices and any non-empty periodic tick; the configured text requires an immediate, tool-free `HEARTBEAT_OK`. Do not restore the stock prompt: its `NO_REPLY` instruction can trigger an isolated finalizer.
 
 ## 8. Podman socket
 

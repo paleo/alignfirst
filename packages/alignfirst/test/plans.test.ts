@@ -145,6 +145,45 @@ describe("plans commands", () => {
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
   });
 
+  it("resolves conflicts in successive local commits", async () => {
+    const fixture = makeFixture();
+    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+    });
+    const ticketDir = join(fixture.product, ".plans", "78");
+    const planA = join(ticketDir, "A1-spec.md");
+    const planB = join(ticketDir, "B1-plan.md");
+    mkdirSync(ticketDir);
+    writeFileSync(planA, "first A\n");
+    writeFileSync(planB, "first B\n");
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+
+    const other = join(fixture.root, "other-plans");
+    git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
+    writeFileSync(join(other, "product-plans", "78", "A1-spec.md"), "remote A\n");
+    writeFileSync(join(other, "product-plans", "78", "B1-plan.md"), "remote B\n");
+    git(other, "add", "-A");
+    git(other, "commit", "--quiet", "-m", "remote");
+    git(other, "push", "--quiet");
+
+    writeFileSync(planA, "local A\n");
+    git(fixture.clone, "add", "product-plans/78/A1-spec.md");
+    git(fixture.clone, "commit", "--quiet", "-m", "local A");
+    writeFileSync(planB, "local B\n");
+    git(fixture.clone, "add", "product-plans/78/B1-plan.md");
+    git(fixture.clone, "commit", "--quiet", "-m", "local B");
+
+    const result = await runMain(["sync"], { cwd: fixture.product });
+
+    expect(result.code).toBe(0);
+    expect(readFileSync(planA, "utf8")).toBe("local A\n");
+    expect(readFileSync(planB, "utf8")).toBe("local B\n");
+    const remote = join(fixture.root, "remote.git");
+    expect(git(remote, "show", "HEAD:product-plans/78/A1-spec.md")).toBe("local A");
+    expect(git(remote, "show", "HEAD:product-plans/78/B1-plan.md")).toBe("local B");
+    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  });
+
   it("keeps both paths on a rename conflict", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
@@ -262,7 +301,7 @@ describe("plans commands", () => {
     expect(automatic.stdout).toContain("Archived 79");
   });
 
-  it("keeps running session files and their ticket directories", async () => {
+  it("keeps fresh running sessions while archiving stale completed sessions", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
     const sessionDir = join(plansDir, "_alcode");
@@ -276,7 +315,7 @@ describe("plans commands", () => {
     writeFileSync(succeeded, "---\nstatus: succeeded\n---\n");
     writeFileSync(ticketSession, "---\nstatus: running\n---\n");
     const old = new Date(Date.now() - 2 * 86_400_000);
-    for (const path of [running, succeeded, ticketSession]) utimesSync(path, old, old);
+    utimesSync(succeeded, old, old);
 
     const result = await runMain(["plans", "auto-archive"], {
       cwd: fixture.product,
@@ -289,6 +328,35 @@ describe("plans commands", () => {
     expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-110000.md"))).toBe(true);
     expect(existsSync(join(plansDir, "79"))).toBe(true);
     expect(existsSync(join(plansDir, "_archives", "79"))).toBe(false);
+  });
+
+  it("archives stale running sessions and their ticket directories", async () => {
+    const fixture = makeFixture();
+    const plansDir = join(fixture.product, ".plans");
+    const running = join(plansDir, "_alcode", "20260901-100000.md");
+    const ticketSession = join(plansDir, "79", "_alcode", "20260901-120000.md");
+    mkdirSync(join(plansDir, "_alcode"), { recursive: true });
+    mkdirSync(join(plansDir, "79", "_alcode"), { recursive: true });
+    writeFileSync(running, "---\nstatus: running\n---\n");
+    writeFileSync(ticketSession, "---\nstatus: running\n---\n");
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    utimesSync(running, old, old);
+    utimesSync(ticketSession, old, old);
+
+    const result = await runMain(["plans", "auto-archive"], {
+      cwd: fixture.product,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Archived _alcode/20260901-100000.md");
+    expect(result.stdout).toContain("Archived 79");
+    expect(existsSync(running)).toBe(false);
+    expect(existsSync(ticketSession)).toBe(false);
+    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "79", "_alcode", "20260901-120000.md"))).toBe(
+      true,
+    );
   });
 
   it("archives a ticket given through the plans clone path", async () => {

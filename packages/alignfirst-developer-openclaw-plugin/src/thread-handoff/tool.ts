@@ -15,6 +15,7 @@ import {
 import type { HandoffService } from "./service.js";
 import type { HandoffStore } from "./state.js";
 import type { HandoffRecord, PluginConfiguration, SourceContext, ToolSuccess } from "./types.js";
+import { nonempty } from "./values.js";
 
 const threadHandoffParameters = Type.Union([
   Type.Object(
@@ -201,8 +202,7 @@ function parseInput(value: unknown): ToolInput {
 function blankAsAbsent(value: unknown): string | undefined {
   if (value === undefined) return;
   if (typeof value !== "string") return invalidInput();
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? undefined : trimmed;
+  return nonempty(value);
 }
 
 function requiredString(value: unknown): string {

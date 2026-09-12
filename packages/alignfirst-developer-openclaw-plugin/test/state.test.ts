@@ -24,9 +24,6 @@ describe("handoff SQLite state", () => {
       ),
     ).toMatchObject({ starterText: "Please do the work." });
     expect(second.findHandoffByRoute("route-1")).toMatchObject({ handoffId: "handoff-1" });
-    expect(second.findHandoffByTarget(handoff().targetSessionKey)).toMatchObject({
-      handoffId: "handoff-1",
-    });
     expect(statSync(resolveDatabasePath(stateDir)).mode & 0o777).toBe(0o600);
     expect(statSync(`${stateDir}/thread-handoff`).mode & 0o777).toBe(0o700);
     second.close();
@@ -84,9 +81,11 @@ describe("handoff SQLite state", () => {
     };
     const results = await Promise.all([
       Promise.resolve().then(() => first.claimHandoff(identity, 2_000).status),
-      Promise.resolve().then(() => second.claimHandoff(identity, 2_001).status),
+      Promise.resolve().then(
+        () => second.claimHandoff({ ...identity, runId: "run-2" }, 2_001).status,
+      ),
     ]);
-    expect(results).toEqual(["claimed", "claimed"]);
+    expect(results.sort()).toEqual(["alreadyClaimed", "claimed"]);
     first.close();
     second.close();
   });

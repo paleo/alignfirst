@@ -35,16 +35,16 @@ function staleTicketDirectories(plansDir: string, cutoff: number): string[] {
   return readdirSync(plansDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && isTicketName(entry.name))
     .map((entry) => join(plansDir, entry.name))
-    .filter((ticketDir) => !hasRunningSession(ticketDir))
+    .filter((ticketDir) => !hasRunningSession(ticketDir, cutoff))
     .filter((ticketDir) => newestFileMtime(ticketDir) < cutoff);
 }
 
-function hasRunningSession(ticketDir: string): boolean {
+function hasRunningSession(ticketDir: string, cutoff: number): boolean {
   const sessionDir = join(ticketDir, "_alcode");
   if (!existsSync(sessionDir)) return false;
   return readdirSync(sessionDir, { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile())
-    .some((entry) => isRunningSessionFile(join(entry.parentPath, entry.name)));
+    .some((entry) => isFreshRunningSessionFile(join(entry.parentPath, entry.name), cutoff));
 }
 
 function newestFileMtime(dir: string): number {
@@ -61,12 +61,13 @@ function staleNoTicketSessionFiles(plansDir: string, cutoff: number): string[] {
   return readdirSync(sessionDir, { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => join(sessionDir, entry.name))
-    .filter((path) => !isRunningSessionFile(path))
+    .filter((path) => !isFreshRunningSessionFile(path, cutoff))
     .filter((path) => statSync(path).mtimeMs < cutoff);
 }
 
-function isRunningSessionFile(path: string): boolean {
+function isFreshRunningSessionFile(path: string, cutoff: number): boolean {
   try {
+    if (statSync(path).mtimeMs <= cutoff) return false;
     const lines = readFileSync(path, "utf8").split(/\r?\n/);
     if (lines[0] !== "---") return false;
     const closingDelimiter = lines.indexOf("---", 1);

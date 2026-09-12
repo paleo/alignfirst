@@ -1,8 +1,8 @@
-import type { ThreadObservation } from "../../scripts/inspect-wake.ts";
+import type { ThreadObservation } from "../../scripts/inspect-thread.ts";
 import type { ScenarioContext } from "@paleo/openclaw-test";
 import { setTimeout } from "node:timers/promises";
 
-const INSPECT_SESSION = "/opt/alignfirst/alignfirst-developer-tests/scripts/inspect-wake.ts";
+const INSPECT_SESSION = "/opt/alignfirst/alignfirst-developer-tests/scripts/inspect-thread.ts";
 
 export async function waitForThreadSettlement(
   ctx: ScenarioContext,
@@ -23,8 +23,8 @@ export async function waitForThreadSettlement(
     if (result.exitCode !== 0) throw new Error(`Session inspection failed: ${result.stderr}`);
     const observation: ThreadObservation = JSON.parse(result.stdout);
     last = observation;
-    // Native exec notices may wait until the next scheduled tick. The chained reply has
-    // already reported the result; require its process to exit and the current thread to settle.
+    // The chained event requests a heartbeat and returns. Its process may exit before the report,
+    // so observe process exit and thread settlement independently.
     const completionObserved =
       launchId === undefined ||
       (observation.backgroundResultObserved === true && observation.processExited === true);
