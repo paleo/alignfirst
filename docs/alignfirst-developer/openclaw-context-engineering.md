@@ -50,6 +50,8 @@ System events are held in memory (2026.9.x): a queued event does not survive a g
 
 The background `exec` acknowledgement ends with "Use process (list/poll/log/…) for follow-up". On a takeover turn with a 600-second budget, that sentence led the model to poll a backgrounded `alcode` run fifty-five times until the turn was aborted with nothing posted. The delegation guide forbids any `process` call on an `alcode` session.
 
+Completion reporting uses the thread's ticket, including a reserved `side-N`. The CLI's `status --no-ticket` searches the shared `.plans/_alcode/` directory and can select another thread's run.
+
 The saved transcript is not a copy of the live heartbeat prompt. `buildReplyPromptEnvelopeBase` in `src/auto-reply/reply/prompt-prelude.ts` substitutes `HEARTBEAT_TRANSCRIPT_PROMPT` (`[OpenClaw heartbeat poll]`) when saving heartbeat user messages. A transcript showing that marker does not establish which instructions the model received. Use provider payloads to inspect the live prompt. Existing workspace rules that match the marker apply only when that text is actually present in the current prompt.
 
 A completion message chained onto a background `exec` and OpenClaw's native exec completion notice take different prompt branches. When testing the notice, observe the actual event; a generic injected `system event` exercises a different branch. The saved transcript shows the `[OpenClaw heartbeat poll]` marker for both, so it cannot tell them apart either.

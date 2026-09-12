@@ -18,11 +18,11 @@ Under OpenClaw, background it through the `exec` tool:
   Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it. Never wait for either text.
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
-- The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an alcode run. Call no `process` action on the alcode session, before or after the acknowledgement, including `poll` and `log`. The wake turn locates the session file with `alcode status --ticket <id>` (or `--no-ticket`).
+- The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an alcode run. Call no `process` action on the alcode session, before or after the acknowledgement, including `poll` and `log`.
 
 As soon as the run is backgrounded, tell the user — in the user's language — that the coding agent is now working in the background and that you will report back when it finishes (e.g. *"The coding agent is running in the background — I'll let you know as soon as it's done."*). Post it even when the user asked to be notified only at completion: this line is the promise of exactly that, not an interruption — a launch with no acknowledgement reads as a session gone silent. The acknowledgement is the plain text that ends the turn on every surface. Only the final message is guaranteed to post, so write nothing and call no tool after it. Do **not** also post it via `message`, and do **not** poll.
 
-Every run writes a session file under `.plans/`: `.plans/<ticket>/_alcode/<stamp>.md`, or `.plans/_alcode/<stamp>.md` without a ticket. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+Each ticketed run writes `.plans/<ticket>/_alcode/<stamp>.md`. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
 
 **One protocol run at a time per workspace** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
@@ -34,7 +34,7 @@ The chained wake fires when the backgrounded `alcode` exits. This session receiv
 
 Any heartbeat received while an `alcode` run is **still pending** enters this completion procedure:
 
-1. **Reconcile the run, then read its session file.** Run `alcode status --ticket <id>` (or `--no-ticket`) from the workspace; its `sessionFile:` line names the run's file. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+1. **Reconcile the run, then read its session file.** Run `alcode status --ticket <id>` from the workspace using the thread's ticket, including `side-N`; its `sessionFile:` line names the newest run's file. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
 2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `alcode` run launched from this completion turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake. Its report becomes the launch acknowledgement, and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
