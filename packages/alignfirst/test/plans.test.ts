@@ -115,7 +115,7 @@ describe("plans commands", () => {
     );
   });
 
-  it("resolves a content conflict by keeping the local version", async () => {
+  it("resolves a content conflict by preserving both versions", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
@@ -135,11 +135,13 @@ describe("plans commands", () => {
     writeFileSync(plan, "local\n");
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(0);
-    expect(conflict.stdout).toContain(
-      "Resolved product-plans/78/A1-spec.md: kept the local version.",
-    );
-    expect(readFileSync(plan, "utf8")).toBe("local\n");
+    expect(conflict.stdout).toContain("saved the local version as product-plans/78/A2-spec.md.");
+    expect(readFileSync(plan, "utf8")).toBe("remote\n");
+    expect(readFileSync(join(plan, "..", "A2-spec.md"), "utf8")).toBe("local\n");
     expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
+      "remote",
+    );
+    expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A2-spec.md")).toBe(
       "local",
     );
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
@@ -176,15 +178,17 @@ describe("plans commands", () => {
     const result = await runMain(["sync"], { cwd: fixture.product });
 
     expect(result.code).toBe(0);
-    expect(readFileSync(planA, "utf8")).toBe("local A\n");
-    expect(readFileSync(planB, "utf8")).toBe("local B\n");
+    expect(readFileSync(planA, "utf8")).toBe("remote A\n");
+    expect(readFileSync(planB, "utf8")).toBe("remote B\n");
     const remote = join(fixture.root, "remote.git");
-    expect(git(remote, "show", "HEAD:product-plans/78/A1-spec.md")).toBe("local A");
-    expect(git(remote, "show", "HEAD:product-plans/78/B1-plan.md")).toBe("local B");
+    expect(git(remote, "show", "HEAD:product-plans/78/A1-spec.md")).toBe("remote A");
+    expect(git(remote, "show", "HEAD:product-plans/78/B1-plan.md")).toBe("remote B");
+    expect(git(remote, "show", "HEAD:product-plans/78/B2-spec.md")).toBe("local A");
+    expect(git(remote, "show", "HEAD:product-plans/78/B3-plan.md")).toBe("local B");
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
   });
 
-  it("keeps both paths on a rename conflict", async () => {
+  it("keeps both paths on an archive versus edit conflict without rename detection", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
@@ -206,7 +210,7 @@ describe("plans commands", () => {
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(0);
     expect(conflict.stdout).toContain(
-      "Resolved product-plans/78/A1-spec.md: kept the paths present in the working tree.",
+      "Resolved product-plans/78/A1-spec.md: preserved committed contents at the surviving paths.",
     );
     expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
       "local",

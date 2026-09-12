@@ -29,11 +29,20 @@ export function assertMainWorktreeRoot(cwd: string): void {
 }
 
 export function gitOutput(dir: string, ...args: string[]): string {
+  return gitOutputRaw(dir, ...args).trim();
+}
+
+export function gitOutputRaw(dir: string, ...args: string[]): string {
+  let output: Buffer;
   try {
-    return execFileSync("git", ["-C", dir, ...args], { encoding: "utf-8" }).trim();
+    output = execFileSync("git", ["-C", dir, ...args]);
   } catch {
     throw gitFailure(args);
   }
+  const text = output.toString("utf8");
+  if (!Buffer.from(text).equals(output))
+    throw new CliError("Cannot read non-UTF-8 Git output safely. Resolve the rebase manually.");
+  return text;
 }
 
 export function gitOutputOrUndefined(dir: string, ...args: string[]): string | undefined {

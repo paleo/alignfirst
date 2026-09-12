@@ -2,4 +2,4 @@
 "alignfirst": minor
 ---
 
-`alignfirst sync` now resolves successive rebase conflicts in the shared plans clone by keeping the local version for content conflicts and every present path for rename and delete conflicts. Automatic archival skips recent running alcode sessions while allowing stale sessions left by interrupted runs to archive.
+`alignfirst sync` preserves conflicting documents separately, keeps published filenames stable, and retains original contents for supported rename and delete conflicts. Rebases that need manual resolution stop before pushing. Automatic archival retains recent files and archives stale sessions, including interrupted runs.

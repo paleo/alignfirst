@@ -275,7 +275,9 @@ describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
       const fixture = await startFixture(surface, { claimTwice: true });
       await injectRootMessage(fixture, "Project-X", "Start a task and claim it twice.");
       await waitForMessage(fixture, (message) => message.text === MARKER);
-      expect(providerContentCount(fixture, '"status": "claimed"')).toBeGreaterThanOrEqual(2);
+      const claimResults = providerClaimResults(fixture);
+      expect(claimResults.size).toBe(2);
+      expect([...claimResults.values()]).toEqual(["claimed", "claimed"]);
       expect(
         fixture.bus.state
           .getSnapshot()
@@ -826,13 +828,37 @@ function providerContentIncludes(fixture: Fixture, expected: string) {
   });
 }
 
-function providerContentCount(fixture: Fixture, expected: string): number {
-  return fixture.providerLog.filter((entry) => {
-    const body = JSON.parse(entry) as { messages?: Array<{ content?: unknown }> };
-    return body.messages?.some(
-      (message) => typeof message.content === "string" && message.content.includes(expected),
-    );
-  }).length;
+function providerClaimResults(fixture: Fixture): Map<string, unknown> {
+  const claimIds = new Set<string>();
+  const results = new Map<string, unknown>();
+  for (const entry of fixture.providerLog) {
+    const body = JSON.parse(entry) as {
+      messages?: Array<{
+        role?: string;
+        content?: unknown;
+        tool_call_id?: string;
+        tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+      }>;
+    };
+    for (const message of body.messages ?? []) {
+      for (const call of message.tool_calls ?? []) {
+        if (call.function.name !== "thread_handoff") continue;
+        const input = JSON.parse(call.function.arguments) as { action?: unknown };
+        if (input.action === "claim") claimIds.add(call.id);
+      }
+      if (
+        message.role !== "tool" ||
+        message.tool_call_id === undefined ||
+        !claimIds.has(message.tool_call_id)
+      )
+        continue;
+      expect(typeof message.content).toBe("string");
+      if (typeof message.content !== "string") continue;
+      const result = JSON.parse(message.content) as { status?: unknown };
+      results.set(message.tool_call_id, result.status);
+    }
+  }
+  return results;
 }
 
 async function injectRootMessage(fixture: Fixture, conversationId: string, text: string) {
