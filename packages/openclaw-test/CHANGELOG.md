@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.19.0
+
+### Minor Changes
+
+- bf37177: Added OpenRouter-compatible judge models with provider-specific credentials and cost reporting.
+
 ## 0.18.0
 
 ### Minor Changes
