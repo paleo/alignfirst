@@ -29,7 +29,19 @@ Then download Chromium as the service account. Resolve `playwright-core` from th
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw_entry=$(readlink -f "$(command -v openclaw)"); playwright_cli=$(node -e '\''const fs = require("node:fs"); const path = require("node:path"); const { createRequire } = require("node:module"); const fromOpenClaw = createRequire(process.argv[1]); let cli; try { const packageFile = fromOpenClaw.resolve("playwright-core/package.json"); cli = path.join(path.dirname(packageFile), "cli.js"); } catch {} if (!cli || !fs.existsSync(cli)) { const root = path.dirname(process.argv[1]); cli = [path.join(root, "node_modules/playwright-core/cli.js"), path.join(root, "dist/extensions/browser/node_modules/playwright-core/cli.js")].find(fs.existsSync); } if (!cli) throw new Error("OpenClaw playwright-core CLI not found"); process.stdout.write(cli);'\'' "$openclaw_entry"); node "$playwright_cli" install chromium'
 ```
 
-When Chromium fails to launch, list the unresolved direct dependencies. GTK and Vulkan load through `dlopen` and do not show here; Playwright's own dependency list (`deb.deps` next to the binary) is the cross-check.
+### AppArmor: let Chromium's sandbox create user namespaces
+
+Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, and Chromium needs one for its process sandbox. Without this profile, the OpenClaw browser aborts with `No usable sandbox!`. [`infra/openclaw/apparmor/playwright-chromium`](../../infra/openclaw/apparmor/playwright-chromium) grants `userns` to every Playwright Chromium revision while preserving the browser sandbox. Prefer it to `browser.noSandbox: true`.
+
+```sh
+sudo install -m 644 infra/openclaw/apparmor/playwright-chromium /etc/apparmor.d/playwright-chromium
+sudo apparmor_parser -r /etc/apparmor.d/playwright-chromium
+sudo aa-status | grep playwright-chromium
+```
+
+The plugin-path verification follows the gateway installation in [04](04-openclaw.md#browser-sandbox).
+
+Playwright's `chromium.launch()` disables the sandbox by default, so it can pass while OpenClaw's launch fails. Test `openclaw browser start --headless` first. If Chromium still fails, list the unresolved direct dependencies. GTK and Vulkan load through `dlopen` and do not show here; Playwright's own dependency list (`deb.deps` next to the binary) is the cross-check.
 
 ```sh
 sudo -u {{SERVICE_USER}} ldd /home/{{SERVICE_USER}}/.cache/ms-playwright/chromium-*/chrome-linux64/chrome | grep "not found"

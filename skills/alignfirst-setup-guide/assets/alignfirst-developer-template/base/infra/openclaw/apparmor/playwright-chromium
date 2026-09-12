@@ -1,0 +1,10 @@
+# Lets Playwright's Chromium create the user namespace its sandbox needs.
+# Ubuntu 24.04 blocks that for unconfined binaries (kernel.apparmor_restrict_unprivileged_userns=1);
+# same pattern as Ubuntu's own /etc/apparmor.d/chrome. Deploy: docs/installations/05-openclaw-dependencies.md.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile playwright-chromium /home/{{SERVICE_USER}}/.cache/ms-playwright/chromium{,_headless_shell}-*/chrome{,-headless-shell}-linux64/{chrome,chrome-headless-shell} flags=(unconfined) {
+  userns,
+}

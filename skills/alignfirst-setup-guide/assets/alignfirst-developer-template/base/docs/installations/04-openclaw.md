@@ -14,6 +14,7 @@ The seed assets live in `infra/openclaw/`:
 ```text
 infra/openclaw/
 ├── .env.example        # every value the seed reads; copy to .env (gitignored)
+├── apparmor/           # Playwright Chromium user-namespace profile
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
@@ -158,6 +159,16 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user enable --now openclaw-gateway.se
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway.service
 sudo -i -u {{SERVICE_USER}} -- systemctl --user cat openclaw-gateway.service
 # Expected: ExecStart names /usr/bin/node and ~/.npm-system-global/lib/node_modules/openclaw; effective PATH has no fnm entry; SHELL is /opt/{{SERVICE_USER}}/libexec/project-shell
+```
+
+### Browser sandbox
+
+The AppArmor profile installed in [05](05-openclaw-dependencies.md#apparmor-let-chromiums-sandbox-create-user-namespaces) preserves Chromium's process sandbox. Verify it through OpenClaw now that the gateway is running:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw browser start --headless && openclaw browser status'
+cat /proc/$(pgrep -u {{SERVICE_USER}} -f 'ms-playwright/chromium-.*/chrome' | head -1)/attr/current   # playwright-chromium (unconfined)
+sudo -i -u {{SERVICE_USER}} -- openclaw browser stop
 ```
 
 After an OpenClaw upgrade, refresh the unit (settings, node flags) with `--force`; the permission check now includes the unit file:

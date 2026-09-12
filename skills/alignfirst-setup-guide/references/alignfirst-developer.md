@@ -128,7 +128,7 @@ Every runbook states its role and its position at the top. Human steps are marke
 1. `01-server-setup.md` — **human administrator**, on the fresh server: admin account, SSH key-only, firewall, Node, podman. Ends with the coding agent installed and logged in for the admin account, then a session of that agent in the clone takes over as the **operator**.
 2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, plans clone and `alignfirst plans setup` when enabled, `workspace setup`.
 3. `03-toolchain.md` — service account created, npm prefix, the CLIs, the coding agent, git access (human: key registration or device code).
-4. `05-openclaw-dependencies.md` — OS packages for the tools, git-host CLIs and their authentication (human), Chromium.
+4. `05-openclaw-dependencies.md` — OS packages for the tools, git-host CLIs and their authentication (human), Chromium and its AppArmor user-namespace profile.
 5. `07-channel.md`, platform part — **channel administrator** creates the app and collects the tokens and IDs for `.env`.
 6. `04-openclaw.md` — human fills `.env`; snapshot, seed, workspace files, the projects marker, lingering, `gateway install`, `podman.socket`; human: provider login when no API key, dashboard pairing through the SSH tunnel, reboot check from the laptop.
 7. `08-coding-agent.md` — human authenticates the coding agent in the service account; skills, global instructions, verification.
