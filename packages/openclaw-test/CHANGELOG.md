@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.19.1
+
+### Patch Changes
+
+- c6ff65d: Keep externally managed gateway configurations authoritative during startup.
+
 ## 0.19.0
 
 ### Minor Changes

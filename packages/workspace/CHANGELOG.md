@@ -1,5 +1,11 @@
 # @paleo/workspace
 
+## 0.33.1
+
+### Patch Changes
+
+- d6b0b40: Prevented new workspace branches from inheriting an upstream from `--from`.
+
 ## 0.33.0
 
 ### Minor Changes
