@@ -23,6 +23,9 @@ beforeEach(() => {
   git(["init", "-b", "main"]);
   git(["config", "user.email", "test@example.com"]);
   git(["config", "user.name", "Test"]);
+  // `createBranch` passes `--no-track`; pin the key it neutralises so the assertion cannot pass
+  // because of the developer's own `branch.autoSetupMerge`.
+  git(["config", "branch.autoSetupMerge", "always"]);
   git(["commit", "--allow-empty", "-m", "init"]);
   process.chdir(repo);
   ctx = { currentWorktree: repo, mainWorktree: repo, isMainWorktree: true };

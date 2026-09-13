@@ -60,6 +60,8 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
       );
     },
     async stop() {
+      // `service.stop()` guarantees no detached completion calls `getStore()` afterwards; such a
+      // call would reopen the database behind the close below.
       await service.stop();
       store?.close();
       store = undefined;

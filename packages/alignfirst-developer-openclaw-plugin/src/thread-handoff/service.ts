@@ -30,15 +30,15 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
   const now = params.now ?? Date.now;
   const scanIntervalMs = params.scanIntervalMs ?? SCAN_INTERVAL_MS;
   const attemptSpacingMs = params.attemptSpacingMs ?? ATTEMPT_SPACING_MS;
-  const dispatchResource = new AsyncResource("alignfirst.thread-handoff.dispatch", {
-    requireManualDestroy: true,
-  });
+  const dispatchResource = new AsyncResource("alignfirst.thread-handoff.dispatch");
   const targetWork = new Map<string, Promise<unknown>>();
   const inFlight = new Map<string, Promise<void>>();
   let timer: ReturnType<typeof setInterval> | undefined;
   let scan: Promise<void> | undefined;
-  let dispatchResourceDestroyed = false;
   let stopped = true;
+  // The host closes the store once `stop()` resolves. A dispatch that settles afterwards must not
+  // call `getStore()`, which would reopen the database and leak the connection.
+  let storeReleased = false;
 
   const service: HandoffService = {
     async startTurn(record) {
@@ -60,7 +60,7 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
           : Promise.reject(
               new Error(`Channel ${updated.channelId} is not configured for handoff.`),
             );
-        const completion = finishAttempt(params, updated, turn, now)
+        const completion = finishAttempt(params, updated, turn, now, () => storeReleased)
           .finally(() => {
             if (inFlight.get(updated.handoffId) === completion) {
               inFlight.delete(updated.handoffId);
@@ -79,6 +79,7 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
     async start() {
       if (!stopped) return;
       stopped = false;
+      storeReleased = false;
       params.getStore();
       await recoverPending(service, params, inFlight, now(), attemptSpacingMs);
       timer = setInterval(() => {
@@ -95,16 +96,10 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
     },
     async stop() {
       stopped = true;
+      storeReleased = true;
       if (timer) clearInterval(timer);
       timer = undefined;
-      try {
-        await scan;
-      } finally {
-        if (!dispatchResourceDestroyed) {
-          dispatchResource.emitDestroy();
-          dispatchResourceDestroyed = true;
-        }
-      }
+      await scan;
     },
   };
   return service;
@@ -159,6 +154,7 @@ async function finishAttempt(
   record: HandoffRecord,
   turn: Promise<void>,
   now: () => number,
+  storeReleased: () => boolean,
 ): Promise<void> {
   let failure: unknown;
   try {
@@ -167,7 +163,6 @@ async function finishAttempt(
     failure = error;
   }
   try {
-    const current = params.getStore().recordAttemptEnd(record.routeKey, now());
     if (failure === undefined) {
       params.logger.debug?.(
         `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} completed`,
@@ -177,6 +172,9 @@ async function finishAttempt(
         `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} failed: ${errorMessage(failure)}`,
       );
     }
+    // A stale `lastAttemptedAt` only makes the record eligible for recovery sooner after a restart.
+    if (storeReleased()) return;
+    const current = params.getStore().recordAttemptEnd(record.routeKey, now());
     if (current?.state === "pending" && current.attemptCount >= MAX_ATTEMPTS) {
       params.logger.warn(
         `thread-handoff ${record.handoffId} stays pending after ${current.attemptCount} start attempts; it remains claimable by the next human message in the thread; inspect it with: openclaw thread-handoff list`,
