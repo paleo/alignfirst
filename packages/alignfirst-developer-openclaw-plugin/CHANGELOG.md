@@ -1,5 +1,12 @@
 # @paleo/alignfirst-developer-openclaw-plugin
 
+## 0.3.1
+
+### Patch Changes
+
+- d6b0b40: Fixed a leaked handoff database connection when the gateway stops during a takeover turn.
+- c6ff65d: Immediate thread handoff now starts reliably on OpenClaw 2026.9.4.
+
 ## 0.3.0
 
 ### Minor Changes
