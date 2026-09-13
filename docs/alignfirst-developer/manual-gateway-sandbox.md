@@ -68,7 +68,7 @@ sqlite3 -readonly ~/.openclaw/agents/main/agent/openclaw-agent.sqlite \
    order by created_at desc limit 1;"
 ```
 
-The `transcript_events` columns are `session_id`, `seq`, `event_json`, and `created_at` in OpenClaw 2026.9.3. Confirm them after an upgrade with `.schema transcript_events`.
+The `transcript_events` columns are `session_id`, `seq`, `event_json`, and `created_at` in OpenClaw 2026.9.4. Confirm them after an upgrade with `.schema transcript_events`.
 
 `gateway call agent --expect-final` and `openclaw agent --session-key` start regular turns through the `agent` method; they remain useful generic probes.
 

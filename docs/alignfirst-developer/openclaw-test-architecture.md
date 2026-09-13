@@ -158,7 +158,7 @@ Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the regi
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
-Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.3 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
+Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.4 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
 
 **Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
 
@@ -208,7 +208,14 @@ dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on 
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
 final `NO_REPLY`.
 
-The deterministic external-plugin suite uses the real OpenClaw 2026.9.3 executable, a scripted
+The shared fresh-takeover assertion binds the successful claim, history read, and eyes reaction by
+tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
+target from the newest visible message in the read result, and confirms that the bus stores exactly
+one reaction from `openclaw`. A01 applies it to a silent takeover; A24 applies it before active
+multi-project delegation. The internal service activation is absent from bus history and cannot be
+selected.
+
+The deterministic external-plugin suite uses the real OpenClaw 2026.9.4 executable, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @paleo/alignfirst-developer-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
@@ -269,7 +276,11 @@ Trajectory capture is default-on (disable with `OPENCLAW_TRAJECTORY=0` on the ga
 
 ## Judge
 
-`judgeLLM` calls Anthropic directly from the runner — no bus traffic, no gateway involvement. Not an OpenClaw agent. Model defaults to `anthropic/claude-haiku-4-5`; override via `OPENCLAW_TEST_JUDGE_MODEL` on the runner service. LiteLLM-style ref required; only the `anthropic/` provider is wired up today.
+`judgeLLM` calls its provider directly from the runner — no bus traffic, no gateway involvement. It
+is not an OpenClaw agent. The package defaults to `anthropic/claude-haiku-4-5`; the consumer
+Compose stack defaults to `openrouter/anthropic/claude-haiku-4.5` and accepts a host
+`OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
+supported.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
 

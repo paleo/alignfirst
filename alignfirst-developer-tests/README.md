@@ -47,7 +47,8 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
 - [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at
   `/home/claw/projects`; the skill and monorepo bind mounts on `gateway`;
-  `OPENCLAW_TEST_JUDGE_MODEL=openrouter/anthropic/claude-haiku-4.5` on `runner`.
+  `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and
+  accepts a host override.
 
 ## Fixtures
 
@@ -81,7 +82,7 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A20 | A casual mention of a listed project is recognized as project work. |
 | A21 | A concrete action with neither project nor ticket still opens a thread and asks for its project. |
 | A23 | A PR URL carries through resource resolution, ticket recovery, review delegation, and reported findings. The fresh thread discovers and reuses a preexisting registered workspace, preserving A07’s cold-discovery boundary without another startup. |
-| A24 | One multi-project request delegates a base refresh separately in each canonical project. |
+| A24 | One multi-project request acknowledges the active takeover, uses the approved readiness wording, and delegates a base refresh separately in each canonical project. |
 | A25 | A multiline request survives the starter and request-file capture before coding. Its missing-ticket question may appear in the starter or the thread. |
 | A26 | Explicit no-ticket work reserves the next side ticket and captures the complete request. File observation does not require setup to remain paused while the test polls. |
 | A27 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
@@ -91,7 +92,7 @@ A04, A14 and A21 retain separate fresh conversations because absent-project infe
 
 Starter values, canonical paths, full detailed requests, and actual session ownership are checked structurally. Scenario-specific judges cover meaning where needed, including missing-information questions and A25’s request fidelity. The former generic starter judge repeated these checks at every thread bootstrap and rejected valid summaries; it is removed.
 
-The quiet-takeover helper observes a claim, a history read and a terminal turn before checking that the starter's question was not repeated. It does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
+The quiet-takeover helper observes a fresh claim, history read, and eyes reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation, then waits for a terminal turn before checking that the starter's question was not repeated. A24 applies the same structural reaction assertion to an active takeover and checks the approved readiness meaning. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
 From this directory, rebuild the CLIs and harness image, then run 20 conversation scenarios on both surfaces with Terra. Run the deterministic A13 contract once for the selected coding agent.
 
@@ -131,7 +132,7 @@ tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-auto
 IDs map to their native receipt contract in `plugins.entries.alignfirst-developer.config.channelSurfaces`.
 
 The complementary deterministic suite makes no model calls and runs outside Docker against the
-pinned OpenClaw 2026.9.3 executable:
+pinned OpenClaw 2026.9.4 executable:
 
 ```sh
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @paleo/alignfirst-developer-openclaw-plugin --prefix ..

@@ -43,6 +43,7 @@ services:
     working_dir: /opt/openclaw-test/src
     environment:
       OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_READONLY: "1"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENCLAW_RAW_STREAM: ${OPENCLAW_RAW_STREAM:-}

@@ -69,11 +69,7 @@ supported.
 
 ## Turn start and persistence
 
-The plugin commits a pending record before dispatching `Take over this thread.` from `AlignFirst Service` as a reply run through the
-channel-inbound path. Its plugin-built context sets the service display name without a human sender ID or command authority, and sets
-`WasMentioned: false`. These plugin-dispatched turns disable block streaming so their complete
-final payload reaches OpenClaw's durable outbound path. The reply run records the session's last
-route. The plugin's in-process nudge does not need an `openclaw` executable on the gateway's `PATH`.
+The plugin commits a pending record before dispatching `Take over this thread.` from `AlignFirst Service` as a reply run through the channel-inbound path. Immediate dispatch starts outside the calling tool turn's asynchronous context. Its plugin-built context sets the service display name without a human sender ID or command authority, and sets `WasMentioned: false`. These plugin-dispatched turns disable block streaming so their complete final payload reaches OpenClaw's durable outbound path. The reply run records the session's last route. The plugin's in-process nudge does not need an `openclaw` executable on the gateway's `PATH`.
 
 The message body is static: it carries no starter copy, routing fields, or handoff ID. The playbook routes by thread metadata, claims the current session, and reads the visible starter and human replies through thread history. The nudge supplies no missing input or approval. A takeover turn with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 
@@ -115,7 +111,7 @@ npm run lint --workspace @paleo/alignfirst-developer-openclaw-plugin
 ```
 
 The ordinary test command excludes the real-gateway suite. To exercise the package as an external
-plugin against the pinned OpenClaw 2026.9.3 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
+plugin against the pinned OpenClaw 2026.9.4 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @paleo/alignfirst-developer-openclaw-plugin

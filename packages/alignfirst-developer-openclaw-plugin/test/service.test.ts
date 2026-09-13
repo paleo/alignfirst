@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { OpenClawPluginApi, PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -63,6 +64,7 @@ describe("handoff turn start and recovery", () => {
         messageId: "thread-handoff:handoff-2:1",
       },
     });
+    await fixture.service.stop();
     fixture.store.close();
   });
 
@@ -88,6 +90,27 @@ describe("handoff turn start and recovery", () => {
     fixture.store.close();
   });
 
+  it("starts dispatch outside the caller async context", async () => {
+    const callerContext = new AsyncLocalStorage<string>();
+    const fixture = serviceFixture();
+    const record = handoff();
+    fixture.store.insertHandoff(record);
+    dispatchTurn.mockImplementationOnce(() => {
+      expect(callerContext.getStore()).toBeUndefined();
+      return Promise.resolve();
+    });
+
+    try {
+      await callerContext.run("tool-turn", () => fixture.service.startTurn(record));
+      await vi.waitFor(() =>
+        expect(fixture.store.findHandoffByRoute(record.routeKey)?.lastAttemptedAt).toBe(100_000),
+      );
+    } finally {
+      await fixture.service.stop();
+      fixture.store.close();
+    }
+  });
+
   it("logs failed attempts and records their end time", async () => {
     const times = [100_000, 101_000];
     const fixture = serviceFixture({ now: () => times.shift() ?? 101_000 });
@@ -102,6 +125,7 @@ describe("handoff turn start and recovery", () => {
     expect(fixture.logger.warn).toHaveBeenCalledWith(
       "thread-handoff handoff-1 start attempt 1 failed: dispatch refused",
     );
+    await fixture.service.stop();
     fixture.store.close();
   });
 

@@ -16,7 +16,7 @@ The seed's silence rule needed four wordings, each failing a different way. "End
 
 ## Promise only what this session does
 
-The production starter closed with "Je m'en occupe dans ce fil", a role the channel session does not have: it ends its turn right after `thread_handoff start`, and the thread session may still be waiting for a value or for the plugin. The first fix, "the thread is ready and its session takes over", still promised the takeover. The user's decision cut it to "The thread is ready." The rubric fails any claim that the channel session handles, follows or takes care of the work, and any statement that work has started when only the starter was delivered. In a DM, where the plugin cannot start a thread, the bot says so rather than promising an activation. The [plugin document](./openclaw-plugin.md) states the principle.
+The production starter closed with "Je m'en occupe dans ce fil", a role the channel session does not have: it ends its turn right after `thread_handoff start`, and the thread session may still be waiting for a value or for the plugin. The first fix, "the thread is ready and its session takes over", still promised the takeover. It became "The thread is ready.", then `Ready for the work session.`. This subjectless form identifies what is ready without assigning the work to the channel session. The rubric fails any claim that the channel session handles, follows or takes care of the work, and any statement that work has started when only the starter was delivered. In a DM, where the plugin cannot start a thread, the bot says so rather than promising an activation. The [plugin document](./openclaw-plugin.md) states the principle.
 
 ## The message the model receives outranks the playbook
 
@@ -84,7 +84,7 @@ Then vary the parts that carry no value — the setup signal, for instance: "Set
 
 ## Temporal anchors are required
 
-"From now on" / "first user-facing action" / "before X" need an event the agent can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists.
+"From now on" / "first user-facing action" / "before X" need an event the agent can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists. The takeover acknowledgement uses three anchors: successful claim, completed history read, then the first surface mutation.
 
 ## Per-surface clauses, not blanket rules
 

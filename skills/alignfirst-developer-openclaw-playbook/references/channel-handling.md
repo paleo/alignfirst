@@ -98,8 +98,8 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No TICKET_ID for single-project work → ask for the ticket id, unless the message contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
-- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state that the thread is ready.
-- Nothing else needs an answer → state that the thread is ready, in the user's language (for example, "The thread is ready.").
+- A request explicitly spanning several projects, or work independent of any project → ask for no main project; state `Ready for the work session.` in the user's language.
+- Nothing else needs an answer → state `Ready for the work session.` in the user's language (for example, "Ready for the work session.").
 
 Whichever case applies, the `{ask}` never says that this channel session handles the work, and never says that work has begun.
 

@@ -58,7 +58,7 @@ afterEach(async () => {
   }
 });
 
-describe("OpenClaw 2026.9.3 external-plugin gateway", () => {
+describe("OpenClaw 2026.9.4 external-plugin gateway", () => {
   it.each(["slack", "discord"] as const)(
     "keeps a claimed %s seed silent while awaiting a human answer",
     async (surface) => {

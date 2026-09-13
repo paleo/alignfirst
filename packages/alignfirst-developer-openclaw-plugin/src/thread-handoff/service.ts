@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import type { OpenClawPluginApi, PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
 import { dispatchTurn } from "./dispatch.js";
 import type { HandoffStore } from "./state.js";
@@ -29,10 +30,14 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
   const now = params.now ?? Date.now;
   const scanIntervalMs = params.scanIntervalMs ?? SCAN_INTERVAL_MS;
   const attemptSpacingMs = params.attemptSpacingMs ?? ATTEMPT_SPACING_MS;
+  const dispatchResource = new AsyncResource("alignfirst.thread-handoff.dispatch", {
+    requireManualDestroy: true,
+  });
   const targetWork = new Map<string, Promise<unknown>>();
   const inFlight = new Map<string, Promise<void>>();
   let timer: ReturnType<typeof setInterval> | undefined;
   let scan: Promise<void> | undefined;
+  let dispatchResourceDestroyed = false;
   let stopped = true;
 
   const service: HandoffService = {
@@ -45,11 +50,13 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
         if (updated?.state !== "pending") return;
         const surface = params.configuration.channelSurfaces[updated.channelId];
         const turn = surface
-          ? dispatchTurn({
-              runtime: params.runtime,
-              logger: params.logger,
-              request: buildSeedRequest(updated, surface),
-            })
+          ? dispatchResource.runInAsyncScope(() =>
+              dispatchTurn({
+                runtime: params.runtime,
+                logger: params.logger,
+                request: buildSeedRequest(updated, surface),
+              }),
+            )
           : Promise.reject(
               new Error(`Channel ${updated.channelId} is not configured for handoff.`),
             );
@@ -90,7 +97,14 @@ export function createHandoffService(params: HandoffServiceParams): HandoffServi
       stopped = true;
       if (timer) clearInterval(timer);
       timer = undefined;
-      await scan;
+      try {
+        await scan;
+      } finally {
+        if (!dispatchResourceDestroyed) {
+          dispatchResource.emitDestroy();
+          dispatchResourceDestroyed = true;
+        }
+      }
     },
   };
   return service;

@@ -2,7 +2,7 @@
 
 You're handling work inside a Slack or Discord thread. The channel session delivered the starter and may have started this regular thread session with a message from AlignFirst Service. Lifecycle, workspace, investigation, and coding happen here.
 
-Your plain text is your reply, on Discord and Slack alike, and only the message that **ends your turn** is guaranteed to post: on most model providers, text written between tool calls never leaves the transcript. So the message you end a turn with carries everything the user needs from that turn: the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` on this thread; it posts everything twice. The single exception is a Discord rename, which travels with a post (see "Thread name" below). Otherwise `message` serves `read`, cross-surface posts, and attachments.
+Your plain text is your reply, on Discord and Slack alike, and only the message that **ends your turn** is guaranteed to post: on most model providers, text written between tool calls never leaves the transcript. So the message you end a turn with carries everything the user needs from that turn: the workspace state, the launch ack, the report. Never call `message` `send`/`thread-reply` on this thread; it posts everything twice. The single exception is a Discord rename, which travels with a post (see "Thread name" below). Otherwise `message` serves `read`, reactions, cross-surface posts, and attachments.
 
 Keep progress and completion reports in this thread. A request to notify the user means reply here; use a DM or another surface only when the user explicitly names that destination.
 
@@ -26,6 +26,10 @@ On a takeover turn with no human message to process, `alreadyClaimed` means anot
 ### Step 2 — Recover the thread context
 
 Read the current thread through `message` with `action: "read"`, the current channel, complete `chat_id` as `target`, and bare thread ID from conversation metadata. Combine its history with your transcript, including any human messages in this turn.
+
+On the fresh service takeover whose saved Step 1 result is `claimed`, acknowledge the takeover immediately after that read. Select the newest visible message in the returned history snapshot, using its returned order. The service nudge is internal and absent from surface history. Read the current surface's extended message reference named by workspace `AGENTS.md`, then call `message` `react` once with the current surface, complete `chat_id` as `target`, the selected message ID, and the reference's eyes value. Continue context recovery and work if the reaction fails; do not retry it.
+
+The reaction is the first channel-surface mutation of the successfully claimed takeover. Internal file reads, the handoff claim, and the surface-history read precede it. Workspace setup, delegation, a Discord rename or send, attachments, edits, deletes, and plain-text replies follow it. When a human message is already in the returned snapshot, its later position makes it the target. A message arriving after the read does not replace the selected target. Later human turns and repeated or recovery takeovers add no reaction.
 
 Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. The starter's values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook or the multi-project procedure asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
 

@@ -52,7 +52,7 @@ The bot claims only what it does. The channel session posts the starter, calls `
 
 ## How the nudge enters OpenClaw
 
-The plugin calls `runtime.channel.inbound.dispatchReply` with a context it builds itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.3, in the deterministic gateway suite:
+The handoff service owns an asynchronous boundary created outside inbound agent turns. It enters that clean context only while calling `runtime.channel.inbound.dispatchReply`, so the reply run cannot inherit a closing tool-turn work scope. The plugin builds the inbound context itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.4, in the deterministic gateway suite:
 
 - The plugin-dispatched turn must disable block streaming. With streaming on, OpenClaw marked the response streamed through a nonposting fallback and dropped the final payload before delivery.
 - A silent plugin-dispatched turn ends on `HEARTBEAT_OK`. `NO_REPLY` invoked the isolated finalizer in six probes out of six, on both surfaces, and produced an unsolicited answer.
@@ -78,4 +78,4 @@ Host entry points checked and refused for an external plugin, so the plugin owns
 - With `claude-sonnet-5`, the bot ran ninety-six `alcode` executions in one test day in the foreground with a 60-second timeout, ignoring the background rule. Terra ran none. The 30-second mock run hides the harm a real coding agent would suffer.
 - Terra chains one background run per completion step (code, log review, tests, push), so the user sees several intermediate acknowledgements. A product question, not a defect.
 - A `⚠️ Message blocked` host notice appeared twice in Slack threads after a silent takeover turn. Its text is in neither the OpenClaw sources nor the build.
-- The first visible thread post lands 1.5 to 2.5 minutes after the starter, at the end of the setup turn. The user sees nothing meanwhile.
+- Before the takeover acknowledgement was added, the first visible thread post landed 1.5 to 2.5 minutes after the starter, at the end of the setup turn. The reaction acknowledgement now provides earlier surface feedback.

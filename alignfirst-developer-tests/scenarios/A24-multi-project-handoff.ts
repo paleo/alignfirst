@@ -4,6 +4,7 @@ import { expectNoProtocolDelegation, setupCodingAgentMock } from "./_lib/mock-co
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { LUMEN_PROJECT_PATH, NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { expectTakeoverReaction } from "./_lib/takeover-reaction.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const TASK = "Rafraîchis les branches de base de nimbus et lumen.";
@@ -18,6 +19,7 @@ export default async function multiProjectHandoff(ctx: ScenarioContext): Promise
   const starter = await bootstrapThreadFromChannel(ctx, {
     text: TASK,
   });
+  await expectTakeoverReaction(ctx, starter);
 
   ctx.assertRegex(starter.match.text, /\bnimbus\b/iu, "starter carries nimbus");
   ctx.assertRegex(starter.match.text, /\blumen\b/iu, "starter carries lumen");
@@ -37,8 +39,10 @@ export default async function multiProjectHandoff(ctx: ScenarioContext): Promise
     rubric:
       "A thread-opening handoff for refreshing the base branches of both nimbus and lumen. It " +
       "does not ask the user to choose one main project, supply a ticket, or send a mechanical " +
-      "follow-up. Its closing states that the thread is ready ('Le fil est prêt.') or that the " +
-      "thread handles the work on both projects; future tense is fine.",
+      "follow-up. Its closing means 'Ready for the work session.' without a person, channel " +
+      "session, or thread as the actor; 'Prêt pour la session de travail.' is the approved French " +
+      "wording. Reject text claiming that the channel session or thread already handles, follows, " +
+      "or has begun the work.",
     label: "multi-project-explicit-working-session",
   });
   await expectBaseRefreshDelegation(ctx, codingAgent, "nimbus", NIMBUS_PROJECT_PATH);

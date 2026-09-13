@@ -50,6 +50,8 @@ confirmed native receipt, trusted tool context, exact canonical thread delivery,
 start, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
 does not establish these combined contracts.
 
+Keep the first-attempt assertion on the immediate reply dispatch. It must start and claim the target session before recovery spacing elapses. This catches dispatches that inherit a closed asynchronous work scope from the calling tool turn.
+
 ## Run doctor in a throwaway container
 
 Doctor is the upstream migration detector: it flags retired workspace files, retired config keys and pending state migrations. Run it against scratch copies of both workspaces we ship, the harness reference and the deployment template (base files plus one surface's `AGENTS.md`) — never the originals, `--fix` rewrites files:

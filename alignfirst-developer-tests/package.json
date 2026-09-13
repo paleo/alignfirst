@@ -22,7 +22,7 @@
     "@paleo/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
     "@paleo/openclaw-test": "file:vendor/openclaw-test.tgz",
     "@paleo/alignfirst-developer-openclaw-plugin": "file:vendor/alignfirst-developer-openclaw-plugin.tgz",
-    "openclaw": "2026.9.3"
+    "openclaw": "2026.9.4"
   },
   "devDependencies": {
     "@types/node": "~26.5.0",
