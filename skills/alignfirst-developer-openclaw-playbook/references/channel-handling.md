@@ -99,7 +99,7 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
 - A request explicitly spanning several projects, or work independent of any project → ask for no main project; state `Ready for the work session.` in the user's language.
-- Nothing else needs an answer → state `Ready for the work session.` in the user's language (for example, "Ready for the work session.").
+- Nothing else needs an answer → state `Ready for the work session.` in the user's language.
 
 Whichever case applies, the `{ask}` never says that this channel session handles the work, and never says that work has begun.
 

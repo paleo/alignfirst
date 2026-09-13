@@ -20,7 +20,7 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 {{COMMANDS:setup}}
 ```
 
-With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
+With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. New branches have no upstream; set one when you first push. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
 {{#PORTS}}
 `setup` creates the worktree (branch, ports, symlinks, config files), then runs the project's finalize step: install dependencies, build, provision the database.

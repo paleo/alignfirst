@@ -23,6 +23,9 @@ beforeEach(() => {
   git(["init", "-b", "main"]);
   git(["config", "user.email", "test@example.com"]);
   git(["config", "user.name", "Test"]);
+  // `createBranch` passes `--no-track`; pin the key it neutralises so the assertion cannot pass
+  // because of the developer's own `branch.autoSetupMerge`.
+  git(["config", "branch.autoSetupMerge", "always"]);
   git(["commit", "--allow-empty", "-m", "init"]);
   process.chdir(repo);
   ctx = { currentWorktree: repo, mainWorktree: repo, isMainWorktree: true };
@@ -76,6 +79,21 @@ describe("createBranch conflicts", () => {
   });
 });
 
+describe("createBranch start point", () => {
+  it("does not track a remote branch passed with --from", () => {
+    git(["remote", "add", "origin", repo]);
+    git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(["commit", "--allow-empty", "-m", "local commit"]);
+
+    createBranch("feature", ctx, run, { from: "origin/main" });
+
+    expect(gitOutput(["rev-parse", "feature"])).toBe(gitOutput(["rev-parse", "origin/main"]));
+    expect(gitOutput(["for-each-ref", "--format=%(upstream:short)", "refs/heads/feature"])).toBe(
+      "",
+    );
+  });
+});
+
 describe("worktree error paths", () => {
   it("throws when --from does not resolve", () => {
     expect(() => createBranch("feat", ctx, run, { from: "does-not-exist" })).toThrow(
@@ -90,6 +108,10 @@ describe("worktree error paths", () => {
 
 function git(args: string[]): void {
   execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+}
+
+function gitOutput(args: string[]): string {
+  return execFileSync("git", args, { cwd: repo, encoding: "utf-8" }).trim();
 }
 
 function branchExists(branch: string): boolean {

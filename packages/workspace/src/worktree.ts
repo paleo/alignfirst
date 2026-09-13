@@ -74,7 +74,15 @@ export function createBranch(
   const worktreePath = dedupeWorktreePath(
     computeWorktreePath(ctx.mainWorktree, finalBranch, dirNameFn),
   );
-  const addArgs = ["worktree", "add", "-b", finalBranch, "--end-of-options", worktreePath];
+  const addArgs = [
+    "worktree",
+    "add",
+    "--no-track",
+    "-b",
+    finalBranch,
+    "--end-of-options",
+    worktreePath,
+  ];
   if (from !== undefined) addArgs.push(from);
   execFileSync("git", addArgs, { stdio: stdioFor(run) });
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };

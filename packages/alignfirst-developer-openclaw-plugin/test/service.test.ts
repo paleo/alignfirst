@@ -233,6 +233,26 @@ describe("handoff turn start and recovery", () => {
     await fixture.service.stop();
     fixture.store.close();
   });
+
+  it("leaves the store alone when a turn settles after stop", async () => {
+    const fixture = serviceFixture();
+    const record = handoff();
+    fixture.store.insertHandoff(record);
+    const turn = createDeferred<void>();
+    dispatchTurn.mockReturnValue(turn.promise);
+
+    await fixture.service.startTurn(record);
+    await fixture.service.stop();
+    const callsBeforeSettling = fixture.getStore.mock.calls.length;
+    turn.resolve();
+    await vi.waitFor(() =>
+      expect(fixture.logger.debug).toHaveBeenCalledWith(expect.stringContaining("completed")),
+    );
+
+    expect(fixture.getStore).toHaveBeenCalledTimes(callsBeforeSettling);
+    expect(fixture.logger.error).not.toHaveBeenCalled();
+    fixture.store.close();
+  });
 });
 
 function createDeferred<T>(): {
@@ -252,6 +272,7 @@ async function nextEventLoopTurn(): Promise<void> {
 
 function serviceFixture(options: { now?: () => number } = {}) {
   const store = createHandoffStore(temporaryStateDir());
+  const getStore = vi.fn(() => store);
   const runtime = {
     config: { current: () => ({}) },
   } as unknown as OpenClawPluginApi["runtime"];
@@ -263,12 +284,13 @@ function serviceFixture(options: { now?: () => number } = {}) {
   };
   return {
     store,
+    getStore,
     runtime,
     logger,
     service: createHandoffService({
       runtime,
       configuration: { channelSurfaces: { slack: "slack", discord: "discord" } },
-      getStore: () => store,
+      getStore,
       logger: logger as unknown as PluginLogger,
       now: options.now ?? (() => 100_000),
     }),
