@@ -21,7 +21,7 @@ The only footprint left in the repository is the `.plans` symlink, registered in
 
 `ALIGNFIRST_OVERLAYS` names the directory holding the overlays. Each overlay is `<ALIGNFIRST_OVERLAYS>/<name>/_project/`. The underscore keeps it out of the ticket listing, like `_archives`.
 
-The recommended value is the team plans clone. A project's overlay then sits next to its tickets, is versioned, shared with the team, and travels with `alignfirst sync`. The AlignFirst Developer template set the variable in `environment.d/common.conf` to `~/projects/<plans-clone>`. Any other directory works.
+The recommended value is the work-files repository clone. A project's overlay then sits next to its tickets, is versioned, shared with the team, and travels with `alignfirst sync`. The AlignFirst Developer template set the variable in `environment.d/common.conf` to `~/projects/<plans-clone>`. Any other directory works.
 
 An overlay holds any of: `.alignfirst.json`, `AGENTS.md`, `DEVELOPERS.md`, `docs/`.
 

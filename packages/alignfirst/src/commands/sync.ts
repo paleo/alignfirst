@@ -9,7 +9,7 @@ import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
 
-export function runSync(ctx: CommandContext, args: string[]): number {
+export async function runSync(ctx: CommandContext, args: string[]): Promise<number> {
   const usage = `Usage: ${ctx.form} sync [--auto-archive | --no-auto-archive]\n`;
   const options = parseSyncArgs(ctx, args, usage);
   if (options === undefined) return 0;
@@ -24,37 +24,37 @@ export function runSync(ctx: CommandContext, args: string[]): number {
   const plansDir = join(ctx.cwd, ".plans");
   if (mode.kind === "local") {
     if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
-    ctx.stdout.write("(local plans mode, nothing to sync)\n");
+    ctx.stdout.write("(local mode, nothing to sync)\n");
     return 0;
   }
   const repoDir = mode.repoToplevel;
   assertNoStoppedRebase(repoDir, ctx.form);
-  git(repoDir, "add", "-A");
-  if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
+  await git(ctx, repoDir, "add", "-A");
+  if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   if (hasUpstream(repoDir)) {
     try {
-      git(repoDir, "pull", "--rebase");
+      await git(ctx, repoDir, "pull", "--rebase");
     } catch {
       if (findStoppedRebase(repoDir) === undefined)
         throw new CliError("git pull failed. See the git output above.");
-      resolveStoppedRebase(repoDir, ctx.stdout);
+      await resolveStoppedRebase(ctx, repoDir);
     }
   }
   if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {
-    git(repoDir, "add", "-A");
-    if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
+    await git(ctx, repoDir, "add", "-A");
+    if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   }
   if (hasCommitsToSend(repoDir)) {
     try {
-      git(repoDir, "push", "--quiet", "-u", "origin", "HEAD");
+      await git(ctx, repoDir, "push", "--quiet", "-u", "origin", "HEAD");
     } catch {
       throw new CliError(
         `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,
       );
     }
-    ctx.stdout.write("Plans synchronized: local changes sent.\n");
+    ctx.stdout.write("Work files synchronized: local changes sent.\n");
   } else {
-    ctx.stdout.write("Plans synchronized: nothing to send.\n");
+    ctx.stdout.write("Work files synchronized: nothing to send.\n");
   }
   return 0;
 }

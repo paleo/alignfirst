@@ -5,7 +5,7 @@ You are one of several reviewers examining the same branch, each from a differen
 ## Scope
 
 - Review the changes between the merge-base and HEAD (the orchestrator gives you both): `git diff <merge_base> HEAD`. The review target is the branch as committed.
-- Fresh eyes: derive everything from the code and the diff. Do not read specs, plans, summaries, or any file in the task directory (e.g., under `.plans/`).
+- Fresh eyes: derive everything from the code and the diff. Do not read specs, plans, summaries, or any file in the ticket directory (under `.plans/`).
 - Read-only: never modify the working tree, the index, or HEAD.
 
 ## Method

@@ -1,10 +1,10 @@
-# Team Plans Repository Setup
+# Work-Files Repository Setup
 
-Share `.plans/` through a dedicated team repository. Solo users keep `.plans/` as a local directory.
+Share `.plans/` through a dedicated team repository, the work-files repository. Solo users keep `.plans/` as a local directory.
 
 ## How It Works
 
-The team hosts one private, multi-project plans repository:
+The team hosts one private, multi-project work-files repository:
 
 ```text
 myteam-plans/
@@ -21,7 +21,7 @@ choose, typically beside the code repositories. In a configured project, `.plans
 the folder named by `plans.folder` in `.alignfirst.json`. Linked worktrees continue through the main
 worktree's symlink.
 
-A contributor without access to the plans repository uses a plain `.plans` directory. The CLI
+A contributor without access to the work-files repository uses a plain `.plans` directory. The CLI
 accepts both modes. Run `npx alignfirst plans check` to report the current mode.
 
 `npx alignfirst sync` publishes changes. Set `plans.autoArchive` to `true` in `.alignfirst.json` to archive
@@ -50,11 +50,11 @@ With the `alignfirst context` bootstrap section, the CLI delivers the sync instr
 > After every change in `.plans/`, run `npx alignfirst sync`.
 
 For a project prepared for an AlignFirst Developer, the `.plans/` entry in `DEVELOPERS.md` also
-names the shared repository and the sync command.
+names the work-files repository and the sync command.
 
 ## Configure Each Machine
 
-Clone the plans repository with the developer's own credentials. From the project root, link it:
+Clone the work-files repository with the developer's own credentials. From the project root, link it:
 
 ```sh
 git clone <plans-repository-url> ../myteam-plans
@@ -86,7 +86,7 @@ preSetup: ({ isMainWorktree, currentWorktree }) => {
 ```
 
 Keep the `isMainWorktree` gate. `preSetup` runs before the kernel creates shared-directory symlinks,
-so a fresh linked worktree has no `.plans` yet. The check accepts a usable plans symlink and a local
+so a fresh linked worktree has no `.plans` yet. The check accepts a usable `.plans` symlink and a local
 directory.
 
 Document these new-machine steps in `README.md` before workspace setup:
@@ -102,6 +102,6 @@ For a public repository, make local mode the default and avoid naming a private 
 
 ```sh
 npm install
-mkdir .plans   # or run npx alignfirst plans setup with the team plans clone
+mkdir .plans   # or run npx alignfirst plans setup with the work-files clone
 npm run workspace -- setup
 ```

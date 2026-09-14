@@ -87,7 +87,7 @@ _Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
 _Ticket ID format:_ `{DETECTED_TICKET_FORMAT}`
 ```
 
-Omit any convention that repository evidence cannot establish. When the project uses a team plans
+Omit any convention that repository evidence cannot establish. When the project uses a work-files
 repository, add: After every change in `.plans/`, run `npx alignfirst sync`. Add `--skill alignfirst` to
 the skills command above, since no bootstrap section describes the protocols.
 
@@ -100,15 +100,11 @@ expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Detect the 
 `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user
 when several non-`origin` remotes exist.
 
-Write `.alignfirst.json` with the agreed fields. When the project declares no `alignfirst` dependency,
-set `cli` to its supported version range. Without this field, each machine runs whichever version it
-fetched. The version guard reports a mismatch and gives the exact
-`npx -y alignfirst@"<range>"` command to run:
+Write `.alignfirst.json` with the agreed fields:
 
 ```json
 {
   "schemaVersion": 1,
-  "cli": "<supported-range>",
   "ticketIdPattern": "^\\d+$",
   "plans": { "folder": "acme-web", "autoArchive": true },
   "portRange": { "first": 8100, "last": 8299 },
@@ -121,14 +117,15 @@ fetched. The version guard reports a mismatch and gives the exact
 }
 ```
 
-Keep only applicable optional fields. Replace any hand-written AlignFirst or docmap section in
-`AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
+Keep only applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+
+Replace any hand-written AlignFirst or docmap section in `AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
 possible:
 
 ```markdown
 ## Project conventions and documentation
 
-Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
 ```
 
 ### Local installation
@@ -139,7 +136,7 @@ Add the exact current `alignfirst` version as a dev dependency with the project 
 
 The CLI brings `@paleo/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@paleo/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
 
-Continue with [plans-setup.md](plans-setup.md) when the team has a plans repository. Finish with:
+Continue with [plans-setup.md](plans-setup.md) when the team has a work-files repository. Finish with:
 
 ```sh
 npx alignfirst config

@@ -27,11 +27,12 @@ In the admin account:
 npm install -g alignfirst
 npm install
 # TEAM_PLANS_SECTION
+git clone {{PLANS_REPOSITORY_URL}} <plans-clone-path>
 alignfirst plans setup <plans-clone-path>
 # TEAM_PLANS_SECTION
 mkdir -p .plans .local
 npm run workspace -- setup
-alignfirst docmap
+alignfirst context
 ```
 
 Optional upstream reference for investigations (host-only, gitignored):

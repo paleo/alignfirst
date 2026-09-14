@@ -99,7 +99,7 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Directory: ${renderOutputValue(details.directory)}`,
     `  Remote host: ${renderNullableValue(details.remoteHost)}`,
     `  Port range: ${renderProjectRange(details.portRange ?? undefined, details.portRangeCode ?? undefined)}`,
-    `  Plans folder: ${renderNullableValue(details.plansFolder)}`,
+    `  Work-files folder: ${renderNullableValue(details.plansFolder)}`,
     `  Ticket id pattern: ${renderNullableValue(details.ticketIdPattern)}`,
     `  Workspaces: ${renderValues(details.workspaces)}`,
     "  Worktrees:",

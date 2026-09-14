@@ -4,12 +4,15 @@ export interface Output {
   write(text: string): void;
 }
 
-export interface CommandContext {
+export interface Streams {
+  stdout: Output;
+  stderr: Output;
+}
+
+export interface CommandContext extends Streams {
   cwd: string;
   env: NodeJS.ProcessEnv;
   home: string;
-  stdout: Output;
-  stderr: Output;
   form: string;
   version: string;
   projectConfig?: ResolvedProjectConfig;

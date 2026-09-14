@@ -51,7 +51,8 @@ export async function main(options?: MainOptions): Promise<number> {
       ctx.projectConfig = resolveProjectConfig(ctx.cwd);
       checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args]);
     }
-    return dispatch(ctx, command, args);
+    const code = await dispatch(ctx, command, args);
+    return code;
   } catch (error) {
     if (!(error instanceof CliError)) throw error;
     ctx.stderr.write(`${error.message}\n`);
@@ -68,7 +69,7 @@ function readPackageVersion(): string {
 }
 
 function renderHelp(ctx: CommandContext): string {
-  return `alignfirst — protocols, plans and docs in one command.
+  return `alignfirst — protocols, work files and docs in one command.
 
 Usage:
   ${ctx.form} guide [<protocol>]

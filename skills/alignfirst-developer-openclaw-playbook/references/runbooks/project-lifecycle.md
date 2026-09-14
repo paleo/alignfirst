@@ -50,7 +50,7 @@ The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Proj
 
 End the turn on a message that explains the procedure: a branch created in the main worktree, preparation commits by the coding agent, a pull request the user must merge, and work waiting for that merge before the original request resumes.
 
-Ask the user to approve this procedure and whether `.plans` must be shared through a team plans repository. If yes, ask for the repository URL. If no, `.plans` stays a plain directory. Wait for explicit approval.
+Ask the user to approve this procedure and whether `.plans` must be shared through a work-files repository. If yes, ask for the repository URL. If no, `.plans` stays a plain directory. Wait for explicit approval.
 
 ### Step 4 — Prepare the project on a branch
 
@@ -58,7 +58,7 @@ On approval:
 
 1. Create `.plans/` in the main worktree and run `alignfirst sync`. Run `alignfirst ticket --side` from PROJECT_PATH, write `.plans/{TICKET_ID}/A1-request.md` with the recorded request, then run `alignfirst sync`.
 2. Create `{TICKET_ID}/alignfirst-setup` in the main worktree. This setup branch is the second main-worktree exception, next to new-project bootstrap.
-3. Run `alcode --openclaw-guide`. From PROJECT_PATH, delegate the preparation to alcode without a protocol: use the `alignfirst-setup-guide` skill and prepare the repository for an AlignFirst Developer, with the user's team plans decision and repository URL. It must run `alproject doctor --root ~/projects` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Instruct alcode to commit and push the branch. The setup guide's rule against pushing addresses a human's laptop session, not this procedure.
+3. Run `alcode --openclaw-guide`. From PROJECT_PATH, delegate the preparation to alcode without a protocol: use the `alignfirst-setup-guide` skill and prepare the repository for an AlignFirst Developer, with the user's work-files repository decision and its URL. It must run `alproject doctor --root ~/projects` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Instruct alcode to commit and push the branch. The setup guide's rule against pushing addresses a human's laptop session, not this procedure.
 4. Have alcode create a ready pull request, not a draft.
 5. End the turn on the PR link and state that work resumes once the PR is merged.
 
@@ -68,7 +68,7 @@ When the user reports the merge, or you observe it while checking the PR:
 
 1. In the main worktree, switch back to the default branch, pull, and delete the local setup branch.
 2. Install dependencies and build.
-3. When the user chose the team plans repository, clone it under `~/projects` when no clone exists there (the projects guide names the repository), then run `alignfirst plans setup ~/projects/<clone>` from PROJECT_PATH. Otherwise, run `mkdir .plans`.
+3. When the user chose the work-files repository, clone it under `~/projects` when no clone exists there (the projects guide names the repository), then run `alignfirst plans setup ~/projects/<clone>` from PROJECT_PATH. Otherwise, run `mkdir .plans`.
 4. Run `alproject doctor --root ~/projects`. Stop when the inventory is unhealthy.
 5. Run the project's `workspace setup` on the main worktree. Add `--profile remote` when the deployment sets `REMOTE_DEV_DOMAIN`.
 6. Continue with the normal working-session flow for the original request through `project-workspace-setup.md`.

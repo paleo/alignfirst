@@ -13,7 +13,7 @@ await runWorkspace({
   // TEAM_PLANS_SECTION
   preSetup: ({ isMainWorktree, currentWorktree }) => {
     if (!isMainWorktree) return;
-    execFileSync("alignfirst", ["plans", "check"], {
+    execFileSync("npx", ["alignfirst", "plans", "check"], {
       cwd: currentWorktree,
       stdio: "inherit",
     });

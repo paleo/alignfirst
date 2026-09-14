@@ -58,6 +58,7 @@ jobs:
     outputs:
       published: ${{ steps.changesets.outputs.published }}
       published-packages: ${{ steps.changesets.outputs.published-packages }}
+      finished-at: ${{ steps.finished.outputs.at }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,12 +73,30 @@ jobs:
         uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
           publish-script: npm run ci:publish
+      - id: finished
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
   verify:
     needs: publish
     if: needs.publish.outputs.published == 'true'
     runs-on: ubuntu-latest
+    # The `verify` environment carries a 15-minute wait timer: the registry serves a
+    # stale packument for several minutes after a publish, and a job held by a timer
+    # occupies no runner. The step below enforces the same delay when the timer is
+    # missing -- a fork, or a re-created environment -- and costs nothing when it is not.
+    environment: verify
     steps:
+      - name: Wait out the registry CDN
+        shell: bash
+        env:
+          PUBLISHED_AT: ${{ needs.publish.outputs.finished-at }}
+        run: |
+          published_at=${PUBLISHED_AT:-$(date +%s)}
+          remaining=$(( published_at + 900 - $(date +%s) ))
+          if [ "$remaining" -gt 0 ]; then
+            echo "Environment wait timer absent or short; sleeping ${remaining}s"
+            sleep "$remaining"
+          fi
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26
@@ -91,11 +110,11 @@ jobs:
           cd "$(mktemp -d)"
           npm init -y > /dev/null
           # --omit=peer: auto-installed peers drag unrelated trees into the audit
-          for i in $(seq 1 10); do
+          for i in 1 2; do
             if npm install --omit=peer $pkgs; then break; fi
-            if [ "$i" = 10 ]; then echo "Install failed after 10 attempts"; exit 1; fi
-            echo "Registry not ready, retrying in 30s"
-            sleep 30
+            if [ "$i" = 2 ]; then echo "Install failed after 2 attempts"; exit 1; fi
+            echo "Registry not ready, retrying in 60s"
+            sleep 60
           done
           npm audit signatures
           alignfirst_version=$(node -e 'console.log(JSON.parse(process.env.PUBLISHED).find((p) => p.name === "alignfirst")?.version ?? "")')

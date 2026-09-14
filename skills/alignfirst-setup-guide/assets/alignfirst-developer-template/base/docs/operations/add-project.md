@@ -25,9 +25,9 @@ It installs the CLI prerequisite and skills, writes `.alignfirst.json`, and conf
 workspace, and `DEVELOPERS.md`.
 
 <!-- TEAM_PLANS_SECTION -->
-## Team plans
+## Work-files repository
 
-The service account keeps its plans clone beside the projects. Clone it with the service account's
+The service account keeps its work-files clone beside the projects. Clone it with the service account's
 credentials when it is missing:
 
 ```sh
@@ -38,7 +38,7 @@ fi
 '
 ```
 
-From the new project root, link the plans folder configured in `.alignfirst.json`:
+From the new project root, link the work-files folder configured in `.alignfirst.json`:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '

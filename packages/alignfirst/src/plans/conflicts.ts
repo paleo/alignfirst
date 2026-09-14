@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   lstatSync,
@@ -11,8 +10,8 @@ import {
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 import { CliError } from "../cli-error.js";
-import type { Output } from "../context.js";
-import { gitOutput, gitOutputRaw } from "../git.js";
+import type { Streams } from "../context.js";
+import { gitBuffer, gitOutput, gitOutputRaw } from "../git.js";
 import { nextFilePosition } from "./ticket.js";
 
 interface Resolution {
@@ -31,7 +30,7 @@ interface Blob {
   mode: string;
 }
 
-export function resolveConflictedPaths(repoDir: string, stdout: Output): void {
+export function resolveConflictedPaths(streams: Streams, repoDir: string): void {
   const conflicts = readConflicts(repoDir);
   const remote = readTree(repoDir, "HEAD");
   const local = readTree(repoDir, "REBASE_HEAD");
@@ -59,7 +58,7 @@ export function resolveConflictedPaths(repoDir: string, stdout: Output): void {
   applyResolution(repoDir, conflicts, resolution);
   for (const path of conflicts.keys()) {
     const renamed = resolution.renames.get(path);
-    stdout.write(
+    streams.stdout.write(
       renamed === undefined
         ? `Resolved ${path}: preserved committed contents at the surviving paths.\n`
         : `Resolved ${path}: kept the published version; saved the local version as ${renamed}.\n`,
@@ -75,7 +74,7 @@ function readConflicts(repoDir: string): Map<string, Set<number>> {
     const header = entry.slice(0, tab).split(" ");
     const stage = Number(header[2]);
     if (tab === -1 || ![1, 2, 3].includes(stage))
-      throw new CliError("Could not read the conflicted plans index.");
+      throw new CliError("Could not read the git index of the work-files repository.");
     const path = entry.slice(tab + 1);
     const stages = result.get(path) ?? new Set<number>();
     stages.add(stage);
@@ -248,7 +247,7 @@ function assertNoLaterEdits(repoDir: string, renames: ReadonlyMap<string, string
 }
 
 function readBlob(repoDir: string, blob: Blob): Buffer {
-  return execFileSync("git", ["-C", repoDir, "cat-file", "blob", blob.id]);
+  return gitBuffer(repoDir, "cat-file", "blob", blob.id);
 }
 
 function updateReferences(
@@ -263,7 +262,7 @@ function updateReferences(
     const to = relative(dirname(source), after);
     replacements.set(from, to);
     replacements.set(`./${from}`, `./${to}`);
-    // A shared plans clone stores the project's .plans directory under its configured folder.
+    // A work-files repository clone stores the project's .plans directory under its configured folder.
     replacements.set(before.replace(/^[^/]+\//, ".plans/"), after.replace(/^[^/]+\//, ".plans/"));
   }
   if (replacements.size === 0) return original;

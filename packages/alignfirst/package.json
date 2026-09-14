@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
-  "description": "The AlignFirst CLI: protocols, plans and docs in one command.",
+  "description": "The AlignFirst CLI: protocols, work files and docs in one command.",
   "keywords": [
     "alignfirst",
     "cli",

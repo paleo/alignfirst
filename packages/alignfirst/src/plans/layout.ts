@@ -35,7 +35,7 @@ export function assertPlansGate(cwd: string, form: string): Stats {
 }
 
 export function missingPlansMessage(form: string): string {
-  return `No .plans/ directory in the current directory.\nLocal plans:  mkdir .plans && echo .plans >> .gitignore\nTeam plans:   ${form} plans setup <clone-dir>`;
+  return `No .plans/ directory in the current directory.\nLocal work files:  mkdir .plans && echo .plans >> .gitignore\nTeam work files:   ${form} plans setup <clone-dir>`;
 }
 
 export function missingPlansError(form: string): CliError {

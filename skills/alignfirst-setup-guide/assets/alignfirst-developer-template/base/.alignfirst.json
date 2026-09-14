@@ -1,7 +1,15 @@
 {
   "schemaVersion": 1,
-  // TEAM_PLANS_SECTION
-  "plans": { "folder": "{{ADMIN_REPOSITORY_NAME}}" },
-  // TEAM_PLANS_SECTION
-  "ticketIdPattern": "^\\d+$"
+  "ticketIdPattern": "^\\d+$",
+  "plans": {
+    // TEAM_PLANS_SECTION
+    "folder": "{{ADMIN_REPOSITORY_NAME}}",
+    // TEAM_PLANS_SECTION
+    "autoArchive": true
+  },
+  "git": {
+    "defaultBranch": "main",
+    "commit": { "style": "conventionalCommit" },
+    "agentCoauthoring": false
+  }
 }

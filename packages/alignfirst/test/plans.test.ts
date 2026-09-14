@@ -24,12 +24,12 @@ afterEach(() => {
 });
 
 describe("plans commands", () => {
-  it("reports local plans mode", async () => {
+  it("reports local mode", async () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.product, ".plans"));
     const result = await runMain(["plans", "check"], { cwd: fixture.product });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain("local plans mode");
+    expect(result.stdout).toContain("local mode");
   });
 
   it("sets up the plans link with the configured folder", async () => {
@@ -93,7 +93,7 @@ describe("plans commands", () => {
         cwd: fixture.product,
       });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(`Plans folder "${folder}" is reserved.`);
+      expect(result.stderr).toContain(`Project folder "${folder}" is reserved.`);
     }
 
     expect(readFileSync(localPlan, "utf8")).toBe("spec\n");
@@ -244,7 +244,7 @@ describe("plans commands", () => {
 
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(1);
-    expect(conflict.stderr).toContain("Plans synchronization stopped on a conflict");
+    expect(conflict.stderr).toContain("Work-files synchronization stopped on a conflict");
     expect((await runMain(["plans", "check"], { cwd: fixture.product })).code).toBe(1);
     expect(
       (
@@ -254,7 +254,7 @@ describe("plans commands", () => {
           home: fixture.root,
         })
       ).stdout,
-    ).toContain("[error] Plans: rebase stopped on a conflict in");
+    ).toContain("[error] Work files: rebase stopped on a conflict in");
 
     writeFileSync(plan, "resolved\n");
     git(fixture.clone, "add", "-A");

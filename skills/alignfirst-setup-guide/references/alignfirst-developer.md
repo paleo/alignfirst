@@ -7,7 +7,7 @@ An AlignFirst Developer is a dedicated Linux service account that receives work 
 Three roles, named as the runbooks name them:
 
 - **Support** — a coding-agent session on a laptop. Edits the admin repository, never executes on the server.
-- **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with team plans, the plans clone under `~/projects`. Root steps are the operator's, through `sudo`.
+- **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with a work-files repository, its clone under `~/projects`. Root steps are the operator's, through `sudo`.
 - **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw on fixed system Node, and runs the coding agent, `alignfirst`, `alcode`, rootless podman and managed projects in fnm developer shells.
 
 The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the root-owned maintenance wrapper before every protected change. The wrapper contains the service account, unlocks only named scopes, runs one command as that account, and restores hardening through an exit trap. From there:
@@ -19,7 +19,7 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and admin CLI packages.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
-- `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with team plans, the service account's own clone of the plans repository (a repository, never a project).
+- `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
 Both accounts install the same selected coding agent. The admin account uses it as the operator with the project-local `sysadmin` skill; the service account uses it through `alcode`.
 
@@ -31,7 +31,7 @@ The human performs every interactive authentication and secret entry. Credential
 
 - **Surface**: `slack` or `discord`.
 - **Coding agent**: `claude-code` or `codex`.
-- **Team plans repository**: yes or no. Yes when the team has one (see [plans-setup.md](plans-setup.md)).
+- **Work-files repository**: yes or no. Yes when the team has one (see [plans-setup.md](plans-setup.md)).
 - **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and `workspace setup --profile remote` is unusable in the managed projects.
 
 Choose the model provider and model separately; the template favors no provider.
@@ -44,7 +44,7 @@ The agent **runtime** is fixed: every AlignFirst Developer uses OpenClaw's embed
 
 | Token | Supplied by | Used by |
 | --- | --- | --- |
-| `{{ADMIN_REPOSITORY_NAME}}` | Operator | `package.json`, root files, `~/{{ADMIN_REPOSITORY_NAME}}` in the runbooks, the team plans folder |
+| `{{ADMIN_REPOSITORY_NAME}}` | Operator | `package.json`, root files, `~/{{ADMIN_REPOSITORY_NAME}}` in the runbooks, the work-files folder |
 | `{{ADMIN_REPOSITORY_URL}}` | Operator or git host | `02` (deploy key) |
 | `{{SERVER_HOST}}` | Server administrator | hostname (`01`), deploy-key alias (`02`), overview, workspace files |
 | `{{SERVER_ADMIN_USER}}` | Server administrator | admin account (`01`), operator commands, hardening ownership |
@@ -56,8 +56,8 @@ The agent **runtime** is fixed: every AlignFirst Developer uses OpenClaw's embed
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
 | `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
 | `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alignfirst-projects.json`, overview, workspace `AGENTS.md`, `09` |
-| `{{PLANS_REPOSITORY_URL}}` | Operator, team plans only | `02`, `add-project.md` |
-| `{{PLANS_CLONE_NAME}}` | Operator, team plans only | `common.conf`, `02`, `add-project.md` |
+| `{{PLANS_REPOSITORY_URL}}` | Operator, work-files repository only | README, `02`, `add-project.md` |
+| `{{PLANS_CLONE_NAME}}` | Operator, work-files repository only | `common.conf`, `02`, `add-project.md` |
 | `{{PLANS_CLONE_NOTE}}` | Derived | projects marker |
 | `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
 | `{{DISCORD_OWNER_ID}}`, `{{DISCORD_GUILD_ID}}`, `{{DISCORD_CHANNEL_ID}}` | Discord administrator | `.env.example` (Discord overlay) |
@@ -75,7 +75,7 @@ The channel IDs are known before the bot exists (the channel, the server and the
 
 The last two rows exist only when the gateway option is on. `{{PORT_RANGE_REGEX}}` is a regex matching exactly the integers `PORT_RANGE_FIRST..PORT_RANGE_LAST`: one digit class per position when the range allows it (`28000..28599` → `28[0-5][0-9]{2}`), otherwise an alternation of such classes (`6500..7700` → `6[5-9][0-9]{2}|7[0-6][0-9]{2}|7700`). `{{DEV_DOMAIN_REGEX}}` is `DEV_DOMAIN` with every `.` escaped as `\.`.
 
-With team plans, collect `{{PLANS_REPOSITORY_URL}}` and `{{PLANS_CLONE_NAME}}` at render time. Both the operator and the service account clone it under `~/projects`; each account supplies its own credentials. `{{PLANS_CLONE_NOTE}}` is then a space followed by `The plans clone at ~/projects/{{PLANS_CLONE_NAME}} is a repository, not a project.`; without team plans it is empty.
+With a work-files repository, collect `{{PLANS_REPOSITORY_URL}}` and `{{PLANS_CLONE_NAME}}` at render time. Both the operator and the service account clone it under `~/projects`; each account supplies its own credentials. `{{PLANS_CLONE_NOTE}}` is then a space followed by `The work-files clone at ~/projects/{{PLANS_CLONE_NAME}} is a repository, not a project.`; without one it is empty.
 
 ## Assemble the Admin Repository
 
@@ -95,7 +95,7 @@ On the operator's machine, from the installed skill directory:
    grep -rlE "$re" . | while read -r f; do awk -v re="$re" '$0 ~ re { skip = !skip; next } !skip' "$f" | cat -s > "$f.tmp" && cat "$f.tmp" > "$f" && rm "$f.tmp"; done
    ```
 
-6. Team plans on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `.alignfirst.json` writes `plans.folder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
+6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `.alignfirst.json` writes `plans.folder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
 7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Dotfiles (`.env.example`, `.alignfirst.json`, `.alignfirst-projects.json`) are part of the sweep.
 8. `npm install`.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.
@@ -119,14 +119,14 @@ node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFil
 npm run validate
 ```
 
-Both `rg` searches must be empty. Add a search for every collected value that is not a token (the VPS IP, the plans repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 
 Every runbook states its role and its position at the top. Human steps are marked `> **User action required.**`. Execution order:
 
 1. `01-server-setup.md` — **human administrator**, on the fresh server: admin account, SSH key-only, firewall, Node, podman. Ends with the coding agent installed and logged in for the admin account, then a session of that agent in the clone takes over as the **operator**.
-2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, plans clone and `alignfirst plans setup` when enabled, `workspace setup`.
+2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, work-files clone and `alignfirst plans setup` when enabled, `workspace setup`.
 3. `03-toolchain.md` — service account created, npm prefix, the CLIs, the coding agent, git access (human: key registration or device code).
 4. `05-openclaw-dependencies.md` — OS packages for the tools, git-host CLIs and their authentication (human), Chromium and its AppArmor user-namespace profile.
 5. `07-channel.md`, platform part — **channel administrator** creates the app and collects the tokens and IDs for `.env`.

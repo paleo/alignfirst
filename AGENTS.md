@@ -2,7 +2,7 @@
 
 ## Project conventions and documentation
 
-Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, plans folder), the index of documentation, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
 
 ## Tooling
 
@@ -28,7 +28,7 @@ This repository is on *GitHub*.
 
 ## Packages
 
-- `alignfirst` — the AlignFirst CLI: protocols, plans and docs
+- `alignfirst` — the AlignFirst CLI: protocols, work files and docs
 - `@paleo/alcode` — coding agent wrapper for the AlignFirst Developer
 - `@paleo/alproject` — project inventory and port allocation for the AlignFirst Developer host
 - `@paleo/docmap` — lightweight documentation system for AI agents and humans

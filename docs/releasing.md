@@ -17,7 +17,7 @@ Packages publish from GitHub Actions through npm trusted publishing (OIDC). Ther
 2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs.
 3. Merging that PR pushes the bumped versions to `main`. The `check` job now finds versions absent from the registry and enables the `publish` job.
 4. `publish` is bound to the `release` environment, so it waits for one approval. After approval it builds, tests, strips the `scripts` field from the workspace manifests, and runs `changeset publish`. npm attaches a provenance attestation to each tarball. The action then pushes git tags and creates the GitHub releases.
-5. `verify` installs the freshly published versions in an empty directory, runs `npm audit signatures`, then asserts that each version carries a provenance attestation.
+5. `verify` waits 15 minutes, then installs the freshly published versions in an empty directory, runs `npm audit signatures`, and asserts that each version carries a provenance attestation. The wait is the `verify` environment's timer: npm's CDN keeps serving a stale packument for several minutes after a publish, and a job held by a wait timer occupies no runner.
 
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
@@ -79,6 +79,20 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    ```
 
 3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
+
+## The `verify` environment
+
+Created on 2026-09-14. Its only purpose is the wait timer, so it carries no reviewer and no branch policy:
+
+```bash
+gh api -X PUT repos/paleo/alignfirst/environments/verify -F wait_timer=15
+```
+
+Before it existed, `verify` ran the moment `publish` finished and failed on every release: the
+registry answered `ETARGET` for the versions just published, for more than five minutes each time.
+The job's retry loop never once outlasted the stale packument. Recreate the environment with the
+command above if it is ever deleted — the job's first step then waits out the remainder itself, so a
+missing timer costs runner minutes rather than a failed release.
 
 ## Owner steps for the AlignFirst CLI
 

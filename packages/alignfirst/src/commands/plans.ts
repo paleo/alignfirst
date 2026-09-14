@@ -57,10 +57,10 @@ function runSetup(ctx: CommandContext, args: string[]): number {
 
 function createPlansDirectory(cloneDir: string, folder: string): string {
   if (folder.length === 0 || folder === "." || folder === ".." || /[\\/]/u.test(folder)) {
-    throw new CliError(`Plans folder "${folder}" must be a single path segment.`);
+    throw new CliError(`Project folder "${folder}" must be a single path segment.`);
   }
   if (RESERVED_PLANS_FOLDERS.has(folder.toLowerCase())) {
-    throw new CliError(`Plans folder "${folder}" is reserved.`);
+    throw new CliError(`Project folder "${folder}" is reserved.`);
   }
   const cloneRoot = realpathSync(cloneDir);
   const projectDir = join(cloneRoot, folder);
@@ -72,7 +72,7 @@ function createPlansDirectory(cloneDir: string, folder: string): string {
     relativeTarget.startsWith(`..${sep}`) ||
     isAbsolute(relativeTarget)
   ) {
-    throw new CliError(`Plans folder "${folder}" must resolve inside ${cloneRoot}.`);
+    throw new CliError(`Project folder "${folder}" must resolve inside ${cloneRoot}.`);
   }
   return projectDir;
 }
@@ -117,15 +117,15 @@ function parseSetupArgs(
 function checkClone(ctx: CommandContext, cloneDir: string): void {
   if (!existsSync(cloneDir))
     throw new CliError(
-      `${cloneDir} does not exist. Clone the team plans repository there first (see the instruction file).`,
+      `${cloneDir} does not exist. Clone the work-files repository there first (see the instruction file).`,
     );
   if (!existsSync(join(cloneDir, ".git")))
     throw new CliError(
-      `${cloneDir} is not a git repository. Point ${ctx.form} plans setup at a clone of the team plans repository.`,
+      `${cloneDir} is not a git repository. Point ${ctx.form} plans setup at a clone of the work-files repository.`,
     );
   if (realpathSync(cloneDir) === realpathSync(ctx.cwd))
     throw new CliError(
-      `${cloneDir} is the product repository itself. Point ${ctx.form} plans setup at a clone of the team plans repository.`,
+      `${cloneDir} is the product repository itself. Point ${ctx.form} plans setup at a clone of the work-files repository.`,
     );
 }
 
@@ -137,11 +137,8 @@ function runCheck(ctx: CommandContext, args: string[]): number {
     const stopped = findStoppedRebase(mode.repoToplevel);
     if (stopped !== undefined) throw new CliError(renderStoppedRebase(stopped, ctx.form));
   }
-  if (mode.kind === "shared") ctx.stdout.write(".plans is linked to the team plans repository.\n");
-  else
-    ctx.stdout.write(
-      ".plans is a local directory (local plans mode): synchronization is disabled.\n",
-    );
+  if (mode.kind === "shared") ctx.stdout.write(".plans is linked to the work-files repository.\n");
+  else ctx.stdout.write(".plans is a local directory (local mode): synchronization is disabled.\n");
   return 0;
 }
 
