@@ -100,15 +100,11 @@ expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Detect the 
 `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user
 when several non-`origin` remotes exist.
 
-Write `.alignfirst.json` with the agreed fields. When the project declares no `alignfirst` dependency,
-set `cli` to its supported version range. Without this field, each machine runs whichever version it
-fetched. The version guard reports a mismatch and gives the exact
-`npx -y alignfirst@"<range>"` command to run:
+Write `.alignfirst.json` with the agreed fields:
 
 ```json
 {
   "schemaVersion": 1,
-  "cli": "<supported-range>",
   "ticketIdPattern": "^\\d+$",
   "plans": { "folder": "acme-web", "autoArchive": true },
   "portRange": { "first": 8100, "last": 8299 },
@@ -121,8 +117,9 @@ fetched. The version guard reports a mismatch and gives the exact
 }
 ```
 
-Keep only applicable optional fields. Replace any hand-written AlignFirst or docmap section in
-`AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
+Keep only applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+
+Replace any hand-written AlignFirst or docmap section in `AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
 possible:
 
 ```markdown
