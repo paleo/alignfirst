@@ -68,7 +68,7 @@ alignfirst plans check
 cd ~/{{ADMIN_REPOSITORY_NAME}}
 mkdir -p .plans .local
 npm run workspace -- setup
-alignfirst docmap
+alignfirst context
 ```
 
 Continue with [03-toolchain.md](03-toolchain.md).

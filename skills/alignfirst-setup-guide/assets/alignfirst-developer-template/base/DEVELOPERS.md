@@ -4,12 +4,12 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 
 ## Layout
 
-- `docs/` — runbooks and notes, listed by `alignfirst docmap`.
+- `docs/` — runbooks and notes, listed by `npx -y alignfirst docmap`.
 - `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `projects/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
 - `scripts/workspace/` — the portless workspace wrapper.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->
-- `.plans/` — work files. Symlinked across worktrees, and into a clone of the work-files repository so the team shares them. Run `alignfirst sync` after changing anything under it.
+- `.plans/` — work files. Symlinked across worktrees, and into a clone of the work-files repository so the team shares them. Run `npx -y alignfirst sync` after changing anything under it.
 <!-- TEAM_PLANS_SECTION -->
 - `.local/`, `.local-wt/` — shared notes and per-worktree state, gitignored.
 
@@ -19,18 +19,14 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 
 Run `npm run workspace -- --guide` for the procedures.
 
-## Conventions
-
-- _Commit messages_: Conventional Commits, very short subject, no ticket ID.
-- _Default branch_: `main`.
-
 ## Everyday commands
 
 | Command | Purpose |
 | --- | --- |
-| `alignfirst docmap` | Browse the documentation; read `docs/overview.md` first |
+| `npx -y alignfirst context` | Conventions, documentation index and protocols; read it first |
+| `npx -y alignfirst docmap` | Browse the documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run validate` | docmap check and a syntax check of the wrapper |
 <!-- TEAM_PLANS_SECTION -->
-| `alignfirst sync` | Publish and retrieve the work files (`.plans`) |
+| `npx -y alignfirst sync` | Publish and retrieve the work files (`.plans`) |
 <!-- TEAM_PLANS_SECTION -->

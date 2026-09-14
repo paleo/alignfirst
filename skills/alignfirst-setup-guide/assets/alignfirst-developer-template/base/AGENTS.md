@@ -2,7 +2,9 @@
 
 This repository documents and operates `{{SERVER_HOST}}`, the server that runs **{{DEVELOPER_NAME}}**, an AlignFirst Developer. Every configuration step is a runbook under `docs/installations/`, so the server can be rebuilt from scratch.
 
-Always ignore the `.plans`, `.local` and `.local-wt` directories when searching the codebase.
+## Project conventions and documentation
+
+Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
 
 ## Sysadmin workflow
 
@@ -17,26 +19,6 @@ Repository specifics:
 
 - Runbooks match `docs/installations/01-server-setup.md`: one short line of prose, then a fenced code block.
 - `.reports/` is committed.
-
-## Docmap - Seek Documentation
-
-*Before* any investigation or code exploration, run `alignfirst docmap`, then read the relevant documentation. Mandatory for every task.
-
-Always read `docs/overview.md`.
-
-## AlignFirst - Commit Message and Default Branch
-
-_Commit message convention:_ Conventional Commits with a very short subject, e.g. `docs: tighten 04 seed section`. No body unless the change needs one. Do not mention the ticket ID.
-
-_Default branch:_ `main`.
-
-<!-- TEAM_PLANS_SECTION -->
-### Work-Files Repository
-
-In the main worktree, `.plans` is a symlink into a clone of the work-files repository (folder `{{ADMIN_REPOSITORY_NAME}}/`). The work files are shared with the team through that repository and never committed in this one.
-
-After every change in `.plans/`, run `alignfirst sync`.
-<!-- TEAM_PLANS_SECTION -->
 
 ## Workspaces
 

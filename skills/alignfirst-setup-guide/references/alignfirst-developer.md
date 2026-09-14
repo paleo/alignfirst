@@ -56,7 +56,7 @@ The agent **runtime** is fixed: every AlignFirst Developer uses OpenClaw's embed
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
 | `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
 | `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alignfirst-projects.json`, overview, workspace `AGENTS.md`, `09` |
-| `{{PLANS_REPOSITORY_URL}}` | Operator, work-files repository only | `02`, `add-project.md` |
+| `{{PLANS_REPOSITORY_URL}}` | Operator, work-files repository only | README, `02`, `add-project.md` |
 | `{{PLANS_CLONE_NAME}}` | Operator, work-files repository only | `common.conf`, `02`, `add-project.md` |
 | `{{PLANS_CLONE_NOTE}}` | Derived | projects marker |
 | `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
