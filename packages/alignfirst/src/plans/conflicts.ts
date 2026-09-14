@@ -74,7 +74,7 @@ function readConflicts(repoDir: string): Map<string, Set<number>> {
     const header = entry.slice(0, tab).split(" ");
     const stage = Number(header[2]);
     if (tab === -1 || ![1, 2, 3].includes(stage))
-      throw new CliError("Could not read the conflicted plans index.");
+      throw new CliError("Could not read the git index of the work-files repository.");
     const path = entry.slice(tab + 1);
     const stages = result.get(path) ?? new Set<number>();
     stages.add(stage);
@@ -262,7 +262,7 @@ function updateReferences(
     const to = relative(dirname(source), after);
     replacements.set(from, to);
     replacements.set(`./${from}`, `./${to}`);
-    // A shared plans clone stores the project's .plans directory under its configured folder.
+    // A work-files repository clone stores the project's .plans directory under its configured folder.
     replacements.set(before.replace(/^[^/]+\//, ".plans/"), after.replace(/^[^/]+\//, ".plans/"));
   }
   if (replacements.size === 0) return original;

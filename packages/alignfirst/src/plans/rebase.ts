@@ -54,7 +54,7 @@ function continueRebase(streams: Streams, repoDir: string): void {
 export function renderStoppedRebase(stopped: StoppedRebase, form: string): string {
   const files = stopped.conflictedFiles.map((path) => `  ${path}`);
   return [
-    `Plans synchronization stopped on a conflict in ${stopped.repoDir}:`,
+    `Work-files synchronization stopped on a conflict in ${stopped.repoDir}:`,
     ...files,
     "Resolve the markers in these files, then run:",
     `  git -C ${stopped.repoDir} add -A && git -C ${stopped.repoDir} rebase --continue`,

@@ -17,7 +17,7 @@ export function linkPlans(ctx: CommandContext, targetDir: string): void {
   const stats = lstatSync(plansPath, { throwIfNoEntry: false });
   if (stats?.isSymbolicLink()) {
     if (existsSync(plansPath) && realpathSync(plansPath) === realpathSync(targetDir)) {
-      ctx.stdout.write(".plans already links to the plans repository.\n");
+      ctx.stdout.write(".plans already links to the work-files repository.\n");
       return;
     }
     rmSync(plansPath);

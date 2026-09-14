@@ -30,6 +30,6 @@ The tooling runs through the `alignfirst` CLI built in this workspace, so run `n
 | `npm run lint` / `npm run lint:fix` | Check / fix with Biome |
 | `npm run docmap` | Browse the project documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
-| `npm run plans:sync` | Publish and retrieve the task plans (`.plans`) |
+| `npm run plans:sync` | Publish and retrieve the work files (`.plans`) |
 
-In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a team plans repository clone. The folder is shared with the team and never committed here.
+In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a clone of the work-files repository. The folder is shared with the team and never committed here.

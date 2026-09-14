@@ -31,9 +31,9 @@ _Commit message convention:_ Conventional Commits with a very short subject, e.g
 _Default branch:_ `main`.
 
 <!-- TEAM_PLANS_SECTION -->
-### Team Plans Repository
+### Work-Files Repository
 
-In the main worktree, `.plans` is a symlink into a clone of the team plans repository (folder `{{ADMIN_REPOSITORY_NAME}}/`). Plans are shared with the team through that repository and are never committed in this one.
+In the main worktree, `.plans` is a symlink into a clone of the work-files repository (folder `{{ADMIN_REPOSITORY_NAME}}/`). The work files are shared with the team through that repository and never committed in this one.
 
 After every change in `.plans/`, run `alignfirst sync`.
 <!-- TEAM_PLANS_SECTION -->

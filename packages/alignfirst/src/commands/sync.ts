@@ -24,7 +24,7 @@ export function runSync(ctx: CommandContext, args: string[]): number {
   const plansDir = join(ctx.cwd, ".plans");
   if (mode.kind === "local") {
     if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
-    ctx.stdout.write("(local plans mode, nothing to sync)\n");
+    ctx.stdout.write("(local mode, nothing to sync)\n");
     return 0;
   }
   const repoDir = mode.repoToplevel;
@@ -52,9 +52,9 @@ export function runSync(ctx: CommandContext, args: string[]): number {
         `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,
       );
     }
-    ctx.stdout.write("Plans synchronized: local changes sent.\n");
+    ctx.stdout.write("Work files synchronized: local changes sent.\n");
   } else {
-    ctx.stdout.write("Plans synchronized: nothing to send.\n");
+    ctx.stdout.write("Work files synchronized: nothing to send.\n");
   }
   return 0;
 }

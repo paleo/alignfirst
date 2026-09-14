@@ -68,7 +68,7 @@ function readPackageVersion(): string {
 }
 
 function renderHelp(ctx: CommandContext): string {
-  return `alignfirst — protocols, plans and docs in one command.
+  return `alignfirst — protocols, work files and docs in one command.
 
 Usage:
   ${ctx.form} guide [<protocol>]

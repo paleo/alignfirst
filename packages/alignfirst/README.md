@@ -1,6 +1,6 @@
 # alignfirst
 
-The AlignFirst CLI provides collaborative software-development workflows, work files, and documentation discovery. Work files are organized by ticket and kept either git-ignored in the project or synchronized through a team plans repository.
+The AlignFirst CLI provides collaborative software-development workflows, work files, and documentation discovery. Work files are organized by ticket and kept either git-ignored in the project or synchronized through a work-files repository.
 
 ## Agent skills
 
@@ -45,7 +45,7 @@ These examples use the `/` form. Replace it with `$` in Codex.
 
 To implement a plan, start a fresh agent context and ask it to execute the plan file.
 
-AlignFirst stores specifications, plans, and summaries in `.plans/<ticket-id>/`. It normally derives the ticket ID from the request or branch and asks when none is available. Files use a cycle letter and sequence number, such as `A1-spec.md` and `A2-plan.md`.
+AlignFirst stores the work files of a ticket, such as specifications, plans and summaries, in `.plans/<ticket-id>/`. It normally derives the ticket ID from the request or branch and asks when none is available. Files use a cycle letter and sequence number, such as `A1-spec.md` and `A2-plan.md`.
 
 ## Global CLI
 
@@ -81,8 +81,8 @@ The guide installs the selected components and configures the repository. You ca
 
 - `guide` — Print an AlignFirst protocol.
 - `ticket` — Resolve a ticket directory, load its history, or get its next file.
-- `sync` — Synchronize shared plans.
-- `plans` — Set up, check and archive plans.
+- `sync` — Synchronize the work files with the work-files repository.
+- `plans` — Link `.plans` to the work-files repository, check the link, archive tickets.
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print the conventions, the documentation map when `docs/` exists, and the protocol aliases.

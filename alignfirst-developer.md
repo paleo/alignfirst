@@ -28,7 +28,7 @@ Ask the agent to create an AlignFirst Developer. The setup skill collects deploy
 one Slack or Discord overlay and one Claude Code or Codex overlay, and produces role-specific
 installation, security, operation, and recovery runbooks.
 
-Managed projects receive the full preparation contract: the AlignFirst bootstrap line, optional team plans,
+Managed projects receive the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository,
 docmap, isolated workspaces, and a project-specific `DEVELOPERS.md`.
 
 ## Maintain the Product

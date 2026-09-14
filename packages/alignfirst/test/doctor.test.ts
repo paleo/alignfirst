@@ -16,7 +16,7 @@ describe("doctor command", () => {
     const cwd = temp();
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    for (const section of ["CLI", ".alignfirst.json", "Git", "Plans", "Docmap", "Skills"])
+    for (const section of ["CLI", ".alignfirst.json", "Git", "Work files", "Docmap", "Skills"])
       expect(result.stdout).toContain(`] ${section}:`);
     expect(result.stdout).toContain("[ok] .alignfirst.json: none");
     expect(result.stdout).toContain("[warn] Git: default branch unresolved");
@@ -45,7 +45,7 @@ describe("doctor command", () => {
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("[error] .alignfirst.json: Invalid");
-    expect(result.stdout).toContain("] Plans:");
+    expect(result.stdout).toContain("] Work files:");
   });
 
   it("reports the configured default branch and skill generation", async () => {

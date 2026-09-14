@@ -9,7 +9,7 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 - `scripts/workspace/` — the portless workspace wrapper.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->
-- `.plans/` — task plans. Symlinked across worktrees, and into a clone of the team plans repository so plans are shared with the team. Run `alignfirst sync` after changing anything under it.
+- `.plans/` — work files. Symlinked across worktrees, and into a clone of the work-files repository so the team shares them. Run `alignfirst sync` after changing anything under it.
 <!-- TEAM_PLANS_SECTION -->
 - `.local/`, `.local-wt/` — shared notes and per-worktree state, gitignored.
 
@@ -32,5 +32,5 @@ Run `npm run workspace -- --guide` for the procedures.
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run validate` | docmap check and a syntax check of the wrapper |
 <!-- TEAM_PLANS_SECTION -->
-| `alignfirst sync` | Publish and retrieve the task plans (`.plans`) |
+| `alignfirst sync` | Publish and retrieve the work files (`.plans`) |
 <!-- TEAM_PLANS_SECTION -->

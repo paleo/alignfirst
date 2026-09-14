@@ -34,7 +34,7 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
     return inspectConfig(ctx, resolved);
   });
   writeSection(ctx, "Git", () => inspectGit(ctx, resolved));
-  writeSection(ctx, "Plans", () => inspectPlans(ctx));
+  writeSection(ctx, "Work files", () => inspectPlans(ctx));
   writeSection(ctx, "Docmap", () => inspectDocmap(ctx));
   writeSection(ctx, "Skills", () => inspectSkills(ctx));
   return 0;

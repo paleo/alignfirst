@@ -1,7 +1,7 @@
 # Upgrade from AlignFirst v3
 
-Replace the full-content v3 skills and plans package with the AlignFirst CLI and v4 stub skills. The
-migration leaves no plans compatibility package or npm-script wrappers.
+Replace the full-content v3 skills and `plans-share` package with the AlignFirst CLI and v4 stub skills. The
+migration leaves no `plans-share` compatibility package or npm-script wrappers.
 
 ## Install the CLI
 
@@ -19,7 +19,7 @@ An AlignFirst Developer host installs the CLI globally and replaces the retired 
 npm install -g alignfirst @paleo/alcode @paleo/alproject
 ```
 
-## Inventory the Plans Contract
+## Inventory the `plans-share` Contract
 
 Before removing anything, search the whole repository, excluding dependencies and generated output,
 for:
@@ -30,11 +30,11 @@ for:
 - setup, sync, check, archive, and auto-archive calls.
 
 Include documentation, CI, package scripts, shell scripts, hooks, deployment files, and automation.
-Record the plans folder and whether synchronization uses `--auto-archive`.
+Record the work-files folder and whether synchronization uses `--auto-archive`.
 
-Recover the plans folder from the static `--folder` value in the old setup script or another setup
+Recover the work-files folder from the static `--folder` value in the old setup script or another setup
 call. If that value is absent or dynamic and `.plans` is a symlink, resolve its target and use the
-target directory's basename after verifying that its parent is the plans repository clone. Use an
+target directory's basename after verifying that its parent is the work-files repository clone. Use an
 existing `plans.folder` when it agrees. Ask the user when these sources are missing or conflict.
 
 Keep `.plans` unchanged; an existing symlink remains valid.
@@ -55,7 +55,7 @@ npm pkg delete scripts.plans:setup scripts.plans:sync
 Detect the ticket pattern from the repository's branch and ticket conventions. Issue-number tickets
 use `^\d+$`; Jira-like keys use `^[A-Z]+-\d+$`; omit the field when there is no convention.
 
-Write `.alignfirst.json` by hand. Preserve the recovered plans folder. When the old synchronization
+Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. When the old synchronization
 path used `--auto-archive`, preserve that behavior with `plans.autoArchive: true`:
 
 ```json
@@ -67,7 +67,7 @@ path used `--auto-archive`, preserve that behavior with `plans.autoArchive: true
 }
 ```
 
-Keep only applicable plans fields. `plans.autoArchive` works in local mode without `plans.folder`.
+Keep only applicable `plans` fields. `plans.autoArchive` works in local mode without `plans.folder`.
 Add `portRange` when the workspace wrapper declares a port scheme. Update the README guidance and
 install the stubs.
 
@@ -118,7 +118,7 @@ npx -y skills update --global --yes
 ```
 
 Use `--project` instead of `--global` for a project-local installation. Finish by checking the
-effective project and the plans workflow:
+effective project and the work-files link:
 
 ```sh
 npx alignfirst config

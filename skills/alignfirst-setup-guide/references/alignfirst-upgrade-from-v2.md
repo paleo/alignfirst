@@ -28,7 +28,7 @@ Remove only known AlignFirst command files from existing project directories:
 
 These paths are legacy cleanup targets, not current installation locations.
 
-## Migrate Plans and Instructions
+## Migrate Work Files and Instructions
 
 1. If only `_plans/` exists, rename it to `.plans/`. If both exist, move `_plans/` to
    `.plans/_plans-archives/`. Remove `.plans/.gitkeep`.

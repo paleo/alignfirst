@@ -21,7 +21,7 @@ Write the file directly. `npm run changeset` is the interactive equivalent, for 
    git status --short        # include uncommitted files
    ```
 
-2. **Gather context from the plan directory.** Run `alignfirst ticket <id>` to find the plan
+2. **Gather context from the ticket directory.** Run `alignfirst ticket <id>` to find the ticket
    directory. Read the summary files (`*-summary.md`) and spec files to write a meaningful
    description.
 

@@ -45,11 +45,11 @@ npm install
 ```
 
 <!-- TEAM_PLANS_SECTION -->
-## Team plans repository
+## Work-files repository
 
-`.plans` is a symlink into `~/projects/{{PLANS_CLONE_NAME}}/{{ADMIN_REPOSITORY_NAME}}`. Clone the team plans repository once with the operator's credentials.
+`.plans` is a symlink into `~/projects/{{PLANS_CLONE_NAME}}/{{ADMIN_REPOSITORY_NAME}}`. Clone the work-files repository once with the operator's credentials.
 
-> **User action required.** Enable the deploy key on the plans repository too, with write access: `alignfirst sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
+> **User action required.** Enable the deploy key on the work-files repository too, with write access: `alignfirst sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
 
 ```sh
 mkdir -p ~/projects
@@ -78,5 +78,5 @@ Continue with [03-toolchain.md](03-toolchain.md).
 Delete the deploy key on the git host, then repeat [Deploy key](#deploy-key); the alias keeps pointing at the regenerated file.
 
 <!-- TEAM_PLANS_SECTION -->
-Then enable it again on the plans repository ([Team plans repository](#team-plans-repository)).
+Then enable it again on the work-files repository ([Work-files repository](#work-files-repository)).
 <!-- TEAM_PLANS_SECTION -->
