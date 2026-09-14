@@ -9,7 +9,7 @@ import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
 
-export function runSync(ctx: CommandContext, args: string[]): number {
+export async function runSync(ctx: CommandContext, args: string[]): Promise<number> {
   const usage = `Usage: ${ctx.form} sync [--auto-archive | --no-auto-archive]\n`;
   const options = parseSyncArgs(ctx, args, usage);
   if (options === undefined) return 0;
@@ -29,24 +29,24 @@ export function runSync(ctx: CommandContext, args: string[]): number {
   }
   const repoDir = mode.repoToplevel;
   assertNoStoppedRebase(repoDir, ctx.form);
-  git(ctx, repoDir, "add", "-A");
-  if (hasStagedChanges(repoDir)) git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
+  await git(ctx, repoDir, "add", "-A");
+  if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   if (hasUpstream(repoDir)) {
     try {
-      git(ctx, repoDir, "pull", "--rebase");
+      await git(ctx, repoDir, "pull", "--rebase");
     } catch {
       if (findStoppedRebase(repoDir) === undefined)
         throw new CliError("git pull failed. See the git output above.");
-      resolveStoppedRebase(ctx, repoDir);
+      await resolveStoppedRebase(ctx, repoDir);
     }
   }
   if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {
-    git(ctx, repoDir, "add", "-A");
-    if (hasStagedChanges(repoDir)) git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
+    await git(ctx, repoDir, "add", "-A");
+    if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   }
   if (hasCommitsToSend(repoDir)) {
     try {
-      git(ctx, repoDir, "push", "--quiet", "-u", "origin", "HEAD");
+      await git(ctx, repoDir, "push", "--quiet", "-u", "origin", "HEAD");
     } catch {
       throw new CliError(
         `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,

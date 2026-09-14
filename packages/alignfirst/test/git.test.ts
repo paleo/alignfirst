@@ -1,4 +1,5 @@
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -20,15 +21,29 @@ describe("git failures", () => {
     expect(result.stderr).toContain("not a git repository");
   });
 
-  it("writes git output to the streams and names the subcommand past global options", () => {
+  it("writes git output to the streams and names the subcommand past global options", async () => {
     const dir = makeFixture();
     git(dir, "init", "--quiet");
     const stdout = makeSink();
     const stderr = makeSink();
-    expect(() =>
+    await expect(
       runGit({ stdout, stderr }, dir, "-c", "core.editor=true", "rebase", "--continue"),
-    ).toThrow("git rebase failed. See the git output above.");
+    ).rejects.toThrow("git rebase failed. See the git output above.");
     expect(stderr.text()).toContain("no rebase in progress");
+  });
+
+  it("streams output beyond the synchronous child-process buffer limit", async () => {
+    const dir = makeFixture();
+    git(dir, "init", "--quiet");
+    const contents = "x".repeat(2 * 1024 * 1024);
+    writeFileSync(join(dir, "large.txt"), contents);
+    git(dir, "add", "large.txt");
+    git(dir, "commit", "--quiet", "-m", "large output");
+    const stdout = makeSink();
+    const stderr = makeSink();
+    await runGit({ stdout, stderr }, dir, "show", "HEAD:large.txt");
+    expect(stdout.text()).toBe(contents);
+    expect(stderr.text()).toBe("");
   });
 });
 

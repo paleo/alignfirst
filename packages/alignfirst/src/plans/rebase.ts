@@ -26,25 +26,25 @@ export function findStoppedRebase(repoDir: string): StoppedRebase | undefined {
   };
 }
 
-export function resolveStoppedRebase(streams: Streams, repoDir: string): void {
+export async function resolveStoppedRebase(streams: Streams, repoDir: string): Promise<void> {
   for (let step = 0; findStoppedRebase(repoDir) !== undefined; ++step) {
     if (step >= MAX_REBASE_STEPS)
       throw new CliError(`Could not finish the stopped rebase in ${repoDir}.`);
     resolveConflictedPaths(streams, repoDir);
-    git(streams, repoDir, "add", "-A");
-    continueRebase(streams, repoDir);
+    await git(streams, repoDir, "add", "-A");
+    await continueRebase(streams, repoDir);
   }
 }
 
-function continueRebase(streams: Streams, repoDir: string): void {
+async function continueRebase(streams: Streams, repoDir: string): Promise<void> {
   const args = ["-c", "core.editor=true", "rebase", "--continue"];
   try {
-    git(streams, repoDir, ...args);
+    await git(streams, repoDir, ...args);
   } catch (error) {
     const stopped = findStoppedRebase(repoDir);
     if (stopped?.conflictedFiles.length) return;
     if (stopped && gitSucceeds(repoDir, "diff", "--cached", "--quiet")) {
-      git(streams, repoDir, "rebase", "--skip");
+      await git(streams, repoDir, "rebase", "--skip");
       return;
     }
     throw error;

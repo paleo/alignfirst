@@ -1,16 +1,22 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { CliError } from "./cli-error.js";
 import type { Streams } from "./context.js";
 
-export function git(streams: Streams, dir: string, ...args: string[]): void {
-  const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf-8" });
-  if (result.error !== undefined) throw gitFailure(args, result.error.message);
-  streams.stdout.write(result.stdout);
-  streams.stderr.write(result.stderr);
-  if (result.status !== 0) throw gitFailure(args);
+export function git(streams: Streams, dir: string, ...args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", ["-C", dir, ...args], {
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (text: string) => streams.stdout.write(text));
+    child.stderr.on("data", (text: string) => streams.stderr.write(text));
+    child.once("error", (error) => reject(gitFailure(args, error.message)));
+    child.once("close", (code) => (code === 0 ? resolve() : reject(gitFailure(args))));
+  });
 }
 
 function gitFailure(args: string[], detail?: string): CliError {
