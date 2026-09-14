@@ -78,13 +78,21 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    gh api -X POST repos/paleo/alignfirst/environments/release/deployment-branch-policies -f name=main
    ```
 
-3. Create the `verify` environment. Its only purpose is the wait timer, so it carries no reviewer and no branch policy:
+3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
 
-   ```bash
-   gh api -X PUT repos/paleo/alignfirst/environments/verify -F wait_timer=15
-   ```
+## The `verify` environment
 
-4. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
+Created on 2026-09-14. Its only purpose is the wait timer, so it carries no reviewer and no branch policy:
+
+```bash
+gh api -X PUT repos/paleo/alignfirst/environments/verify -F wait_timer=15
+```
+
+Before it existed, `verify` ran the moment `publish` finished and failed on every release: the
+registry answered `ETARGET` for the versions just published, for more than five minutes each time.
+The job's retry loop never once outlasted the stale packument. Recreate the environment with the
+command above if it is ever deleted — the job's first step then waits out the remainder itself, so a
+missing timer costs runner minutes rather than a failed release.
 
 ## Owner steps for the AlignFirst CLI
 

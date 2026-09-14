@@ -30,7 +30,7 @@ export function resolveStoppedRebase(streams: Streams, repoDir: string): void {
   for (let step = 0; findStoppedRebase(repoDir) !== undefined; ++step) {
     if (step >= MAX_REBASE_STEPS)
       throw new CliError(`Could not finish the stopped rebase in ${repoDir}.`);
-    resolveConflictedPaths(repoDir, streams.stdout);
+    resolveConflictedPaths(streams, repoDir);
     git(streams, repoDir, "add", "-A");
     continueRebase(streams, repoDir);
   }

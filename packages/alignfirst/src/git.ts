@@ -15,9 +15,17 @@ export function git(streams: Streams, dir: string, ...args: string[]): void {
 
 function gitFailure(args: string[], detail?: string): CliError {
   const output = detail?.trim();
+  const subcommand = gitSubcommand(args);
+  const label = subcommand === undefined ? "git command" : `git ${subcommand}`;
   if (output === undefined || output === "")
-    return new CliError(`git ${args[0]} failed. See the git output above.`);
-  return new CliError(`git ${args[0]} failed:\n${output}`);
+    return new CliError(`${label} failed. See the git output above.`);
+  return new CliError(`${label} failed:\n${output}`);
+}
+
+function gitSubcommand(args: string[]): string | undefined {
+  let index = 0;
+  while (args[index] === "-c") index += 2;
+  return args[index];
 }
 
 export function assertMainWorktreeRoot(cwd: string): void {

@@ -10,7 +10,7 @@ import {
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 import { CliError } from "../cli-error.js";
-import type { Output } from "../context.js";
+import type { Streams } from "../context.js";
 import { gitBuffer, gitOutput, gitOutputRaw } from "../git.js";
 import { nextFilePosition } from "./ticket.js";
 
@@ -30,7 +30,7 @@ interface Blob {
   mode: string;
 }
 
-export function resolveConflictedPaths(repoDir: string, stdout: Output): void {
+export function resolveConflictedPaths(streams: Streams, repoDir: string): void {
   const conflicts = readConflicts(repoDir);
   const remote = readTree(repoDir, "HEAD");
   const local = readTree(repoDir, "REBASE_HEAD");
@@ -58,7 +58,7 @@ export function resolveConflictedPaths(repoDir: string, stdout: Output): void {
   applyResolution(repoDir, conflicts, resolution);
   for (const path of conflicts.keys()) {
     const renamed = resolution.renames.get(path);
-    stdout.write(
+    streams.stdout.write(
       renamed === undefined
         ? `Resolved ${path}: preserved committed contents at the surviving paths.\n`
         : `Resolved ${path}: kept the published version; saved the local version as ${renamed}.\n`,
