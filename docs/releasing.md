@@ -17,7 +17,7 @@ Packages publish from GitHub Actions through npm trusted publishing (OIDC). Ther
 2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs.
 3. Merging that PR pushes the bumped versions to `main`. The `check` job now finds versions absent from the registry and enables the `publish` job.
 4. `publish` is bound to the `release` environment, so it waits for one approval. After approval it builds, tests, strips the `scripts` field from the workspace manifests, and runs `changeset publish`. npm attaches a provenance attestation to each tarball. The action then pushes git tags and creates the GitHub releases.
-5. `verify` installs the freshly published versions in an empty directory, runs `npm audit signatures`, then asserts that each version carries a provenance attestation.
+5. `verify` waits 15 minutes, then installs the freshly published versions in an empty directory, runs `npm audit signatures`, and asserts that each version carries a provenance attestation. The wait is the `verify` environment's timer: npm's CDN keeps serving a stale packument for several minutes after a publish, and a job held by a wait timer occupies no runner.
 
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
@@ -78,7 +78,13 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    gh api -X POST repos/paleo/alignfirst/environments/release/deployment-branch-policies -f name=main
    ```
 
-3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
+3. Create the `verify` environment. Its only purpose is the wait timer, so it carries no reviewer and no branch policy:
+
+   ```bash
+   gh api -X PUT repos/paleo/alignfirst/environments/verify -F wait_timer=15
+   ```
+
+4. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
 
 ## Owner steps for the AlignFirst CLI
 

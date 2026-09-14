@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   lstatSync,
@@ -12,7 +11,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 import { CliError } from "../cli-error.js";
 import type { Output } from "../context.js";
-import { gitOutput, gitOutputRaw } from "../git.js";
+import { gitBuffer, gitOutput, gitOutputRaw } from "../git.js";
 import { nextFilePosition } from "./ticket.js";
 
 interface Resolution {
@@ -248,7 +247,7 @@ function assertNoLaterEdits(repoDir: string, renames: ReadonlyMap<string, string
 }
 
 function readBlob(repoDir: string, blob: Blob): Buffer {
-  return execFileSync("git", ["-C", repoDir, "cat-file", "blob", blob.id]);
+  return gitBuffer(repoDir, "cat-file", "blob", blob.id);
 }
 
 function updateReferences(

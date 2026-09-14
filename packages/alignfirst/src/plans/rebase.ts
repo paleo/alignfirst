@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { CliError } from "../cli-error.js";
-import type { Output } from "../context.js";
+import type { Streams } from "../context.js";
 import { git, gitOutputRaw, gitOutputOrUndefined, gitSucceeds } from "../git.js";
 import { resolveConflictedPaths } from "./conflicts.js";
 
@@ -26,25 +26,25 @@ export function findStoppedRebase(repoDir: string): StoppedRebase | undefined {
   };
 }
 
-export function resolveStoppedRebase(repoDir: string, stdout: Output): void {
+export function resolveStoppedRebase(streams: Streams, repoDir: string): void {
   for (let step = 0; findStoppedRebase(repoDir) !== undefined; ++step) {
     if (step >= MAX_REBASE_STEPS)
       throw new CliError(`Could not finish the stopped rebase in ${repoDir}.`);
-    resolveConflictedPaths(repoDir, stdout);
-    git(repoDir, "add", "-A");
-    continueRebase(repoDir);
+    resolveConflictedPaths(repoDir, streams.stdout);
+    git(streams, repoDir, "add", "-A");
+    continueRebase(streams, repoDir);
   }
 }
 
-function continueRebase(repoDir: string): void {
+function continueRebase(streams: Streams, repoDir: string): void {
   const args = ["-c", "core.editor=true", "rebase", "--continue"];
   try {
-    git(repoDir, ...args);
+    git(streams, repoDir, ...args);
   } catch (error) {
     const stopped = findStoppedRebase(repoDir);
     if (stopped?.conflictedFiles.length) return;
     if (stopped && gitSucceeds(repoDir, "diff", "--cached", "--quiet")) {
-      git(repoDir, "rebase", "--skip");
+      git(streams, repoDir, "rebase", "--skip");
       return;
     }
     throw error;

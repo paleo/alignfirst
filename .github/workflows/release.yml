@@ -77,6 +77,9 @@ jobs:
     needs: publish
     if: needs.publish.outputs.published == 'true'
     runs-on: ubuntu-latest
+    # The `verify` environment carries a wait timer: the registry serves a stale
+    # packument for several minutes after a publish. No runner during the wait.
+    environment: verify
     steps:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -91,11 +94,11 @@ jobs:
           cd "$(mktemp -d)"
           npm init -y > /dev/null
           # --omit=peer: auto-installed peers drag unrelated trees into the audit
-          for i in $(seq 1 10); do
+          for i in 1 2; do
             if npm install --omit=peer $pkgs; then break; fi
-            if [ "$i" = 10 ]; then echo "Install failed after 10 attempts"; exit 1; fi
-            echo "Registry not ready, retrying in 30s"
-            sleep 30
+            if [ "$i" = 2 ]; then echo "Install failed after 2 attempts"; exit 1; fi
+            echo "Registry not ready, retrying in 60s"
+            sleep 60
           done
           npm audit signatures
           alignfirst_version=$(node -e 'console.log(JSON.parse(process.env.PUBLISHED).find((p) => p.name === "alignfirst")?.version ?? "")')

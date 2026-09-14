@@ -63,7 +63,10 @@ export function configureGit(dir: string): void {
 }
 
 export function git(dir: string, ...args: string[]): string {
-  return execFileSync("git", ["-C", dir, ...args], { encoding: "utf-8" }).trim();
+  return execFileSync("git", ["-C", dir, ...args], {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
 function readPackageVersion(): string {

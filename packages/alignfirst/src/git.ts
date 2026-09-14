@@ -1,19 +1,23 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { CliError } from "./cli-error.js";
+import type { Streams } from "./context.js";
 
-export function git(dir: string, ...args: string[]): void {
-  try {
-    execFileSync("git", ["-C", dir, ...args], { stdio: "inherit" });
-  } catch {
-    throw gitFailure(args);
-  }
+export function git(streams: Streams, dir: string, ...args: string[]): void {
+  const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf-8" });
+  if (result.error !== undefined) throw gitFailure(args, result.error.message);
+  streams.stdout.write(result.stdout);
+  streams.stderr.write(result.stderr);
+  if (result.status !== 0) throw gitFailure(args);
 }
 
-function gitFailure(args: string[]): CliError {
-  return new CliError(`git ${args[0]} failed. See the git output above.`);
+function gitFailure(args: string[], detail?: string): CliError {
+  const output = detail?.trim();
+  if (output === undefined || output === "")
+    return new CliError(`git ${args[0]} failed. See the git output above.`);
+  return new CliError(`git ${args[0]} failed:\n${output}`);
 }
 
 export function assertMainWorktreeRoot(cwd: string): void {
@@ -33,16 +37,18 @@ export function gitOutput(dir: string, ...args: string[]): string {
 }
 
 export function gitOutputRaw(dir: string, ...args: string[]): string {
-  let output: Buffer;
-  try {
-    output = execFileSync("git", ["-C", dir, ...args]);
-  } catch {
-    throw gitFailure(args);
-  }
+  const output = gitBuffer(dir, ...args);
   const text = output.toString("utf8");
   if (!Buffer.from(text).equals(output))
     throw new CliError("Cannot read non-UTF-8 Git output safely. Resolve the rebase manually.");
   return text;
+}
+
+export function gitBuffer(dir: string, ...args: string[]): Buffer {
+  const result = spawnSync("git", ["-C", dir, ...args]);
+  if (result.error !== undefined) throw gitFailure(args, result.error.message);
+  if (result.status !== 0) throw gitFailure(args, result.stderr.toString("utf8"));
+  return result.stdout;
 }
 
 export function gitOutputOrUndefined(dir: string, ...args: string[]): string | undefined {

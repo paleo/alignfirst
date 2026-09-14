@@ -29,24 +29,24 @@ export function runSync(ctx: CommandContext, args: string[]): number {
   }
   const repoDir = mode.repoToplevel;
   assertNoStoppedRebase(repoDir, ctx.form);
-  git(repoDir, "add", "-A");
-  if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
+  git(ctx, repoDir, "add", "-A");
+  if (hasStagedChanges(repoDir)) git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   if (hasUpstream(repoDir)) {
     try {
-      git(repoDir, "pull", "--rebase");
+      git(ctx, repoDir, "pull", "--rebase");
     } catch {
       if (findStoppedRebase(repoDir) === undefined)
         throw new CliError("git pull failed. See the git output above.");
-      resolveStoppedRebase(repoDir, ctx.stdout);
+      resolveStoppedRebase(ctx, repoDir);
     }
   }
   if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {
-    git(repoDir, "add", "-A");
-    if (hasStagedChanges(repoDir)) git(repoDir, "commit", "--quiet", "-m", "sync");
+    git(ctx, repoDir, "add", "-A");
+    if (hasStagedChanges(repoDir)) git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   }
   if (hasCommitsToSend(repoDir)) {
     try {
-      git(repoDir, "push", "--quiet", "-u", "origin", "HEAD");
+      git(ctx, repoDir, "push", "--quiet", "-u", "origin", "HEAD");
     } catch {
       throw new CliError(
         `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,
