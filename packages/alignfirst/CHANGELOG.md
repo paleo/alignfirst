@@ -1,5 +1,12 @@
 # alignfirst
 
+## 0.3.1
+
+### Patch Changes
+
+- fa78b2f: A failing git command now reports git's own message instead of pointing at output that was never printed, and names the subcommand that failed rather than a leading global option.
+- fa78b2f: Renamed the container concept in every message and document to "work files": the conventions line now starts with `Work files:`, `sync` reports "Work files synchronized", `doctor` shows a "Work files" section, and the team repository is called the work-files repository. The `.plans` directory, the `plans` command and the `plans` config key keep their names.
+
 ## 0.3.0
 
 ### Minor Changes
