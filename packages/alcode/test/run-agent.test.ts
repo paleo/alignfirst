@@ -161,6 +161,7 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
     startedAt: new Date(0).toISOString(),
     endedAt: null,
     exitReason: null,
+    contextTokens: null,
   });
   return {
     sessionFilePath,

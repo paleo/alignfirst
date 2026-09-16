@@ -597,6 +597,7 @@ function buildFrontmatter(
     startedAt: now.toISOString(),
     endedAt: null,
     exitReason: null,
+    contextTokens: null,
   };
 }
 

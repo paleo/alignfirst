@@ -498,6 +498,7 @@ describe("resolveTicket", () => {
         startedAt: "2026-07-01T09:15:03.000Z",
         endedAt: null,
         exitReason: null,
+        contextTokens: null,
         ...overrides,
       },
     };
@@ -611,6 +612,7 @@ describe("launch guards", () => {
       startedAt: "2026-07-01T09:15:03.000Z",
       endedAt: null,
       exitReason: null,
+      contextTokens: null,
       ...overrides,
     };
   }
