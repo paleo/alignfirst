@@ -113,7 +113,8 @@ Stop AAD now. Start a spec instead (alignfirst).
 
 Two fresh sessions: one reviews, one fixes.
 
-1. **Review** — `alcode new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`.
+1. **Review** — `alcode new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`. Retain the session id.
+   - **Follow up** (someone else's branch, its author pushed fixes) — `alcode resume <sessionId> --message "Fixes have been pushed, please check."`, in the review session, with the author's replies to the review appended when there are any. The agent checks its findings against the new commits and reports which are resolved and which remain. A new review session would start over.
 2. **Fix** (optional, always in a fresh session — never in the review session) — `alcode new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Point the message at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent proposes fixes; decide together what to fix, as in any AAD session. Keep it simple and avoid overengineering. When the agent asks about scope, welcome expansion that cleans things up and refuse expansion that adds complexity; simplicity wins. The agent then implements and writes a summary file.
 
 Skip the fix step when the review is informational.

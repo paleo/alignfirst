@@ -316,6 +316,16 @@ The PR/MR review sequence:
 
 The fix step is also how you process a review that arrives from outside — a teammate's review comments on your PR/MR, a review file the user points at. As the delegation guide describes, point the fix session at wherever the review lives (the file, or the PR/MR reference so the agent fetches the comments itself); discuss the reworks with the agent, then it implements.
 
+### Following up on a review
+
+The author of a branch you reviewed pushes fixes and asks you to check them, or you notice new commits on that branch after your comments. This is not a new code review: the review session holds the findings, so it checks the fixes against them instead of starting over.
+
+1. In the branch's workspace, merge the remote branch as Step 5 of [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md) describes, without its base-branch catch-up: the branch belongs to its author.
+2. Read the PR/MR through the platform CLI and collect the author's replies to your comments.
+3. Resume the review session without a protocol: `alcode resume <sessionId> --message "Fixes have been pushed, please check."`, with the author's replies appended when there are any. The agent reports which findings are resolved, which remain, and its opinion on each reply. The review file stays as written.
+4. React on the PR/MR as a reviewer would: resolve the thread of each fixed finding, answer on each remaining one with what is still missing, and approve the PR/MR through the platform CLI when nothing remains. Without a PR/MR, report the outcome in the thread instead.
+5. End the turn on a one-line report: what is resolved, what remains, and whether you approved.
+
 ### Merge/Pull requests
 
 You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking — as a **draft**, unless the user asked for a ready one. Mark it ready when the user says so.
