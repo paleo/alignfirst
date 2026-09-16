@@ -125,7 +125,7 @@ possible:
 ```markdown
 ## Project conventions and documentation
 
-Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 ```
 
 ### Local installation
