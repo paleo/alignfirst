@@ -1,5 +1,11 @@
 # @paleo/openclaw-test
 
+## 0.20.0
+
+### Minor Changes
+
+- ab0b032: Added `ScenarioContext.createThread`, so a scenario can open a thread the way a human does, and a `threadTitle` passthrough on `sendInbound`.
+
 ## 0.19.1
 
 ### Patch Changes
