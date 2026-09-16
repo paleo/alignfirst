@@ -11,7 +11,7 @@ import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-0280";
+const TICKET_ID = "ABC-0210";
 
 /** The first native delivery fails once; retry must reuse the original target and starter. */
 export default async function recoverableHandoffFailure(ctx: ScenarioContext): Promise<void> {

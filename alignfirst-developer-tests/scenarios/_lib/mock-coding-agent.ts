@@ -75,11 +75,37 @@ const WORKTREE_ATTACH_INTENT_RE = /\b(attach .*existing.*branch|use existing bra
 const BRANCH_TOKEN_RE = /\b((?:[a-zA-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*)\b/;
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
+/**
+ * Context-window occupancy both mock streams end on, so `alcode` records the same
+ * `contextTokens:` whichever coding agent is selected. The earlier turn reports a smaller figure:
+ * the recorded value is the newest response's occupancy, never a sum across the run.
+ */
+export const MOCK_CONTEXT_TOKENS = 128_000;
+
+// Claude reports cache reads and writes beside `input_tokens`, so occupancy is their sum plus the
+// response itself: 8 + 2_000 + 125_000 + 992.
 function buildClaudeStreamResponse(sessionId: string, result: string): string {
   const events: unknown[] = [
     { type: "system", subtype: "init", session_id: sessionId },
-    { type: "assistant", message: { content: [{ type: "text", text: "Working on it…" }] } },
-    { type: "assistant", message: { content: [{ type: "text", text: result }] } },
+    {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "Working on it…" }],
+        usage: { input_tokens: 8, cache_read_input_tokens: 40_000, output_tokens: 100 },
+      },
+    },
+    {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: result }],
+        usage: {
+          input_tokens: 8,
+          cache_creation_input_tokens: 2_000,
+          cache_read_input_tokens: 125_000,
+          output_tokens: 992,
+        },
+      },
+    },
     {
       type: "result",
       subtype: "success",
@@ -128,7 +154,10 @@ export function buildCodexStreamResponse(
 ): { stdout: string; stderr?: string; exitCode: number } {
   const line = (event: unknown): string => JSON.stringify(event);
   const started = line({ type: "thread.started", thread_id: sessionId });
-  const completed = line({ type: "turn.completed" });
+  const completed = line({
+    type: "turn.completed",
+    usage: { input_tokens: 127_000, cached_input_tokens: 120_000, output_tokens: 1_000 },
+  });
   switch (variant) {
     case "success":
       return {

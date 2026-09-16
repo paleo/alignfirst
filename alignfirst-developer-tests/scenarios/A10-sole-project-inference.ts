@@ -13,7 +13,7 @@ import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-0140";
+const TICKET_ID = "ABC-0100";
 
 export default async function soleProjectInference(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);

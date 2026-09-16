@@ -15,7 +15,7 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { assertWorktreePaths, bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PULL_REQUEST_URL = "https://github.com/acme/nimbus/pull/42";
-const TICKET_ID = "ABC-0230";
+const TICKET_ID = "ABC-0160";
 const SOURCE_BRANCH = `${TICKET_ID}/review-export`;
 // Pre-filter for the final review report; the judge validates the match. The model phrases
 // "no findings" freely in French, so accept the usual negations before the judge sees it.
@@ -23,7 +23,7 @@ const REVIEW_OUTCOME_RE =
   /(?:no (?:findings|issues|concerns)|aucun[^.\n]*(?:problème|commentaire|retour|remarque|anomalie|défaut|souci|réserve)|rien à signaler|sans (?:remarque|réserve|anomalie)|0 commentaire)/iu;
 const REVIEW_RESULT =
   "Review complete against main. No findings: the change is focused, covered, and safe to merge. " +
-  "Review file: .plans/ABC-0230/A1-review.md.";
+  "Review file: .plans/ABC-0160/A1-review.md.";
 
 export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);

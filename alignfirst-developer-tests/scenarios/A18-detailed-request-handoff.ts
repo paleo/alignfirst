@@ -9,7 +9,7 @@ import { waitForCapturedRequest } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
-const TICKET_ID = "ABC-0250";
+const TICKET_ID = "ABC-0180";
 const REQUEST = `Sur nimbus, réorganise la page d'export.
 
 - Le filtre de région doit rester visible pendant le défilement.

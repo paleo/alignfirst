@@ -16,7 +16,7 @@ import {
 } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-090";
+const TICKET_ID = "ABC-070";
 const BRANCH_DESC = "export-bold";
 const BRANCH = `${TICKET_ID}/${BRANCH_DESC}`;
 

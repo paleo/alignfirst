@@ -9,7 +9,7 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-0270";
+const TICKET_ID = "ABC-0200";
 
 /** A genuine missing-value reply arrives as soon as the native starter is visible. */
 export default async function humanReplyRacingStartup(ctx: ScenarioContext): Promise<void> {

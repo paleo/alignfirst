@@ -5,7 +5,7 @@ import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { runReadOnlyQuestion } from "./_lib/question-flow.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 
-const TICKET_ID = "ABC-0300";
+const TICKET_ID = "ABC-0220";
 const BRANCH = `${TICKET_ID}/export`;
 
 export default async function questionAboutExistingBranch(ctx: ScenarioContext): Promise<void> {

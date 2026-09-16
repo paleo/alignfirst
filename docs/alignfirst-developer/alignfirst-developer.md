@@ -75,7 +75,7 @@ npm run env:down
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Runs are written to **timestamped** subdirs, so they accumulate without colliding — wiping the directory destroys prior runs for no reason. `mkdir -p` is enough to avoid root-owned dirs.
 
-Run model matrices with Terra first. After they pass, use A11 on Slack for the smallest Sonnet compatibility check.
+Run model matrices with Terra first. After they pass, use A08 on Slack for the smallest Sonnet compatibility check.
 
 Scenario ids are the full filename stem (`A01-new-work-to-be-done`, not `A01`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md#doc-obedience-is-per-iteration).
 

@@ -98,12 +98,18 @@ function assertStayedInTheThread(
     0,
     "no thread created from inside a thread",
   );
+  // A rename carries a non-empty `threadName`. Agents pass an empty one on unrelated calls (a
+  // history `read`, for instance), which renames nothing.
   ctx.assertLength(
-    calls.filter((call) => call.toolName === "message" && inputOf(call).threadName !== undefined),
+    calls.filter((call) => call.toolName === "message" && renamesThread(inputOf(call))),
     0,
     "the human's thread keeps its name",
   );
   ctx.log(`stayed in thread ${threadId} — OK`);
+}
+
+function renamesThread(input: Record<string, unknown>): boolean {
+  return typeof input.threadName === "string" && input.threadName.trim() !== "";
 }
 
 function readGit(cwd: string, args: string[]): string {
