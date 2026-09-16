@@ -6,13 +6,13 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.38.0"
+  version: "0.39.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
 # AlignFirst Setup Guide
 
-Route by the user's intent. Load only the references needed for that route.
+Route by the user's intent. Load only the references needed for that route. Docmap, workspace, and the AlignFirst skills can each be adopted independently.
 
 ## Terminology
 
@@ -37,7 +37,7 @@ delegation and project discovery.
 When the user names a tool, inspect the repository and proceed directly to that tool. Install or
 upgrade only what they requested.
 
-- **AlignFirst CLI and skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md).
+- **AlignFirst CLI, protocols, or skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Install only the requested components; skills invoke the CLI through `npx` without a separate installation.
   For an existing v1, v2, or v3 installation, start with
   [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
@@ -51,15 +51,23 @@ Do not present the tooling menu or add unrelated tools on this route.
 When the user asks what the project could adopt, inspect the repository and present these independent
 choices:
 
-- **AlignFirst** installs the CLI and the command skills for collaborative specification, planning,
-  implementation, merge, review, description, and catch-up workflows. A work-files repository is an
-  optional sub-choice.
+- **AlignFirst protocols** provide collaborative specification, planning, implementation, merge, review, description, and catch-up workflows through the CLI. Command skills add shortcuts and can be installed on their own. A work-files repository is an optional sub-choice.
 - **docmap** makes the repository's `docs/` tree discoverable to agents and humans. It is available
   through the AlignFirst CLI or as the standalone `@paleo/docmap` package.
 - **workspace** creates isolated git-worktree development environments.
 
 Determine whether a work-files repository exists before offering that option. Let the user choose
 any subset.
+
+## Project Instructions
+
+Choose the `AGENTS.md` or `CLAUDE.md` discovery section from the project's adopted tools:
+
+- **AlignFirst skills or protocols:** use the `alignfirst context` section from [AlignFirst setup](references/alignfirst-skills-setup.md#project-instructions). It replaces `Docmap - Seek Documentation`; preserve any essential-documentation list and project-specific instructions.
+- **Docmap without AlignFirst skills or protocols:** use `Docmap - Seek Documentation` from [Docmap setup](references/docmap-setup.md#agent-instructions), with the project's actual Docmap command.
+- **Workspace only:** add the [workspace instructions](references/workspace-setup.md#agent-instructions).
+
+Installing Docmap or workspace alone does not opt the project into AlignFirst protocols. Installing skills globally does not opt every repository into them.
 
 ## AlignFirst Developer
 

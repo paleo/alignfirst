@@ -7,11 +7,12 @@ import {
   type CodingAgentCall,
   type CodingAgentMockHandle,
   isCodexCatalogCall,
+  MOCK_CONTEXT_TOKENS,
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
 
 const PROJECT_DIR = NIMBUS_PROJECT_PATH;
-const TICKET_ID = "ABC-0130";
+const TICKET_ID = "ABC-090";
 const NEW_MESSAGE = "Inspect the fixture and report the result.";
 const RESUME_MESSAGE = "Continue and confirm the result.";
 
@@ -121,6 +122,15 @@ function assertSucceededSession(session: SessionSnapshot, agent: CodingAgent, mo
   assertEqual(requiredFrontmatter(session, "model"), model, "session user-facing model");
   assertEqual(requiredFrontmatter(session, "status"), "succeeded", "session status");
   assertEqual(requiredFrontmatter(session, "exitReason"), "completed", "session exit reason");
+  // The delegation guide's spec-to-plan threshold reads this figure. Both mocks end on the same
+  // occupancy, and the Codex stream reports a far larger cumulative total: recording that total
+  // instead, as `codex exec --json` invites, fails here.
+  assertEqual(
+    requiredFrontmatter(session, "contextTokens"),
+    String(MOCK_CONTEXT_TOKENS),
+    "recorded context size",
+  );
+  assertEqual(requiredFrontmatter(session, "contextCompacted"), "false", "context not compacted");
   assertEqual(
     session.result,
     "Done. Implemented the requested change and verified it. Changes committed on the ticket branch.",

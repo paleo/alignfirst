@@ -2,6 +2,8 @@
 
 Blueprint for a **workspace** system — multiple git-worktree dev environments side by side. Requires git. The templates are Node.js, but the approach fits any runtime.
 
+Workspace can be installed on its own. Add the workspace instructions below; AlignFirst skills, protocols, and Docmap are separate choices.
+
 **Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
 **Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an AlignFirst Developer must also meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract).
@@ -144,6 +146,7 @@ Builds a `DevServerConfig` and calls `runDevServer`. `servers: ServerDescriptor[
 - Let a failing command throw (run with `stdio: "inherit"`, or print `err.stderr` on `"pipe"`). Never swallow it — a false success starts later servers against a dead dependency and hides the root cause.
 - Thread `ctx.cwd` into every child process and resolve every path against it. Never call bare `execSync("docker compose …")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Resolve everything inside the callback, not at module load.
+- A callback server gets no port, no PID and no log file, so `formatSummary` is the only place it can surface. Give it a row of the same shape as the spawn servers — what reaches it, then how its logs are read — so one column means one thing on every row. For a database: the connection string without the password, the workspace-scoped container name, and the command that tails the container logs.
 
 Also: `maxConcurrentDevServers` (the cap), optional `formatSummary({ workspace, servers })` — `workspace` being `{ name, worktree, main? }`.
 
@@ -256,7 +259,7 @@ Public-IP variant: the same section without the `export` line, introduced by "Wh
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Set `.alignfirst.json`'s `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Document the resulting layout in `docs/`.
+- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Standalone workspace setup does not require this file. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
@@ -267,6 +270,7 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Write `dev-server.mjs`** from the asset — same approach. *(dev server)*
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
+- [ ] **Give every callback server its own row in the `dev up` summary.** *(dev server)* The spawn servers get a URL, a PID and a log path for free; a database or a mock container gets none of the three. Print its connection string, its container name and the container-logs command, in the same column order as the spawn rows.
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts. Add the search-ignore line unless the instruction file runs `alignfirst context`.
 - [ ] **Meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.

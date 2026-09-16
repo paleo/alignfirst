@@ -63,6 +63,7 @@ Project fixtures and their reset logic are consumer concerns — ship a reset sc
 - `channel`, `conversationId`, `accountId` — per-task isolation; never hard-code a conversation id.
 - `busUrl` — the bus the gateway talks to, for direct bus calls such as `failNextQaBusOperation`.
 - `sendInbound(input)` — push an inbound message on the bus.
+- `createThread(input)` — seed a thread the bot did not open, as a surface user creating one; returns its id for `sendInbound`.
 - `waitForOutbound(predicate, opts)` — await a matching outbound; fails fast on unmatched outbounds or mock-CLI silence.
 - `poll`, `expectNoOutbound`, `getCursor` — bus consumers.
 - `assertRegex`, `assertEqual`, `assertLength` — structural assertions.

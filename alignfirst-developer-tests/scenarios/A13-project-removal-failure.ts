@@ -19,7 +19,7 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-0190";
+const TICKET_ID = "ABC-0130";
 
 export default async function projectRemovalFailure(ctx: ScenarioContext): Promise<void> {
   await resetFixtures(ctx);
@@ -42,7 +42,7 @@ export default async function projectRemovalFailure(ctx: ScenarioContext): Promi
   );
 
   await ctx.waitForAgentToolCall(
-    (call) => execMatches(call, /workspace\s+remove/) && execMatches(call, /ABC-0190-remove/),
+    (call) => execMatches(call, /workspace\s+remove/) && execMatches(call, /ABC-0130-remove/),
     { label: "workspace removal attempted through project tooling", timeoutMs: 180_000 },
   );
   await ctx.waitForOutbound(

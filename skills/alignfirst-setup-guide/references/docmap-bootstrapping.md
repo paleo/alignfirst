@@ -62,4 +62,4 @@ After writing, run `docmap --check` to verify all files pass validation.
 
 ## 5. Point agents at the essentials
 
-In the `## Docmap - Seek Documentation` section of `AGENTS.md` (or `CLAUDE.md`), add or refresh an `### Essential Documentation` sub-list naming the 1–3 docs an agent must always read first (e.g. architecture, code style). Keep it short — it is the always-read subset, not the full index.
+In the documentation discovery section of `AGENTS.md` (or `CLAUDE.md`), add or refresh an `### Essential Documentation` sub-list naming the 1–3 docs an agent must always read first (e.g. architecture, code style). Keep the section selected by [Docmap setup](docmap-setup.md#agent-instructions): standalone Docmap or AlignFirst context. Keep the list short — it is the always-read subset, not the full index.

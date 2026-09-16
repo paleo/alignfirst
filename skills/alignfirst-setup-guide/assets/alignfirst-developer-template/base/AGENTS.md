@@ -2,9 +2,9 @@
 
 This repository documents and operates `{{SERVER_HOST}}`, the server that runs **{{DEVELOPER_NAME}}**, an AlignFirst Developer. Every configuration step is a runbook under `docs/installations/`, so the server can be rebuilt from scratch.
 
-## Project conventions and documentation
+## Seek project conventions and documentation
 
-Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 
 ## Sysadmin workflow
 

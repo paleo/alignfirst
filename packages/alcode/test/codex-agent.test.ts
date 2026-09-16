@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   assessCodexState,
@@ -115,8 +118,108 @@ describe("Codex protocol", () => {
     event(state, { type: "turn.completed" });
     expect(assessCodexState(state)).toMatchObject({ succeeded: true, authEvidence: false });
   });
+
+  it("reads the context window from the thread rollout, not the cumulative stream total", () => {
+    const state = completedState("thread-a", { streamTotal: 176_122 });
+    writeRollout("thread-a", [
+      { occupancy: 20_000, total: 40_000 },
+      { occupancy: 33_807, total: 176_122 },
+    ]);
+    const assessment = assessCodexState(state);
+    expect(assessment.contextTokens).toBe(33_807);
+    expect(assessment.contextCompacted).toBe(false);
+    expect(assessment.contextTokensError).toBeUndefined();
+  });
+
+  it("reports a compacted thread when occupancy fell during the run", () => {
+    const state = completedState("thread-b", { streamTotal: 500_000 });
+    writeRollout("thread-b", [
+      { occupancy: 198_667, total: 300_000 },
+      { occupancy: 20_579, total: 500_000 },
+    ]);
+    const assessment = assessCodexState(state);
+    expect(assessment.contextTokens).toBe(20_579);
+    expect(assessment.contextCompacted).toBe(true);
+  });
+
+  // The rollout total must match the stream's, so a Codex format change is reported instead of
+  // producing a plausible wrong figure.
+  it("reports an error when the rollout total disagrees with the stream", () => {
+    const state = completedState("thread-c", { streamTotal: 176_122 });
+    writeRollout("thread-c", [{ occupancy: 33_807, total: 999 }]);
+    const assessment = assessCodexState(state);
+    expect(assessment.contextTokens).toBeUndefined();
+    expect(assessment.contextTokensError).toMatch(/does not match the stream total/);
+  });
+
+  it("reports an error when no rollout exists for the thread", () => {
+    const assessment = assessCodexState(completedState("thread-missing", { streamTotal: 1_000 }));
+    expect(assessment.contextTokens).toBeUndefined();
+    expect(assessment.contextTokensError).toMatch(/No Codex rollout found/);
+  });
+
+  it("reports an error when the completed turn carries no usage", () => {
+    const state = createCodexState();
+    event(state, { type: "thread.started", thread_id: "thread-d" });
+    event(state, { type: "turn.completed" });
+    const assessment = assessCodexState(state);
+    expect(assessment.contextTokens).toBeUndefined();
+    expect(assessment.contextTokensError).toMatch(/no turn.completed usage/);
+  });
 });
 
 function event(state: ReturnType<typeof createCodexState>, value: unknown): string | undefined {
   return interpretCodexLine(JSON.stringify(value), state);
+}
+
+let codexHome: string | undefined;
+let previousCodexHome: string | undefined;
+
+beforeEach(() => {
+  previousCodexHome = process.env.CODEX_HOME;
+  codexHome = mkdtempSync(join(tmpdir(), "alcode-codex-home-"));
+  process.env.CODEX_HOME = codexHome;
+});
+
+afterEach(() => {
+  if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+  else process.env.CODEX_HOME = previousCodexHome;
+});
+
+function completedState(threadId: string, options: { streamTotal: number }) {
+  const state = createCodexState();
+  event(state, { type: "thread.started", thread_id: threadId });
+  event(state, {
+    type: "turn.completed",
+    // Codex counts cached input inside `input_tokens`; the event carries the thread's total.
+    usage: { input_tokens: options.streamTotal - 100, output_tokens: 100 },
+  });
+  return state;
+}
+
+interface RolloutUsage {
+  occupancy: number;
+  total: number;
+}
+
+function writeRollout(threadId: string, usages: RolloutUsage[]): void {
+  const dir = join(codexHome ?? "", "sessions", "2026", "09", "16");
+  mkdirSync(dir, { recursive: true });
+  const lines = usages.map((usage) =>
+    JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          last_token_usage: { input_tokens: usage.occupancy - 1, output_tokens: 1 },
+          total_token_usage: { input_tokens: usage.total - 1, output_tokens: 1 },
+          model_context_window: 258_400,
+        },
+      },
+    }),
+  );
+  writeFileSync(
+    join(dir, `rollout-2026-09-16T13-21-55-${threadId}.jsonl`),
+    `${lines.join("\n")}\n`,
+  );
 }

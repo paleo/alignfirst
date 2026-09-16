@@ -23,8 +23,8 @@ describe("context command", () => {
       "Default branch: unresolved; ask before default-branch operations.\n\n# Docmap Usage\n\ndocmap — browse",
     );
     expect(result.stdout).toContain("`docs/topic.md` — Topic\n\n# AlignFirst Protocols\n\n");
-    expect(result.stdout).toContain("`alignfirst guide <protocol>` prints");
-    expect(result.stdout).toContain("`alcatchup` stands for `alignfirst ticket --catchup`");
+    expect(result.stdout).toContain("run `alignfirst guide <protocol>` and follow it");
+    expect(result.stdout).toContain("Catch up (`alcatchup`) — run `alignfirst ticket --catchup`");
     expect(result.stdout).not.toContain("{{");
   });
 
@@ -42,7 +42,7 @@ describe("context command", () => {
       cwd: temp(),
       env: { npm_config_user_agent: "npm/10.0.0 node/v22.0.0" },
     });
-    expect(result.stdout).toContain("`npx -y alignfirst guide <protocol>` prints");
+    expect(result.stdout).toContain("run `npx -y alignfirst guide <protocol>` and follow it");
   });
 });
 

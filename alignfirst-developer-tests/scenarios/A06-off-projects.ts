@@ -24,7 +24,7 @@ const OFF_PROJECTS_CHAT_PROMPT =
 // reference needs no `alproject list`, so this scenario asserts only what the
 // user can observe — social-only replies, no thread, no coding-agent call. The
 // mock stays installed to serve a lookup if one happens; either count is fine.
-// The lookup-when-it-matters case is A20-ambiguous-project-mention.
+// The lookup-when-it-matters case is A14-ambiguous-project-mention.
 export default async function offProjectsChat(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);

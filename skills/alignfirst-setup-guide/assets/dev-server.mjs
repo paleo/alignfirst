@@ -74,10 +74,26 @@ await runDevServer({
   // ADAPT (managed project): report the public URL instead of the default
   // `http://localhost:<port>/`, read from the file the `remote` profile rewrites
   // (see workspace.mjs). Both profile variants write it to the same variable.
+  //
+  // ADAPT (callback servers): a callback server has no port, no PID and no log
+  // file, so this is the only place it can surface. Give it a row of the same
+  // shape as the spawn servers — what it is reached by, then how its logs are
+  // read — so one column means one thing on every row. For a database: the
+  // connection string without the password, the workspace-scoped container name,
+  // and the command that tails the container logs.
+  //
   // Needs `import { readFileSync } from "node:fs";`.
   // formatSummary: ({ workspace, servers }) => {
-  //   const url = readFileSync(".env", "utf8").match(/^API_URL=(.+)$/m)?.[1];
-  //   const pids = servers.map(({ server, pid }) => `  ${server.name}: PID ${pid}`);
-  //   return [`Dev server up for ${workspace.name}: ${url}`, ...pids].join("\n");
+  //   const env = readFileSync(".env", "utf8");
+  //   const read = (name) => env.match(new RegExp(`^${name}=(.+)$`, "m"))?.[1];
+  //   const rows = servers
+  //     .filter(({ pid }) => pid !== undefined) // Callback servers have none.
+  //     .map(({ server, pid }) => `  ${server.name}: PID ${pid}  log: .local-wt/logs/${server.name}.log`);
+  //   const db = `${read("DB_USER")}@127.0.0.1:${read("DB_PORT")}/${read("DB_NAME")}`;
+  //   return [
+  //     `Dev server up for ${workspace.name}: ${read("API_URL")}`,
+  //     ...rows,
+  //     `  database: ${db}  (${workspace.name}-database)  log: docker compose logs -f database`,
+  //   ].join("\n");
   // },
 });

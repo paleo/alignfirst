@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.38.0"
+  version: "0.39.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -14,7 +14,7 @@ metadata:
 
 You have just loaded this skill. Before any reply text and before any other tool call, read the playbook for your surface:
 
-- Conversation metadata carries a `topic_id` → you are already inside the working thread → read [`references/working-session.md`](references/working-session.md) and continue there. This holds even on its first human message, before the service nudge. A `channel:` prefix or channel label does not change this; do not create another thread.
+- Conversation metadata carries a `topic_id` → you are already inside the working thread → read [`references/working-session.md`](references/working-session.md) and continue there. This holds even on its first human message, before the service nudge, and in a thread a human opened and tagged you in, which carries no starter and no handoff. A `channel:` prefix, a channel label, or a missing starter does not change this; you are never to create another thread from inside one.
 - Otherwise → channel or DM session → read [`references/channel-handling.md`](references/channel-handling.md). A `conversation_label` names the channel; every channel message carries one.
 
 The choice rests on the metadata alone. The playbook tells you what to do. No announcement, `ls`, `grep`, `find` or project lookup before it is read.
@@ -29,6 +29,10 @@ Your plain text streams to your bound route: in a thread it is the reply, in a c
 
 The `message` tool serves the starter (Discord `thread-create`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. After `thread_handoff start`, the channel turn ends on `NO_REPLY`.
 
+## Reply style
+
+Be concise. Use fewer words while preserving the substance and detail the user needs. Let the question determine the length and format. Lead with the answer, omit repetition and process narration, and summarize alcode's findings in your own words.
+
 ## Projects
 
 `alproject list --json --root ~/projects` is the authoritative project inventory. Keep these values distinct:
@@ -40,11 +44,13 @@ PROJECT_PATH anchors project-file reads, main-worktree Git commands, workspace t
 
 Channel/DM: obtain PROJECT and PROJECT_PATH from `alproject list --json --root ~/projects`, following the channel procedure. Never rely on memorized names.
 
-Thread: PROJECT and PROJECT_PATH come from the starter, recovered with `message action: "read"`. The working-session procedure resolves the values the starter left open. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
+Thread: PROJECT and PROJECT_PATH come from the starter, recovered with `message action: "read"`. The working-session procedure resolves the values the starter left open, and runs the inventory itself in a thread a human opened, which has no starter. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix.
 
 ## Tickets and AlignFirst protocols
 
-A development task owned by one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
+Code reviews and explicitly requested AlignFirst protocols follow their protocol workflow, including its ticket and workspace requirements. Other read-only questions, advice and brainstormings need no ticket or AlignFirst protocol to start. They use the refreshed main worktree unless they explicitly concern another branch; follow the working session's consultation runbook, which also records a discussion worth keeping.
+
+A development task that changes one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
 
 Use AlignFirst protocols only for work owned by one project. Delegate project bootstrap (creation and repository onboarding), a multi-project request with no main project, workspace cleanup, base-branch refresh, and other operational work to alcode without a protocol. A ticket ID may still identify the project workspaces involved.
 

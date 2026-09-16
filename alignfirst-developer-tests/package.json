@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor": "node scripts/vendor-packages.mjs",
     "env:build": "npm run vendor && npm install && openclaw-test env build",
     "env:up": "openclaw-test env up",

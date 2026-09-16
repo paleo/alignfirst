@@ -20,7 +20,7 @@ import {
   type SessionRecord,
   writeInitialSessionFile,
 } from "./session-file.js";
-import { readUsage, type UsageReader } from "./usage.js";
+import { readQuota, type QuotaReader } from "./quota.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
@@ -49,7 +49,7 @@ export interface MainOptions {
   env?: NodeJS.ProcessEnv;
   alignfirstCommand?: string[];
   modelResolver?: ExecutableModelResolver;
-  usageReader?: UsageReader;
+  quotaReader?: QuotaReader;
 }
 
 export type AlcodeCommand =
@@ -57,13 +57,14 @@ export type AlcodeCommand =
   | { kind: "help" }
   | { kind: "guide"; variant: GuideVariant }
   | { kind: "status"; target: StatusTarget }
-  | { kind: "usage" }
+  | { kind: "quota" }
   | { kind: "session"; args: SessionArgs };
 
 export type StatusTarget =
   | { kind: "file"; sessionFile: string }
   | { kind: "ticket"; ticket: string }
-  | { kind: "noTicket" };
+  | { kind: "noTicket" }
+  | { kind: "meta"; meta: string };
 
 // `resume` undefined means a new session.
 export interface SessionArgs {
@@ -117,9 +118,9 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  if (command.kind === "usage") {
+  if (command.kind === "quota") {
     try {
-      const report = await (options?.usageReader ?? readUsage)(agent, { cwd, env });
+      const report = await (options?.quotaReader ?? readQuota)(agent, { cwd, env });
       stdout.write(`${report.trimEnd()}\n`);
       return 0;
     } catch (error) {
@@ -163,6 +164,7 @@ export async function main(options?: MainOptions): Promise<number> {
 
 function resolveStatusTargetSessionFile(cwd: string, target: StatusTarget): string {
   if (target.kind === "file") return resolveStatusSessionFile(cwd, target.sessionFile);
+  if (target.kind === "meta") return resolveMetaSessionFile(cwd, target.meta);
   const relativeDir =
     target.kind === "ticket" ? `.plans/${target.ticket}/_alcode/` : ".plans/_alcode/";
   const sessionFilePath = findNewestSessionFile(resolve(cwd, relativeDir));
@@ -170,6 +172,17 @@ function resolveStatusTargetSessionFile(cwd: string, target: StatusTarget): stri
     throw new Error(`Error: no session file under ${relativeDir}.`);
   }
   return resolveStatusSessionFile(cwd, sessionFilePath);
+}
+
+// A run tagged with `--meta <key>` is found by that key alone: the worktree's `.plans/` is shared,
+// so its newest run may belong to another thread.
+function resolveMetaSessionFile(cwd: string, meta: string): string {
+  const matches = listSessionRecords(cwd).filter((record) => record.frontmatter.meta === meta);
+  if (matches.length === 0) throw new Error(`Error: no session file with meta "${meta}".`);
+  const newest = matches.reduce((a, b) =>
+    a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
+  );
+  return resolveStatusSessionFile(cwd, newest.path);
 }
 
 function loadMessage(args: SessionArgs, cwd: string): void {
@@ -225,6 +238,10 @@ function renderSessionStatus(
     `startedAt: ${frontmatter.startedAt}`,
     `endedAt: ${frontmatter.endedAt ?? ""}`,
     `exitReason: ${frontmatter.exitReason ?? ""}`,
+    `contextTokens: ${frontmatter.contextTokens ?? ""}`,
+    `contextCompacted: ${frontmatter.contextCompacted}`,
+    `contextTokensError: ${frontmatter.contextTokensError ?? ""}`,
+    `meta: ${frontmatter.meta ?? ""}`,
     "",
   ].join("\n");
 }
@@ -250,8 +267,8 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
       return parseResumeCommand(tokens);
     case "status":
       return parseStatusCommand(tokens);
-    case "usage":
-      return parseBareCommand(tokens, "usage");
+    case "quota":
+      return parseBareCommand(tokens, "quota");
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
@@ -263,6 +280,7 @@ function parseStatusCommand(tokens: string[]): AlcodeCommand {
     options: {
       ticket: { type: "string" },
       "no-ticket": { type: "boolean", default: false },
+      meta: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -270,12 +288,18 @@ function parseStatusCommand(tokens: string[]): AlcodeCommand {
   });
   if (values.help) return { kind: "help" };
   const targetCount =
-    positionals.length + Number(values.ticket !== undefined) + Number(values["no-ticket"]);
+    positionals.length +
+    Number(values.ticket !== undefined) +
+    Number(values["no-ticket"]) +
+    Number(values.meta !== undefined);
   if (targetCount !== 1) {
     throw new Error(
-      "Error: `alcode status` takes exactly one of <session-file>, --ticket <id> or --no-ticket.",
+      "Error: `alcode status` takes exactly one of <session-file>, --ticket <id>, --no-ticket " +
+        "or --meta <key>.",
     );
   }
+  if (values.meta !== undefined)
+    return { kind: "status", target: { kind: "meta", meta: values.meta } };
   if (values.ticket !== undefined) {
     if (!isPathSafeTicket(values.ticket)) throw new Error(TICKET_PATH_ERROR);
     return { kind: "status", target: { kind: "ticket", ticket: values.ticket } };
@@ -333,7 +357,7 @@ function parseResumeCommand(tokens: string[]): AlcodeCommand {
   };
 }
 
-function parseBareCommand(tokens: string[], kind: "usage"): AlcodeCommand {
+function parseBareCommand(tokens: string[], kind: "quota"): AlcodeCommand {
   const { values } = parseArgs({
     args: tokens,
     options: { help: { type: "boolean", short: "h", default: false } },
@@ -596,6 +620,9 @@ function buildFrontmatter(
     startedAt: now.toISOString(),
     endedAt: null,
     exitReason: null,
+    contextTokens: null,
+    contextCompacted: false,
+    contextTokensError: null,
   };
 }
 
@@ -660,8 +687,8 @@ Usage:
   alcode new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
   alcode new --message "..."
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
-  alcode status (<session-file> | --ticket <id> | --no-ticket)
-  alcode usage
+  alcode status (<session-file> | --ticket <id> | --no-ticket | --meta <key>)
+  alcode quota
   alcode --guide
   alcode --openclaw-guide
   alcode -h, --help
@@ -671,8 +698,15 @@ Commands:
   new                   Start a new session; prints its Session ID at the end.
   resume <sessionId>    Continue an existing session.
   status                Reconcile and show one run's durable status: the given file, or the newest
-                        run of the ticket (or of no-ticket work). Does not start an agent.
-  usage                 Show the selected coding agent's current usage limits and reset times.
+                        run of the ticket, of no-ticket work, or of the --meta key. Includes
+                        contextTokens, the context-window occupancy the run ended on, and
+                        contextCompacted. Does not start an agent.
+
+Options (status):
+  --ticket <id>         Newest run of that ticket.
+  --no-ticket           Newest run of no-ticket work.
+  --meta <key>          Newest run tagged with \`--meta <key>\`, wherever it sits under .plans/.
+  quota                 Show the selected coding agent's account limits and reset times.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.

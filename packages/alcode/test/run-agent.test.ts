@@ -45,6 +45,9 @@ describe("shared runner helpers", () => {
       exitReason: "terminated",
       sessionId: "sess-1",
       result: "Terminated by SIGTERM before completion.",
+      contextTokens: null,
+      contextCompacted: false,
+      contextTokensError: null,
     });
   });
 
@@ -160,6 +163,9 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
     startedAt: new Date(0).toISOString(),
     endedAt: null,
     exitReason: null,
+    contextTokens: null,
+    contextCompacted: false,
+    contextTokensError: null,
   });
   return {
     sessionFilePath,

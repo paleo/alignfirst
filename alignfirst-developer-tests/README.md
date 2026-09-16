@@ -22,7 +22,7 @@ npm run vendor   # build + pack the local @paleo/openclaw-* into vendor/ (first 
 npm install
 npm run env:build
 npm run env:up
-npm run e2e -- --model gpt-5.6-terra --channel all A11-go-ahead-delegation
+npm run e2e -- --model gpt-5.6-terra --channel all A08-go-ahead-delegation
 npm run env:down
 ```
 
@@ -60,41 +60,45 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 21 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 23 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
 | Scenario | Coverage and consolidation |
 | --- | --- |
 | A01 | Missing ticket and scope, quiet takeover, human answer, workspace and delegation; Discord title gains the supplied ticket. |
-| A02 | Complete request starts automatically on external project `orion`; canonical path survives through delegation. Absorbs A16. |
-| A03 | A question selects a read-only investigation and reports its findings. |
+| A02 | Complete request starts automatically on external project `orion`; canonical path survives through delegation. |
+| A03 | A question without a ticket refreshes main before read-only investigation and reports concise, substantive findings without creating a ticket or workspace. |
 | A04 | Ticket supplied without a project: ask which project and wait. |
 | A05 | An unknown project name must be corrected before work starts. |
 | A06 | Small talk stays social and starts no project work. One message suffices; the former second message had no additional assertion. |
-| A09 | Status progresses from no branch to an externally created branch and its attached workspace. A repeated status with no state change is omitted; A23 covers existing-workspace reuse. Checks actual filesystem state and report meaning, with no template requirement. Its mock reports status without claiming implementation work. Preserves A08's existing-branch choice; A23 covers A07's discovery of a workspace that predates the session. |
-| A11 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Preserves A10's alcode/background contract and A12's later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward, replacing A29's artificial event. |
-| A13 | Deterministic alcode new/resume, selected-agent protocol, catchup, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
-| A14 | With one listed project, a ticket-only request selects it automatically. |
-| A15 | Duplicate project names require choosing a canonical path; takeover waits for the answer. |
-| A17 | New project creation, initial commit, and setup on main without a ticket protocol. The report confirms completion; CLI and filesystem assertions verify port allocation without requiring the report to repeat configuration fields. |
-| A19 | A preparation request asks for the exact paths before confirmation, followed by failed removal of a dirty worktree, preservation of all paths/config, then cleanup and an explicitly reconfirmed successful retry. Absorbs A18's ordered deletion, final inventory refresh after removal, and sibling-directory protection. |
-| A20 | A casual mention of a listed project is recognized as project work. |
-| A21 | A concrete action with neither project nor ticket still opens a thread and asks for its project. |
-| A23 | A PR URL carries through resource resolution, ticket recovery, review delegation, and reported findings. The fresh thread discovers and reuses a preexisting registered workspace, preserving A07’s cold-discovery boundary without another startup. |
-| A24 | One multi-project request acknowledges the active takeover, uses the approved readiness wording, and delegates a base refresh separately in each canonical project. |
-| A25 | A multiline request survives the starter and request-file capture before coding. Its missing-ticket question may appear in the starter or the thread. |
-| A26 | Explicit no-ticket work reserves the next side ticket and captures the complete request. File observation does not require setup to remain paused while the test polls. |
-| A27 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
-| A28 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
+| A07 | Status progresses from no branch to an externally created branch and its attached workspace. A repeated status with no state change is omitted. Checks actual filesystem state and report meaning, with no template requirement. Its mock reports status without claiming implementation work. A16 covers reuse of an existing workspace and the discovery of one that predates the session. |
+| A08 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Covers the alcode/background contract and later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward. |
+| A09 | Deterministic alcode new/resume, selected-agent protocol, catchup, recorded context size, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
+| A10 | With one listed project, a ticket-only request selects it automatically. |
+| A11 | Duplicate project names require choosing a canonical path; takeover waits for the answer. |
+| A12 | New project creation, initial commit, and setup on main without a ticket protocol. The report confirms completion; CLI and filesystem assertions verify port allocation without requiring the report to repeat configuration fields. |
+| A13 | A preparation request asks for the exact paths before confirmation, followed by failed removal of a dirty worktree, preservation of all paths/config, then cleanup and an explicitly reconfirmed successful retry. Covers ordered deletion, final inventory refresh after removal, and sibling-directory protection. |
+| A14 | A casual mention of a listed project is recognized as project work. |
+| A15 | A concrete action with neither project nor ticket still opens a thread and asks for its project. |
+| A16 | A PR URL carries through resource resolution, ticket recovery, review delegation, and reported findings. The fresh thread discovers and reuses a preexisting registered workspace, preserving the cold-discovery boundary without another startup. |
+| A17 | One multi-project request acknowledges the active takeover, uses the approved readiness wording, and delegates a base refresh separately in each canonical project. |
+| A18 | A multiline request survives the starter and request-file capture before coding. Its missing-ticket question may appear in the starter or the thread. |
+| A19 | Explicit no-ticket work reserves the next side ticket and captures the complete request. File observation does not require setup to remain paused while the test polls. |
+| A20 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
+| A21 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
+| A22 | A question about an explicit branch reuses its registered workspace for read-only investigation. |
+| A23 | A human opens the thread and tags the bot inside it: no starter, no handoff. The session resolves the project itself, opens no second thread, and leaves the author's thread name alone. |
 
-A04, A14 and A21 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A25 distinguish a missing task description from a complete detailed request. A27 keeps its startup race separate from A11's explicit hold. A07, A08, A10, A12, A16, A18 and A29 have no standalone files; A22 was already absent.
+A04, A10 and A15 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A18 distinguish a missing task description from a complete detailed request. A20 keeps its startup race separate from A08's explicit hold.
 
-Starter values, canonical paths, full detailed requests, and actual session ownership are checked structurally. Scenario-specific judges cover meaning where needed, including missing-information questions and A25’s request fidelity. The former generic starter judge repeated these checks at every thread bootstrap and rejected valid summaries; it is removed.
+Scenario numbers are contiguous and describe the suite as it stands. Dated references elsewhere in the docs (`A05 Slack, 2026-09-08`, artifact directories, …) use the numbering in force on that date and are left as recorded.
 
-The quiet-takeover helper observes a fresh claim, history read, and eyes reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation, then waits for a terminal turn before checking that the starter's question was not repeated. A24 applies the same structural reaction assertion to an active takeover and checks the approved readiness meaning. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
+Starter values, canonical paths, full detailed requests, and actual session ownership are checked structurally. Scenario-specific judges cover meaning where needed, including missing-information questions and A18’s request fidelity. The former generic starter judge repeated these checks at every thread bootstrap and rejected valid summaries; it is removed.
 
-From this directory, rebuild the CLIs and harness image, then run 20 conversation scenarios on both surfaces with Terra. Run the deterministic A13 contract once for the selected coding agent.
+The quiet-takeover helper observes a fresh claim, history read, and eyes reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation, then waits for a terminal turn before checking that the starter's question was not repeated. A17 applies the same structural reaction assertion to an active takeover and checks the approved readiness meaning. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
+
+From this directory, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
 
 ```bash
 npm run build --prefix ..
@@ -102,15 +106,15 @@ npm run env:build
 
 scenario_names=()
 for scenario_file in scenarios/A*.ts; do
-  case "$scenario_file" in scenarios/A13-*) continue ;; esac
+  case "$scenario_file" in scenarios/A09-*) continue ;; esac
   scenario_name="${scenario_file##*/}"
   scenario_names+=("${scenario_name%.ts}")
 done
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenario_names[@]}"
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A13-alcode-agent-contract
+ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A09-alcode-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A11 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. If the selected coding agent changes to Claude, run A13 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A08 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 

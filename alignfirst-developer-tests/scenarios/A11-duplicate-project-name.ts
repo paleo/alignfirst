@@ -9,7 +9,7 @@ import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nimbus";
-const TICKET_ID = "ABC-0150";
+const TICKET_ID = "ABC-0110";
 const DUPLICATE_PATH = `${EXTERNAL_PROJECT_PARENT}/${PROJECT}`;
 
 export default async function duplicateProjectName(ctx: ScenarioContext): Promise<void> {

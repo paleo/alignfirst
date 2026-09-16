@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import type { CodingAgent } from "./coding-agent.js";
 import { buildAgentEnv } from "./run-agent.js";
 
-const USAGE_TIMEOUT_MS = 30_000;
+const QUOTA_TIMEOUT_MS = 30_000;
 const CLAUDE_PRIVACY_OPT_OUTS = [
   "DISABLE_TELEMETRY",
   "DISABLE_ERROR_REPORTING",
@@ -13,30 +13,30 @@ const CLAUDE_PRIVACY_OPT_OUTS = [
   "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
 ] as const;
 const execFileAsync = promisify(execFile);
-const DEFAULT_USAGE_PROCESS_ADAPTER: UsageProcessAdapter = {
-  execute: executeUsageProcess,
-  spawn: spawnUsageProcess,
+const DEFAULT_QUOTA_PROCESS_ADAPTER: QuotaProcessAdapter = {
+  execute: executeQuotaProcess,
+  spawn: spawnQuotaProcess,
 };
 
-export const readUsage: UsageReader = createUsageReader();
+export const readQuota: QuotaReader = createQuotaReader();
 
-export interface UsageContext {
+export interface QuotaContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
 }
 
-export type UsageReader = (agent: CodingAgent, context: UsageContext) => Promise<string>;
+export type QuotaReader = (agent: CodingAgent, context: QuotaContext) => Promise<string>;
 
-export interface UsageProcessAdapter {
+export interface QuotaProcessAdapter {
   execute(
     file: string,
     args: string[],
-    options: UsageProcessOptions & { timeout: number },
+    options: QuotaProcessOptions & { timeout: number },
   ): Promise<{ stdout: string }>;
-  spawn(file: string, args: string[], options: UsageProcessOptions): ChildProcessWithoutNullStreams;
+  spawn(file: string, args: string[], options: QuotaProcessOptions): ChildProcessWithoutNullStreams;
 }
 
-interface UsageProcessOptions {
+interface QuotaProcessOptions {
   cwd: string;
   env: NodeJS.ProcessEnv;
 }
@@ -51,15 +51,15 @@ interface RateLimitBucket {
   windows: RateLimitWindow[];
 }
 
-export function createUsageReader(
-  adapter: UsageProcessAdapter = DEFAULT_USAGE_PROCESS_ADAPTER,
-  timeoutMs = USAGE_TIMEOUT_MS,
-): UsageReader {
+export function createQuotaReader(
+  adapter: QuotaProcessAdapter = DEFAULT_QUOTA_PROCESS_ADAPTER,
+  timeoutMs = QUOTA_TIMEOUT_MS,
+): QuotaReader {
   return async (agent, context) => {
     const env = buildAgentEnv(context.env, (context.env.ALIGNFIRST_CODE_UNSET ?? "").split(","));
     return agent === "claude"
-      ? readClaudeUsage({ ...context, env: translateClaudePrivacyOptOut(env) }, adapter, timeoutMs)
-      : readCodexUsage({ ...context, env }, adapter, timeoutMs);
+      ? readClaudeQuota({ ...context, env: translateClaudePrivacyOptOut(env) }, adapter, timeoutMs)
+      : readCodexQuota({ ...context, env }, adapter, timeoutMs);
   };
 }
 
@@ -70,9 +70,9 @@ function translateClaudePrivacyOptOut(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
   return env;
 }
 
-async function readClaudeUsage(
-  context: UsageContext,
-  adapter: UsageProcessAdapter,
+async function readClaudeQuota(
+  context: QuotaContext,
+  adapter: QuotaProcessAdapter,
   timeoutMs: number,
 ): Promise<string> {
   const { stdout } = await adapter.execute(
@@ -84,10 +84,10 @@ async function readClaudeUsage(
       timeout: timeoutMs,
     },
   );
-  return `Claude Code usage\n\n${parseClaudeUsage(stdout)}`;
+  return `Claude Code quota\n\n${parseClaudeQuota(stdout)}`;
 }
 
-export function parseClaudeUsage(stdout: string): string {
+export function parseClaudeQuota(stdout: string): string {
   let value: unknown;
   try {
     value = JSON.parse(stdout);
@@ -105,18 +105,18 @@ export function parseClaudeUsage(stdout: string): string {
   return limits;
 }
 
-async function readCodexUsage(
-  context: UsageContext,
-  adapter: UsageProcessAdapter,
+async function readCodexQuota(
+  context: QuotaContext,
+  adapter: QuotaProcessAdapter,
   timeoutMs: number,
 ): Promise<string> {
-  const response = await requestCodexUsage(context, adapter, timeoutMs);
-  return formatCodexUsage(response);
+  const response = await requestCodexQuota(context, adapter, timeoutMs);
+  return formatCodexQuota(response);
 }
 
-function requestCodexUsage(
-  context: UsageContext,
-  adapter: UsageProcessAdapter,
+function requestCodexQuota(
+  context: QuotaContext,
+  adapter: QuotaProcessAdapter,
   timeoutMs: number,
 ): Promise<unknown> {
   const child = adapter.spawn("codex", ["app-server"], {
@@ -263,10 +263,10 @@ function initializeCodex(child: ChildProcessWithoutNullStreams): void {
   });
 }
 
-async function executeUsageProcess(
+async function executeQuotaProcess(
   file: string,
   args: string[],
-  options: UsageProcessOptions & { timeout: number },
+  options: QuotaProcessOptions & { timeout: number },
 ): Promise<{ stdout: string }> {
   const { stdout } = await execFileAsync(file, args, {
     ...options,
@@ -275,20 +275,20 @@ async function executeUsageProcess(
   return { stdout };
 }
 
-function spawnUsageProcess(
+function spawnQuotaProcess(
   file: string,
   args: string[],
-  options: UsageProcessOptions,
+  options: QuotaProcessOptions,
 ): ChildProcessWithoutNullStreams {
   return spawn(file, args, { ...options, stdio: ["pipe", "pipe", "pipe"] });
 }
 
-export function formatCodexUsage(
+export function formatCodexQuota(
   response: unknown,
   formatTime: (timestampSeconds: number) => string = formatLocalTime,
 ): string {
   const bucket = parseCodexBucket(response);
-  return `Codex usage\n\n${formatBucket(bucket, formatTime)}`;
+  return `Codex quota\n\n${formatBucket(bucket, formatTime)}`;
 }
 
 function parseCodexBucket(response: unknown): RateLimitBucket {

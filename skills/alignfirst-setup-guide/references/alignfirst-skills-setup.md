@@ -1,7 +1,8 @@
 # AlignFirst Setup
 
-Install the AlignFirst CLI and its command skills, then configure the consumer repository.
-AlignFirst does not require the standalone docmap package or workspace.
+Install the requested AlignFirst components. The protocols work through the CLI without skills; the skills invoke the CLI through `npx` without a separate CLI installation. Neither requires standalone Docmap or workspace.
+
+For a skills-only request, follow **Install the Skills**. Configure the project only when the user also wants the repository to adopt AlignFirst. For a protocols-only request, configure the project and omit skill installation.
 
 ## Install the CLI
 
@@ -19,7 +20,7 @@ Offer this in the README as a convenience and use the bare command when describi
 
 `alspec`, `alplan`, `al`, `almerge`, `alreview`, and `aldescription` select individual protocols. `alcatchup` loads ticket history; `alcatchupaad` and `alcatchupspec` load history before starting AAD or specification. Skills reuse guides already in context; each named guide includes the ticket directory and work file rules. Humans invoke them with `/` in Claude Code, GitHub Copilot, and Cursor, or `$` in Codex.
 
-The `alignfirst` skill lets the agent recognize a protocol named in prose. The `alignfirst context` bootstrap section provides this, so the skill is needed only for the configuration without `.alignfirst.json`.
+The optional `alignfirst` skill lets the agent recognize a protocol named in prose. Add `--skill alignfirst` when the user wants that recognition in repositories without an `alignfirst context` instruction.
 
 Discover the package without installing it:
 
@@ -64,7 +65,7 @@ with `npx -y skills remove [--global] <skill-name> --yes`. Let the skills CLI ma
 
 ## Configure the Project
 
-Choose with the user between the following equal configurations. Both create `.plans/` and add it to
+Add the **Project Instructions** section below, then choose with the user between the following equal configurations. Both create `.plans/` and add it to
 `.gitignore`:
 
 ```sh
@@ -88,8 +89,7 @@ _Ticket ID format:_ `{DETECTED_TICKET_FORMAT}`
 ```
 
 Omit any convention that repository evidence cannot establish. When the project uses a work-files
-repository, add: After every change in `.plans/`, run `npx alignfirst sync`. Add `--skill alignfirst` to
-the skills command above, since no bootstrap section describes the protocols.
+repository, add: After every change in `.plans/`, run `npx alignfirst sync`.
 
 ### With `.alignfirst.json`
 
@@ -119,15 +119,6 @@ Write `.alignfirst.json` with the agreed fields:
 
 Keep only applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
 
-Replace any hand-written AlignFirst or docmap section in `AGENTS.md` or `CLAUDE.md` with the following section. Place it before every other section whenever
-possible:
-
-```markdown
-## Project conventions and documentation
-
-Run `npx -y alignfirst context` from the repository root, _before_ reading any other file. It prints the project conventions (ticket IDs, branch names, commit format, work files), the index of documentation, and the AlignFirst protocols.
-```
-
 ### Local installation
 
 By default a project declares no `alignfirst` dependency. Add one only when the user asks for a pinned CLI, or when the repository gates installation on publication age or provenance and so cannot accept an on-demand fetch.
@@ -142,3 +133,15 @@ Continue with [plans-setup.md](plans-setup.md) when the team has a work-files re
 npx alignfirst config
 npx alignfirst doctor
 ```
+
+## Project Instructions
+
+When the repository adopts AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible. It works with or without `.alignfirst.json`:
+
+```markdown
+## Seek project conventions and documentation
+
+Run `npx -y alignfirst context` from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
+```
+
+Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `.alignfirst.json`.

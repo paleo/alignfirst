@@ -17,8 +17,8 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 import type { Step } from "./_lib/types.ts";
 import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
 
-// A<S> → ABC-0<S>N (README convention); scenario A11 → ABC-011N, first ticket ABC-0110.
-const TICKET_ID = "ABC-0110";
+// A<S> → ABC-0<S>N (README convention); scenario A8 → ABC-08N, first ticket ABC-080.
+const TICKET_ID = "ABC-080";
 const PROJECT = "nimbus";
 
 /** A hold during takeover, then two sequential coding runs with one final report each. */

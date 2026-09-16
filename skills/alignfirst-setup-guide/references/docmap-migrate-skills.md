@@ -86,12 +86,8 @@ You must provide each subagent with:
 
 ### AGENTS.md (or equivalent)
 
-If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, add or replace the documentation discovery section with the following.
+If `AGENTS.md` (or an equivalent top-level agent instructions file) exists, use the discovery section and installed command from [Docmap setup](docmap-setup.md#agent-instructions). Preserve the AlignFirst context section when the project adopts its skills or protocols. Under the selected section, add:
 
-> ## Docmap - Seek Documentation
->
-> *Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
->
 > ### Essential Documentation
 >
 > Always read before any investigation or work:
@@ -102,11 +98,7 @@ Populate the **Essential Documentation** sub-list with the 1–3 docs an agent m
 
 ### package.json
 
-If a root `package.json` exists and does not already have a `docmap` script, add it:
-
-```json
-"docmap": "docmap"
-```
+Keep the selected installation from [Docmap setup](docmap-setup.md). Add a script only when using the standalone package as a project dependency.
 
 ### Agent Configuration Files
 
