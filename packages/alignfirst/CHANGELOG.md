@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.3.2
+
+### Patch Changes
+
+- ab0b032: Improved guidance for read-only question results and ticket catch-up context.
+
 ## 0.3.1
 
 ### Patch Changes

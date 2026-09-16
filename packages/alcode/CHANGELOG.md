@@ -1,5 +1,16 @@
 # @paleo/alcode
 
+## 0.17.0
+
+### Minor Changes
+
+- ab0b032: Renamed `alcode usage` to `alcode quota`, and added the run's context-window occupancy as `contextTokens` in the session file and in `alcode status`, beside `contextCompacted`. For Codex the figure comes from the thread's rollout file, since `codex exec --json` reports only cumulative session totals. `alcode status` gains `--meta <key>` to select a run by the key it was tagged with. The delegation guide uses the occupancy to decide whether the plan protocol continues in the spec's session or starts in a fresh one from a self-sufficient spec.
+
+### Patch Changes
+
+- ab0b032: Improved guidance for read-only question results and ticket catch-up context.
+- ab0b032: Added a follow-up step to the delegation guide's review workflow: pushed fixes are checked by resuming the review session, not by a new review.
+
 ## 0.16.0
 
 ### Minor Changes
