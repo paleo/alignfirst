@@ -2,6 +2,8 @@
 
 Blueprint for a **workspace** system — multiple git-worktree dev environments side by side. Requires git. The templates are Node.js, but the approach fits any runtime.
 
+Workspace can be installed on its own. Add the workspace instructions below; AlignFirst skills, protocols, and Docmap are separate choices.
+
 **Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
 **Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an AlignFirst Developer must also meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract).
@@ -257,7 +259,7 @@ Public-IP variant: the same section without the `export` line, introduced by "Wh
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. Set `.alignfirst.json`'s `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Document the resulting layout in `docs/`.
+- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Standalone workspace setup does not require this file. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.

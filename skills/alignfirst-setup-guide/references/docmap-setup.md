@@ -9,15 +9,7 @@ Use this form when the project already requires the AlignFirst CLI. It adds no p
 1. Nothing to install: project files invoke `npx alignfirst`. Offer `npm install -g alignfirst` in the README as a convenience.
 2. Ensure `docs/` exists. When preparing a project for an AlignFirst Developer, populate a newly
    created directory through [docmap-bootstrapping.md](docmap-bootstrapping.md).
-3. Remove any existing docmap section and add the AlignFirst bootstrap to `AGENTS.md` or
-   `CLAUDE.md`. Place it before every other section whenever possible:
-
-   ```markdown
-   ## Project conventions and documentation
-
-   Run `npx -y alignfirst context` from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
-   ```
-
+3. Add the **Agent Instructions** below, using `npx -y alignfirst docmap` as the Docmap command.
 4. Read the authoring guide with `npx alignfirst docmap --guide`.
 
 CI can pin a version range while validating the documentation:
@@ -39,11 +31,38 @@ AlignFirst.
 
 2. Install `@paleo/docmap` as a dev dependency with the detected package manager:
    `npm install -D @paleo/docmap` (`pnpm add -D`, `yarn add -D`, or `bun add -D`).
-3. Ensure `docs/` exists and add the same instruction section, using `npm run docmap` for npm.
+3. Ensure `docs/` exists and add the **Agent Instructions** below, using the project's script command.
 4. Read the authoring guide with `npm run docmap -- --guide`.
 
 Translate the script commands for the detected package manager according to the skill's Shared
 Investigation Rules.
+
+### Global installation
+
+For a global installation, including projects without `package.json`, run `npm install -g @paleo/docmap`. Ensure `docs/` exists, use `docmap` in the instructions below, and read `docmap --guide`. No project dependency or script is needed.
+
+## Agent Instructions
+
+For Docmap without AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible:
+
+```markdown
+## Docmap - Seek Documentation
+
+*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+```
+
+Replace `npm run docmap` with the installed command:
+
+| Installation | Command |
+| --- | --- |
+| npm script | `npm run docmap` |
+| pnpm script | `pnpm docmap` |
+| yarn script | `yarn docmap` |
+| bun script | `bun run docmap` |
+| Global standalone package | `docmap` |
+| AlignFirst CLI | `npx -y alignfirst docmap` |
+
+When the project adopts AlignFirst skills or protocols, use the [AlignFirst context section](alignfirst-skills-setup.md#project-instructions) instead. It replaces `Docmap - Seek Documentation` regardless of how Docmap is installed. Preserve any essential-documentation list and project-specific instructions.
 
 ## Documentation Work
 
