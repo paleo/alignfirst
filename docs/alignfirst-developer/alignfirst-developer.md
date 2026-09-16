@@ -18,7 +18,8 @@ The [`@paleo/alignfirst-developer-openclaw-plugin`](../../packages/alignfirst-de
    [`alignfirst-developer-openclaw-playbook`](../../skills/alignfirst-developer-openclaw-playbook/)
    skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
    `channel-handling.md`. Its references own working sessions, channel handling, the `runbooks/`
-   directory for project workspace setup and project lifecycle, and the `message` tool per surface.
+   directory for project workspace setup, project lifecycle and consultations, and the `message`
+   tool per surface.
    Project discovery comes from `alproject --guide`; the delegation procedure comes from
    `alcode --openclaw-guide` only when delegation starts.
 3. **Regression-test harness** —
@@ -35,6 +36,7 @@ user message
   → alignfirst-developer-openclaw-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
   → references/runbooks/project-lifecycle.md (create/onboard/remove)       layer 2
+  → references/runbooks/consultation.md (question, advice, brainstorming)  layer 2
   → references/runbooks/project-workspace-setup.md (if the thread gets its workspace)  layer 2
   → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
 ```

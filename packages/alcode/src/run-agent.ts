@@ -33,6 +33,9 @@ export interface AgentProtocolState {
   protocolComplete: boolean;
   protocolFailed: boolean;
   authEvidence: boolean;
+  // Context-window occupancy reported by the newest model response seen so far. Each adapter
+  // overwrites it, so the last write is the run's final context size.
+  contextTokens?: number;
 }
 
 export interface AgentAssessment {
@@ -41,6 +44,7 @@ export interface AgentAssessment {
   result?: string;
   error?: string;
   authEvidence: boolean;
+  contextTokens?: number;
 }
 
 export interface AgentAdapter {
@@ -85,6 +89,7 @@ export async function runAgent(
     exitReason: authRequired ? "auth_required" : failed ? "error" : "completed",
     sessionId: assessment.sessionId ?? null,
     result,
+    contextTokens: assessment.contextTokens ?? null,
   });
   return {
     status: failed ? "failed" : "succeeded",
@@ -284,6 +289,7 @@ export function buildTerminationUpdate(
     exitReason: "terminated",
     sessionId: state.sessionId ?? null,
     result: `Terminated by ${signal} before completion.`,
+    contextTokens: state.contextTokens ?? null,
   };
 }
 

@@ -60,7 +60,7 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 22 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 23 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
@@ -88,6 +88,7 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A27 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
 | A28 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
 | A30 | A question about an explicit branch reuses its registered workspace for read-only investigation. |
+| A31 | A human opens the thread and tags the bot inside it: no starter, no handoff. The session resolves the project itself, opens no second thread, and leaves the author's thread name alone. |
 
 A04, A14 and A21 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A25 distinguish a missing task description from a complete detailed request. A27 keeps its startup race separate from A11's explicit hold. A07, A08, A10, A12, A16, A18 and A29 have no standalone files; A22 was already absent.
 

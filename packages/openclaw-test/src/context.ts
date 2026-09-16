@@ -1,4 +1,5 @@
 import {
+  createQaBusThread,
   getQaBusState,
   injectQaBusInboundMessage,
   pollQaBus,
@@ -100,6 +101,11 @@ export interface ScenarioContext {
   log(message: string): void;
   log(opts: { attachTo: ActionEntry; label?: string; extra?: unknown }): void;
   sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
+  /**
+   * Seed a thread the bot did not open, as a human creating one on the surface. Returns its id,
+   * to be passed as `sendInbound`'s `threadId`.
+   */
+  createThread(input: CreateThreadInput): Promise<string>;
   poll(opts: { sinceCursor: number; timeoutMs?: number }): Promise<PollResult>;
   waitForOutbound(
     predicate: (m: BusMessage) => boolean,
@@ -209,7 +215,15 @@ export interface SendInboundInput {
   senderName?: string;
   text: string;
   threadId?: string;
+  /** Thread name carried by the message, as a surface reports it. */
+  threadTitle?: string;
   conversation?: Conversation;
+}
+
+export interface CreateThreadInput {
+  title: string;
+  /** The surface user who opened it. Defaults to the bot, so a human thread must name one. */
+  createdBy?: string;
 }
 
 export class AssertionError extends Error {
@@ -328,6 +342,7 @@ export function createContext(params: {
       emitAugment(arg.attachTo.entrySeq, { kind: "scenarioLog", scenarioLog: note });
     }) as ScenarioContext["log"],
     sendInbound: (input) => sendInbound({ emit, nextEntrySeqTs }, accountId, conversationId, input),
+    createThread: (input) => createThread(accountId, conversationId, input),
     poll: (opts) => poll(accountId, opts),
     waitForOutbound: (predicate, opts) =>
       waitForOutbound(
@@ -489,6 +504,7 @@ async function sendInbound(
       senderName: input.senderName,
       text: input.text,
       threadId: input.threadId,
+      threadTitle: input.threadTitle,
     },
   });
   const entry: InboundSentEntry = {
@@ -502,6 +518,21 @@ async function sendInbound(
   };
   deps.emit(entry);
   return { message: r.message, entry };
+}
+
+async function createThread(
+  accountId: ChannelId,
+  conversationId: string,
+  input: CreateThreadInput,
+): Promise<string> {
+  const r = await createQaBusThread({
+    baseUrl: BUS_URL,
+    accountId,
+    conversationId,
+    title: input.title,
+    createdBy: input.createdBy,
+  });
+  return r.thread.id;
 }
 
 async function poll(

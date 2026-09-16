@@ -111,7 +111,7 @@ describe("parseAlcodeArgs", () => {
       kind: "status",
       target: { kind: "noTicket" },
     });
-    expect(parseAlcodeArgs(["node", "alcode", "usage"])).toEqual({ kind: "usage" });
+    expect(parseAlcodeArgs(["node", "alcode", "quota"])).toEqual({ kind: "quota" });
   });
 
   it("reads `new` options into camelCase fields", () => {
@@ -149,7 +149,7 @@ describe("parseAlcodeArgs", () => {
     expect(parseAlcodeArgs(["node", "alcode", "new", "--help"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "resume", "-h"])).toEqual({ kind: "help" });
     expect(parseAlcodeArgs(["node", "alcode", "status", "--help"])).toEqual({ kind: "help" });
-    expect(parseAlcodeArgs(["node", "alcode", "usage", "--help"])).toEqual({ kind: "help" });
+    expect(parseAlcodeArgs(["node", "alcode", "quota", "--help"])).toEqual({ kind: "help" });
   });
 
   it("rejects a missing or unknown command", () => {
@@ -173,7 +173,7 @@ describe("parseAlcodeArgs", () => {
       "--ticket must be a single path segment",
     );
     expect(() => parse(["status", "--message", "go"])).toThrow();
-    expect(() => parse(["usage", "extra"])).toThrow();
+    expect(() => parse(["quota", "extra"])).toThrow();
     expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
     expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow("exactly one <sessionId>");
   });
@@ -301,6 +301,7 @@ describe("status", () => {
       startedAt: "2026-08-29T11:55:29.000Z",
       endedAt: null,
       exitReason: null,
+      contextTokens: 162_400,
     });
   }
 
@@ -337,6 +338,7 @@ describe("status", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain("status: running\n");
+    expect(stdout.text()).toContain("contextTokens: 162400\n");
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("running");
   });
 
@@ -434,43 +436,43 @@ describe("status", () => {
   });
 });
 
-describe("usage", () => {
-  it("reads usage without a plans directory or model discovery", async () => {
+describe("quota", () => {
+  it("reads the quota without a plans directory or model discovery", async () => {
     const stdout = makeSink();
     const modelResolver = vi.fn(async () => {
-      throw new Error("usage must not discover models");
+      throw new Error("quota must not discover models");
     });
-    const usageReader = vi.fn(async () => "Claude Code usage\n\nCurrent session: 25% used");
+    const quotaReader = vi.fn(async () => "Claude Code quota\n\nCurrent session: 25% used");
 
     expect(
       await main({
-        argv: ["node", "alcode", "usage"],
+        argv: ["node", "alcode", "quota"],
         cwd: tmpdir(),
         env: { ALIGNFIRST_CODE_AGENT: "claude" },
         stdout,
         modelResolver,
-        usageReader,
+        quotaReader,
       }),
     ).toBe(0);
-    expect(stdout.text()).toBe("Claude Code usage\n\nCurrent session: 25% used\n");
-    expect(usageReader).toHaveBeenCalledWith("claude", {
+    expect(stdout.text()).toBe("Claude Code quota\n\nCurrent session: 25% used\n");
+    expect(quotaReader).toHaveBeenCalledWith("claude", {
       cwd: tmpdir(),
       env: { ALIGNFIRST_CODE_AGENT: "claude" },
     });
     expect(modelResolver).not.toHaveBeenCalled();
   });
 
-  it("reports usage failures", async () => {
+  it("reports quota failures", async () => {
     const stderr = makeSink();
-    const usageReader = async () => {
+    const quotaReader = async () => {
       throw new Error("limits unavailable");
     };
     expect(
       await main({
-        argv: ["node", "alcode", "usage"],
+        argv: ["node", "alcode", "quota"],
         env: { ALIGNFIRST_CODE_AGENT: "codex" },
         stderr,
-        usageReader,
+        quotaReader,
       }),
     ).toBe(1);
     expect(stderr.text()).toBe("limits unavailable\n");

@@ -115,6 +115,21 @@ describe("Codex protocol", () => {
     event(state, { type: "turn.completed" });
     expect(assessCodexState(state)).toMatchObject({ succeeded: true, authEvidence: false });
   });
+
+  it("measures the context window from the completed turn, cached input included once", () => {
+    const state = createCodexState();
+    event(state, {
+      type: "turn.completed",
+      usage: { input_tokens: 148_000, cached_input_tokens: 140_000, output_tokens: 2_000 },
+    });
+    expect(assessCodexState(state).contextTokens).toBe(150_000);
+  });
+
+  it("reports no context when the completed turn carries no usage", () => {
+    const state = createCodexState();
+    event(state, { type: "turn.completed" });
+    expect(assessCodexState(state).contextTokens).toBeUndefined();
+  });
 });
 
 function event(state: ReturnType<typeof createCodexState>, value: unknown): string | undefined {

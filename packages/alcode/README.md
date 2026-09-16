@@ -27,7 +27,7 @@ alcode new --message "Execute the plan: .plans/AB-123/A2-plan.md"
 alcode new --protocol aad --no-ticket --message "Task description"
 alcode new --ticket AB-123 --catchup --protocol aad --message-file message.md
 alcode status .plans/AB-123/_alcode/20260829-135529.md
-alcode usage
+alcode quota
 ```
 
 `--catchup` loads the ticket's history (through `alignfirst ticket --catchup`) before the protocol and message. Alone, it returns a short synthesis.
@@ -40,7 +40,9 @@ A new protocol session needs a ticket. `--no-ticket` reserves the next side tick
 
 `alcode status <session-file>` reconciles and shows a run's durable status. If a recorded process is gone, the command seals the session file as `status: failed`, `exitReason: terminated`. New Linux records also store the process start time to detect pid reuse. The command accepts session files under the current project's `.plans/**/_alcode/` tree and does not start a coding agent.
 
-`alcode usage` shows the selected coding agent's current account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
+Its `contextTokens` line reports what the run left in the coding agent's context window, measured from the agent's last model response. A resumed session keeps growing across runs, so the figure tells you when to continue in the same session and when to start a fresh one.
+
+`alcode quota` shows the selected coding agent's account limits, consumed percentages, and reset times. It works outside a project and does not start a coding session.
 
 ## Coding agents
 

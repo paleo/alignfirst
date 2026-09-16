@@ -44,6 +44,7 @@ export function interpretCodexLine(line: string, state: AgentProtocolState): str
       return captureCompletedItem(event, state);
     case "turn.completed":
       state.protocolComplete = true;
+      captureContextTokens(event, state);
       return;
     case "turn.failed":
     case "error":
@@ -63,7 +64,17 @@ export function assessCodexState(state: AgentProtocolState) {
     result: state.result,
     error: succeeded ? undefined : state.failure,
     authEvidence: state.authEvidence,
+    contextTokens: state.contextTokens,
   };
+}
+
+// `turn.completed` reports the last turn's usage, which is what occupies the context window. Codex
+// counts cached input inside `input_tokens`, so adding `cached_input_tokens` would double it.
+function captureContextTokens(event: Record<string, unknown>, state: AgentProtocolState): void {
+  const usage = event.usage;
+  if (!isRecord(usage)) return;
+  const total = asCount(usage.input_tokens) + asCount(usage.output_tokens);
+  if (total > 0) state.contextTokens = total;
 }
 
 function parseCodexLine(line: string): unknown {
@@ -151,4 +162,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }

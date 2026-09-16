@@ -3,13 +3,13 @@ import { spawn } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  createUsageReader,
-  formatCodexUsage,
-  parseClaudeUsage,
-  type UsageProcessAdapter,
-} from "../src/usage.js";
+  createQuotaReader,
+  formatCodexQuota,
+  parseClaudeQuota,
+  type QuotaProcessAdapter,
+} from "../src/quota.js";
 
-describe("Claude usage", () => {
+describe("Claude quota", () => {
   it("calls the native usage command with a filtered environment", async () => {
     const execute = vi.fn(async () => ({
       stdout: JSON.stringify({
@@ -18,7 +18,7 @@ describe("Claude usage", () => {
         result: "Current session: 25% used",
       }),
     }));
-    const reader = createUsageReader({
+    const reader = createQuotaReader({
       execute,
       spawn: () => {
         throw new Error("unexpected spawn");
@@ -37,7 +37,7 @@ describe("Claude usage", () => {
           ALIGNFIRST_CODE_UNSET: "SECRET",
         },
       }),
-    ).resolves.toBe("Claude Code usage\n\nCurrent session: 25% used");
+    ).resolves.toBe("Claude Code quota\n\nCurrent session: 25% used");
     expect(execute).toHaveBeenCalledWith(
       "claude",
       ["-p", "/usage", "--tools", "", "--output-format", "json", "--no-session-persistence"],
@@ -58,7 +58,7 @@ describe("Claude usage", () => {
   });
 
   it("reports native command failures", async () => {
-    const reader = createUsageReader({
+    const reader = createQuotaReader({
       execute: async () => {
         throw new Error("claude exited with code 1");
       },
@@ -74,7 +74,7 @@ describe("Claude usage", () => {
 
   it("extracts the native zero-turn usage report", () => {
     expect(
-      parseClaudeUsage(
+      parseClaudeQuota(
         JSON.stringify({
           subtype: "success",
           is_error: false,
@@ -88,7 +88,7 @@ describe("Claude usage", () => {
 
   it("omits the local insights section", () => {
     expect(
-      parseClaudeUsage(
+      parseClaudeQuota(
         JSON.stringify({
           subtype: "success",
           is_error: false,
@@ -101,12 +101,12 @@ describe("Claude usage", () => {
   });
 
   it("rejects malformed, failed, and limit-free responses", () => {
-    expect(() => parseClaudeUsage("nope")).toThrow("malformed usage JSON");
+    expect(() => parseClaudeQuota("nope")).toThrow("malformed usage JSON");
     expect(() =>
-      parseClaudeUsage(JSON.stringify({ subtype: "error", is_error: true, result: "failed" })),
+      parseClaudeQuota(JSON.stringify({ subtype: "error", is_error: true, result: "failed" })),
     ).toThrow("could not read");
     expect(() =>
-      parseClaudeUsage(
+      parseClaudeQuota(
         JSON.stringify({
           subtype: "success",
           is_error: false,
@@ -117,7 +117,7 @@ describe("Claude usage", () => {
   });
 });
 
-describe("Codex usage", () => {
+describe("Codex quota", () => {
   const cwd = process.cwd();
 
   it("initializes app-server and requests rate limits", async () => {
@@ -153,7 +153,7 @@ describe("Codex usage", () => {
         process.exit(7);
       });
     `);
-    const reader = createUsageReader(fakeServer.adapter);
+    const reader = createQuotaReader(fakeServer.adapter);
 
     await expect(
       reader("codex", {
@@ -192,7 +192,7 @@ describe("Codex usage", () => {
       });
     `);
 
-    await expect(createUsageReader(fakeServer.adapter)("codex", { cwd, env: {} })).rejects.toThrow(
+    await expect(createQuotaReader(fakeServer.adapter)("codex", { cwd, env: {} })).rejects.toThrow(
       "Codex could not read usage limits: account unavailable",
     );
   });
@@ -203,7 +203,7 @@ describe("Codex usage", () => {
       process.exit(7);
     `);
 
-    await expect(createUsageReader(fakeServer.adapter)("codex", { cwd, env: {} })).rejects.toThrow(
+    await expect(createQuotaReader(fakeServer.adapter)("codex", { cwd, env: {} })).rejects.toThrow(
       "Codex could not read usage limits: not authenticated",
     );
   });
@@ -212,7 +212,7 @@ describe("Codex usage", () => {
     const fakeServer = nodeProcessAdapter("setInterval(() => {}, 1_000);");
 
     await expect(
-      createUsageReader(fakeServer.adapter, 20)("codex", { cwd, env: {} }),
+      createQuotaReader(fakeServer.adapter, 20)("codex", { cwd, env: {} }),
     ).rejects.toThrow("Codex timed out while reading usage limits");
   });
 
@@ -239,8 +239,8 @@ describe("Codex usage", () => {
       },
     };
 
-    expect(formatCodexUsage(response, (timestamp) => `time-${timestamp}`)).toBe(
-      "Codex usage\n\n" +
+    expect(formatCodexQuota(response, (timestamp) => `time-${timestamp}`)).toBe(
+      "Codex quota\n\n" +
         "Codex\n" +
         "  1 week: 7% used · resets time-100\n" +
         "  5 hours: 8% used · resets time-200",
@@ -249,7 +249,7 @@ describe("Codex usage", () => {
 
   it("falls back to the legacy bucket and tolerates missing reset metadata", () => {
     expect(
-      formatCodexUsage(
+      formatCodexQuota(
         {
           rateLimits: {
             limitId: "codex",
@@ -263,7 +263,7 @@ describe("Codex usage", () => {
   });
 
   it("rejects responses without quota windows", () => {
-    expect(() => formatCodexUsage({ rateLimits: {}, rateLimitsByLimitId: {} })).toThrow(
+    expect(() => formatCodexQuota({ rateLimits: {}, rateLimitsByLimitId: {} })).toThrow(
       "no usage windows",
     );
   });
@@ -276,7 +276,7 @@ interface ProcessRequest {
 }
 
 function nodeProcessAdapter(script: string): {
-  adapter: UsageProcessAdapter;
+  adapter: QuotaProcessAdapter;
   readonly request: ProcessRequest | undefined;
 } {
   let request: ProcessRequest | undefined;

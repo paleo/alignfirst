@@ -34,6 +34,10 @@ export interface SessionFrontmatter {
   startedAt: string;
   endedAt: string | null;
   exitReason: string | null;
+  // Tokens held in the coding agent's context window when the run ended, from its last model
+  // response. It measures the conversation, so a resumed session keeps growing across runs; the
+  // spec-to-plan decision in the delegation guide reads it. Null when the stream reported none.
+  contextTokens: number | null;
 }
 
 export const RESULT_MARKER = "\n---- Result ----\n";
@@ -82,6 +86,7 @@ export interface CompletionUpdate {
   exitReason: "completed" | "error" | "terminated" | "auth_required";
   sessionId: string | null;
   result: string;
+  contextTokens?: number | null;
 }
 
 // Appends the result block, then rewrites the frontmatter in place. Append-first keeps the tailed
@@ -95,6 +100,7 @@ export function applyCompletion(sessionFilePath: string, update: CompletionUpdat
     endedAt: update.endedAt,
     exitReason: update.exitReason,
     sessionId: update.sessionId ?? frontmatter.sessionId,
+    contextTokens: update.contextTokens ?? frontmatter.contextTokens,
   };
   const resultBlock = `${RESULT_MARKER}\n${update.result}\n`;
   writeFileSync(sessionFilePath, `${serializeFrontmatter(updated)}\n${body}${resultBlock}`);
@@ -303,6 +309,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     startedAt: map.startedAt ?? "",
     endedAt: map.endedAt ?? null,
     exitReason: map.exitReason ?? null,
+    contextTokens: parseCount(map.contextTokens),
   };
 }
 
@@ -314,6 +321,12 @@ function parsePid(raw: string | null | undefined): number | null {
   if (raw === null || raw === undefined) return null;
   const pid = Number(raw);
   return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
+}
+
+function parseCount(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined) return null;
+  const count = Number(raw);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
 function parseValue(raw: string): string | null {

@@ -36,11 +36,13 @@ describe("renderGuide", () => {
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain("alcode status (<session-file> | --ticket <id> | --no-ticket)");
-      expect(guide).toContain("alcode usage");
+      expect(guide).toContain("alcode quota");
       expect(guide).toContain("alignfirst");
       expect(guide).not.toContain("reserve-side-ticket");
-      expect(guide).toContain("current usage limits and reset times");
+      expect(guide).toContain("account limits and reset times");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
+      expect(guide).toContain("### Where the plan runs");
+      expect(guide).toContain("contextTokens");
       expect(guide).toContain("Stop AAD now. Start a spec instead (alignfirst).");
       expect(guide).toContain("`fable`, `opus`, `sonnet`, `haiku`");
     }

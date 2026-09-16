@@ -20,7 +20,7 @@ import {
   type SessionRecord,
   writeInitialSessionFile,
 } from "./session-file.js";
-import { readUsage, type UsageReader } from "./usage.js";
+import { readQuota, type QuotaReader } from "./quota.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
@@ -49,7 +49,7 @@ export interface MainOptions {
   env?: NodeJS.ProcessEnv;
   alignfirstCommand?: string[];
   modelResolver?: ExecutableModelResolver;
-  usageReader?: UsageReader;
+  quotaReader?: QuotaReader;
 }
 
 export type AlcodeCommand =
@@ -57,7 +57,7 @@ export type AlcodeCommand =
   | { kind: "help" }
   | { kind: "guide"; variant: GuideVariant }
   | { kind: "status"; target: StatusTarget }
-  | { kind: "usage" }
+  | { kind: "quota" }
   | { kind: "session"; args: SessionArgs };
 
 export type StatusTarget =
@@ -117,9 +117,9 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
 
-  if (command.kind === "usage") {
+  if (command.kind === "quota") {
     try {
-      const report = await (options?.usageReader ?? readUsage)(agent, { cwd, env });
+      const report = await (options?.quotaReader ?? readQuota)(agent, { cwd, env });
       stdout.write(`${report.trimEnd()}\n`);
       return 0;
     } catch (error) {
@@ -225,6 +225,7 @@ function renderSessionStatus(
     `startedAt: ${frontmatter.startedAt}`,
     `endedAt: ${frontmatter.endedAt ?? ""}`,
     `exitReason: ${frontmatter.exitReason ?? ""}`,
+    `contextTokens: ${frontmatter.contextTokens ?? ""}`,
     "",
   ].join("\n");
 }
@@ -250,8 +251,8 @@ export function parseAlcodeArgs(argv: string[]): AlcodeCommand {
       return parseResumeCommand(tokens);
     case "status":
       return parseStatusCommand(tokens);
-    case "usage":
-      return parseBareCommand(tokens, "usage");
+    case "quota":
+      return parseBareCommand(tokens, "quota");
     default:
       throw new Error(`Error: unknown command "${command}". Run \`alcode --help\`.`);
   }
@@ -333,7 +334,7 @@ function parseResumeCommand(tokens: string[]): AlcodeCommand {
   };
 }
 
-function parseBareCommand(tokens: string[], kind: "usage"): AlcodeCommand {
+function parseBareCommand(tokens: string[], kind: "quota"): AlcodeCommand {
   const { values } = parseArgs({
     args: tokens,
     options: { help: { type: "boolean", short: "h", default: false } },
@@ -661,7 +662,7 @@ Usage:
   alcode new --message "..."
   alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
   alcode status (<session-file> | --ticket <id> | --no-ticket)
-  alcode usage
+  alcode quota
   alcode --guide
   alcode --openclaw-guide
   alcode -h, --help
@@ -671,8 +672,9 @@ Commands:
   new                   Start a new session; prints its Session ID at the end.
   resume <sessionId>    Continue an existing session.
   status                Reconcile and show one run's durable status: the given file, or the newest
-                        run of the ticket (or of no-ticket work). Does not start an agent.
-  usage                 Show the selected coding agent's current usage limits and reset times.
+                        run of the ticket (or of no-ticket work). Includes contextTokens, the
+                        context-window occupancy the run ended on. Does not start an agent.
+  quota                 Show the selected coding agent's account limits and reset times.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.

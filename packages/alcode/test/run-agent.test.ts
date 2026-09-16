@@ -45,6 +45,7 @@ describe("shared runner helpers", () => {
       exitReason: "terminated",
       sessionId: "sess-1",
       result: "Terminated by SIGTERM before completion.",
+      contextTokens: null,
     });
   });
 

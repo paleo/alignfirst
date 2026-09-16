@@ -37,6 +37,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     startedAt: "2026-07-01T09:15:03.000Z",
     endedAt: null,
     exitReason: null,
+    contextTokens: null,
     ...overrides,
   };
 }
@@ -106,6 +107,15 @@ describe("frontmatter serialization", () => {
 
   it("parses an omitted legacy agent as null", () => {
     expect(parseFrontmatter("status: succeeded").agent).toBeNull();
+  });
+
+  it("round-trips the context size and rejects a non-numeric one", () => {
+    const block = serializeFrontmatter(makeFrontmatter({ contextTokens: 162_400 }))
+      .replace(/^---\n/, "")
+      .replace(/\n---\n$/, "");
+    expect(parseFrontmatter(block).contextTokens).toBe(162_400);
+    expect(parseFrontmatter("status: running\ncontextTokens: lots").contextTokens).toBeNull();
+    expect(parseFrontmatter("status: running").contextTokens).toBeNull();
   });
 
   it("parses an invalid or absent pid as null", () => {

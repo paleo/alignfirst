@@ -6,15 +6,15 @@ alcode new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path
 alcode new --message "..."
 alcode resume <sessionId> [--protocol <protocol>] [--message "..."]
 alcode status (<session-file> | --ticket <id> | --no-ticket)
-alcode usage
+alcode quota
 ```
 
 | Command | Description |
 |---------|-------------|
 | `new` | Start a new session. |
 | `resume <sessionId>` | Continue an existing session. |
-| `status` | Reconcile and show one run's durable status. Give the session file, or `--ticket <id>` / `--no-ticket` to select the newest run of that scope. Does not start a coding agent. |
-| `usage` | Show the selected coding agent's current usage limits and reset times. Takes no option. |
+| `status` | Reconcile and show one run's durable status, including `contextTokens`. Give the session file, or `--ticket <id>` / `--no-ticket` to select the newest run of that scope. Does not start a coding agent. |
+| `quota` | Show the selected coding agent's account limits and reset times. Takes no option. |
 
 | Option | Description |
 |--------|-------------|
@@ -29,7 +29,9 @@ alcode usage
 
 The current coding agent is `{{AGENT}}`. `ALIGNFIRST_CODE_MODELS` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`alcode status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode usage` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+`alcode status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `alcode quota` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+
+`contextTokens` is what the run left in the coding agent's context window, measured from its last model response. It describes the conversation, so resuming a session carries the figure forward and each run reports a larger one.
 
 `alcode` requires the `alignfirst` CLI on `PATH`. The delegated agent runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.
 
@@ -53,11 +55,35 @@ The default workflow. Always start with it, except for very insignificant tasks.
 For large work, do not rush. Decompose it yourself only when the concerns are truly distinct; otherwise write one big spec, iterate on discussing it with the agent, then translate it into one or several plans.
 
 1. **Spec** — `alcode new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
-2. **Plan** — `alcode resume <sessionId> --protocol plan`. The agent writes the plan file, or several sub-plans and a main plan for large work.
+2. **Plan** — the spec run's context decides where planning happens. Read `contextTokens` from `alcode status`, then follow "Where the plan runs" below.
 3. **Execute** — `alcode new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. Given a main plan, it spawns one subagent per sub-plan and writes a main summary; when the working tree is clean, append to the message: *"Feel free to commit between each plan."*
 4. **Commit** — use the suggested commit message from the spec file.
 
 Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
+
+### Where the plan runs
+
+Planning in the spec's own session is cheaper: the agent already holds the investigation. That advantage ends once the session fills up, because the spec discussion competes with the planning work for the same context window. `contextTokens` in the `alcode status` output is the measure; the threshold is **150k**.
+
+**Below 150k — plan in the spec session.** Send the protocol with no message:
+
+```bash
+alcode resume <sessionId> --protocol plan
+```
+
+**At or above 150k — make the spec stand alone, then plan in a fresh session.** The next session reads the spec file and nothing else, so the spec must carry every decision the discussion settled. Ask for that first, in the session that holds the discussion:
+
+```bash
+alcode resume <sessionId> --message "Ensure this spec is self-sufficient: another session will write the plans from it."
+```
+
+Then start the planning session, naming the spec so the agent does not have to guess among the ticket's files:
+
+```bash
+alcode new --protocol plan --ticket AB-123 --message "spec: \`.plans/AB-123/A1-spec.md\`"
+```
+
+Either way the agent writes the plan file, or several sub-plans and a main plan for large work.
 
 Plan files are the executing agent's material: never read one, main plans included. When the user hands you a plan to execute, pass its path in the message as-is; for context, read the spec that shares the plan's leading letter in the same directory (`A1-spec.md` for `A2-plan.md`), when there is one.
 

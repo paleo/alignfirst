@@ -41,6 +41,8 @@ export function interpretClaudeLine(line: string, state: AgentProtocolState): st
     case "system":
       return event.subtype === "init" ? `[init] session ${asString(event.session_id)}` : undefined;
     case "assistant":
+      captureContextTokens(event, state);
+      return renderMessageContent(event);
     case "user":
       return renderMessageContent(event);
     case "result":
@@ -63,7 +65,24 @@ export function assessClaudeState(state: AgentProtocolState) {
     result: state.result,
     error: state.failure,
     authEvidence: state.authEvidence,
+    contextTokens: state.contextTokens,
   };
+}
+
+// What the newest assistant response holds in the context window. Claude reports cache reads and
+// writes beside `input_tokens`, so the occupancy is their sum plus the response itself. A subagent
+// message carries `parent_tool_use_id` and measures its own context, not the main conversation's.
+function captureContextTokens(event: Record<string, unknown>, state: AgentProtocolState): void {
+  if (event.parent_tool_use_id != null) return;
+  const message = event.message;
+  if (!isRecord(message) || !isRecord(message.usage)) return;
+  const usage = message.usage;
+  const total =
+    asCount(usage.input_tokens) +
+    asCount(usage.cache_creation_input_tokens) +
+    asCount(usage.cache_read_input_tokens) +
+    asCount(usage.output_tokens);
+  if (total > 0) state.contextTokens = total;
 }
 
 function parseEventLine(line: string): unknown {
@@ -127,6 +146,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function compactJson(value: unknown): string {

@@ -95,7 +95,7 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No PROJECT_PATH for project removal → ask which listed canonical path to remove.
 - A clearly single-project task with no PROJECT → ask which project it belongs to, restating the ticket id when present.
 - An unresolved PROJECT for ordinary single-project work → state that the name is not in the project inventory, then ask for the path of a listed project.
-- No TICKET_ID for single-project work → ask for the ticket id, unless the request is a read-only question or investigation without a code review or requested protocol, contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
+- No TICKET_ID for single-project work → ask for the ticket id, unless the request is a read-only question, advice or a brainstorming without a code review or requested protocol, contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
 - A request explicitly spanning several projects, or work independent of any project → ask for no main project; state `Ready for the work session.` in the user's language.

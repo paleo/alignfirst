@@ -104,4 +104,46 @@ describe("Claude adapter", () => {
       error: "Claude could not complete the task",
     });
   });
+
+  it("measures the context window from the newest main-loop response", () => {
+    const state = createClaudeState();
+    assistant(state, { input_tokens: 10, cache_read_input_tokens: 40_000, output_tokens: 100 });
+    assistant(state, {
+      input_tokens: 12,
+      cache_creation_input_tokens: 5_000,
+      cache_read_input_tokens: 120_000,
+      output_tokens: 300,
+    });
+    expect(assessClaudeState(state).contextTokens).toBe(125_312);
+  });
+
+  it("ignores subagent responses, which hold their own context", () => {
+    const state = createClaudeState();
+    assistant(state, { input_tokens: 1_000, output_tokens: 10 });
+    interpretClaudeLine(
+      JSON.stringify({
+        type: "assistant",
+        parent_tool_use_id: "toolu_1",
+        message: { content: [], usage: { input_tokens: 900_000, output_tokens: 10 } },
+      }),
+      state,
+    );
+    expect(assessClaudeState(state).contextTokens).toBe(1_010);
+  });
+
+  it("reports no context when the stream carries no usage", () => {
+    const state = createClaudeState();
+    interpretClaudeLine(JSON.stringify({ type: "assistant", message: { content: [] } }), state);
+    expect(assessClaudeState(state).contextTokens).toBeUndefined();
+  });
 });
+
+function assistant(
+  state: ReturnType<typeof createClaudeState>,
+  usage: Record<string, number>,
+): void {
+  interpretClaudeLine(
+    JSON.stringify({ type: "assistant", message: { content: [], usage } }),
+    state,
+  );
+}
