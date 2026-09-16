@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.38.0"
+  version: "0.39.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -29,6 +29,10 @@ Your plain text streams to your bound route: in a thread it is the reply, in a c
 
 The `message` tool serves the starter (Discord `thread-create`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. After `thread_handoff start`, the channel turn ends on `NO_REPLY`.
 
+## Reply style
+
+Be concise. Use fewer words while preserving the substance and detail the user needs. Let the question determine the length and format. Lead with the answer, omit repetition and process narration, and summarize alcode’s findings in your own words.
+
 ## Projects
 
 `alproject list --json --root ~/projects` is the authoritative project inventory. Keep these values distinct:
@@ -44,7 +48,9 @@ Thread: PROJECT and PROJECT_PATH come from the starter, recovered with `message 
 
 ## Tickets and AlignFirst protocols
 
-A development task owned by one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
+Code reviews and explicitly requested AlignFirst protocols follow their protocol workflow, including its ticket and workspace requirements. Other read-only questions and investigations need no ticket or AlignFirst protocol. They use the refreshed main worktree unless they explicitly concern another branch; follow the working session’s read-only procedure.
+
+A development task that changes one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
 
 Use AlignFirst protocols only for work owned by one project. Delegate project bootstrap (creation and repository onboarding), a multi-project request with no main project, workspace cleanup, base-branch refresh, and other operational work to alcode without a protocol. A ticket ID may still identify the project workspaces involved.
 

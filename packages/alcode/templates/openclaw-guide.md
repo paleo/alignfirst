@@ -17,6 +17,7 @@ Under OpenClaw, background it through the `exec` tool:
 
   Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `alcode` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it. Never wait for either text.
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
+- For a run launched without `--ticket` or `--no-ticket`, pass `--meta <KEY>` with this session’s key. Retain its `Session file:` path when available; otherwise this metadata identifies its result among concurrent runs in the shared main worktree.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
 - The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an alcode run. Call no `process` action on the alcode session, before or after the acknowledgement, including `poll` and `log`.
 
@@ -34,10 +35,12 @@ The chained wake fires when the backgrounded `alcode` exits. This session receiv
 
 Any heartbeat received while an `alcode` run is **still pending** enters this completion procedure:
 
-1. **Reconcile the run, then read its session file.** Run `alcode status --ticket <id>` from the workspace using the thread's ticket, including `side-N`; its `sessionFile:` line names the newest run's file. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
+1. **Reconcile the run, then read its session file.** Run `alcode status <session-file>` from the run’s worktree when you retained its path. Otherwise, for a ticket run, use `alcode status --ticket <id>`, including `side-N`; its `sessionFile:` line names the newest run’s file. For a run tagged with this session’s key, find the newest session file under `.plans/` (in any `_alcode/` directory) whose `meta:` matches this session’s key and run `alcode status` on that exact file. The shared worktree may have runs from other threads; do not select its newest run indiscriminately. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
 2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `alcode` run launched from this completion turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake. Its report becomes the launch acknowledgement, and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
+
+   For a read-only question, answer it directly from the findings; include a failure or uncertainty when relevant. The coding-run template above is for change reports.
 
    The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
 3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the coding agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.

@@ -10,7 +10,7 @@ Keep progress and completion reports in this thread. A request to notify the use
 
 A runbook is a procedure you read fully when its situation arises. Claim first, then recover context.
 
-- [`runbooks/project-workspace-setup.md`](./runbooks/project-workspace-setup.md) — every single-project request, before any other action.
+- [`runbooks/project-workspace-setup.md`](./runbooks/project-workspace-setup.md) — single-project changes, protocol requests, and ticket status requests, before project work.
 - [`runbooks/project-lifecycle.md`](./runbooks/project-lifecycle.md) — creating a project, onboarding a repository to clone, physically removing a project.
 
 ## Take over a working session
@@ -36,7 +36,7 @@ Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKE
 On a takeover turn:
 
 - The starter asked for a value and no human message has supplied it: end on exactly `HEARTBEAT_OK`. Only the user supplies that value; a lookup of your own is not an answer, and the question is not repeated.
-- The starter asked nothing but a required value is missing (a detailed request without a ticket, for instance): ask for it now.
+- The starter asked nothing but a required value is missing (a detailed change request without a ticket, for instance): ask for it now.
 - The request is complete: proceed. It is the go-ahead; respect an explicit request to hold.
 
 ### Step 3 — Resolve deferred context
@@ -46,9 +46,10 @@ The channel deliberately leaves some values for this session:
 - A PR/MR, issue, ticket, or other resource URL may identify its project and ticket. Read it through the platform's configured tool before asking for either value.
 - For a multi-project request, retain every affected project and path. Do not choose a main project merely to fit a single-project workflow.
 - A request may need no project. Do not ask for one until the work itself requires project files.
-- Ordinary single-project work still requires PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
+- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions and investigations require PROJECT and PROJECT_PATH only. Follow “Read-only questions” below before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
+- Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 
-As soon as PROJECT_PATH and TICKET_ID are known, and before any project work, run `alignfirst sync`, then `alignfirst ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before alcode can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
+For changes, protocol requests, and ticket status requests, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `alignfirst sync`, then `alignfirst ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before alcode can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
 
 Default rule: When the user asks you to handle or implement an existing ticket and a configured account gives you access to its platform, inspect the ticket before workspace setup. If its state is To do or equivalent and its assignee is either empty or your account, ensure it is assigned to your account and move it to In progress or equivalent when that state exists.
 
@@ -60,7 +61,7 @@ Project-workspace cleanup is not physical project removal; follow "Cleanup reque
 
 ### Step 5 — Reserve a side ticket for explicit no-ticket work
 
-Skip this step for project lifecycle and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
+Skip this step for read-only questions, project lifecycle, and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket:
 
@@ -76,10 +77,12 @@ The bot owns this reservation and the request capture; the coding agent receives
 
 The question on every turn is not a mode but a fact: does this request need a project workspace?
 
-- **The request is single-project work** — require PROJECT, PROJECT_PATH, and TICKET_ID, including for read-only work. A starter with a request block is filed first ("Detailed requests" below). Then open [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md), read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
+- **The request is a code review or names an AlignFirst protocol** — follow the ticket and workspace flow below.
+- **The request is another read-only question or investigation** — follow “Read-only questions” below.
+- **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A starter with a request block is filed first ("Detailed requests" below). Then open [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md), read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
 - **A required value is missing** — go to Step 7. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
-The underlying invariant for an existing project: project work always happens inside a linked workspace. The two main-worktree exceptions in `runbooks/project-lifecycle.md` are new-project bootstrap through its initial commit and the repository-onboarding setup branch.
+Changes to an existing project happen inside a linked workspace. Read-only questions use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
 
 ### Step 7 — Handle the actual request
 
@@ -105,9 +108,20 @@ Only when the message is unambiguously about chat content ("summarize this threa
 
 **Investigation / question, or advice.** The substance comes from alcode: delegate the question without a protocol so it investigates the right repo, then summarize its reply back to the user in the thread. Ground the answer in the actual code. No code change unless asked.
 
+### Read-only questions
+
+For a codebase question, investigation, or advice, resolve the project and delegate without collecting a ticket, reserving a side ticket, capturing a request file, or creating a workspace. Keep the complete question in the delegation, however detailed it is.
+
+1. Read `{PROJECT_PATH}/DEVELOPERS.md` and run `alignfirst context` from PROJECT_PATH. Use the main worktree on the configured default branch. If the question explicitly concerns a branch or PR, or follows ongoing branch work in this thread, use its existing registered workspace instead. Resolve it through the project's workspace guide; if none exists, report that limitation rather than inspecting a different branch.
+2. Before investigating the default branch, verify that the main worktree is clean and on that branch. Fetch its remote and fast-forward from its upstream with `git merge --ff-only`. If the branch is wrong, the worktree is dirty, the upstream is missing, or the refresh fails, stop and report the obstacle. Preserve local work; do not switch branches, stash, commit, reset, or resolve merges for a question. When using an existing branch workspace, inspect its current state without the workspace setup or branch-sync procedure.
+3. Apply the takeover-turn checkpoint in `SKILL.md`, then run `alcode new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`. Include the complete question, the selected branch, and an explicit constraint to investigate and answer without implementing changes. If the main branch advanced, include the environment refresh described below. Use the delegation guide's background launch and completion procedure.
+4. Relay the findings in the thread. If the user then requests changes, return to the ticket and linked-workspace flow before implementing.
+
+A request for a ticket's progress follows “Status update”; it needs that ticket's history and workspace state.
+
 ### Detailed requests
 
-When one project owns a detailed user explanation, preserve it before delegation:
+When one project owns a detailed change request, preserve it before delegation:
 
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
 2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR to get the request-file path, preserving the leading dot.
@@ -134,7 +148,7 @@ Thinking is delegated too. When you need *ideas*, a *design* direction, an *opin
 
 Global tools go in the prompt. Run alcode from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. alcode knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
 
-Every single-project development delegation carries TICKET_ID, including a no-protocol investigation. Put it in the alcode invocation or message as the delegation guide allows. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the alcode invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question’s context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 

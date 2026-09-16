@@ -10,7 +10,7 @@ const MAX_FILE_BYTES = 64 * 1024;
 const MAX_OUTPUT_BYTES = 30 * 1024;
 const PLAN_FILE = /^[A-Z]\d+-(?:main-plan|plan-.*)\.md$/;
 const OMISSION_NOTICE = `Content omitted: over the ${formatSize(MAX_FILE_BYTES)} limit.`;
-const TOO_LARGE_NOTICE = `History too large to print (over the ${formatSize(MAX_OUTPUT_BYTES)} budget). Read the relevant files among the entries above, skipping the plans (\`*-plan.md\`, \`*-main-plan.md\`, \`*-plan-*.md\`): their \`.summary.md\` files cover them.`;
+const TOO_LARGE_NOTICE = `History too large to print (over the ${formatSize(MAX_OUTPUT_BYTES)} budget). Read the relevant files among the entries above, skipping the plans (\`*-plan.md\`, \`*-main-plan.md\`, \`*-plan-*.md\`): the specs and \`.summary.md\` files provide the catch-up context.`;
 
 interface CatchupFile {
   path: string;

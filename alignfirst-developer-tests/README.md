@@ -60,7 +60,7 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 21 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 22 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
@@ -68,7 +68,7 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | --- | --- |
 | A01 | Missing ticket and scope, quiet takeover, human answer, workspace and delegation; Discord title gains the supplied ticket. |
 | A02 | Complete request starts automatically on external project `orion`; canonical path survives through delegation. Absorbs A16. |
-| A03 | A question selects a read-only investigation and reports its findings. |
+| A03 | A question without a ticket refreshes main before read-only investigation and reports concise, substantive findings without creating a ticket or workspace. |
 | A04 | Ticket supplied without a project: ask which project and wait. |
 | A05 | An unknown project name must be corrected before work starts. |
 | A06 | Small talk stays social and starts no project work. One message suffices; the former second message had no additional assertion. |
@@ -87,6 +87,7 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A26 | Explicit no-ticket work reserves the next side ticket and captures the complete request. File observation does not require setup to remain paused while the test polls. |
 | A27 | A genuine missing-ticket answer races initial takeover; it must reach the working session. |
 | A28 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
+| A30 | A question about an explicit branch reuses its registered workspace for read-only investigation. |
 
 A04, A14 and A21 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A25 distinguish a missing task description from a complete detailed request. A27 keeps its startup race separate from A11's explicit hold. A07, A08, A10, A12, A16, A18 and A29 have no standalone files; A22 was already absent.
 
@@ -94,7 +95,7 @@ Starter values, canonical paths, full detailed requests, and actual session owne
 
 The quiet-takeover helper observes a fresh claim, history read, and eyes reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation, then waits for a terminal turn before checking that the starter's question was not repeated. A24 applies the same structural reaction assertion to an active takeover and checks the approved readiness meaning. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
-From this directory, rebuild the CLIs and harness image, then run 20 conversation scenarios on both surfaces with Terra. Run the deterministic A13 contract once for the selected coding agent.
+From this directory, rebuild the CLIs and harness image, then run 21 conversation scenarios on both surfaces with Terra. Run the deterministic A13 contract once for the selected coding agent.
 
 ```bash
 npm run build --prefix ..

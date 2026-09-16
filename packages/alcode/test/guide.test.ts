@@ -24,7 +24,8 @@ describe("renderGuide", () => {
     expect(openclawInstructions).not.toContain("openclaw agent");
     expect(openclawInstructions).not.toContain("--timeout 0");
     expect(openclawInstructions).not.toContain("thread-handoff wake");
-    expect(openclawInstructions).not.toContain("--meta");
+    expect(openclawInstructions).toContain("--meta <KEY>");
+    expect(openclawInstructions).toContain("alcode status <session-file>");
     expect(openclawInstructions).not.toContain("thread-reply");
     expect(openclawInstructions).not.toContain("process log");
   });
