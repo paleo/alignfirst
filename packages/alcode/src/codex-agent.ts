@@ -1,3 +1,4 @@
+import { readCodexContext } from "./codex-rollout.js";
 import type { AgentAdapter, AgentProtocolState, RunConfig } from "./run-agent.js";
 
 export function createCodexAdapter(): AgentAdapter {
@@ -44,7 +45,7 @@ export function interpretCodexLine(line: string, state: AgentProtocolState): str
       return captureCompletedItem(event, state);
     case "turn.completed":
       state.protocolComplete = true;
-      captureContextTokens(event, state);
+      captureStreamTotal(event, state);
       return;
     case "turn.failed":
     case "error":
@@ -58,23 +59,27 @@ export function interpretCodexLine(line: string, state: AgentProtocolState): str
 
 export function assessCodexState(state: AgentProtocolState) {
   const succeeded = state.protocolComplete && !state.protocolFailed && state.result !== undefined;
+  const context = readCodexContext(state.sessionId, state.streamTotalTokens);
   return {
     succeeded,
     sessionId: state.sessionId,
     result: state.result,
     error: succeeded ? undefined : state.failure,
     authEvidence: state.authEvidence,
-    contextTokens: state.contextTokens,
+    contextTokens: context.contextTokens ?? undefined,
+    contextCompacted: context.compacted,
+    contextTokensError: context.error,
   };
 }
 
-// `turn.completed` reports the last turn's usage, which is what occupies the context window. Codex
+// The `turn.completed` usage is the thread's cumulative total, not its context occupancy. It serves
+// only to pin the rollout file to this run; `codex-rollout.ts` reads the occupancy itself. Codex
 // counts cached input inside `input_tokens`, so adding `cached_input_tokens` would double it.
-function captureContextTokens(event: Record<string, unknown>, state: AgentProtocolState): void {
+function captureStreamTotal(event: Record<string, unknown>, state: AgentProtocolState): void {
   const usage = event.usage;
   if (!isRecord(usage)) return;
   const total = asCount(usage.input_tokens) + asCount(usage.output_tokens);
-  if (total > 0) state.contextTokens = total;
+  if (total > 0) state.streamTotalTokens = total;
 }
 
 function parseCodexLine(line: string): unknown {

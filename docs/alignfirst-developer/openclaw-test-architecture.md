@@ -154,7 +154,7 @@ Both channels register together on every gateway boot. The runner selects which 
   `react`, `read`, `edit`, `delete`, `reactions`, and `search`; fake thread creation/rename actions
   remain disabled. Its action adapter prepares `send` for core delivery through the mock's message adapter. `replyToMode: "all"` is the compatibility default and routes an eligible root plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots in the channel session and routes only explicit replies through a thread session.
 
-Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. Envelope targets follow the native surface: a Discord thread is `channel:<thread-id>`, while a Slack thread is `thread:<channel-id>/<thread-ts>`. The bus generates numeric snowflake-shaped thread IDs and records each thread’s parent conversation. Transcript collection uses that ownership to include thread sessions without embedding scenario names in their IDs.
+Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. Envelope targets follow the native surface: a Discord thread is `channel:<thread-id>`, while a Slack thread is `thread:<channel-id>/<thread-ts>`. The bus generates numeric snowflake-shaped thread IDs and records each thread's parent conversation. Transcript collection uses that ownership to include thread sessions without embedding scenario names in their IDs.
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
@@ -211,7 +211,7 @@ final `NO_REPLY`.
 The shared fresh-takeover assertion binds the successful claim, history read, and eyes reaction by
 tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
 target from the newest visible message in the read result, and confirms that the bus stores exactly
-one reaction from `openclaw`. A01 applies it to a silent takeover; A24 applies it before active
+one reaction from `openclaw`. A01 applies it to a silent takeover; A17 applies it before active
 multi-project delegation. The internal service activation is absent from bus history and cannot be
 selected.
 

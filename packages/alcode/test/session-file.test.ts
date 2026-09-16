@@ -38,6 +38,8 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     endedAt: null,
     exitReason: null,
     contextTokens: null,
+    contextCompacted: false,
+    contextTokensError: null,
     ...overrides,
   };
 }

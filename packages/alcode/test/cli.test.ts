@@ -161,7 +161,7 @@ describe("parseAlcodeArgs", () => {
   it("rejects unknown options, stray positionals, and a resume without an id", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
-    const statusTargetError = "exactly one of <session-file>, --ticket <id> or --no-ticket";
+    const statusTargetError = "exactly one of <session-file>, --ticket <id>, --no-ticket";
     expect(() => parseAlcodeArgs(["node", "alcode", "status"])).toThrow(statusTargetError);
     expect(() => parseAlcodeArgs(["node", "alcode", "status", "x.md", "--ticket", "1"])).toThrow(
       statusTargetError,
@@ -172,6 +172,9 @@ describe("parseAlcodeArgs", () => {
     expect(() => parseAlcodeArgs(["node", "alcode", "status", "--ticket", "../other"])).toThrow(
       "--ticket must be a single path segment",
     );
+    expect(() =>
+      parseAlcodeArgs(["node", "alcode", "status", "--meta", "k", "--no-ticket"]),
+    ).toThrow(statusTargetError);
     expect(() => parse(["status", "--message", "go"])).toThrow();
     expect(() => parse(["quota", "extra"])).toThrow();
     expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
@@ -302,6 +305,8 @@ describe("status", () => {
       endedAt: null,
       exitReason: null,
       contextTokens: 162_400,
+      contextCompacted: false,
+      contextTokensError: null,
     });
   }
 
@@ -499,6 +504,8 @@ describe("resolveTicket", () => {
         endedAt: null,
         exitReason: null,
         contextTokens: null,
+        contextCompacted: false,
+        contextTokensError: null,
         ...overrides,
       },
     };
@@ -613,6 +620,8 @@ describe("launch guards", () => {
       endedAt: null,
       exitReason: null,
       contextTokens: null,
+      contextCompacted: false,
+      contextTokensError: null,
       ...overrides,
     };
   }

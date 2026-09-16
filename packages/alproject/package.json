@@ -34,6 +34,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run"

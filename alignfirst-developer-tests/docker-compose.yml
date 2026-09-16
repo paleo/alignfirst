@@ -21,6 +21,10 @@ services:
       ZAI_API_KEY: ${ZAI_API_KEY:-}
       ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
       ALIGNFIRST_CODE_MODELS: ${ALIGNFIRST_CODE_MODELS:-}
+      # `codex` is the mock shim here (symlinked in the image, first on PATH), so no real Codex
+      # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
+      # can write the thread rollout alcode reads the context occupancy from.
+      CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/claw/.codex:ro
       - fixture-projects:/home/claw/projects

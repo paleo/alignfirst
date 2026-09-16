@@ -95,9 +95,12 @@ export function assertBranchForTicket(worktreeDir: string, ticket: string): stri
 }
 
 function readWorktreeBranch(worktreeDir: string): string {
-  return execFileSync("git", ["-C", worktreeDir, "rev-parse", "--abbrev-ref", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
+  return readGit(worktreeDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+}
+
+/** Runs a read-only `git` command in a worktree on the host and returns its trimmed output. */
+export function readGit(cwd: string, args: string[]): string {
+  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
 }
 
 /** Escapes a dynamic value for safe interpolation into a `RegExp` source. */

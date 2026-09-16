@@ -1,3 +1,4 @@
+import { isCompacted } from "./run-agent.js";
 import type { AgentAdapter, AgentProtocolState, RunConfig } from "./run-agent.js";
 
 export function createClaudeAdapter(): AgentAdapter {
@@ -66,6 +67,7 @@ export function assessClaudeState(state: AgentProtocolState) {
     error: state.failure,
     authEvidence: state.authEvidence,
     contextTokens: state.contextTokens,
+    contextCompacted: isCompacted(state),
   };
 }
 
@@ -82,7 +84,9 @@ function captureContextTokens(event: Record<string, unknown>, state: AgentProtoc
     asCount(usage.cache_creation_input_tokens) +
     asCount(usage.cache_read_input_tokens) +
     asCount(usage.output_tokens);
-  if (total > 0) state.contextTokens = total;
+  if (total === 0) return;
+  state.contextTokens = total;
+  state.peakContextTokens = Math.max(state.peakContextTokens ?? 0, total);
 }
 
 function parseEventLine(line: string): unknown {

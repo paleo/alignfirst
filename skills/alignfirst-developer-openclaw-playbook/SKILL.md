@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst Developer runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.40.0"
+  version: "0.39.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -31,7 +31,7 @@ The `message` tool serves the starter (Discord `thread-create`, Slack `send` wit
 
 ## Reply style
 
-Be concise. Use fewer words while preserving the substance and detail the user needs. Let the question determine the length and format. Lead with the answer, omit repetition and process narration, and summarize alcode’s findings in your own words.
+Be concise. Use fewer words while preserving the substance and detail the user needs. Let the question determine the length and format. Lead with the answer, omit repetition and process narration, and summarize alcode's findings in your own words.
 
 ## Projects
 

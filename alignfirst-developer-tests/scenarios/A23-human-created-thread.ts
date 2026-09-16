@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import type { AgentToolCall, ScenarioContext } from "@paleo/openclaw-test";
 import { inputOf, listsProjects } from "./_lib/agent-tool-calls.ts";
 import { waitForCodingSessionSucceeded, waitForFindingsReport } from "./_lib/coding-session.ts";
+import { readGit } from "./_lib/fixture-state.ts";
 import { expectNoProtocolDelegation, setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
 import { assertNoChannelRootLeak } from "./_lib/outbound.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
@@ -110,8 +110,4 @@ function assertStayedInTheThread(
 
 function renamesThread(input: Record<string, unknown>): boolean {
   return typeof input.threadName === "string" && input.threadName.trim() !== "";
-}
-
-function readGit(cwd: string, args: string[]): string {
-  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
 }

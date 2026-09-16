@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import type { ScenarioContext, OutboundReceivedEntry } from "@paleo/openclaw-test";
 import { inputOf } from "./agent-tool-calls.ts";
+import { readGit } from "./fixture-state.ts";
 import { waitForCodingSessionSucceeded, waitForFindingsReport } from "./coding-session.ts";
 import { expectNoProtocolDelegation, setupCodingAgentMock } from "./mock-coding-agent.ts";
 import { setupGhMock } from "./mock-gh.ts";
@@ -140,8 +140,4 @@ function assertNoChanges(
       entry !== "_alcode" && entry !== options.ticketId && !initialPlanEntries.includes(entry),
   );
   ctx.assertLength(newPlanEntries, 0, "no new ticket or side-ticket directory");
-}
-
-function readGit(cwd: string, args: string[]): string {
-  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
 }

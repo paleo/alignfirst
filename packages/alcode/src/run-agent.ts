@@ -36,6 +36,12 @@ export interface AgentProtocolState {
   // Context-window occupancy reported by the newest model response seen so far. Each adapter
   // overwrites it, so the last write is the run's final context size.
   contextTokens?: number;
+  // Highest occupancy seen during the run. Above the final figure, it means the agent compacted
+  // the conversation.
+  peakContextTokens?: number;
+  // Codex only: the cumulative thread total from `turn.completed`, used to pin the rollout file to
+  // this run. It is not an occupancy.
+  streamTotalTokens?: number;
 }
 
 export interface AgentAssessment {
@@ -45,6 +51,8 @@ export interface AgentAssessment {
   error?: string;
   authEvidence: boolean;
   contextTokens?: number;
+  contextCompacted?: boolean;
+  contextTokensError?: string;
 }
 
 export interface AgentAdapter {
@@ -90,6 +98,8 @@ export async function runAgent(
     sessionId: assessment.sessionId ?? null,
     result,
     contextTokens: assessment.contextTokens ?? null,
+    contextCompacted: assessment.contextCompacted ?? false,
+    contextTokensError: assessment.contextTokensError ?? null,
   });
   return {
     status: failed ? "failed" : "succeeded",
@@ -290,7 +300,17 @@ export function buildTerminationUpdate(
     sessionId: state.sessionId ?? null,
     result: `Terminated by ${signal} before completion.`,
     contextTokens: state.contextTokens ?? null,
+    contextCompacted: isCompacted(state),
+    contextTokensError: null,
   };
+}
+
+// Occupancy only falls when the agent compacts the conversation, so a peak above the final figure
+// is the compaction itself.
+export function isCompacted(state: AgentProtocolState): boolean {
+  const { contextTokens, peakContextTokens } = state;
+  if (contextTokens === undefined || peakContextTokens === undefined) return false;
+  return peakContextTokens > contextTokens;
 }
 
 function nonblank(value: string): string | undefined {

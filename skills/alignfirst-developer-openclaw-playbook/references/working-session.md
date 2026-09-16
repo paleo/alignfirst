@@ -127,7 +127,7 @@ Only when the message is unambiguously about chat content ("summarize this threa
 
 A codebase question, advice, or a brainstorming follows [`consultation.md`](./runbooks/consultation.md). Read it fully. It resolves the project, delegates the complete question to alcode, and records the discussion when one is worth keeping.
 
-A request for a ticket's progress follows “Status update” instead; it needs that ticket's history and workspace state.
+A request for a ticket's progress follows "Status update" instead; it needs that ticket's history and workspace state.
 
 ### Detailed requests
 
@@ -158,7 +158,7 @@ Thinking is delegated too. When you need *ideas*, a *design* direction, an *opin
 
 Global tools go in the prompt. Run alcode from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. alcode knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
 
-Every single-project change delegation carries TICKET_ID in the alcode invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question’s context. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the alcode invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 

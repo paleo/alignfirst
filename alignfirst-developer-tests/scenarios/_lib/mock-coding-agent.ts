@@ -1,4 +1,5 @@
-import { basename, dirname } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { text } from "node:stream/consumers";
 import type { CliMockEntry, ScenarioContext } from "@paleo/openclaw-test";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
@@ -76,11 +77,27 @@ const BRANCH_TOKEN_RE = /\b((?:[a-zA-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
 /**
- * Context-window occupancy both mock streams end on, so `alcode` records the same
- * `contextTokens:` whichever coding agent is selected. The earlier turn reports a smaller figure:
- * the recorded value is the newest response's occupancy, never a sum across the run.
+ * Context-window occupancy both mocks end on, so `alcode` records the same `contextTokens:`
+ * whichever coding agent is selected. The recorded value is the newest response's occupancy, never
+ * a sum across the run: the Claude stream reports a smaller figure on its earlier turn, and the
+ * Codex mock reports {@link MOCK_CODEX_STREAM_TOTAL} as the run's cumulative total.
  */
 export const MOCK_CONTEXT_TOKENS = 128_000;
+
+/**
+ * Cumulative thread total the mocked `codex exec --json` stream ends on, which is all that stream
+ * reports. It sits far above {@link MOCK_CONTEXT_TOKENS} on purpose: a run that recorded this
+ * figure as its occupancy would trip the delegation guide's threshold on every Codex run.
+ */
+export const MOCK_CODEX_STREAM_TOTAL = 512_000;
+
+/**
+ * Where the mocked Codex writes its thread rollout. `codex` is the mock shim in the gateway, so no
+ * real Codex reads this; the gateway sets `CODEX_HOME` to the same path, on the IPC volume both
+ * containers mount, which is how `alcode` finds the occupancy the stream does not carry. It stays
+ * out of the projects directory, which project discovery walks.
+ */
+const MOCK_CODEX_HOME = "/var/run/openclaw-test-ipc/codex-home";
 
 // Claude reports cache reads and writes beside `input_tokens`, so occupancy is their sum plus the
 // response itself: 8 + 2_000 + 125_000 + 992.
@@ -147,6 +164,32 @@ export type CodexResponseVariant =
   | "modelRejection"
   | "nonzeroStderr";
 
+/**
+ * Writes the thread rollout `alcode` reads the context occupancy from.
+ *
+ * `last_token_usage` is the occupancy and `total_token_usage` the cumulative total the stream also
+ * reports; they differ, so a run that recorded the total instead fails the assertion.
+ */
+function writeCodexRollout(sessionId: string): void {
+  const dir = join(MOCK_CODEX_HOME, "sessions", "2026", "01", "01");
+  mkdirSync(dir, { recursive: true });
+  const record = JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: { input_tokens: MOCK_CONTEXT_TOKENS - 1_000, output_tokens: 1_000 },
+        total_token_usage: {
+          input_tokens: MOCK_CODEX_STREAM_TOTAL - 1_000,
+          output_tokens: 1_000,
+        },
+        model_context_window: 258_400,
+      },
+    },
+  });
+  writeFileSync(join(dir, `rollout-2026-01-01T00-00-00-${sessionId}.jsonl`), `${record}\n`);
+}
+
 export function buildCodexStreamResponse(
   sessionId: string,
   result: string,
@@ -154,9 +197,15 @@ export function buildCodexStreamResponse(
 ): { stdout: string; stderr?: string; exitCode: number } {
   const line = (event: unknown): string => JSON.stringify(event);
   const started = line({ type: "thread.started", thread_id: sessionId });
+  // Cumulative thread total, which is all `codex exec --json` reports. alcode uses it only to pin
+  // the rollout file to the run, never as an occupancy.
   const completed = line({
     type: "turn.completed",
-    usage: { input_tokens: 127_000, cached_input_tokens: 120_000, output_tokens: 1_000 },
+    usage: {
+      input_tokens: MOCK_CODEX_STREAM_TOTAL - 1_000,
+      cached_input_tokens: 120_000,
+      output_tokens: 1_000,
+    },
   });
   switch (variant) {
     case "success":
@@ -401,6 +450,7 @@ export function setupCodingAgentMock(
         if (agent === "claude") {
           stdout.write(buildClaudeStreamResponse(sessionId, resultText));
         } else {
+          writeCodexRollout(sessionId);
           const response = buildCodexStreamResponse(
             sessionId,
             resultText,
