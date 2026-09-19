@@ -7,7 +7,7 @@ Choose one adoption form. Both expose the same documentation tree under `docs/`.
 Use this form when the project already requires the AlignFirst CLI. It adds no project dependency.
 
 1. Nothing to install: project files invoke `npx alignfirst`. Offer `npm install -g alignfirst` in the README as a convenience.
-2. Ensure `docs/` exists. When preparing a project for a claw, populate a newly
+2. Ensure `docs/` exists. When preparing a project for an assistant, populate a newly
    created directory through [docmap-bootstrapping.md](docmap-bootstrapping.md).
 3. Add the **Agent Instructions** below, using `npx -y alignfirst docmap` as the Docmap command.
 4. Read the authoring guide with `npx alignfirst docmap --guide`.

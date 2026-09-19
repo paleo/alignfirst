@@ -7,7 +7,7 @@ read_when:
 
 # Admin Repository on the Server
 
-**Operator**, after [01-server-setup.md](01-server-setup.md). The repository is cloned under `{{SERVER_ADMIN_USER}}` so the operator edits and pushes from the server. Authentication uses a deploy key with write access: no human account is trusted on a server that also runs the claw. The repository itself is published from the operator's machine before this step (the setup skill's reference covers rendering and publishing).
+**Operator**, after [01-server-setup.md](01-server-setup.md). The repository is cloned under `{{SERVER_ADMIN_USER}}` so the operator edits and pushes from the server. Authentication uses a deploy key with write access: no human account is trusted on a server that also runs the assistant. The repository itself is published from the operator's machine before this step (the setup skill's reference covers rendering and publishing).
 
 ## Deploy key
 

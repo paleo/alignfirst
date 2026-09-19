@@ -1,6 +1,6 @@
-# Admin Repository of {{CLAW_NAME}}
+# Admin Repository of {{ASSISTANT_NAME}}
 
-This repository documents and operates `{{SERVER_HOST}}`, the server that runs **{{CLAW_NAME}}**, an AlignFirst claw. Every configuration step is a runbook under `docs/installations/`, so the server can be rebuilt from scratch.
+This repository documents and operates `{{SERVER_HOST}}`, the server that runs **{{ASSISTANT_NAME}}**, an AlignFirst assistant. Every configuration step is a runbook under `docs/installations/`, so the server can be rebuilt from scratch.
 
 ## Seek project conventions and documentation
 

@@ -689,7 +689,7 @@ export async function pushMockFixtureBranch(
     throw new Error(`mock-coding-agent: unexpected fixture Git directory: ${commonDir}`);
   }
   const origin = await runFixtureGit(ctx, cwd, ["remote", "get-url", "--push", "origin"]);
-  const expectedOrigin = `/home/claw/.fixture-origins/${basename(projectPath)}.git`;
+  const expectedOrigin = `/home/assistant/.fixture-origins/${basename(projectPath)}.git`;
   if (origin !== expectedOrigin) {
     throw new Error(`mock-coding-agent: refusing to push to non-fixture origin: ${origin}`);
   }

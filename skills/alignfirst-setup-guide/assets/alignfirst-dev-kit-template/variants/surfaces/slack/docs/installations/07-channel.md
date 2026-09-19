@@ -3,7 +3,7 @@ title: Slack Channel
 read_when:
   - creating the Slack app that feeds the SLACK_* variables of .env
   - rotating a Slack token or moving the bot to another channel
-  - running the channel smoke test after the claw is installed
+  - running the channel smoke test after the assistant is installed
 ---
 
 # Slack Channel
@@ -23,11 +23,11 @@ The JSON configuration below keeps what a member of one **private** channel need
 ```json
 {
   "display_information": {
-    "name": "{{CLAW_NAME}}",
+    "name": "{{ASSISTANT_NAME}}",
     "description": "AI developer for {{TEAM_NAME}}"
   },
   "features": {
-    "bot_user": { "display_name": "{{CLAW_NAME}}", "always_online": true },
+    "bot_user": { "display_name": "{{ASSISTANT_NAME}}", "always_online": true },
     "app_home": {
       "home_tab_enabled": false,
       "messages_tab_enabled": false,
@@ -36,7 +36,7 @@ The JSON configuration below keeps what a member of one **private** channel need
     "slash_commands": [
       {
         "command": "/openclaw",
-        "description": "Send a command to {{CLAW_NAME}}",
+        "description": "Send a command to {{ASSISTANT_NAME}}",
         "should_escape": false
       }
     ]
@@ -91,7 +91,7 @@ After any scope or event change, Slack marks the app as needing re-installation:
 
 ## Invite the Bot
 
-> **User action required.** In the target channel, run `/invite @{{CLAW_NAME}}`.
+> **User action required.** In the target channel, run `/invite @{{ASSISTANT_NAME}}`.
 
 The seed allowlists that one channel (`channels.slack.channels`, `groupPolicy allowlist`) and disables inbound DMs (`dmPolicy disabled`). An invite elsewhere leaves the bot silent there.
 
@@ -105,7 +105,7 @@ The app configuration is scoped to a private channel (`groups:*`, `message.group
 
 1. **OAuth & Permissions**: add the bot scopes `channels:history` and `channels:read`; drop the `groups:*` pair.
 2. **Event Subscriptions**: add `message.channels`, drop `message.groups`.
-3. **Reinstall to Workspace**. Save the rotated `xoxb-` token as `SLACK_BOT_TOKEN` and re-seed (`../operations/configure-claw.md`).
+3. **Reinstall to Workspace**. Save the rotated `xoxb-` token as `SLACK_BOT_TOKEN` and re-seed (`../operations/configure-assistant.md`).
 4. A conversion can change the channel ID. Confirm it, update `SLACK_CHANNEL_ID` when needed, and re-seed.
 
 ## Collect the IDs
@@ -120,7 +120,7 @@ The app configuration is scoped to a private channel (`groups:*`, `message.group
 ## Notes
 
 - One process per app token. A second Socket Mode connection on the same token replaces the first; a local or staging bot needs its own Slack app.
-- Rotating a token: regenerate it (reinstall for `xoxb-`, delete and recreate for `xapp-`), edit `infra/openclaw/.env`, then follow `../operations/configure-claw.md` (snapshot, re-seed, `openclaw secrets reload`).
+- Rotating a token: regenerate it (reinstall for `xoxb-`, delete and recreate for `xapp-`), edit `infra/openclaw/.env`, then follow `../operations/configure-assistant.md` (snapshot, re-seed, `openclaw secrets reload`).
 - Startup logs one `[slack] channel resolve failed … missing_scope: channels:read` line: the plugin tries a public-channel lookup, fails on the trimmed scopes, and falls back to the configured channel map. Cosmetic; do not add the scope.
 - `openclaw doctor` warns that `groupPolicy` is `allowlist` while `allowFrom` is empty. False positive: Slack's allowlist is the channel map, not a sender list. Do not add `allowFrom`.
 - The seed disables `channels.slack.implicitMentions.threadParticipation`. Leave it off: Slack otherwise treats every message in a thread the bot has posted in as directed at it, and the bot answers a turn meant to be silent with `⚠️ Agent couldn't generate a response.` ([gotchas.md](../gotchas.md#a-thread-the-agent-has-posted-in-can-forbid-silence)).

@@ -21,7 +21,7 @@ main() {
   run_check "inherited gateway snapshot is isolated" check_inherited_gateway_snapshot
   run_check "profile output stays silent" check_silent_profile
   run_check "audited commands resist runtime shadows" check_command_precedence
-  run_check "claw CLIs execute" check_cli_commands
+  run_check "assistant CLIs execute" check_cli_commands
   run_check "background Node owns its process" check_background_process
 
   return "$failures"

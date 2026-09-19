@@ -18,7 +18,7 @@ const LAYOUT: GuideLayout = {
   sharedDirs: [".local", ".plans"],
   hasDevServer: true,
   hasPorts: true,
-  profiles: { claw: "HTTPS gateway environment" },
+  profiles: { assistant: "HTTPS gateway environment" },
 };
 
 const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false, hasPorts: false, profiles: {} };
@@ -84,11 +84,11 @@ describe("renderGuide", () => {
     const withProfiles = renderGuide(NPM, LAYOUT);
     expect(withProfiles).toContain("npm run workspace -- setup --profile <name>");
     expect(withProfiles).toContain("**Setup profiles:**");
-    expect(withProfiles).toContain("- `claw` — HTTPS gateway environment");
+    expect(withProfiles).toContain("- `assistant` — HTTPS gateway environment");
     const withoutProfiles = renderGuide(NPM, { ...LAYOUT, profiles: {} });
     expect(withoutProfiles).not.toContain("--profile");
     expect(withoutProfiles).not.toContain("Setup profiles");
-    expect(withoutProfiles).not.toContain("claw");
+    expect(withoutProfiles).not.toContain("assistant");
   });
 
   it("leaves no template marker and no blank-line gap in either mode", () => {

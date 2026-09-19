@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the agent's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.4 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.4 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `alignfirst-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message, including the static `Take over this thread.` message from AlignFirst Service, tells the agent to load the skill from OpenClaw's managed `~/.openclaw/skills/` directory and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). Neither coding agent scans this managed directory. None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the agent reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
+This is the mechanism the `alignfirst-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message, including the static `Take over this thread.` message from AlignFirst Service, tells the assistant to load the skill from OpenClaw's managed `~/.openclaw/skills/` directory and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). Neither coding agent scans this managed directory. None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the assistant reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
 
 ## Character budgets
 
@@ -111,7 +111,7 @@ This is why "a subagent talks to the user directly" doesn't work — the archite
 
 Practical consequences, verified on the harness (2026-07-28, trajectory-vs-bus diff, `claude-sonnet-5`):
 
-- With an Anthropic model, a session's durable posts are its **turn finals** (unphased text ending the run) plus explicit `message` tool-posts. A setup turn that narrates "setting up the workspace", runs tools, then ends on a status line delivers only the status line. Instructions telling the agent to "post" a mid-turn signal produce text that reaches the transcript but never the surface.
+- With an Anthropic model, a session's durable posts are its **turn finals** (unphased text ending the run) plus explicit `message` tool-posts. A setup turn that narrates "setting up the workspace", runs tools, then ends on a status line delivers only the status line. Instructions telling the assistant to "post" a mid-turn signal produce text that reaches the transcript but never the surface.
 - The real plugins do not change this: Discord forwards commentary only in draft-preview *progress* mode (`commentaryPayloadsEnabled` in `extensions/discord/src/monitor/message-handler.process-progress.ts`, ephemeral previews); Slack never does.
 - The one durable, production-supported outlet is the **verbose lane** (`agents.defaults.verboseDefault: "on"` or `/verbose on`): commentary items become standalone `💬 <text>` progress messages (`deliverCommentaryProgressMessage` in `src/auto-reply/reply/dispatch-from-config.choose-route.ts`), at the cost of a `🛠️` summary per tool call.
 - Provider asymmetry: `openai-completions` providers (qwen, glm) emit unphased text, so their mid-turn text **does** stream at `text_end`. Delivery shape differs per provider; scenario waits and playbook promises must not depend on mid-turn posts existing (Anthropic) or on their absence (qwen/glm).

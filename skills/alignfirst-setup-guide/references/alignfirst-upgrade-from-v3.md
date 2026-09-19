@@ -13,7 +13,7 @@ Installing the CLI globally on a developer machine is a convenience:
 npm install -g alignfirst
 ```
 
-A claw host installs the CLI globally and replaces the retired project-discovery package:
+An assistant host installs the CLI globally and replaces the retired project-discovery package:
 
 ```sh
 npm install -g alignfirst @alignfirst/alcode @alignfirst/alproject

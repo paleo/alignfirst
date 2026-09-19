@@ -96,10 +96,10 @@ sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills
 ```
 
-After `06`, run the same refresh through the root-owned maintenance wrapper. It contains the claw before the directory becomes writable and restores the directory through an `EXIT` trap:
+After `06`, run the same refresh through the root-owned maintenance wrapper. It contains the assistant before the directory becomes writable and restores the directory through an `EXIT` trap:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance agent-skills -- bash -lc \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- bash -lc \
   'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop."' \
   < /dev/null
 ```
@@ -110,7 +110,7 @@ The bundled `skill-creator` and `skill-installer` become visible to the delegate
 
 The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `${CODEX_HOME:-~/.codex}/AGENTS.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
-To change the instructions, edit the repository file and run `docs/operations/configure-claw.md` with its `config instructions` scopes. The maintenance wrapper contains the claw before either file becomes writable and restores both through an `EXIT` trap.
+To change the instructions, edit the repository file and run `docs/operations/configure-assistant.md` with its `config instructions` scopes. The maintenance wrapper contains the assistant before either file becomes writable and restores both through an `EXIT` trap.
 
 ### Hardening
 
@@ -136,12 +136,12 @@ sudo -i -u {{SERVICE_USER}} -- codex login status
 
 ### Update
 
-**Role: operator**, during `docs/operations/update-claw.md`.
+**Role: operator**, during `docs/operations/update-assistant.md`.
 
 Run the coding-agent package update through its own package-scoped maintenance window:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance packages -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- \
   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @openai/codex@latest
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
@@ -157,7 +157,7 @@ A Codex upgrade changes the system-skills marker, so repeat the post-hardening m
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
 ```
 
-The `skills` scope of `update-claw.md` covers `~/.agents` and `~/.openclaw/skills`. Codex's bundled skills under `~/.codex/skills` use the separate `agent-skills` scope.
+The `skills` scope of `update-assistant.md` covers `~/.agents` and `~/.openclaw/skills`. Codex's bundled skills under `~/.codex/skills` use the separate `agent-skills` scope.
 
 ### Verification
 

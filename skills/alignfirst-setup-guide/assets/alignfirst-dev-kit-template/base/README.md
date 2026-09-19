@@ -1,6 +1,6 @@
 # {{ADMIN_REPOSITORY_NAME}}
 
-Private repository that reproduces and operates **{{CLAW_NAME}}**, the AlignFirst claw of {{TEAM_NAME}}, on `{{SERVER_HOST}}`. Runbooks under [`docs/`](docs/) (`alignfirst docmap` to browse); the OpenClaw seed, workspace files and scripts under [`infra/openclaw/`](infra/openclaw/).
+Private repository that reproduces and operates **{{ASSISTANT_NAME}}**, the AlignFirst assistant of {{TEAM_NAME}}, on `{{SERVER_HOST}}`. Runbooks under [`docs/`](docs/) (`alignfirst docmap` to browse); the OpenClaw seed, workspace files and scripts under [`infra/openclaw/`](infra/openclaw/).
 
 ## Bootstrap order
 

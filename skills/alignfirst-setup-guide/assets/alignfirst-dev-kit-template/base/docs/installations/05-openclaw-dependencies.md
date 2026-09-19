@@ -1,7 +1,7 @@
 ---
 title: OpenClaw Tool Dependencies
 read_when:
-  - installing the OS packages and CLIs the claw's tools need
+  - installing the OS packages and CLIs the assistant's tools need
   - Chromium fails to launch for the service account
 ---
 
@@ -78,7 +78,7 @@ sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 - `httpie` — `http` and `https`, JSON-aware client.
 - `yq` — the Ubuntu package is the Python jq wrapper; sufficient for YAML and compose files.
 - `postgresql-client` — `psql` for remote databases; a containerized one is reached with `docker exec`.
-- `shellcheck`, `shfmt` — for the shell scripts the claw writes.
+- `shellcheck`, `shfmt` — for the shell scripts the assistant writes.
 
 ## Git-host CLIs
 
@@ -114,7 +114,7 @@ glab --version
 
 **Authenticate**, as the service account. Pull requests need the CLI logged in on both paths of `03 § 4`; the host CLI path also lets it serve git's HTTPS credentials.
 
-> **User action required.** Each login prints a one-time code and a URL. Open the URL in the laptop browser, logged in as the claw's own account, and approve the code.
+> **User action required.** Each login prints a one-time code and a URL. Open the URL in the laptop browser, logged in as the assistant's own account, and approve the code.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- gh auth login --hostname <git-host> --git-protocol ssh --web     # SSH key path
@@ -126,7 +126,7 @@ sudo -i -u {{SERVICE_USER}} -- gh auth status
 
 ## Context7 (`ctx7`)
 
-Installed in `03` under the npm prefix; rides `@latest` in [update-claw.md](../operations/update-claw.md). The CLI reads `CONTEXT7_API_KEY` from the environment on each call. The seed writes the key from `.env` into `~/.openclaw/.env`, the gateway env file, which the gateway loads at startup and every exec child inherits. `ctx7 login` and `ctx7 setup` are unused: the key is preconfigured, and `setup` would install a duplicate skill and rule.
+Installed in `03` under the npm prefix; rides `@latest` in [update-assistant.md](../operations/update-assistant.md). The CLI reads `CONTEXT7_API_KEY` from the environment on each call. The seed writes the key from `.env` into `~/.openclaw/.env`, the gateway env file, which the gateway loads at startup and every exec child inherits. `ctx7 login` and `ctx7 setup` are unused: the key is preconfigured, and `setup` would install a duplicate skill and rule.
 
 Verify after `04` has run the seed (a valid key returns results; an invalid one, `Invalid API key`):
 

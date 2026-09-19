@@ -101,7 +101,7 @@ handoffs, because deleting a claimed record also deletes its duplicate-start pro
 
 ## Development
 
-`src/index.ts` defines the plugin identity and configuration schema. `src/thread-handoff/` owns handoff registration, tools, hooks, recovery and persistence. Additional claw features can register alongside it through the root entry point.
+`src/index.ts` defines the plugin identity and configuration schema. `src/thread-handoff/` owns handoff registration, tools, hooks, recovery and persistence. Additional assistant features can register alongside it through the root entry point.
 
 ```bash
 npm run build --workspace @alignfirst/service-openclaw-plugin

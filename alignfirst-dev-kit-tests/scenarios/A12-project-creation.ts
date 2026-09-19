@@ -136,12 +136,12 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
 async function configureGitIdentity(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["git", "config", "--global", "user.name", "myclaw"],
+    ["git", "config", "--global", "user.name", "myassistant"],
     "deployment Git author name",
   );
   await assertGatewayCommand(
     ctx,
-    ["git", "config", "--global", "user.email", "myclaw@example.test"],
+    ["git", "config", "--global", "user.email", "myassistant@example.test"],
     "deployment Git author email",
   );
 }

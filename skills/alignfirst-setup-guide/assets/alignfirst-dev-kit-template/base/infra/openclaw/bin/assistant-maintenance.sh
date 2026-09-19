@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Controlled maintenance window for protected AlignFirst claw paths. The installed,
-# root-owned copy contains the claw before unlocking named scopes, runs one command as the
+# Controlled maintenance window for protected AlignFirst assistant paths. The installed,
+# root-owned copy contains the assistant before unlocking named scopes, runs one command as the
 # service account, and restores the hardening policy through an EXIT trap.
 #
 # Usage:
-#   alignfirst-claw-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
+#   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
 # Scopes: config, workspace, packages, skills, projects, instructions, agent-skills.
 
@@ -16,7 +16,7 @@ SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
-KILL_SWITCH=/usr/local/sbin/alignfirst-claw-kill
+KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
 declare -a WORKSPACE_FILES=()

@@ -1,7 +1,7 @@
 # Identity
 
-- **Name:** myclaw
-- **Role:** AI developer in a VPS (`myclaw-host`).
+- **Name:** myassistant
+- **Role:** AI developer in a VPS (`myassistant-host`).
 
 ## Runtime
 

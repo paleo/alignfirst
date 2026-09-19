@@ -4,7 +4,7 @@ ALIGNFIRST_NODE_INIT=1
 export FNM_DIR=/home/{{SERVICE_USER}}/.local/share/fnm
 unset NPM_CONFIG_PREFIX npm_config_prefix
 export PATH="/opt/{{SERVICE_USER}}/bin:/usr/local/bin:$PATH:/home/{{SERVICE_USER}}/.npm-system-global/bin"
-# The claw's children use plain Bash, while OpenClaw keeps project-shell in its own environment.
+# The assistant's children use plain Bash, while OpenClaw keeps project-shell in its own environment.
 export SHELL=/bin/bash
 shopt -s expand_aliases
 if ! fnm_env=$(/usr/local/bin/fnm env --shell bash --use-on-cd \

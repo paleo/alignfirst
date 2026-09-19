@@ -3,7 +3,7 @@ title: Discord Channel
 read_when:
   - creating the Discord application that feeds the DISCORD_* variables of .env
   - rotating the bot token or moving the bot to another channel
-  - running the channel smoke test after the claw is installed
+  - running the channel smoke test after the assistant is installed
 ---
 
 # Discord Channel
@@ -16,7 +16,7 @@ read_when:
 
 ## Create the Application
 
-> **User action required.** Sign in to <https://discord.com/developers/applications> and click **New Application**. Name it `{{CLAW_NAME}}`, then:
+> **User action required.** Sign in to <https://discord.com/developers/applications> and click **New Application**. Name it `{{ASSISTANT_NAME}}`, then:
 >
 > 1. **Installation**: set **Install Link** to **None** and save. The private-bot switch below depends on it.
 > 2. **Bot**: click **Reset Token** and save the value as `DISCORD_BOT_TOKEN` in `.env`. The token is shown once; losing it means resetting again.
@@ -52,7 +52,7 @@ The seed allowlists that one channel (`channels.discord.guilds`, `groupPolicy al
 ## Notes
 
 - One connected process per token. A second instance disconnects the first; a local or staging bot needs its own application and token.
-- Rotating the token: **Reset Token** on the Bot page, edit `DISCORD_BOT_TOKEN` in `infra/openclaw/.env`, then follow `../operations/configure-claw.md` (snapshot, re-seed, `openclaw secrets reload`).
+- Rotating the token: **Reset Token** on the Bot page, edit `DISCORD_BOT_TOKEN` in `infra/openclaw/.env`, then follow `../operations/configure-assistant.md` (snapshot, re-seed, `openclaw secrets reload`).
 
 ## Smoke Test
 

@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 
 const TEMPLATE = "/opt/alignfirst-dev-kit-tests/fixtures/template";
-const PRIMARY = "/home/claw/projects";
+const PRIMARY = "/home/assistant/projects";
 const EXTERNAL = `${PRIMARY}/external-projects`;
 const LIFECYCLE = `${PRIMARY}/lifecycle-projects`;
 const PRIMARY_MARKER = {
@@ -41,7 +41,7 @@ const FIXTURES = [
 // clone (a remote-less fixture made the playbook's new-work path — fetch +
 // fast-forward the base — hard-fail with "origin/main - not something we can
 // merge"). Kept out of PROJECTS so it never reads as a project directory.
-const ORIGINS = "/home/claw/.fixture-origins";
+const ORIGINS = "/home/assistant/.fixture-origins";
 const BASE_BRANCH = "main";
 
 async function main() {
@@ -56,7 +56,7 @@ async function main() {
   }
   // Wipe everything under the fixture root and origins unconditionally. The
   // fixture template lives in /opt/alignfirst-dev-kit-tests/fixtures/ and is re-copied below.
-  // pnpm's store is pinned to /home/claw/.pnpm-store by the image's pnpm config, so nothing
+  // pnpm's store is pinned to /home/assistant/.pnpm-store by the image's pnpm config, so nothing
   // here is worth keeping.
   for (const entry of readdirSync(PRIMARY)) {
     rmSync(`${PRIMARY}/${entry}`, { recursive: true, force: true });

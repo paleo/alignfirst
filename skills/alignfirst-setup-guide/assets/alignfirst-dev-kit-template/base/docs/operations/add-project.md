@@ -1,7 +1,7 @@
 ---
 title: Add a Project
 read_when:
-  - opening a repository to the claw
+  - opening a repository to the assistant
   - a fresh clone's workspace setup or dev server fails
 ---
 
@@ -20,7 +20,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'alproject --guide --root ~/projects'
 sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 ```
 
-Prepare the clone through the setup skill's **Prepare a Project for a Claw** route.
+Prepare the clone through the setup skill's **Prepare a Project for an Assistant** route.
 It installs the CLI prerequisite and skills, writes `.alignfirst.json`, and configures docmap,
 workspace, and `DEVELOPERS.md`.
 

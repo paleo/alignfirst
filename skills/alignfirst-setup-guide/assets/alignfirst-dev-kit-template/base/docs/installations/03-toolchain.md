@@ -35,7 +35,7 @@ sudo install -m 755 -o root -g root "$runtime_tmp/fnm" /usr/local/bin/fnm
 rm -rf "$runtime_tmp"
 ```
 
-Create fnm's state directory, install the latest patch of the current Node LTS as the default (at least 24.16.0 for the claw's CLIs), then install every version declared by a managed project. Provision without loading profiles so an unavailable default cannot block this step:
+Create fnm's state directory, install the latest patch of the current Node LTS as the default (at least 24.16.0 for the assistant's CLIs), then install every version declared by a managed project. Provision without loading profiles so an unavailable default cannot block this step:
 
 ```sh
 sudo install -d -m 755 -o {{SERVICE_USER}} -g {{SERVICE_USER}} /home/{{SERVICE_USER}}/.local/share/fnm
@@ -136,7 +136,7 @@ Two supported paths for `{{GIT_HOSTS}}`; keep the one matching the deployment's 
 sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "{{SERVICE_USER}}@{{SERVER_HOST}}" -N "" && ssh-keyscan -t ed25519 <git-host> >> ~/.ssh/known_hosts && ssh-keygen -lf ~/.ssh/known_hosts && cat ~/.ssh/id_ed25519.pub'
 ```
 
-> **User action required.** Add the printed public key to the claw's own account on each git host, logged in as that account.
+> **User action required.** Add the printed public key to the assistant's own account on each git host, logged in as that account.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- ssh -T git@<git-host>
@@ -145,7 +145,7 @@ sudo -i -u {{SERVICE_USER}} -- ssh -T git@<git-host>
 **Git identity**, for both paths:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- git config --global user.name "{{CLAW_NAME}}"
+sudo -i -u {{SERVICE_USER}} -- git config --global user.name "{{ASSISTANT_NAME}}"
 sudo -i -u {{SERVICE_USER}} -- git config --global user.email "<email>"
 sudo -i -u {{SERVICE_USER}} -- git config --global init.defaultBranch main
 sudo -i -u {{SERVICE_USER}} -- git config --global fetch.prune true

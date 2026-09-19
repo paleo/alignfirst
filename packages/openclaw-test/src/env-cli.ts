@@ -418,9 +418,9 @@ function ensureBaseImage(packageDir: string, opts: { force: boolean }): boolean 
     "-t",
     tag,
     "--build-arg",
-    `CLAW_UID=${process.env.CLAW_UID}`,
+    `ASSISTANT_UID=${process.env.ASSISTANT_UID}`,
     "--build-arg",
-    `CLAW_GID=${process.env.CLAW_GID}`,
+    `ASSISTANT_GID=${process.env.ASSISTANT_GID}`,
     packageDir,
   ];
   const r = spawnSync("docker", args, { stdio: "inherit" });
@@ -447,8 +447,8 @@ function setupHostEnv(packageDir: string): void {
   process.env.OPENCLAW_TEST_PROJECT_DIR = projectDir;
   process.env.OPENCLAW_TEST_PACKAGE_DIR ??= packageDir;
   process.env.OPENCLAW_TEST_CONSUMER_IMAGE ??= `${sanitizeProjectName(basename(projectDir))}-openclaw-test:latest`;
-  if (!process.env.CLAW_UID) process.env.CLAW_UID = String(process.getuid?.() ?? 1000);
-  if (!process.env.CLAW_GID) process.env.CLAW_GID = String(process.getgid?.() ?? 1000);
+  if (!process.env.ASSISTANT_UID) process.env.ASSISTANT_UID = String(process.getuid?.() ?? 1000);
+  if (!process.env.ASSISTANT_GID) process.env.ASSISTANT_GID = String(process.getgid?.() ?? 1000);
   absolutizePathVarsFromEnvFile(projectDir);
   applyPathDefaults(projectDir);
 }

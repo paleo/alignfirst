@@ -1,6 +1,6 @@
-# Create a Claw
+# Create an Assistant
 
-A claw is a dedicated Linux service account that receives work through Slack or Discord (OpenClaw) and delegates coding to Claude Code or Codex through `alcode`. This reference produces its **admin repository**: a private repository rendered from `assets/alignfirst-dev-kit-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
+An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code or Codex through `alcode`. This reference produces its **admin repository**: a private repository rendered from `assets/alignfirst-dev-kit-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
 
 ## Topology
 
@@ -36,7 +36,7 @@ The human performs every interactive authentication and secret entry. Credential
 
 Choose the model provider and model separately; the template favors no provider.
 
-The agent **runtime** is fixed: every claw uses OpenClaw's embedded runtime so the playbook can rely on OpenClaw's `exec` and `process` tools.
+The **assistant** is fixed: every deployment uses OpenClaw and its embedded runtime, so the playbook can rely on OpenClaw's `exec` and `process` tools.
 
 ### Placeholder Vocabulary
 
@@ -49,7 +49,7 @@ The agent **runtime** is fixed: every claw uses OpenClaw's embedded runtime so t
 | `{{SERVER_HOST}}` | Server administrator | hostname (`01`), deploy-key alias (`02`), overview, workspace files |
 | `{{SERVER_ADMIN_USER}}` | Server administrator | admin account (`01`), operator commands, hardening ownership |
 | `{{SERVICE_USER}}` | Server administrator | service account (`03`), every `sudo -i -u` command, the scripts |
-| `{{CLAW_NAME}}` | Operator | agent identity, bot name (`07`), secret provider id `{{CLAW_NAME}}file` (lowercased by the seed; letters, digits, `-` and `_`, starting with a letter) |
+| `{{ASSISTANT_NAME}}` | Operator | assistant identity, bot name (`07`), secret provider id `{{ASSISTANT_NAME}}file` (lowercased by the seed; letters, digits, `-` and `_`, starting with a letter) |
 | `{{TIME_ZONE}}` | Operator | `timedatectl` (`01`), `USER.md`, overview |
 | `{{GIT_HOSTS}}` | Operator | `03`, `05` (git-host CLIs), workspace `AGENTS.md`, coding-agent instructions |
 | `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (provider login) |
@@ -100,7 +100,7 @@ On the operator's machine, from the installed skill directory:
 8. `npm install`.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.
 10. Run the audits below.
-11. `git init -b main`, first commit `chore: initialize claw administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
+11. `git init -b main`, first commit `chore: initialize assistant administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
 
 Do not copy the alignfirst repository's `node_modules`, lock files or `skills-lock.json`. The rendered tree has no `variants/`.
 
@@ -135,11 +135,11 @@ Every runbook states its role and its position at the top. Human steps are marke
 8. `09-dev-server-gateway.md` when selected — human: DNS wildcard record and API token, Authelia secrets, gateway users.
 9. `06-security-hardening.md` — last, because it locks what the others write.
 10. `07-channel.md`, smoke test — operator, from the chat client.
-11. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for a Claw" route, which writes `.alignfirst.json`. Project discovery then needs no registration step.
+11. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes `.alignfirst.json`. Project discovery then needs no registration step.
 
-The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `configure-claw.md` (re-seed, secret rotation), `update-claw.md`, `update-workspace.md`, `recover-claw.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
+The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 
-The `claw` files are named after the role, not the instance. An operator who prefers the claw's own name renames them after rendering: `update-{{CLAW_NAME}}.md`, `{{CLAW_NAME}}-kill.sh`. Update the links and the `install` commands in the same pass.
+The `assistant` files are named after the role, not the instance. An operator who prefers the assistant's own name renames them after rendering: `update-{{ASSISTANT_NAME}}.md`, `{{ASSISTANT_NAME}}-kill.sh`. Update the links and the `install` commands in the same pass.
 
 ## Linux Examples
 

@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 
-const TRANSCRIPT_DATABASE_PATH = "/home/claw/.openclaw/agents/main/agent/openclaw-agent.sqlite";
+const TRANSCRIPT_DATABASE_PATH =
+  "/home/assistant/.openclaw/agents/main/agent/openclaw-agent.sqlite";
 
 export interface ThreadObservation {
   messageCount: number;

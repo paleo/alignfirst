@@ -7,7 +7,7 @@ read_when:
 
 # Update the Workspace Files
 
-**Operator.** `infra/openclaw/workspace/` is the source of truth; the live copies under `~/.openclaw/workspace/` are immutable ([06](../installations/06-security-hardening.md)), so the claw proposes changes and the operator applies them. `apply-workspace.sh` is backup + overwrite.
+**Operator.** `infra/openclaw/workspace/` is the source of truth; the live copies under `~/.openclaw/workspace/` are immutable ([06](../installations/06-security-hardening.md)), so the assistant proposes changes and the operator applies them. `apply-workspace.sh` is backup + overwrite.
 
 Layout: repository → `~/seed/workspace/` (snapshot) → `~/.openclaw/workspace/` (live). Backups under `~/backups/workspace-backups/<stamp>/`.
 
@@ -29,10 +29,10 @@ Commit and push, so the repository mirrors the server:
 git add infra/openclaw/workspace/ && git commit -m "docs: update workspace files" && git push
 ```
 
-Apply through the maintenance wrapper. It contains the claw, refreshes the seed snapshot, and restores the workspace ownership, modes and flags through an `EXIT` trap:
+Apply through the maintenance wrapper. It contains the assistant, refreshes the seed snapshot, and restores the workspace ownership, modes and flags through an `EXIT` trap:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance workspace -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance workspace -- \
   /home/{{SERVICE_USER}}/seed/bin/apply-workspace.sh
 ```
 
@@ -47,7 +47,7 @@ sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 The script mirrors `*.md`, `*.png` and `*.svg` under `~/seed/workspace/`, subdirectories included. The maintenance wrapper discovers the resulting live files and restores their flags dynamically. A removal leaves the live copy in place: delete it through a maintenance window.
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance workspace -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance workspace -- \
   rm /home/{{SERVICE_USER}}/.openclaw/workspace/<file>.md
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```

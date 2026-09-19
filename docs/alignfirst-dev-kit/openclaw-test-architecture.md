@@ -20,7 +20,7 @@ Four generic packages drive automated regression tests against an OpenClaw works
 | `@alignfirst/openclaw-channel-mock-core` | Shared channel library — bus client, action handlers, plugin/setup factories, account helpers. Not consumed directly. |
 | `@alignfirst/openclaw-discord-mock` | Thin wrapper. Registers as channel `discord-mock`, `surface: "discord"`, `autoThread: false`. |
 | `@alignfirst/openclaw-slack-mock` | Thin wrapper. Registers as channel `slack-mock`, `surface: "slack"`, `autoThread: true`. |
-| `@alignfirst/service-openclaw-plugin` | A claw's OpenClaw capabilities, registered as `alignfirst-service`. Thread handoff converts confirmed native starter delivery into a reply run on the canonical thread session. |
+| `@alignfirst/service-openclaw-plugin` | An assistant's OpenClaw capabilities, registered as `alignfirst-service`. Thread handoff converts confirmed native starter delivery into a reply run on the canonical thread session. |
 
 The two wrappers exist side-by-side in one gateway and share a single bus. The runner picks which channel(s) to drive per scenario; `accountId = channelId` keeps per-channel bus state segregated.
 
@@ -51,7 +51,7 @@ Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `g
 
 ## Two-Dockerfile pattern
 
-`openclaw-test` ships `Dockerfile.base` (consumer-agnostic): Node 26 Alpine, `claw` user with host-matched UID/GID, the mock-CLI **shim binary** at `/opt/openclaw-test/mocks/bin/mock-cli-shim` (no per-command symlinks — consumers add their own), `/etc/profile` rewritten to keep `/opt/openclaw-test/mocks/bin` first in PATH, and the exec watcher binary at `/usr/local/bin/exec-watcher`. Anything else the fixture needs at runtime (`git`, `pnpm` via Corepack, reset scripts, per-command shim symlinks) is the consumer's responsibility.
+`openclaw-test` ships `Dockerfile.base` (consumer-agnostic): Node 26 Alpine, `assistant` user with host-matched UID/GID, the mock-CLI **shim binary** at `/opt/openclaw-test/mocks/bin/mock-cli-shim` (no per-command symlinks — consumers add their own), `/etc/profile` rewritten to keep `/opt/openclaw-test/mocks/bin` first in PATH, and the exec watcher binary at `/usr/local/bin/exec-watcher`. Anything else the fixture needs at runtime (`git`, `pnpm` via Corepack, reset scripts, per-command shim symlinks) is the consumer's responsibility.
 
 The CLI's `env build` builds the base locally as `paleo/openclaw-test-base:<pkg-version>` and injects the tag into the consumer image via the `OPENCLAW_TEST_BASE_TAG` build arg.
 
@@ -63,7 +63,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/claw/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/claw/.agents/skills/`.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -82,7 +82,7 @@ Compose v2.20+ required. The overlay's job is to add consumer-specific service o
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 
-The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `CLAW_UID`, `CLAW_GID` automatically.
+The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `ASSISTANT_UID`, `ASSISTANT_GID` automatically.
 
 ## Mocked-CLI shim
 
@@ -102,7 +102,7 @@ Cross-cell hygiene is enforced at the container level (see "Per-cell hygiene" be
 
 The mock-cli `release()` quiet-drain is no longer load-bearing across cells (the host destroys the gateway container between them); it remains as a small belt-and-braces for the post-`markScenarioAsEnded` window inside one cell.
 
-The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. the harness fixture tree under `/home/claw/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. This is a physical test-fixture path, not a playbook location contract. The harness owns only the transport.
+The harness does **not** provide a fixture reset. Scenarios that need to wipe and reseed on-disk state (e.g. the harness fixture tree under `/home/assistant/projects/`) ship a reset script in the consumer image and invoke it via `ctx.execInGateway(...)`. This is a physical test-fixture path, not a playbook location contract. The harness owns only the transport.
 
 ## Per-cell hygiene
 

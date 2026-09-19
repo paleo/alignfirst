@@ -7,11 +7,11 @@
 ARG OPENCLAW_TEST_BASE_TAG=__SET_VIA_OPENCLAW_TEST_CLI__
 FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}
 
-COPY --chown=claw:claw package.json package-lock.json /opt/openclaw-test/src/
-COPY --chown=claw:claw openclaw.json /home/claw/.openclaw/openclaw.json
+COPY --chown=assistant:assistant package.json package-lock.json /opt/openclaw-test/src/
+COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/openclaw.json
 
 RUN npm ci --include=dev && \
-    OPENCLAW_CONFIG_PATH=/home/claw/.openclaw/openclaw.json npx openclaw plugins registry --refresh
+    OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json npx openclaw plugins registry --refresh
 
 # Consumer customizations below. Add RUN/COPY/ENV as needed. The base image
 # is deliberately minimal — add only what your fixtures and scenarios need.
@@ -28,20 +28,20 @@ RUN npm ci --include=dev && \
 #     RUN for name in claude gh; do \
 #           ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; \
 #         done
-#     USER claw
+#     USER assistant
 #
 # * Helper scripts invoked from scenarios via `ctx.execInGateway(...)`:
 #     USER root
 #     COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
 #     RUN chmod +x /opt/openclaw-test/scripts/*.mjs
-#     USER claw
+#     USER assistant
 #
 # * Project fixtures baked into the image (typical with a named-volume
-#   /home/claw/projects, then reset/seeded per scenario):
-#     COPY --chown=claw:claw projects-fixture/<name>/ /opt/<consumer>/fixtures/<name>/
+#   /home/assistant/projects, then reset/seeded per scenario):
+#     COPY --chown=assistant:assistant projects-fixture/<name>/ /opt/<consumer>/fixtures/<name>/
 #     RUN cd /opt/<consumer>/fixtures/<name> && pnpm install --frozen-lockfile
 #
-# * Skills under /home/claw/.agents/skills/ for the agent to discover
+# * Skills under /home/assistant/.agents/skills/ for the assistant to discover
 #   (e.g. installed with the `skills` CLI from any repo or registry):
 #     RUN npx -y skills add <skills-source> --global --yes \
 #           --agent claude-code --skill <name> [--skill <name> …]

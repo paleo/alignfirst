@@ -29,7 +29,7 @@ section provides this itself.
 `alignfirst-setup-guide` and `alignfirst-openclaw-playbook` are separate skills. A
 work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
-A claw host also installs `@alignfirst/alcode`, the companion CLI for coding-agent
+An assistant host also installs `@alignfirst/alcode`, the companion CLI for coding-agent
 delegation and project discovery.
 
 ## Named Tool
@@ -71,24 +71,24 @@ Installing Docmap or workspace alone does not opt the project into AlignFirst pr
 
 ## AlignFirst Dev Kit for OpenClaw
 
-The **Dev Kit** deploys a persistent AI teammate for software work. That teammate receives requests
-through team chat, manages each task in an isolated project workspace, and delegates repository work
-to a coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
+The **Dev Kit** deploys a persistent **assistant** for software work. The assistant holds a chat
+identity, its channels and its sessions, and runs repository work through a coding **agent** (Claude
+Code or Codex) using the AlignFirst protocols. The Dev Kit uses OpenClaw as its assistant.
 
-One deployment is a **claw**: a dedicated Linux service account running OpenClaw under its own name
-and channel identity, on Slack or Discord. These three terms are used throughout this skill and the
+One deployment is a dedicated Linux service account running the assistant under its own name and
+channel identity, on Slack or Discord. These two terms are used throughout this skill and the
 repositories it renders.
 
-Preparing a project makes its repository compatible with a claw. Creating a claw builds and deploys
-the teammate itself.
+Preparing a project makes its repository compatible with an assistant. Creating an assistant builds and
+deploys it.
 
-## Prepare a Project for a Claw
+## Prepare a Project for an Assistant
 
 Inspect the repository before changing it. A prepared project has all of these:
 
 1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed before every other section
    whenever possible. The README may offer a global AlignFirst CLI installation as a convenience.
-   `.alignfirst.json` is required for a claw-managed project and optional otherwise.
+   `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
 2. A clean `alproject doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
 3. The work-files repository through `alignfirst plans setup` when the team has one.
@@ -105,9 +105,9 @@ Detect and verify the package manager, runtime, build, test, lint, dev-server, p
 directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
 repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`, naming the Node version declaration.
 
-## Create a Claw
+## Create an Assistant
 
-For creating or operating the claw deployment itself, read
+For creating or operating the assistant deployment itself, read
 [alignfirst-dev-kit.md](references/alignfirst-dev-kit.md). Do not load that workflow for ordinary
 tool setup.
 
@@ -131,7 +131,7 @@ Detect existing footprints before proposing changes:
 - AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
   `npx alignfirst context`, an AlignFirst instruction section, or a canonical skill installation.
 - work-files repository: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.
-- Claw preparation: the complete seven-part contract above.
+- Assistant preparation: the complete seven-part contract above.
 
 Require a clean working tree immediately before project mutations. Read-only discovery and
 recommendations do not require one.
@@ -146,4 +146,4 @@ npx -y skills remove alignfirst-setup-guide --yes </dev/null
 ```
 
 The CLI owns `skills-lock.json`. Leave global installations in place for other repositories. A
-claw service account must retain a global installation for its delegated coding agent.
+assistant service account must retain a global installation for its delegated coding agent.

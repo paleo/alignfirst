@@ -37,7 +37,7 @@ cd ~/{{ADMIN_REPOSITORY_NAME}}
 cp infra/openclaw/.env.example infra/openclaw/.env && chmod 600 infra/openclaw/.env
 ```
 
-> **User action required.** Edit `infra/openclaw/.env`. The values come from the password manager and the provider dashboards, so the agent cannot fill it.
+> **User action required.** Edit `infra/openclaw/.env`. The values come from the password manager and the provider dashboards, so the coding agent cannot fill it.
 
 - `RUNTIME_PROVIDER`, `RUNTIME_MODEL` — pre-filled from the render.
 - `RUNTIME_API_KEY` — when the provider authenticates by key; leave empty for an interactive login (step 10).
@@ -67,7 +67,7 @@ The snapshot copies `bin/openclaw` and `node-runtime/` but executes neither. `03
 
 The provider and model are deployment choices. The seed always pins
 `models.providers.{{RUNTIME_PROVIDER}}.agentRuntime.id` to `openclaw`. The embedded runtime owns the
-turn and supplies the `exec` and `process` tools that the claw's playbook uses. Keep this pin
+turn and supplies the `exec` and `process` tools that the assistant's playbook uses. Keep this pin
 when changing models.
 
 ```sh
@@ -101,7 +101,7 @@ An installed agent-harness plugin cannot claim this deployment's turns because t
 `openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
 authentication, or chat commands.
 
-The seed installs `@alignfirst/service-openclaw-plugin` as **AlignFirst Service** (ID `alignfirst-service`) and enables its optional `thread_handoff` tool. This plugin supplies the claw's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `alcode`, the agent runs `openclaw system event` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
+The seed installs `@alignfirst/service-openclaw-plugin` as **AlignFirst Service** (ID `alignfirst-service`) and enables its optional `thread_handoff` tool. This plugin supplies the assistant's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `alcode`, the assistant runs `openclaw system event` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
 
 ## Model-specific parameters
 
@@ -236,7 +236,7 @@ sudo -i -u {{SERVICE_USER}} -- env | grep -E '^(PROJECT_DEV_LIMIT|DOCKER_HOST)='
 
 Skip when `RUNTIME_API_KEY` is set. Otherwise the provider's interactive login needs a TTY; `openclaw models auth login` refuses to run without one.
 
-> **User action required.** In a fresh SSH terminal as `{{SERVER_ADMIN_USER}}`, open an interactive service-account shell and complete the browser flow on the laptop, signed in to the account that funds the claw:
+> **User action required.** In a fresh SSH terminal as `{{SERVER_ADMIN_USER}}`, open an interactive service-account shell and complete the browser flow on the laptop, signed in to the account that funds the assistant:
 >
 > ```sh
 > sudo -i -u {{SERVICE_USER}}
@@ -270,7 +270,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
 
 ## 12. Reboot check
 
-> **User action required.** The reboot ends the agent's SSH session, so this runs from the laptop:
+> **User action required.** The reboot ends the coding agent's SSH session, so this runs from the laptop:
 >
 > ```sh
 > ssh {{SERVER_ADMIN_USER}}@<vps-ip> 'sudo reboot'
@@ -291,11 +291,11 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor          # interactive; no --fix,
 sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload   # after a secret rotation
 ```
 
-Upgrades: [update-claw.md](../operations/update-claw.md). Configuration changes: [configure-claw.md](../operations/configure-claw.md).
+Upgrades: [update-assistant.md](../operations/update-assistant.md). Configuration changes: [configure-assistant.md](../operations/configure-assistant.md).
 
 ## Rotating a secret
 
-Edit the value in the checkout's `infra/openclaw/.env`. Before `06`, refresh the snapshot and re-run the seed. After `06`, follow [configure-claw.md](../operations/configure-claw.md); its root-owned wrapper contains the claw and restores the locked configuration.
+Edit the value in the checkout's `infra/openclaw/.env`. Before `06`, refresh the snapshot and re-run the seed. After `06`, follow [configure-assistant.md](../operations/configure-assistant.md); its root-owned wrapper contains the assistant and restores the locked configuration.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- openclaw secrets reload  # before 06 only

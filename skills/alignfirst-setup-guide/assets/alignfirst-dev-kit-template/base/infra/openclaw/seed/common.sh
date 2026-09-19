@@ -8,7 +8,7 @@ required_common=(
 )
 secret_variables_common=(GATEWAY_AUTH_TOKEN)
 # A SecretRef provider alias must match ^[a-z][a-z0-9_-]{0,63}$ (upstream zod-schema.core.ts).
-secrets_provider_id="$(printf '%s' '{{CLAW_NAME}}' | tr '[:upper:]' '[:lower:]')file"
+secrets_provider_id="$(printf '%s' '{{ASSISTANT_NAME}}' | tr '[:upper:]' '[:lower:]')file"
 
 set_scalar() { openclaw config set "$1" "$2"; }
 set_json() { openclaw config set "$1" --json "$2"; }
@@ -136,14 +136,14 @@ configure_common() {
   unset_key agents.defaults.heartbeat.activeHours
 
   echo "[seed] skill allowlist"
-  # `clawhub` is deliberately absent: the agent cannot install skills on its own.
+  # `clawhub` is deliberately absent: the assistant cannot install skills on its own.
   set_json agents.defaults.skills \
     '["alignfirst-setup-guide","alignfirst-openclaw-playbook","sharp-writing"]'
-  # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the agent rewrite or
+  # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the assistant rewrite or
   # drop writable skills. Same rule as clawhub.
   set_scalar skills.workshop.autonomous.mode off
 
-  echo "[seed] updates — operator-driven (update-claw.md)"
+  echo "[seed] updates — operator-driven (update-assistant.md)"
   # The startup check also sends an anonymous version ping to telemetry.openclaw.ai. Background
   # auto-update could not write the root-owned npm prefix anyway.
   set_json update.checkOnStart false
@@ -165,7 +165,7 @@ configure_common() {
   set_json session.threadBindings '{"enabled":true,"idleHours":60,"maxAgeHours":0}'
 
   echo "[seed] agent identity"
-  set_json agents.entries '{"main":{"identity":{"name":"{{CLAW_NAME}}"}}}'
+  set_json agents.entries '{"main":{"identity":{"name":"{{ASSISTANT_NAME}}"}}}'
 
   echo "[seed] gateway — loopback, token auth, dashboard through an SSH tunnel"
   set_json gateway.port 18789

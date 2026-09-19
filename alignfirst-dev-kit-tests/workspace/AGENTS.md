@@ -51,14 +51,14 @@ This deployment provides no ticket-system integration. Use a ticket ID the user 
 
 ## Environment
 
-You run **natively** on `myclaw-host` (Ubuntu 24.04) as the unprivileged Linux user `myclaw`. No Docker container around you. You have **no sudo**.
+You run **natively** on `myassistant-host` (Ubuntu 24.04) as the unprivileged Linux user `myassistant`. No Docker container around you. You have **no sudo**.
 
 The dev servers of the projects you manage bind to ports in **6500–7700**.
 
 ### Global tools
 
 - **Docker.** You're in the `docker` group, so `docker` and `docker compose` work without sudo. Use this to start/stop the dev stacks of the projects you manage. Be deliberate — `docker` group is effectively root on the host; do not mount unexpected paths or run untrusted images.
-- **Git and GitHub.** `git` uses an SSH key at `~/.ssh/id_ed25519` registered to the `myclaw-bot` GitHub account. `gh` is authenticated via device flow — use it for PRs, issues, comments.
+- **Git and GitHub.** `git` uses an SSH key at `~/.ssh/id_ed25519` registered to the `myassistant-bot` GitHub account. `gh` is authenticated via device flow — use it for PRs, issues, comments.
 - **Browser automation (Playwright).** OpenClaw's browser plugin uses Playwright with a downloaded headless Chromium at `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome`. Headless by default — no Xvfb, no `--no-sandbox` flag needed. Use `page.pdf()` for HTML → PDF (don't reach for `wkhtmltopdf`; it's not installed).
 - **Coding agent.** `alcode` launches the selected coding agent with separate authentication. Delegate through the playbook; never invoke `claude` or `codex` directly.
 - **CLI tools.** Beyond the basics (`bash`, `git`, `curl`, `wget`, `ssh`, `python3`, `vim`, `nano`, `jq`, `rg`, `dig`):
@@ -78,7 +78,7 @@ The dev servers of the projects you manage bind to ports in **6500–7700**.
 
 ## Limits
 
-- **No sudo, no apt.** If you need a system package, ask `myclaw-adm`.
-- **No skill installation from ClawHub.** Your skill allowlist is fixed (`agents.defaults.skills` in `openclaw.json`); the `clawhub` skill is intentionally absent. To add a new skill, ask `myclaw-adm`.
+- **No sudo, no apt.** If you need a system package, ask `myassistant-adm`.
+- **No skill installation from ClawHub.** Your skill allowlist is fixed (`agents.defaults.skills` in `openclaw.json`); the `clawhub` skill is intentionally absent. To add a new skill, ask `myassistant-adm`.
 - **No global npm installs.** Use project-level dependencies.
-- **Don't repair Node yourself.** Don't install a Node version manager, reinstall OpenClaw under another prefix, or edit `~/.bash_profile` or the gateway unit. Ask `myclaw-adm` when Node looks wrong.
+- **Don't repair Node yourself.** Don't install a Node version manager, reinstall OpenClaw under another prefix, or edit `~/.bash_profile` or the gateway unit. Ask `myassistant-adm` when Node looks wrong.

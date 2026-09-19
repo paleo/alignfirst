@@ -24,4 +24,4 @@ The seed is the record of the OpenClaw configuration. No copy of `openclaw.json`
 
 `seed.sh` sources the three modules and calls, in order, `validate_common`, `validate_surface`, `validate_coding_agent`, then `configure_common`, `configure_surface`, `configure_coding_agent`. Each module declares its required variables (`required_*`) and its secret variables (`secret_variables_*`); the surface module also declares `surface_plugin_id`. Every setting goes through `openclaw config set`; every credential through `set_secret_ref`.
 
-To change something: edit the owning source, then [configure-claw.md](operations/configure-claw.md).
+To change something: edit the owning source, then [configure-assistant.md](operations/configure-assistant.md).

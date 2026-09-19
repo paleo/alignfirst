@@ -1,6 +1,6 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myclaw` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-openclaw-playbook` skill (`skills/alignfirst-openclaw-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-openclaw-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-openclaw-playbook` skill (`skills/alignfirst-openclaw-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-openclaw-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
 
 ## One rule, stated once
 
@@ -60,7 +60,7 @@ An exception placed after the procedure it excepts gets skipped: the model acts 
 
 ## Template + variations beats N full examples
 
-A single labelled template plus a short list of variation tails beats four full-example bullets, and stops the agent from compressing the template away. Bad:
+A single labelled template plus a short list of variation tails beats four full-example bullets, and stops the assistant from compressing the template away. Bad:
 
 ```text
 - "Setting up the workspace now…"
@@ -80,11 +80,11 @@ Ticket: {T}
 {ask}
 ```
 
-Then vary the parts that carry no value — the setup signal, for instance: "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the agent to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.
+Then vary the parts that carry no value — the setup signal, for instance: "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". Note the template carries no literal `**`: instruct the assistant to bold the values, since hardcoded `**` gets copied verbatim and renders literally on surfaces (e.g. Slack `message`-tool posts) that don't run the Markdown converter.
 
 ## Temporal anchors are required
 
-"From now on" / "first user-facing action" / "before X" need an event the agent can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists. The takeover acknowledgement uses three anchors: successful claim, completed history read, then the first surface mutation.
+"From now on" / "first user-facing action" / "before X" need an event the assistant can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists. The takeover acknowledgement uses three anchors: successful claim, completed history read, then the first surface mutation.
 
 ## Per-surface clauses, not blanket rules
 
@@ -98,25 +98,25 @@ The visible starter must state the task and preserve a detailed request in full.
 
 ## Don't treat a derived value as redundant
 
-When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the agent to drop X from the ack. Collapse to: "Post `<form including X>`".
+When step 1 of a procedure produces a value (project name, ticket id, branch name) and a later step would use it, restate the value in the later step's required output. "State X, then post an ack" leaves room for the assistant to drop X from the ack. Collapse to: "Post `<form including X>`".
 
 This is a common cause of an otherwise-correct run failing an assertion. Historical example from `A1-new-work-to-be-done`: after the user supplied a ticket in-thread, the ack had to restate both project and ticket and announce workspace setup. The agent's tool-call trace confirms it read the whole chain correctly (dispatcher → `working-session.md` → `project-workspace-setup.md` → the project's `DEVELOPERS.md` → `workspace --guide`), yet the ack still came out as *"Simple UI tweak → AAD workflow. Je lance ça."* — naming the internal AlignFirst protocol instead of the setup signal. The reads happened; the ack form was the gap.
 
 ## The other side: a value already on screen gets dropped
 
-The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the agent drops the second one — correctly, from its point of view: the user can already see them.
+The rule above pushes values into a required output. Push the *same* values into two outputs a few minutes apart and the assistant drops the second one — correctly, from its point of view: the user can already see them.
 
 This killed the first version of the channel-bootstrap redesign. The channel starter was given the project, project path, ticket, and task; the thread session was then still asked to open with a `[WORK]` banner carrying the same values. Claude Sonnet 5 skipped the banner and posted nothing until the workspace was up, two minutes later. The fix was structural, not more insistence: the starter remains the thread's record, the static service message activates the session, and the thread session's next visible output reports new state rather than repeating the starter.
 
-So before requiring an output, check what is already in the thread. Restate a value the agent derived; don't restate one the user is looking at.
+So before requiring an output, check what is already in the thread. Restate a value the assistant derived; don't restate one the user is looking at.
 
 The `[WORKSPACE]` banner is how a tagged header came back without reviving the failure: it rides on the workspace report the session must post anyway (worktree, branch, status, URLs — all fresh values), anchored to a concrete event (the workspace reaching `ready`/`failed`), with project and ticket as a two-value tagline on data the model cannot skip.
 
 ## A nearby auto-loaded doc can crowd out the procedure
 
-The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the alcode guide (today `alcode --openclaw-guide`)). That makes the agent read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the agent matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
+The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the alcode guide (today `alcode --openclaw-guide`)). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
 
-Lesson: the file the agent reads *first* on a turn sets its frame. If that file is coaching/vocabulary-heavy (protocol names, workflow taxonomies), its language leaks into user-facing output. Keep the dispatch entry point pointed straight at the procedural playbook; defer delegation/coaching material until the agent is actually delegating.
+Lesson: the file the assistant reads *first* on a turn sets its frame. If that file is coaching/vocabulary-heavy (protocol names, workflow taxonomies), its language leaks into user-facing output. Keep the dispatch entry point pointed straight at the procedural playbook; defer delegation/coaching material until the assistant is actually delegating.
 
 ## Doc-obedience is per-iteration
 

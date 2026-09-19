@@ -1,7 +1,7 @@
 ---
 title: Server Setup
 read_when:
-  - bootstrapping a fresh server for the claw
+  - bootstrapping a fresh server for the assistant
   - replaying the OS-level baseline (accounts, SSH, firewall, Node, containers)
 ---
 

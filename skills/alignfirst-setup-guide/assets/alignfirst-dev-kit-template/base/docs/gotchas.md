@@ -26,7 +26,7 @@ The audited PATH keeps `/opt/{{SERVICE_USER}}/bin` and `~/.npm-system-global/bin
 
 ## Containers are per-user
 
-Rootless podman scopes containers to the invoking user's socket. `docker ps` as the operator shows nothing (or the operator's own containers), never the claw's:
+Rootless podman scopes containers to the invoking user's socket. `docker ps` as the operator shows nothing (or the operator's own containers), never the assistant's:
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- docker ps
@@ -36,7 +36,7 @@ A bare `docker …` without `DOCKER_HOST` fails on `unix:///var/run/docker.sock`
 
 ## `skills` CLI writes escaped symlinks under `~/.openclaw/skills/`
 
-For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. [update-claw.md](operations/update-claw.md) sweeps the links inside the `skills` maintenance scope because the managed directory is locked. The copied playbook is a directory, so the `-type l` sweep leaves it in place.
+For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. [update-assistant.md](operations/update-assistant.md) sweeps the links inside the `skills` maintenance scope because the managed directory is locked. The copied playbook is a directory, so the `-type l` sweep leaves it in place.
 
 ## Shared skills live under `~/.agents/skills`
 
@@ -50,11 +50,11 @@ The playbook lives under OpenClaw's managed `~/.openclaw/skills/` directory, out
 
 ## Heartbeat cost is a main-session problem
 
-A bill that climbs day after day with near-zero output (the agent waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on for the daily tick and the native exec-exit notice. A comment-only scratch on the `heartbeat:main` job skips the model call on periodic ticks entirely. When the cost appears despite it, run `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)): it restores the snapshot when the agent has rewritten the scratch ([06](installations/06-security-hardening.md#configuration-and-workspace-files)).
+A bill that climbs day after day with near-zero output (the assistant waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on for the daily tick and the native exec-exit notice. A comment-only scratch on the `heartbeat:main` job skips the model call on periodic ticks entirely. When the cost appears despite it, run `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)): it restores the snapshot when the assistant has rewritten the scratch ([06](installations/06-security-hardening.md#configuration-and-workspace-files)).
 
 ## OpenClaw schedules background model runs on its own
 
-Three defaults spend tokens without a user message: the memory-core *dreaming* sweep (a daily 03:00 isolated turn that rewrites `MEMORY.md`), the weekly *skill collection review* (`skills.workshop.autonomous.mode` defaults to `auto`, which also lets the agent rewrite writable skills), and the pre-compaction *memory flush* (an agentic turn that writes `memory/YYYY-MM-DD.md` when a long session nears its token limit). The seed turns each off: `plugins.slots.memory none`, `skills.workshop.autonomous.mode off`, `agents.defaults.compaction.memoryFlush.enabled false`. After an upgrade, `openclaw cron list --all` must list `heartbeat:main` as the only enabled system-owned job ([update-claw.md](operations/update-claw.md#smoke-test)); a new one is a default the release turned on, to opt out of in `seed/common.sh`. A dated note under `workspace/memory/` means the flush is back on.
+Three defaults spend tokens without a user message: the memory-core *dreaming* sweep (a daily 03:00 isolated turn that rewrites `MEMORY.md`), the weekly *skill collection review* (`skills.workshop.autonomous.mode` defaults to `auto`, which also lets the assistant rewrite writable skills), and the pre-compaction *memory flush* (an agentic turn that writes `memory/YYYY-MM-DD.md` when a long session nears its token limit). The seed turns each off: `plugins.slots.memory none`, `skills.workshop.autonomous.mode off`, `agents.defaults.compaction.memoryFlush.enabled false`. After an upgrade, `openclaw cron list --all` must list `heartbeat:main` as the only enabled system-owned job ([update-assistant.md](operations/update-assistant.md#smoke-test)); a new one is a default the release turned on, to opt out of in `seed/common.sh`. A dated note under `workspace/memory/` means the flush is back on.
 
 ## `plugins.allow` does not govern slot plugins
 
@@ -83,13 +83,13 @@ While a kernel upgrade is pending, package postinsts raise a "Newer kernel avail
 
 ## Config-writing commands fail while `openclaw.json` is immutable
 
-Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Run it through the `config` scope of the root-owned maintenance wrapper: [configure-claw.md](operations/configure-claw.md).
+Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Run it through the `config` scope of the root-owned maintenance wrapper: [configure-assistant.md](operations/configure-assistant.md).
 
-## A thread the agent has posted in can forbid silence
+## A thread the assistant has posted in can forbid silence
 
-The silent-reply sentinel is only honored on an undirected turn: `allowEmptyAssistantReplyAsSilent` requires `!isDirectedTurn`. Implicit mentions make a turn directed, and the kind `bot_thread_participant` covers *every* later message in a thread the agent has spoken in — which is the normal state of a work thread. The agent's `NO_REPLY` is then read as an empty response, retried once, and posted to the channel as `⚠️ Agent couldn't generate a response.` — a false failure a human is likely to answer, at a few thousand output tokens each time.
+The silent-reply sentinel is only honored on an undirected turn: `allowEmptyAssistantReplyAsSilent` requires `!isDirectedTurn`. Implicit mentions make a turn directed, and the kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in — which is the normal state of a work thread. The agent's `NO_REPLY` is then read as an empty response, retried once, and posted to the channel as `⚠️ Agent couldn't generate a response.` — a false failure a human is likely to answer, at a few thousand output tokens each time.
 
-The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on. `agents.defaults.silentReply.group: "disallow"` is not the fix — it removes the sentinel from the prompt and makes the agent answer everything.
+The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on. `agents.defaults.silentReply.group: "disallow"` is not the fix — it removes the sentinel from the prompt and makes the assistant answer everything.
 
 ## `MEDIA:` and `message` attachments read different media roots
 
@@ -101,7 +101,7 @@ Two outbound paths deliver a local file with different read policies. The `MEDIA
 
 ## Prefer interactive `openclaw doctor` over `--fix`
 
-`--fix` applies every recommendation without review. Plain `openclaw doctor` prompts before each change, so a recommendation that contradicts the seed can be declined; without a TTY it only reports. Two exceptions use `--fix`: the first install ([04 § 3](installations/04-openclaw.md#3-seed)), to create the credential scaffolding, and the migration after a core bump ([update-claw.md](operations/update-claw.md#migrate-after-a-core-bump)), because a release's state migrations apply in repair mode only, TTY or not.
+`--fix` applies every recommendation without review. Plain `openclaw doctor` prompts before each change, so a recommendation that contradicts the seed can be declined; without a TTY it only reports. Two exceptions use `--fix`: the first install ([04 § 3](installations/04-openclaw.md#3-seed)), to create the credential scaffolding, and the migration after a core bump ([update-assistant.md](operations/update-assistant.md#migrate-after-a-core-bump)), because a release's state migrations apply in repair mode only, TTY or not.
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 ## Gateway URLs answer curl with a redirect

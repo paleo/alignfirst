@@ -27,4 +27,4 @@ Authentication is preset through `CONTEXT7_API_KEY`. On a quota or authenticatio
 
 ## Node
 
-Run project commands from the project or worktree directory: your shell initializes **fnm**, which picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell; children inherit it. Never edit those declarations to make a command work, and never install a Node version; ask the administrator through the claw. `npm i -g` is allowed: it lands in the selected runtime and cannot reach OpenClaw or the admin CLIs.
+Run project commands from the project or worktree directory: your shell initializes **fnm**, which picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell; children inherit it. Never edit those declarations to make a command work, and never install a Node version; ask the administrator through the assistant. `npm i -g` is allowed: it lands in the selected runtime and cannot reach OpenClaw or the admin CLIs.

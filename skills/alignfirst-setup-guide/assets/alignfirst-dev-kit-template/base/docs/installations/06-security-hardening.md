@@ -3,7 +3,7 @@ title: Security Hardening
 read_when:
   - locking the service account's configuration, workspace, skills and packages
   - a write by the service account fails with "Operation not permitted" or EACCES
-  - stopping the claw immediately (kill switch)
+  - stopping the assistant immediately (kill switch)
 ---
 
 # Security Hardening
@@ -18,20 +18,20 @@ read_when:
 
 `{{SERVICE_USER}}` has no sudo, so filesystem permissions are a guarantee, not an instruction. Two mechanisms: `chattr +i` (the owner can neither modify nor delete the file; only root removes the flag), and ownership handoff to `root` or `{{SERVER_ADMIN_USER}}` with the write bits stripped. Each locked directory root that sits in a service-writable parent is flagged as well; otherwise the tree could be renamed and recreated writable.
 
-The claw can no longer edit its own instruction files or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
+The assistant can no longer edit its own instruction files or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
 
 ## Install the maintenance controls
 
-Install the kill switch and maintenance wrapper outside the service account's writable paths, then contain the claw before changing the hardening policy:
+Install the kill switch and maintenance wrapper outside the service account's writable paths, then contain the assistant before changing the hardening policy:
 
 ```sh
 sudo install -m 755 -o root -g root \
-  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/claw-kill.sh \
-  /usr/local/sbin/alignfirst-claw-kill
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/assistant-kill.sh \
+  /usr/local/sbin/alignfirst-assistant-kill
 sudo install -m 755 -o root -g root \
-  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/claw-maintenance.sh \
-  /usr/local/sbin/alignfirst-claw-maintenance
-sudo /usr/local/sbin/alignfirst-claw-kill
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/assistant-maintenance.sh \
+  /usr/local/sbin/alignfirst-assistant-maintenance
+sudo /usr/local/sbin/alignfirst-assistant-kill
 ```
 
 ## Configuration and workspace files
@@ -47,7 +47,7 @@ sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 ```
 
-Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the agent can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the agent-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-claw.md](../operations/update-claw.md#smoke-test) restores it.
+Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the assistant can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the assistant-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-assistant.md](../operations/update-assistant.md#smoke-test) restores it.
 
 The projects marker is repository-managed and immutable:
 
@@ -124,7 +124,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-claw-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -133,7 +133,7 @@ The operation runbooks supply the scopes and service-account command. Start the 
 The installed kill switch stops the gateway, stops and kills every rootless container, then terminates every service-account process regardless of its executable name. Only the `systemd --user` manager and its `(sd-pam)` process may survive. The script fails when a container, the gateway or another process survives.
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-kill
+sudo /usr/local/sbin/alignfirst-assistant-kill
 # recovery:
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```

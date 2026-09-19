@@ -1,6 +1,6 @@
 ---
 name: alignfirst-openclaw-playbook
-description: "Operating-instructions dispatcher for an AlignFirst claw running on OpenClaw. Routes user messages, including thread-handoff messages, to channel handling or working sessions, and carries the global rules."
+description: "Operating-instructions dispatcher for an AlignFirst assistant running on OpenClaw. Routes user messages, including thread-handoff messages, to channel handling or working sessions, and carries the global rules."
 license: CC0 1.0
 metadata:
   author: Paleo
@@ -8,7 +8,7 @@ metadata:
   repository: https://github.com/paleo/alignfirst
 ---
 
-# Operating Instructions for an AlignFirst Claw
+# Operating Instructions for an AlignFirst Assistant
 
 ## On every activation: read the surface playbook first
 

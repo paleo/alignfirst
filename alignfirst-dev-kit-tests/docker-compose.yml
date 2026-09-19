@@ -5,7 +5,7 @@
 # ALIGNFIRST_PLAYBOOK_SKILL_DIR.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
-# CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
+# ASSISTANT_UID, ASSISTANT_GID are set automatically by `openclaw-test env|run`.
 
 include:
   - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml
@@ -26,12 +26,12 @@ services:
       # can write the thread rollout alcode reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
     volumes:
-      - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/claw/.codex:ro
-      - fixture-projects:/home/claw/projects
+      - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
+      - fixture-projects:/home/assistant/projects
       # Live-mount the playbook skill over its copy in OpenClaw's managed skill
       # directory. Set in .env.local (relative to this dir, e.g.
       # ../skills/alignfirst-openclaw-playbook).
-      - ${ALIGNFIRST_PLAYBOOK_SKILL_DIR:?set ALIGNFIRST_PLAYBOOK_SKILL_DIR to the playbook skill directory}:/home/claw/.openclaw/skills/alignfirst-openclaw-playbook
+      - ${ALIGNFIRST_PLAYBOOK_SKILL_DIR:?set ALIGNFIRST_PLAYBOOK_SKILL_DIR to the playbook skill directory}:/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook
       # Live-mount the built monorepo so the alcode and alignfirst wrappers resolve
       # to this checkout. Run `npm run build` at the root first so alcode, alignfirst,
       # and docmap have built output.
@@ -42,4 +42,4 @@ services:
       OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:-openrouter/anthropic/claude-haiku-4.5}
       ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
     volumes:
-      - fixture-projects:/home/claw/projects
+      - fixture-projects:/home/assistant/projects

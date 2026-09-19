@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Kill switch for the AlignFirst claw service account. Stops the gateway and every
+# Kill switch for the AlignFirst assistant service account. Stops the gateway and every
 # rootless container, terminates all account workloads, then verifies containment. Only the
 # systemd user manager and its (sd-pam) process may survive.
 #
 # Install and run as root:
-#   install -m 755 -o root -g root claw-kill.sh \
-#     /usr/local/sbin/alignfirst-claw-kill
-#   /usr/local/sbin/alignfirst-claw-kill
+#   install -m 755 -o root -g root assistant-kill.sh \
+#     /usr/local/sbin/alignfirst-assistant-kill
+#   /usr/local/sbin/alignfirst-assistant-kill
 
 set -euo pipefail
 

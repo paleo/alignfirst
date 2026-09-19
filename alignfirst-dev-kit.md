@@ -1,8 +1,8 @@
 # AlignFirst Dev Kit for OpenClaw
 
-The AlignFirst Dev Kit deploys an AI teammate for software work. That teammate receives requests
-through Slack or Discord, manages the conversation in OpenClaw, and delegates repository work to
-Claude Code or Codex through `alcode` and the AlignFirst protocols.
+The AlignFirst Dev Kit deploys an **assistant** for software work. It receives requests through
+Slack or Discord, holds the conversation, and delegates repository work to Claude Code or Codex
+through `alcode` and the AlignFirst protocols. The Dev Kit uses OpenClaw as its assistant.
 
 ```mermaid
 flowchart TD
@@ -11,12 +11,12 @@ flowchart TD
   CA -->|AlignFirst protocols| FS[(Managed project)]
 ```
 
-One deployment is a **claw**: a dedicated service account running OpenClaw under its own name and
-channel identity. The communication surface, delegated coding agent, and OpenClaw runtime provider are
-independent choices. Each task moves from a channel into its own thread session, then into an isolated
+One deployment is a dedicated service account running the assistant under its own name and channel
+identity. The communication surface, the delegated coding agent, and the assistant's model provider
+are independent choices. Each task moves from a channel into its own thread session, then into an isolated
 project workspace before delegated changes begin.
 
-## Create a Claw
+## Create an Assistant
 
 Install the setup skill in the repository where your agent will assemble the private administration
 repository:
@@ -25,7 +25,7 @@ repository:
 npx -y skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
 ```
 
-Ask the agent to create a claw. The setup skill collects deployment values, renders
+Ask the agent to create an assistant. The setup skill collects deployment values, renders
 one Slack or Discord overlay and one Claude Code or Codex overlay, and produces role-specific
 installation, security, operation, and recovery runbooks.
 

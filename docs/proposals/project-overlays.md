@@ -4,7 +4,7 @@ summary: A future feature of the alignfirst CLI — keeping a project's AlignFir
 read_when:
   - designing or implementing overlays in the alignfirst CLI
   - changing project config resolution, the `config` report or the guide's conventions section, which must stay overlay-compatible
-  - preparing a claw for a repository that must stay untouched
+  - preparing an assistant for a repository that must stay untouched
 ---
 
 # Project Overlays
@@ -13,7 +13,7 @@ read_when:
 
 ## Goal
 
-A claw sometimes works in a repository that must stay untouched, a client's repository for instance. Today a prepared project carries its AlignFirst files at its root: `.alignfirst.json`, the AlignFirst section of `AGENTS.md`, `DEVELOPERS.md` and `docs/`. An overlay holds these files outside the repository, and every command resolves each file in the project root first, then in the overlay. A prepared project never meets the feature.
+An assistant sometimes works in a repository that must stay untouched, a client's repository for instance. Today a prepared project carries its AlignFirst files at its root: `.alignfirst.json`, the AlignFirst section of `AGENTS.md`, `DEVELOPERS.md` and `docs/`. An overlay holds these files outside the repository, and every command resolves each file in the project root first, then in the overlay. A prepared project never meets the feature.
 
 The only footprint left in the repository is the `.plans` symlink, registered in `.git/info/exclude` so it stays invisible to every other clone. Workspaces stay out of scope: `workspace.mjs`, its script and its devDependency remain the one footprint an untouched repository must accept.
 
@@ -77,14 +77,14 @@ Recorded when the feature was designed; none was resolved.
 - **No auto-loaded instructions.** An agent reads a project's `AGENTS.md` on its own and never an overlay's. The agent runs `alignfirst guide`, or now `alignfirst context`, because the user's global instructions say so. This footprint moves from the project to the user, and a developer without that line works as if AlignFirst were absent.
 - **Fragile matching.** A fork, a mirror or a renamed remote changes the `origin` URL, and the path fallback is per machine. A wrong match silently serves another project's conventions; `doctor` was the only place showing the match.
 - **Two homes per file.** Every command must apply the root-then-overlay rule identically, including `docmap` on a root `docs/` tree that is not in docmap format.
-- **Documentation does not travel with the code.** No pull request shows an overlay's docs and no CI checks them. The recommendation remains a `docs/` tree in the repository; the overlay lets the claw start with less friction and documents the project until its team adopts docmap.
+- **Documentation does not travel with the code.** No pull request shows an overlay's docs and no CI checks them. The recommendation remains a `docs/` tree in the repository; the overlay lets the assistant start with less friction and documents the project until its team adopts docmap.
 
 ## Questions for the next design
 
 The CLI changed since the implementation: conventions became structured fields of `.alignfirst.json` rendered by `alignfirst conventions`, `alignfirst context` chains them with docmap, `setup` disappeared and the setup guide writes the project config itself.
 
 - With structured conventions, does an overlay still need an `AGENTS.md`? The overlay's `.alignfirst.json` carries the conventions, and `conventions` renders them through the resolution function. The `guide` append point may then be unnecessary.
-- The bootstrap for an untouched repository is one line in the claw's global agent instructions, presumably `alignfirst context`. Decide whether a human developer gets the same line or the feature stays claw-only.
+- The bootstrap for an untouched repository is one line in the assistant's global agent instructions, presumably `alignfirst context`. Decide whether a human developer gets the same line or the feature stays assistant-only.
 - Without `setup`, who creates the overlay? Either the setup guide writes the directory, the `project` key, the `.plans` symlink and the exclude entry by hand, or a single command returns for this one mechanical, multi-step operation.
 - Is `project.paths` worth keeping? It is per machine and was only a fallback for a repository without a remote.
 - Is `--adopt` needed on day one? It is the exit path from the feature and can come with the first team that adopts.

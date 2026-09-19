@@ -1,11 +1,11 @@
 ---
-title: Recover the Claw
+title: Recover the Assistant
 read_when:
-  - the claw misbehaves and must be stopped
+  - the assistant misbehaves and must be stopped
   - restoring the service after a failed update or a broken configuration
 ---
 
-# Recover the Claw
+# Recover the Assistant
 
 **Operator.** Contain first, then diagnose, restore, re-authenticate when needed, re-seed, verify. Record the incident in `.reports/`.
 
@@ -14,7 +14,7 @@ read_when:
 The kill switch stops the gateway and every rootless container, terminates all account workloads, and fails if anything except the user manager and `(sd-pam)` survives:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-kill
+sudo /usr/local/sbin/alignfirst-assistant-kill
 ps -u {{SERVICE_USER}}
 ```
 
@@ -49,7 +49,7 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance config -- install -m 600 \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance config -- install -m 600 \
   /home/{{SERVICE_USER}}/backups/deployment/<stamp>/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/openclaw.json
 ```
@@ -65,7 +65,7 @@ Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw
 
 ## Re-seed and validate
 
-Follow [configure-claw.md](configure-claw.md) to re-seed through a contained maintenance window. Then follow [update-workspace.md](update-workspace.md) when the workspace files were touched.
+Follow [configure-assistant.md](configure-assistant.md) to re-seed through a contained maintenance window. Then follow [update-workspace.md](update-workspace.md) when the workspace files were touched.
 
 ## Start and verify
 

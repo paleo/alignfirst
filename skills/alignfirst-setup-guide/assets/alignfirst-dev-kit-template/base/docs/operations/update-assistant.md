@@ -1,12 +1,12 @@
 ---
-title: Update the Claw
+title: Update the Assistant
 read_when:
   - upgrading OpenClaw, the coding agent, alignfirst, alcode, alproject, ctx7 or the skills
 ---
 
-# Update the Claw
+# Update the Assistant
 
-**Operator.** Every step is idempotent; re-apply all of them. Each maintenance window contains the claw before an unlock and leaves the gateway stopped. Configuration changes are a different runbook: [configure-claw.md](configure-claw.md).
+**Operator.** Every step is idempotent; re-apply all of them. Each maintenance window contains the assistant before an unlock and leaves the gateway stopped. Configuration changes are a different runbook: [configure-assistant.md](configure-assistant.md).
 
 Open a report in `.reports/` and record the versions the verify step prints.
 
@@ -16,17 +16,17 @@ Pull the repository and reinstall its root-owned controls before opening any mai
 
 ```sh
 cd ~/{{ADMIN_REPOSITORY_NAME}} && git pull
-sudo install -m 755 -o root -g root infra/openclaw/bin/claw-kill.sh \
-  /usr/local/sbin/alignfirst-claw-kill
-sudo install -m 755 -o root -g root infra/openclaw/bin/claw-maintenance.sh \
-  /usr/local/sbin/alignfirst-claw-maintenance
+sudo install -m 755 -o root -g root infra/openclaw/bin/assistant-kill.sh \
+  /usr/local/sbin/alignfirst-assistant-kill
+sudo install -m 755 -o root -g root infra/openclaw/bin/assistant-maintenance.sh \
+  /usr/local/sbin/alignfirst-assistant-maintenance
 ```
 
 ## Back up
 
 Before a core bump, stop the gateway so both OpenClaw and the independent thread-handoff database
 close consistently, then keep the state the migrations will rewrite
-([recover-claw.md](recover-claw.md#restore)):
+([recover-assistant.md](recover-assistant.md#restore)):
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway
@@ -38,10 +38,10 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
 Contain the account before replacing runtime files. The gateway stays stopped through the remaining steps:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-kill
+sudo /usr/local/sbin/alignfirst-assistant-kill
 ```
 
-For the first upgrade from a shared system/project runtime, provision system Node using [01-server-setup.md](../installations/01-server-setup.md), then run the fnm installation and version-provisioning blocks in [03 § 2](../installations/03-toolchain.md#2-project-runtimes). Use Node 24.16.0 or newer as the fnm default for the claw's CLIs. Complete provisioning before adding the profile hooks below; an unavailable default prevents login-shell startup. Existing hosts keep their installed project versions.
+For the first upgrade from a shared system/project runtime, provision system Node using [01-server-setup.md](../installations/01-server-setup.md), then run the fnm installation and version-provisioning blocks in [03 § 2](../installations/03-toolchain.md#2-project-runtimes). Use Node 24.16.0 or newer as the fnm default for the assistant's CLIs. Complete provisioning before adding the profile hooks below; an unavailable default prevents login-shell startup. Existing hosts keep their installed project versions.
 
 Refresh these root-owned files from the operator's checkout on every update, including the first migration. Refreshing `~/seed` alone does not deploy them:
 
@@ -79,7 +79,7 @@ The login hook must remain after the environment bridge and any PATH assignments
 The prefix is root-owned and immutable ([06](../installations/06-security-hardening.md)). The maintenance wrapper gives the service account this scope for the command, then restores root ownership, modes and the immutable flag through an `EXIT` trap. `openclaw update` is channel-aware and refreshes its plugins at the core's version; the other packages ride `@latest`.
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance packages -- bash -lc '
+sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
 openclaw update --yes --no-restart --accept-capabilities
 openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
   openclaw plugins update @alignfirst/service-openclaw-plugin@latest --accept-capabilities
@@ -90,7 +90,7 @@ openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
 Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual project `.alignfirst.json` files retain their singular `portRange` claims:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance projects -- bash -lc '
+sudo /usr/local/sbin/alignfirst-assistant-maintenance projects -- bash -lc '
 set -e
 install -m 644 ~/seed/projects/.alignfirst-projects.json ~/projects/.alignfirst-projects.json
 alproject doctor --root ~/projects
@@ -130,14 +130,14 @@ Also run the [project-runtime audit](../installations/06-security-hardening.md#p
 The shared `~/.agents` tree and OpenClaw's managed `~/.openclaw/skills` tree are admin-owned and immutable. The `skills` scope also covers Claude Code's symlink tier when selected.
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
   bash -lc 'npx -y skills update -g -y </dev/null'
 ```
 
 The CLI does not retain the copied OpenClaw target during an update. Restore the playbook copy after every update:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- bash -lc '
+sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- bash -lc '
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent openclaw --copy --skill alignfirst-openclaw-playbook </dev/null
 '
@@ -146,13 +146,13 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
 Then make sure every target exists. If an entry is missing, repeat the idempotent `skills add` block of [08-coding-agent.md § Skills](../installations/08-coding-agent.md#skills), replacing its opening command with:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- bash <<'EOS'
+sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- bash <<'EOS'
 ```
 
 Sweep the escaped symlinks the `skills` CLI writes into `~/.openclaw/skills/` ([gotchas.md](../gotchas.md#skills-cli-writes-escaped-symlinks-under-openclawskills)). Run it as a separate command: the symlink writes lag the CLI's return, so a sweep chained in the same heredoc deletes nothing.
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
   find /home/{{SERVICE_USER}}/.openclaw/skills -maxdepth 1 -type l -print -delete
 ```
 
@@ -177,7 +177,7 @@ The setup guide and `sharp-writing` remain shared through `~/.agents/skills/`. O
 A release can ship state migrations that only doctor's repair mode applies, with or without a TTY. `openclaw update repair` runs that repair, syncs the plugins at the core's version and refreshes the plugin registry; it needs the configuration and the workspace writable:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance config workspace -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance config workspace -- \
   openclaw update repair --yes --accept-capabilities
 ```
 
@@ -185,7 +185,7 @@ Read its output: every imported or removed file is a change to port into the rep
 
 ## Re-seed
 
-Re-seed after a core bump, and whenever the `git pull` above changed anything under `infra/openclaw/`: the seed is the configuration's source of truth, and a release that adds a plugin or a tool ships as a seed change. Re-seed through [configure-claw.md](configure-claw.md).
+Re-seed after a core bump, and whenever the `git pull` above changed anything under `infra/openclaw/`: the seed is the configuration's source of truth, and a release that adds a plugin or a tool ships as a seed change. Re-seed through [configure-assistant.md](configure-assistant.md).
 
 A new OpenClaw release can retire keys the seed sets, turn on new defaults and widen the channel plugin's declared capabilities. `config set` under the new binary rewrites the config in the current schema, and the surface module re-records the plugin consent. A `config set` that fails names a retired key; the trailing interactive `openclaw doctor` shows the new defaults. Port both into the seed modules before starting the gateway.
 
@@ -197,7 +197,7 @@ After an OpenClaw version bump, doctor may report a unit installed by an older v
 sudo install -d -m 755 -o {{SERVICE_USER}} -g {{SERVICE_USER}} \
   /home/{{SERVICE_USER}}/.config/systemd/user/openclaw-gateway.service.d
 sudo -H -u {{SERVICE_USER}} bash -lc 'chmod go-w ~/.config ~/.config/systemd ~/.config/systemd/user ~/.config/systemd/user/openclaw-gateway.service ~/.config/systemd/user/openclaw-gateway.service.d'
-sudo /usr/local/sbin/alignfirst-claw-maintenance config -- \
+sudo /usr/local/sbin/alignfirst-assistant-maintenance config -- \
   openclaw gateway install --force
 sudo install -m 644 -o {{SERVICE_USER}} -g {{SERVICE_USER}} \
   ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/node-runtime/gateway-path.conf \
@@ -228,6 +228,6 @@ runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVI
 EOF
 ```
 
-Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat:main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). `apply-heartbeat-scratch.sh` reports the scratch unchanged, or pushes `infra/openclaw/heartbeat-scratch.md` back when the release or the agent rewrote it ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)). The private gateway turn must return `RUNTIME_OK`; a direct harness pass does not cover OpenClaw's exported shell snapshot.
+Config-schema warnings here mean a migration that the seed has not ported yet: back to the re-seed step. A repair doctor still proposes after the gateway ran (an orphaned session binding, for instance) needs one more migration window. The job list must show `heartbeat:main` as the only enabled system-owned job; another one is a default the release turned on, to opt out of in `seed/common.sh` ([gotchas.md](../gotchas.md#openclaw-schedules-background-model-runs-on-its-own)). `apply-heartbeat-scratch.sh` reports the scratch unchanged, or pushes `infra/openclaw/heartbeat-scratch.md` back when the release or the assistant rewrote it ([04 § 7](../installations/04-openclaw.md#heartbeat-scratch)). The private gateway turn must return `RUNTIME_OK`; a direct harness pass does not cover OpenClaw's exported shell snapshot.
 
 Once the release has run for a while, `openclaw update cleanup --dry-run` (gateway stopped) previews the retirement of the archived pre-migration files; run it without `--dry-run` to reclaim the space.

@@ -115,7 +115,7 @@
       "main": {
         "name": "OpenClaw Main",
         "model": "custom-anthropic/claude-sonnet-5",
-        "workspace": "/home/claw/.openclaw/workspace"
+        "workspace": "/home/assistant/.openclaw/workspace"
       }
     }
   },
@@ -123,13 +123,13 @@
     "discord-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "myclaw",
+      "botDisplayName": "myassistant",
       "allowFrom": ["*"]
     },
     "slack-mock": {
       "baseUrl": "http://bus:43123",
       "botUserId": "openclaw",
-      "botDisplayName": "myclaw",
+      "botDisplayName": "myassistant",
       "allowFrom": ["*"],
       "replyToMode": "off",
       "blockStreaming": true

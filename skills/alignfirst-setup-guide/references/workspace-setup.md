@@ -6,7 +6,7 @@ Workspace can be installed on its own. Add the workspace instructions below; Ali
 
 **Node consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by a claw must also meet [the Dev Kit contract](#the-dev-kit-contract).
+**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an assistant must also meet [the Dev Kit contract](#the-dev-kit-contract).
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -201,7 +201,7 @@ The system only works if agents know about it. The CLI self-documents via `works
   Skip this line when the instruction file runs `alignfirst context`; the command renders the
   exclusions.
 
-On a project prepared for a claw, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
+On a project prepared for an assistant, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
 
 ### Project-specific facts the guide can't know
 
@@ -216,24 +216,24 @@ The port layout is not one of them either: the block table, what raising `perWor
 
 ## The Dev Kit Contract
 
-A claw creates every worktree through the workspace system and has no manual fallback. `@alignfirst/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
+An assistant creates every worktree through the workspace system and has no manual fallback. `@alignfirst/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
 
 1. The workspaces section in `DEVELOPERS.md` ([Agent Instructions](#agent-instructions)).
 2. A setup profile named `remote` *(dev server)*, below.
-3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the patched config file, so the claw reports an address that works from the user's browser.
+3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the patched config file, so the assistant reports an address that works from the user's browser.
 4. A README section on remote access, below.
 5. A Node version declaration (`.nvmrc`, `.node-version` or `engines.node`) named in `DEVELOPERS.md`, so fnm selects the project runtime. Ask which version to declare when the repository has none.
 
 ### The `remote` setup profile
 
-The claw's dev servers are reached from the team's browsers, so the deployment runs `workspace setup --profile remote` on the main worktree of every managed project with a dev server. The profile rewrites, in the ignored main files, every URL a browser or a third party resolves: the API base URL, the front URL, OAuth callbacks, CORS origins, allowed hosts. Server-to-server URLs stay on localhost. Linked worktrees inherit the rewritten files through their `mainWorktree` sources, so each file patcher keeps the host it finds and changes only the port.
+The assistant's dev servers are reached from the team's browsers, so the deployment runs `workspace setup --profile remote` on the main worktree of every managed project with a dev server. The profile rewrites, in the ignored main files, every URL a browser or a third party resolves: the API base URL, the front URL, OAuth callbacks, CORS origins, allowed hosts. Server-to-server URLs stay on localhost. Linked worktrees inherit the rewritten files through their `mainWorktree` sources, so each file patcher keeps the host it finds and changes only the port.
 
 How the servers are exposed depends on the deployment. The profile has one variant for each:
 
 - **HTTPS gateway.** The deployment has the dev-server gateway: port `<port>` is served at `https://p<port>.$REMOTE_DEV_DOMAIN` behind a login, and `REMOTE_DEV_DOMAIN` is set in the service account's environment. `preSetup` rejects a missing or malformed variable before any file is written. `apply` sets the public URL to `https://p<port>.<domain>`; an application that distinguishes them also gets the public protocol (`https`), the public port (`443`) and the trusted proxy (loopback). The servers keep listening on `localhost:<port>`; the gateway proxies to them. A patcher recognizes a `p<port>.` host and replaces its port label instead of appending `:<port>`: see `publicUrl` in [workspace.mjs](../assets/workspace.mjs).
 - **Public IP.** No gateway: the browser reaches `http://<public-ip>:<port>` directly. `apply` reads the machine's single public IPv4 from the network interfaces (a VPS carries it; skip loopback, link-local and private ranges) and swaps the host of the listed variables, keeping scheme and port. The servers must listen on every interface. A patcher that keeps a non-localhost host (`helpers.extractHost`) needs nothing more.
 
-Pick the variant from the deployment that will run the project: the gateway variant when `REMOTE_DEV_DOMAIN` is set in the claw's environment, the public-IP variant when the deployment opens the dev-port range on its public IP. Ask the user when the deployment is unknown.
+Pick the variant from the deployment that will run the project: the gateway variant when `REMOTE_DEV_DOMAIN` is set in the assistant's environment, the public-IP variant when the deployment opens the dev-port range on its public IP. Ask the user when the deployment is unknown.
 
 In both variants, compute every change before the first write, so a missing variable aborts with the files untouched, and make reapplying the profile a no-op. The commented alternative in [workspace.mjs](../assets/workspace.mjs) shows the public-IP variant.
 

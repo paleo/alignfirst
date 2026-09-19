@@ -63,7 +63,7 @@ cp -r workspace /tmp/doctor-harness
 cp -r $template/base/infra/openclaw/workspace /tmp/doctor-template
 cp $template/variants/surfaces/slack/infra/openclaw/workspace/AGENTS.md /tmp/doctor-template/
 for ws in /tmp/doctor-harness /tmp/doctor-template; do
-  docker run --rm -v $ws:/home/claw/.openclaw/workspace \
+  docker run --rm -v $ws:/home/assistant/.openclaw/workspace \
     -e ANTHROPIC_API_KEY=x -e OPENROUTER_API_KEY=x -e ZAI_API_KEY=x \
     -e ALIGNFIRST_CODE_AGENT=claude \
     --entrypoint /usr/local/bin/openclaw \

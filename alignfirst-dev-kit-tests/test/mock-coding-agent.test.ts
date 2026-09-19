@@ -18,7 +18,7 @@ import {
 
 const PROMPT =
   "Run `alignfirst guide aad` and follow the protocol. Ticket ID = 29.\n\nFix `code` and $(literal).";
-const WORKTREE = "/home/claw/projects/nimbus-ABC-0120-export-bold";
+const WORKTREE = "/home/assistant/projects/nimbus-ABC-0120-export-bold";
 const PUBLISH_REQUEST =
   "Publish the existing local commit on branch ABC-0120/export-bold: push it to origin " +
   "with upstream tracking. Do not change code or create a PR. Report the remote branch URL or push result.";
@@ -141,7 +141,7 @@ test("push mock ignores prohibitions, references, and historical publication ins
 test("push mock refuses paths outside the linked fixture and non-fixture origins", async (t) => {
   const fixture = createPushFixture(t);
   for (const path of [
-    "/home/claw/projects/nimbus",
+    "/home/assistant/projects/nimbus",
     `${WORKTREE}/nested`,
     `${WORKTREE}/../nimbus`,
   ]) {
@@ -185,14 +185,14 @@ function createPushFixture(t: TestContext) {
     execInGateway: async ([command, ...args]) => {
       const result = spawnSync(
         command,
-        args.map((arg) => arg.replace("/home/claw", root)),
+        args.map((arg) => arg.replace("/home/assistant", root)),
         {
           encoding: "utf8",
         },
       );
       return {
         exitCode: result.status ?? 1,
-        stdout: result.stdout.replaceAll(root, "/home/claw"),
+        stdout: result.stdout.replaceAll(root, "/home/assistant"),
         stderr: result.stderr,
       };
     },

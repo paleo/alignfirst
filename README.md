@@ -24,9 +24,9 @@ Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Clau
 
 ## AlignFirst Dev Kit for OpenClaw
 
-The Dev Kit deploys an AI teammate for software work. One deployment is a **claw**. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
+The Dev Kit deploys an **assistant** for software work. One deployment is a dedicated service account running it under its own name and channel identity. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
 
-[`@alignfirst/service-openclaw-plugin`](packages/service-openclaw-plugin/README.md) supplies a claw's OpenClaw capabilities under plugin ID `alignfirst-service`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
+[`@alignfirst/service-openclaw-plugin`](packages/service-openclaw-plugin/README.md) supplies an assistant's OpenClaw capabilities under plugin ID `alignfirst-service`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
 
 ---
 

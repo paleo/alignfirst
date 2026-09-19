@@ -5,13 +5,13 @@ document is the entry point for working *on* the product in this repository. For
 deployment, use the
 [`alignfirst-setup-guide`](../../skills/alignfirst-setup-guide/references/alignfirst-dev-kit.md).
 
-The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plugin/README.md) package supplies the product's OpenClaw capabilities. OpenClaw displays it as **AlignFirst Service**, with plugin ID `alignfirst-service`. Its root entry point registers feature modules; the first, `src/thread-handoff/`, owns the `thread_handoff` tool, delivery hook, recovery service and `openclaw thread-handoff` maintenance commands. Additional claw capabilities can register through the same plugin.
+The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plugin/README.md) package supplies the product's OpenClaw capabilities. OpenClaw displays it as **AlignFirst Service**, with plugin ID `alignfirst-service`. Its root entry point registers feature modules; the first, `src/thread-handoff/`, owns the `thread_handoff` tool, delivery hook, recovery service and `openclaw thread-handoff` maintenance commands. Additional assistant capabilities can register through the same plugin.
 
 ## Three layers
 
 1. **Reference workspace** —
    [`alignfirst-dev-kit-tests/workspace/`](../../alignfirst-dev-kit-tests/workspace/). The
-   `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
+   `myassistant` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
    load into the system prompt every turn. `AGENTS.md` sends every user message to the
    `alignfirst-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the
@@ -25,7 +25,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 3. **Regression-test harness** —
    [`alignfirst-dev-kit-tests/`](../../alignfirst-dev-kit-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
-   It bind-mounts the workspace, the playbook at `/home/claw/.openclaw/skills/alignfirst-openclaw-playbook`, and the monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout. The managed skill path keeps the playbook out of the mock coding agent's context.
+   It bind-mounts the workspace, the playbook at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`, and the monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout. The managed skill path keeps the playbook out of the mock coding agent's context.
    The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
@@ -49,7 +49,7 @@ A channel session answers ordinary conversation at the root. For project work, i
 
 The fresh thread session routes by `topic_id`, calls `thread_handoff` with `{ "action": "claim" }`, and reads its own history before acting. After a successful first claim, it reacts to the newest visible message from that completed history snapshot before setup or another visible action. The static service message only starts the turn. It is internal to OpenClaw, absent from the surface history and therefore cannot be the reaction target. The visible starter carries the request. When the starter already asks for missing input, the takeover waits quietly until a human supplies it. An explicit hold remains in force. A final history read before coding catches human instructions that arrived during setup. Completion and later user turns stay on the same canonical thread session. Project creation and repository onboarding remain exceptions to the initial path requirement. The older manual-follow-up contract and, before it, channel-owned setup both produced avoidable routing failures; the historical artifact at `alignfirst-dev-kit-tests/artifacts/2026-07-15T10-31-39-655Z/` documents the latter.
 
-The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate serialized every wake behind the agent's running turns and capped each turn at 600 seconds. The plugin's principles and the approaches tried before are in [`openclaw-plugin.md`](./openclaw-plugin.md). `HEARTBEAT_OK` remains the silence token for plugin reply runs as well as native heartbeat turns; it does not select their dispatch mechanism.
+The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate serialized every wake behind the assistant's running turns and capped each turn at 600 seconds. The plugin's principles and the approaches tried before are in [`openclaw-plugin.md`](./openclaw-plugin.md). `HEARTBEAT_OK` remains the silence token for plugin reply runs as well as native heartbeat turns; it does not select their dispatch mechanism.
 
 ## Reading order for maintainers
 

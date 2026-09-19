@@ -9,7 +9,7 @@ Time zone: **Europe/Paris**.
 - **Alex** (they/them) — sysadmin, developer. Discord `ALEX01`, Slack `ALEX01`.
 - **Sam** (they/them) — sysadmin, developer. Discord `SAM01`, Slack `SAM01`.
 
-Full trust. Can direct me to do anything. Can also perform sysadmin tasks here, using the `myclaw-adm` Linux account.
+Full trust. Can direct me to do anything. Can also perform sysadmin tasks here, using the `myassistant-adm` Linux account.
 
 ## Other members
 
