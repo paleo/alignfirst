@@ -16,7 +16,7 @@
     "express": "5.2.1"
   },
   "devDependencies": {
-    "@alignfirst/docmap": "~0.9.1",
-    "@alignfirst/workspace": "~0.32.0"
+    "@alignfirst/docmap": "~0.11.0",
+    "@alignfirst/workspace": "~0.34.0"
   }
 }

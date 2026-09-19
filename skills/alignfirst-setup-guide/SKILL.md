@@ -124,9 +124,10 @@ Detect existing footprints before proposing changes:
 
 - docmap: a `docmap` script, `@alignfirst/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
 - workspace: a `workspace` script or `@alignfirst/workspace`.
-- A pre-`@alignfirst` install: `@paleo/docmap` or `@paleo/workspace` in the manifest. Move the
-  dependency to the `@alignfirst` name before proposing anything else; the two scopes install side
-  by side and the wrapper keeps importing the old one.
+- A pre-`@alignfirst` install: `@paleo/docmap` or `@paleo/workspace` in the manifest. Before
+  proposing anything else, replace the dependency with the `@alignfirst` name and rewrite the
+  `@paleo/` import specifiers in the wrapper scripts (`scripts/workspace/*.mjs`); the two scopes
+  install side by side, so a manifest-only change leaves the wrappers importing the old package.
 - AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
   `npx alignfirst context`, an AlignFirst instruction section, or a canonical skill installation.
 - work-files repository: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.

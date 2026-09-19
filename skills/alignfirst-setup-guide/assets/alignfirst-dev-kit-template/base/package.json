@@ -9,6 +9,6 @@
     "validate": "npx -y alignfirst docmap --check && node --check scripts/workspace/workspace.mjs"
   },
   "devDependencies": {
-    "@alignfirst/workspace": "~0.32.0"
+    "@alignfirst/workspace": "~0.34.0"
   }
 }

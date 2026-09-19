@@ -63,7 +63,11 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    git checkout -- package.json packages/*/package.json
    ```
 
-   These tarballs carry no provenance attestation. Every later version publishes through CI and does.
+   These tarballs carry no provenance attestation, and nothing should depend on them: deprecate each one at the version it was published, so the first release consumers see is the one CI publishes:
+
+   ```bash
+   npm deprecate @alignfirst/workspace@0.33.1 "Bootstrap publish, use 0.34.0 or later"
+   ```
 
 2. Register the trusted publisher and require 2FA for each name, with npm CLI ≥ 11.19. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 

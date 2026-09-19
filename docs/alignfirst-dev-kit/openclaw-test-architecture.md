@@ -12,7 +12,7 @@ read_when:
 
 Four generic packages drive automated regression tests against an OpenClaw workspace. Only
 `openclaw-test` is the entry point. The Dev Kit consumer additionally loads the
-`service-openclaw-plugin` gateway plugin; it is not imposed on generic harness consumers.
+`@alignfirst/service-openclaw-plugin` gateway plugin; it is not imposed on generic harness consumers.
 
 | Package | Role |
 | --- | --- |

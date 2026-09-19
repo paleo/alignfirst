@@ -4,7 +4,7 @@ Dockerised regression-test harness for OpenClaw workspaces. Drives the agent thr
 
 Pair with [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core), [`@alignfirst/openclaw-discord-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-discord-mock), [`@alignfirst/openclaw-slack-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-slack-mock).
 
-For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechanics, OpenClaw quirks), see [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
+For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechanics, OpenClaw quirks), see [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/alignfirst-dev-kit/openclaw-test-architecture.md).
 
 ## Install
 
@@ -98,7 +98,7 @@ npm run env:down                                                   # tear down a
 
 Rebuild (`npm run env:build`) after editing `openclaw.json` or the `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
-Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
+Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/alignfirst-dev-kit/openclaw-test-architecture.md).
 
 ### Parallel runs
 
