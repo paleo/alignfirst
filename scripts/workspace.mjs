@@ -1,15 +1,15 @@
-import { runWorkspace } from "@paleo/workspace";
+import { runWorkspace } from "@alignfirst/workspace";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-  sharedDirs: [".plans", ".local", "alignfirst-developer-tests/artifacts"],
+  sharedDirs: [".plans", ".local", "alignfirst-dev-kit-tests/artifacts"],
   runtimeDir: ".local-wt",
   gitignoredFiles: [
     { path: ".vscode/settings.json", source: { kind: "mainWorktree" }, optional: true },
     {
-      path: "alignfirst-developer-tests/.env.local",
+      path: "alignfirst-dev-kit-tests/.env.local",
       source: { kind: "mainWorktree" },
       optional: true,
     },

@@ -1,9 +1,9 @@
 {
-  "name": "@paleo/alproject",
-  "version": "3.0.1",
+  "name": "@alignfirst/alproject",
+  "version": "0.3.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
-  "description": "Discover the projects of an AlignFirst Developer host and allocate their port ranges.",
+  "description": "Discover the projects of an AlignFirst Dev Kit host and allocate their port ranges.",
   "keywords": [
     "alignfirst",
     "cli",

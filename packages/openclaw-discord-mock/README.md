@@ -1,4 +1,4 @@
-# @paleo/openclaw-discord-mock
+# @alignfirst/openclaw-discord-mock
 
 Synthetic Discord-shaped OpenClaw channel plugin. Registers as channel `discord-mock`. Full
 Discord-shaped action surface: `send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`,
@@ -7,15 +7,15 @@ native `{ ok: true, thread }` shape. If the thread exists but its optional start
 is explicitly partial and is not a confirmed handoff receipt. Free-form agent text without a tool
 call lands in the parent channel.
 
-Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
+Backed by [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@alignfirst/openclaw-test`](https://www.npmjs.com/package/@alignfirst/openclaw-test) for the test harness.
 
 ## Install
 
 ```sh
-npm i -D @paleo/openclaw-discord-mock
+npm i -D @alignfirst/openclaw-discord-mock
 ```
 
-The runner depends on this package transitively — installing `@paleo/openclaw-test` already pulls it in.
+The runner depends on this package transitively — installing `@alignfirst/openclaw-test` already pulls it in.
 
 ## Enable
 
@@ -24,7 +24,7 @@ In your `openclaw.json`:
 ```json
 {
   "plugins": {
-    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@paleo/openclaw-discord-mock"] },
+    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@alignfirst/openclaw-discord-mock"] },
     "entries": { "discord-mock": { "enabled": true } }
   },
   "channels": {

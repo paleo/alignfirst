@@ -1,11 +1,11 @@
 import { readFileSync, rmSync } from "node:fs";
-import { getQaBusState } from "@paleo/openclaw-channel-mock-core";
+import { getQaBusState } from "@alignfirst/openclaw-channel-mock-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { execInGateway } from "../src/exec-rpc.js";
 import { fetchTranscriptSnapshot } from "../src/transcript-log.js";
 
 vi.mock("node:fs", () => ({ readFileSync: vi.fn(), rmSync: vi.fn() }));
-vi.mock("@paleo/openclaw-channel-mock-core", () => ({ getQaBusState: vi.fn() }));
+vi.mock("@alignfirst/openclaw-channel-mock-core", () => ({ getQaBusState: vi.fn() }));
 vi.mock("../src/exec-rpc.js", () => ({
   IPC_DIR: "/test-ipc",
   execInGateway: vi.fn(),

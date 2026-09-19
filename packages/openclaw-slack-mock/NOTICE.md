@@ -1,6 +1,6 @@
 # NOTICE — upstream attribution
 
-Thin Slack-shaped wrapper around `@paleo/openclaw-channel-mock-core`. The plugin shape (manifest + entry points) follows upstream [OpenClaw](https://github.com/steipete/openclaw) `extensions/slack/` (MIT, Copyright 2025 Peter Steinberger).
+Thin Slack-shaped wrapper around `@alignfirst/openclaw-channel-mock-core`. The plugin shape (manifest + entry points) follows upstream [OpenClaw](https://github.com/steipete/openclaw) `extensions/slack/` (MIT, Copyright 2025 Peter Steinberger).
 
 ## Shape borrowed from `openclaw/extensions/slack/`
 

@@ -1,0 +1,38 @@
+import type { ScenarioContext } from "@alignfirst/openclaw-test";
+import { askWhichProjectRubric } from "./_lib/common-constants.ts";
+import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
+import { setupCodingAgentMock } from "./_lib/mock-coding-agent.ts";
+import { setupGhMock } from "./_lib/mock-gh.ts";
+import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { expectSilentSeedTurn } from "./_lib/silent-seed-turn.ts";
+import { bootstrapThreadFromChannel } from "./_lib/thread-bootstrap.ts";
+
+const TICKET_ID = "ABC-040";
+
+/**
+ * A ticket with no project. The starter carries the ticket and asks which
+ * project it belongs to; the channel session then stops, waiting for the
+ * answer that will wake the thread session.
+ */
+export default async function ticketWithoutProject(ctx: ScenarioContext): Promise<void> {
+  ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
+  await resetFixtures(ctx);
+  setupCodingAgentMock(ctx);
+  setupGhMock(ctx);
+
+  const starter = await bootstrapThreadFromChannel(ctx, {
+    text: `Ticket ${TICKET_ID}, on doit corriger le bug d'export.`,
+  });
+
+  await ctx.judgeLLM({
+    attachTo: starter.entry,
+    message: starter.match.text,
+    rubric: askWhichProjectRubric(TICKET_ID),
+    label: "ask-which-project",
+  });
+  await expectSilentSeedTurn(ctx, starter);
+  await waitForProjectListing(ctx, "channel session lists the projects");
+
+  ctx.markScenarioAsEnded("PASS");
+  ctx.log("PASS");
+}

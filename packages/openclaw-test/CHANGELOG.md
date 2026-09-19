@@ -1,4 +1,6 @@
-# @paleo/openclaw-test
+# @alignfirst/openclaw-test
+
+> Version 0.20.0 and every version below it was published as `@paleo/openclaw-test`.
 
 ## 0.20.0
 
@@ -30,9 +32,9 @@
 - Updated dependencies [348c407]
 - Updated dependencies [348c407]
 - Updated dependencies [348c407]
-  - @paleo/openclaw-channel-mock-core@0.9.0
-  - @paleo/openclaw-slack-mock@0.5.0
-  - @paleo/openclaw-discord-mock@0.5.0
+  - @alignfirst/openclaw-channel-mock-core@0.9.0
+  - @alignfirst/openclaw-slack-mock@0.5.0
+  - @alignfirst/openclaw-discord-mock@0.5.0
 
 ## 0.17.0
 
@@ -45,9 +47,9 @@
 - 6d72df2: Fixed the pnpm fixture-install example for current pnpm releases.
 - Updated dependencies [6d72df2]
 - Updated dependencies [6d72df2]
-  - @paleo/openclaw-channel-mock-core@0.8.0
-  - @paleo/openclaw-slack-mock@0.4.0
-  - @paleo/openclaw-discord-mock@0.4.0
+  - @alignfirst/openclaw-channel-mock-core@0.8.0
+  - @alignfirst/openclaw-slack-mock@0.4.0
+  - @alignfirst/openclaw-discord-mock@0.4.0
 
 ## 0.16.0
 
@@ -58,9 +60,9 @@
 ### Patch Changes
 
 - Updated dependencies [ac9b4c5]
-  - @paleo/openclaw-channel-mock-core@0.7.0
-  - @paleo/openclaw-discord-mock@0.3.8
-  - @paleo/openclaw-slack-mock@0.3.8
+  - @alignfirst/openclaw-channel-mock-core@0.7.0
+  - @alignfirst/openclaw-discord-mock@0.3.8
+  - @alignfirst/openclaw-slack-mock@0.3.8
 
 ## 0.15.5
 
@@ -81,9 +83,9 @@
 
 - 801309f: Updated `@anthropic-ai/sdk` to 0.120.0, pinned to the exact version.
 - Updated dependencies [801309f]
-  - @paleo/openclaw-channel-mock-core@0.6.1
-  - @paleo/openclaw-discord-mock@0.3.7
-  - @paleo/openclaw-slack-mock@0.3.7
+  - @alignfirst/openclaw-channel-mock-core@0.6.1
+  - @alignfirst/openclaw-discord-mock@0.3.7
+  - @alignfirst/openclaw-slack-mock@0.3.7
 
 ## 0.15.2
 
@@ -97,9 +99,9 @@
 
 - 705363d: The judge's Anthropic client now retries up to 5 times, riding out transient container DNS failures instead of failing the cell.
 - Updated dependencies [1470b76]
-  - @paleo/openclaw-channel-mock-core@0.6.0
-  - @paleo/openclaw-discord-mock@0.3.6
-  - @paleo/openclaw-slack-mock@0.3.6
+  - @alignfirst/openclaw-channel-mock-core@0.6.0
+  - @alignfirst/openclaw-discord-mock@0.3.6
+  - @alignfirst/openclaw-slack-mock@0.3.6
 
 ## 0.15.0
 
@@ -130,18 +132,18 @@
 - Updated dependencies [0290042]
 - Updated dependencies [0290042]
 - Updated dependencies [53fc35d]
-  - @paleo/openclaw-channel-mock-core@0.5.0
-  - @paleo/openclaw-discord-mock@0.3.5
-  - @paleo/openclaw-slack-mock@0.3.5
+  - @alignfirst/openclaw-channel-mock-core@0.5.0
+  - @alignfirst/openclaw-discord-mock@0.3.5
+  - @alignfirst/openclaw-slack-mock@0.3.5
 
 ## 0.12.2
 
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.4.0
-  - @paleo/openclaw-discord-mock@0.3.4
-  - @paleo/openclaw-slack-mock@0.3.4
+  - @alignfirst/openclaw-channel-mock-core@0.4.0
+  - @alignfirst/openclaw-discord-mock@0.3.4
+  - @alignfirst/openclaw-slack-mock@0.3.4
 
 ## 0.12.1
 
@@ -149,9 +151,9 @@
 
 - aced48c: Fix the intermittent post-verdict runner hang. The QA-bus long-poll now runs under a client-side `AbortController` (server hold + 2s) so a wedged bus or half-open connection surfaces as an empty poll and the caller's deadline loop keeps ticking instead of hanging forever. On shutdown the mock CLI server force-closes lingering keep-alive sockets (`closeAllConnections`) so `close()` resolves at once rather than waiting on an idle-open connection.
 - Updated dependencies [aced48c]
-  - @paleo/openclaw-channel-mock-core@0.3.2
-  - @paleo/openclaw-discord-mock@0.3.3
-  - @paleo/openclaw-slack-mock@0.3.3
+  - @alignfirst/openclaw-channel-mock-core@0.3.2
+  - @alignfirst/openclaw-discord-mock@0.3.3
+  - @alignfirst/openclaw-slack-mock@0.3.3
 
 ## 0.12.0
 
@@ -213,8 +215,8 @@
 
 - Silence two cosmetic warnings on a fresh consumer `env:build`.
 - Updated dependencies
-  - @paleo/openclaw-discord-mock@0.3.2
-  - @paleo/openclaw-slack-mock@0.3.2
+  - @alignfirst/openclaw-discord-mock@0.3.2
+  - @alignfirst/openclaw-slack-mock@0.3.2
 
 ## 0.5.1
 
@@ -222,9 +224,9 @@
 
 - Improved CLI argument handling
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.3.1
-  - @paleo/openclaw-discord-mock@0.3.1
-  - @paleo/openclaw-slack-mock@0.3.1
+  - @alignfirst/openclaw-channel-mock-core@0.3.1
+  - @alignfirst/openclaw-discord-mock@0.3.1
+  - @alignfirst/openclaw-slack-mock@0.3.1
 
 ## 0.5.0
 
@@ -235,9 +237,9 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.3.0
-  - @paleo/openclaw-discord-mock@0.3.0
-  - @paleo/openclaw-slack-mock@0.3.0
+  - @alignfirst/openclaw-channel-mock-core@0.3.0
+  - @alignfirst/openclaw-discord-mock@0.3.0
+  - @alignfirst/openclaw-slack-mock@0.3.0
 
 ## 0.4.1
 
@@ -245,9 +247,9 @@
 
 - Improved documentation
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.3
-  - @paleo/openclaw-discord-mock@0.2.3
-  - @paleo/openclaw-slack-mock@0.2.3
+  - @alignfirst/openclaw-channel-mock-core@0.2.3
+  - @alignfirst/openclaw-discord-mock@0.2.3
+  - @alignfirst/openclaw-slack-mock@0.2.3
 
 ## 0.4.0
 
@@ -282,9 +284,9 @@
 
 - Fixed configuration
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.2
-  - @paleo/openclaw-discord-mock@0.2.2
-  - @paleo/openclaw-slack-mock@0.2.2
+  - @alignfirst/openclaw-channel-mock-core@0.2.2
+  - @alignfirst/openclaw-discord-mock@0.2.2
+  - @alignfirst/openclaw-slack-mock@0.2.2
 
 ## 0.2.1
 
@@ -292,9 +294,9 @@
 
 - Hardened openclaw qa toolkit
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.1
-  - @paleo/openclaw-discord-mock@0.2.1
-  - @paleo/openclaw-slack-mock@0.2.1
+  - @alignfirst/openclaw-channel-mock-core@0.2.1
+  - @alignfirst/openclaw-discord-mock@0.2.1
+  - @alignfirst/openclaw-slack-mock@0.2.1
 
 ## 0.2.0
 
@@ -305,6 +307,6 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.0
-  - @paleo/openclaw-discord-mock@0.2.0
-  - @paleo/openclaw-slack-mock@0.2.0
+  - @alignfirst/openclaw-channel-mock-core@0.2.0
+  - @alignfirst/openclaw-discord-mock@0.2.0
+  - @alignfirst/openclaw-slack-mock@0.2.0

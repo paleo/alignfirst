@@ -1,4 +1,8 @@
-# @paleo/alproject
+# @alignfirst/alproject
+
+> Versions 1.0.0 through 3.0.1 were published as `@paleo/alproject`. Those majors were a numbering
+> mistake on an unfinished package. Under the `@alignfirst` scope the package restarts at 0.4.0, and
+> the history below is kept as it was released.
 
 ## 3.0.1
 

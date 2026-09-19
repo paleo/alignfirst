@@ -49,7 +49,7 @@ With the `alignfirst context` bootstrap section, the CLI delivers the sync instr
 
 > After every change in `.plans/`, run `npx alignfirst sync`.
 
-For a project prepared for an AlignFirst Developer, the `.plans/` entry in `DEVELOPERS.md` also
+For a project prepared for an assistant, the `.plans/` entry in `DEVELOPERS.md` also
 names the work-files repository and the sync command.
 
 ## Configure Each Machine

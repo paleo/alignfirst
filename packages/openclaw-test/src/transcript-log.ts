@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
-import { getQaBusState } from "@paleo/openclaw-channel-mock-core";
+import { getQaBusState } from "@alignfirst/openclaw-channel-mock-core";
 import { execInGateway, IPC_DIR } from "./exec-rpc.js";
 import type { AgentToolCall } from "./report.js";
 

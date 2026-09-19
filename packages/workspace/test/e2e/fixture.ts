@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { WorkspacesRegistry } from "../../src/workspaces.js";
 
-/** Repo root of `@paleo/workspace`, resolved from this file's location. */
+/** Repo root of `@alignfirst/workspace`, resolved from this file's location. */
 export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 // The fixture's `workspace.mjs` is a plain `node` subprocess, so it imports the *built* package.
@@ -25,7 +25,7 @@ export interface FixtureOptions {
   /** Seeds a gitignored file from a committed fallback or the customized main file. */
   fallbackSeeding?: boolean;
   /**
-   * Declares one setup profile, `claw`, whose `apply` throws with `E2E_PROFILE_FAIL=1` and otherwise
+   * Declares one setup profile, `assistant`, whose `apply` throws with `E2E_PROFILE_FAIL=1` and otherwise
    * writes `profile-applied.txt`: `ctx.ports` and the seeded file's content as JSON.
    */
   profiles?: boolean;
@@ -67,7 +67,7 @@ function workspaceMjsSource(
 ): string {
   const setupProfiles = profiles
     ? `  setupProfiles: {
-    claw: {
+    assistant: {
       description: "e2e gateway environment",
       apply: (ctx) => {
         if (process.env.E2E_PROFILE_FAIL === "1") throw new Error("e2e profile boom");
@@ -75,7 +75,7 @@ function workspaceMjsSource(
         const seeded = existsSync(seededPath) ? readFileSync(seededPath, "utf-8") : "(none)";
         const marker = { ports: ctx.ports, seeded };
         writeFileSync(join(ctx.currentWorktree, "profile-applied.txt"), JSON.stringify(marker));
-        ctx.log("Applied profile claw.");
+        ctx.log("Applied profile assistant.");
       },
     },
   },

@@ -1,7 +1,7 @@
 // =============================================================================
 // Reference: workspace.mjs
 //
-// Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
+// Thin wrapper around `@alignfirst/workspace`. Search for "ADAPT" to find every
 // project-specific field. The kernel (workspace registry, port allocation,
 // branch lifecycle, removal flow, CLI) lives in the package; this file only
 // carries project knowledge.
@@ -11,7 +11,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWorkspace, helpers } from "@paleo/workspace";
+import { runWorkspace, helpers } from "@alignfirst/workspace";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
 // `finalizeWorkspace` and the `docker-compose.yml` gitignoredFiles entry with a
@@ -119,7 +119,7 @@ await runWorkspace({
   ],
 
   // ADAPT (dev server, managed project): the `remote` setup profile, required by
-  // the AlignFirst Developer contract. This is the HTTPS-gateway variant:
+  // the Dev Kit contract. This is the HTTPS-gateway variant:
   // `setup --profile remote` rewrites the main worktree's public URLs to
   // `https://p<port>.<domain>` with `<domain>` from REMOTE_DEV_DOMAIN; linked
   // worktrees inherit them through `publicUrl`. List every variable a browser or a
@@ -189,7 +189,7 @@ await runWorkspace({
   // path. Guard each block against pre-existing state so re-runs are no-ops.
   //
   // Run `npm install` first: any later failure then leaves a worktree with
-  // usable node_modules, so `workspace setup` can re-import @paleo/workspace.
+  // usable node_modules, so `workspace setup` can re-import @alignfirst/workspace.
   finalizeWorkspace: async ({ currentWorktree, name, ports }) => {
     const container = `${name}-database`;
     // A worktree of the same name, deleted out-of-band, may have leaked its container (it belongs

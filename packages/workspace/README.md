@@ -1,4 +1,4 @@
-# @paleo/workspace
+# @alignfirst/workspace
 
 Run multiple local dev environments side by side, one per git worktree, with isolated ports, databases, and config files. Built for branches worked in parallel, by humans or AI agents.
 
@@ -28,7 +28,7 @@ Then, in your project, ask your agent:
 Use your *alignfirst-setup-guide* skill. Set up *workspaces* in this project.
 ```
 
-The agent reads the skill, adapts the reference scripts to your stack, installs `@paleo/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
+The agent reads the skill, adapts the reference scripts to your stack, installs `@alignfirst/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
 
 Setup writes one or two wrapper scripts on these entry points:
 

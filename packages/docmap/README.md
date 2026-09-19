@@ -1,4 +1,4 @@
-# @paleo/docmap
+# @alignfirst/docmap
 
 A lightweight documentation system for AI agents and humans. Keep project docs in a `docs/` folder with YAML frontmatter, browse and read them from the terminal.
 
@@ -11,7 +11,7 @@ _Inspired by the [OpenClaw](https://github.com/openclaw/openclaw/) docs system, 
 Install the CLI as a dev dependency and add a `docmap` script:
 
 ```bash
-npm install -D @paleo/docmap
+npm install -D @alignfirst/docmap
 ```
 
 In your `package.json`:
@@ -77,7 +77,7 @@ read_when:
 Install the CLI globally to use it on non-JavaScript projects:
 
 ```bash
-npm install -g @paleo/docmap
+npm install -g @alignfirst/docmap
 
 docmap -v
 ```

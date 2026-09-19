@@ -1,4 +1,6 @@
-# @paleo/workspace
+# @alignfirst/workspace
+
+> Version 0.33.1 and every version below it was published as `@paleo/workspace`.
 
 ## 0.33.1
 
@@ -57,7 +59,7 @@ npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guid
 Then give this prompt to your agent:
 
 ```md
-Upgrade `@paleo/workspace` to its latest version, then use the _alignfirst-setup-guide_ skill to rewrite our workspace wrapper scripts (`workspace.mjs` / `dev-server.mjs`) to the new config shape. Keep the old `basePort` as `ports.base` and the old `portStep` as `ports.perWorkspace`, so every workspace keeps its ports.
+Upgrade `@alignfirst/workspace` to its latest version, then use the _alignfirst-setup-guide_ skill to rewrite our workspace wrapper scripts (`workspace.mjs` / `dev-server.mjs`) to the new config shape. Keep the old `basePort` as `ports.base` and the old `portStep` as `ports.perWorkspace`, so every workspace keeps its ports.
 
 Our infrastructure names may be derived from the slot number, which no longer exists. Where that is the case, derive them from the workspace name instead, and tear down the old-named containers and volumes before migrating — after the migration their names can no longer be reconstructed. Each surviving linked worktree also keeps those old names inside its gitignored config, which merging and reinstalling does not regenerate: run `workspace setup --force` in each one.
 
@@ -245,7 +247,7 @@ You can delete the `alignfirst-setup-guide` skill as soon as it's done.
 
 ### Minor Changes
 
-- 18f400e: Renamed to @paleo/workspace, single-verb setup CLI.
+- 18f400e: Renamed to @alignfirst/workspace, single-verb setup CLI.
 
 ## 0.10.3
 

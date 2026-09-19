@@ -11,9 +11,9 @@ read_when:
 Write the file directly. `npm run changeset` is the interactive equivalent, for humans.
 
 1. **Identify modified packages.** Map changed file paths to their workspace packages:
-   `packages/<name>/` → `@paleo/<name>`, except `packages/alignfirst/` → `alignfirst`. Only include
+   `packages/<name>/` → `@alignfirst/<name>`, except `packages/alignfirst/` → `alignfirst`. Only include
    packages with actual source changes. Changes confined to `skills/`,
-   `alignfirst-developer-tests/`, `alignfirst-developer.md`, or `docs/` release nothing and need no
+   `alignfirst-dev-kit-tests/`, `alignfirst-dev-kit.md`, or `docs/` release nothing and need no
    changeset.
 
    ```sh

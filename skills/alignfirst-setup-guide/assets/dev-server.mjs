@@ -1,7 +1,7 @@
 // =============================================================================
 // Reference: dev-server.mjs
 //
-// Thin wrapper around `@paleo/workspace`. Search for "ADAPT" to find every
+// Thin wrapper around `@alignfirst/workspace`. Search for "ADAPT" to find every
 // project-specific field. Two-tier shutdown: `dev down` kills dev processes and
 // runs callback stop() (e.g. `docker compose down`); `workspace remove`
 // re-execs this script's `down` in the target worktree and then runs
@@ -12,7 +12,7 @@
 // (e.g. `dev:app`) for the app's own dev command.
 // =============================================================================
 
-import { helpers, runDevServer } from "@paleo/workspace";
+import { helpers, runDevServer } from "@alignfirst/workspace";
 
 await runDevServer({
   runtimeDir: ".local-wt", // Per-worktree runtime directory. The symlinked registry lives at `${runtimeDir}/workspace-registry`.

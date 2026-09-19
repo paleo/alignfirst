@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+#
+# Common OpenClaw baseline and the helpers every seed module may call.
+# Sourced by seed.sh; not meant to run on its own.
+
+required_common=(
+  RUNTIME_PROVIDER RUNTIME_MODEL GATEWAY_AUTH_TOKEN GATEWAY_DASHBOARD_ORIGIN CONTEXT7_API_KEY
+)
+secret_variables_common=(GATEWAY_AUTH_TOKEN)
+# A SecretRef provider alias must match ^[a-z][a-z0-9_-]{0,63}$ (upstream zod-schema.core.ts).
+secrets_provider_id="$(printf '%s' '{{ASSISTANT_NAME}}' | tr '[:upper:]' '[:lower:]')file"
+
+set_scalar() { openclaw config set "$1" "$2"; }
+set_json() { openclaw config set "$1" --json "$2"; }
+unset_key() { openclaw config unset "$1" || true; }
+
+# ref <pointer>: SecretRef into the file provider registered by seed.sh. The pointer is a JSON
+# pointer into secrets.json, so the variable NAME is reached as /NAME.
+ref() { printf '{"source":"file","provider":"%s","id":"%s"}' "$secrets_provider_id" "$1"; }
+set_secret_ref() { set_json "$1" "$(ref "$2")"; }
+
+# install_plugin_once <package>: installs an external npm plugin when no copy is present under
+# ~/.openclaw/npm/ (the layout varies across versions). The caller records the capability consent
+# with `openclaw plugins enable <id> --accept-capabilities`, which also enables the plugin.
+install_plugin_once() {
+  if ! find "$HOME/.openclaw/npm" -maxdepth 6 -type d -path "*/node_modules/$1" 2>/dev/null \
+    | grep -q .; then
+    openclaw plugins install "$1" --accept-capabilities
+  fi
+}
+
+# merge_managed_block <target-file> <source-file> <block-name>: replaces the block between
+# `<!-- name:start -->` and `<!-- name:end -->` in the target with the source content, keeps the
+# rest of the file, and writes nothing when the result already equals the target (a re-seed then
+# succeeds while 06 keeps the file immutable).
+merge_managed_block() {
+  local target_file=$1 source_file=$2 block_name=$3
+  local begin_marker="<!-- $block_name:start -->" end_marker="<!-- $block_name:end -->"
+  local remainder="" merged
+  install -d -m 700 "$(dirname -- "$target_file")"
+  if [ -f "$target_file" ]; then
+    remainder=$(sed "/^$begin_marker\$/,/^$end_marker\$/d" "$target_file")
+  fi
+  merged=$(mktemp)
+  {
+    if [ -n "$remainder" ]; then printf '%s\n\n' "$remainder"; fi
+    printf '%s\n' "$begin_marker"
+    sed -e '$a\' "$source_file"
+    printf '%s\n' "$end_marker"
+  } > "$merged"
+  if [ -f "$target_file" ] && cmp -s "$merged" "$target_file"; then
+    rm -f "$merged"
+    return
+  fi
+  install -m 600 "$merged" "$target_file"
+  rm -f "$merged"
+}
+
+# require_variables <name>...: fails listing every missing or empty variable.
+require_variables() {
+  local name missing=()
+  for name in "$@"; do
+    if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "[seed] missing or empty in .env: ${missing[*]}" >&2
+    exit 1
+  fi
+}
+
+validate_common() {
+  if [ "$(id -un)" != "{{SERVICE_USER}}" ]; then
+    echo "[seed] run as {{SERVICE_USER}}, not $(id -un):" \
+      "sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh" >&2
+    exit 1
+  fi
+  local command_name
+  for command_name in openclaw node; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      echo "[seed] $command_name is not on PATH." >&2
+      exit 1
+    fi
+  done
+  case "$GATEWAY_DASHBOARD_ORIGIN" in
+    http*) ;;
+    *) echo "[seed] GATEWAY_DASHBOARD_ORIGIN must start with http." >&2; exit 1 ;;
+  esac
+}
+
+configure_common() {
+  echo "[seed] model and workspace"
+  set_scalar agents.defaults.workspace "$HOME/.openclaw/workspace"
+  set_scalar agents.defaults.model.primary "$RUNTIME_PROVIDER/$RUNTIME_MODEL"
+  set_json agents.defaults.model.fallbacks '[]'
+  # The playbook depends on OpenClaw's exec/process surface. Provider and model are selectable;
+  # the agent runtime is fixed. The explicit pin prevents an installed harness from claiming an
+  # eligible route.
+  set_scalar "models.providers.$RUNTIME_PROVIDER.agentRuntime.id" openclaw
+  if [ -n "${RUNTIME_API_KEY:-}" ]; then
+    set_secret_ref "models.providers.$RUNTIME_PROVIDER.apiKey" /RUNTIME_API_KEY
+  else
+    unset_key "models.providers.$RUNTIME_PROVIDER.apiKey"
+  fi
+
+  echo "[seed] memory — nothing persists across sessions"
+  # Semantic recall is unused; disabled so it never binds a provider of its own.
+  set_json memory.search.enabled false
+  # Defaults on while session.dmScope is unset; doctor reports it "effectively enabled".
+  set_json memory.search.rememberAcrossConversations false
+  # The pre-compaction memory flush is an agentic turn that writes memory/YYYY-MM-DD.md when a
+  # long session nears its token limit.
+  set_json agents.defaults.compaction.memoryFlush.enabled false
+  # memory-core owns the memory slot and loads regardless of plugins.allow, bringing the
+  # memory_search/memory_get tools and a nightly "dreaming" turn that rewrites MEMORY.md. The
+  # slot is its only off switch. A leftover plugins.entries.memory-core block would warn
+  # "plugin disabled but config is present".
+  set_scalar plugins.slots.memory none
+  unset_key plugins.entries.memory-core
+
+  echo "[seed] heartbeat — on, one periodic tick a day"
+  # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
+  # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
+  # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
+  # session, no workspace bootstrap, deferred run), so they are cleared. Thread handoff itself
+  # does not depend on heartbeat.
+  set_scalar agents.defaults.heartbeat.every "24h"
+  # Explicit target: the implicit owner-DM default prepends a one-time operator-facing
+  # "First heartbeat alert" preamble to the first delivered heartbeat report, and the
+  # owner route never resolves to a group. Heartbeat reports must follow the ticket conversation,
+  # which "last" targets.
+  set_scalar agents.defaults.heartbeat.target "last"
+  # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.
+  unset_key agents.defaults.heartbeat.prompt
+  unset_key agents.defaults.heartbeat.isolatedSession
+  unset_key agents.defaults.heartbeat.lightContext
+  unset_key agents.defaults.heartbeat.activeHours
+
+  echo "[seed] skill allowlist"
+  # `clawhub` is deliberately absent: the assistant cannot install skills on its own.
+  set_json agents.defaults.skills \
+    '["alignfirst-setup-guide","alignfirst-openclaw-playbook","sharp-writing"]'
+  # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the assistant rewrite or
+  # drop writable skills. Same rule as clawhub.
+  set_scalar skills.workshop.autonomous.mode off
+
+  echo "[seed] updates — operator-driven (update-assistant.md)"
+  # The startup check also sends an anonymous version ping to telemetry.openclaw.ai. Background
+  # auto-update could not write the root-owned npm prefix anyway.
+  set_json update.checkOnStart false
+  set_json update.auto.enabled false
+
+  echo "[seed] tools"
+  set_scalar tools.profile coding
+  # The coding profile omits these tools; the playbook needs all three.
+  set_json tools.alsoAllow '["message","browser","thread_handoff"]'
+  # The login shell owns PATH assembly and fnm selection for every exec run.
+  set_json tools.exec.pathPrepend '[]'
+  set_json agents.defaults.sandbox.browser.headless true
+  set_scalar messages.groupChat.visibleReplies automatic
+
+  echo "[seed] thread sessions — 2.5 days idle, binding kept as long"
+  # Threads carry one task across days; the default daily reset and 24h binding would drop
+  # them overnight.
+  set_json session.resetByType.thread '{"mode":"idle","idleMinutes":3600}'
+  set_json session.threadBindings '{"enabled":true,"idleHours":60,"maxAgeHours":0}'
+
+  echo "[seed] agent identity"
+  set_json agents.entries '{"main":{"identity":{"name":"{{ASSISTANT_NAME}}"}}}'
+
+  echo "[seed] gateway — loopback, token auth, dashboard through an SSH tunnel"
+  set_json gateway.port 18789
+  set_scalar gateway.bind loopback
+  set_scalar gateway.auth.mode token
+  set_secret_ref gateway.auth.token /GATEWAY_AUTH_TOKEN
+  set_json gateway.controlUi.allowedOrigins \
+    "[\"$GATEWAY_DASHBOARD_ORIGIN\",\"http://127.0.0.1:18789\"]"
+
+  echo "[seed] plugins — explicit allowlist"
+  install_plugin_once @alignfirst/service-openclaw-plugin
+  openclaw plugins enable alignfirst-service --accept-capabilities
+  # A provider served by an additional OpenClaw plugin (a runtime harness, for example) needs
+  # `install_plugin_once`, its id appended to `plugins.allow` here and `openclaw plugins enable`;
+  # the runbook 04 shows the form.
+  set_json plugins.allow \
+    "[\"$surface_plugin_id\",\"$RUNTIME_PROVIDER\",\"browser\",\"alignfirst-service\"]"
+}

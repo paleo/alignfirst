@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createBus } from "@paleo/openclaw-channel-mock-core";
+import { createBus } from "@alignfirst/openclaw-channel-mock-core";
 
 const PORT = 43123;
 const HOST = "0.0.0.0";

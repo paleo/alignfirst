@@ -12,7 +12,7 @@
     "plans:sync": "alignfirst sync",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "build": "npm run build --workspace @paleo/docmap && npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @alignfirst/docmap && npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
