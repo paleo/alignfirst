@@ -1,5 +1,7 @@
 # @alignfirst/openclaw-slack-mock
 
+> Version 0.5.0 and every version below it was published as `@paleo/openclaw-slack-mock`.
+
 ## 0.5.0
 
 ### Minor Changes

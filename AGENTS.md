@@ -32,6 +32,7 @@ This repository is on *GitHub*.
 - `@alignfirst/alcode` — coding agent wrapper for the AlignFirst Dev Kit
 - `@alignfirst/alproject` — project inventory and port allocation for the AlignFirst Dev Kit host
 - `@alignfirst/docmap` — lightweight documentation system for AI agents and humans
+- `@alignfirst/service-openclaw-plugin` — OpenClaw plugin for a claw, under plugin ID `alignfirst-service`
 - `@alignfirst/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
 - `@alignfirst/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
 - `@alignfirst/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios

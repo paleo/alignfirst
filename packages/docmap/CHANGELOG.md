@@ -1,5 +1,7 @@
 # @alignfirst/docmap
 
+> Version 0.10.0 and every version below it was published as `@paleo/docmap`.
+
 ## 0.10.0
 
 ### Minor Changes

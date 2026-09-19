@@ -71,7 +71,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent universal --agent codex \
   --skill alignfirst-setup-guide < /dev/null
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-dev-kit-playbook < /dev/null
+  --agent openclaw --copy --skill alignfirst-openclaw-playbook < /dev/null
 npx -y skills add https://github.com/paleo/skills --global --yes \
   --agent universal --agent codex --skill sharp-writing < /dev/null
 EOS

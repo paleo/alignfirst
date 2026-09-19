@@ -1,6 +1,6 @@
 # @alignfirst/service-openclaw-plugin
 
-Versions 0.1.0 through 0.3.1 were published as `@paleo/alignfirst-developer-openclaw-plugin`.
+> Versions 0.1.0 through 0.3.1 were published as `@paleo/alignfirst-developer-openclaw-plugin`.
 
 ## 0.3.1
 

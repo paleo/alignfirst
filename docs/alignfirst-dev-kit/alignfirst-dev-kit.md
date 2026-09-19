@@ -13,9 +13,9 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    [`alignfirst-dev-kit-tests/workspace/`](../../alignfirst-dev-kit-tests/workspace/). The
    `myclaw` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
    load into the system prompt every turn. `AGENTS.md` sends every user message to the
-   `alignfirst-dev-kit-playbook` dispatcher. The workspace carries no playbook copy.
+   `alignfirst-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the
-   [`alignfirst-dev-kit-playbook`](../../skills/alignfirst-dev-kit-playbook/)
+   [`alignfirst-openclaw-playbook`](../../skills/alignfirst-openclaw-playbook/)
    skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
    `channel-handling.md`. Its references own working sessions, channel handling, the `runbooks/`
    directory for project workspace setup, project lifecycle and consultations, and the `message`
@@ -25,7 +25,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 3. **Regression-test harness** —
    [`alignfirst-dev-kit-tests/`](../../alignfirst-dev-kit-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
-   It bind-mounts the workspace, the playbook at `/home/claw/.openclaw/skills/alignfirst-dev-kit-playbook`, and the monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout. The managed skill path keeps the playbook out of the mock coding agent's context.
+   It bind-mounts the workspace, the playbook at `/home/claw/.openclaw/skills/alignfirst-openclaw-playbook`, and the monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout. The managed skill path keeps the playbook out of the mock coding agent's context.
    The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
@@ -33,7 +33,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 ```text
 user message
   → workspace AGENTS.md (auto-loaded)              layer 1
-  → alignfirst-dev-kit-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
+  → alignfirst-openclaw-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
   → references/working-session.md | channel-handling.md   layer 2
   → references/runbooks/project-lifecycle.md (create/onboard/remove)       layer 2
   → references/runbooks/consultation.md (question, advice, brainstorming)  layer 2

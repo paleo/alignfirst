@@ -1,11 +1,11 @@
 ---
-title: Recover the claw
+title: Recover the Claw
 read_when:
   - the claw misbehaves and must be stopped
   - restoring the service after a failed update or a broken configuration
 ---
 
-# Recover the claw
+# Recover the Claw
 
 **Operator.** Contain first, then diagnose, restore, re-authenticate when needed, re-seed, verify. Record the incident in `.reports/`.
 

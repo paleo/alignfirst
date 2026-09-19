@@ -1,11 +1,11 @@
 ---
-title: Configure the claw
+title: Configure the Claw
 read_when:
   - infra/openclaw/.env or a seed module changed
   - a secret was rotated
 ---
 
-# Configure the claw
+# Configure the Claw
 
 **Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
 

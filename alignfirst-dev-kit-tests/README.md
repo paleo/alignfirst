@@ -42,7 +42,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
   ```
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
-- `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — host path to the `alignfirst-dev-kit-playbook` skill, bind-mounted at `/home/claw/.openclaw/skills/alignfirst-dev-kit-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
+- `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — renamed from `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR`, and its value moved with the skill directory; host path to the `alignfirst-openclaw-playbook` skill, bind-mounted at `/home/claw/.openclaw/skills/alignfirst-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
 - `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
 - [`docker-compose.yml`](docker-compose.yml) — one shared fixture volume on gateway + runner at

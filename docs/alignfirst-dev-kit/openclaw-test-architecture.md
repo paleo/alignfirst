@@ -63,7 +63,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/claw/.openclaw/skills/alignfirst-dev-kit-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/claw/.agents/skills/`.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/claw/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/claw/.agents/skills/`.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 

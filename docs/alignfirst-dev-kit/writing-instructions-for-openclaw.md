@@ -1,6 +1,6 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myclaw` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-dev-kit-playbook` skill (`skills/alignfirst-dev-kit-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-dev-kit-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myclaw` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-openclaw-playbook` skill (`skills/alignfirst-openclaw-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-openclaw-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
 
 ## One rule, stated once
 

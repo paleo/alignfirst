@@ -138,7 +138,7 @@ configure_common() {
   echo "[seed] skill allowlist"
   # `clawhub` is deliberately absent: the agent cannot install skills on its own.
   set_json agents.defaults.skills \
-    '["alignfirst-setup-guide","alignfirst-dev-kit-playbook","sharp-writing"]'
+    '["alignfirst-setup-guide","alignfirst-openclaw-playbook","sharp-writing"]'
   # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the agent rewrite or
   # drop writable skills. Same rule as clawhub.
   set_scalar skills.workshop.autonomous.mode off

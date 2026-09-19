@@ -1,5 +1,7 @@
 # @alignfirst/openclaw-test
 
+> Version 0.20.0 and every version below it was published as `@paleo/openclaw-test`.
+
 ## 0.20.0
 
 ### Minor Changes

@@ -26,7 +26,7 @@ Cursor, or `$alspec` in Codex. The optional `alignfirst` skill lets the agent re
 named in prose; a project whose instruction file starts with the canonical `alignfirst context`
 section provides this itself.
 
-`alignfirst-setup-guide` and `alignfirst-dev-kit-playbook` are separate skills. A
+`alignfirst-setup-guide` and `alignfirst-openclaw-playbook` are separate skills. A
 work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
 A claw host also installs `@alignfirst/alcode`, the companion CLI for coding-agent
@@ -71,9 +71,9 @@ Installing Docmap or workspace alone does not opt the project into AlignFirst pr
 
 ## AlignFirst Dev Kit for OpenClaw
 
-The **Dev Kit** deploys a persistent AI teammate for software work. It receives requests through
-team chat, manages each task in an isolated project workspace, and delegates repository work to
-a coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
+The **Dev Kit** deploys a persistent AI teammate for software work. That teammate receives requests
+through team chat, manages each task in an isolated project workspace, and delegates repository work
+to a coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
 
 One deployment is a **claw**: a dedicated Linux service account running OpenClaw under its own name
 and channel identity, on Slack or Discord. These three terms are used throughout this skill and the
@@ -124,6 +124,9 @@ Detect existing footprints before proposing changes:
 
 - docmap: a `docmap` script, `@alignfirst/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
 - workspace: a `workspace` script or `@alignfirst/workspace`.
+- A pre-`@alignfirst` install: `@paleo/docmap` or `@paleo/workspace` in the manifest. Move the
+  dependency to the `@alignfirst` name before proposing anything else; the two scopes install side
+  by side and the wrapper keeps importing the old one.
 - AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
   `npx alignfirst context`, an AlignFirst instruction section, or a canonical skill installation.
 - work-files repository: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.

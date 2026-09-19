@@ -1,10 +1,10 @@
 ---
-title: Update the claw
+title: Update the Claw
 read_when:
   - upgrading OpenClaw, the coding agent, alignfirst, alcode, alproject, ctx7 or the skills
 ---
 
-# Update the claw
+# Update the Claw
 
 **Operator.** Every step is idempotent; re-apply all of them. Each maintenance window contains the claw before an unlock and leaves the gateway stopped. Configuration changes are a different runbook: [configure-claw.md](configure-claw.md).
 
@@ -98,7 +98,7 @@ alproject list --root ~/projects
 '
 ```
 
-If interrupted after the package upgrade, complete marker replacement and validation before any inventory command or restart. For hosts still using the v1 registry, finish [the registry migration](#upgrade-from-the-registry-model) before continuing.
+If interrupted after the package upgrade, complete marker replacement and validation before any inventory command or restart.
 
 `--accept-capabilities` accepts the plugins' reviewed capability changes. Without it the post-update plugin sync stops with an unresolved review, which `openclaw update repair --accept-capabilities` finishes.
 
@@ -129,23 +129,6 @@ Also run the [project-runtime audit](../installations/06-security-hardening.md#p
 
 The shared `~/.agents` tree and OpenClaw's managed `~/.openclaw/skills` tree are admin-owned and immutable. The `skills` scope also covers Claude Code's symlink tier when selected.
 
-### Move the playbook to OpenClaw's skill directory
-
-A deployment created before the playbook became OpenClaw-only runs this migration once, before the normal skill update. Removing the old entry deletes its canonical copy and every agent link. The second command copies it directly into OpenClaw's managed directory.
-
-```sh
-sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- bash <<'EOS'
-set -e
-npx -y skills remove alignfirst-dev-kit-playbook -g -y </dev/null
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-dev-kit-playbook </dev/null
-EOS
-```
-
-Apply [update-workspace.md](update-workspace.md) so `AGENTS.md` reads the playbook from its new path. The maintenance wrapper restores `/home/{{SERVICE_USER}}/.openclaw/skills` with admin ownership, directory mode `755`, file mode `644` and the immutable flag, as specified in [06-security-hardening.md](../installations/06-security-hardening.md#skills-and-instructions).
-
-### Update skills
-
 ```sh
 sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- \
   bash -lc 'npx -y skills update -g -y </dev/null'
@@ -156,7 +139,7 @@ The CLI does not retain the copied OpenClaw target during an update. Restore the
 ```sh
 sudo /usr/local/sbin/alignfirst-claw-maintenance skills -- bash -lc '
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-dev-kit-playbook </dev/null
+  --agent openclaw --copy --skill alignfirst-openclaw-playbook </dev/null
 '
 ```
 
@@ -178,25 +161,16 @@ Verify the playbook is a real directory and its old shared and coding-agent entr
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
 set -e
-test -f ~/.openclaw/skills/alignfirst-dev-kit-playbook/SKILL.md
-test ! -L ~/.openclaw/skills/alignfirst-dev-kit-playbook
+test -f ~/.openclaw/skills/alignfirst-openclaw-playbook/SKILL.md
+test ! -L ~/.openclaw/skills/alignfirst-openclaw-playbook
 for root in ~/.agents/skills ~/.codex/skills ~/.claude/skills; do
-  test ! -e "$root/alignfirst-dev-kit-playbook"
-  test ! -L "$root/alignfirst-dev-kit-playbook"
+  test ! -e "$root/alignfirst-openclaw-playbook"
+  test ! -L "$root/alignfirst-openclaw-playbook"
 done
 EOS
 ```
 
 The setup guide and `sharp-writing` remain shared through `~/.agents/skills/`. Only OpenClaw automatically discovers the managed playbook. See [gotchas.md](../gotchas.md#shared-skills-live-under-agentsskills).
-
-## Upgrade from the registry model
-
-A host deployed before `@alignfirst/alproject` 2 has no marker yet; the `projects` scope tolerates its absence, so the command above creates it. Then remove the immutable registry and guide the old model installed:
-
-```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.alproject.json /home/{{SERVICE_USER}}/projects/alproject-guide.md
-sudo rm /home/{{SERVICE_USER}}/.alproject.json /home/{{SERVICE_USER}}/projects/alproject-guide.md
-```
 
 ## Migrate after a core bump
 

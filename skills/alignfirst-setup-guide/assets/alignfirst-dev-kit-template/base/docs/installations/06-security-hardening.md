@@ -146,7 +146,7 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/alignfirst-dev-kit-playbook/SKILL.md'
+sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/alignfirst-openclaw-playbook/SKILL.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.openclaw/skills ~/.openclaw/skills-x'
 ```

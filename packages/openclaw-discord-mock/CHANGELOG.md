@@ -1,5 +1,7 @@
 # @alignfirst/openclaw-discord-mock
 
+> Version 0.5.0 and every version below it was published as `@paleo/openclaw-discord-mock`.
+
 ## 0.5.0
 
 ### Minor Changes

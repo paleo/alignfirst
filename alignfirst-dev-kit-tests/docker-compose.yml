@@ -30,8 +30,8 @@ services:
       - fixture-projects:/home/claw/projects
       # Live-mount the playbook skill over its copy in OpenClaw's managed skill
       # directory. Set in .env.local (relative to this dir, e.g.
-      # ../skills/alignfirst-dev-kit-playbook).
-      - ${ALIGNFIRST_PLAYBOOK_SKILL_DIR}:/home/claw/.openclaw/skills/alignfirst-dev-kit-playbook
+      # ../skills/alignfirst-openclaw-playbook).
+      - ${ALIGNFIRST_PLAYBOOK_SKILL_DIR:?set ALIGNFIRST_PLAYBOOK_SKILL_DIR to the playbook skill directory}:/home/claw/.openclaw/skills/alignfirst-openclaw-playbook
       # Live-mount the built monorepo so the alcode and alignfirst wrappers resolve
       # to this checkout. Run `npm run build` at the root first so alcode, alignfirst,
       # and docmap have built output.

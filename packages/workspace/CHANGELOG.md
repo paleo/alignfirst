@@ -1,5 +1,7 @@
 # @alignfirst/workspace
 
+> Version 0.33.1 and every version below it was published as `@paleo/workspace`.
+
 ## 0.33.1
 
 ### Patch Changes

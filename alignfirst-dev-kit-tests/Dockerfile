@@ -95,7 +95,7 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --skill alignfirst-setup-guide && \
     npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent openclaw --copy \
-      --skill alignfirst-dev-kit-playbook
+      --skill alignfirst-openclaw-playbook
 
 USER root
 RUN corepack install --global pnpm@latest

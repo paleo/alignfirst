@@ -1,10 +1,10 @@
 ---
-name: alignfirst-dev-kit-playbook
+name: alignfirst-openclaw-playbook
 description: "Operating-instructions dispatcher for an AlignFirst claw running on OpenClaw. Routes user messages, including thread-handoff messages, to channel handling or working sessions, and carries the global rules."
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.39.0"
+  version: "0.40.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
