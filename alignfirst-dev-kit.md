@@ -1,8 +1,8 @@
 # AlignFirst Dev Kit for OpenClaw
 
-The AlignFirst Dev Kit deploys an **assistant** for software work. It receives requests through
-Slack or Discord, holds the conversation, and delegates repository work to Claude Code or Codex
-through `alcode` and the AlignFirst protocols. The Dev Kit uses OpenClaw as its assistant.
+The AlignFirst Dev Kit turns an OpenClaw **assistant** into a developer who works with AlignFirst.
+The assistant receives requests through Slack or Discord, holds the conversation, and delegates
+repository work to Claude Code or Codex through `alcode` and the AlignFirst protocols.
 
 ```mermaid
 flowchart TD

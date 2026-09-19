@@ -71,9 +71,9 @@ Installing Docmap or workspace alone does not opt the project into AlignFirst pr
 
 ## AlignFirst Dev Kit for OpenClaw
 
-The **Dev Kit** deploys a persistent **assistant** for software work. The assistant holds a chat
-identity, its channels and its sessions, and runs repository work through a coding **agent** (Claude
-Code or Codex) using the AlignFirst protocols. The Dev Kit uses OpenClaw as its assistant.
+The **Dev Kit** turns an OpenClaw **assistant** into a developer who works with AlignFirst. The
+assistant holds a chat identity, its channels and its sessions, and runs repository work through a
+coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
 
 One deployment is a dedicated Linux service account running the assistant under its own name and
 channel identity, on Slack or Discord. These two terms are used throughout this skill and the
