@@ -1,4 +1,4 @@
-# @paleo/alproject
+# @alignfirst/alproject
 
 A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker holds an optional description and port ranges. A direct child with a root `.alignfirst.json` is a project; linked Git worktrees are listed as its workspaces.
 
@@ -16,7 +16,7 @@ When upgrading from v2, replace the marker's `"portRange": { ... }` with `"portR
 
 Prerequisite: install the `alignfirst` CLI on `PATH` with `npm install -g alignfirst`.
 
-Install `alproject` with `npm install -g @paleo/alproject`.
+Install `alproject` with `npm install -g @alignfirst/alproject`.
 
 ## Commands
 

@@ -3,7 +3,7 @@ import {
   createBus,
   type QaBusMessage,
   type ResolvedChannelMockAccount,
-} from "@paleo/openclaw-channel-mock-core";
+} from "@alignfirst/openclaw-channel-mock-core";
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

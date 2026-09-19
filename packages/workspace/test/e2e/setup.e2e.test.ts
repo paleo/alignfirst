@@ -306,7 +306,7 @@ function buildIfStale(): void {
     console.log("[e2e] dist is up to date; skipping build.");
     return;
   }
-  console.log("[e2e] building @paleo/workspace…");
+  console.log("[e2e] building @alignfirst/workspace…");
   execFileSync("npm", ["run", "build"], { cwd: packageRoot, stdio: "inherit" });
 }
 

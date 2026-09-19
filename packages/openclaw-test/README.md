@@ -1,15 +1,15 @@
-# @paleo/openclaw-test
+# @alignfirst/openclaw-test
 
 Dockerised regression-test harness for OpenClaw workspaces. Drives the agent through two synthetic channels (`discord-mock`, `slack-mock`) and asserts the results.
 
-Pair with [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core), [`@paleo/openclaw-discord-mock`](https://www.npmjs.com/package/@paleo/openclaw-discord-mock), [`@paleo/openclaw-slack-mock`](https://www.npmjs.com/package/@paleo/openclaw-slack-mock).
+Pair with [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core), [`@alignfirst/openclaw-discord-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-discord-mock), [`@alignfirst/openclaw-slack-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-slack-mock).
 
 For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechanics, OpenClaw quirks), see [openclaw-test-architecture.md](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
 
 ## Install
 
 ```sh
-npm i -D @paleo/openclaw-test @paleo/openclaw-channel-mock-core @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock openclaw
+npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw
 ```
 
 Requires Docker Compose.
@@ -17,7 +17,7 @@ Requires Docker Compose.
 ## Init
 
 ```sh
-npx @paleo/openclaw-test init <project-dir>
+npx @alignfirst/openclaw-test init <project-dir>
 ```
 
 Adds the four `package.json` scripts (`env:build`, `env:up`, `env:down`, `e2e`) if missing, and drops four files:
@@ -74,7 +74,7 @@ Project fixtures and their reset logic are consumer concerns — ship a reset sc
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
 
-Examples: [alignfirst-developer-tests/scenarios](https://github.com/paleo/alignfirst/tree/main/alignfirst-developer-tests/scenarios).
+Examples: [alignfirst-dev-kit-tests/scenarios](https://github.com/paleo/alignfirst/tree/main/alignfirst-dev-kit-tests/scenarios).
 
 ## Run
 
@@ -96,7 +96,7 @@ npm run env:down                                                   # tear down a
 
 `run` auto-starts the worker stacks it needs and tears down the ones it started; an explicit `env:up` beforehand keeps them warm across runs.
 
-Rebuild (`npm run env:build`) after editing `openclaw.json` or the `Dockerfile`, or after bumping any `@paleo/openclaw-*` dependency.
+Rebuild (`npm run env:build`) after editing `openclaw.json` or the `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
 Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/openclaw-test-architecture.md).
 

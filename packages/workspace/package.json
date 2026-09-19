@@ -1,5 +1,5 @@
 {
-  "name": "@paleo/workspace",
+  "name": "@alignfirst/workspace",
   "version": "0.33.1",
   "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [

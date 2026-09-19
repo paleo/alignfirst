@@ -12,21 +12,21 @@ Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Clau
 
 ## Docmap - Agent-discoverable documentation
 
-`@paleo/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
+`@alignfirst/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
 ## Workspaces - Local environments with worktrees
 
-`@paleo/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
+`@alignfirst/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
 ## OpenClaw Test toolkit
 
-`@paleo/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
+`@alignfirst/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
-## AlignFirst Developer
+## AlignFirst Dev Kit for OpenClaw
 
-AlignFirst Developer is an AI teammate for software work, currently packaged on OpenClaw. See [alignfirst-developer.md](alignfirst-developer.md).
+The Dev Kit deploys an AI teammate for software work. One deployment is a **claw**. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
 
-[`@paleo/alignfirst-developer-openclaw-plugin`](packages/alignfirst-developer-openclaw-plugin/README.md) supplies its OpenClaw capabilities under plugin ID `alignfirst-developer`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
+[`@alignfirst/service-openclaw-plugin`](packages/service-openclaw-plugin/README.md) supplies a claw's OpenClaw capabilities under plugin ID `alignfirst-service`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
 
 ---
 
@@ -54,7 +54,7 @@ After a fresh clone:
 
 ```sh
 npm install
-npm run build --workspace @paleo/workspace
+npm run build --workspace @alignfirst/workspace
 npm run workspace -- setup
 ```
 

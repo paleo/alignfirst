@@ -1,5 +1,5 @@
 # Thin consumer overlay. Pulls in the parameterized base from
-# @paleo/openclaw-test. Requires Docker Compose v2.20+.
+# @alignfirst/openclaw-test. Requires Docker Compose v2.20+.
 #
 # `.env.local` only needs ANTHROPIC_API_KEY and OPENCLAW_WORKSPACE_DIR.
 # All other paths default to subdirs of the project dir; override in
@@ -7,4 +7,4 @@
 # CLAW_UID, CLAW_GID are set automatically by `openclaw-test env|run`.
 
 include:
-  - ./node_modules/@paleo/openclaw-test/docker-compose.yml
+  - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml

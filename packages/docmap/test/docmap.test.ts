@@ -849,21 +849,21 @@ describe("package-manager prefix in help", () => {
   it("suggests the bare global binary when no runner agent is set", () => {
     const out = help("");
     expect(out).toContain("docmap --guide");
-    expect(out).not.toContain("npx @paleo/docmap");
+    expect(out).not.toContain("npx @alignfirst/docmap");
     expect(out).not.toContain("npm run docmap");
   });
 
   it("keeps the npx suggestion when launched through npx, even if installed globally", () => {
     const out = help("npm/10.0.0 node/v24.0.0 linux x64 workspaces/false");
-    expect(out).toContain("npx @paleo/docmap --guide");
+    expect(out).toContain("npx @alignfirst/docmap --guide");
   });
 
   it("suggests pnpm dlx under a pnpm runner", () => {
-    expect(help("pnpm/9.0.0 npm/? node/v24.0.0")).toContain("pnpm dlx @paleo/docmap");
+    expect(help("pnpm/9.0.0 npm/? node/v24.0.0")).toContain("pnpm dlx @alignfirst/docmap");
   });
 
   it("suggests bunx under a bun runner", () => {
-    expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @paleo/docmap");
+    expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @alignfirst/docmap");
   });
 
   it("suggests the npm run script when launched via npm inside a lockfile'd project", () => {
@@ -879,7 +879,7 @@ describe("package-manager prefix in help", () => {
     const out = invoke(["node", "docmap", "--help"], process.cwd(), "").stdout;
     expect(out).toContain("docmap --guide");
     expect(out).not.toContain("npm run docmap");
-    expect(out).not.toContain("npx @paleo/docmap");
+    expect(out).not.toContain("npx @alignfirst/docmap");
   });
 });
 

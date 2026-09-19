@@ -1,4 +1,4 @@
-# @paleo/alcode
+# @alignfirst/alcode
 
 ## 0.17.0
 

@@ -1,4 +1,4 @@
-import { pollQaBus } from "@paleo/openclaw-channel-mock-core";
+import { pollQaBus } from "@alignfirst/openclaw-channel-mock-core";
 import { randomBytes } from "node:crypto";
 import { createWriteStream, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";

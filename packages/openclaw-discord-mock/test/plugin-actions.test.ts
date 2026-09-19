@@ -3,7 +3,7 @@ import {
   createBus,
   createChannelMockAccountHelpers,
   createChannelMockMessageActions,
-} from "@paleo/openclaw-channel-mock-core";
+} from "@alignfirst/openclaw-channel-mock-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const CHANNEL_ID = "discord-mock";

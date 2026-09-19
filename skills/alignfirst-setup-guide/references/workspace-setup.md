@@ -4,9 +4,9 @@ Blueprint for a **workspace** system — multiple git-worktree dev environments 
 
 Workspace can be installed on its own. Add the workspace instructions below; AlignFirst skills, protocols, and Docmap are separate choices.
 
-**Node consumers** install `@paleo/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
+**Node consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an AlignFirst Developer must also meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract).
+**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by a claw must also meet [the Dev Kit contract](#the-dev-kit-contract).
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -129,7 +129,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree", fallback? }`, `{ kind: "committed", path }`, or `{ kind: "content", content }`. Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, ports, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
 - `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, profile?, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the work-files link with `npx alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work. `profile` is set only during `setup --profile <name>`: check the profile's external requirements here (an environment variable, a reachable host) to fail before any file is written.
 - `setupProfiles: { <name>: { description, apply } }` — optional; enables `setup --profile <name>`. The kernel checks the name and lists each `description` (one line) in `--help` and `--guide`. `apply({ name, ports, currentWorktree, mainWorktree, isMainWorktree, log })` runs on the **main worktree only**, after `gitignoredFiles` are seeded, and rewrites the ignored files for that environment. The profile rewrites the ignored main files once; linked worktrees inherit them through `mainWorktree` sources, so patchers stay profile-agnostic. Check every computed change before the first write, leave unrelated files untouched, and **MUST be idempotent** — reapplying the same profile produces the same files.
-- `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@paleo/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
+- `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
 - `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.purgeData` for non-derivable ids. Swallow errors.
 - `formatSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
 
@@ -201,7 +201,7 @@ The system only works if agents know about it. The CLI self-documents via `works
   Skip this line when the instruction file runs `alignfirst context`; the command renders the
   exclusions.
 
-On a project prepared for an AlignFirst Developer, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
+On a project prepared for a claw, `DEVELOPERS.md` carries the same workspaces section. The definition and the pointer to `--guide` are sufficient; do not copy the command list.
 
 ### Project-specific facts the guide can't know
 
@@ -214,26 +214,26 @@ The release process is not one of them: a multi-step procedure followed occasion
 
 The port layout is not one of them either: the block table, what raising `perWorkspace` costs elsewhere in the repo, which config file each port reaches. That reference material belongs in `docs/`, with nothing left behind in the entry points. Point at the document from the `ports` group in `workspace.mjs`. Entry points keep only what a reader needs every session: the ports are printed at startup, read them from the log.
 
-## The AlignFirst Developer Contract
+## The Dev Kit Contract
 
-An AlignFirst Developer creates every worktree through the workspace system and has no manual fallback. `@paleo/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
+A claw creates every worktree through the workspace system and has no manual fallback. `@alignfirst/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
 
 1. The workspaces section in `DEVELOPERS.md` ([Agent Instructions](#agent-instructions)).
 2. A setup profile named `remote` *(dev server)*, below.
-3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the patched config file, so the developer reports an address that works from the user's browser.
+3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the patched config file, so the claw reports an address that works from the user's browser.
 4. A README section on remote access, below.
 5. A Node version declaration (`.nvmrc`, `.node-version` or `engines.node`) named in `DEVELOPERS.md`, so fnm selects the project runtime. Ask which version to declare when the repository has none.
 
 ### The `remote` setup profile
 
-The developer's dev servers are reached from the team's browsers, so the deployment runs `workspace setup --profile remote` on the main worktree of every managed project with a dev server. The profile rewrites, in the ignored main files, every URL a browser or a third party resolves: the API base URL, the front URL, OAuth callbacks, CORS origins, allowed hosts. Server-to-server URLs stay on localhost. Linked worktrees inherit the rewritten files through their `mainWorktree` sources, so each file patcher keeps the host it finds and changes only the port.
+The claw's dev servers are reached from the team's browsers, so the deployment runs `workspace setup --profile remote` on the main worktree of every managed project with a dev server. The profile rewrites, in the ignored main files, every URL a browser or a third party resolves: the API base URL, the front URL, OAuth callbacks, CORS origins, allowed hosts. Server-to-server URLs stay on localhost. Linked worktrees inherit the rewritten files through their `mainWorktree` sources, so each file patcher keeps the host it finds and changes only the port.
 
 How the servers are exposed depends on the deployment. The profile has one variant for each:
 
 - **HTTPS gateway.** The deployment has the dev-server gateway: port `<port>` is served at `https://p<port>.$REMOTE_DEV_DOMAIN` behind a login, and `REMOTE_DEV_DOMAIN` is set in the service account's environment. `preSetup` rejects a missing or malformed variable before any file is written. `apply` sets the public URL to `https://p<port>.<domain>`; an application that distinguishes them also gets the public protocol (`https`), the public port (`443`) and the trusted proxy (loopback). The servers keep listening on `localhost:<port>`; the gateway proxies to them. A patcher recognizes a `p<port>.` host and replaces its port label instead of appending `:<port>`: see `publicUrl` in [workspace.mjs](../assets/workspace.mjs).
 - **Public IP.** No gateway: the browser reaches `http://<public-ip>:<port>` directly. `apply` reads the machine's single public IPv4 from the network interfaces (a VPS carries it; skip loopback, link-local and private ranges) and swaps the host of the listed variables, keeping scheme and port. The servers must listen on every interface. A patcher that keeps a non-localhost host (`helpers.extractHost`) needs nothing more.
 
-Pick the variant from the deployment that will run the project: the gateway variant when `REMOTE_DEV_DOMAIN` is set in the developer's environment, the public-IP variant when the deployment opens the dev-port range on its public IP. Ask the user when the deployment is unknown.
+Pick the variant from the deployment that will run the project: the gateway variant when `REMOTE_DEV_DOMAIN` is set in the claw's environment, the public-IP variant when the deployment opens the dev-port range on its public IP. Ask the user when the deployment is unknown.
 
 In both variants, compute every change before the first write, so a missing variable aborts with the files untouched, and make reapplying the profile a no-op. The commented alternative in [workspace.mjs](../assets/workspace.mjs) shows the public-IP variant.
 
@@ -265,7 +265,7 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
 - [ ] **Decide the dev-server ready marker** and **fatal markers** (or leave empty) for fast-fail. *(dev server)*
 - [ ] **Pair main-worktree sources with committed fallbacks.** Declare each existing `.example` template as `fallback` so fresh main and linked setup work while siblings still prefer customized main files.
-- [ ] **Install `@paleo/workspace`** (Node consumers).
+- [ ] **Install `@alignfirst/workspace`** (Node consumers).
 - [ ] **Write `workspace.mjs`** from the asset — adapt the `ADAPT` points, then strip the scaffolding.
 - [ ] **Write `dev-server.mjs`** from the asset — same approach. *(dev server)*
 - [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
@@ -273,5 +273,5 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Give every callback server its own row in the `dev up` summary.** *(dev server)* The spawn servers get a URL, a PID and a log path for free; a database or a mock container gets none of the three. Print its connection string, its container name and the container-logs command, in the same column order as the spawn rows.
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts. Add the search-ignore line unless the instruction file runs `alignfirst context`.
-- [ ] **Meet [the AlignFirst Developer contract](#the-alignfirst-developer-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
+- [ ] **Meet [the Dev Kit contract](#the-dev-kit-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. On a managed project, also run `setup --profile remote` on the main worktree (gateway variant: with `REMOTE_DEV_DOMAIN` set to a placeholder domain), check the rewritten URLs there and in a new linked worktree, then restore the main files. A wrapper that merely loads proves nothing.

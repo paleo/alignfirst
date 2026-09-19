@@ -125,7 +125,7 @@ By default a project declares no `alignfirst` dependency. Add one only when the 
 
 Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
 
-The CLI brings `@paleo/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@paleo/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
+The CLI brings `@alignfirst/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@alignfirst/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
 
 Continue with [plans-setup.md](plans-setup.md) when the team has a work-files repository. Finish with:
 

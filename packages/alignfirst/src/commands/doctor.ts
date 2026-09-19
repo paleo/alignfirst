@@ -115,9 +115,9 @@ function inspectDocmap(ctx: CommandContext): DoctorLine[] {
 
 function readDocmapVersion(): string {
   const require = createRequire(import.meta.url);
-  const pkg: unknown = require("@paleo/docmap/package.json");
+  const pkg: unknown = require("@alignfirst/docmap/package.json");
   if (!isRecord(pkg) || typeof pkg.version !== "string")
-    throw new Error("@paleo/docmap package.json has no version");
+    throw new Error("@alignfirst/docmap package.json has no version");
   return pkg.version;
 }
 

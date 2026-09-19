@@ -1,4 +1,4 @@
-# @paleo/openclaw-channel-mock-core
+# @alignfirst/openclaw-channel-mock-core
 
 ## 0.9.0
 

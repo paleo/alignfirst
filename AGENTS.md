@@ -29,14 +29,14 @@ This repository is on *GitHub*.
 ## Packages
 
 - `alignfirst` — the AlignFirst CLI: protocols, work files and docs
-- `@paleo/alcode` — coding agent wrapper for the AlignFirst Developer
-- `@paleo/alproject` — project inventory and port allocation for the AlignFirst Developer host
-- `@paleo/docmap` — lightweight documentation system for AI agents and humans
-- `@paleo/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
-- `@paleo/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
-- `@paleo/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
-- `@paleo/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
-- `@paleo/workspace` — run multiple git-worktree dev environments side by side
+- `@alignfirst/alcode` — coding agent wrapper for the AlignFirst Dev Kit
+- `@alignfirst/alproject` — project inventory and port allocation for the AlignFirst Dev Kit host
+- `@alignfirst/docmap` — lightweight documentation system for AI agents and humans
+- `@alignfirst/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)
+- `@alignfirst/openclaw-slack-mock` — Slack-shaped channel plugin for test scenarios
+- `@alignfirst/openclaw-discord-mock` — Discord-shaped channel plugin for test scenarios
+- `@alignfirst/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
+- `@alignfirst/workspace` — run multiple git-worktree dev environments side by side
 
 ## Workspaces
 

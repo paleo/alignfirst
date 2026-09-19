@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { WorkspacesRegistry } from "../../src/workspaces.js";
 
-/** Repo root of `@paleo/workspace`, resolved from this file's location. */
+/** Repo root of `@alignfirst/workspace`, resolved from this file's location. */
 export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 // The fixture's `workspace.mjs` is a plain `node` subprocess, so it imports the *built* package.

@@ -1,8 +1,8 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@paleo/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-block allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
+summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-block allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
 read_when:
-  - onboarding to the @paleo/workspace codebase
+  - onboarding to the @alignfirst/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
   - debugging an orphaned process, a leaked container, or a registry inconsistency
   - touching cross-worktree stop or `workspace remove`

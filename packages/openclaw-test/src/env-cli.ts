@@ -487,7 +487,7 @@ function ensureHostOutputDirs(workers: WorkerContext[]): void {
  * Absolutize path vars from `.env.local` against the consumer's project dir.
  *
  * Compose `include:` resolves relative bind-mount paths against the declaring
- * file (here, `node_modules/@paleo/openclaw-test/`), not the consumer's
+ * file (here, `node_modules/@alignfirst/openclaw-test/`), not the consumer's
  * project dir. Exporting absolute paths via `process.env` sidesteps that.
  */
 function absolutizePathVarsFromEnvFile(projectDir: string): void {

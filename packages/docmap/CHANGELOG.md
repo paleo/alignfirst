@@ -1,4 +1,4 @@
-# @paleo/docmap
+# @alignfirst/docmap
 
 ## 0.10.0
 
