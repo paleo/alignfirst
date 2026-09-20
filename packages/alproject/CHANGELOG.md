@@ -1,5 +1,17 @@
 # @alignfirst/alproject
 
+## 0.4.0
+
+### Minor Changes
+
+- 30b9db6: Moved to the `@alignfirst` npm scope. `alignfirst` itself stays unscoped, and the previous names are deprecated and receive no further releases.
+  
+  Replace the `@paleo/` prefix in your dependencies, then in the two scaffolded files that hardcode the scope as a path: the `include` of `./node_modules/@alignfirst/openclaw-test/docker-compose.yml` in `docker-compose.yml`, and `plugins.load.paths` under `node_modules/@alignfirst/openclaw-{discord,slack}-mock` in `openclaw.json`. A bumped dependency alone leaves `openclaw-test env up` failing on a missing Compose include, with the mock channels unloaded.
+
+### Patch Changes
+
+- 30b9db6: Added the `homepage` field pointing to https://alignfirst.paroi.tech, and a link to the product page in the README of each presented product.
+
 > Versions 1.0.0 through 3.0.1 were published as `@paleo/alproject`. Those majors were a numbering
 > mistake on an unfinished package. Under the `@alignfirst` scope the package restarts at 0.4.0, and
 > the history below is kept as it was released.

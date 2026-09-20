@@ -1,5 +1,15 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.4.0
+
+### Minor Changes
+
+- 30b9db6: Renamed from `@paleo/alignfirst-developer-openclaw-plugin`, with plugin ID `alignfirst-service` and display name "AlignFirst Service". Update `plugins.allow` and `plugins.entries` in `openclaw.json` to the new ID. Thread-handoff state under `~/.openclaw/thread-handoff/` is unaffected.
+
+### Patch Changes
+
+- 30b9db6: Added the `homepage` field pointing to https://alignfirst.paroi.tech, and a link to the product page in the README of each presented product.
+
 > Versions 0.1.0 through 0.3.1 were published as `@paleo/alignfirst-developer-openclaw-plugin`.
 
 ## 0.3.1

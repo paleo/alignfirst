@@ -1,6 +1,6 @@
 {
   "name": "alignfirst",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "The AlignFirst CLI: protocols, work files and docs in one command.",
@@ -42,7 +42,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@alignfirst/docmap": "~0.10.0",
+    "@alignfirst/docmap": "~0.11.0",
     "arktype": "^2.2.3",
     "semver": "^7.8.5"
   },

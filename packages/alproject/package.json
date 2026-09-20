@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/alproject",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "Discover the projects of an AlignFirst Dev Kit host and allocate their port ranges.",
