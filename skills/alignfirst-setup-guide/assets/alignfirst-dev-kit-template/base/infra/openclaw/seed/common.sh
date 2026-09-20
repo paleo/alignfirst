@@ -153,6 +153,8 @@ configure_common() {
   set_scalar tools.profile coding
   # The coding profile omits these tools; the playbook needs all three.
   set_json tools.alsoAllow '["message","browser","thread_handoff"]'
+  # Preserve the previous default: a turn may post only through its source provider.
+  set_json tools.message.crossContext.allowAcrossProviders false
   # The login shell owns PATH assembly and fnm selection for every exec run.
   set_json tools.exec.pathPrepend '[]'
   set_json agents.defaults.sandbox.browser.headless true

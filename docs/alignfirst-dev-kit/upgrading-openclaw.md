@@ -71,7 +71,7 @@ for ws in /tmp/doctor-harness /tmp/doctor-template; do
 done
 ```
 
-Three findings are expected noise, because no gateway ever runs in this container: the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`), the plaintext-secrets warning (the harness injects keys through the environment on purpose) and the node-hosting precondition about the loopback bind. Investigate anything else.
+Four findings are expected noise, because no gateway ever runs in this container: the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`), the plaintext-secrets warning (the harness injects keys through the environment on purpose), and the node-hosting preconditions about the loopback bind and disabled device pairing. Investigate anything else.
 
 ## Inspect a running gateway
 

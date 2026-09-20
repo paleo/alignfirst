@@ -17,13 +17,13 @@
     "e2e": "openclaw-test run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "~0.122.0",
+    "@anthropic-ai/sdk": "~0.127.0",
     "@alignfirst/openclaw-channel-mock-core": "file:vendor/openclaw-channel-mock-core.tgz",
     "@alignfirst/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",
     "@alignfirst/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
     "@alignfirst/openclaw-test": "file:vendor/openclaw-test.tgz",
     "@alignfirst/service-openclaw-plugin": "file:vendor/service-openclaw-plugin.tgz",
-    "openclaw": "2026.9.4"
+    "openclaw": "2026.9.5"
   },
   "devDependencies": {
     "@types/node": "~26.5.0",

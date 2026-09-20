@@ -13,21 +13,21 @@ importers:
         version: 5.2.1
     devDependencies:
       '@alignfirst/docmap':
-        specifier: ~0.9.1
-        version: 0.9.1
+        specifier: ~0.11.0
+        version: 0.11.0
       '@alignfirst/workspace':
-        specifier: ~0.32.0
-        version: 0.32.0
+        specifier: ~0.34.0
+        version: 0.34.0
 
 packages:
 
-  '@alignfirst/docmap@0.9.1':
-    resolution: {integrity: sha512-Wag6iXxyTGVeQ4/bVrHA0mI2y1KeZ5QEb+X/bQzNoyzO8mg38qvi+J2J1ajujj81CV+DWJPXtdoE+Kc159rowA==}
+  '@alignfirst/docmap@0.11.0':
+    resolution: {integrity: sha512-GHe8tyBOI9I9pgMOLyXntGzBhWbzzFNtL8b+hx5FXczrASMw99vwBKGZMWH6w55Aqopypf/5DUUUJJLhFXG9Fg==}
     engines: {node: '>=22.11.0'}
     hasBin: true
 
-  '@alignfirst/workspace@0.32.0':
-    resolution: {integrity: sha512-d20B9iJtCT+xnZ8EyHqHOmjBg7Q61jlR9wA4FKRQUMkzZSO5qtorV+/vvEiOszDd86LZAuibXAGX2K7Zbz0YFA==}
+  '@alignfirst/workspace@0.34.0':
+    resolution: {integrity: sha512-AFLb62dZ5T1e8u0sheFkmkcODP1VL0j2kj7eRy9UjlspWCO5iAqgHrzRfQ9B03AEmEpirpeP/DmduQlsyU9xWA==}
     engines: {node: '>=22.11.0'}
 
   accepts@2.0.0:
@@ -290,9 +290,9 @@ packages:
 
 snapshots:
 
-  '@alignfirst/docmap@0.9.1': {}
+  '@alignfirst/docmap@0.11.0': {}
 
-  '@alignfirst/workspace@0.32.0': {}
+  '@alignfirst/workspace@0.34.0': {}
 
   accepts@2.0.0:
     dependencies:

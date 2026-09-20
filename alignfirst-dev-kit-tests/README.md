@@ -136,7 +136,7 @@ tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-auto
 IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 
 The complementary deterministic suite makes no model calls and runs outside Docker against the
-pinned OpenClaw 2026.9.4 executable:
+pinned OpenClaw 2026.9.5 executable:
 
 ```sh
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
