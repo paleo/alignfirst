@@ -12,6 +12,7 @@
     "plans",
     "docmap"
   ],
+  "homepage": "https://alignfirst.paroi.tech/skills",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

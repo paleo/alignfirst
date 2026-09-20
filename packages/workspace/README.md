@@ -2,6 +2,8 @@
 
 Run multiple local dev environments side by side, one per git worktree, with isolated ports, databases, and config files. Built for branches worked in parallel, by humans or AI agents.
 
+See the [product page](https://alignfirst.paroi.tech/workspaces) for a demonstration.
+
 ## What is a workspace?
 
 A **workspace** is one isolated stream of work. It is close to [Conductor's](https://www.conductor.build/docs/concepts/workspaces-and-branches) sense of the word, with the dev-server setup made explicit. It bundles:

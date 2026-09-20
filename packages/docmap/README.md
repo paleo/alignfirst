@@ -2,6 +2,8 @@
 
 A lightweight documentation system for AI agents and humans. Keep project docs in a `docs/` folder with YAML frontmatter, browse and read them from the terminal.
 
+See the [product page](https://alignfirst.paroi.tech/docmap) for a demonstration.
+
 The CLI lists, reads, and validates docs, and ships its own authoring guide: run `docmap --guide` to learn the conventions for writing and organizing documents.
 
 _Inspired by the [OpenClaw](https://github.com/openclaw/openclaw/) docs system, which uses [Mintlify](https://www.mintlify.com/). This project doesn't depend on Mintlify._

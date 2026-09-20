@@ -1,6 +1,6 @@
 # @alignfirst/service-openclaw-plugin
 
-The OpenClaw gateway plugin of the AlignFirst Dev Kit. It currently provides thread handoff: after a native message action delivers its visible starter, the plugin starts the regular channel-thread session through a reply run it dispatches itself. Delivery evidence and pending handoffs survive gateway restart in a plugin-owned SQLite database.
+The OpenClaw gateway plugin of the [AlignFirst Dev Kit](https://alignfirst.paroi.tech/openclaw-dev-kit). It currently provides thread handoff: after a native message action delivers its visible starter, the plugin starts the regular channel-thread session through a reply run it dispatches itself. Delivery evidence and pending handoffs survive gateway restart in a plugin-owned SQLite database.
 
 ## Install and enable
 

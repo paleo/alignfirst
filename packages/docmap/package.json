@@ -11,6 +11,7 @@
     "markdown",
     "docmap"
   ],
+  "homepage": "https://alignfirst.paroi.tech/docmap",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

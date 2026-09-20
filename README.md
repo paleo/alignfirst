@@ -2,6 +2,8 @@
 
 Companion products for AI-assisted software work. They can be used independently.
 
+Home page: **[alignfirst.paroi.tech](https://alignfirst.paroi.tech/)**.
+
 ## `alignfirst` CLI
 
 The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](packages/alignfirst/README.md) for installation and usage.

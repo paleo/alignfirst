@@ -11,6 +11,7 @@
     "projects",
     "worktrees"
   ],
+  "homepage": "https://alignfirst.paroi.tech/openclaw-dev-kit",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

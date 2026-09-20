@@ -13,6 +13,7 @@
   ],
   "license": "CC0-1.0",
   "author": "Thomas MUR",
+  "homepage": "https://alignfirst.paroi.tech/workspaces",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
