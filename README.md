@@ -2,6 +2,8 @@
 
 Companion products for AI-assisted software work. They can be used independently.
 
+Home page: **[alignfirst.paroi.tech](https://alignfirst.paroi.tech/)**.
+
 ## `alignfirst` CLI
 
 The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](packages/alignfirst/README.md) for installation and usage.
@@ -12,21 +14,21 @@ Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Clau
 
 ## Docmap - Agent-discoverable documentation
 
-`@paleo/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
+`@alignfirst/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
 ## Workspaces - Local environments with worktrees
 
-`@paleo/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
+`@alignfirst/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
 
 ## OpenClaw Test toolkit
 
-`@paleo/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
+`@alignfirst/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
-## AlignFirst Developer
+## AlignFirst Dev Kit for OpenClaw
 
-AlignFirst Developer is an AI teammate for software work, currently packaged on OpenClaw. See [alignfirst-developer.md](alignfirst-developer.md).
+The Dev Kit turns an OpenClaw **assistant** into a developer who works with AlignFirst. One deployment is a dedicated service account running it under its own name and channel identity. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
 
-[`@paleo/alignfirst-developer-openclaw-plugin`](packages/alignfirst-developer-openclaw-plugin/README.md) supplies its OpenClaw capabilities under plugin ID `alignfirst-developer`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
+[`@alignfirst/service-openclaw-plugin`](packages/service-openclaw-plugin/README.md) supplies an assistant's OpenClaw capabilities under plugin ID `alignfirst-service`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
 
 ---
 
@@ -35,7 +37,7 @@ AlignFirst Developer is an AI teammate for software work, currently packaged on 
 Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then, in your project, ask your agent:
@@ -54,7 +56,7 @@ After a fresh clone:
 
 ```sh
 npm install
-npm run build --workspace @paleo/workspace
+npm run build --workspace @alignfirst/workspace
 npm run workspace -- setup
 ```
 

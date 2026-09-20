@@ -44,29 +44,57 @@ npm attaches provenance only when the repository and the package are both public
 Each package is bound to repository `paleo/alignfirst`, workflow `release.yml`, environment `release`. Inspect or remove a binding as the package owner:
 
 ```bash
-npm trust list @paleo/docmap
-npm trust revoke @paleo/docmap
+npm trust list @alignfirst/docmap
+npm trust revoke @alignfirst/docmap
 ```
 
-Renaming the workflow file or the environment breaks every binding; re-register them with the command below.
+Renaming the workflow file or the environment breaks every binding; re-register them with the loop in [Adding a package name](#adding-a-package-name).
+
+## Adding a package name
+
+A trusted publisher binds to an existing package, so a name the registry has never seen can neither be registered nor publish from CI. Bootstrap it by hand, from a machine logged in to npm as the owner, on the commit that introduces the name and before that commit reaches `main`.
+
+1. Publish the current version of every unpublished name. `changeset publish` skips the names the registry already serves, so one run covers them all. Restore the manifests afterwards — `npm pkg delete` rewrites them in place:
+
+   ```bash
+   npm run clear && npm run build && npm run lint && npm run test
+   npm pkg delete scripts --workspaces
+   npx changeset publish
+   git checkout -- package.json packages/*/package.json
+   ```
+
+   These tarballs carry no provenance attestation, and nothing should depend on them: deprecate each one at the version it was published, so the first release consumers see is the one CI publishes:
+
+   ```bash
+   npm deprecate @alignfirst/workspace@0.33.1 "Bootstrap publish, use 0.34.0 or later"
+   ```
+
+2. Register the trusted publisher and require 2FA for each name, with npm CLI ≥ 11.19. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
+
+   ```bash
+   for pkg in alignfirst @alignfirst/alcode @alignfirst/alproject @alignfirst/docmap \
+              @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock \
+              @alignfirst/openclaw-slack-mock @alignfirst/openclaw-test \
+              @alignfirst/service-openclaw-plugin @alignfirst/workspace; do
+     npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
+     npm access set mfa=publish "$pkg"
+   done
+   npm trust list @alignfirst/docmap   # spot-check
+   ```
+
+3. When the new name replaces an older one, deprecate the older one so an install of it points at the new:
+
+   ```bash
+   npm deprecate @paleo/docmap "Renamed to @alignfirst/docmap"
+   ```
+
+Publishing the current versions first preserves the invariant above: `check` reports nothing pending until the **release: version packages** PR lands, and the rename's own release is the first one CI is asked to approve.
 
 ## Owner setup (one-time)
 
-Done on 2026-08-22. Requires the package owner's npm account and repository admin rights; kept here for re-registration and for a fresh repository.
+Done on 2026-08-22, when the packages carried their `@paleo/*` names; their trusted publishers were registered with the loop above. Requires the package owner's npm account and repository admin rights; kept here for a fresh repository.
 
-1. Register the trusted publisher for each package, with npm CLI ≥ 11.19 and logged in as the owner. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
-
-   ```bash
-   for pkg in alignfirst @paleo/alcode @paleo/docmap @paleo/openclaw-channel-mock-core \
-              @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock \
-              @paleo/openclaw-test @paleo/alignfirst-developer-openclaw-plugin \
-              @paleo/workspace; do
-     npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
-   done
-   npm trust list @paleo/docmap   # spot-check
-   ```
-
-2. Create the `release` environment with a required reviewer and deployments restricted to `main`. Self-review stays allowed, so the owner approves their own releases:
+1. Create the `release` environment with a required reviewer and deployments restricted to `main`. Self-review stays allowed, so the owner approves their own releases:
 
    ```bash
    gh api -X PUT repos/paleo/alignfirst/environments/release --input - <<'JSON'
@@ -78,7 +106,7 @@ Done on 2026-08-22. Requires the package owner's npm account and repository admi
    gh api -X POST repos/paleo/alignfirst/environments/release/deployment-branch-policies -f name=main
    ```
 
-3. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
+2. Enable **Allow GitHub Actions to create and approve pull requests** in Settings → Actions → General → Workflow permissions. The `version` job needs it to open the Version Packages PR with the default `GITHUB_TOKEN`.
 
 ## The `verify` environment
 
@@ -94,34 +122,12 @@ The job's retry loop never once outlasted the stale packument. Recreate the envi
 command above if it is ever deleted — the job's first step then waits out the remainder itself, so a
 missing timer costs runner minutes rather than a failed release.
 
-## Owner steps for the AlignFirst CLI
-
-The first **release: version packages** PR bumps `alignfirst` to `0.1.0`. Do not let its publish job
-run before the manual publish: publish the built tarball from that commit by hand, then approve the
-environment.
-
-1. Publish `alignfirst@0.1.0` once from a machine logged in to npm, because a trusted publisher binds
-   to an existing package. Then configure trusted publishing and MFA:
-
-   ```bash
-   npm trust github alignfirst --repo paleo/alignfirst --file release.yml --env release --allow-publish
-   npm access set mfa=publish alignfirst
-   ```
-
-2. Deprecate the replaced package:
-
-   ```bash
-   npm deprecate @paleo/plans-share@"*" "Replaced by the alignfirst package: npm install -g alignfirst"
-   ```
-
 ## Two-factor authentication and tokens
 
-Every package requires 2FA and disallows tokens, applied on 2026-08-22. This closes the token path; the OIDC flow is unaffected, because trusted publishing satisfies the 2FA requirement.
-
-Applied per package with:
+Every package requires 2FA and disallows tokens. This closes the token path; the OIDC flow is unaffected, because trusted publishing satisfies the 2FA requirement. [Adding a package name](#adding-a-package-name) applies it to each new name:
 
 ```bash
-npm access set mfa=publish "@paleo/docmap"
+npm access set mfa=publish "@alignfirst/docmap"
 ```
 
 In the npmjs.com UI, `publish` is the option "Require two-factor authentication and disallow bypass 2fa tokens (recommended)". The alternative, `automation`, is "Require two-factor authentication or a granular access token with bypass 2fa enabled".

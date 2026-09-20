@@ -8,12 +8,12 @@ x-common-build: &common-build
 # (writer) and runner (reader), but mounting it on `bus` too is harmless and
 # lets all three services share one anchor.
 x-common-volumes: &common-volumes
-  - ${OPENCLAW_WORKSPACE_DIR}:/home/claw/.openclaw/workspace
-  - ${OPENCLAW_CONFIG_PATH}:/home/claw/.openclaw/openclaw.json
+  - ${OPENCLAW_WORKSPACE_DIR}:/home/assistant/.openclaw/workspace
+  - ${OPENCLAW_CONFIG_PATH}:/home/assistant/.openclaw/openclaw.json
   - ${OPENCLAW_TEST_PACKAGE_DIR}/dist/:/opt/openclaw-test/src/dist
   - ${OPENCLAW_TEST_SCENARIOS_DIR}:/opt/openclaw-test/src/scenarios
   - ${OPENCLAW_TEST_ARTIFACTS_DIR}:/opt/openclaw-test/artifacts
-  - ${OPENCLAW_TEST_GATEWAY_LOGS_DIR}:/home/claw/.openclaw/logs
+  - ${OPENCLAW_TEST_GATEWAY_LOGS_DIR}:/home/assistant/.openclaw/logs
   - openclaw-test-ipc:/var/run/openclaw-test-ipc
 
 volumes:
@@ -26,7 +26,7 @@ services:
   bus:
     build: *common-build
     image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
-    user: claw
+    user: assistant
     working_dir: /opt/openclaw-test/src
     command: ["node", "/opt/openclaw-test/src/dist/bus.js"]
     volumes: *common-volumes
@@ -39,10 +39,10 @@ services:
   gateway:
     build: *common-build
     image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
-    user: claw
+    user: assistant
     working_dir: /opt/openclaw-test/src
     environment:
-      OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_PATH: /home/assistant/.openclaw/openclaw.json
       OPENCLAW_CONFIG_READONLY: "1"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -67,11 +67,11 @@ services:
   runner:
     build: *common-build
     image: ${OPENCLAW_TEST_CONSUMER_IMAGE}
-    user: claw
+    user: assistant
     working_dir: /opt/openclaw-test/src
     environment:
       OPENCLAW_TEST_BUS_URL: http://bus:43123
-      OPENCLAW_CONFIG_PATH: /home/claw/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_PATH: /home/assistant/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     entrypoint: ["node", "/opt/openclaw-test/src/dist/runner.js"]

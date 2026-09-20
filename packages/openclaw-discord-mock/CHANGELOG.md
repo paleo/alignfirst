@@ -1,4 +1,6 @@
-# @paleo/openclaw-discord-mock
+# @alignfirst/openclaw-discord-mock
+
+> Version 0.5.0 and every version below it was published as `@paleo/openclaw-discord-mock`.
 
 ## 0.5.0
 
@@ -11,7 +13,7 @@
 - Updated dependencies [348c407]
 - Updated dependencies [348c407]
 - Updated dependencies [348c407]
-  - @paleo/openclaw-channel-mock-core@0.9.0
+  - @alignfirst/openclaw-channel-mock-core@0.9.0
 
 ## 0.4.0
 
@@ -23,7 +25,7 @@
 
 - Updated dependencies [6d72df2]
 - Updated dependencies [6d72df2]
-  - @paleo/openclaw-channel-mock-core@0.8.0
+  - @alignfirst/openclaw-channel-mock-core@0.8.0
 
 ## 0.3.8
 
@@ -31,21 +33,21 @@
 
 - ac9b4c5: OpenClaw 2026.8 compatibility. The core package now requires `zod` as a peer dependency (pinned to OpenClaw's version) and no longer provides the `messaging.parseExplicitTarget` handler.
 - Updated dependencies [ac9b4c5]
-  - @paleo/openclaw-channel-mock-core@0.7.0
+  - @alignfirst/openclaw-channel-mock-core@0.7.0
 
 ## 0.3.7
 
 ### Patch Changes
 
 - Updated dependencies [801309f]
-  - @paleo/openclaw-channel-mock-core@0.6.1
+  - @alignfirst/openclaw-channel-mock-core@0.6.1
 
 ## 0.3.6
 
 ### Patch Changes
 
 - Updated dependencies [1470b76]
-  - @paleo/openclaw-channel-mock-core@0.6.0
+  - @alignfirst/openclaw-channel-mock-core@0.6.0
 
 ## 0.3.5
 
@@ -54,21 +56,21 @@
 - Updated dependencies [0290042]
 - Updated dependencies [0290042]
 - Updated dependencies [53fc35d]
-  - @paleo/openclaw-channel-mock-core@0.5.0
+  - @alignfirst/openclaw-channel-mock-core@0.5.0
 
 ## 0.3.4
 
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.4.0
+  - @alignfirst/openclaw-channel-mock-core@0.4.0
 
 ## 0.3.3
 
 ### Patch Changes
 
 - Updated dependencies [aced48c]
-  - @paleo/openclaw-channel-mock-core@0.3.2
+  - @alignfirst/openclaw-channel-mock-core@0.3.2
 
 ## 0.3.2
 
@@ -81,7 +83,7 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.3.1
+  - @alignfirst/openclaw-channel-mock-core@0.3.1
 
 ## 0.3.0
 
@@ -92,7 +94,7 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.3.0
+  - @alignfirst/openclaw-channel-mock-core@0.3.0
 
 ## 0.2.3
 
@@ -100,7 +102,7 @@
 
 - Improved documentation
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.3
+  - @alignfirst/openclaw-channel-mock-core@0.2.3
 
 ## 0.2.2
 
@@ -108,7 +110,7 @@
 
 - Fixed configuration
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.2
+  - @alignfirst/openclaw-channel-mock-core@0.2.2
 
 ## 0.2.1
 
@@ -116,7 +118,7 @@
 
 - Hardened openclaw qa toolkit
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.1
+  - @alignfirst/openclaw-channel-mock-core@0.2.1
 
 ## 0.2.0
 
@@ -127,4 +129,4 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @paleo/openclaw-channel-mock-core@0.2.0
+  - @alignfirst/openclaw-channel-mock-core@0.2.0

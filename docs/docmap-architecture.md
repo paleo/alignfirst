@@ -45,7 +45,7 @@ Help and guide command lists are built from shared `CommandRow[]` builders (`bro
 
 An explicit `--root <value>` is threaded through **every** suggested command, not documented as a standalone row: `commandsWithRoot()` folds `--root <value>` into the `PackageManagerCommands` prefix once, so short help, full help, the guide's `{{COMMANDS}}`, and the `{{PM_ARGS}}` substitutions in the guide body all render commands that target the same custom root (`docmap --root config/docs --recursive`, `npm run docmap -- --root config/docs …`). Because the fold adds an argument, both `base` and `withArgs` derive from `withArgs` — the form that carries npm's `--` separator. The `--root <path>` documentation row lives in `moreCommands` (full help only) and is shown **only when no root is active** (`showRootOption = root === undefined`); once a real root is folded in, every command already demonstrates it, so the generic row is dropped to avoid a doubled `--root`. A bare invocation still prints its short help unchanged when `--root` is passed, since `--root` is a flag, not a positional.
 
-`detectPackageManager()` chooses that prefix from the **actual invocation**, so every suggested command is one that works in the situation the user is in. It reads `npm_config_user_agent`, which every package-manager-mediated launch sets and a bare global binary leaves empty. An **empty** agent means the user ran the global `docmap` directly, so it suggests bare `docmap` — even inside a project with a lockfile, since a lockfile does not imply a `docmap` script and `npm run docmap` would then be a dead command. A **set** agent walks up from `cwd` for a lockfile: found → the project-script form (`npm run docmap`, `pnpm docmap`, …); none found → the manager's package-runner form (`npx @paleo/docmap`, `pnpm dlx …`, defaulting to npx). A global install invoked through `npx @paleo/docmap` sets the agent, so it keeps the npx suggestion rather than the bare one.
+`detectPackageManager()` chooses that prefix from the **actual invocation**, so every suggested command is one that works in the situation the user is in. It reads `npm_config_user_agent`, which every package-manager-mediated launch sets and a bare global binary leaves empty. An **empty** agent means the user ran the global `docmap` directly, so it suggests bare `docmap` — even inside a project with a lockfile, since a lockfile does not imply a `docmap` script and `npm run docmap` would then be a dead command. A **set** agent walks up from `cwd` for a lockfile: found → the project-script form (`npm run docmap`, `pnpm docmap`, …); none found → the manager's package-runner form (`npx @alignfirst/docmap`, `pnpm dlx …`, defaulting to npx). A global install invoked through `npx @alignfirst/docmap` sets the agent, so it keeps the npx suggestion rather than the bare one.
 
 ## CLI Flow
 
@@ -93,8 +93,8 @@ Warnings (⚠) appear inline for name issues or frontmatter errors.
 
 | Command | Purpose |
 | --- | --- |
-| `npm -w @paleo/docmap run build` | Compile TypeScript (`src/` → `dist/`) |
-| `npm -w @paleo/docmap test` | Run tests with Vitest |
+| `npm -w @alignfirst/docmap run build` | Compile TypeScript (`src/` → `dist/`) |
+| `npm -w @alignfirst/docmap test` | Run tests with Vitest |
 | `npm run lint` | Biome linter (root) |
 
 Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories under `packages/docmap/test/fixtures/` (basic, errors, empty, nested, bad-names, subdirs-only, classify, no-frontmatter, large, listable, search). Each fixture is a self-contained `docs/`-like tree passed via `--root`. The `large` fixture (≥20 `.md` files) exercises the top-level listing kept above the recursive-default threshold.

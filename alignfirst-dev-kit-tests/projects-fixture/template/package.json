@@ -1,0 +1,22 @@
+{
+  "name": "@alignfirst-dev-kit-tests/fixture-template",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "docmap": "docmap",
+    "workspace": "node scripts/workspace/workspace.mjs",
+    "dev": "node scripts/workspace/dev-server.mjs",
+    "test": "node --test",
+    "lint": "for f in *.mjs; do node --check \"$f\" || exit 1; done"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  },
+  "devDependencies": {
+    "@alignfirst/docmap": "~0.11.0",
+    "@alignfirst/workspace": "~0.34.0"
+  }
+}

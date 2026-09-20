@@ -100,8 +100,8 @@ export function addInitScripts(pkg: PackageJsonScripts): string[] {
 function printNextSteps(): void {
   console.log(
     "\nNext steps:\n" +
-      "  1. npm i -D @paleo/openclaw-test @paleo/openclaw-channel-mock-core" +
-      " @paleo/openclaw-discord-mock @paleo/openclaw-slack-mock openclaw\n" +
+      "  1. npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core" +
+      " @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw\n" +
       "  2. cp .env.local.example .env.local   # then fill it in\n" +
       "  3. npm run env:build",
   );

@@ -7,7 +7,7 @@ Choose one adoption form. Both expose the same documentation tree under `docs/`.
 Use this form when the project already requires the AlignFirst CLI. It adds no project dependency.
 
 1. Nothing to install: project files invoke `npx alignfirst`. Offer `npm install -g alignfirst` in the README as a convenience.
-2. Ensure `docs/` exists. When preparing a project for an AlignFirst Developer, populate a newly
+2. Ensure `docs/` exists. When preparing a project for an assistant, populate a newly
    created directory through [docmap-bootstrapping.md](docmap-bootstrapping.md).
 3. Add the **Agent Instructions** below, using `npx -y alignfirst docmap` as the Docmap command.
 4. Read the authoring guide with `npx alignfirst docmap --guide`.
@@ -18,7 +18,7 @@ CI can pin a version range while validating the documentation:
 npx -y alignfirst@<range> docmap --check
 ```
 
-## Through `@paleo/docmap`
+## Through `@alignfirst/docmap`
 
 Use the standalone package when the project wants docmap pinned in its lockfile or does not adopt
 AlignFirst.
@@ -29,8 +29,8 @@ AlignFirst.
    "docmap": "docmap"
    ```
 
-2. Install `@paleo/docmap` as a dev dependency with the detected package manager:
-   `npm install -D @paleo/docmap` (`pnpm add -D`, `yarn add -D`, or `bun add -D`).
+2. Install `@alignfirst/docmap` as a dev dependency with the detected package manager:
+   `npm install -D @alignfirst/docmap` (`pnpm add -D`, `yarn add -D`, or `bun add -D`).
 3. Ensure `docs/` exists and add the **Agent Instructions** below, using the project's script command.
 4. Read the authoring guide with `npm run docmap -- --guide`.
 
@@ -39,11 +39,11 @@ Investigation Rules.
 
 ### Global installation
 
-For a global installation, including projects without `package.json`, run `npm install -g @paleo/docmap`. Ensure `docs/` exists, use `docmap` in the instructions below, and read `docmap --guide`. No project dependency or script is needed.
+For a global installation, including projects without `package.json`, run `npm install -g @alignfirst/docmap`. Ensure `docs/` exists, use `docmap` in the instructions below, and read `docmap --guide`. No project dependency or script is needed.
 
 ## Agent Instructions
 
-For Docmap without AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible:
+For Docmap without AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first:
 
 ```markdown
 ## Docmap - Seek Documentation

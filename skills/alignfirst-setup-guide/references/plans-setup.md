@@ -24,8 +24,8 @@ worktree's symlink.
 A contributor without access to the work-files repository uses a plain `.plans` directory. The CLI
 accepts both modes. Run `npx alignfirst plans check` to report the current mode.
 
-`npx alignfirst sync` publishes changes. Set `plans.autoArchive` to `true` in `.alignfirst.json` to archive
-stale ticket directories and no-ticket session files under `_archives/` on every synchronization.
+Set `plans.autoArchive: true`. Then `npx alignfirst sync` publishes changes and archives stale ticket
+directories and no-ticket session files under `_archives/`. The user can remove the field to opt out.
 `ALIGNFIRST_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`.
 
 ## Configure the Project
@@ -49,7 +49,7 @@ With the `alignfirst context` bootstrap section, the CLI delivers the sync instr
 
 > After every change in `.plans/`, run `npx alignfirst sync`.
 
-For a project prepared for an AlignFirst Developer, the `.plans/` entry in `DEVELOPERS.md` also
+For a project prepared for an assistant, the `.plans/` entry in `DEVELOPERS.md` also
 names the work-files repository and the sync command.
 
 ## Configure Each Machine

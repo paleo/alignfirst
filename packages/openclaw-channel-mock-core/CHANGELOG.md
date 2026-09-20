@@ -1,4 +1,6 @@
-# @paleo/openclaw-channel-mock-core
+# @alignfirst/openclaw-channel-mock-core
+
+> Version 0.9.0 and every version below it was published as `@paleo/openclaw-channel-mock-core`.
 
 ## 0.9.0
 

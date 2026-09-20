@@ -33,8 +33,9 @@ generated output.
 - v1: follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
 - v2: follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
 - v3: follow [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md).
-- v4: keep the current skills. When legacy `plans-share` artifacts remain, apply the cleanup, command sweep,
-  and verification sections of the v3 upgrade.
+- v4: keep the current skills. Set `plans.autoArchive: true` in an existing `.alignfirst.json`; the
+  user can remove it after the upgrade to opt out. When legacy `plans-share` artifacts remain, apply
+  the cleanup, command sweep, and verification sections of the v3 upgrade.
 - No detected installation: use [alignfirst-skills-setup.md](alignfirst-skills-setup.md).
 
 The v1 and v2 migrations preserve project knowledge and remove their legacy layouts. After either

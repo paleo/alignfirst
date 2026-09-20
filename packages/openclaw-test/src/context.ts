@@ -6,7 +6,7 @@ import {
   type QaBusConversation,
   type QaBusMessage,
   type QaBusPollResult,
-} from "@paleo/openclaw-channel-mock-core";
+} from "@alignfirst/openclaw-channel-mock-core";
 import { judgeCostUsd } from "./cost.js";
 import { execInGateway, type ExecInGatewayOptions, type ExecInGatewayResult } from "./exec-rpc.js";
 import {

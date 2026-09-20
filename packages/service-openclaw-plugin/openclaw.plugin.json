@@ -1,0 +1,18 @@
+{
+  "id": "alignfirst-service",
+  "name": "AlignFirst Service",
+  "description": "OpenClaw capabilities for the AlignFirst Dev Kit.",
+  "activation": { "onStartup": true },
+  "contracts": { "tools": ["thread_handoff"] },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "channelSurfaces": {
+        "type": "object",
+        "additionalProperties": { "enum": ["slack", "discord"] },
+        "default": { "slack": "slack", "discord": "discord" }
+      }
+    }
+  }
+}

@@ -117,7 +117,7 @@ Write `.alignfirst.json` with the agreed fields:
 }
 ```
 
-Keep only applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only the other applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
 
 ### Local installation
 
@@ -125,7 +125,7 @@ By default a project declares no `alignfirst` dependency. Add one only when the 
 
 Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
 
-The CLI brings `@paleo/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@paleo/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
+The CLI brings `@alignfirst/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@alignfirst/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
 
 Continue with [plans-setup.md](plans-setup.md) when the team has a work-files repository. Finish with:
 
@@ -136,12 +136,12 @@ npx alignfirst doctor
 
 ## Project Instructions
 
-When the repository adopts AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible. It works with or without `.alignfirst.json`:
+When the repository adopts AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first. It works with or without `.alignfirst.json`:
 
 ```markdown
 ## Seek project conventions and documentation
 
-Run `npx -y alignfirst context` from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` once from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 ```
 
 Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `.alignfirst.json`.

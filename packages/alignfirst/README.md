@@ -2,6 +2,8 @@
 
 The AlignFirst CLI provides collaborative software-development workflows, work files, and documentation discovery. Work files are organized by ticket and kept either git-ignored in the project or synchronized through a work-files repository.
 
+See the [product page](https://alignfirst.paroi.tech/skills) for a demonstration.
+
 ## Agent skills
 
 Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub Copilot, and Cursor. Install them globally:
@@ -66,7 +68,7 @@ npm update -g alignfirst
 Temporarily install the setup-guide skill:
 
 ```sh
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then ask your agent:
@@ -100,7 +102,7 @@ Run `alignfirst --help` for command usage or `alignfirst guide` to choose a prot
 Install the setup-guide skill and ask your agent to run its upgrade route:
 
 ```sh
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 ```text

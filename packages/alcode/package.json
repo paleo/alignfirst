@@ -1,5 +1,5 @@
 {
-  "name": "@paleo/alcode",
+  "name": "@alignfirst/alcode",
   "version": "0.17.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
@@ -12,6 +12,7 @@
     "claude",
     "codex"
   ],
+  "homepage": "https://alignfirst.paroi.tech/openclaw-dev-kit",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

@@ -1,4 +1,4 @@
-# @paleo/alcode
+# @alignfirst/alcode
 
 Run a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) protocols from the terminal. `alcode` wraps a coding-agent CLI for non-interactive use: it invokes a protocol (`spec`, `plan`, `aad`, …), streams the run to a per-call session file under `.plans/`, and returns the result.
 

@@ -1,6 +1,8 @@
-# @paleo/docmap
+# @alignfirst/docmap
 
 A lightweight documentation system for AI agents and humans. Keep project docs in a `docs/` folder with YAML frontmatter, browse and read them from the terminal.
+
+See the [product page](https://alignfirst.paroi.tech/docmap) for a demonstration.
 
 The CLI lists, reads, and validates docs, and ships its own authoring guide: run `docmap --guide` to learn the conventions for writing and organizing documents.
 
@@ -11,7 +13,7 @@ _Inspired by the [OpenClaw](https://github.com/openclaw/openclaw/) docs system, 
 Install the CLI as a dev dependency and add a `docmap` script:
 
 ```bash
-npm install -D @paleo/docmap
+npm install -D @alignfirst/docmap
 ```
 
 In your `package.json`:
@@ -37,7 +39,7 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then ask your agent:
@@ -77,7 +79,7 @@ read_when:
 Install the CLI globally to use it on non-JavaScript projects:
 
 ```bash
-npm install -g @paleo/docmap
+npm install -g @alignfirst/docmap
 
 docmap -v
 ```

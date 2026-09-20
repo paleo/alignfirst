@@ -1,4 +1,4 @@
-import { createChannelMockPlugin } from "@paleo/openclaw-channel-mock-core";
+import { createChannelMockPlugin } from "@alignfirst/openclaw-channel-mock-core";
 import { getSlackMockRuntime } from "./runtime.js";
 
 export const slackMockPlugin = createChannelMockPlugin({

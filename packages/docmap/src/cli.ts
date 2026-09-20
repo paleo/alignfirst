@@ -414,13 +414,13 @@ function detectPackageManager(cwd: string, userAgent: string): PackageManagerCom
 
 // A package manager launched us (agent is set) but no lockfile was found: docmap is not wired as a
 // project script, so suggest the manager's package-runner form, defaulting to npx (every Node
-// install ships it). A global install invoked through `npx @paleo/docmap` lands here too and
+// install ships it). A global install invoked through `npx @alignfirst/docmap` lands here too and
 // correctly keeps the npx suggestion.
 function runnerCommand(userAgent: string): PackageManagerCommands {
-  if (userAgent.startsWith("pnpm")) return sameCommand("pnpm dlx @paleo/docmap");
-  if (userAgent.startsWith("yarn")) return sameCommand("yarn dlx @paleo/docmap");
-  if (userAgent.startsWith("bun")) return sameCommand("bunx @paleo/docmap");
-  return sameCommand("npx @paleo/docmap");
+  if (userAgent.startsWith("pnpm")) return sameCommand("pnpm dlx @alignfirst/docmap");
+  if (userAgent.startsWith("yarn")) return sameCommand("yarn dlx @alignfirst/docmap");
+  if (userAgent.startsWith("bun")) return sameCommand("bunx @alignfirst/docmap");
+  return sameCommand("npx @alignfirst/docmap");
 }
 
 // Only npm needs a `--` separator before forwarded args; every other manager passes them verbatim.

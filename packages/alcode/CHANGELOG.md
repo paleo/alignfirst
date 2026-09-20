@@ -1,4 +1,6 @@
-# @paleo/alcode
+# @alignfirst/alcode
+
+> Version 0.17.0 and every version below it was published as `@paleo/alcode`.
 
 ## 0.17.0
 

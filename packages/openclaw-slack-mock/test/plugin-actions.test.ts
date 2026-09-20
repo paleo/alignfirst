@@ -2,9 +2,9 @@ import {
   createChannelMockAccountHelpers,
   createChannelMockMessageActions,
   createChannelMockPlugin,
-} from "@paleo/openclaw-channel-mock-core";
+} from "@alignfirst/openclaw-channel-mock-core";
 import { createServer, type Server } from "node:http";
-import { createBus } from "@paleo/openclaw-channel-mock-core";
+import { createBus } from "@alignfirst/openclaw-channel-mock-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const CHANNEL_ID = "slack-mock";

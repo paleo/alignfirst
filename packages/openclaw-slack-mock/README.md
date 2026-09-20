@@ -1,18 +1,18 @@
-# @paleo/openclaw-slack-mock
+# @alignfirst/openclaw-slack-mock
 
 Synthetic Slack-shaped OpenClaw channel plugin. Registers as channel `slack-mock`. Its
 Slack-shaped action surface includes `send`, `read`, `edit`, `delete`, `react`, `reactions`, and
 `search`; fake thread creation, replies, and renames stay unavailable. `send` is prepared for OpenClaw core, which delivers through the mock's message adapter and shapes `deliveryStatus`, `result.target`, `result.receipt.threadId`, and `messageDelivery`. Starter text is preserved exactly.
 
-Backed by [`@paleo/openclaw-channel-mock-core`](https://www.npmjs.com/package/@paleo/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@paleo/openclaw-test`](https://www.npmjs.com/package/@paleo/openclaw-test) for the test harness.
+Backed by [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core) (`surface: "slack"`, `autoThread: true`). Pair with [`@alignfirst/openclaw-test`](https://www.npmjs.com/package/@alignfirst/openclaw-test) for the test harness.
 
 ## Install
 
 ```sh
-npm i -D @paleo/openclaw-slack-mock
+npm i -D @alignfirst/openclaw-slack-mock
 ```
 
-The runner depends on this package transitively — installing `@paleo/openclaw-test` already pulls it in.
+The runner depends on this package transitively — installing `@alignfirst/openclaw-test` already pulls it in.
 
 ## Enable
 
@@ -21,7 +21,7 @@ In your `openclaw.json`:
 ```json
 {
   "plugins": {
-    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@paleo/openclaw-slack-mock"] },
+    "load": { "paths": ["/opt/openclaw-test/src/node_modules/@alignfirst/openclaw-slack-mock"] },
     "entries": { "slack-mock": { "enabled": true } }
   },
   "channels": {

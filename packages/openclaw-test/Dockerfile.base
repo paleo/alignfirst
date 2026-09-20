@@ -10,36 +10,36 @@ FROM node:26-alpine
 
 RUN apk add --no-cache shadow
 
-ARG CLAW_UID=1000
-ARG CLAW_GID=1000
-RUN (getent passwd ${CLAW_UID} && userdel -r "$(getent passwd ${CLAW_UID} | cut -d: -f1)" || true) && \
-    (getent group ${CLAW_GID} && groupdel "$(getent group ${CLAW_GID} | cut -d: -f1)" || true) && \
-    groupadd --gid ${CLAW_GID} claw && \
-    useradd --create-home --shell /bin/sh --uid ${CLAW_UID} --gid ${CLAW_GID} claw && \
-    mkdir -p /home/claw/.openclaw /opt/openclaw-test/src /opt/openclaw-test/artifacts && \
-    chown -R claw:claw /home/claw /opt/openclaw-test/src /opt/openclaw-test/artifacts
+ARG ASSISTANT_UID=1000
+ARG ASSISTANT_GID=1000
+RUN (getent passwd ${ASSISTANT_UID} && userdel -r "$(getent passwd ${ASSISTANT_UID} | cut -d: -f1)" || true) && \
+    (getent group ${ASSISTANT_GID} && groupdel "$(getent group ${ASSISTANT_GID} | cut -d: -f1)" || true) && \
+    groupadd --gid ${ASSISTANT_GID} assistant && \
+    useradd --create-home --shell /bin/sh --uid ${ASSISTANT_UID} --gid ${ASSISTANT_GID} assistant && \
+    mkdir -p /home/assistant/.openclaw /opt/openclaw-test/src /opt/openclaw-test/artifacts && \
+    chown -R assistant:assistant /home/assistant /opt/openclaw-test/src /opt/openclaw-test/artifacts
 
 # Mock-CLI shim under /opt/openclaw-test/mocks. OpenClaw's exec tool runs commands via
 # `/bin/sh -lc`, which sources /etc/profile; Alpine's default resets PATH to a
 # "safe" set that excludes /opt/openclaw-test/mocks/bin, so we override it. Consumers
 # create the per-command symlinks (e.g. claude, gh) in their own Dockerfile.
-COPY --chown=claw:claw dist/mock-cli-shim.js /opt/openclaw-test/mocks/dist/mock-cli-shim.js
+COPY --chown=assistant:assistant dist/mock-cli-shim.js /opt/openclaw-test/mocks/dist/mock-cli-shim.js
 RUN mkdir -p /opt/openclaw-test/mocks/bin && \
     printf '#!/bin/sh\nexec node /opt/openclaw-test/mocks/dist/mock-cli-shim.js "$0" "$@"\n' > /opt/openclaw-test/mocks/bin/mock-cli-shim && \
     chmod +x /opt/openclaw-test/mocks/bin/mock-cli-shim && \
-    chown -R claw:claw /opt/openclaw-test/mocks && \
+    chown -R assistant:assistant /opt/openclaw-test/mocks && \
     printf 'export PATH="/opt/openclaw-test/mocks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' > /etc/profile
 
 # Exec RPC watcher. The gateway service spawns it in the background; the runner
 # pokes requests onto the shared `openclaw-test-ipc` volume via `ctx.execInGateway(...)`.
-# Pre-create the mountpoint with `claw` ownership so a fresh named volume
-# inherits it — otherwise Docker creates it as root:root and the claw-uid
+# Pre-create the mountpoint with `assistant` ownership so a fresh named volume
+# inherits it — otherwise Docker creates it as root:root and the assistant-uid
 # processes get EACCES on the first write.
 COPY --chown=root:root exec-watcher.mjs /usr/local/bin/exec-watcher
 RUN chmod +x /usr/local/bin/exec-watcher && \
-    mkdir -p /var/run/openclaw-test-ipc && chown claw:claw /var/run/openclaw-test-ipc
+    mkdir -p /var/run/openclaw-test-ipc && chown assistant:assistant /var/run/openclaw-test-ipc
 
-USER claw
+USER assistant
 WORKDIR /opt/openclaw-test/src
 
 CMD ["sleep", "infinity"]

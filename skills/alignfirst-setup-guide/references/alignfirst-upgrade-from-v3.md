@@ -13,10 +13,10 @@ Installing the CLI globally on a developer machine is a convenience:
 npm install -g alignfirst
 ```
 
-An AlignFirst Developer host installs the CLI globally and replaces the retired project-discovery package:
+An assistant host installs the CLI globally and replaces the retired project-discovery package:
 
 ```sh
-npm install -g alignfirst @paleo/alcode @paleo/alproject
+npm install -g alignfirst @alignfirst/alcode @alignfirst/alproject
 ```
 
 ## Inventory the `plans-share` Contract
@@ -30,7 +30,7 @@ for:
 - setup, sync, check, archive, and auto-archive calls.
 
 Include documentation, CI, package scripts, shell scripts, hooks, deployment files, and automation.
-Record the work-files folder and whether synchronization uses `--auto-archive`.
+Record the work-files folder.
 
 Recover the work-files folder from the static `--folder` value in the old setup script or another setup
 call. If that value is absent or dynamic and `.plans` is a symlink, resolve its target and use the
@@ -55,8 +55,8 @@ npm pkg delete scripts.plans:setup scripts.plans:sync
 Detect the ticket pattern from the repository's branch and ticket conventions. Issue-number tickets
 use `^\d+$`; Jira-like keys use `^[A-Z]+-\d+$`; omit the field when there is no convention.
 
-Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. When the old synchronization
-path used `--auto-archive`, preserve that behavior with `plans.autoArchive: true`:
+Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. Set
+`plans.autoArchive: true`, including in local mode; the user can remove it to opt out:
 
 ```json
 {
@@ -67,7 +67,6 @@ path used `--auto-archive`, preserve that behavior with `plans.autoArchive: true
 }
 ```
 
-Keep only applicable `plans` fields. `plans.autoArchive` works in local mode without `plans.folder`.
 Add `portRange` when the workspace wrapper declares a port scheme. Update the README guidance and
 install the stubs.
 

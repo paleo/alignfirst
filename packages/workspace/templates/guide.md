@@ -48,7 +48,7 @@ If setup fails (check the setup log), do **not** delete the worktree. From insid
 {{COMMANDS:recovery}}
 ```
 
-**Edge case** — if setup errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@paleo/workspace'`, the worktree never got `node_modules/` (setup failed before the install). Fall back to the main worktree's wrapper directly:
+**Edge case** — if setup errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@alignfirst/workspace'`, the worktree never got `node_modules/` (setup failed before the install). Fall back to the main worktree's wrapper directly:
 
 ```sh
 cd <failed-worktree>

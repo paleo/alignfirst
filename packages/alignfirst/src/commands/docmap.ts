@@ -1,4 +1,4 @@
-import { main as docmapMain } from "@paleo/docmap";
+import { main as docmapMain } from "@alignfirst/docmap";
 
 import type { CommandContext } from "../context.js";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@paleo/workspace",
+  "name": "@alignfirst/workspace",
   "version": "0.33.1",
   "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [
@@ -13,6 +13,7 @@
   ],
   "license": "CC0-1.0",
   "author": "Thomas MUR",
+  "homepage": "https://alignfirst.paroi.tech/workspaces",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",
