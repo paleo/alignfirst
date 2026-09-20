@@ -23,7 +23,7 @@ Install the setup skill in the repository where your agent will assemble the pri
 repository:
 
 ```sh
-npx -y skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Ask the agent to create an assistant. The setup skill collects deployment values, renders

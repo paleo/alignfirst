@@ -37,7 +37,7 @@ The Dev Kit turns an OpenClaw **assistant** into a developer who works with Alig
 Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then, in your project, ask your agent:

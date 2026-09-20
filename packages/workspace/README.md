@@ -21,7 +21,7 @@ Several workspaces run at once without colliding, so you can develop, test, or h
 The `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill (globally or locally):
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then, in your project, ask your agent:

@@ -68,7 +68,7 @@ npm update -g alignfirst
 Temporarily install the setup-guide skill:
 
 ```sh
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then ask your agent:
@@ -102,7 +102,7 @@ Run `alignfirst --help` for command usage or `alignfirst guide` to choose a prot
 Install the setup-guide skill and ask your agent to run its upgrade route:
 
 ```sh
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 ```text

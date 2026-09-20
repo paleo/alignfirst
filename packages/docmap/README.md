@@ -39,7 +39,7 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:
 
 ```bash
-npx skills add https://github.com/paleo/alignfirst --skill alignfirst-setup-guide
+npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
 Then ask your agent:
