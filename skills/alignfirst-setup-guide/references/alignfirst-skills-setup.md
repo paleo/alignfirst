@@ -117,7 +117,7 @@ Write `.alignfirst.json` with the agreed fields:
 }
 ```
 
-Keep only applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only the other applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
 
 ### Local installation
 
@@ -136,7 +136,7 @@ npx alignfirst doctor
 
 ## Project Instructions
 
-When the repository adopts AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible. It works with or without `.alignfirst.json`:
+When the repository adopts AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first. It works with or without `.alignfirst.json`:
 
 ```markdown
 ## Seek project conventions and documentation

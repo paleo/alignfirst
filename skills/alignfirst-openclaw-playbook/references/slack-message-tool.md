@@ -19,5 +19,5 @@ Slack supports `send`, `read`, `react`, `edit`, `delete`, `search`, and `sendAtt
 ## Reactions
 
 ```jsonc
-{ "action": "react", "channel": "<Slack surface id>", "target": "<chat_id>", "messageId": "<message id>", "emoji": "eyes" }
+{ "action": "react", "channel": "<Slack surface id>", "target": "<chat_id>", "messageId": "<message id>", "emoji": "lobster" }
 ```

@@ -208,12 +208,13 @@ dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on 
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
 final `NO_REPLY`.
 
-The shared fresh-takeover assertion binds the successful claim, history read, and eyes reaction by
+The shared fresh-session assertion binds the claim, history read, and lobster reaction by
 tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
 target from the newest visible message in the read result, and confirms that the bus stores exactly
 one reaction from `openclaw`. A01 applies it to a silent takeover; A17 applies it before active
-multi-project delegation. The internal service activation is absent from bus history and cannot be
-selected.
+multi-project delegation; A20 confirms that a later human message becomes the target; A23 applies it
+to a human-created thread whose claim returns `none`. The internal service activation is absent from
+bus history and cannot be selected.
 
 The deterministic external-plugin suite uses the real OpenClaw 2026.9.4 executable, a scripted
 local provider, the synthetic bus, and disposable state. Run it with

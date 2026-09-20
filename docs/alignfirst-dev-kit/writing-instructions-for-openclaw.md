@@ -6,6 +6,12 @@ Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-de
 
 No "Important:", no all-caps emphasis, no triple-bullet restatement of the same point. There are a lot of things that matter. The more you insist, the more diluted later content becomes.
 
+State a simple rule through its trigger and action. Add procedural detail only when needed to carry it out or resolve a concrete ambiguity.
+
+## Address the session doing the work
+
+The OpenClaw session itself reads the playbook. Address it directly with "you" and imperative verbs. "On the first turn of your session, react…" gives the reader both a trigger and an action. Keep the session's lifetime distinct from the thread's history: a fresh session can take over an old thread.
+
 ## Keep the activation message static
 
 The plugin sends exactly `Take over this thread.` from `AlignFirst Service`. The playbook owns claim, history recovery, waiting for missing input, and delegation. Keep task details in the visible starter and human replies; keep routing and sender identity in the plugin context.
@@ -84,7 +90,7 @@ Then vary the parts that carry no value — the setup signal, for instance: "Set
 
 ## Temporal anchors are required
 
-"From now on" / "first user-facing action" / "before X" need an event the assistant can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists. The takeover acknowledgement uses three anchors: successful claim, completed history read, then the first surface mutation.
+"From now on" / "first user-facing action" / "before X" need an event the assistant can pin to. "Eventually" / "soon" don't survive a hot model. If you write "Once the thread exists…", make sure the previous sentence pinpoints when the thread exists. The session-start reaction happens on the session's first turn, after the history read and before any other visible action.
 
 ## Per-surface clauses, not blanket rules
 

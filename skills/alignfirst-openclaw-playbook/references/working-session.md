@@ -24,20 +24,22 @@ A takeover turn starts with the plugin's `Take over this thread.` message from `
 
 Call `thread_handoff` with `{ "action": "claim" }` once per turn, before history reads, workspace setup, delegation, or any other task effect. The tool uses the current thread session; omit `threadId` and `handoffId`. Keep its first result for the whole turn; do not claim again during setup.
 
-On a takeover turn with no human message to process, `alreadyClaimed` means another turn owns the handoff; end on exactly `HEARTBEAT_OK`. A `claimed` result activates the recorded request: recover its context in Step 2 and start work when its required values are present. Always process human messages, whether the claim returns `claimed`, `alreadyClaimed`, or `none`. On a claim error, stop and report the failure in the thread.
+A `claimed` result activates the recorded request. An `alreadyClaimed` result means another turn owns the handoff. Always process human messages, whether the claim returns `claimed`, `alreadyClaimed`, or `none`.
 
 ### Step 2 — Recover the thread context
 
 Read the current thread through `message` with `action: "read"`, the current channel, complete `chat_id` as `target`, and bare thread ID from conversation metadata. Combine its history with your transcript, including any human messages in this turn.
 
-On the fresh service takeover whose saved Step 1 result is `claimed`, acknowledge the takeover immediately after that read. Select the newest visible message in the returned history snapshot, using its returned order. The service nudge is internal and absent from surface history. Read the current surface's extended message reference named by workspace `AGENTS.md`, then call `message` `react` once with the current surface, complete `chat_id` as `target`, the selected message ID, and the reference's eyes value. Continue context recovery and work if the reaction fails; do not retry it.
+On the first turn of your session, react with 🦞 to the latest message returned by this read, before any other visible action. This applies even when you take over a thread with a long history. The reaction tells the user a new session has arrived.
 
-The reaction is the first channel-surface mutation of the successfully claimed takeover. Internal file reads, the handoff claim, and the surface-history read precede it. Workspace setup, delegation, a Discord rename or send, attachments, edits, deletes, and plain-text replies follow it. When a human message is already in the returned snapshot, its later position makes it the target. A message arriving after the read does not replace the selected target. Later human turns and repeated or recovery takeovers add no reaction.
+Use `message` with `action: "react"`, following the current surface's extended message reference named by workspace `AGENTS.md`. If the reaction fails, continue without retrying.
 
 Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. With a starter present, its values come from the inventory the channel session consulted; run `alproject list --json` only where a runbook, the multi-project procedure, or "A thread you did not open" asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
 
 On a takeover turn:
 
+- The claim failed: stop and report the failure in the thread.
+- No human message needs processing and the claim returned `alreadyClaimed`: end on exactly `HEARTBEAT_OK`.
 - The starter asked for a value and no human message has supplied it: end on exactly `HEARTBEAT_OK`. Only the user supplies that value; a lookup of your own is not an answer, and the question is not repeated.
 - The starter asked nothing but a required value is missing (a detailed change request without a ticket, for instance): ask for it now.
 - The request is complete: proceed. It is the go-ahead; respect an explicit request to hold.
@@ -323,8 +325,8 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 1. In the branch's workspace, merge the remote branch as Step 5 of [`project-workspace-setup.md`](./runbooks/project-workspace-setup.md) describes, without its base-branch catch-up: the branch belongs to its author.
 2. Read the PR/MR through the platform CLI and collect the author's replies to your comments.
 3. Resume the review session without a protocol: `alcode resume <sessionId> --message "Fixes have been pushed, please check."`, with the author's replies appended when there are any. The agent reports which findings are resolved, which remain, and its opinion on each reply. The review file stays as written.
-4. React on the PR/MR as a reviewer would: resolve the thread of each fixed finding, answer on each remaining one with what is still missing, and approve the PR/MR through the platform CLI when nothing remains. Without a PR/MR, report the outcome in the thread instead.
-5. End the turn on a one-line report: what is resolved, what remains, and whether you approved.
+4. Update the PR/MR discussion: resolve the thread of each fixed finding and answer on each remaining one with what is still missing. Without a PR/MR, report the outcome in the thread instead.
+5. End the turn on a one-line report: what is resolved and what remains.
 
 ### Merge/Pull requests
 

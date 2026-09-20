@@ -43,7 +43,7 @@ For a global installation, including projects without `package.json`, run `npm i
 
 ## Agent Instructions
 
-For Docmap without AlignFirst skills or protocols, add this section to `AGENTS.md` or `CLAUDE.md`, before every other section whenever possible:
+For Docmap without AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first:
 
 ```markdown
 ## Docmap - Seek Documentation

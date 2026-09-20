@@ -5,6 +5,7 @@ import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { waitForProjectListing } from "./_lib/project-lifecycle.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { waitForSetupAck } from "./_lib/setup-ack.ts";
+import { expectTakeoverReaction } from "./_lib/takeover-reaction.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 import { runWorkspaceFlow } from "./_lib/workspace-flow.ts";
 
@@ -30,6 +31,7 @@ export default async function humanReplyRacingStartup(ctx: ScenarioContext): Pro
       );
     },
   });
+  await expectTakeoverReaction(ctx, starter);
 
   const ack = await waitForSetupAck(ctx, {
     threadId: starter.threadId,

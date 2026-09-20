@@ -29,7 +29,7 @@ Post into a channel or DM:
 ## Reactions
 
 ```jsonc
-{ "action": "react", "channel": "<Discord surface id>", "target": "<chat_id>", "messageId": "<message id>", "emoji": "👀" }
+{ "action": "react", "channel": "<Discord surface id>", "target": "<chat_id>", "messageId": "<message id>", "emoji": "🦞" }
 ```
 
 ## Attachment boundary

@@ -86,8 +86,8 @@ deploys it.
 
 Inspect the repository before changing it. A prepared project has all of these:
 
-1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed before every other section
-   whenever possible. The README may offer a global AlignFirst CLI installation as a convenience.
+1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed as the first `##` section
+   after the title and introduction. The README may offer a global CLI installation as a convenience.
    `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
 2. A clean `alproject doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.

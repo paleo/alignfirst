@@ -6,6 +6,7 @@ import { expectNoProtocolDelegation, setupCodingAgentMock } from "./_lib/mock-co
 import { assertNoChannelRootLeak } from "./_lib/outbound.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
+import { expectFreshSessionReaction } from "./_lib/takeover-reaction.ts";
 import { assertNoWorktreeDirs } from "./_lib/thread-bootstrap.ts";
 
 const SENDER_ID = "ROBIN01";
@@ -44,6 +45,7 @@ export default async function humanCreatedThread(ctx: ScenarioContext): Promise<
     threadId,
     threadTitle: THREAD_TITLE,
   });
+  await expectFreshSessionReaction(ctx, threadId, "none");
 
   const { cursorAfterDelegation } = await expectNoProtocolDelegation(ctx, codingAgent, {
     rubric:

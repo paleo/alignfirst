@@ -78,4 +78,4 @@ Host entry points checked and refused for an external plugin, so the plugin owns
 - With `claude-sonnet-5`, the bot ran ninety-six `alcode` executions in one test day in the foreground with a 60-second timeout, ignoring the background rule. Terra ran none. The 30-second mock run hides the harm a real coding agent would suffer.
 - Terra chains one background run per completion step (code, log review, tests, push), so the user sees several intermediate acknowledgements. A product question, not a defect.
 - A `⚠️ Message blocked` host notice appeared twice in Slack threads after a silent takeover turn. Its text is in neither the OpenClaw sources nor the build.
-- The takeover reaction lands immediately after the history read. The first visible thread post still arrives 1.5 to 2.5 minutes after the starter, at the end of the setup turn.
+- The fresh-session lobster reaction lands immediately after the history read. The first visible thread post still arrives 1.5 to 2.5 minutes after the starter, at the end of the setup turn.

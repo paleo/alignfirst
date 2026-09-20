@@ -17,13 +17,21 @@ const SURFACE_MUTATING_ACTIONS = new Set([
 ]);
 
 export async function expectTakeoverReaction(ctx: ScenarioContext, starter: Step): Promise<string> {
-  const claim = await waitForClaim(ctx, starter.threadId);
+  return await expectFreshSessionReaction(ctx, starter.threadId, "claimed");
+}
+
+export async function expectFreshSessionReaction(
+  ctx: ScenarioContext,
+  threadId: string,
+  expectedClaimStatus: "claimed" | "none",
+): Promise<string> {
+  const claim = await waitForClaim(ctx, threadId);
   const sessionKey = requireSessionKey(claim);
-  requireClaimedResult(claim);
+  requireClaimResult(claim, expectedClaimStatus);
   const historyRead = await waitForMessageAction(ctx, sessionKey, "read");
   const reaction = await waitForMessageAction(ctx, sessionKey, "react");
   const calls = (await ctx.getAgentToolCalls()).filter((call) => call.sessionKey === sessionKey);
-  assertTakeoverOrder(ctx, calls, claim, historyRead, reaction);
+  assertFreshSessionOrder(ctx, calls, claim, historyRead, reaction);
   const messageId = newestVisibleMessageId(historyRead);
   const emoji = expectedEmoji(ctx);
   assertReactionInput(ctx, historyRead, reaction, messageId, emoji);
@@ -44,14 +52,14 @@ async function waitForClaim(ctx: ScenarioContext, threadId: string): Promise<Age
 
 function requireSessionKey(claim: AgentToolCall): string {
   if (claim.sessionKey !== undefined) return claim.sessionKey;
-  throw new Error("Fresh takeover claim lacks session attribution");
+  throw new Error("Fresh session claim lacks session attribution");
 }
 
-function requireClaimedResult(claim: AgentToolCall): void {
-  const result = parseJsonToolResult(claim, "fresh takeover claim");
-  if (result.status === "claimed") return;
+function requireClaimResult(claim: AgentToolCall, expectedStatus: "claimed" | "none"): void {
+  const result = parseJsonToolResult(claim, "fresh session claim");
+  if (result.status === expectedStatus) return;
   throw new Error(
-    `Fresh takeover claim returned ${JSON.stringify(result.status)}, expected status "claimed"`,
+    `Fresh session claim returned ${JSON.stringify(result.status)}, expected status ${JSON.stringify(expectedStatus)}`,
   );
 }
 
@@ -66,11 +74,11 @@ async function waitForMessageAction(
       call.toolName === "message" &&
       inputOf(call).action === action &&
       call.result !== undefined,
-    { label: `takeover ${action}s the visible thread`, timeoutMs: TAKEOVER_TIMEOUT_MS },
+    { label: `fresh session ${action}s the visible thread`, timeoutMs: TAKEOVER_TIMEOUT_MS },
   );
 }
 
-function assertTakeoverOrder(
+function assertFreshSessionOrder(
   ctx: ScenarioContext,
   calls: AgentToolCall[],
   claim: AgentToolCall,
@@ -82,27 +90,29 @@ function assertTakeoverOrder(
   const reactionIndex = callIndex(calls, reaction.toolUseId, "reaction");
   if (!(claimIndex < readIndex && readIndex < reactionIndex)) {
     throw new Error(
-      `Bad takeover ordering: claim=${claimIndex}, history read=${readIndex}, reaction=${reactionIndex}`,
+      `Bad fresh-session ordering: claim=${claimIndex}, history read=${readIndex}, reaction=${reactionIndex}`,
     );
   }
   const claims = calls.filter(
     (call) => call.toolName === "thread_handoff" && inputOf(call).action === "claim",
   );
-  ctx.assertLength(claims, 1, "fresh takeover claims exactly once");
+  ctx.assertLength(claims, 1, "fresh session claims exactly once");
   const reactions = calls.filter(
     (call) => call.toolName === "message" && inputOf(call).action === "react",
   );
-  ctx.assertLength(reactions, 1, "fresh takeover reacts exactly once");
+  ctx.assertLength(reactions, 1, "fresh session reacts exactly once");
   const earlyMutations = calls
     .slice(0, reactionIndex)
     .filter((call) => isSurfaceMutatingMessageCall(call));
-  ctx.assertLength(earlyMutations, 0, "takeover reaction is the first surface mutation");
+  ctx.assertLength(earlyMutations, 0, "fresh-session reaction is the first surface mutation");
 }
 
 function callIndex(calls: AgentToolCall[], toolUseId: string, label: string): number {
   const index = calls.findIndex((call) => call.toolUseId === toolUseId);
   if (index >= 0) return index;
-  throw new Error(`Bad takeover ordering: ${label} call is missing from the transcript snapshot`);
+  throw new Error(
+    `Bad fresh-session ordering: ${label} call is missing from the transcript snapshot`,
+  );
 }
 
 function isSurfaceMutatingMessageCall(call: AgentToolCall): boolean {
@@ -127,9 +137,9 @@ function newestVisibleMessageId(historyRead: AgentToolCall): string {
 }
 
 function expectedEmoji(ctx: ScenarioContext): string {
-  if (ctx.channel === "slack-mock") return "eyes";
-  if (ctx.channel === "discord-mock") return "👀";
-  throw new Error(`No takeover reaction contract for channel ${ctx.channel}`);
+  if (ctx.channel === "slack-mock") return "lobster";
+  if (ctx.channel === "discord-mock") return "🦞";
+  throw new Error(`No fresh-session reaction contract for channel ${ctx.channel}`);
 }
 
 function assertReactionInput(
@@ -151,7 +161,7 @@ function assertReactionInput(
   );
   ctx.assertEqual(reactionInput.target, readInput.target, "reaction keeps the history read target");
   ctx.assertEqual(reactionInput.channel, ctx.channel, "reaction uses the active channel");
-  ctx.assertEqual(reactionInput.emoji, emoji, "reaction uses the surface eyes emoji");
+  ctx.assertEqual(reactionInput.emoji, emoji, "reaction uses the surface lobster emoji");
 }
 
 async function assertVisibleReaction(
@@ -164,11 +174,15 @@ async function assertVisibleReaction(
     (candidate) => candidate.accountId === ctx.accountId && candidate.id === messageId,
   );
   if (!message) throw new Error(`Reacted visible message ${messageId} is missing from the bus`);
-  ctx.assertLength(message.reactions, 1, "visible takeover message has exactly one reaction");
+  ctx.assertLength(message.reactions, 1, "visible fresh-session message has exactly one reaction");
   const [reaction] = message.reactions;
-  if (!reaction) throw new Error("Visible takeover reaction is missing from the bus");
-  ctx.assertEqual(reaction.emoji, emoji, "visible takeover reaction uses the surface eyes emoji");
-  ctx.assertEqual(reaction.senderId, "openclaw", "visible takeover reaction uses the bot sender");
+  if (!reaction) throw new Error("Visible fresh-session reaction is missing from the bus");
+  ctx.assertEqual(reaction.emoji, emoji, "visible fresh-session reaction uses the lobster emoji");
+  ctx.assertEqual(
+    reaction.senderId,
+    "openclaw",
+    "visible fresh-session reaction uses the bot sender",
+  );
 }
 
 function parseJsonToolResult(call: AgentToolCall, label: string): Record<string, unknown> {
