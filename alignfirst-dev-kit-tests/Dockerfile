@@ -81,6 +81,18 @@ RUN npm ci --include=dev && \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force
 
+# OpenClaw 2026.9.5 defers plugin state migration until its update records are
+# released. Finalize the update first, then settle the deferred state in a new
+# process. Retry Doctor because a just-released SQLite lease can race once.
+RUN OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
+      npx openclaw update repair --yes
+RUN for attempt in 1 2 3; do \
+      OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
+        npx openclaw doctor --fix --yes && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+      sleep 2; \
+    done
+
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
 # from here into the nested fixture tree at scenario start, materializing nimbus,
 # lumen, and external-team project orion with per-name patches.

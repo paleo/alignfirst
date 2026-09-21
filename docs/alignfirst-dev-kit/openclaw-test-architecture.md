@@ -44,10 +44,10 @@ inbound ──▶ │   bus   │ ◀── outbound (every channel plugin)
 ```
 
 - **`bus`** — in-memory state store. Conversations, threads, messages, events, cursors. Exposes a small HTTP API consumed by `bus-client.ts` in `channel-mock-core`.
-- **`gateway`** — runs `npx openclaw gateway run`. Loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim.
+- **`gateway`** — runs OpenClaw and loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim. The Dev Kit overlay starts the gateway once, imports the mounted Codex credential into the `main` agent's auth store, then restarts the gateway to refresh its authentication cache.
 - **`runner`** — runs scenarios serially. Mints a fresh `conversationId` per task, pushes inbounds onto the bus, polls outbounds, asserts, runs the judge (Anthropic-direct), writes artifacts.
 
-Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
+Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. The Dev Kit gateway becomes healthy only after credential import and restart complete. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
 
 ## Two-Dockerfile pattern
 
@@ -63,7 +63,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.5.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -78,7 +78,9 @@ include:
   - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml
 ```
 
-Compose v2.20+ required. The overlay's job is to add consumer-specific service overrides (e.g. extra env vars on `runner`); the base file owns the build context, volumes, healthchecks, and entrypoints.
+Compose v2.20+ required. The overlay adds consumer-specific service overrides. The Dev Kit overlay adds runner environment variables, bind mounts, and the gateway credential-import startup and healthcheck. The base file owns the shared build context, volumes, and default entrypoints.
+
+The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so the startup command copies `auth.json` and the optional model cache into a temporary directory, imports only `auth:openai`, then deletes the copy. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup and failure modes.
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 

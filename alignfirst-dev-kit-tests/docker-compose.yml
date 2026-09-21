@@ -25,6 +25,45 @@ services:
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
       # can write the thread rollout alcode reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        /usr/local/bin/exec-watcher &
+        npx openclaw gateway run --port 18789 --bind loopback --auth none &
+        gateway_pid=$!
+        import_home=$$(mktemp -d)
+        cleanup() {
+          if [ -n "$$import_home" ]; then rm -rf "$$import_home"; fi
+          kill -TERM "$$gateway_pid" 2>/dev/null || true
+        }
+        trap cleanup EXIT TERM INT
+        until node -e "require('net').connect(18789, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"; do
+          kill -0 "$$gateway_pid" 2>/dev/null
+          sleep 1
+        done
+        cp /home/assistant/.codex/auth.json "$$import_home/auth.json"
+        if [ -f /home/assistant/.codex/models_cache.json ]; then
+          cp /home/assistant/.codex/models_cache.json "$$import_home/models_cache.json"
+        fi
+        npx openclaw migrate apply codex --from "$$import_home" --agent main --include-secrets --item auth:openai --yes
+        rm -rf "$$import_home"
+        import_home=""
+        kill -TERM "$$gateway_pid"
+        wait "$$gateway_pid" || true
+        npx openclaw gateway run --port 18789 --bind loopback --auth none &
+        gateway_pid=$!
+        until node -e "require('net').connect(18789, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"; do
+          kill -0 "$$gateway_pid" 2>/dev/null
+          sleep 1
+        done
+        touch /tmp/openclaw-auth-ready
+        wait "$$gateway_pid"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -f /tmp/openclaw-auth-ready && node -e "require('net').connect(18789, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
       - fixture-projects:/home/assistant/projects

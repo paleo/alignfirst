@@ -44,7 +44,10 @@
   "models": {
     "providers": {
       "openai": {
-        "agentRuntime": { "id": "openclaw" }
+        "agentRuntime": { "id": "openclaw" },
+        "baseUrl": "https://chatgpt.com/backend-api/codex",
+        "api": "openai-chatgpt-responses",
+        "models": []
       },
       "custom-anthropic": {
         "agentRuntime": { "id": "openclaw" },
