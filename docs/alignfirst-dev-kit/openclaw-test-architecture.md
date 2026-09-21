@@ -44,10 +44,10 @@ inbound ──▶ │   bus   │ ◀── outbound (every channel plugin)
 ```
 
 - **`bus`** — in-memory state store. Conversations, threads, messages, events, cursors. Exposes a small HTTP API consumed by `bus-client.ts` in `channel-mock-core`.
-- **`gateway`** — runs OpenClaw and loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim. The Dev Kit overlay starts the gateway once, imports the mounted Codex credential into the `main` agent's auth store, then restarts the gateway to refresh its authentication cache.
+- **`gateway`** — runs OpenClaw and loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim. The Dev Kit overlay imports mounted Codex credentials, when present, into the `main` agent's auth store before starting the gateway.
 - **`runner`** — runs scenarios serially. Mints a fresh `conversationId` per task, pushes inbounds onto the bus, polls outbounds, asserts, runs the judge (Anthropic-direct), writes artifacts.
 
-Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. The Dev Kit gateway becomes healthy only after credential import and restart complete. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
+Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
 
 ## Two-Dockerfile pattern
 
@@ -78,9 +78,9 @@ include:
   - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml
 ```
 
-Compose v2.20+ required. The overlay adds consumer-specific service overrides. The Dev Kit overlay adds runner environment variables, bind mounts, and the gateway credential-import startup and healthcheck. The base file owns the shared build context, volumes, and default entrypoints.
+Compose v2.20+ required. The Dev Kit overlay adds environment variables, bind mounts, and optional credential import before gateway startup. The base file owns the shared build context, volumes, healthchecks, and default entrypoints.
 
-The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so the startup command copies `auth.json` and the optional model cache into a temporary directory, imports only `auth:openai`, then deletes the copy. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup and failure modes.
+The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so the startup command copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 

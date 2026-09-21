@@ -36,7 +36,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@alignfirst/service-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
 - Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, the core gateway `wake` method used by `openclaw system event`, and the heartbeat exec-completion prompt.
 - Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs. Use the deterministic gateway suite as the judge.
-- Recheck the version-specific credential import, gateway restart, and build repair described in [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration). Remove a workaround only after the subscription-backed Terra scenario passes without it.
+- Recheck the credential import and version-specific build repair described in [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration). Remove a workaround only after the subscription-backed Terra scenario passes without it.
 
 ## Bump the pins
 
