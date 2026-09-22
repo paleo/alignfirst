@@ -1,3 +1,0 @@
-minimumReleaseAgeExclude:
-  - "@alignfirst/docmap@0.11.0"
-  - "@alignfirst/workspace@0.34.0"

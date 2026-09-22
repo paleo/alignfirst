@@ -25,21 +25,9 @@ services:
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
       # can write the thread rollout alcode reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
-    command:
-      - sh
-      - -c
-      - |
-        set -e
-        if [ -f /home/assistant/.codex/auth.json ]; then
-          (
-            import_home=$$(mktemp -d)
-            trap 'rm -rf "$$import_home"' EXIT
-            cp /home/assistant/.codex/auth.json "$$import_home/auth.json"
-            npx openclaw migrate apply codex --from "$$import_home" --agent main --include-secrets --item auth:openai --yes
-          )
-        fi
-        /usr/local/bin/exec-watcher &
-        exec npx openclaw gateway run --port 18789 --bind loopback --auth none
+    # Import the mounted Codex credential, then hand off to the base stack's
+    # gateway command, which stays the single owner of the start line.
+    entrypoint: ["/usr/local/bin/gateway-entrypoint"]
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
       - fixture-projects:/home/assistant/projects

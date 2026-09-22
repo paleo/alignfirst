@@ -38,7 +38,7 @@ npm run e2e -- --model gpt-5.6-terra --channel slack-mock A03-question
 npm run env:down
 ```
 
-See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLEL` in `.env.local`) runs cells concurrently on K worker stacks; per-worker workspace copies land in `.workers/` (gitignored). When upgrading from a pre-parallel version, tear down the legacy un-suffixed Compose project once: `docker compose down` from this dir.
+See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLEL` in `.env.local`) runs cells concurrently on K worker stacks; per-worker workspace copies land in `.workers/` (gitignored). When upgrading from a pre-parallel version, tear down the legacy un-suffixed Compose project once: `docker compose down` from `alignfirst-dev-kit-tests/`.
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
@@ -55,7 +55,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 
-  OpenClaw 2026.9.5 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. Before starting the gateway, Compose copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, then deletes the copy. Without `auth.json`, startup skips the import so other providers need no Codex login. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
+  OpenClaw 2026.9.5 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
 - `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — renamed from `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR`, and its value moved with the skill directory; host path to the `alignfirst-openclaw-playbook` skill, bind-mounted at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
@@ -111,7 +111,7 @@ Starter values, canonical paths, full detailed requests, and actual session owne
 
 The fresh-session reaction helper observes a claim, history read, and lobster reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation. The quiet-takeover helper then waits for a terminal turn before checking that the starter's question was not repeated. A17 applies the structural reaction assertion to an active takeover and checks the approved readiness meaning. A23 applies it to a human-created thread whose claim returns `none`. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
-From this directory, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
+From `alignfirst-dev-kit-tests/`, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
 
 ```bash
 npm run build --prefix ..
@@ -135,7 +135,7 @@ For a focused pass, supply only the affected scenario names instead of the array
 
 This harness vendors the **local** sources of the four generic `@alignfirst/openclaw-*` packages and `@alignfirst/service-openclaw-plugin`.
 
-The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](../../alignfirst-dev-kit-tests/scripts/vendor-packages.mjs) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is this directory, so the tarballs must live here.
+The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](../../alignfirst-dev-kit-tests/scripts/vendor-packages.mjs) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is `alignfirst-dev-kit-tests/`, so the tarballs must live in `alignfirst-dev-kit-tests/vendor/`.
 
 `npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any of the five packages is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution.
 

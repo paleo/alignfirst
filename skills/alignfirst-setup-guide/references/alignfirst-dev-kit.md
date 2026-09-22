@@ -139,6 +139,8 @@ Every runbook states its role and its position at the top. Human steps are marke
 
 The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 
+The seed carries only the settings the deployment decided, and follows an OpenClaw default when a release changes it. `docs/configuration.md` states the rule and `update-assistant.md` applies it at each core bump.
+
 The `assistant` files are named after the role, not the instance. An operator who prefers the assistant's own name renames them after rendering: `update-{{ASSISTANT_NAME}}.md`, `{{ASSISTANT_NAME}}-kill.sh`. Update the links and the `install` commands in the same pass.
 
 ## Linux Examples

@@ -55,6 +55,8 @@ Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `g
 
 The CLI's `env build` builds the base locally as `paleo/openclaw-test-base:<pkg-version>` and injects the tag into the consumer image via the `OPENCLAW_TEST_BASE_TAG` build arg.
 
+That tag lives only in the local image store, which only a `docker`-driver Buildx builder reads. `docker build` always picks the docker driver, so the base image is safe, but `docker compose build` follows the selected builder: with a `docker-container` or `remote` builder the consumer `FROM` misses the store, falls back to the registry, and fails as `pull access denied`. The CLI therefore points `BUILDX_BUILDER` at the docker-driver builder, whose name follows the Docker context. An explicit `BUILDX_BUILDER` wins, and a selected builder that already reads the store is left alone.
+
 The consumer-owned `Dockerfile` (dropped by `init`) does:
 
 1. `FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}`
@@ -78,9 +80,9 @@ include:
   - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml
 ```
 
-Compose v2.20+ required. The Dev Kit overlay adds environment variables, bind mounts, and optional credential import before gateway startup. The base file owns the shared build context, volumes, healthchecks, and default entrypoints.
+Compose v2.20+ required. The Dev Kit overlay adds environment variables, bind mounts, and a gateway `entrypoint:` that imports the Codex credential before handing off. The base file owns the shared build context, volumes, healthchecks, and the service commands, including the gateway start line the overlay inherits.
 
-The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so the startup command copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
+The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so [`scripts/gateway-entrypoint.sh`](../../alignfirst-dev-kit-tests/scripts/gateway-entrypoint.sh) copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. It ends with `exec "$@"`, so the base stack stays the single owner of the gateway start line. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 

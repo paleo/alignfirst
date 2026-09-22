@@ -40,7 +40,9 @@ RUN printf '#!/bin/sh\nexec /opt/openclaw-test/src/node_modules/.bin/openclaw "$
 
 # Reset / seed scripts invoked from scenarios via ctx.execInGateway(...).
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
-RUN chmod +x /opt/openclaw-test/scripts/*.mjs
+RUN chmod +x /opt/openclaw-test/scripts/*.mjs && \
+    install -m 0755 /opt/openclaw-test/scripts/gateway-entrypoint.sh \
+      /usr/local/bin/gateway-entrypoint
 
 USER assistant
 

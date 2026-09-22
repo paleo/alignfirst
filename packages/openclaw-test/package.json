@@ -51,7 +51,7 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "~0.122.0",
+    "@anthropic-ai/sdk": "~0.127.0",
     "@alignfirst/openclaw-channel-mock-core": "0.10.0",
     "@alignfirst/openclaw-discord-mock": "0.6.0",
     "@alignfirst/openclaw-slack-mock": "0.6.0",
