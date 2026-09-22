@@ -1,5 +1,16 @@
 # @alignfirst/openclaw-test
 
+## 0.21.1
+
+### Patch Changes
+
+- 34b5c46: Updated the Anthropic SDK used by the judge to 0.127.
+- 34b5c46: Fixed the consumer image build failing with `pull access denied` when the selected Buildx builder does not use the `docker` driver.
+- Updated dependencies [34b5c46]
+  - @alignfirst/openclaw-channel-mock-core@0.10.1
+  - @alignfirst/openclaw-discord-mock@0.6.1
+  - @alignfirst/openclaw-slack-mock@0.6.1
+
 ## 0.21.0
 
 ### Minor Changes

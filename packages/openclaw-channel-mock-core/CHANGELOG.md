@@ -1,5 +1,11 @@
 # @alignfirst/openclaw-channel-mock-core
 
+## 0.10.1
+
+### Patch Changes
+
+- 34b5c46: Required OpenClaw 2026.9.5 and pinned Zod to the 4.5.4 copy that release ships, so a single Zod instance crosses the plugin boundary.
+
 ## 0.10.0
 
 ### Minor Changes
