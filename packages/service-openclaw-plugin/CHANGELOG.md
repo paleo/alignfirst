@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.4.1
+
+### Patch Changes
+
+- 34b5c46: Verified compatibility with OpenClaw 2026.9.5.
+
 ## 0.4.0
 
 ### Minor Changes

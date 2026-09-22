@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/openclaw-test",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Dockerised regression-test framework for OpenClaw workspaces: bus, scenario driver, judge, Compose stack.",
   "keywords": [
     "openclaw",
@@ -52,9 +52,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "~0.127.0",
-    "@alignfirst/openclaw-channel-mock-core": "0.10.0",
-    "@alignfirst/openclaw-discord-mock": "0.6.0",
-    "@alignfirst/openclaw-slack-mock": "0.6.0",
+    "@alignfirst/openclaw-channel-mock-core": "0.10.1",
+    "@alignfirst/openclaw-discord-mock": "0.6.1",
+    "@alignfirst/openclaw-slack-mock": "0.6.1",
     "openai": "~7.8.0"
   },
   "devDependencies": {
