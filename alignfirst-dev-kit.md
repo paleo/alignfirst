@@ -38,5 +38,5 @@ docmap, isolated workspaces, and a project-specific `DEVELOPERS.md`.
 Read the
 [maintainer architecture](docs/alignfirst-dev-kit/alignfirst-dev-kit.md) before changing the
 OpenClaw workspace, playbook, or regression harness. The
-[regression-test guide](alignfirst-dev-kit-tests/README.md) covers the synthetic Slack and Discord
+[regression-test guide](docs/alignfirst-dev-kit/running-openclaw-tests.md) covers the synthetic Slack and Discord
 suite.

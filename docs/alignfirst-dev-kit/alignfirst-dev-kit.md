@@ -56,28 +56,12 @@ The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate
 - [`openclaw-plugin.md`](./openclaw-plugin.md) — what the plugin is for, the principles that bound it, and what was tried and dropped. Read this before changing how a thread starts.
 - [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) — what OpenClaw auto-loads, the surface/session/subagent model, Discord thread routing, debug env vars. Read this first before touching layer 1 or 2.
 - [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics for authoring layer 1 / layer 2 files so they survive a hot model and the test suite.
+- [`running-openclaw-tests.md`](./running-openclaw-tests.md) — setup, credentials, scenario selection, fixtures, artifacts, and maintenance notes.
 - [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) — the harness internals (topology, Dockerfiles, mocked CLIs, scenarios, artifacts, judge).
-- [`alignfirst-dev-kit-tests/README.md`](../../alignfirst-dev-kit-tests/README.md) — running the suite, the `ABC-0<S>N` ticket convention, the gotchas.
 
 ## Running the suite
 
-From [`alignfirst-dev-kit-tests/`](../../alignfirst-dev-kit-tests/):
-
-```sh
-cp .env.local.example .env.local   # fill ANTHROPIC_API_KEY
-npm install
-mkdir -p artifacts .gateway-logs   # create as your user so Docker doesn't make them root-owned
-npm run env:build                  # only after image-affecting changes
-npm run env:up
-npm run e2e -- --model gpt-5.6-terra --channel discord-mock A01-new-work-to-be-done
-npm run env:down
-```
-
-> ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Runs are written to **timestamped** subdirs, so they accumulate without colliding — wiping the directory destroys prior runs for no reason. `mkdir -p` is enough to avoid root-owned dirs.
-
-Run model matrices with Terra first. After they pass, use A08 on Slack for the smallest Sonnet compatibility check.
-
-Scenario ids are the full filename stem (`A01-new-work-to-be-done`, not `A01`). Measure a flaky-looking assertion's true rate with `--iterations N --max-failures N` (raise `--max-failures` above its default of 1 so the matrix doesn't abort early). See [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md#doc-obedience-is-per-iteration).
+[Running the OpenClaw Tests](./running-openclaw-tests.md) is the operator guide for the Dev Kit harness. It covers setup, safe artifact handling, focused checks, full matrices, and the ticket-id convention.
 
 ## Deployment
 

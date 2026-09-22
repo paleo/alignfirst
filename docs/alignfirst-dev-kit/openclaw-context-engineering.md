@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.4 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.5 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
@@ -42,7 +42,7 @@ Over-budget files are truncated with a marker. Keep workspace files under these 
 
 The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; the listing shows it as `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.
 
-The general silence convention is `NO_REPLY`. OpenClaw 2026.9.4 can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
+The general silence convention is `NO_REPLY`. OpenClaw 2026.9.5 can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
 
 The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. OpenClaw's stock prompt instructs `NO_REPLY`, and with the key unset it wins over any workspace instruction. The harness and deployment seed leave this key unset. Native exec completions take a separate `buildExecEventPrompt` branch in `src/infra/heartbeat-runner-prompt.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
@@ -92,7 +92,7 @@ For Discord today:
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
 - Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
 
-A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.4; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
+A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.5; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
 
 ### Outbound delivery (the surprising part)
 

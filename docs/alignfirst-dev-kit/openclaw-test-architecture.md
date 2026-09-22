@@ -44,7 +44,7 @@ inbound ──▶ │   bus   │ ◀── outbound (every channel plugin)
 ```
 
 - **`bus`** — in-memory state store. Conversations, threads, messages, events, cursors. Exposes a small HTTP API consumed by `bus-client.ts` in `channel-mock-core`.
-- **`gateway`** — runs `npx openclaw gateway run`. Loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim.
+- **`gateway`** — runs OpenClaw and loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim. The Dev Kit overlay imports mounted Codex credentials, when present, into the `main` agent's auth store before starting the gateway.
 - **`runner`** — runs scenarios serially. Mints a fresh `conversationId` per task, pushes inbounds onto the bus, polls outbounds, asserts, runs the judge (Anthropic-direct), writes artifacts.
 
 Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
@@ -55,6 +55,8 @@ Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `g
 
 The CLI's `env build` builds the base locally as `paleo/openclaw-test-base:<pkg-version>` and injects the tag into the consumer image via the `OPENCLAW_TEST_BASE_TAG` build arg.
 
+That tag lives only in the local image store, which only a `docker`-driver Buildx builder reads. `docker build` always picks the docker driver, so the base image is safe, but `docker compose build` follows the selected builder: with a `docker-container` or `remote` builder the consumer `FROM` misses the store, falls back to the registry, and fails as `pull access denied`. The CLI therefore points `BUILDX_BUILDER` at the docker-driver builder, whose name follows the Docker context. An explicit `BUILDX_BUILDER` wins, and a selected builder that already reads the store is left alone.
+
 The consumer-owned `Dockerfile` (dropped by `init`) does:
 
 1. `FROM paleo/openclaw-test-base:${OPENCLAW_TEST_BASE_TAG}`
@@ -63,7 +65,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.5.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -78,7 +80,9 @@ include:
   - ./node_modules/@alignfirst/openclaw-test/docker-compose.yml
 ```
 
-Compose v2.20+ required. The overlay's job is to add consumer-specific service overrides (e.g. extra env vars on `runner`); the base file owns the build context, volumes, healthchecks, and entrypoints.
+Compose v2.20+ required. The Dev Kit overlay adds environment variables, bind mounts, and a gateway `entrypoint:` that imports the Codex credential before handing off. The base file owns the shared build context, volumes, healthchecks, and the service commands, including the gateway start line the overlay inherits.
+
+The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so [`scripts/gateway-entrypoint.sh`](../../alignfirst-dev-kit-tests/scripts/gateway-entrypoint.sh) copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. It ends with `exec "$@"`, so the base stack stays the single owner of the gateway start line. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 
@@ -158,7 +162,7 @@ Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the regi
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
-Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.4 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
+Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.5 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
 
 **Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
 
@@ -216,7 +220,7 @@ multi-project delegation; A20 confirms that a later human message becomes the ta
 to a human-created thread whose claim returns `none`. The internal service activation is absent from
 bus history and cannot be selected.
 
-The deterministic external-plugin suite uses the real OpenClaw 2026.9.4 executable, a scripted
+The deterministic external-plugin suite uses the real OpenClaw 2026.9.5 executable, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @alignfirst/service-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and

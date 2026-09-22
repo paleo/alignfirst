@@ -3,11 +3,18 @@ title: Configuration
 read_when:
   - looking for the record of the OpenClaw configuration
   - wondering which file owns a setting
+  - deciding what to do when an OpenClaw release changes a default
 ---
 
 # Configuration
 
 The seed is the record of the OpenClaw configuration. No copy of `openclaw.json` is tracked: `seed.sh` derives it from the installed version's defaults and the sources below, so the repository shows the intent and the server holds the result.
+
+## Stock defaults
+
+The seed carries only the settings this deployment decided. Everything else stays at the installed version's default, and follows that default when a release changes it.
+
+Pin a value only when a stated policy requires it, and record the policy in the comment beside the setting. Preserving previous behavior is not a policy.
 
 ## Sources
 

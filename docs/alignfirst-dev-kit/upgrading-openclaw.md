@@ -36,6 +36,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@alignfirst/service-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
 - Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, the core gateway `wake` method used by `openclaw system event`, and the heartbeat exec-completion prompt.
 - Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs. Use the deterministic gateway suite as the judge.
+- Recheck the credential import and version-specific build repair described in [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration). Remove a workaround only after the subscription-backed Terra scenario passes without it.
 
 ## Bump the pins
 
@@ -71,7 +72,7 @@ for ws in /tmp/doctor-harness /tmp/doctor-template; do
 done
 ```
 
-Three findings are expected noise, because no gateway ever runs in this container: the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`), the plaintext-secrets warning (the harness injects keys through the environment on purpose) and the node-hosting precondition about the loopback bind. Investigate anything else.
+Four findings are expected noise, because no gateway ever runs in this container: the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`), the plaintext-secrets warning (the harness injects keys through the environment on purpose), and the node-hosting preconditions about the loopback bind and disabled device pairing. Investigate anything else.
 
 ## Inspect a running gateway
 
@@ -95,3 +96,5 @@ npm run env:down
 ## Propagate to the deployment template
 
 The seed targets the current release. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `alignfirst-dev-kit-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
+
+Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/alignfirst-setup-guide/assets/alignfirst-dev-kit-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The background opt-outs above hold their policies — no autonomous model spend, no telemetry ping.

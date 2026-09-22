@@ -38,12 +38,15 @@
   "tools": {
     "profile": "coding",
     "alsoAllow": ["message", "browser", "thread_handoff"],
+    "message": { "crossContext": { "allowAcrossProviders": false } },
     "deny": ["ask_user"]
   },
   "models": {
     "providers": {
       "openai": {
-        "agentRuntime": { "id": "openclaw" }
+        "agentRuntime": { "id": "openclaw" },
+        "baseUrl": "https://chatgpt.com/backend-api/codex",
+        "api": "openai-chatgpt-responses"
       },
       "custom-anthropic": {
         "agentRuntime": { "id": "openclaw" },

@@ -25,6 +25,9 @@ services:
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
       # can write the thread rollout alcode reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
+    # Import the mounted Codex credential, then hand off to the base stack's
+    # gateway command, which stays the single owner of the start line.
+    entrypoint: ["/usr/local/bin/gateway-entrypoint"]
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
       - fixture-projects:/home/assistant/projects

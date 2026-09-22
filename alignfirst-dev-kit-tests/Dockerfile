@@ -40,7 +40,9 @@ RUN printf '#!/bin/sh\nexec /opt/openclaw-test/src/node_modules/.bin/openclaw "$
 
 # Reset / seed scripts invoked from scenarios via ctx.execInGateway(...).
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
-RUN chmod +x /opt/openclaw-test/scripts/*.mjs
+RUN chmod +x /opt/openclaw-test/scripts/*.mjs && \
+    install -m 0755 /opt/openclaw-test/scripts/gateway-entrypoint.sh \
+      /usr/local/bin/gateway-entrypoint
 
 USER assistant
 
@@ -70,16 +72,28 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.9.4 && \
+        npm:@openclaw/codex@2026.9.5 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.9.4 && \
+        npm:@openclaw/zai-provider@2026.9.5 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.9.4 && \
+        npm:@openclaw/perplexity-plugin@2026.9.5 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force
+
+# OpenClaw 2026.9.5 defers plugin state migration until its update records are
+# released. Finalize the update first, then settle the deferred state in a new
+# process. Retry Doctor because a just-released SQLite lease can race once.
+RUN OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
+      npx openclaw update repair --yes
+RUN for attempt in 1 2 3; do \
+      OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
+        npx openclaw doctor --fix --yes && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+      sleep 2; \
+    done
 
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
 # from here into the nested fixture tree at scenario start, materializing nimbus,

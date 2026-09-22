@@ -451,6 +451,47 @@ function setupHostEnv(packageDir: string): void {
   if (!process.env.ASSISTANT_GID) process.env.ASSISTANT_GID = String(process.getgid?.() ?? 1000);
   absolutizePathVarsFromEnvFile(projectDir);
   applyPathDefaults(projectDir);
+  pinBuilderReadingLocalImages();
+}
+
+// The consumer Dockerfile resolves the base image with `FROM paleo/openclaw-test-base:<tag>`,
+// a tag that exists only in the local image store. Only a `docker`-driver builder reads that
+// store: a `docker-container` or `remote` builder tries the registry instead and fails with an
+// opaque `pull access denied`. `docker build` always picks the docker driver, so the base image
+// itself is unaffected, but `docker compose build` follows the selected builder — so a developer
+// who selected a container builder for everything else cannot build the consumer image.
+// Point BUILDX_BUILDER at the docker-driver builder, whose name follows the Docker context and
+// is only `default` on the default one. An explicit BUILDX_BUILDER wins, as does the selected
+// builder when it already reads the store.
+function pinBuilderReadingLocalImages(): void {
+  if (process.env.BUILDX_BUILDER) return;
+  const builders = listBuilders();
+  if (builders.some((builder) => builder.current && builder.driver === "docker")) return;
+  const local = builders.find((builder) => builder.driver === "docker");
+  if (local) process.env.BUILDX_BUILDER = local.name;
+}
+
+type BuilderSummary = { name: string; driver: string; current: boolean };
+
+// `buildx ls --format json` emits one builder per line. Tolerate every failure: an older Docker
+// without the flag, or a malformed line, leaves the selection untouched and the build reports
+// its own error.
+function listBuilders(): BuilderSummary[] {
+  const r = spawnSync("docker", ["buildx", "ls", "--format", "json"], { encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout) return [];
+  return r.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        const parsed = JSON.parse(line) as { Name?: string; Driver?: string; Current?: boolean };
+        if (!parsed.Name || !parsed.Driver) return [];
+        return [{ name: parsed.Name, driver: parsed.Driver, current: parsed.Current === true }];
+      } catch {
+        return [];
+      }
+    });
 }
 
 // Defaults relative to the consumer's project dir, applied after `.env.local` so
