@@ -16,6 +16,9 @@ import {
 // `LLM request failed: …`) stream to the channel root and are not
 // model-controllable — exempt from the leak sweep.
 const openclawNoticeRe = /^(?:⚠️|LLM request failed\b)/u;
+// Printed by OpenClaw's context-free finalizer when a required reply ends silent.
+const FINALIZER_FALLBACK = "The tool run finished, but no final summary was produced.";
+const HANDOFF_POINTER_MAX_CHARS = 200;
 
 export function isOpenclawNotice(text: string): boolean {
   return openclawNoticeRe.test(text);
@@ -98,6 +101,37 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
 }
 
 /**
+ * The channel turn ends on one short line pointing to the thread. OpenClaw 2026.9.6 requires that
+ * answer for a mentioned request; a silent turn gets a context-free finalizer post instead.
+ */
+export async function waitForHandoffPointer(
+  ctx: ScenarioContext,
+  opts: { sinceCursor: number; timeoutMs?: number },
+): Promise<WaitForOutboundResult> {
+  const wait = await ctx.waitForOutbound(
+    (m) =>
+      m.direction === "outbound" &&
+      m.conversation.id === ctx.conversationId &&
+      m.threadId === undefined &&
+      !isOpenclawNotice(m.text),
+    {
+      timeoutMs: opts.timeoutMs ?? 60_000,
+      sinceCursor: opts.sinceCursor,
+      failFastUnmatchedOutbounds: false,
+    },
+  );
+  const text = wait.match.text.trim();
+  if (text.includes("\n") || text.length > HANDOFF_POINTER_MAX_CHARS) {
+    throw new Error(`handoff pointer is not one short line: ${JSON.stringify(text)}`);
+  }
+  if (text.startsWith(FINALIZER_FALLBACK)) {
+    throw new Error("the channel turn ended silent and OpenClaw posted its finalizer fallback");
+  }
+  ctx.log({ attachTo: wait.entry, label: `handoff pointer: ${JSON.stringify(text)}` });
+  return wait;
+}
+
+/**
  * Assert the agent posted nothing substantive on the channel root since
  * `sinceCursor`. Once a thread exists, every post must carry a threadId;
  * free-form assistant text auto-streams to the parent channel (Discord), so a
@@ -113,7 +147,7 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
  */
 export async function assertNoChannelRootLeak(
   ctx: ScenarioContext,
-  opts: { sinceCursor: number; withinMs?: number },
+  opts: { sinceCursor: number; withinMs?: number; exceptIds?: readonly string[] },
 ): Promise<void> {
   const deadline = Date.now() + (opts.withinMs ?? 5_000);
   let cursor = opts.sinceCursor;
@@ -124,6 +158,7 @@ export async function assertNoChannelRootLeak(
     for (const m of messages) {
       if (m.direction !== "outbound" || m.conversation.id !== ctx.conversationId) continue;
       if (m.threadId !== undefined || isOpenclawNotice(m.text)) continue;
+      if (opts.exceptIds?.includes(m.id)) continue;
       if (await isMetaNarration(ctx, m.text)) {
         ++tolerated;
         ctx.log(`channel-root narration tolerated: ${JSON.stringify(m.text.slice(0, 80))}`);

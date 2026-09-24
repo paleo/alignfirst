@@ -210,7 +210,7 @@ The Dev Kit consumer sets Slack to `replyToMode: "off"`. Its parent channel sess
 posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
 dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical target session. That session claims with `{ "action": "claim" }` and reads thread history before work. Scenario assertions correlate
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
-final `NO_REPLY`.
+closing pointer to the thread.
 
 The shared fresh-session assertion binds the claim, history read, and lobster reaction by
 tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
@@ -229,7 +229,7 @@ both surfaces: a static takeover with its reply in the thread, a human message d
 turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
 takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery.
 
-The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
+The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 
@@ -267,7 +267,7 @@ Authoritative types: `packages/openclaw-test/src/report.ts`.
 
 OpenClaw (2026.8+) persists each session's transcript as SQLite rows in the gateway's per-agent store (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`, table `transcript_events`, with `session_nodes` mapping `session_key` → `current_session_id`). A session key can span several `session_windows` rows — compaction, reset, or recovery mints a successor session id — so the dump unions every window of the key, keeping earlier tool calls and costs across a mid-run rollover. The runner reads transcripts, not the trajectory diagnostics: the `trajectory_runtime_events` payloads run through OpenClaw's diagnostic projection, which caps the whole payload at ~64 nodes — a `model.completed` snapshot loses every message past the first few, so tool calls from any real turn are unrecoverable there. The transcript is the conversation record the gateway itself replays, appended per message — tool calls become visible as they happen, not at turn end.
 
-Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
+Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
 The store lives outside the shared mounts and dies with the per-cell stack recreation, so the runner extracts a conversation's session transcripts through the exec-watcher RPC: `transcript-dump.js` (in this package's dist, mounted into the gateway) queries the store with `node:sqlite` (session keys matched on the conversation ID and its bus-owned thread IDs) and writes the result as JSON into the shared IPC volume (stdout would hit the watcher's 1 MiB cap). The runner saves the fetched transcripts as `transcripts.json` in the cell's artifact dir for post-mortems.
 

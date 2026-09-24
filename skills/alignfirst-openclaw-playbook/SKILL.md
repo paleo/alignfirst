@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst assistant runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.40.0"
+  version: "0.41.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -27,7 +27,7 @@ A channel session answers ordinary conversation directly. Project investigation,
 
 Your plain text streams to your bound route: in a thread it is the reply, in a channel it is the root reply. Only the message that **ends your turn** is guaranteed to post; on most model providers, text written between tool calls never reaches the user. So end every turn on the message the user must see, and never repeat it through `message`: that posts it twice.
 
-The `message` tool serves the starter (Discord `thread-create`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. After `thread_handoff start`, the channel turn ends on `NO_REPLY`.
+The `message` tool serves the starter (Discord `thread-create`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. After `thread_handoff start`, the channel turn ends on a one-line pointer to the thread.
 
 ## Reply style
 

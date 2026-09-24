@@ -38,11 +38,9 @@ Defaults in `src/agents/embedded-agent-helpers/bootstrap.ts`:
 
 Over-budget files are truncated with a marker. Keep workspace files under these limits.
 
-## Heartbeat: cron scratch and `NO_REPLY`
+## Heartbeat: cron scratch and prompt
 
 The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; the listing shows it as `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.
-
-The general silence convention is `NO_REPLY`. OpenClaw can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect. Observed on 2026.9.5; the 2026.9.6 changelog lists no fix.
 
 The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. OpenClaw's stock prompt instructs `NO_REPLY`, and with the key unset it wins over any workspace instruction. The harness and deployment seed leave this key unset. Native exec completions take a separate branch in `src/infra/heartbeat-runner-prompt.ts`, built by `buildExecEventPrompt` in `src/infra/heartbeat-events-filter.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
@@ -60,7 +58,13 @@ Native notices have no short delivery deadline. In `src/infra/heartbeat-cooldown
 
 Heartbeat wakes cannot start a thread reliably. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty, whatever the intent; `immediate` bypasses only the per-agent active-run check. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds, against 48 hours for a regular turn. In production on 2026-09-10, two review requests thirty seconds apart left one thread unstarted until a human wrote in it. The plugin therefore dispatches the takeover nudge as a reply run. The `alcode` completion path stays OpenClaw's own; see [`openclaw-plugin.md`](./openclaw-plugin.md).
 
-Plugin-dispatched reply runs use `HEARTBEAT_OK` when they have nothing to report. The deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply.
+## Silent replies
+
+OpenClaw decides at admission whether a turn owes a reply (`resolveSourceReplyExpectation` in `src/auto-reply/reply/source-reply-delivery-mode.ts`). Heartbeat, inter-session and internal-system turns are optional. A group or channel message is optional only when `silentReply.group` is `"allow"` and the message does not mention the bot; an implicit mention counts. The group default changed from `"allow"` to `"disallow"` in 2026.9.6, and `"disallow"` also drops the `NO_REPLY` line from the group prompt (`src/auto-reply/reply/groups.ts`). The harness config, the deterministic gateway and the seed set `agents.defaults.silentReply.group: "allow"`: the channels are always-on (`requireMention: false`), and most of their messages need no answer.
+
+A required turn that ends on a silent token gets an isolated finalization: no system prompt, no tools, an order to produce the final answer now. Its output posts to the turn's route; an empty one becomes `The tool run finished, but no final summary was produced.` (`src/agents/embedded-agent-runner/run/settled-turn-finalization.ts`). The channel turn that calls `thread_handoff start` therefore always ends on a one-line pointer to the thread, since a request that mentions the bot stays required.
+
+The plugin's nudge is an unmentioned group message, so its reply run is optional. It ends on `HEARTBEAT_OK` when it has nothing to report. On 2026.9.5 the deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply. Disabling block streaming did not avoid the `NO_REPLY` defect. Other turns with nothing to report stay on `NO_REPLY`.
 
 ## Background model runs disabled by the harness and the seed
 

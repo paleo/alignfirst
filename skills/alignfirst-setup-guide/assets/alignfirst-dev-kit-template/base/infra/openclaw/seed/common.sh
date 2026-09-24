@@ -161,6 +161,9 @@ configure_common() {
   set_json tools.exec.pathPrepend '[]'
   set_json agents.defaults.sandbox.browser.headless true
   set_scalar messages.groupChat.visibleReplies automatic
+  # The channel is always-on: most of its messages need no answer. Since 2026.9.6, a group
+  # message requires a reply unless this opts in; a mention still requires one.
+  set_scalar agents.defaults.silentReply.group allow
 
   echo "[seed] thread sessions — 2.5 days idle, binding kept as long"
   # Threads carry one task across days; the default daily reset and 24h binding would drop

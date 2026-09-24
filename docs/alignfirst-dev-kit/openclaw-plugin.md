@@ -38,7 +38,7 @@ The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited righ
 
 ### Say only what is true
 
-The bot claims only what it does. The channel session posts the starter, calls `thread_handoff start` and ends its turn. Its last line never says that this session handles the work or that the work has begun: it has left the thread, and the thread session may still be waiting for a value. In a DM, where the plugin cannot start a thread, the bot says so instead of promising an activation. A completion report relays what the coding agent claims and what the bot verified; it does not call the work done.
+The bot claims only what it does. The channel session posts the starter, calls `thread_handoff start` and ends its turn on a one-line pointer to the thread. That line never says that this session handles the work or that the work has begun: it has left the thread, and the thread session may still be waiting for a value. In a DM, where the plugin cannot start a thread, the bot says so instead of promising an activation. A completion report relays what the coding agent claims and what the bot verified; it does not call the work done.
 
 ## What the plugin does
 
@@ -56,6 +56,7 @@ The handoff service owns an asynchronous boundary created outside inbound agent 
 
 - The plugin-dispatched turn must disable block streaming. With streaming on, OpenClaw marked the response streamed through a nonposting fallback and dropped the final payload before delivery.
 - A silent plugin-dispatched turn ends on `HEARTBEAT_OK`. `NO_REPLY` invoked the isolated finalizer in six probes out of six, on both surfaces, and produced an unsolicited answer.
+- The nudge is an unmentioned group message. Since 2026.9.6 it may end silent only under `agents.defaults.silentReply.group: "allow"`; see [Silent replies](./openclaw-context-engineering.md#silent-replies).
 - A human message posted while the nudge turn runs queues behind it and is processed. This is the property the `agent` gateway method lacked (see below).
 - After a gateway restart, core may replay the nudge as a durable user turn while the plugin retries the pending record. The idempotent claim absorbs the duplicate.
 
