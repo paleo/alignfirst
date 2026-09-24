@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { zstdCompressSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { readConversationSessions } from "../src/transcript-store.js";
 
@@ -22,7 +23,7 @@ describe("conversation transcript attribution", () => {
       CREATE TABLE session_nodes (session_key TEXT, current_session_id TEXT);
       CREATE TABLE session_windows (session_key TEXT, session_id TEXT, created_at INTEGER);
       CREATE TABLE transcript_events (
-        session_id TEXT, created_at INTEGER, seq INTEGER, event_json TEXT
+        session_id TEXT, created_at INTEGER, seq INTEGER, event_json TEXT, event_zstd BLOB
       );
     `);
     const conversationId = "A14-sole-project-discord-mock-test";
@@ -35,7 +36,7 @@ describe("conversation transcript attribution", () => {
       "thread-after-recovery",
       threadKey,
     );
-    seedWindow(db, threadKey, "thread-after-recovery", "workspace ready", 2);
+    seedWindow(db, threadKey, "thread-after-recovery", "workspace ready", 2, { compressed: true });
     seedSession(db, `${threadKey}1`, "other-thread", "unrelated");
     seedSession(db, `${channelKey}-other`, "other-conversation", "unrelated");
     db.close();
@@ -66,12 +67,18 @@ function seedWindow(
   id: string,
   text: string,
   timestamp: number,
+  options: { compressed?: boolean } = {},
 ): void {
   db.prepare("INSERT INTO session_windows VALUES (?, ?, ?)").run(key, id, timestamp);
-  db.prepare("INSERT INTO transcript_events VALUES (?, ?, ?, ?)").run(
+  const eventJson = JSON.stringify({
+    type: "message",
+    message: { role: "assistant", content: text },
+  });
+  db.prepare("INSERT INTO transcript_events VALUES (?, ?, ?, ?, ?)").run(
     id,
     timestamp,
     1,
-    JSON.stringify({ type: "message", message: { role: "assistant", content: text } }),
+    options.compressed ? null : eventJson,
+    options.compressed ? zstdCompressSync(Buffer.from(eventJson, "utf8")) : null,
   );
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
+import { zstdDecompressSync } from "node:zlib";
 
 const TRANSCRIPT_DATABASE_PATH =
   "/home/assistant/.openclaw/agents/main/agent/openclaw-agent.sqlite";
@@ -60,16 +61,13 @@ export function inspectSession(
   try {
     const rows = database
       .prepare(`
-        SELECT e.event_json FROM transcript_events e
+        SELECT e.event_json, e.event_zstd FROM transcript_events e
         JOIN session_windows w ON w.session_id = e.session_id
         WHERE w.session_key = ? ORDER BY e.created_at, e.seq
       `)
       .all(sessionKey);
     const messages = rows
-      .map((row): TranscriptMessage => {
-        if (typeof row.event_json !== "string") throw new Error("Invalid transcript JSON");
-        return JSON.parse(row.event_json).message;
-      })
+      .map((row): TranscriptMessage => JSON.parse(decodeTranscriptEvent(row)).message)
       .filter(Boolean);
     const lastMessage = messages.at(-1);
     const terminalCount = messages.filter(isTerminal).length;
@@ -85,6 +83,14 @@ export function inspectSession(
   } finally {
     database.close();
   }
+}
+
+/** Since OpenClaw 2026.9.6, an event of 1 KiB or more is stored zstd-compressed, `event_json` NULL. */
+function decodeTranscriptEvent(row: Record<string, unknown>): string {
+  if (typeof row.event_json === "string") return row.event_json;
+  if (row.event_zstd instanceof Uint8Array)
+    return zstdDecompressSync(row.event_zstd).toString("utf8");
+  throw new Error("Invalid transcript JSON");
 }
 
 function isTerminal(message: TranscriptMessage) {
