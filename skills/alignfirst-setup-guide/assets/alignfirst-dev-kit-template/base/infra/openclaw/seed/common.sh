@@ -153,6 +153,10 @@ configure_common() {
   set_scalar tools.profile coding
   # The coding profile omits these tools; the playbook needs all three.
   set_json tools.alsoAllow '["message","browser","thread_handoff"]'
+  # The handoff and reply contract must stay visible on every turn: a tool behind Tool Search or
+  # the Code Mode bridge is one the model can forget to call. Both default on since 2026.9.6.
+  set_json tools.toolSearch false
+  set_json tools.codeMode false
   # The login shell owns PATH assembly and fnm selection for every exec run.
   set_json tools.exec.pathPrepend '[]'
   set_json agents.defaults.sandbox.browser.headless true

@@ -39,7 +39,9 @@
     "profile": "coding",
     "alsoAllow": ["message", "browser", "thread_handoff"],
     "message": { "crossContext": { "allowAcrossProviders": false } },
-    "deny": ["ask_user"]
+    "deny": ["ask_user"],
+    "toolSearch": false,
+    "codeMode": false
   },
   "models": {
     "providers": {
