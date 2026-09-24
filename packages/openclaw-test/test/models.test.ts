@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveSelectedModels } from "../src/models.js";
 
-const MODELS = "anthropic/claude-sonnet-4-6,custom-openrouter/qwen/qwen3.6-plus";
+const MODELS = "anthropic/claude-sonnet-5,custom-openrouter/qwen/qwen3.8-flash";
 
 function resolve(selection: string | undefined, defaultEnv?: string) {
   return resolveSelectedModels({ selection, modelsEnv: MODELS, defaultEnv });
@@ -9,21 +9,21 @@ function resolve(selection: string | undefined, defaultEnv?: string) {
 
 describe("resolveSelectedModels", () => {
   it("resolves a single bare id to its full ref", () => {
-    expect(resolve("qwen3.6-plus")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
+    expect(resolve("qwen3.8-flash")).toEqual([
+      { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },
     ]);
   });
 
   it("resolves a comma list of bare ids, order preserved", () => {
-    expect(resolve("qwen3.6-plus,claude-sonnet-4-6")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
-      { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
+    expect(resolve("qwen3.8-flash,claude-sonnet-5")).toEqual([
+      { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },
+      { id: "claude-sonnet-5", ref: "anthropic/claude-sonnet-5" },
     ]);
   });
 
   it("dedupes repeated ids in a list", () => {
-    expect(resolve("qwen3.6-plus,qwen3.6-plus")).toEqual([
-      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
+    expect(resolve("qwen3.8-flash,qwen3.8-flash")).toEqual([
+      { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },
     ]);
   });
 
@@ -31,24 +31,24 @@ describe("resolveSelectedModels", () => {
     expect(
       resolveSelectedModels({
         selection: "all",
-        modelsEnv: "custom-openrouter/qwen/qwen3.6-plus,anthropic/claude-sonnet-4-6",
+        modelsEnv: "custom-openrouter/qwen/qwen3.8-flash,anthropic/claude-sonnet-5",
         defaultEnv: undefined,
       }),
     ).toEqual([
-      { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
-      { id: "qwen3.6-plus", ref: "custom-openrouter/qwen/qwen3.6-plus" },
+      { id: "claude-sonnet-5", ref: "anthropic/claude-sonnet-5" },
+      { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },
     ]);
   });
 
   it("falls back to the default bare id when selection is omitted", () => {
-    expect(resolve(undefined, "claude-sonnet-4-6")).toEqual([
-      { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4-6" },
+    expect(resolve(undefined, "claude-sonnet-5")).toEqual([
+      { id: "claude-sonnet-5", ref: "anthropic/claude-sonnet-5" },
     ]);
   });
 
   it("throws on an unknown id (single or in a list)", () => {
     expect(() => resolve("nope")).toThrow(/not found/);
-    expect(() => resolve("claude-sonnet-4-6,nope")).toThrow(/not found/);
+    expect(() => resolve("claude-sonnet-5,nope")).toThrow(/not found/);
   });
 
   it("throws when selection is omitted and no default is set", () => {

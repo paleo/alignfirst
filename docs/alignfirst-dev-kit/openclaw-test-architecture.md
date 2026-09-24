@@ -282,9 +282,8 @@ Trajectory capture is default-on (disable with `OPENCLAW_TRAJECTORY=0` on the ga
 ## Judge
 
 `judgeLLM` calls its provider directly from the runner — no bus traffic, no gateway involvement. It
-is not an OpenClaw agent. The package defaults to `anthropic/claude-haiku-4-5`; the consumer
-Compose stack defaults to `openrouter/anthropic/claude-haiku-4.5` and accepts a host
-`OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
+is not an OpenClaw agent. It defaults to `openrouter/anthropic/claude-haiku-4.5`; the consumer
+Compose stack forwards a host `OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
 supported.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.

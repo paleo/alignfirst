@@ -190,7 +190,7 @@ describe("validateSessionArgs", () => {
   });
 
   it("rejects a model outside the allowlist", () => {
-    expect(validate(["new", "--message", "go", "--model", "claude-opus-5"])).toBe(
+    expect(validate(["new", "--message", "go", "--model", "claude-opus-5-5"])).toBe(
       "Error: --model must be one of: fable, opus, sonnet, haiku.",
     );
   });
