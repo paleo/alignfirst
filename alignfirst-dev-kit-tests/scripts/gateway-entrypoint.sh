@@ -3,7 +3,7 @@
 # subscription credential, then hands off to the command the base Compose stack
 # defines, so the gateway start line stays owned by @alignfirst/openclaw-test.
 #
-# Version-specific (OpenClaw 2026.9.5): the runtime no longer reads a Codex
+# Version-specific (OpenClaw 2026.9.6): the runtime no longer reads a Codex
 # `auth.json` directly, so the credential has to reach OpenClaw's own auth store.
 # See docs/alignfirst-dev-kit/upgrading-openclaw.md for the removal condition.
 #

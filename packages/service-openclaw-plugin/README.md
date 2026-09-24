@@ -111,7 +111,7 @@ npm run lint --workspace @alignfirst/service-openclaw-plugin
 ```
 
 The ordinary test command excludes the real-gateway suite. To exercise the package as an external
-plugin against the pinned OpenClaw 2026.9.5 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
+plugin against the pinned OpenClaw 2026.9.6 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin

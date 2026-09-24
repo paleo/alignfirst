@@ -65,7 +65,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.5.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.6.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -220,7 +220,7 @@ multi-project delegation; A20 confirms that a later human message becomes the ta
 to a human-created thread whose claim returns `none`. The internal service activation is absent from
 bus history and cannot be selected.
 
-The deterministic external-plugin suite uses the real OpenClaw 2026.9.5 executable, a scripted
+The deterministic external-plugin suite uses the real OpenClaw 2026.9.6 executable, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @alignfirst/service-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and

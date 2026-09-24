@@ -57,7 +57,7 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 
-  OpenClaw 2026.9.5 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
+  OpenClaw 2026.9.6 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
 - `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — renamed from `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR`, and its value moved with the skill directory; host path to the `alignfirst-openclaw-playbook` skill, bind-mounted at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
@@ -143,7 +143,7 @@ The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](..
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 
-The complementary deterministic suite makes no model calls and runs outside Docker against the pinned OpenClaw 2026.9.5 executable:
+The complementary deterministic suite makes no model calls and runs outside Docker against the pinned OpenClaw 2026.9.6 executable:
 
 ```sh
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
