@@ -127,7 +127,7 @@ ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A09-alcode-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A08 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A08 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. GLM and Qwen stay in the catalog at their latest versions, untested. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../alignfirst-dev-kit-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 

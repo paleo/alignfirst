@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.5 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.6 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
@@ -42,9 +42,9 @@ Over-budget files are truncated with a marker. Keep workspace files under these 
 
 The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; the listing shows it as `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.
 
-The general silence convention is `NO_REPLY`. OpenClaw 2026.9.5 can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect.
+The general silence convention is `NO_REPLY`. OpenClaw can lose a post-tool `NO_REPLY` from its reply accumulator and invoke an isolated finalizer without conversation context, producing an unsolicited answer. The plugin uses `HEARTBEAT_OK` for silent reply runs; ordinary channel and human-turn silence stays on `NO_REPLY`. Disabling block streaming does not avoid the defect. Observed on 2026.9.5; the 2026.9.6 changelog lists no fix.
 
-The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. OpenClaw's stock prompt instructs `NO_REPLY`, and with the key unset it wins over any workspace instruction. The harness and deployment seed leave this key unset. Native exec completions take a separate `buildExecEventPrompt` branch in `src/infra/heartbeat-runner-prompt.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
+The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat prompt. OpenClaw's stock prompt instructs `NO_REPLY`, and with the key unset it wins over any workspace instruction. The harness and deployment seed leave this key unset. Native exec completions take a separate branch in `src/infra/heartbeat-runner-prompt.ts`, built by `buildExecEventPrompt` in `src/infra/heartbeat-events-filter.ts`; changing `heartbeat.prompt` does not change that branch. The former `agents.defaults.heartbeat.includeSystemPromptSection` key is rejected.
 
 System events are held in memory (2026.9.x): a queued event does not survive a gateway restart. They are peeked at prompt build and consumed after delivery, so an event survives an aborted heartbeat turn. `enqueueSystemEvent` returns `false` both for a rejection and, with `replace: true`, when an identical event for the same `contextKey` is still queued.
 
@@ -52,9 +52,9 @@ The background `exec` acknowledgement ends with "Use process (list/poll/log/…)
 
 Completion reporting uses the thread's ticket, including a reserved `side-N`. The CLI's `status --no-ticket` searches the shared `.plans/_alcode/` directory and can select another thread's run.
 
-The saved transcript is not a copy of the live heartbeat prompt. `buildReplyPromptEnvelopeBase` in `src/auto-reply/reply/prompt-prelude.ts` substitutes `HEARTBEAT_TRANSCRIPT_PROMPT` (`[OpenClaw heartbeat poll]`) when saving heartbeat user messages. A transcript showing that marker does not establish which instructions the model received. Use provider payloads to inspect the live prompt. Existing workspace rules that match the marker apply only when that text is actually present in the current prompt.
+The saved transcript is not a copy of the live heartbeat prompt. `buildReplyPromptEnvelopeBase` in `src/auto-reply/reply/prompt-prelude.ts` saves an internal wake as a marker from `INTERNAL_WAKE_TRANSCRIPT_PROMPTS` (`src/auto-reply/heartbeat.ts`), chosen by the turn source: `[OpenClaw heartbeat poll]` for a heartbeat turn, `[OpenClaw exec completion]` for a native exec completion. A transcript showing that marker does not establish which instructions the model received. Use provider payloads to inspect the live prompt. Existing workspace rules that match the marker apply only when that text is actually present in the current prompt.
 
-A completion message chained onto a background `exec` and OpenClaw's native exec completion notice take different prompt branches. When testing the notice, observe the actual event; a generic injected `system event` exercises a different branch. The saved transcript shows the `[OpenClaw heartbeat poll]` marker for both, so it cannot tell them apart either.
+A completion message chained onto a background `exec` and OpenClaw's native exec completion notice take different prompt branches. When testing the notice, observe the actual event; a generic injected `system event` exercises a different branch. The saved marker tells them apart: the chained completion wakes a heartbeat turn, the native notice an exec one (`src/infra/heartbeat-runner-run.ts`).
 
 Native notices have no short delivery deadline. In `src/infra/heartbeat-cooldown.ts`, a new exec event arriving after the 30-second spacing window can defer until the next configured tick; the harness cadence is 24 hours. Closely spaced events may instead coalesce and run after the spacing window. Completion tests therefore require the real chained process to exit, its report to arrive, and the thread to settle. They record native notices when observed and make no claim about deferred notices outside the observation window.
 
@@ -65,6 +65,10 @@ Plugin-dispatched reply runs use `HEARTBEAT_OK` when they have nothing to report
 ## Background model runs disabled by the harness and the seed
 
 Three defaults schedule model turns without a user message: the memory-core dreaming sweep (daily, rewrites `MEMORY.md`), the weekly skill-collection review (`skills.workshop.autonomous.mode` defaults to `auto`) and the pre-compaction memory flush (`agents.defaults.compaction.memoryFlush`, writes `memory/YYYY-MM-DD.md`). `memory-core` owns the `memory` plugin slot and loads regardless of `plugins.allow`; `plugins.slots.memory: "none"` removes it along with the `memory_search`/`memory_get` tools. The harness config and the deployment seed set the same opt-outs, plus `update.checkOnStart: false` (the startup update check is also an anonymous version ping).
+
+## Tool surface pinned by the harness and the seed
+
+Since 2026.9.6, two defaults hide tool schemas from the model. Tool Search (`tools.toolSearch`, `src/agents/tool-search-config.ts`) leaves only the core file and shell tools direct and moves `message`, `browser` and `thread_handoff` behind search, describe and call tools. Code Mode (`tools.codeMode`, default `"auto"` in `src/agents/code-mode-runtime.ts`) engages models the catalog marks `codeMode: "preferred"` and exposes only a JavaScript `exec` and `wait`; every other tool goes through its bridge. Code Mode takes precedence over Tool Search (`src/agents/tool-surface-plan.ts`). The harness config and the seed set both to `false`: the playbook's handoff and reply contract must stay visible on every turn.
 
 ## Practical implications
 
@@ -92,7 +96,7 @@ For Discord today:
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
 - Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
 
-A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.5; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
+A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.6; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
 
 ### Outbound delivery (the surprising part)
 
