@@ -8,7 +8,7 @@ Run `npx -y alignfirst context` once from the repository root, _before_ any inve
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
 
-**Runtime**: Node (ESM only, `"type": "module"`).
+**Runtime**: Node 26 (`.nvmrc`), managed with fnm. ESM only (`"type": "module"`). Prefix Node commands with `fnm exec --using=.nvmrc`.
 
 **Language**: TypeScript with `strict: true`, `module: NodeNext`. Each package has a `tsconfig.build.json` (emits `dist/`) and a `tsconfig.json` (`noEmit`, includes `src` + `test`).
 
