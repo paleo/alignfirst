@@ -72,13 +72,13 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.9.5 && \
+        npm:@openclaw/codex@2026.9.6 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.9.5 && \
+        npm:@openclaw/zai-provider@2026.9.6 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.9.5 && \
+        npm:@openclaw/perplexity-plugin@2026.9.6 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force
