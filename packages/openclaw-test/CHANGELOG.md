@@ -1,5 +1,19 @@
 # @alignfirst/openclaw-test
 
+## 0.22.0
+
+### Minor Changes
+
+- ff57cfa: Changed the default judge model to `openrouter/anthropic/claude-haiku-4.5`, billed to `OPENROUTER_API_KEY`.
+
+### Patch Changes
+
+- ff57cfa: Fixed transcript reads on OpenClaw 2026.9.6, which stores larger transcript events compressed.
+- Updated dependencies [ff57cfa]
+  - @alignfirst/openclaw-channel-mock-core@0.10.2
+  - @alignfirst/openclaw-discord-mock@0.6.2
+  - @alignfirst/openclaw-slack-mock@0.6.2
+
 ## 0.21.1
 
 ### Patch Changes

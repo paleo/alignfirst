@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/openclaw-discord-mock",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Synthetic Discord-shaped OpenClaw channel plugin for automated test scenarios.",
   "keywords": [
     "openclaw",
@@ -66,7 +66,7 @@
     "openclaw": "*"
   },
   "dependencies": {
-    "@alignfirst/openclaw-channel-mock-core": "0.10.1"
+    "@alignfirst/openclaw-channel-mock-core": "0.10.2"
   },
   "devDependencies": {
     "@types/node": "~26.5.0",
