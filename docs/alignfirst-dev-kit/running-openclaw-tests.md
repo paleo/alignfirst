@@ -23,7 +23,7 @@ This guide documents what is specific to the Dev Kit harness. Run its commands f
 
 ```sh
 cp .env.local.example .env.local
-# Configure OPENROUTER_API_KEY, ALIGNFIRST_CODE_AGENT, and the model credentials described below.
+# Configure OPENROUTER_API_KEY, OPENCLAW_CODEX_HOME, and ALIGNFIRST_CODE_AGENT as described below.
 
 # Create bind-mount outputs as your user so Docker does not create root-owned directories.
 mkdir -p artifacts .gateway-logs
@@ -44,6 +44,8 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 ## Configuration
 
+Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
 
@@ -55,7 +57,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 
-  OpenClaw 2026.9.5 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
+  OpenClaw 2026.9.6 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
 - `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — renamed from `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR`, and its value moved with the skill directory; host path to the `alignfirst-openclaw-playbook` skill, bind-mounted at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
@@ -127,7 +129,7 @@ ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "
 ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A09-alcode-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. After Terra passes, use A08 on Slack for the representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a Sonnet-specific failure. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+For a focused pass, supply only the affected scenario names instead of the array. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../alignfirst-dev-kit-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
@@ -141,7 +143,7 @@ The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](..
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 
-The complementary deterministic suite makes no model calls and runs outside Docker against the pinned OpenClaw 2026.9.5 executable:
+The complementary deterministic suite makes no model calls and runs outside Docker against the pinned OpenClaw 2026.9.6 executable:
 
 ```sh
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..

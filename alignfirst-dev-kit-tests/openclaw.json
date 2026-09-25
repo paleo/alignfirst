@@ -39,7 +39,9 @@
     "profile": "coding",
     "alsoAllow": ["message", "browser", "thread_handoff"],
     "message": { "crossContext": { "allowAcrossProviders": false } },
-    "deny": ["ask_user"]
+    "deny": ["ask_user"],
+    "toolSearch": false,
+    "codeMode": false
   },
   "models": {
     "providers": {
@@ -72,13 +74,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen/qwen3.7-plus",
-            "name": "Qwen 3.7 Plus (OpenRouter)",
+            "id": "qwen/qwen3.8-flash",
+            "name": "Qwen 3.8 Flash (OpenRouter)",
             "reasoning": false,
             "input": ["text"],
-            "cost": { "input": 0.325, "output": 1.95, "cacheRead": 0, "cacheWrite": 0.40625 },
+            "cost": { "input": 0.15, "output": 0.47, "cacheRead": 0.016, "cacheWrite": 0.2 },
             "contextWindow": 1000000,
-            "maxTokens": 65536
+            "maxTokens": 131072
           }
         ]
       },
@@ -89,13 +91,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.2",
-            "name": "GLM-5.2",
+            "id": "glm-5.3",
+            "name": "GLM-5.3",
             "reasoning": true,
             "input": ["text"],
-            "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
+            "cost": { "input": 0.84, "output": 2.64, "cacheRead": 0.156, "cacheWrite": 0 },
+            "contextWindow": 1048576,
+            "maxTokens": 131072
           }
         ]
       }
@@ -110,6 +112,7 @@
         "directPolicy": "allow"
       },
       "compaction": { "memoryFlush": { "enabled": false } },
+      "silentReply": { "group": "allow" },
       "blockStreamingDefault": "on",
       "blockStreamingBreak": "text_end",
       "blockStreamingCoalesce": { "minChars": 1, "idleMs": 100 }
@@ -117,7 +120,7 @@
     "entries": {
       "main": {
         "name": "OpenClaw Main",
-        "model": "custom-anthropic/claude-sonnet-5",
+        "model": "openai/gpt-5.6-terra",
         "workspace": "/home/assistant/.openclaw/workspace"
       }
     }

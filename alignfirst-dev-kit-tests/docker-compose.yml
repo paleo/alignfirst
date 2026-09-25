@@ -1,8 +1,8 @@
 # Thin consumer overlay. Pulls in the parameterized base from
 # @alignfirst/openclaw-test. Requires Docker Compose v2.20+.
 #
-# `.env.local` needs ANTHROPIC_API_KEY, OPENCLAW_WORKSPACE_DIR,
-# ALIGNFIRST_PLAYBOOK_SKILL_DIR.
+# `.env.local` needs OPENROUTER_API_KEY (judge), OPENCLAW_CODEX_HOME (Terra),
+# OPENCLAW_WORKSPACE_DIR, ALIGNFIRST_PLAYBOOK_SKILL_DIR.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
 # ASSISTANT_UID, ASSISTANT_GID are set automatically by `openclaw-test env|run`.

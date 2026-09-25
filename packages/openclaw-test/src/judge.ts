@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extractTaggedBlock } from "./parse-tagged-json.js";
 
-const DEFAULT_JUDGE_MODEL = "anthropic/claude-haiku-4-5";
+const DEFAULT_JUDGE_MODEL = "openrouter/anthropic/claude-haiku-4.5";
 const DEFAULT_MAX_TOKENS = 1024;
 const RESULT_TAG = "result-json";
 

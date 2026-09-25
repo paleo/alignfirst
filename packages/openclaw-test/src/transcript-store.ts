@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { zstdDecompressSync } from "node:zlib";
 
 export interface DumpedSession {
   sessionKey: string;
@@ -68,18 +69,31 @@ function readNodeMessages(
 function readSessionMessages(db: DatabaseSync, sessionId: string, sinceMs: number): unknown[] {
   const rows = db
     .prepare(
-      "SELECT event_json FROM transcript_events WHERE session_id = ? AND created_at >= ? ORDER BY seq",
+      "SELECT event_json, event_zstd FROM transcript_events" +
+        " WHERE session_id = ? AND created_at >= ? ORDER BY seq",
     )
-    .all(sessionId, sinceMs) as { event_json: string }[];
+    .all(sessionId, sinceMs) as unknown as TranscriptEventRow[];
   const messages: unknown[] = [];
   for (const row of rows) {
-    let event: { type?: string; message?: unknown };
+    let event: { type?: string; message?: unknown } | null;
     try {
-      event = JSON.parse(row.event_json) as { type?: string; message?: unknown };
+      event = JSON.parse(decodeTranscriptEvent(row)) as { type?: string; message?: unknown } | null;
     } catch {
       continue;
     }
-    if (event.type === "message" && event.message !== undefined) messages.push(event.message);
+    if (event?.type === "message" && event.message !== undefined) messages.push(event.message);
   }
   return messages;
+}
+
+interface TranscriptEventRow {
+  event_json: string | null;
+  event_zstd: Uint8Array | null;
+}
+
+/** Since OpenClaw 2026.9.6, an event of 1 KiB or more is stored zstd-compressed, `event_json` NULL. */
+function decodeTranscriptEvent(row: TranscriptEventRow): string {
+  if (row.event_json !== null) return row.event_json;
+  if (row.event_zstd === null) throw new Error("transcript event without a payload");
+  return zstdDecompressSync(row.event_zstd).toString("utf8");
 }

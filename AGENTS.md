@@ -8,7 +8,7 @@ Run `npx -y alignfirst context` once from the repository root, _before_ any inve
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
 
-**Runtime**: Node (ESM only, `"type": "module"`).
+**Runtime**: Node 26 (`.nvmrc`), managed with fnm. ESM only (`"type": "module"`). Prefix Node commands with `fnm exec --using=.nvmrc`.
 
 **Language**: TypeScript with `strict: true`, `module: NodeNext`. Each package has a `tsconfig.build.json` (emits `dist/`) and a `tsconfig.json` (`noEmit`, includes `src` + `test`).
 
@@ -16,9 +16,9 @@ Run `npx -y alignfirst context` once from the repository root, _before_ any inve
 
 **Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`.
 
-**Model-test policy**: Run model-driven matrices with Terra first. Once green, run the smallest
-representative Sonnet compatibility check. Expand Sonnet coverage only to diagnose a
-Sonnet-specific failure.
+**Model-test policy**: Run model-driven matrices with Terra only. The Anthropic and Z.AI keys are
+not provisioned; their providers stay in the test config as examples. The judge runs Haiku through
+OpenRouter.
 
 **Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Publishing runs from CI through npm trusted publishing — see `docs/releasing.md`.
 

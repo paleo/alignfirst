@@ -46,14 +46,14 @@ The session file under the project's `.plans/<ticket>/_alcode/` carries the exit
 
 Run the smoke test of [07-channel.md](installations/07-channel.md). Check the allowlisted channel, the session binding and the thread destination before touching the playbook.
 
-A `⚠️ Agent couldn't generate a response.` in a thread is usually not a model failure: the assistant chose silence and the runtime refused the sentinel. Two journal lines about twenty seconds apart identify it, and the transcript holds the sentinel the assistant actually returned:
+An off-topic answer, or `The tool run finished, but no final summary was produced.`, is usually not a model failure: the assistant chose silence on a turn that required a reply, and OpenClaw finalized the turn without its context. The journal names each case:
 
 ```sh
 sudo journalctl _SYSTEMD_USER_UNIT=openclaw-gateway.service --since today --no-pager \
-  | grep -E "empty response|incomplete turn detected"
+  | grep "running isolated finalization"
 ```
 
-See [gotchas.md](gotchas.md#a-thread-the-agent-has-posted-in-can-forbid-silence).
+See [gotchas.md](gotchas.md#when-the-bot-may-stay-silent).
 
 ## Incidents
 

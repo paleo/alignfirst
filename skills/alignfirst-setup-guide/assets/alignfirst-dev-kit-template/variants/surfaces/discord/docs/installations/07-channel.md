@@ -71,7 +71,7 @@ The plugin must be loaded, `thread_handoff` allowed, and `autoThread` must be `f
 allowlisted channel.
 
 1. Send small talk in the allowlisted channel. It receives one channel-root reply and no thread.
-2. Request a complete small read-only task against a listed project. One named thread and one starter appear; work begins without a follow-up and reports in that same thread.
+2. Request a complete small read-only task against a listed project. One named thread and one starter appear, and the channel gets one line linking to the thread. Work begins without a follow-up and reports in that same thread.
 3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
 4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens and no work starts.
 5. Confirm that the channel root received neither a duplicate starter nor a completion report.

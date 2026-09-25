@@ -45,8 +45,8 @@ OPENROUTER_API_KEY=sk-or-… # Required for an OpenRouter agent or judge.
 OPENCLAW_WORKSPACE_DIR=/path/to/your/openclaw-workspace
 
 # Model catalog: full LiteLLM refs. `run --model` picks by bare id (suffix after the last "/").
-OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-4-6,custom-openrouter/qwen/qwen3.6-plus
-OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-4-6
+OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-5,custom-openrouter/qwen/qwen3.8-flash
+OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-5
 
 ```
 
@@ -84,8 +84,8 @@ npm run env:up                                                     # (optional) 
 npm run e2e -- --channel all <scenario>                             # one scenario, both channels
 npm run e2e -- --channel all --all                                  # every scenario, both channels
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
-npm run e2e -- --channel all --model qwen3.6-plus <scenario>        # pick a model by bare id
-npm run e2e -- --channel all --model claude-sonnet-4-6,qwen3.6-plus <s>  # a comma list of bare ids
+npm run e2e -- --channel all --model qwen3.8-flash <scenario>        # pick a model by bare id
+npm run e2e -- --channel all --model claude-sonnet-5,qwen3.8-flash <s>  # a comma list of bare ids
 npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
@@ -121,10 +121,10 @@ Assert on `conversation.id` / `threadId`, not envelope formatting.
 
 ## Judge model
 
-Defaults to `anthropic/claude-haiku-4-5`. Override it via `OPENCLAW_TEST_JUDGE_MODEL` on
-the `runner` service (set in your consumer overlay). Direct Anthropic refs use
-`anthropic/<model>`; OpenRouter refs use `openrouter/<model>`, for example
-`openrouter/anthropic/claude-haiku-4.5`. The judge is **not** an OpenClaw agent — don't
+Defaults to `openrouter/anthropic/claude-haiku-4.5`, billed to `OPENROUTER_API_KEY`. Override it
+via `OPENCLAW_TEST_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). OpenRouter
+refs use `openrouter/<model>`; direct Anthropic refs use `anthropic/<model>`, for example
+`anthropic/claude-haiku-4-5`. The judge is **not** an OpenClaw agent — don't
 configure it in `openclaw.json`.
 
 ## Attribution

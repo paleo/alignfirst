@@ -56,7 +56,10 @@ export default async function ticketStatusLifecycle(ctx: ScenarioContext): Promi
     label: "thread reads the alcode delegation guide",
     timeoutMs: 120_000,
   });
-  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  await assertNoChannelRootLeak(ctx, {
+    sinceCursor: startCursor,
+    exceptIds: [starter.handoffPointerId],
+  });
   await waitForProjectListing(ctx, "channel session lists the projects");
   ctx.markScenarioAsEnded("PASS");
 }

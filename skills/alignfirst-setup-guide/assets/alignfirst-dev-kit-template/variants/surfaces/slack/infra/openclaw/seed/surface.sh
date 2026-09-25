@@ -40,10 +40,9 @@ configure_surface() {
   # The whole map, so a re-seed with a new channel ID replaces the old one. Invite the bot there.
   set_json channels.slack.channels \
     "{\"$SLACK_CHANNEL_ID\":{\"enabled\":true,\"requireMention\":false,\"replyToMode\":\"off\"}}"
-  # Slack marks every later message in a thread the bot has posted in as directed at it, which
-  # forbids the silent-reply sentinel: NO_REPLY is read as an empty response and posted as
-  # "Agent couldn't generate a response" (gotchas.md). No inbound message is lost — requireMention
-  # is false above, and only that drops a turn.
+  # Slack marks every later message in a thread the bot has posted in as a mention, and a mention
+  # requires a reply: NO_REPLY then triggers a context-free finalization post (gotchas.md). No
+  # inbound message is lost — requireMention is false above, and only that drops a turn.
   set_json channels.slack.implicitMentions.threadParticipation false
   # Completed paragraphs as they finish; no tool-progress previews in the channel.
   set_json channels.slack.streaming '{"mode":"block","preview":{"toolProgress":false}}'

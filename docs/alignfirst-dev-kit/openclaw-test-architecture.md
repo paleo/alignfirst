@@ -65,7 +65,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.5.
+The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.6.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -162,7 +162,7 @@ Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the regi
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
-Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.5 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
+Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.6 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
 
 **Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
 
@@ -210,7 +210,7 @@ The Dev Kit consumer sets Slack to `replyToMode: "off"`. Its parent channel sess
 posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
 dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical target session. That session claims with `{ "action": "claim" }` and reads thread history before work. Scenario assertions correlate
 tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
-final `NO_REPLY`.
+closing pointer to the thread.
 
 The shared fresh-session assertion binds the claim, history read, and lobster reaction by
 tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
@@ -220,7 +220,7 @@ multi-project delegation; A20 confirms that a later human message becomes the ta
 to a human-created thread whose claim returns `none`. The internal service activation is absent from
 bus history and cannot be selected.
 
-The deterministic external-plugin suite uses the real OpenClaw 2026.9.5 executable, a scripted
+The deterministic external-plugin suite uses the real OpenClaw 2026.9.6 executable, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @alignfirst/service-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
@@ -229,7 +229,7 @@ both surfaces: a static takeover with its reply in the thread, a human message d
 turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
 takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery.
 
-The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
+The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
 `BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner against Anthropic directly.
 
@@ -267,7 +267,7 @@ Authoritative types: `packages/openclaw-test/src/report.ts`.
 
 OpenClaw (2026.8+) persists each session's transcript as SQLite rows in the gateway's per-agent store (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`, table `transcript_events`, with `session_nodes` mapping `session_key` → `current_session_id`). A session key can span several `session_windows` rows — compaction, reset, or recovery mints a successor session id — so the dump unions every window of the key, keeping earlier tool calls and costs across a mid-run rollover. The runner reads transcripts, not the trajectory diagnostics: the `trajectory_runtime_events` payloads run through OpenClaw's diagnostic projection, which caps the whole payload at ~64 nodes — a `model.completed` snapshot loses every message past the first few, so tool calls from any real turn are unrecoverable there. The transcript is the conversation record the gateway itself replays, appended per message — tool calls become visible as they happen, not at turn end.
 
-Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-no_reply).
+Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
 The store lives outside the shared mounts and dies with the per-cell stack recreation, so the runner extracts a conversation's session transcripts through the exec-watcher RPC: `transcript-dump.js` (in this package's dist, mounted into the gateway) queries the store with `node:sqlite` (session keys matched on the conversation ID and its bus-owned thread IDs) and writes the result as JSON into the shared IPC volume (stdout would hit the watcher's 1 MiB cap). The runner saves the fetched transcripts as `transcripts.json` in the cell's artifact dir for post-mortems.
 
@@ -282,9 +282,8 @@ Trajectory capture is default-on (disable with `OPENCLAW_TRAJECTORY=0` on the ga
 ## Judge
 
 `judgeLLM` calls its provider directly from the runner — no bus traffic, no gateway involvement. It
-is not an OpenClaw agent. The package defaults to `anthropic/claude-haiku-4-5`; the consumer
-Compose stack defaults to `openrouter/anthropic/claude-haiku-4.5` and accepts a host
-`OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
+is not an OpenClaw agent. It defaults to `openrouter/anthropic/claude-haiku-4.5`; the consumer
+Compose stack forwards a host `OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
 supported.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.

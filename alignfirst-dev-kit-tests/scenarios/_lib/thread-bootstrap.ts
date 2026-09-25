@@ -3,11 +3,21 @@ import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
 import { execMatches, inputOf, invokesAlcode, readsFile } from "./agent-tool-calls.ts";
 import { escapeRe } from "./common-constants.ts";
-import { assertNoChannelRootLeak, requireThreadId, waitForStarter } from "./outbound.ts";
+import {
+  assertNoChannelRootLeak,
+  requireThreadId,
+  waitForHandoffPointer,
+  waitForStarter,
+} from "./outbound.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 import type { Step } from "./types.ts";
 
 const SENDER_ID = "ROBIN01";
+
+export interface ChannelThreadStart extends Step {
+  /** The channel-root line that closes the handoff; exempt from later root-leak sweeps. */
+  handoffPointerId: string;
+}
 
 export interface ChannelBootstrapOptions {
   /** The channel/DM message that triggers the bootstrap. */
@@ -28,12 +38,12 @@ export interface ChannelBootstrapOptions {
 /**
  * Open a thread, confirm its native starter and durable handoff, then return after the plugin
  * starts the thread session with a reply run. Target work may already be in progress before
- * the parent turn emits its final `NO_REPLY`.
+ * the parent turn posts its closing pointer to the thread.
  */
 export async function bootstrapThreadFromChannel(
   ctx: ScenarioContext,
   opts: ChannelBootstrapOptions,
-): Promise<Step> {
+): Promise<ChannelThreadStart> {
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({ senderId: SENDER_ID, senderName: SENDER_ID, text: opts.text });
 
@@ -62,6 +72,7 @@ export async function bootstrapThreadFromChannel(
     nextCursor: wait.nextCursor,
     sourceSessionKey: handoff.sourceSessionKey,
     targetSessionKey: handoff.targetSessionKey,
+    handoffPointerId: handoff.pointerId,
   };
 }
 
@@ -138,7 +149,7 @@ interface ChannelSessionHandedOffOptions {
 async function assertChannelSessionHandedOff(
   ctx: ScenarioContext,
   opts: ChannelSessionHandedOffOptions,
-): Promise<{ sourceSessionKey: string; targetSessionKey?: string }> {
+): Promise<{ sourceSessionKey: string; targetSessionKey?: string; pointerId: string }> {
   const startCall = await ctx.waitForAgentToolCall(
     (call) => {
       const input = inputOf(call);
@@ -175,11 +186,19 @@ async function assertChannelSessionHandedOff(
       execMatches(call, /\b(workspace|worktree|git\s+(?:-C\s+\S+\s+)?(?:status|log|show|diff))\b/i),
   );
   ctx.assertLength(forbidden, 0, "parent session performed no target work");
-  await assertNoChannelRootLeak(ctx, { sinceCursor: opts.startCursor });
+  const pointer = await waitForHandoffPointer(ctx, { sinceCursor: opts.startCursor });
+  await assertNoChannelRootLeak(ctx, {
+    sinceCursor: opts.startCursor,
+    exceptIds: [pointer.match.id],
+  });
   const resultText = JSON.stringify(startCall.result ?? {});
   const targetSessionKey = readJsonString(resultText, "sessionKey");
   ctx.log(`parent session handed off to ${targetSessionKey ?? opts.threadId} — OK`);
-  return { sourceSessionKey: startCall.sessionKey, targetSessionKey };
+  return {
+    sourceSessionKey: startCall.sessionKey,
+    targetSessionKey,
+    pointerId: pointer.match.id,
+  };
 }
 
 function readJsonString(value: string, field: string): string | undefined {

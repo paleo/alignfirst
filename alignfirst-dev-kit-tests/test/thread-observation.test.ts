@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { zstdCompressSync } from "node:zlib";
 import { inspectSession } from "../scripts/inspect-thread.ts";
 
 const SESSION_KEY = "agent:main:discord:channel:thread-1";
@@ -17,7 +18,7 @@ test("a terminal in another thread cannot settle an unanswered takeover", () => 
       terminalCount: 0,
       openTurn: true,
     });
-    append(database, "target", terminal("NO_REPLY"));
+    append(database, "target", terminal("NO_REPLY"), { compressed: true });
     assert.equal(inspectSession(path, SESSION_KEY).openTurn, false);
   });
 });
@@ -118,7 +119,7 @@ function withTranscript(run: (database: DatabaseSync, path: string) => void): vo
   try {
     database.exec(`
       CREATE TABLE session_windows (session_id TEXT, session_key TEXT);
-      CREATE TABLE transcript_events (session_id TEXT, event_json TEXT, created_at INTEGER, seq INTEGER);
+      CREATE TABLE transcript_events (session_id TEXT, event_json TEXT, event_zstd BLOB, created_at INTEGER, seq INTEGER);
       CREATE TABLE trajectory_runtime_events (session_id TEXT, run_id TEXT, event_json TEXT, created_at INTEGER);
     `);
     database.prepare("INSERT INTO session_windows VALUES (?, ?)").run("target", SESSION_KEY);
@@ -130,12 +131,19 @@ function withTranscript(run: (database: DatabaseSync, path: string) => void): vo
   }
 }
 
-function append(database: DatabaseSync, sessionId: string, message: object): void {
+function append(
+  database: DatabaseSync,
+  sessionId: string,
+  message: object,
+  options: { compressed?: boolean } = {},
+): void {
+  const eventJson = JSON.stringify({ message });
   database
-    .prepare("INSERT INTO transcript_events VALUES (?, ?, ?, ?)")
+    .prepare("INSERT INTO transcript_events VALUES (?, ?, ?, ?, ?)")
     .run(
       sessionId,
-      JSON.stringify({ message }),
+      options.compressed ? null : eventJson,
+      options.compressed ? zstdCompressSync(Buffer.from(eventJson, "utf8")) : null,
       Date.now(),
       Number(database.prepare("SELECT COUNT(*) AS n FROM transcript_events").get()?.n),
     );

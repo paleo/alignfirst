@@ -142,14 +142,10 @@ function buildClaudeStreamResponse(sessionId: string, result: string): string {
 // otherwise gets "the bundled catalog contains no matching model" (A12 Slack, 2026-09-11T15-30-11).
 const CODEX_MODEL_CATALOG = {
   models: [
-    { slug: "gpt-5.5-astra" },
-    { slug: "gpt-5.6-astra" },
-    { slug: "gpt-5.5-sol" },
-    { slug: "gpt-5.6-sol" },
-    { slug: "gpt-5.5-terra" },
+    { slug: "gpt-6-astra" },
+    { slug: "gpt-6-sol" },
     { slug: "gpt-5.6-terra" },
-    { slug: "gpt-5.4-luna" },
-    { slug: "gpt-5.6-luna" },
+    { slug: "gpt-6-luna" },
   ],
 };
 

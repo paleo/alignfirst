@@ -11,6 +11,7 @@ const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
 const TAKEOVER_MESSAGE = "Take over this thread.";
 const SILENT_TOKEN = "HEARTBEAT_OK";
+const HANDOFF_POINTER = "Continuing in the thread.";
 const STARTER = "Project: Project-X\nTask: preserve this exact starter.";
 const MARKER = "TARGET_SESSION_STARTED";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted by a gateway restart";
@@ -58,7 +59,7 @@ afterEach(async () => {
   }
 });
 
-describe("OpenClaw 2026.9.5 external-plugin gateway", () => {
+describe("OpenClaw 2026.9.6 external-plugin gateway", () => {
   it.each(["slack", "discord"] as const)(
     "keeps a claimed %s seed silent while awaiting a human answer",
     async (surface) => {
@@ -86,7 +87,7 @@ describe("OpenClaw 2026.9.5 external-plugin gateway", () => {
           .getSnapshot()
           .messages.filter((message) => message.direction === "outbound")
           .map((message) => message.text),
-      ).toEqual([STARTER]);
+      ).toEqual([STARTER, HANDOFF_POINTER]);
     },
   );
 
@@ -123,6 +124,8 @@ describe("OpenClaw 2026.9.5 external-plugin gateway", () => {
             (message) => message.direction === "outbound" && message.text === STARTER,
           ),
       ).toHaveLength(1);
+      const pointer = await waitForMessage(fixture, (message) => message.text === HANDOFF_POINTER);
+      expect(pointer.threadId).toBeUndefined();
 
       const records = JSON.parse(
         await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
@@ -192,6 +195,7 @@ describe("OpenClaw 2026.9.5 external-plugin gateway", () => {
             (message) => message.direction === "outbound" && message.text === MARKER,
           ),
       ).toHaveLength(1);
+      expect(outboundMessages(fixture, HANDOFF_POINTER)).toHaveLength(1);
     },
   );
 
@@ -485,7 +489,12 @@ function buildConfig(params: {
       },
       slots: { memory: "none" },
     },
-    tools: { profile: "coding", alsoAllow: ["message", "thread_handoff"] },
+    tools: {
+      profile: "coding",
+      alsoAllow: ["message", "thread_handoff"],
+      toolSearch: false,
+      codeMode: false,
+    },
     models: {
       providers: {
         scripted: {
@@ -512,6 +521,7 @@ function buildConfig(params: {
         workspace: params.workspace,
         maxConcurrent: 4,
         heartbeat: { target: "last" },
+        silentReply: { group: "allow" },
         blockStreamingDefault: "on",
         blockStreamingBreak: "text_end",
       },
@@ -621,10 +631,10 @@ function createProviderScript(
         const threadId = resolveThreadId(surface, snapshot, conversationId);
         return { tool: "thread_handoff", arguments: { action: "start", threadId } };
       }
-      return { content: "NO_REPLY" };
+      return { content: HANDOFF_POINTER };
     }
     if (/"status"\s*:\s*"alreadyStarted"/u.test(latestToolText ?? "")) {
-      return { content: "NO_REPLY" };
+      return { content: HANDOFF_POINTER };
     }
     const snapshot = bus.state.getSnapshot();
     const conversationId = resolveConversationId(snapshot, all);

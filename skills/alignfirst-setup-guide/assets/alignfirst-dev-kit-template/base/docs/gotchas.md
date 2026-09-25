@@ -85,11 +85,11 @@ While a kernel upgrade is pending, package postinsts raise a "Newer kernel avail
 
 Every `openclaw` command that rewrites the config (`config set`, `plugins install`/`uninstall`, the seed, `openclaw update`'s post-install doctor) fails while the `chattr +i` flag is on, and not always legibly: `ENOTDIR: not a directory, scandir '~/.openclaw/openclaw.json'` is one shape. Run it through the `config` scope of the root-owned maintenance wrapper: [configure-assistant.md](operations/configure-assistant.md).
 
-## A thread the assistant has posted in can forbid silence
+## When the bot may stay silent
 
-The silent-reply sentinel is only honored on an undirected turn: `allowEmptyAssistantReplyAsSilent` requires `!isDirectedTurn`. Implicit mentions make a turn directed, and the kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in — which is the normal state of a work thread. The agent's `NO_REPLY` is then read as an empty response, retried once, and posted to the channel as `⚠️ Agent couldn't generate a response.` — a false failure a human is likely to answer, at a few thousand output tokens each time.
+OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default has been `"disallow"` since 2026.9.6, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced.`, posts to the channel.
 
-The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on. `agents.defaults.silentReply.group: "disallow"` is not the fix — it removes the sentinel from the prompt and makes the assistant answer everything.
+Implicit mentions count as mentions. The kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in, which is the normal state of a work thread. The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on.
 
 ## `MEDIA:` and `message` attachments read different media roots
 

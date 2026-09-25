@@ -13,7 +13,11 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
+import {
+  bootstrapThreadFromChannel,
+  type ChannelThreadStart,
+  sendInThread,
+} from "./_lib/thread-bootstrap.ts";
 import type { Step } from "./_lib/types.ts";
 import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
 
@@ -48,7 +52,7 @@ export default async function threadSessionDelegation(ctx: ScenarioContext): Pro
   });
 
   await runSetupPhaseWithoutDelegation(ctx, codingAgent, starter);
-  await runGoAheadPhase(ctx, starter.threadId, startCursor);
+  await runGoAheadPhase(ctx, starter, startCursor);
   await waitForProjectListing(ctx, "channel session lists the projects");
 
   ctx.markScenarioAsEnded("PASS");
@@ -83,9 +87,10 @@ async function runSetupPhaseWithoutDelegation(
 
 async function runGoAheadPhase(
   ctx: ScenarioContext,
-  threadId: string,
+  starter: ChannelThreadStart,
   startCursor: number,
 ): Promise<void> {
+  const { threadId } = starter;
   for (const [index, text] of [
     "Feu vert : lance le travail. Préviens-moi ici quand c'est terminé.",
     "Deuxième étape : ajoute une infobulle « Exporter les données » sur ce bouton. Préviens-moi quand c'est terminé.",
@@ -116,6 +121,9 @@ async function runGoAheadPhase(
     0,
     "working thread never starts another handoff",
   );
-  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
+  await assertNoChannelRootLeak(ctx, {
+    sinceCursor: startCursor,
+    exceptIds: [starter.handoffPointerId],
+  });
   await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
 }
