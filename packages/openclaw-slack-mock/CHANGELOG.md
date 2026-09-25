@@ -1,5 +1,12 @@
 # @alignfirst/openclaw-slack-mock
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies [ff57cfa]
+  - @alignfirst/openclaw-channel-mock-core@0.10.2
+
 ## 0.6.1
 
 ### Patch Changes
