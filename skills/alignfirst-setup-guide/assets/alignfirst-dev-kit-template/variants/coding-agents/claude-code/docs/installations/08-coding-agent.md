@@ -9,7 +9,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. Two sections run earlier: [Admin Account](#admin-account) during `01-server-setup.md`, [Install](#install) during `03-toolchain.md`. Every Claude Code command of this deployment lives here; the base runbooks link to these sections.
 
-Claude Code is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `alcode`, one fresh `claude` process per delegated run.
+Claude Code is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `aldev code`, one fresh `claude` process per delegated run.
 
 ## Admin Account
 
@@ -53,7 +53,7 @@ sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-s
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. The seed strips `ANTHROPIC_API_KEY` from every delegated run (`environment.d/coding-agent.conf`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aldev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.unset` in `infra/openclaw/aldev.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** The login prints a URL and waits for a one-shot code on stdin, tied to the same process. Run it from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`.
 
@@ -65,11 +65,11 @@ claude auth status
 exit
 ```
 
-Trusting `~/projects` once covers every project cloned under it; `alcode` starts `claude` inside the project directory, and an unanswered trust prompt would block the run.
+Trusting `~/projects` once covers every project cloned under it; `aldev code` starts `claude` inside the project directory, and an unanswered trust prompt would block the run.
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent claude-code` adds the `~/.claude/skills/<name>` symlink that the `claude` CLI reads. The playbook is copied to OpenClaw's managed `~/.openclaw/skills/` directory because its operating instructions would only cost tokens in the coding agent's context. The delegated coder needs no protocol skill: `alcode` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent claude-code` adds the `~/.claude/skills/<name>` symlink that the `claude` CLI reads. The delegated coder needs no protocol skill: `aldev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
@@ -77,8 +77,6 @@ set -e
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent universal --agent claude-code \
   --skill alignfirst-setup-guide < /dev/null
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-openclaw-playbook < /dev/null
 npx -y skills add https://github.com/paleo/skills --global --yes \
   --agent universal --agent claude-code --skill sharp-writing < /dev/null
 EOS
@@ -129,7 +127,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- \
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-ALIGNFIRST_CODE_AGENT=claude \
+CODING_AGENT=claude \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
@@ -141,16 +139,16 @@ The `skills` scope of `update-assistant.md` includes `~/.claude/skills`, so the 
 After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode --guide | head'      # names claude as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide --root ~/projects >/dev/null && echo projects-ok'
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 3 skills
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev code --help | grep selected'   # names claude as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev guide project >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'        # 2 skills
 ```
 
 Exercise the runtime harness through the real gateway. This catches shell-snapshot state that a direct invocation cannot reproduce:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> ALIGNFIRST_CODE_AGENT=claude /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=claude /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json
@@ -159,4 +157,4 @@ EOF
 
 The private turn must return `RUNTIME_OK`.
 
-The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: claude`.
+The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_aldev/*.md` records `agent: claude`.

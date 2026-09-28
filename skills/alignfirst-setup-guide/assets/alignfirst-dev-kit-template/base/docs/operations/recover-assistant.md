@@ -26,7 +26,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw config validate
 ```
 
-A delegated run leaves its session file under the project's `.plans/<ticket>/_alcode/`; read it before restoring anything. `exitReason: auth_required` means the coding agent's login expired — [08-coding-agent.md § Authenticate](../installations/08-coding-agent.md#authenticate). A provider error means the runtime login — [04 § 10](../installations/04-openclaw.md#10-provider-login). Keep the failed files.
+A delegated run leaves its session file under the project's `.plans/<ticket>/_aldev/`; read it before restoring anything. `exitReason: auth_required` means the coding agent's login expired — [08-coding-agent.md § Authenticate](../installations/08-coding-agent.md#authenticate). A provider error means the runtime login — [04 § 10](../installations/04-openclaw.md#10-provider-login). Keep the failed files.
 
 ## Restore
 
@@ -46,6 +46,7 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `openclaw.env` | `~/.openclaw/.env` | — |
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
+| `aldev.json` | `~/.config/alignfirst/aldev.json` | `config` |
 | `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 
 ```sh
@@ -61,7 +62,7 @@ together while the gateway is stopped. See the package README before retiring cl
 Unpack the OpenClaw archive with `openclaw backup restore <archive> --target <dir>`, then copy the
 needed files under `~/.openclaw/` through the `config` maintenance scope.
 
-Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env` and `environment.d/` from the repository and `.env`. Prefer the backup for workspace files, which the seed does not write.
+Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env`, `environment.d/` and `aldev.json` from the repository and `.env`. Prefer the backup for workspace files, which the seed does not write.
 
 ## Re-seed and validate
 
@@ -72,7 +73,7 @@ Follow [configure-assistant.md](configure-assistant.md) to re-seed through a con
 ```sh
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project list'
 ```
 
 Finish with [08-coding-agent.md § Verification](../installations/08-coding-agent.md#verification) and the smoke test of [07-channel.md](../installations/07-channel.md) before reopening the channel to users.

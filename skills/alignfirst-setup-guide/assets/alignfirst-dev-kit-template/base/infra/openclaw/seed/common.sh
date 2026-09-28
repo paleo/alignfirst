@@ -118,7 +118,7 @@ configure_common() {
   unset_key plugins.entries.memory-core
 
   echo "[seed] heartbeat — on, one periodic tick a day"
-  # Heartbeat stays on: the alcode completion wake is a heartbeat-sourced turn. `every` only
+  # Heartbeat stays on: the `aldev code` completion wake is a heartbeat-sourced turn. `every` only
   # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
   # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
   # session, no workspace bootstrap, deferred run), so they are cleared. Thread handoff itself
@@ -138,7 +138,7 @@ configure_common() {
   echo "[seed] skill allowlist"
   # `clawhub` is deliberately absent: the assistant cannot install skills on its own.
   set_json agents.defaults.skills \
-    '["alignfirst-setup-guide","alignfirst-openclaw-playbook","sharp-writing"]'
+    '["alignfirst-setup-guide","sharp-writing"]'
   # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the assistant rewrite or
   # drop writable skills. Same rule as clawhub.
   set_scalar skills.workshop.autonomous.mode off

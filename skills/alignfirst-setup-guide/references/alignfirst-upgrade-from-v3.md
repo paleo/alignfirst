@@ -13,10 +13,10 @@ Installing the CLI globally on a developer machine is a convenience:
 npm install -g alignfirst
 ```
 
-An assistant host installs the CLI globally and replaces the retired project-discovery package:
+An assistant host installs it globally with `aldev`, the Dev Kit CLI:
 
 ```sh
-npm install -g alignfirst @alignfirst/alcode @alignfirst/alproject
+npm install -g alignfirst aldev
 ```
 
 ## Inventory the `plans-share` Contract

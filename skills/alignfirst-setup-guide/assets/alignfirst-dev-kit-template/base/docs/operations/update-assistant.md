@@ -1,7 +1,8 @@
 ---
 title: Update the Assistant
 read_when:
-  - upgrading OpenClaw, the coding agent, alignfirst, alcode, alproject, ctx7 or the skills
+  - upgrading OpenClaw, the coding agent, alignfirst, aldev, ctx7 or the skills
+  - replacing alcode and alproject with aldev
 ---
 
 # Update the Assistant
@@ -74,6 +75,45 @@ EOS
 
 The login hook must remain after the environment bridge and any PATH assignments. The [gateway step](#gateway-unit-and-restart) installs or refreshes the systemd drop-in before restarting.
 
+## One-time: replace alcode and alproject with aldev
+
+Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aldev` replaces both and prints the playbook through `aldev guide`, so OpenClaw's managed playbook copy goes away.
+
+1. Bring the admin repository to the current template: the variant's `infra/openclaw/aldev.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aldev.json`, and its `config` scope covers the aldev config.
+2. Swap the packages:
+
+   ```sh
+   sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
+   set -e
+   /opt/{{SERVICE_USER}}/libexec/admin-npm uninstall -g @alignfirst/alcode @alignfirst/alproject
+   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g aldev@latest
+   '
+   ```
+
+3. Remove the playbook copy:
+
+   ```sh
+   sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
+     rm -rf /home/{{SERVICE_USER}}/.openclaw/skills/alignfirst-openclaw-playbook
+   ```
+
+4. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aldev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
+
+   ```sh
+   # only when step 1 deleted coding-agent.conf
+   sudo -i -u {{SERVICE_USER}} -- rm -f /home/{{SERVICE_USER}}/.config/environment.d/coding-agent.conf
+   sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec
+   ```
+
+5. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aldev` and `ctx7`.
+
+   ```sh
+   sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
+   sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev project doctor && aldev guide >/dev/null && echo aldev-ok'
+   ```
+
+Continue with the regular steps below.
+
 ## npm packages
 
 The prefix is root-owned and immutable ([06](../installations/06-security-hardening.md)). The maintenance wrapper gives the service account this scope for the command, then restores root ownership, modes and the immutable flag through an `EXIT` trap. `openclaw update` is channel-aware and refreshes its plugins at the core's version; the other packages ride `@latest`.
@@ -83,7 +123,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
 openclaw update --yes --no-restart --accept-capabilities
 openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
   openclaw plugins update @alignfirst/service-openclaw-plugin@latest --accept-capabilities
-/opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest @alignfirst/alcode@latest @alignfirst/alproject@latest ctx7@latest
+/opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aldev@latest ctx7@latest
 '
 ```
 
@@ -93,8 +133,8 @@ Immediately replace the projects marker, then validate with the new CLI. The wra
 sudo /usr/local/sbin/alignfirst-assistant-maintenance projects -- bash -lc '
 set -e
 install -m 644 ~/seed/projects/.alignfirst-projects.json ~/projects/.alignfirst-projects.json
-alproject doctor --root ~/projects
-alproject list --root ~/projects
+aldev project doctor
+aldev project list
 '
 ```
 
@@ -110,20 +150,20 @@ Update the coding agent through its package-scoped command: [08-coding-agent.md 
 
 `openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts, and the migration step below finishes what the lock interrupted.
 
-Verify — the listing must show exactly six packages (`openclaw`, the coding agent, `alignfirst`, `@alignfirst/alcode`, `@alignfirst/alproject`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
+Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `alignfirst`, `aldev`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && alcode --help >/dev/null && echo alcode-ok && alproject --version && ctx7 --version'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && aldev --version && aldev code --help >/dev/null && echo aldev-ok && ctx7 --version'
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-ALIGNFIRST_CODE_AGENT=<claude|codex> \
+CODING_AGENT=<claude|codex> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
 
-Also run the [project-runtime audit](../installations/06-security-hardening.md#project-runtime-audit). It inventories writable runtime bins and globals across every installed version, separately from the protected six-package listing.
+Also run the [project-runtime audit](../installations/06-security-hardening.md#project-runtime-audit). It inventories writable runtime bins and globals across every installed version, separately from the protected five-package listing.
 
 ## Skills
 
@@ -132,15 +172,6 @@ The shared `~/.agents` tree and OpenClaw's managed `~/.openclaw/skills` tree are
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
   bash -lc 'npx -y skills update -g -y </dev/null'
-```
-
-The CLI does not retain the copied OpenClaw target during an update. Restore the playbook copy after every update:
-
-```sh
-sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- bash -lc '
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-openclaw-playbook </dev/null
-'
 ```
 
 Then make sure every target exists. If an entry is missing, repeat the idempotent `skills add` block of [08-coding-agent.md § Skills](../installations/08-coding-agent.md#skills), replacing its opening command with:
@@ -156,21 +187,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
   find /home/{{SERVICE_USER}}/.openclaw/skills -maxdepth 1 -type l -print -delete
 ```
 
-Verify the playbook is a real directory and its old shared and coding-agent entries are absent:
-
-```sh
-sudo -i -u {{SERVICE_USER}} bash <<'EOS'
-set -e
-test -f ~/.openclaw/skills/alignfirst-openclaw-playbook/SKILL.md
-test ! -L ~/.openclaw/skills/alignfirst-openclaw-playbook
-for root in ~/.agents/skills ~/.codex/skills ~/.claude/skills; do
-  test ! -e "$root/alignfirst-openclaw-playbook"
-  test ! -L "$root/alignfirst-openclaw-playbook"
-done
-EOS
-```
-
-The setup guide and `sharp-writing` remain shared through `~/.agents/skills/`. Only OpenClaw automatically discovers the managed playbook. See [gotchas.md](../gotchas.md#shared-skills-live-under-agentsskills).
+The setup guide and `sharp-writing` are shared through `~/.agents/skills/` ([gotchas.md](../gotchas.md#shared-skills-live-under-agentsskills)).
 
 ## Migrate after a core bump
 
@@ -221,7 +238,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> ALIGNFIRST_CODE_AGENT=<claude|codex> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=<claude|codex> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json

@@ -95,7 +95,7 @@ The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
-  openclaw alignfirst @alignfirst/alcode @alignfirst/alproject ctx7
+  openclaw alignfirst aldev ctx7
 ```
 
 Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). The seed in `04` requires it.
@@ -103,13 +103,13 @@ Install the selected coding agent under the same prefix: [08-coding-agent.md § 
 Verify:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst alcode alproject ctx7'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst aldev ctx7'
 # Expected: node and npm under $FNM_MULTISHELL_PATH/bin; openclaw under /opt/{{SERVICE_USER}}/bin; the rest under /home/{{SERVICE_USER}}/.npm-system-global/bin
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> \
 PINNED_NODE=<project-node-version> \
-ALIGNFIRST_CODE_AGENT=<claude|codex> \
+CODING_AGENT=<claude|codex> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
@@ -159,4 +159,4 @@ sudo -i -u {{SERVICE_USER}} -- podman info --format '{{.Host.Security.Rootless}}
 # Expected: true
 ```
 
-`alproject` needs the projects marker installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).
+`aldev project` needs the aldev config and the projects marker, both installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).

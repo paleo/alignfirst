@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Copies the deployment state of the service account into ~/backups/deployment/<stamp>/:
-# openclaw.json, the secret store, the gateway env file, the workspace files, environment.d,
-# OpenClaw's archive, and thread-handoff's independent state.
+# openclaw.json, the secret store, the gateway env file, the workspace files, environment.d, the
+# aldev config, OpenClaw's archive, and thread-handoff's independent state.
 #
 # Run as the service account:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
@@ -22,6 +22,7 @@ main() {
   copy_file "$HOME/.openclaw/.env" openclaw.env
   copy_workspace
   copy_environment
+  copy_file "$HOME/.config/alignfirst/aldev.json" aldev.json
   create_openclaw_archive
   copy_thread_handoff_state
   chmod -R go-rwx "$BACKUP_DIR"

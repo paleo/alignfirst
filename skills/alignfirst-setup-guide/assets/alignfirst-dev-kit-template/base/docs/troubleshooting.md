@@ -22,8 +22,8 @@ Run `secrets audit` from a login shell, as above: the file provider resolves fro
 ## Project routing
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --json --root ~/projects'
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject status <repo> --json --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project list --json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project status <repo> --json'
 ```
 
 A project absent from the listing has no `.alignfirst.json` or sits outside a marked projects directory. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project-breaks-its-workspace-registry).
@@ -31,16 +31,16 @@ A project absent from the listing has no `.alignfirst.json` or sits outside a ma
 ## Delegation
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- alcode --guide
+sudo -i -u {{SERVICE_USER}} -- aldev guide code
 sudo -i -u {{SERVICE_USER}} -- \
   openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
 # Expected: {"id":"openclaw"}
 ```
 
 The agent runtime must be `openclaw`; another value changes the tool surface and breaks the
-playbook's background delegation contract. Re-seed before investigating alcode itself.
+playbook's background delegation contract. Re-seed before investigating `aldev code` itself.
 
-The session file under the project's `.plans/<ticket>/_alcode/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 9](installations/04-openclaw.md#9-environment-changes)).
+The session file under the project's `.plans/<ticket>/_aldev/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 9](installations/04-openclaw.md#9-environment-changes)).
 
 ## Channel and thread flow
 

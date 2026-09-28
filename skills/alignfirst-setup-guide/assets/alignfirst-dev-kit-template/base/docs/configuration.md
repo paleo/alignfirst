@@ -22,10 +22,11 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 - `infra/openclaw/seed/common.sh` — the baseline: model, memory opt-outs, heartbeat, skill allowlist, tools, updates, thread sessions, identity, gateway, plugin allowlist. Also the helpers every module calls.
 - `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel.
 - `infra/openclaw/seed/coding-agent.sh` — the delegated coding agent's global instructions (merged into its instruction file).
-- `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`, `coding-agent.conf`; `runtime.conf` is generated).
+- `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`; `runtime.conf` is generated).
+- `infra/openclaw/aldev.json` — the `aldev` config: platform, projects root and coding agent. The seed installs it at `~/.config/alignfirst/aldev.json`, the fixed path `aldev` reads. `code.skipPermissions` passes the agent CLI's permission-bypass flag, since backgrounded runs have no approval loop. `code.unset` strips the listed variables from the coder's environment, so the coder uses its own login, never a stray API key.
 - `infra/openclaw/workspace/` — the workspace files, applied by `apply-workspace.sh`.
 - `infra/openclaw/heartbeat-scratch.md` — the heartbeat job's checklist, pushed by `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)).
-- `infra/openclaw/projects/.alignfirst-projects.json` — the project parent, policy, and port range used by `alproject`.
+- `infra/openclaw/projects/.alignfirst-projects.json` — the project parent, policy, and port range used by `aldev project`.
 
 ## Module contract
 

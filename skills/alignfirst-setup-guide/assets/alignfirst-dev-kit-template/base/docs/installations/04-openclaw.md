@@ -63,7 +63,7 @@ The snapshot copies `bin/openclaw` and `node-runtime/` but executes neither. `03
 
 ## 3. Seed
 
-`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
+`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aldev.json` as `~/.config/alignfirst/aldev.json`, the `aldev` config, and validates it with `aldev guide code`. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
 
 The provider and model are deployment choices. The seed always pins
 `models.providers.{{RUNTIME_PROVIDER}}.agentRuntime.id` to `openclaw`. The embedded runtime owns the
@@ -101,7 +101,7 @@ An installed agent-harness plugin cannot claim this deployment's turns because t
 `openclaw` runtime pin is authoritative. A provider plugin may still supply model transport,
 authentication, or chat commands.
 
-The seed installs `@alignfirst/service-openclaw-plugin` as **AlignFirst Service** (ID `alignfirst-service`) and enables its optional `thread_handoff` tool. This plugin supplies the assistant's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `alcode`, the assistant runs `openclaw system event` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
+The seed installs `@alignfirst/service-openclaw-plugin` as **AlignFirst Service** (ID `alignfirst-service`) and enables its optional `thread_handoff` tool. This plugin supplies the assistant's OpenClaw capabilities. Thread handoff starts the thread session through a reply run that the plugin dispatches in-process. After `aldev code`, the assistant runs `openclaw system event` through `exec`; the gateway unit therefore needs `openclaw` on its `PATH`, which `gateway-path.conf` already provides at `/opt/{{SERVICE_USER}}/bin`. Thread handoff keeps its SQLite state under `~/.openclaw/thread-handoff/` and needs no official-plugin trust override. Keep that directory writable by `{{SERVICE_USER}}` and follow the package README for consistent backup and retirement.
 
 ## Model-specific parameters
 
@@ -129,7 +129,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/projects'
 sudo install -m 644 -o root -g root \
   /home/{{SERVICE_USER}}/seed/projects/.alignfirst-projects.json \
   /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project list'
 ```
 
 Projects come later through [add-project.md](../operations/add-project.md).

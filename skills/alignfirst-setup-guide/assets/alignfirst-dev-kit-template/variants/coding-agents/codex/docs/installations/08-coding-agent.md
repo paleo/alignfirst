@@ -10,7 +10,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. Two sections run earlier: [Admin Account](#admin-account) during `01-server-setup.md`, [Install](#install) during `03-toolchain.md`. Every Codex command of this deployment lives here; the base runbooks link to these sections.
 
-Codex is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `alcode`, one fresh `codex` process per delegated run.
+Codex is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `aldev code`, one fresh `codex` process per delegated run.
 
 ## Admin Account
 
@@ -47,7 +47,7 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. The seed strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`environment.d/coding-agent.conf`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aldev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.unset` in `infra/openclaw/aldev.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
 
@@ -62,7 +62,7 @@ exit
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The playbook is copied to OpenClaw's managed `~/.openclaw/skills/` directory because its operating instructions would only cost tokens in the coding agent's context. The delegated coder needs no protocol skill: `alcode` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The delegated coder needs no protocol skill: `aldev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
@@ -70,8 +70,6 @@ set -e
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent universal --agent codex \
   --skill alignfirst-setup-guide < /dev/null
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent openclaw --copy --skill alignfirst-openclaw-playbook < /dev/null
 npx -y skills add https://github.com/paleo/skills --global --yes \
   --agent universal --agent codex --skill sharp-writing < /dev/null
 EOS
@@ -146,7 +144,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- \
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-ALIGNFIRST_CODE_AGENT=codex \
+CODING_AGENT=codex \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
@@ -164,16 +162,16 @@ The `skills` scope of `update-assistant.md` covers `~/.agents` and `~/.openclaw/
 After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alcode --guide | head'      # names codex as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'alproject --guide --root ~/projects >/dev/null && echo projects-ok'
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'   # 3 skills
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev code --help | grep selected'   # names codex as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev guide project >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'        # 2 skills
 ```
 
 Exercise the runtime harness through the real gateway. This catches shell-snapshot state that a direct invocation cannot reproduce:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> ALIGNFIRST_CODE_AGENT=codex /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=codex /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json
@@ -182,4 +180,4 @@ EOF
 
 The private turn must return `RUNTIME_OK`.
 
-The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_alcode/*.md` records `agent: codex`.
+The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_aldev/*.md` records `agent: codex`.

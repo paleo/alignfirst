@@ -6,7 +6,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.41.0"
+  version: "0.42.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -26,11 +26,10 @@ Cursor, or `$alspec` in Codex. The optional `alignfirst` skill lets the agent re
 named in prose; a project whose instruction file starts with the canonical `alignfirst context`
 section provides this itself.
 
-`alignfirst-setup-guide` and `alignfirst-openclaw-playbook` are separate skills. A
-work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
+A work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
-An assistant host also installs `@alignfirst/alcode`, the companion CLI for coding-agent
-delegation and project discovery.
+An assistant host also installs `aldev`, the Dev Kit CLI: the assistant's playbook, coding-agent
+delegation, and project discovery.
 
 ## Named Tool
 
@@ -89,7 +88,7 @@ Inspect the repository before changing it. A prepared project has all of these:
 1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed as the first `##` section
    after the title and introduction. The README may offer a global CLI installation as a convenience.
    `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
-2. A clean `alproject doctor --root <projects-directory>` result after writing
+2. A clean `aldev project doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
 3. The work-files repository through `alignfirst plans setup` when the team has one.
 4. docmap, including project scripts or CLI instructions. When the repository has no `docs/`

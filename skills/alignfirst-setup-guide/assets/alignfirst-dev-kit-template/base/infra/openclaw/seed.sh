@@ -5,7 +5,8 @@
 # Strategy: `openclaw setup` produces the installed version's default config; every
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
-# reach openclaw.json as file SecretRefs only.
+# reach openclaw.json as file SecretRefs only. The seed also installs environment.d and the
+# aldev config.
 #
 # Run as the service account, from the seed snapshot:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
@@ -18,6 +19,8 @@ OPENCLAW_HOME="$HOME/.openclaw"
 SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
+ALDEV_CONFIG_DIR="$HOME/.config/alignfirst"
+ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.json"
 
 main() {
   load_env
@@ -38,6 +41,7 @@ main() {
   configure_surface
   configure_coding_agent
   install_environment_files
+  install_aldev_config
   verify
 }
 
@@ -136,6 +140,18 @@ install_environment_files() {
   printf 'DOCKER_HOST=unix:///run/user/%s/podman/podman.sock\n' "$(id -u)" \
     > "$ENVIRONMENT_DIR/runtime.conf"
   echo "[seed] a changed variable needs: systemctl --user daemon-reexec, then a gateway restart"
+}
+
+install_aldev_config() {
+  echo "[seed] aldev config — $ALDEV_CONFIG_FILE"
+  # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
+  # its directory immutable.
+  if [ ! -d "$ALDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALDEV_CONFIG_DIR"; fi
+  if ! cmp -s "$DIR/aldev.json" "$ALDEV_CONFIG_FILE"; then
+    install -m 644 "$DIR/aldev.json" "$ALDEV_CONFIG_FILE"
+  fi
+  # Fails on an invalid file or a missing code.agent.
+  aldev guide code >/dev/null
 }
 
 verify() {

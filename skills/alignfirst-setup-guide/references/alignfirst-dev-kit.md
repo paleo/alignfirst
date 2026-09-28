@@ -1,6 +1,6 @@
 # Create an Assistant
 
-An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code or Codex through `alcode`. This reference produces its **admin repository**: a private repository rendered from `assets/alignfirst-dev-kit-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
+An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code or Codex through `aldev code`. This reference produces its **admin repository**: a private repository rendered from `assets/alignfirst-dev-kit-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
 
 ## Topology
 
@@ -8,20 +8,21 @@ Three roles, named as the runbooks name them:
 
 - **Support** — a coding-agent session on a laptop. Edits the admin repository, never executes on the server.
 - **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with a work-files repository, its clone under `~/projects`. Root steps are the operator's, through `sudo`.
-- **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw on fixed system Node, and runs the coding agent, `alignfirst`, `alcode`, rootless podman and managed projects in fnm developer shells.
+- **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw on fixed system Node, and runs the coding agent, `alignfirst`, `aldev`, rootless podman and managed projects in fnm developer shells.
 
 The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the root-owned maintenance wrapper before every protected change. The wrapper contains the service account, unlocks only named scopes, runs one command as that account, and restores hardening through an exit trap. From there:
 
-- `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `skills/` (the OpenClaw-only playbook), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the plugin's durable handoff state).
+- `~/.openclaw/` — `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from `~/seed/workspace/`), `skills/` (admin-owned and empty, locked so the assistant cannot install skills), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the plugin's durable handoff state).
 - `~/.agents/skills/` — the setup guide and `sharp-writing`, shared with the delegated coding agent.
 - `/opt/{{SERVICE_USER}}/` — root-owned OpenClaw and project-shell launchers, fnm initialization, maintenance npm and runtime checks.
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and admin CLI packages.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
+- `~/.config/alignfirst/aldev.json` — the `aldev` config (platform, projects root, coding agent), installed by the seed and locked with its directory.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
-Both accounts install the same selected coding agent. The admin account uses it as the operator with the project-local `sysadmin` skill; the service account uses it through `alcode`.
+Both accounts install the same selected coding agent. The admin account uses it as the operator with the project-local `sysadmin` skill; the service account uses it through `aldev code`.
 
 The human performs every interactive authentication and secret entry. Credentials never enter chat, files under version control, commands saved in shell history, or documentation.
 
@@ -115,7 +116,7 @@ rg -n --hidden -g '!node_modules' '\{\{[A-Z][A-Z0-9_]*\}\}' .
 rg -n --hidden -g '!node_modules' 'TEAM_PLANS_SECTION|DEV_SERVER_GATEWAY_SECTION' .
 for f in infra/openclaw/seed.sh infra/openclaw/seed/*.sh infra/openclaw/bin/*.sh infra/openclaw/bin/openclaw infra/openclaw/node-runtime/project-shell infra/openclaw/node-runtime/init.bash infra/openclaw/node-runtime/admin-npm infra/openclaw/node-runtime/check-project-runtimes.sh; do bash -n "$f"; done
 node --check scripts/workspace/workspace.mjs
-node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json .alignfirst.json package.json
+node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aldev.json .alignfirst.json package.json
 npm run validate
 ```
 
@@ -154,7 +155,7 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
 ## Completion Criteria
 
 - The allowed channel routes work into one thread; a message elsewhere gets no reply.
-- The coding agent runs every AlignFirst command through `alcode`, unattended.
+- The coding agent runs every AlignFirst command through `aldev code`, unattended.
 - Every model route uses OpenClaw's embedded agent runtime.
 - `alignfirst-service` is loaded as an external plugin, `thread_handoff` is allowed, Slack effective
   `replyToMode` is `off` or Discord channel `autoThread` is `false`, and a complete request starts in

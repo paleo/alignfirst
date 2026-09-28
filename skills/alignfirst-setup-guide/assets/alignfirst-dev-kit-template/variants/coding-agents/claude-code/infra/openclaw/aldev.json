@@ -1,0 +1,9 @@
+{
+  "platform": "openclaw",
+  "projectsRoot": "~/projects",
+  "code": {
+    "agent": "claude",
+    "skipPermissions": true,
+    "unset": ["ANTHROPIC_API_KEY"]
+  }
+}
