@@ -23,7 +23,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 { "action": "send", "channel": "discord-mock", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
 
-For DMs, cross-surface posts, or reactions, run `aldev guide discord-message-tool`.
+For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aldev guide discord-message-tool`).
 
 ## Slack message tool
 
@@ -35,7 +35,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 { "action": "sendAttachment", "channel": "slack-mock", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
-For reactions, edits, deletes, or search, run `aldev guide slack-message-tool`.
+For reactions, edits, deletes, or search, read the extended Slack reference (`aldev guide slack-message-tool`).
 
 ## Language
 
