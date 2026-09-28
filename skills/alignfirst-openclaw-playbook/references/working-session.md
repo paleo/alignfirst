@@ -204,6 +204,8 @@ The main worktree at PROJECT_PATH stays on the base branch, except for the repos
 
 Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `runbooks/project-lifecycle.md`.
 
+Install dependencies in the main worktree from the committed lockfile, without rewriting it: `npm ci` with npm, or the frozen-lockfile install of the project's package manager. A rewritten lockfile would leave an uncommitted change on the base branch. Every alcode prompt that installs dependencies in the main worktree states this rule.
+
 Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
@@ -359,7 +361,7 @@ When the user asks to tear down one named project workspace (or worktree) from i
 
 When the user asks to clean the workspaces, run a no-protocol alcode delegation from each affected PROJECT_PATH with this instruction:
 
-> List every registered workspace for this project. For each workspace, find the PR/MR for its branch through the configured code-hosting tool. Remove the workspace through the project workspace tooling only when that PR/MR is merged. Leave workspaces with no PR/MR or an unmerged PR/MR intact. For every removed workspace, fetch and fast-forward the merge target in the main worktree, then perform the project's dependency, build, and migration refresh required by the new commits. Report every decision and the final base-branch state.
+> List every registered workspace for this project. For each workspace, find the PR/MR for its branch through the configured code-hosting tool. Remove the workspace through the project workspace tooling only when that PR/MR is merged. Leave workspaces with no PR/MR or an unmerged PR/MR intact. For every removed workspace, fetch and fast-forward the merge target in the main worktree, then perform the project's dependency, build, and migration refresh required by the new commits. Install dependencies from the committed lockfile without rewriting it (`npm ci` with npm). Report every decision and the final base-branch state.
 
 ### Resetting a thread session
 

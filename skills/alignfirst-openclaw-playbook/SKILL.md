@@ -4,7 +4,7 @@ description: "Operating-instructions dispatcher for an AlignFirst assistant runn
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.41.0"
+  version: "0.42.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
