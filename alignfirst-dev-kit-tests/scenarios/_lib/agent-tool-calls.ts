@@ -1,7 +1,7 @@
 import type { AgentToolCall } from "@alignfirst/openclaw-test";
 import { escapeRe } from "./common-constants.ts";
 
-const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])alproject\s+list\b.*--json/;
+const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])aldev\s+project\s+list\b.*--json/;
 
 export function inputOf(call: AgentToolCall): Record<string, unknown> {
   return call.input && typeof call.input === "object"
@@ -50,22 +50,20 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
   return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
-// `alcode` at a word boundary — bare, absolute path (`/usr/local/bin/alcode …`), or after a shell
-// separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained
+// `aldev` at a word boundary — bare, absolute path (`/usr/local/bin/aldev …`), or after a shell
+// separator/subshell open (`(aldev code … ; openclaw system event …)` is the guide's chained
 // completion-event launch shape) — but not a substring of another token.
-const ALCODE_INVOCATION_RE = /(^|[\s/;(&|])alcode(\s|$)/;
-// Only alcode may launch a coding agent. Its subprocess appears as a cliMock entry rather than an
-// OpenClaw agent tool call.
+const ALDEV_INVOCATION_RE = /(^|[\s/;(&|])aldev(\s|$)/;
+// A coder launch. `aldev code status` and `aldev guide code` launch nothing.
+const ALDEV_CODE_LAUNCH_RE = /(^|[\s/;(&|])aldev\s+code\s+(new|resume)(\s|$)/;
+// Only `aldev code` may launch a coding agent. Its subprocess appears as a cliMock entry rather
+// than an OpenClaw agent tool call.
 const CODING_AGENT_INVOCATION_RE = /(^|[\s/;(&|])(claude|codex)(\s|$)/;
 
-/** True when the call is an `exec` that invokes the real `alcode` CLI. */
-export function invokesAlcode(call: AgentToolCall): boolean {
-  const input = inputOf(call);
-  return (
-    call.toolName === "exec" &&
-    typeof input.command === "string" &&
-    ALCODE_INVOCATION_RE.test(input.command)
-  );
+/** True when the call is an `exec` that launches the coder through the real `aldev code` CLI. */
+export function invokesAldevCode(call: AgentToolCall): boolean {
+  const command = execCommandOf(call);
+  return command !== undefined && ALDEV_CODE_LAUNCH_RE.test(command);
 }
 
 export function listsProjects(call: AgentToolCall): boolean {
@@ -92,7 +90,5 @@ export function nthMatchingCall(
 export function invokesCodingAgentDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
-  return (
-    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command)
-  );
+  return CODING_AGENT_INVOCATION_RE.test(input.command) && !ALDEV_INVOCATION_RE.test(input.command);
 }

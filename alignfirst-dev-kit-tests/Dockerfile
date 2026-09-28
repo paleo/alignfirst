@@ -12,7 +12,7 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm through Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `alcode` runs for real,
+# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `aldev` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl sqlite && \
     npm install --global corepack@0.36.0 && \
@@ -23,16 +23,15 @@ RUN apk add --no-cache git curl sqlite && \
 
 # PATH wrappers for the real CLIs. `/opt/alignfirst` is the read-only monorepo root
 # mount, so @alignfirst/docmap, arktype, and semver resolve through its root node_modules.
-# `alproject` spawns `alignfirst`.
-RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alcode/bin/alcode.mjs "$@"\n' > /usr/local/bin/alcode && \
+# `aldev project` spawns `alignfirst`.
+RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/aldev/bin/aldev.mjs "$@"\n' > /usr/local/bin/aldev && \
     printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alignfirst/bin/alignfirst.mjs "$@"\n' > /usr/local/bin/alignfirst && \
-    printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alproject/bin/alproject.mjs "$@"\n' > /usr/local/bin/alproject && \
-    chmod +x /usr/local/bin/alcode /usr/local/bin/alignfirst /usr/local/bin/alproject
+    chmod +x /usr/local/bin/aldev /usr/local/bin/alignfirst
 
 # PATH wrapper for the `openclaw` CLI. OpenClaw is only a local npm dependency
 # of /opt/openclaw-test/src (nothing puts its node_modules/.bin on the exec
-# PATHs), yet the alcode guide chains `openclaw system event …` onto every delegated
-# run for the completion wake. The server's `--auth none` flag does
+# PATHs), yet the `aldev guide code` delegation manual chains `openclaw system event …`
+# onto every delegated run for the completion wake. The server's `--auth none` flag does
 # not exempt the CLI: it checks credentials client-side from the config, so
 # openclaw.json also declares `gateway.auth.mode: "none"`.
 RUN printf '#!/bin/sh\nexec /opt/openclaw-test/src/node_modules/.bin/openclaw "$@"\n' > /usr/local/bin/openclaw && \
@@ -102,14 +101,10 @@ COPY --chown=assistant:assistant projects-fixture/template/ /opt/alignfirst-dev-
 RUN cd /opt/alignfirst-dev-kit-tests/fixtures/template && \
     pnpm install --frozen-lockfile
 
-# Install the shared setup guide under /home/assistant/.agents/skills/ and the
-# OpenClaw-only playbook under OpenClaw's managed /home/assistant/.openclaw/skills/.
+# Install the shared setup guide under /home/assistant/.agents/skills/.
 RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --agent universal --agent claude-code \
-      --skill alignfirst-setup-guide && \
-    npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-      --agent openclaw --copy \
-      --skill alignfirst-openclaw-playbook
+      --skill alignfirst-setup-guide
 
 USER root
 RUN corepack install --global pnpm@latest

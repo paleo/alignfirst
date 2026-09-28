@@ -73,9 +73,9 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
         extractCodingPrompt(call) ?? "",
       ),
     rubric:
-      "Grade only the captured alcode delegation text. Pass if it invokes the AlignFirst review " +
-      `protocol for ticket ${TICKET_ID}. Reject only if the ticket is wrong or it invokes a change, ` +
-      "implementation, or non-review protocol. Do not require GitHub or workspace evidence here; " +
+      "Grade only the captured `aldev code` delegation text. Pass if it invokes the AlignFirst " +
+      `review protocol for ticket ${TICKET_ID}. Reject only if the ticket is wrong or it ` +
+      "invokes a change, implementation, or non-review protocol. Do not require GitHub or workspace evidence here; " +
       "the scenario verifies those separately with deterministic assertions.",
     label: "pull-request-review-delegation",
   });

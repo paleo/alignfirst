@@ -93,7 +93,7 @@ export default async function projectRemovalFailure(ctx: ScenarioContext): Promi
   const calls = await ctx.getAgentToolCalls();
   assertAgentCommandOrder(
     calls,
-    /alproject\s+--guide\b/,
+    /aldev\s+guide\s+project\b/,
     /\brm\s+-rf?\s+\S*nimbus|workspace\s+remove/,
     "guide precedes removal",
   );
@@ -106,7 +106,7 @@ export default async function projectRemovalFailure(ctx: ScenarioContext): Promi
   assertAgentCommandOrder(
     calls.filter((call) => call.startedAt !== undefined && call.startedAt >= retryStartedAt),
     new RegExp(String.raw`\brm\b[^\n]*${escapeRe(NIMBUS_PROJECT_PATH)}`),
-    /\balproject\s+list\b(?![\s\S]*\balproject\s+list\b)/u,
+    /\baldev\s+project\s+list\b(?![\s\S]*\baldev\s+project\s+list\b)/u,
     "final project inventory follows main-worktree removal",
   );
   ctx.markScenarioAsEnded("PASS");

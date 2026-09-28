@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
-import { execMatches, inputOf, invokesAlcode, readsFile } from "./agent-tool-calls.ts";
+import { execMatches, inputOf, invokesAldevCode, readsFile } from "./agent-tool-calls.ts";
 import { escapeRe } from "./common-constants.ts";
 import {
   assertNoChannelRootLeak,
@@ -182,7 +182,7 @@ async function assertChannelSessionHandedOff(
     (call) =>
       readsFile(call, "DEVELOPERS.md") ||
       readsFile(call, "README.md") ||
-      invokesAlcode(call) ||
+      invokesAldevCode(call) ||
       execMatches(call, /\b(workspace|worktree|git\s+(?:-C\s+\S+\s+)?(?:status|log|show|diff))\b/i),
   );
   ctx.assertLength(forbidden, 0, "parent session performed no target work");

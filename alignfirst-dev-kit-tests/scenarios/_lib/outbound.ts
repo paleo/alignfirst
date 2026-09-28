@@ -69,7 +69,7 @@ export interface WaitForReportOptions {
  * tolerates), so `predicate` plus the timeout bound the wait instead.
  *
  * The CLI grace fail-fast is off for the same reason as `waitForSetupAck`: the
- * report turn runs mocked CLIs mid-composition (`gh`, an alcode delegation),
+ * report turn runs mocked CLIs mid-composition (`gh`, an `aldev code` delegation),
  * and on finals-only surfaces the report legitimately follows such a call by
  * more than any reasonable grace, with no outbound in between. The deadline
  * bounds the wait.

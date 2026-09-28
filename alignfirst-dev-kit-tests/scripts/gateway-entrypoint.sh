@@ -31,4 +31,28 @@ if [ -f "$CODEX_AUTH" ]; then
   trap - EXIT
 fi
 
+# Fatal, unlike the import: every delegation reads its coding agent from this config.
+node -e '
+  const { mkdirSync, writeFileSync } = require("node:fs");
+  const { dirname } = require("node:path");
+  const [file] = process.argv.slice(1);
+  const agent = process.env.CODING_AGENT;
+  if (agent !== "claude" && agent !== "codex") {
+    const got = JSON.stringify(agent);
+    console.error(`gateway-entrypoint: CODING_AGENT must be claude or codex, got ${got}`);
+    process.exit(1);
+  }
+  const models = (process.env.CODING_AGENT_MODELS ?? "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter((model) => model !== "");
+  const config = {
+    platform: "openclaw",
+    projectsRoot: "/home/assistant/projects",
+    code: models.length > 0 ? { agent, models } : { agent },
+  };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+' "$HOME/.config/alignfirst/aldev.json" || exit 1
+
 exec "$@"

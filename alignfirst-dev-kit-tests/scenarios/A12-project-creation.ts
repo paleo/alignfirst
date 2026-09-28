@@ -52,7 +52,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         scaffoldCreated = true;
       }
       // A verifying bot may ask for the `packageManager` declaration the template omits;
-      // comply, like a real alcode would.
+      // comply, like a real coder would.
       if (/\bpackageManager\b/u.test(prompt)) await declarePackageManager(scenario);
       await verifyProjectInventory(scenario);
       const holdsCommit = /\b(?:do not|don't|never)\s+(?:\w+\s+){0,3}commit\b/iu.test(prompt);
@@ -258,7 +258,7 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
 async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["alproject", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
+    ["aldev", "project", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
     "project inventory doctor before workspace setup",
   );
 }
@@ -266,14 +266,16 @@ async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
 function assertCreationCalls(calls: AgentToolCall[]): void {
   assertAgentCommandOrder(
     calls,
-    /alproject\s+--guide\b/,
+    /aldev\s+guide\s+project\b/,
     /\bgit\b[^\n;&|]*\binit\b/,
-    "alproject guide must precede git initialization",
+    "`aldev guide project` must precede git initialization",
   );
   const commands = calls
     .filter((call) => call.toolName === "exec")
     .map((call) => JSON.stringify(call.input));
-  const freePortsCommand = commands.find((command) => /alproject\s+free-ports\b/.test(command));
+  const freePortsCommand = commands.find((command) =>
+    /aldev\s+project\s+free-ports\b/.test(command),
+  );
   if (freePortsCommand === undefined) {
     throw new Error(`missing free-ports call: ${JSON.stringify(commands)}`);
   }
@@ -281,7 +283,10 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
     throw new Error(`free-ports call did not request size 8: ${JSON.stringify(commands)}`);
   }
   const allocatedExpectedBlock = calls.some((call) => {
-    if (call.toolName !== "exec" || !/alproject\s+free-ports\b/.test(JSON.stringify(call.input))) {
+    if (
+      call.toolName !== "exec" ||
+      !/aldev\s+project\s+free-ports\b/.test(JSON.stringify(call.input))
+    ) {
       return false;
     }
     const result = JSON.stringify(call.result);

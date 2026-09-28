@@ -29,8 +29,9 @@ const PROJECT = "nimbus";
 export default async function threadSessionDelegation(ctx: ScenarioContext): Promise<void> {
   ctx.log(`channel: ${ctx.channel}, conversationId: ${ctx.conversationId}`);
   await resetFixtures(ctx);
-  // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the alcode exec even if
-  // the agent does not pass `background: true`, letting the "started" ack precede the completion wake.
+  // Stream delay > exec `yieldMs` (10s default) so OpenClaw auto-backgrounds the `aldev code` exec
+  // even if the agent does not pass `background: true`, letting the "started" ack precede the
+  // completion wake.
   const codingAgent = setupCodingAgentMock(ctx, { streamDelayMs: 12_000 });
   setupGhMock(ctx);
 
