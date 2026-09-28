@@ -308,8 +308,8 @@ describe("plans commands", () => {
   it("keeps fresh running sessions while archiving stale completed sessions", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const sessionDir = join(plansDir, "_alcode");
-    const ticketSessionDir = join(plansDir, "79", "_alcode");
+    const sessionDir = join(plansDir, "_aldev");
+    const ticketSessionDir = join(plansDir, "79", "_aldev");
     mkdirSync(sessionDir, { recursive: true });
     mkdirSync(ticketSessionDir, { recursive: true });
     const running = join(sessionDir, "20260901-100000.md");
@@ -326,10 +326,10 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
 
-    expect(result.stdout).toContain("Archived _alcode/20260901-110000.md");
+    expect(result.stdout).toContain("Archived _aldev/20260901-110000.md");
     expect(existsSync(running)).toBe(true);
     expect(existsSync(succeeded)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-110000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "_aldev", "20260901-110000.md"))).toBe(true);
     expect(existsSync(join(plansDir, "79"))).toBe(true);
     expect(existsSync(join(plansDir, "_archives", "79"))).toBe(false);
   });
@@ -337,10 +337,10 @@ describe("plans commands", () => {
   it("archives stale running sessions and their ticket directories", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const running = join(plansDir, "_alcode", "20260901-100000.md");
-    const ticketSession = join(plansDir, "79", "_alcode", "20260901-120000.md");
-    mkdirSync(join(plansDir, "_alcode"), { recursive: true });
-    mkdirSync(join(plansDir, "79", "_alcode"), { recursive: true });
+    const running = join(plansDir, "_aldev", "20260901-100000.md");
+    const ticketSession = join(plansDir, "79", "_aldev", "20260901-120000.md");
+    mkdirSync(join(plansDir, "_aldev"), { recursive: true });
+    mkdirSync(join(plansDir, "79", "_aldev"), { recursive: true });
     writeFileSync(running, "---\nstatus: running\n---\n");
     writeFileSync(ticketSession, "---\nstatus: running\n---\n");
     const old = new Date(Date.now() - 2 * 86_400_000);
@@ -353,12 +353,12 @@ describe("plans commands", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Archived _alcode/20260901-100000.md");
+    expect(result.stdout).toContain("Archived _aldev/20260901-100000.md");
     expect(result.stdout).toContain("Archived 79");
     expect(existsSync(running)).toBe(false);
     expect(existsSync(ticketSession)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-100000.md"))).toBe(true);
-    expect(existsSync(join(plansDir, "_archives", "79", "_alcode", "20260901-120000.md"))).toBe(
+    expect(existsSync(join(plansDir, "_archives", "_aldev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "79", "_aldev", "20260901-120000.md"))).toBe(
       true,
     );
   });

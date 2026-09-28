@@ -24,7 +24,7 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
     expect(result.stdout).toContain("[ok] Skills: no command skill installed");
     expect(result.stdout).not.toContain("missing");
-    expect(result.stdout).not.toContain("Skills: alcode");
+    expect(result.stdout).not.toContain("Skills: aldev");
   });
 
   it("reports an excluded CLI range without failing", async () => {
