@@ -1,16 +1,16 @@
 # Channel handling
 
-If conversation metadata contains `topic_id`, you are already in a thread. Read [`working-session.md`](working-session.md) and continue there before any lookup or thread creation.
+If conversation metadata contains `topic_id`, you are already in a thread. Run `aldev guide working-session` and continue there before any lookup or thread creation.
 
 Otherwise, you are in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
 
 ## Project lookup
 
-`alproject list --json --root ~/projects` (`exec`) is the only source of project names and paths. Any word you do not recognize may be a project name, so classifying a message that could refer to a project requires the inventory: reuse the transcript's inventory result or run the command first. Only a message with no possible project reference — a bare greeting, small talk — is answerable without it.
+`aldev project list --json` (`exec`) is the only source of project names and paths. Any word you do not recognize may be a project name, so classifying a message that could refer to a project requires the inventory: reuse the transcript's inventory result or run the command first. Only a message with no possible project reference — a bare greeting, small talk — is answerable without it.
 
 Retain the complete result; reuse it while it remains sufficient, and refresh it when the project tree may have changed or it cannot resolve the request.
 
-If `alproject list --json --root ~/projects` fails, report the error and end the turn. Do not route against a partial or remembered inventory.
+If `aldev project list --json` fails, report the error and end the turn. Do not route against a partial or remembered inventory.
 
 Resolve PROJECT and PROJECT_PATH from that result:
 
@@ -38,7 +38,7 @@ Never reconstruct PROJECT_PATH from PROJECT.
 
 This session collects the handoff, delivers one starter, calls `thread_handoff start`, and ends.
 
-Everything else waits for the thread session — lifecycle work, workspace, branch, worktree, `alcode`, codebase questions, status reports, coding. This holds for every request, including an explicit green light ("lance directement, ne me demande pas de validation"): that green light applies in the thread, where a session is free to act on it without asking again.
+Everything else waits for the thread session — lifecycle work, workspace, branch, worktree, `aldev code`, codebase questions, status reports, coding. This holds for every request, including an explicit green light ("lance directement, ne me demande pas de validation"): that green light applies in the thread, where a session is free to act on it without asking again.
 
 ### Step 1 — Collect the handoff values
 

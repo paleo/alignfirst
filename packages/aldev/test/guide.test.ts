@@ -132,6 +132,41 @@ describe("aldev guide playbook", () => {
     }
   });
 
+  it("substitutes projectsRoot as written", async () => {
+    for (const projectsRoot of ["~/projects", "/srv/projects"]) {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, { ...OPENCLAW_CONFIG, projectsRoot });
+      const result = await runGuide(fixture, ["project-lifecycle"]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toContain(`\`${projectsRoot}\``);
+      expect(result.stdout).toContain(`\`alignfirst plans setup ${projectsRoot}/<clone>\``);
+      expect(result.stdout).not.toContain("{{");
+    }
+  });
+
+  it("names no retired command or skill file in any topic", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    for (const topic of ["playbook", ...PLAYBOOK_TOPICS.openclaw]) {
+      const result = await runGuide(fixture, topic === "playbook" ? [] : [topic]);
+      for (const retired of ["alcode", "alproject", "SKILL.md", "references/"]) {
+        expect(result.stdout, `${topic} mentions ${retired}`).not.toContain(retired);
+      }
+    }
+  });
+
+  it("routes the dispatcher through guide commands and defines the coder", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const result = await runGuide(fixture, []);
+    expect(result.stdout).toContain("run `aldev guide working-session`");
+    expect(result.stdout).toContain("run `aldev guide channel-handling`");
+    expect(result.stdout).toContain("run `aldev guide code`");
+    expect(result.stdout).toContain(
+      "**The coder** — the coding agent (Claude Code or Codex) you launch in a project with `aldev code`.",
+    );
+  });
+
   it("requires platform, naming the key, the config file and the platforms", async () => {
     const fixture = makeFixture();
     const path = writeConfig(fixture.home, { projectsRoot: "~/projects" });
