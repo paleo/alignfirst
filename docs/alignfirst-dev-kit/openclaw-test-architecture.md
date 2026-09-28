@@ -65,7 +65,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer copies its OpenClaw-only playbook to `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`. Its Compose overlay bind-mounts the checkout at that managed skill path, while shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.6.
+The Dev Kit consumer installs no managed skill: the playbook comes from the mounted monorepo through `aldev guide`. Shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.6.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -90,7 +90,7 @@ The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `ASSIS
 
 ## Mocked-CLI shim
 
-The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The Dev Kit consumer links `claude`, `codex`, and `gh`; `alcode`, `alignfirst` and `alproject` run live from the mounted checkout. Alcode selects its child through gateway `ALIGNFIRST_CODE_AGENT`, while either coding-agent executable remains intercepted. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. `alproject list --json` reads the real fixture tree, including its markers and project configs, and spawns `alignfirst config --json`. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
+The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The Dev Kit consumer links `claude`, `codex`, and `gh`; `aldev` and `alignfirst` run live from the mounted checkout. `aldev code` selects its child from the aldev config that the gateway entrypoint writes from `CODING_AGENT`, while either coding-agent executable remains intercepted. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. `aldev project list --json` reads the real fixture tree, including its markers and project configs, and spawns `alignfirst config --json`. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
 
 The sh wrapper at `/opt/openclaw-test/mocks/bin/mock-cli-shim` invokes the shim as `node mock-cli-shim.js "$0" "$@"`. The JS reads the symlink name from `argv[2]` (`/opt/openclaw-test/mocks/bin/git` → `git`). Without `"$0"`, the shim would see only the script path and reject every call as `unexpected call to mock-cli-shim.js`.
 

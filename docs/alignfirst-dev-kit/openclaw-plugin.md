@@ -34,7 +34,7 @@ The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited righ
 
 ### No hack around OpenClaw's handling of long commands
 
-`alcode` runs are long, and other commands are long too. OpenClaw owns how a background `exec` completes and how the assistant learns about it. The plugin adds nothing there: no gateway method to start a turn after a command, no command to chain onto a run, no rule about the native completion notice. The delegation guide uses OpenClaw's own means for that, and the plugin stays out of it.
+`aldev code` runs are long, and other commands are long too. OpenClaw owns how a background `exec` completes and how the assistant learns about it. The plugin adds nothing there: no gateway method to start a turn after a command, no command to chain onto a run, no rule about the native completion notice. The delegation guide uses OpenClaw's own means for that, and the plugin stays out of it.
 
 ### Say only what is true
 

@@ -3,7 +3,7 @@ title: Running the OpenClaw Tests
 summary: Configure and run the Dev Kit's local OpenClaw regression harness, select scenarios, preserve artifacts, and maintain its fixtures.
 read_when:
   - running the Dev Kit's OpenClaw regression scenarios
-  - configuring model credentials for the test harness
+  - configuring model credentials or the coding agent for the test harness
   - changing scenarios, fixtures, or vendored harness packages
   - investigating test artifacts or cross-scenario state
 ---
@@ -23,12 +23,12 @@ This guide documents what is specific to the Dev Kit harness. Run its commands f
 
 ```sh
 cp .env.local.example .env.local
-# Configure OPENROUTER_API_KEY, OPENCLAW_CODEX_HOME, and ALIGNFIRST_CODE_AGENT as described below.
+# Configure OPENROUTER_API_KEY, OPENCLAW_CODEX_HOME, and CODING_AGENT as described below.
 
 # Create bind-mount outputs as your user so Docker does not create root-owned directories.
 mkdir -p artifacts .gateway-logs
 
-# Build the real alcode, alignfirst, and alproject CLIs the gateway runs.
+# Build the real aldev and alignfirst CLIs the gateway runs.
 npm run build --prefix ..
 
 # Build and pack local packages, install them, then build the harness image.
@@ -60,10 +60,9 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
   OpenClaw 2026.9.6 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
-- `ALIGNFIRST_PLAYBOOK_SKILL_DIR` — renamed from `ALIGNFIRST_DEVELOPER_PLAYBOOK_SKILL_DIR`, and its value moved with the skill directory; host path to the `alignfirst-openclaw-playbook` skill, bind-mounted at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook` in OpenClaw's managed skill directory. Playbook edits iterate live, no rebuild.
-- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `alcode`, `alignfirst`, and `alproject` wrappers run all three CLIs from the checkout. Alcode runs for real, while both `claude` and `codex` resolve to the mock through PATH. Delegation instructions come from `alcode --openclaw-guide` (rendered from `packages/alcode/templates/`, so guide edits iterate live).
-- `ALIGNFIRST_CODE_AGENT=codex|claude` — required selector for alcode's child. It does not affect the OpenClaw conversation model. `ALIGNFIRST_CODE_MODELS` optionally narrows the agent models or pins a full Codex slug.
-- [`docker-compose.yml`](../../alignfirst-dev-kit-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the skill and monorepo bind mounts on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
+- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aldev` and `alignfirst` wrappers run both CLIs from the checkout. `aldev code` runs for real, while both `claude` and `codex` resolve to the mock through PATH. `aldev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aldev/templates/guide/openclaw/`, and the delegation instructions (`aldev guide code`) from `packages/aldev/templates/guide/code/`.
+- `CODING_AGENT=codex|claude` — required selector for the coder. It does not affect the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally narrows the agent models or pins a full Codex slug. Both reach the gateway and the runner. At startup, the gateway entrypoint writes them into the aldev config at `/home/assistant/.config/alignfirst/aldev.json`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. A missing or invalid `CODING_AGENT` fails the start.
+- [`docker-compose.yml`](../../alignfirst-dev-kit-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
 
 ## Fixtures
 
@@ -71,7 +70,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../alignfirst-dev-k
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and a default `portRanges` entry. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
-`alproject` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
+`aldev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
 ## Scenarios
 
@@ -88,8 +87,8 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A05 | An unknown project name must be corrected before work starts. |
 | A06 | Small talk stays social and starts no project work. One message suffices; the former second message had no additional assertion. |
 | A07 | Status progresses from no branch to an externally created branch and its attached workspace. A repeated status with no state change is omitted. Checks actual filesystem state and report meaning, with no template requirement. Its mock reports status without claiming implementation work. A16 covers reuse of an existing workspace and the discovery of one that predates the session. |
-| A08 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Covers the alcode/background contract and later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward. |
-| A09 | Deterministic alcode new/resume, selected-agent protocol, catchup, recorded context size, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
+| A08 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Covers the `aldev code`/background contract and later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward. |
+| A09 | Deterministic `aldev code` new/resume, selected-agent protocol, catchup, recorded context size, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
 | A10 | With one listed project, a ticket-only request selects it automatically. |
 | A11 | Duplicate project names require choosing a canonical path; takeover waits for the answer. |
 | A12 | New project creation, initial commit, and setup on main without a ticket protocol. The report confirms completion; CLI and filesystem assertions verify port allocation without requiring the report to repeat configuration fields. |
@@ -125,11 +124,11 @@ for scenario_file in scenarios/A*.ts; do
   scenario_name="${scenario_file##*/}"
   scenario_names+=("${scenario_name%.ts}")
 done
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenario_names[@]}"
-ALIGNFIRST_CODE_AGENT=codex npm run e2e -- --channel slack-mock A09-alcode-agent-contract
+CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenario_names[@]}"
+CODING_AGENT=codex npm run e2e -- --channel slack-mock A09-code-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. If the selected coding agent changes to Claude, run A09 once with `ALIGNFIRST_CODE_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+For a focused pass, supply only the affected scenario names instead of the array. If the selected coding agent changes to Claude, run A09 once with `CODING_AGENT=claude`; channel/model repetition adds no coverage to that contract.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../alignfirst-dev-kit-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
@@ -156,6 +155,6 @@ It retains test-owned gateway logs, scripted-provider requests, configuration, a
 - [`openclaw.json`](../../alignfirst-dev-kit-tests/openclaw.json) · [`docker-compose.yml`](../../alignfirst-dev-kit-tests/docker-compose.yml) · [`Dockerfile`](../../alignfirst-dev-kit-tests/Dockerfile) · [`package.json`](../../alignfirst-dev-kit-tests/package.json) · [`scripts/vendor-packages.mjs`](../../alignfirst-dev-kit-tests/scripts/vendor-packages.mjs) — committed.
 - [`sandbox/inbound.sh`](../../alignfirst-dev-kit-tests/sandbox/inbound.sh) — manual inbound-message helper; see [Manual Gateway Sandbox](./manual-gateway-sandbox.md).
 - `vendor/` (gitignored) — locally-built `@alignfirst/openclaw-*` tarballs, regenerated by `npm run vendor`.
-- `.env.local` (gitignored) — API keys, workspace/skill/repository paths, and `ALIGNFIRST_CODE_AGENT`.
+- `.env.local` (gitignored) — API keys, workspace/repository paths, and `CODING_AGENT`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `raw-stream.jsonl` (opt-in). Session transcripts live in the gateway's SQLite store; each cell's artifact dir archives them as `transcripts.json`.

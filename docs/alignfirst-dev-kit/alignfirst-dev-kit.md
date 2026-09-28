@@ -12,40 +12,40 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 1. **Reference workspace** —
    [`alignfirst-dev-kit-tests/workspace/`](../../alignfirst-dev-kit-tests/workspace/). The
    `myassistant` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
-   load into the system prompt every turn. `AGENTS.md` sends every user message to the
-   `alignfirst-openclaw-playbook` dispatcher. The workspace carries no playbook copy.
-2. **Operating-instructions playbook** — the
-   [`alignfirst-openclaw-playbook`](../../skills/alignfirst-openclaw-playbook/)
-   skill. `SKILL.md` routes thread sessions to `working-session.md` and channel/DM sessions to
-   `channel-handling.md`. Its references own working sessions, channel handling, the `runbooks/`
-   directory for project workspace setup, project lifecycle and consultations, and the `message`
-   tool per surface.
-   Project discovery comes from `alproject --guide`; the delegation procedure comes from
-   `alcode --openclaw-guide` only when delegation starts.
+   load into the system prompt every turn. `AGENTS.md` makes `aldev guide` the first action on
+   every activation. The workspace carries no playbook copy.
+2. **Operating-instructions playbook** — the `aldev guide` topics, rendered from
+   [`packages/aldev/templates/guide/openclaw/`](../../packages/aldev/templates/guide/openclaw/).
+   The dispatcher (`aldev guide`) routes thread sessions to `aldev guide working-session` and
+   channel/DM sessions to `aldev guide channel-handling`. The other topics own the runbooks for
+   project workspace setup, project lifecycle and consultations, and the `message` tool per
+   surface.
+   Project discovery comes from `aldev guide project`; the delegation procedure comes from
+   `aldev guide code` only when delegation starts.
 3. **Regression-test harness** —
    [`alignfirst-dev-kit-tests/`](../../alignfirst-dev-kit-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
-   It bind-mounts the workspace, the playbook at `/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook`, and the monorepo root into the gateway, so `alcode`, `alignfirst` and `alproject` run from the checkout. The managed skill path keeps the playbook out of the mock coding agent's context.
+   It bind-mounts the workspace and the monorepo root into the gateway, so `aldev` and `alignfirst` run from the checkout and `aldev guide` prints the checkout's playbook.
    The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
 
 ```text
 user message
-  → workspace AGENTS.md (auto-loaded)              layer 1
-  → alignfirst-openclaw-playbook/SKILL.md (read first)  layer 2  ← procedural dispatcher
-  → references/working-session.md | channel-handling.md   layer 2
-  → references/runbooks/project-lifecycle.md (create/onboard/remove)       layer 2
-  → references/runbooks/consultation.md (question, advice, brainstorming)  layer 2
-  → references/runbooks/project-workspace-setup.md (if the thread gets its workspace)  layer 2
-  → run `alcode --openclaw-guide` (delegation manual, read last), then delegate via alcode
+  → workspace AGENTS.md (auto-loaded)                                       layer 1
+  → aldev guide (read first)                                                layer 2  ← procedural dispatcher
+  → aldev guide working-session | channel-handling                          layer 2
+  → aldev guide project-lifecycle (create/onboard/remove)                   layer 2
+  → aldev guide consultation (question, advice, brainstorming)              layer 2
+  → aldev guide project-workspace-setup (if the thread gets its workspace)  layer 2
+  → aldev guide code (delegation manual, read last), then delegate via aldev code
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by an explicit file read because nested workspace files and skill files are not auto-loaded. The dispatch skill is read **first** and is purely procedural; the `alcode --openclaw-guide` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aldev guide` commands run through `exec`. The dispatcher is read **first** and is purely procedural; the `aldev guide code` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
 
 ## The channel session only bootstraps a thread
 
-A channel session answers ordinary conversation at the root. For project work, it runs `alproject list --json --root ~/projects`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably records the handoff and dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical thread session, with core delivering into the thread. The channel turn then ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
+A channel session answers ordinary conversation at the root. For project work, it runs `aldev project list --json`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably records the handoff and dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical thread session, with core delivering into the thread. The channel turn then ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
 
 Every fresh thread session routes by `topic_id`, calls `thread_handoff` with `{ "action": "claim" }`, and reads its own history before acting. It reacts with 🦞 to the newest visible message from that completed history snapshot before setup or another visible action. This applies to new threads, human-created threads, and fresh sessions taking over existing threads. The static service message only starts a takeover turn. It is internal to OpenClaw, absent from the surface history and therefore cannot be the reaction target. The visible starter carries the request. When the starter already asks for missing input, the takeover waits quietly until a human supplies it. An explicit hold remains in force. A final history read before coding catches human instructions that arrived during setup. Completion and later user turns stay on the same canonical thread session. Project creation and repository onboarding remain exceptions to the initial path requirement. The older manual-follow-up contract and, before it, channel-owned setup both produced avoidable routing failures; the historical artifact at `alignfirst-dev-kit-tests/artifacts/2026-07-15T10-31-39-655Z/` documents the latter.
 

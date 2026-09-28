@@ -1,6 +1,6 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-openclaw-playbook` skill (`skills/alignfirst-openclaw-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-openclaw-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the playbook templates (`packages/aldev/templates/guide/openclaw/*.md`, printed by `aldev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
 
 ## One rule, stated once
 
@@ -11,6 +11,10 @@ State a simple rule through its trigger and action. Add procedural detail only w
 ## Address the session doing the work
 
 The OpenClaw session itself reads the playbook. Address it directly with "you" and imperative verbs. "On the first turn of your session, react…" gives the reader both a trigger and an action. Keep the session's lifetime distinct from the thread's history: a fresh session can take over an old thread.
+
+## Name the delegate by its role
+
+The playbook calls the delegate **the coder**: the coding agent launched with `aldev code`. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename. "The coding agent" becomes ambiguous once a coding agent can itself act as the assistant.
 
 ## Keep the activation message static
 
@@ -120,7 +124,7 @@ The `[WORKSPACE]` banner is how a tagged header came back without reviving the f
 
 ## A nearby auto-loaded doc can crowd out the procedure
 
-The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the alcode guide (today `alcode --openclaw-guide`)). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
+The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the delegation guide, today `aldev guide code`). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
 
 Lesson: the file the assistant reads *first* on a turn sets its frame. If that file is coaching/vocabulary-heavy (protocol names, workflow taxonomies), its language leaks into user-facing output. Keep the dispatch entry point pointed straight at the procedural playbook; defer delegation/coaching material until the assistant is actually delegating.
 
@@ -136,4 +140,4 @@ npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --ma
 
 ## Watch out for `--iterations` matrix cost
 
-Editing a bind-mounted file propagates live (the workspace dir, the playbook skill, and the mounted monorepo — including `packages/alcode/templates/` — are all mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.
+Editing a bind-mounted file propagates live (the workspace dir and the monorepo — including `packages/aldev/templates/` — are mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.

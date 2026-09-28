@@ -72,7 +72,7 @@ A trusted publisher binds to an existing package, so a name the registry has nev
 2. Register the trusted publisher and require 2FA for each name, with npm CLI ≥ 11.19. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 
    ```bash
-   for pkg in alignfirst @alignfirst/alcode @alignfirst/alproject @alignfirst/docmap \
+   for pkg in alignfirst aldev @alignfirst/docmap \
               @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock \
               @alignfirst/openclaw-slack-mock @alignfirst/openclaw-test \
               @alignfirst/service-openclaw-plugin @alignfirst/workspace; do

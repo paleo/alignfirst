@@ -73,7 +73,7 @@ The plugin commits a pending record before dispatching `Take over this thread.` 
 
 The message body is static: it carries no starter copy, routing fields, or handoff ID. The playbook routes by thread metadata, claims the current session, and reads the visible starter and human replies through thread history. The nudge supplies no missing input or approval. A takeover turn with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 
-The plugin starts the thread session and does nothing after that. Alcode completion uses OpenClaw's own completion path.
+The plugin starts the thread session and does nothing after that. `aldev code` completion uses OpenClaw's own completion path.
 
 Each takeover turn gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
 

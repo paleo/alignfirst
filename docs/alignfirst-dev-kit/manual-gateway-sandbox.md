@@ -72,7 +72,7 @@ In OpenClaw 2026.9.6, `transcript_events` stores an event of 1 KiB or more zstd-
 
 `gateway call agent --expect-final` and `openclaw agent --session-key` start regular turns through the `agent` method; they remain useful generic probes.
 
-The `system event` command uses the heartbeat-gated gateway `wake` RPC. It is the guide's alcode completion path and a useful probe. It is distinct from the thread-start mechanism and OpenClaw's native exec completion.
+The `system event` command uses the heartbeat-gated gateway `wake` RPC. It is the guide's `aldev code` completion path and a useful probe. It is distinct from the thread-start mechanism and OpenClaw's native exec completion.
 
 A takeover uses the exact body `Take over this thread.`; the plugin supplies `AlignFirst Service` as sender context. Inspect provider payloads when diagnosing heartbeat prompts, because saved transcripts replace their user message with a marker.
 

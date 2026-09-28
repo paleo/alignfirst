@@ -67,7 +67,6 @@ cp $template/variants/surfaces/slack/infra/openclaw/workspace/AGENTS.md /tmp/doc
 for ws in /tmp/doctor-harness /tmp/doctor-template; do
   docker run --rm -v $ws:/home/assistant/.openclaw/workspace \
     -e ANTHROPIC_API_KEY=x -e OPENROUTER_API_KEY=x -e ZAI_API_KEY=x \
-    -e ALIGNFIRST_CODE_AGENT=claude \
     --entrypoint /usr/local/bin/openclaw \
     alignfirst-dev-kit-tests-openclaw-test:latest doctor --json
 done
