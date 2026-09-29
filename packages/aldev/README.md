@@ -1,10 +1,10 @@
 # aldev
 
-The AlignFirst Dev Kit CLI. It carries the assistant's playbook, runs a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) protocols, and keeps the inventory of the host's projects and their port ranges.
+The AlignFirst Dev Kit CLI. It carries the assistant's playbook, runs a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) protocols, and keeps the inventory of the host's projects and their port ranges. The assistant is an OpenClaw bot, or a coding agent working on one project.
 
-Prerequisite: install the `alignfirst` CLI on `PATH` with `npm install -g alignfirst`.
+Run `aldev` through `npx` (`npx -y aldev …`), or install it with `npm install -g aldev`. Through `npx`, it runs `alignfirst` through `npx` too, and its help and guides print both commands in that form. A global `aldev` needs the `alignfirst` CLI on `PATH`: `npm install -g alignfirst`.
 
-Install `aldev` with `npm install -g aldev`.
+Supported systems: Linux and macOS, and Windows through WSL.
 
 ## Commands
 
@@ -76,18 +76,24 @@ An older marker carrying `"portRange": { ... }` is rejected; replace the key wit
 aldev guide [<topic>] [--root <path>]
 ```
 
-| Topic | Output | Requires |
-|-------|--------|----------|
-| (none) | The playbook dispatcher. | `platform`, `projectsRoot` |
-| `channel-handling`, `working-session` | Surface procedures. | `platform`, `projectsRoot` |
-| `project-workspace-setup`, `project-lifecycle`, `consultation` | Runbooks. | `platform`, `projectsRoot` |
-| `slack-message-tool`, `discord-message-tool` | Extended `message` references. | `platform`, `projectsRoot` |
-| `code` | The delegation guide: the OpenClaw variant when `platform` is `openclaw`, the generic one otherwise. | `code.agent` |
-| `project` | The projects guide, followed by the directory sections when the root carries a marker. `--root` overrides `projectsRoot`. | — |
+Each topic renders the variant of the configured `platform`.
+
+| Topic | Output | Platforms |
+|-------|--------|-----------|
+| (none) | The playbook dispatcher. | both |
+| `working-session` | The work procedure: a thread under OpenClaw, the conversation for a coding agent. | both |
+| `project-workspace-setup`, `consultation` | Runbooks. | both |
+| `code` | The delegation guide. | both |
+| `channel-handling` | The channel and DM procedure. | `openclaw` |
+| `project-lifecycle` | The runbook to create, onboard or remove a project. | `openclaw` |
+| `slack-message-tool`, `discord-message-tool` | Extended `message` references. | `openclaw` |
+| `project` | The projects guide, followed by the directory sections when the root carries a marker. `--root` overrides `projectsRoot`. | `openclaw` |
+
+Under `openclaw`, the playbook topics require `projectsRoot`.
 
 ## Configuration
 
-`aldev` reads one file, `~/.config/alignfirst/aldev.config.json`. The path is fixed: no environment variable overrides it. An absent file means no configuration, and each command then fails on the first key it needs.
+`aldev` reads one file, `~/.config/alignfirst/aldev.config.json`. The path is fixed: no environment variable overrides it. `aldev code` and `aldev guide` require it, `--help` included. Without it, they fail with an error naming the path and the required keys. `aldev project`, `aldev --help` and `aldev --version` run without it.
 
 ```json
 {
@@ -102,12 +108,21 @@ aldev guide [<topic>] [--root <path>]
 }
 ```
 
-- `platform` — selects the playbook of `aldev guide` and the variant of `aldev guide code`. Accepted value: `openclaw`.
-- `projectsRoot` — the default projects directory. `~/` expands to the home directory; a relative path resolves against the config file's directory.
-- `code.agent` — the coding agent: `claude` or `codex`. Required by every `aldev code` command except `status`, and by `aldev guide code`.
+A coding agent acting as the assistant needs only the required keys:
+
+```json
+{
+  "platform": "codingAgent",
+  "code": { "agent": "codex" }
+}
+```
+
+- `platform` — required. Selects the variant of every `aldev guide` topic: `openclaw` for an OpenClaw assistant, `codingAgent` for a coding agent acting as the assistant.
+- `projectsRoot` — the default projects directory of `aldev project` and `aldev guide project`. Required by the `openclaw` playbook. `~/` expands to the home directory; a relative path resolves against the config file's directory.
+- `code.agent` — required. The coder: `claude` or `codex`.
 - `code.models` — replaces the selected agent's accepted models.
 - `code.skipPermissions` — `true` selects each CLI's dangerous permission-bypass flag. Default: `false`.
-- `code.unset` — environment variables stripped from the coder's environment.
+- `code.unset` — environment variables stripped from the coder's environment. `aldev code` always strips the assistant session's identity variables first (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …), whatever the agent.
 
 Unknown keys are rejected. An unreadable file, invalid JSON or an invalid value fails every command that loads the config, with an error naming the file.
 
@@ -117,7 +132,12 @@ Companion directories are declared in `~/.config/alignfirst/companions.json`, wh
 
 `aldev code` runs the coder as a direct **foreground** child of its own process. It streams a live transcript to stdout and to a per-run session file, whose frontmatter status goes from `running` to `succeeded` or `failed`, and blocks until the coder exits. It never backgrounds or detaches itself.
 
-Coding runs can be very long, so the caller always runs `aldev code` as a background task and owns the backgrounding. Under OpenClaw, the assistant invokes it through the `exec` tool with `background: true` and `timeoutSeconds: 0`, and chains `openclaw system event --mode now --session-key <key>` onto the command, as `aldev guide code` prescribes. The completion turn locates the session file with `aldev code status` and reads the result. The session file is the durable result handoff: frontmatter `sessionId` and status, and the `---- Result ----` block.
+Coding runs can be very long, so the caller always runs `aldev code` as a background task and owns the backgrounding, as `aldev guide code` prescribes:
+
+- Under OpenClaw, the assistant invokes it through the `exec` tool with `background: true` and `timeoutSeconds: 0`, and chains `openclaw system event --mode now --session-key <key>` onto the command.
+- A coding-agent assistant starts it with its own background-execution facility, with no time limit, and outside its sandbox. When the agent wakes the session as the command exits, as Claude Code does, the assistant handles the completion on that wake. Otherwise, the assistant checks its pending runs at the start of the next user turn.
+
+The completion turn locates the session file with `aldev code status` and reads the result. The session file is the durable result handoff: frontmatter `sessionId` and status, and the `---- Result ----` block.
 
 If `aldev code` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`), then send `SIGTERM` to the coder. After a short grace period, a `SIGKILL` guarantees no orphan is left behind. Only a `SIGKILL` of `aldev` itself can leave a stale `running` status, which the next `status` call seals.
 
@@ -132,6 +152,16 @@ Normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspac
 Claude's default model list is `fable`, `opus`, `sonnet`, `haiku`. Codex's is `astra`, `sol`, `terra`, `luna`; `aldev code` resolves a selected Codex alias against `codex debug models --bundled`. Set `code.models` to narrow the list or to advertise an explicit Codex slug such as `gpt-5.6-terra`.
 
 Session files record `agent`. A session resumes only with the same selected agent. Agentless legacy sessions stay readable but require a new session.
+
+## The `aldev` skill
+
+The `aldev` agent skill makes a Claude Code or Codex session the assistant of the project it runs in. Invoked as `/aldev` in Claude Code, or `$aldev` in Codex, it loads the playbook through `npx -y aldev guide`, which needs `platform: "codingAgent"` in the config. Install it:
+
+```sh
+npx skills add https://github.com/paleo/alignfirst --global --skill aldev
+```
+
+The setup guide's [coding-agent assistant reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) covers the project, the configuration and the sandbox.
 
 ## Port claims
 

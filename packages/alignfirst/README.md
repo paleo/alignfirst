@@ -4,6 +4,8 @@ The AlignFirst CLI provides collaborative software-development workflows, work f
 
 See the [product page](https://alignfirst.paroi.tech/skills) for a demonstration.
 
+Supported systems: Linux and macOS, and Windows through WSL.
+
 ## Agent skills
 
 Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub Copilot, and Cursor. Install them globally:

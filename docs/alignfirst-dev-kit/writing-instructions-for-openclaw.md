@@ -1,6 +1,43 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the playbook templates (`packages/aldev/templates/guide/openclaw/*.md`, printed by `aldev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the guide templates (`packages/aldev/templates/guide/playbook/*.md` and `code.md`, printed by `aldev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+
+## Shared templates
+
+The playbook templates and `code.md` serve both platforms: `openclaw` and `codingAgent`, a Claude Code or Codex session acting as the assistant. `project.md` is OpenClaw only.
+
+### Platform blocks
+
+A platform-specific paragraph sits in a block, each marker alone on its line:
+
+```text
+{{#openclaw}}
+Text only for OpenClaw.
+{{/openclaw}}
+{{#codingAgent}}
+Text only for a coding agent.
+{{/codingAgent}}
+```
+
+`aldev guide` keeps the active platform's blocks without their marker lines and drops the others. Blocks mark whole lines and do not nest. An unknown platform name, a nested block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+
+After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the OpenClaw output.
+
+### OpenClaw text stays byte-identical
+
+The OpenClaw text was tuned against the harness scenarios. When a sentence must differ for `codingAgent`, keep the OpenClaw paragraph untouched in an `{{#openclaw}}` block and write the `codingAgent` copy in a `{{#codingAgent}}` block right after it. A paragraph is one line, so a one-word difference duplicates the whole paragraph. Check an edit by rendering every OpenClaw guide before and after it and comparing the output. Rewording OpenClaw text to share more of it needs harness runs.
+
+### Step numbers stay aligned
+
+Cross-references cite step numbers, as in "Step 5 of `{{ALDEV}} guide project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
+
+### `codingAgent` prose
+
+The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aldev project` or the project inventory either.
+
+### Placeholders
+
+Write every command as `{{ALDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aldev` and `alignfirst`, or as `npx -y aldev` and `npx -y alignfirst` when `aldev` runs through `npx`. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
 
 ## One rule, stated once
 

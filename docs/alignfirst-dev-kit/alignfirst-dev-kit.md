@@ -15,7 +15,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    load into the system prompt every turn. `AGENTS.md` makes `aldev guide` the first action on
    every activation. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the `aldev guide` topics, rendered from
-   [`packages/aldev/templates/guide/openclaw/`](../../packages/aldev/templates/guide/openclaw/).
+   [`packages/aldev/templates/guide/playbook/`](../../packages/aldev/templates/guide/playbook/).
    The dispatcher (`aldev guide`) routes thread sessions to `aldev guide working-session` and
    channel/DM sessions to `aldev guide channel-handling`. The other topics own the runbooks for
    project workspace setup, project lifecycle and consultations, and the `message` tool per
@@ -54,6 +54,10 @@ The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate
 ## Companion-backed projects
 
 A managed project can keep its AlignFirst files in a companion directory, outside its repository. The operator enables this by shipping `infra/openclaw/companions.json` in the admin repository; the seed installs it into the locked `~/.config/alignfirst/`. The playbook reads each file's location from `aldev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
+
+## A coding agent as the assistant
+
+The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aldev guide` selects the platform from `platform` in the `aldev` config, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aldev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
 
 ## Reading order for maintainers
 

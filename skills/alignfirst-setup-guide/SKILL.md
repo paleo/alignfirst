@@ -2,11 +2,12 @@
 name: alignfirst-setup-guide
 description: >-
   Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a
-  consumer repository, or prepare a repository and Linux deployment for the AlignFirst Dev Kit.
+  consumer repository, prepare a repository and Linux deployment for the AlignFirst Dev Kit, or set
+  up a coding agent as the AlignFirst assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.42.0"
+  version: "0.43.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -28,8 +29,8 @@ section provides this itself.
 
 A work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
-An assistant host also installs `aldev`, the Dev Kit CLI: the assistant's playbook, coding-agent
-delegation, and project discovery.
+`aldev`, the Dev Kit CLI, carries the assistant's playbook, coding-agent delegation, and project
+discovery. An OpenClaw assistant host installs it; a coding-agent assistant runs it through `npx`.
 
 ## Named Tool
 
@@ -111,6 +112,11 @@ repository. Follow each selected tool reference above, then complete `DEVELOPERS
 For creating or operating the assistant deployment itself, read
 [alignfirst-dev-kit.md](references/alignfirst-dev-kit.md). Do not load that workflow for ordinary
 tool setup.
+
+## A Coding Agent as the Assistant
+
+For a coding agent (Claude Code or Codex) acting as the assistant on one project, without OpenClaw,
+read [coding-agent-assistant.md](references/coding-agent-assistant.md).
 
 ## Shared Investigation Rules
 
