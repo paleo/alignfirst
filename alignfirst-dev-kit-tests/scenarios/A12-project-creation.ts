@@ -289,8 +289,12 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
     ) {
       return false;
     }
+    // Digit lookarounds, not `\b`: the serialized result escapes a newline as `\n`, so a
+    // chained command's output reads `n6600`, where `\b` finds no boundary.
     const result = JSON.stringify(call.result);
-    return result !== undefined && /\b6600\b/.test(result) && /\b6607\b/.test(result);
+    return (
+      result !== undefined && /(?<!\d)6600(?!\d)/.test(result) && /(?<!\d)6607(?!\d)/.test(result)
+    );
   });
   if (!allocatedExpectedBlock) {
     throw new Error("free-ports did not allocate the lifecycle parent's 6600..6607 block");
