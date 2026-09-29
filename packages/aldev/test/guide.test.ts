@@ -183,6 +183,13 @@ describe("aldev guide playbook", () => {
     expect(firstParagraph).toContain("in a thread a human opened, it answers `none`");
   });
 
+  it("names the reaction emoji of each surface", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const session = await runGuide(fixture, ["working-session"]);
+    expect(session.stdout).toContain("`🦞` on Discord, `lobster` on Slack");
+  });
+
   it("reads DEVELOPERS.md at the path aldev project status reports", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);

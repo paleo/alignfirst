@@ -30,9 +30,9 @@ A takeover turn starts with the plugin's `Take over this thread.` message from `
 
 Read the current thread through `message` with `action: "read"`, the current channel, complete `chat_id` as `target`, and bare thread ID from conversation metadata. Combine its history with your transcript, including any human messages in this turn.
 
-On the first turn of your session, react with 🦞 to the latest message returned by this read, before any other visible action. This applies even when you take over a thread with a long history. The reaction tells the user a new session has arrived.
+On the first turn of your session, react with the lobster emoji to the latest message returned by this read, before any other visible action. This applies even when you take over a thread with a long history. The reaction tells the user a new session has arrived.
 
-Use `message` with `action: "react"`, following the current surface's extended message reference named by workspace `AGENTS.md`. If the reaction fails, continue without retrying.
+Use `message` with `action: "react"`, following the current surface's extended message reference named by workspace `AGENTS.md`. The `emoji` value depends on the surface: `🦞` on Discord, `lobster` on Slack. If the reaction fails, continue without retrying.
 
 Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. With a starter present, its values come from the inventory the channel session consulted; run `aldev project list --json` only where a runbook, the multi-project procedure, or "A thread you did not open" asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
 
