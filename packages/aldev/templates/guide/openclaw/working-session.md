@@ -20,11 +20,11 @@ A runbook is a procedure you read fully when its situation arises. Claim first, 
 
 ### Step 1 — Claim before any task effect
 
-A takeover turn starts with the plugin's `Take over this thread.` message from `AlignFirst Service`. Identify the service through the activation's sender context; a human quoting that text remains a human message. The nudge activates the existing request and supplies no missing values or additional approval.
-
-Call `thread_handoff` with `{ "action": "claim" }` once per turn, before history reads, workspace setup, delegation, or any other task effect. The tool uses the current thread session; omit `threadId` and `handoffId`. Keep its first result for the whole turn; do not claim again during setup.
+Every turn in this thread, a human message's included, starts with a claim: call `thread_handoff` with `{ "action": "claim" }` before history reads, reactions, workspace setup, delegation, or any other task effect. You cannot know whether a handoff is recorded until the claim answers; in a thread a human opened, it answers `none`. The tool uses the current thread session; omit `threadId` and `handoffId`. Keep its first result for the whole turn; do not claim again during setup.
 
 A `claimed` result activates the recorded request. An `alreadyClaimed` result means another turn owns the handoff. Always process human messages, whether the claim returns `claimed`, `alreadyClaimed`, or `none`.
+
+A takeover turn starts with the plugin's `Take over this thread.` message from `AlignFirst Service`. Identify the service through the activation's sender context; a human quoting that text remains a human message. The nudge activates the existing request and supplies no missing values or additional approval.
 
 ### Step 2 — Recover the thread context
 

@@ -170,6 +170,19 @@ describe("aldev guide playbook", () => {
     );
   });
 
+  it("opens the claim step with the every-turn rule, human turns included", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const session = await runGuide(fixture, ["working-session"]);
+    const step = session.stdout.slice(
+      session.stdout.indexOf("### Step 1"),
+      session.stdout.indexOf("### Step 2"),
+    );
+    const firstParagraph = step.split("\n\n")[1];
+    expect(firstParagraph).toMatch(/^Every turn in this thread, a human message's included, /);
+    expect(firstParagraph).toContain("in a thread a human opened, it answers `none`");
+  });
+
   it("reads DEVELOPERS.md at the path aldev project status reports", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
