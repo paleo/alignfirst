@@ -145,3 +145,13 @@ Run `npx -y alignfirst context` once from the repository root, _before_ any inve
 ```
 
 Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `.alignfirst.json`.
+
+### Repositories Without AlignFirst Instructions
+
+A developer who works in repositories without this section, such as companion-backed ones ([companion-setup.md](companion-setup.md)), adds one line to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent):
+
+```markdown
+In a git repository, run `alignfirst context` once before investigating, unless the project's instructions already say so.
+```
+
+The line uses the global CLI and no agent-specific mechanism. `alignfirst context` works in any repository, with or without AlignFirst files.

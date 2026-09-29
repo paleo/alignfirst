@@ -57,15 +57,23 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So is the aldev config, with its directory. The service account owns `~/.config`: with only the file locked, it could rename `~/.config/alignfirst/` and create its own `aldev.json` in a new directory of that name.
+So is the aldev config, with its directory. The service account owns `~/.config`: with only the file locked, it could rename `~/.config/alignfirst/` and create its own `aldev.config.json` in a new directory of that name. The locked directory also keeps the service account from creating `companions.json`.
 
 ```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/aldev.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/aldev.json
-sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/aldev.json
+sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/aldev.config.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/aldev.config.json
+sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/aldev.config.json
 sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst
 sudo chmod 755 /home/{{SERVICE_USER}}/.config/alignfirst
 sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst
+```
+
+When the seed installed `companions.json`, lock it the same way:
+
+```sh
+sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
+sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
 ```
 
 ## Skills and instructions
@@ -136,7 +144,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json` and the aldev config with its directory. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json`, the aldev config with its directory, and `companions.json` when it exists. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -158,7 +166,8 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/aldev.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/aldev.config.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/companions.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.config/alignfirst ~/.config/alignfirst-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'

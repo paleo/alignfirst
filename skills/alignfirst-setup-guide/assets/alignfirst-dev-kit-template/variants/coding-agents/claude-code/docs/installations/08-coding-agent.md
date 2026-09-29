@@ -53,7 +53,7 @@ sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-s
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aldev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.unset` in `infra/openclaw/aldev.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aldev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.unset` in `infra/openclaw/aldev.config.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** The login prints a URL and waits for a one-shot code on stdin, tied to the same process. Run it from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`.
 

@@ -5,8 +5,8 @@
 # Strategy: `openclaw setup` produces the installed version's default config; every
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
-# reach openclaw.json as file SecretRefs only. The seed also installs environment.d and the
-# aldev config.
+# reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aldev
+# config and, when the admin repository ships one, companions.json.
 #
 # Run as the service account, from the seed snapshot:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
@@ -20,7 +20,8 @@ SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
 ALDEV_CONFIG_DIR="$HOME/.config/alignfirst"
-ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.json"
+ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.config.json"
+COMPANIONS_CONFIG_FILE="$ALDEV_CONFIG_DIR/companions.json"
 
 main() {
   load_env
@@ -42,6 +43,7 @@ main() {
   configure_coding_agent
   install_environment_files
   install_aldev_config
+  install_companions_config
   verify
 }
 
@@ -147,11 +149,21 @@ install_aldev_config() {
   # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
   # its directory immutable.
   if [ ! -d "$ALDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALDEV_CONFIG_DIR"; fi
-  if ! cmp -s "$DIR/aldev.json" "$ALDEV_CONFIG_FILE"; then
-    install -m 644 "$DIR/aldev.json" "$ALDEV_CONFIG_FILE"
+  if ! cmp -s "$DIR/aldev.config.json" "$ALDEV_CONFIG_FILE"; then
+    install -m 644 "$DIR/aldev.config.json" "$ALDEV_CONFIG_FILE"
   fi
   # Fails on an invalid file or a missing code.agent.
   aldev guide code >/dev/null
+}
+
+install_companions_config() {
+  # Optional. Without a source, a file installed by an earlier seed stays: removing it is a
+  # maintenance operation.
+  if [ ! -f "$DIR/companions.json" ]; then return; fi
+  echo "[seed] companions config — $COMPANIONS_CONFIG_FILE"
+  if ! cmp -s "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"; then
+    install -m 644 "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"
+  fi
 }
 
 verify() {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Coding-agent seed module: Claude Code. Sourced by seed.sh; not meant to run on its own.
-# The agent is selected by the overlay (aldev.json), not by .env.
+# The agent is selected by the overlay (aldev.config.json), not by .env.
 
 required_coding_agent=()
 

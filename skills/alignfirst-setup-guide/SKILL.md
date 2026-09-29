@@ -100,6 +100,8 @@ Inspect the repository before changing it. A prepared project has all of these:
 7. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
 
+When the user says the repository must stay untouched, follow [companion-setup.md](references/companion-setup.md) instead. The same contract lives in the project's companion directory, except the workspace system and the Node version file.
+
 Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
 directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
 repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`, naming the Node version declaration.

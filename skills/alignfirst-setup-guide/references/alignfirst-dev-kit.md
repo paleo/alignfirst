@@ -18,7 +18,7 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and admin CLI packages.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
-- `~/.config/alignfirst/aldev.json` — the `aldev` config (platform, projects root, coding agent), installed by the seed and locked with its directory.
+- `~/.config/alignfirst/aldev.config.json` — the `aldev` config (platform, projects root, coding agent), installed by the seed and locked with its directory. The optional `companions.json` beside it declares the projects whose AlignFirst files live outside their repository.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
@@ -116,7 +116,7 @@ rg -n --hidden -g '!node_modules' '\{\{[A-Z][A-Z0-9_]*\}\}' .
 rg -n --hidden -g '!node_modules' 'TEAM_PLANS_SECTION|DEV_SERVER_GATEWAY_SECTION' .
 for f in infra/openclaw/seed.sh infra/openclaw/seed/*.sh infra/openclaw/bin/*.sh infra/openclaw/bin/openclaw infra/openclaw/node-runtime/project-shell infra/openclaw/node-runtime/init.bash infra/openclaw/node-runtime/admin-npm infra/openclaw/node-runtime/check-project-runtimes.sh; do bash -n "$f"; done
 node --check scripts/workspace/workspace.mjs
-node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aldev.json .alignfirst.json package.json
+node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aldev.config.json .alignfirst.json package.json
 npm run validate
 ```
 

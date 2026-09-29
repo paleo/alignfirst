@@ -79,7 +79,9 @@ The login hook must remain after the environment bridge and any PATH assignments
 
 Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aldev` replaces both and prints the playbook through `aldev guide`, so OpenClaw's managed playbook copy goes away.
 
-1. Bring the admin repository to the current template: the variant's `infra/openclaw/aldev.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aldev.json`, and its `config` scope covers the aldev config.
+1. Bring the admin repository to the current template: the variant's `infra/openclaw/aldev.config.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aldev.config.json`, and its `config` scope covers the aldev config.
+
+   An admin repository rendered from an earlier template renames its aldev config: `git mv infra/openclaw/aldev{,.config}.json`.
 2. Swap the packages:
 
    ```sh

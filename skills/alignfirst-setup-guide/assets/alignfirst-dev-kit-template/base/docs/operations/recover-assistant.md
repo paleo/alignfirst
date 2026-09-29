@@ -46,7 +46,8 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `openclaw.env` | `~/.openclaw/.env` | — |
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
-| `aldev.json` | `~/.config/alignfirst/aldev.json` | `config` |
+| `aldev.config.json` | `~/.config/alignfirst/aldev.config.json` | `config` |
+| `companions.json` | `~/.config/alignfirst/companions.json` | `config` |
 | `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 
 ```sh
@@ -62,7 +63,7 @@ together while the gateway is stopped. See the package README before retiring cl
 Unpack the OpenClaw archive with `openclaw backup restore <archive> --target <dir>`, then copy the
 needed files under `~/.openclaw/` through the `config` maintenance scope.
 
-Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env`, `environment.d/` and `aldev.json` from the repository and `.env`. Prefer the backup for workspace files, which the seed does not write.
+Restoring the configuration rarely beats re-seeding: the seed rebuilds `openclaw.json`, `secrets.json`, `~/.openclaw/.env`, `environment.d/`, `aldev.config.json` and `companions.json` from the repository and `.env`. Prefer the backup for workspace files, which the seed does not write.
 
 ## Re-seed and validate
 

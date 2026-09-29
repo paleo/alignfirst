@@ -8,7 +8,8 @@
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
 # Scopes: config, workspace, packages, skills, projects, instructions, agent-skills. The config
-# scope covers openclaw.json and the aldev config with its directory.
+# scope covers openclaw.json, the aldev config with its directory, and companions.json when it
+# exists.
 
 set -Eeuo pipefail
 
@@ -18,7 +19,8 @@ ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
 ALDEV_CONFIG_DIR="$SERVICE_HOME/.config/alignfirst"
-ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.json"
+ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.config.json"
+COMPANIONS_CONFIG_FILE="$ALDEV_CONFIG_DIR/companions.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
@@ -82,7 +84,7 @@ parse_arguments() {
 }
 
 resolve_paths() {
-  local config="$ADMIN_REPOSITORY/infra/openclaw/aldev.json"
+  local config="$ADMIN_REPOSITORY/infra/openclaw/aldev.config.json"
   if [ -r "$config" ]; then
     CODING_AGENT=$(jq -r '.code.agent' "$config" 2>/dev/null) || CODING_AGENT=
   fi
@@ -118,7 +120,7 @@ unlock_config() {
   local path
   chattr -i "$SERVICE_HOME/.openclaw/openclaw.json"
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json"
-  for path in "$ALDEV_CONFIG_DIR" "$ALDEV_CONFIG_FILE"; do
+  for path in "$ALDEV_CONFIG_DIR" "$ALDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
     [ -e "$path" ] || continue
     chattr -i "$path"
     chown "$SERVICE_USER:$SERVICE_USER" "$path"
@@ -203,15 +205,16 @@ restore_scopes() {
 }
 
 restore_config() {
-  local status=0
+  local path status=0
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chmod 600 "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chattr +i "$SERVICE_HOME/.openclaw/openclaw.json" || status=1
-  if [ -e "$ALDEV_CONFIG_FILE" ]; then
-    chown root:root "$ALDEV_CONFIG_FILE" &&
-      chmod 644 "$ALDEV_CONFIG_FILE" &&
-      chattr +i "$ALDEV_CONFIG_FILE" || status=1
-  fi
+  for path in "$ALDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
+    [ -e "$path" ] || continue
+    chown root:root "$path" &&
+      chmod 644 "$path" &&
+      chattr +i "$path" || status=1
+  done
   if [ -d "$ALDEV_CONFIG_DIR" ]; then
     chown root:root "$ALDEV_CONFIG_DIR" &&
       chmod 755 "$ALDEV_CONFIG_DIR" &&
