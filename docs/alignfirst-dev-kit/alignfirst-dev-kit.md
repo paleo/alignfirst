@@ -51,6 +51,10 @@ Every fresh thread session routes by `topic_id`, calls `thread_handoff` with `{ 
 
 The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate serialized every wake behind the assistant's running turns and capped each turn at 600 seconds. The plugin's principles and the approaches tried before are in [`openclaw-plugin.md`](./openclaw-plugin.md). `HEARTBEAT_OK` remains the silence token for plugin reply runs as well as native heartbeat turns; it does not select their dispatch mechanism.
 
+## Companion-backed projects
+
+A managed project can keep its AlignFirst files in a companion directory, outside its repository. The operator enables this by shipping `infra/openclaw/companions.json` in the admin repository; the seed installs it into the locked `~/.config/alignfirst/`. The playbook reads each file's location from `aldev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
+
 ## Reading order for maintainers
 
 - [`openclaw-plugin.md`](./openclaw-plugin.md) — what the plugin is for, the principles that bound it, and what was tried and dropped. Read this before changing how a thread starts.
