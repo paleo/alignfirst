@@ -1,12 +1,14 @@
 import { dirname } from "node:path";
 
-import { readTemplate } from "../templates.js";
+import type { CommandForms } from "../command-form.js";
+import { renderGuideTemplate } from "../guide/render-template.js";
 import type { ProjectInventory, ProjectsDirectory } from "./discovery.js";
 import { escapeAdditionalJsonCharacters, formatRange } from "./format.js";
 import type { MarkerPortRange, PortRange } from "./markers.js";
 
-export function renderProjectsGuide(inventory?: ProjectInventory): string {
-  const guide = readTemplate("guide/project.md").trimEnd();
+// The projects guide serves the OpenClaw playbook only.
+export function renderProjectsGuide(forms: CommandForms, inventory?: ProjectInventory): string {
+  const guide = renderGuideTemplate("project.md", "openclaw", forms);
   if (inventory === undefined) return guide;
   const sections = inventory.directories.map((directory) => renderDirectory(inventory, directory));
   return `${guide}\n\n${sections.join("\n\n")}`;

@@ -1,7 +1,5 @@
 import { spawnSync } from "node:child_process";
 
-export const DEFAULT_ALIGNFIRST_COMMAND = ["alignfirst"];
-
 export interface AlignfirstResult {
   status: number;
   stdout: string;
@@ -20,7 +18,10 @@ export function runAlignfirst(
     encoding: "utf8",
   });
   if (result.error && isErrnoException(result.error) && result.error.code === "ENOENT") {
-    throw new Error("alignfirst is not installed. Install it: npm install -g alignfirst");
+    throw new Error(
+      "alignfirst is not installed. Install it globally (`npm install -g alignfirst`), or run " +
+        "aldev through npx (`npx -y aldev`).",
+    );
   }
   if (result.error) throw result.error;
   return {

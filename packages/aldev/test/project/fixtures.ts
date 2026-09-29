@@ -72,7 +72,9 @@ export async function runAldev(
   const stdout = makeSink();
   const stderr = makeSink();
   const home = overrides.home ?? fixture.home;
-  const env = { ...process.env, HOME: home };
+  // Under `npm test`, npm sets its user agent: the guides would print the npx forms.
+  const { npm_config_user_agent: _userAgent, ...baseEnv } = process.env;
+  const env = { ...baseEnv, HOME: home };
   Object.assign(env, overrides.env);
   const code = await main({
     argv: ["node", "aldev", ...args],

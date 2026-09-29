@@ -5,6 +5,23 @@ import { appendTranscript, applyCompletion, type CompletionUpdate } from "./sess
 
 const TERMINATION_GRACE_MS = 2000;
 
+// A coding-agent session exports its own identity to every command it runs; when the assistant
+// runs in one, the coder must not inherit it.
+const ASSISTANT_SESSION_VARIABLES = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_CODE_CHILD_SESSION",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_MESSAGING_SOCKET",
+  "CLAUDE_CODE_MESSAGING_TOKEN",
+  "CLAUDE_PID",
+  "CLAUDE_EFFORT",
+  "CODEX_SESSION_ID",
+  "CODEX_THREAD_ID",
+  "CODEX_CI",
+  "CODEX_SANDBOX_NETWORK_DISABLED",
+];
+
 export interface RunConfig {
   prompt: string;
   sessionFilePath: string;
@@ -225,6 +242,7 @@ export function buildAgentEnv(
   unset: readonly string[],
 ): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
+  for (const name of ASSISTANT_SESSION_VARIABLES) delete env[name];
   for (const name of unset) {
     const trimmed = name.trim();
     if (trimmed !== "") delete env[trimmed];

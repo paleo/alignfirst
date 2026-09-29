@@ -21,7 +21,7 @@ beforeEach(() => {
   plans = join(dir, ".plans");
   mkdirSync(plans);
   home = join(dir, "home");
-  writeConfig(home, { code: { agent: "claude" } });
+  writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
   env = { PATH: dir, HOME: home };
   writeFileSync(
     join(dir, "claude"),

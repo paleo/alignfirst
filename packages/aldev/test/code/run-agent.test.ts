@@ -30,6 +30,22 @@ describe("shared runner helpers", () => {
     expect(env).toEqual({ PATH: "/bin", KEEP: "yes", HOME: "/home/a" });
   });
 
+  it("strips the assistant's coding-agent session identity and keeps its settings", () => {
+    const env = buildAgentEnv(
+      {
+        PATH: "/bin",
+        CLAUDECODE: "1",
+        CLAUDE_CODE_SESSION_ID: "s-1",
+        CLAUDE_CODE_ENTRYPOINT: "cli",
+        CODEX_THREAD_ID: "t-1",
+        CODEX_SANDBOX_NETWORK_DISABLED: "1",
+        CLAUDE_CODE_USE_BEDROCK: "1",
+      },
+      [],
+    );
+    expect(env).toEqual({ PATH: "/bin", CLAUDE_CODE_USE_BEDROCK: "1" });
+  });
+
   it("builds a terminal update with captured identity", () => {
     const state = createClaudeState();
     state.sessionId = "sess-1";

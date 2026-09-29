@@ -3,7 +3,8 @@ import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
 import { loadCatchup, loadContext, reserveSideTicket } from "../alignfirst-cli.js";
-import { type AldevConfig, type CodeConfig, requireCodeConfig } from "../config.js";
+import type { CommandForms } from "../command-form.js";
+import type { AldevConfig, CodeConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import {
@@ -70,6 +71,7 @@ export interface CodeContext {
   env: NodeJS.ProcessEnv;
   stdout: Output;
   stderr: Output;
+  forms: CommandForms;
   alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
   quotaReader: QuotaReader;
@@ -115,13 +117,13 @@ export async function runCode(
   ctx: CodeContext,
 ): Promise<number> {
   try {
-    const command = parseCodeArgs(tokens);
+    const command = parseCodeArgs(tokens, ctx.forms.aldev);
     if (command.kind === "status") return showStatus(ctx, command.target);
-    const code = requireCodeConfig(config);
+    const { code } = config;
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.agent, code.models);
     if (command.kind === "help") {
-      ctx.stdout.write(renderHelp(code.agent, models));
+      ctx.stdout.write(renderHelp(code.agent, models, ctx.forms));
       return 0;
     }
     loadMessage(command.args, ctx.cwd);
@@ -270,11 +272,11 @@ function renderSessionStatus(
   ].join("\n");
 }
 
-export function parseCodeArgs(tokens: string[]): CodeCommand {
+export function parseCodeArgs(tokens: string[], aldev: string): CodeCommand {
   const [command, ...rest] = tokens;
   switch (command) {
     case undefined:
-      throw new Error("Error: no command given. Run `aldev code --help`.");
+      throw new Error(`Error: no command given. Run \`${aldev} code --help\`.`);
     case "--help":
     case "-h":
       return { kind: "help" };
@@ -287,7 +289,7 @@ export function parseCodeArgs(tokens: string[]): CodeCommand {
     case "quota":
       return parseBareCommand(rest, "quota");
     default:
-      throw new Error(`Error: unknown command "${command}". Run \`aldev code --help\`.`);
+      throw new Error(`Error: unknown command "${command}". Run \`${aldev} code --help\`.`);
   }
 }
 
@@ -427,12 +429,12 @@ function isPathSafeTicket(ticket: string): boolean {
 }
 
 // `aldev code` always runs the selected coding agent in the foreground and blocks until it exits.
-// When OpenClaw drives it, it wraps this call in its own `exec` tool (which backgrounds and wakes
-// the assistant on exit) — aldev owns no backgrounding or callback of its own. The per-run session
+// The assistant backgrounds it with its own platform's facility (OpenClaw's `exec` tool, a coding
+// agent's background task) — aldev owns no backgrounding or callback of its own. The per-run session
 // file is the durable result handoff: on completion the frontmatter carries the session id and
 // status, and the `---- Result ----` block carries the outcome for a waking caller (or a human).
 async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext): Promise<number> {
-  const { cwd, env, stdout, stderr, alignfirstCommand, modelResolver } = ctx;
+  const { cwd, env, stdout, stderr, forms, alignfirstCommand, modelResolver } = ctx;
   const { agent } = code;
 
   const report = readReport(ctx);
@@ -441,7 +443,7 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
   if (!plans.exists) {
     stderr.write(
       `Error: no .plans/ directory at ${displayPath(tree.cwd, plans.path)}. ` +
-        "Create it, or run `alignfirst plans setup <clone>`.\n",
+        `Create it, or run \`${forms.alignfirst} plans setup <clone>\`.\n`,
     );
     return 1;
   }
@@ -503,6 +505,7 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
       executableModel,
       catchupContent,
       contextContent,
+      alignfirst: forms.alignfirst,
     }),
     createAgentAdapter(agent),
     stdout,
@@ -678,6 +681,8 @@ export interface RunInput {
   executableModel: string | undefined;
   catchupContent?: string;
   contextContent?: string;
+  // The alignfirst command form the coder is told to run.
+  alignfirst: string;
 }
 
 export function buildRunConfig(input: RunInput): RunConfig {
@@ -689,6 +694,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
       message: args.message,
       catchupContent: input.catchupContent,
       contextContent: input.contextContent,
+      alignfirst: input.alignfirst,
     }),
     sessionFilePath: input.sessionFilePath,
     cwd: input.cwd,
@@ -706,7 +712,8 @@ export function buildRunConfig(input: RunInput): RunConfig {
   };
 }
 
-function renderHelp(agent: CodingAgent, models: readonly string[]): string {
+function renderHelp(agent: CodingAgent, models: readonly string[], forms: CommandForms): string {
+  const { aldev, alignfirst } = forms;
   const permissionMode =
     agent === "claude"
       ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
@@ -715,16 +722,19 @@ function renderHelp(agent: CodingAgent, models: readonly string[]): string {
     agent === "codex"
       ? "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through."
       : "Claude model values pass through unchanged.";
+  const requires = forms.viaNpx
+    ? "Requires: the alignfirst CLI, run through npx, for the project layout, side tickets and the\ndelegated protocols."
+    : "Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side\ntickets and the delegated protocols.";
   return `aldev code — run a coding agent through AlignFirst protocols.
 
 Usage:
-  aldev code new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
-  aldev code new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
-  aldev code new --message "..."
-  aldev code resume <sessionId> [--protocol <protocol>] [--message "..."]
-  aldev code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>)
-  aldev code quota
-  aldev code -h, --help
+  ${aldev} code new --protocol <protocol> (--ticket <id> | --no-ticket) [--message "..."]
+  ${aldev} code new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
+  ${aldev} code new --message "..."
+  ${aldev} code resume <sessionId> [--protocol <protocol>] [--message "..."]
+  ${aldev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>)
+  ${aldev} code quota
+  ${aldev} code -h, --help
 
 Commands:
   new                   Start a new session; prints its Session ID at the end.
@@ -745,7 +755,7 @@ Options (new, resume):
   --ticket <id>         Ticket ID. \`new --protocol\` requires it or a side ticket through
                         --no-ticket.
   --no-ticket           Side ticket, for work without a ticket: reserves the next one through
-                        \`alignfirst ticket --side\` and passes it to the agent. new only,
+                        \`${alignfirst} ticket --side\` and passes it to the agent. new only,
                         requires --protocol.
   --catchup             Load the ticket history before the message. new only.
   -m, --message "..."   Message to send. Required for spec/aad, or without protocol/catchup.
@@ -756,8 +766,7 @@ Options (new, resume):
                         (\`meta:\`). aldev never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
 
-Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side
-tickets and the delegated protocols.
+${requires}
 
 Config (~/.config/alignfirst/aldev.config.json):
   code.agent            Required coding agent: claude or codex (selected: ${agent}).
@@ -769,11 +778,11 @@ Selected-agent permissions: ${permissionMode}
 The normal mode also makes the project's companion directory writable when it is in use.
 ${modelBehavior}
 
-aldev code runs a coding agent in the foreground and blocks until it finishes, streaming the
+${aldev} code runs a coding agent in the foreground and blocks until it finishes, streaming the
 transcript to stdout and to a session file under .plans/ or its companion. Coding runs can be
-very long: always run aldev code as a background task. Your platform does the backgrounding;
-never detach it.
+very long: always run it as a background task. Your platform does the backgrounding; never
+detach it.
 
-Run \`aldev guide code\` for the full delegation guide.
+Run \`${aldev} guide code\` for the full delegation guide.
 `;
 }

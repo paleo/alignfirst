@@ -66,7 +66,10 @@ describe("aldev", () => {
   });
 
   it("delegates --help to each subcommand", async () => {
-    const code = await run(["code", "--help"], { code: { agent: "claude" } });
+    const code = await run(["code", "--help"], {
+      platform: "codingAgent",
+      code: { agent: "claude" },
+    });
     expect(code.code).toBe(0);
     expect(code.stdout).toMatch(/^aldev code — /);
 
@@ -74,7 +77,10 @@ describe("aldev", () => {
     expect(project.code).toBe(0);
     expect(project.stdout).toContain("aldev project list [--json] [--root <path>]");
 
-    const guide = await run(["guide", "--help"]);
+    const guide = await run(["guide", "--help"], {
+      platform: "openclaw",
+      code: { agent: "claude" },
+    });
     expect(guide.code).toBe(0);
     expect(guide.stdout).toContain("aldev guide [<topic>] [--root <path>]");
   });

@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
+import type { CommandForms } from "../command-form.js";
 import type { AldevConfig, ProjectsRoot } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
@@ -28,17 +29,6 @@ import {
 } from "./render.js";
 import { getProjectStatus } from "./status.js";
 
-const USAGE = `Usage:
-  aldev project list [--json] [--root <path>]
-  aldev project doctor [--root <path>]
-  aldev project status <path> [--json] [--root <path>]
-  aldev project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
-  aldev project free-ports --size <n> [--range <code>] [--json] [--root <path>]
-  aldev project --help
-
---root defaults to projectsRoot in the aldev config, then to the working directory.
-`;
-
 // What a caller supplies; the projects root default comes from the config.
 export interface ProjectsCallerContext {
   cwd: string;
@@ -46,6 +36,7 @@ export interface ProjectsCallerContext {
   home: string;
   stdout: Output;
   stderr: Output;
+  forms: CommandForms;
   alignfirstCommand: string[];
 }
 
@@ -67,10 +58,10 @@ interface ProjectsArgs {
 
 export function runProject(
   tokens: string[],
-  config: AldevConfig,
+  config: AldevConfig | undefined,
   caller: ProjectsCallerContext,
 ): number {
-  const ctx: ProjectsContext = { ...caller, projectsRoot: config.projectsRoot };
+  const ctx: ProjectsContext = { ...caller, projectsRoot: config?.projectsRoot };
   try {
     return runProjectCommand(ctx, parseProjectsArgs(tokens));
   } catch (error) {
@@ -81,13 +72,13 @@ export function runProject(
 
 function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
   if (args.help || args.command === undefined) {
-    ctx.stdout.write(USAGE);
+    ctx.stdout.write(renderUsage(ctx.forms.aldev));
     return 0;
   }
   if (args.command === "doctor") return inspectProjectInventory(ctx, args.root);
   const root = resolveProjectsRoot(ctx, args.root);
   if (args.command === "init") return initializeProjectsDirectory(root, args, ctx.stdout);
-  const marker = requireMarker(root);
+  const marker = requireMarker(root, ctx.forms.aldev);
   const inventory = inventoryFor(root, marker, ctx);
   if (args.command === "list") {
     ctx.stdout.write(args.json ? renderProjectListJson(inventory) : renderProjectList(inventory));
@@ -106,6 +97,19 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
   throw new Error("Invalid aldev project command");
 }
 
+function renderUsage(aldev: string): string {
+  return `Usage:
+  ${aldev} project list [--json] [--root <path>]
+  ${aldev} project doctor [--root <path>]
+  ${aldev} project status <path> [--json] [--root <path>]
+  ${aldev} project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
+  ${aldev} project free-ports --size <n> [--range <code>] [--json] [--root <path>]
+  ${aldev} project --help
+
+--root defaults to projectsRoot in the aldev config, then to the working directory.
+`;
+}
+
 // The projects guide, followed by the directory sections when the root carries a marker.
 export function renderProjectsGuideForRoot(
   ctx: ProjectsContext,
@@ -114,13 +118,13 @@ export function renderProjectsGuideForRoot(
   const root = resolveProjectsRoot(ctx, rootOption);
   const marker = readMarker(root);
   const inventory = marker === undefined ? undefined : inventoryFor(root, marker, ctx);
-  return renderProjectsGuide(inventory);
+  return renderProjectsGuide(ctx.forms, inventory);
 }
 
 function inspectProjectInventory(ctx: ProjectsContext, rootOption: string | undefined): number {
   try {
     const root = resolveProjectsRoot(ctx, rootOption);
-    const inventory = inventoryFor(root, requireMarker(root), ctx);
+    const inventory = inventoryFor(root, requireMarker(root, ctx.forms.aldev), ctx);
     ctx.stdout.write(renderProjectDoctor(inventory));
     return inventory.issues.length === 0 ? 0 : 1;
   } catch (error) {
@@ -280,12 +284,12 @@ function initializeProjectsDirectory(root: string, args: ProjectsArgs, stdout: O
   return 0;
 }
 
-function requireMarker(root: string): ProjectsMarker {
+function requireMarker(root: string, aldev: string): ProjectsMarker {
   const marker = readMarker(root);
   if (marker !== undefined) return marker;
   throw new Error(
     `${root} is not a projects directory: ${MARKER_FILENAME} is missing. ` +
-      "Run `aldev project init` there, or pass --root <path>.",
+      `Run \`${aldev} project init\` there, or pass --root <path>.`,
   );
 }
 

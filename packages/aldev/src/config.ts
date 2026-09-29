@@ -6,7 +6,7 @@ import { type } from "arktype";
 import { CODING_AGENTS, type CodingAgent } from "./code/coding-agent.js";
 import { errorMessage } from "./errors.js";
 
-export const PLATFORMS = ["openclaw"] as const;
+export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 
 const codeSchema = type({
   "+": "reject",
@@ -17,9 +17,9 @@ const codeSchema = type({
 });
 const configSchema = type({
   "+": "reject",
-  "platform?": type.enumerated(...PLATFORMS),
+  platform: type.enumerated(...PLATFORMS),
   "projectsRoot?": "string > 0",
-  "code?": codeSchema,
+  code: codeSchema,
 });
 
 export type Platform = (typeof PLATFORMS)[number];
@@ -27,9 +27,9 @@ export type Platform = (typeof PLATFORMS)[number];
 export interface AldevConfig {
   // The config file path, for error messages.
   path: string;
-  platform?: Platform;
+  platform: Platform;
   projectsRoot?: ProjectsRoot;
-  code?: CodeConfig;
+  code: CodeConfig;
 }
 
 export interface ProjectsRoot {
@@ -47,26 +47,22 @@ export interface CodeConfig {
 }
 
 // An absent file is a normal state: a machine where aldev is not configured.
-export function loadConfig(home: string): AldevConfig {
+export function loadConfig(home: string): AldevConfig | undefined {
   const path = configPath(home);
-  if (!existsSync(path)) return { path };
+  if (!existsSync(path)) return;
   const value = parseConfigFile(path);
   return {
     path,
-    ...(value.platform === undefined ? {} : { platform: value.platform }),
+    platform: value.platform,
     ...(value.projectsRoot === undefined
       ? {}
       : { projectsRoot: resolveProjectsRoot(value.projectsRoot, home, path) }),
-    ...(value.code === undefined
-      ? {}
-      : {
-          code: {
-            agent: value.code.agent,
-            ...(value.code.models === undefined ? {} : { models: value.code.models }),
-            skipPermissions: value.code.skipPermissions ?? false,
-            unset: value.code.unset ?? [],
-          },
-        }),
+    code: {
+      agent: value.code.agent,
+      ...(value.code.models === undefined ? {} : { models: value.code.models }),
+      skipPermissions: value.code.skipPermissions ?? false,
+      unset: value.code.unset ?? [],
+    },
   };
 }
 
@@ -95,23 +91,14 @@ function resolveProjectsRoot(written: string, home: string, path: string): Proje
   return { path: isAbsolute(written) ? written : resolve(dirname(path), written), written };
 }
 
-export function requirePlatform(config: AldevConfig): Platform {
-  if (config.platform !== undefined) return config.platform;
-  throw new Error(
-    `${missingKeyMessage("platform", config)} Available platforms: ${PLATFORMS.join(", ")}.`,
+export function missingConfigMessage(home: string): string {
+  return (
+    `Error: no aldev config at ${configPath(home)}. Create it with "platform" ` +
+    `(${PLATFORMS.join(" or ")}) and "code.agent" (${CODING_AGENTS.join(" or ")}).`
   );
 }
 
 export function requireProjectsRoot(config: AldevConfig): ProjectsRoot {
   if (config.projectsRoot !== undefined) return config.projectsRoot;
-  throw new Error(missingKeyMessage("projectsRoot", config));
-}
-
-export function requireCodeConfig(config: AldevConfig): CodeConfig {
-  if (config.code !== undefined) return config.code;
-  throw new Error(missingKeyMessage("code.agent", config));
-}
-
-function missingKeyMessage(key: string, config: AldevConfig): string {
-  return `Error: ${key} is missing from the aldev config ${config.path}.`;
+  throw new Error(`Error: projectsRoot is missing from the aldev config ${config.path}.`);
 }

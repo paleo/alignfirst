@@ -8,9 +8,9 @@ The user consults you, and you consult the coder. It reads the repository; you w
 
 ## Step 1 — Select the worktree
 
-Run `aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `alignfirst context` from PROJECT_PATH.
+Run `{{ALDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 
-Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`aldev guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
 
 ## Step 2 — Refresh the default branch
 
@@ -24,7 +24,7 @@ Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forwa
 
 ## Step 3 — Delegate
 
-Apply the takeover-turn checkpoint in the playbook (`aldev guide`), then run `aldev code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
+Apply the takeover-turn checkpoint in the playbook (`{{ALDEV}} guide`), then run `{{ALDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
 
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Include the environment refresh described in the working session when the main branch advanced. Use the delegation guide's background launch and completion procedure.
 
@@ -43,8 +43,8 @@ A single question answered in one turn ends at Step 4. Nothing is written.
 Record the exchange when it produced something worth keeping: the user asked for ideas, an opinion, or a decision, or the topic continued past your first answer. Then:
 
 1. **Ask about the ticket, without waiting for it.** Add one sentence to the answer you are already sending, in the user's language: *"Is there a ticket to attach this discussion to, or do we continue without one?"* Ask it once in the session, then carry on regardless of the reply.
-2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `alignfirst ticket --side` from PROJECT_PATH and take the `side-N` it reports.
-3. **Name the file.** Run `alignfirst sync`, then `alignfirst ticket {TICKET_ID} --next consultation.md --new-cycle`, both from PROJECT_PATH, and append FILE_NAME to TICKET_DIR exactly as printed. Syncing first brings down the ticket's existing work files, so the new file is numbered after them. A consultation opens its own cycle, and the flag is harmless on a ticket with no work files yet.
+2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH and take the `side-N` it reports.
+3. **Name the file.** Run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID} --next consultation.md --new-cycle`, both from PROJECT_PATH, and append FILE_NAME to TICKET_DIR exactly as printed. Syncing first brings down the ticket's existing work files, so the new file is numbered after them. A consultation opens its own cycle, and the flag is harmless on a ticket with no work files yet.
 4. **Have the coder write it.** Resume the consultation's session with no protocol, naming that exact path. Ask for the discussion's summary, the ideas considered, the decisions reached, and the open questions named as open. The coder syncs its own writes.
 5. **Report where it landed.** Your closing message states TICKET_ID and the file path. The file names the revision retained at Step 2.
 

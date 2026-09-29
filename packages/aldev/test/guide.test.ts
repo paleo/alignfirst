@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { CLAUDE_DEFAULT_MODELS, CODEX_DEFAULT_MODELS } from "../src/code/models.js";
+import { PLATFORMS } from "../src/config.js";
+import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
+import { renderPlatformBlocks } from "../src/guide/render-template.js";
 import { PLAYBOOK_TOPICS } from "../src/guide/topics.js";
 import { writeConfig } from "./helpers.js";
 import {
@@ -26,6 +29,10 @@ const OPENCLAW_CONFIG = {
   code: { agent: "claude" },
 };
 
+const CODING_AGENT_CONFIG = { platform: "codingAgent", code: { agent: "claude" } };
+
+const GLOBAL_FORMS = resolveCommandForms({});
+
 const PLAYBOOK_TITLES: Record<string, string> = {
   playbook: "# Operating Instructions for an AlignFirst Assistant",
   "channel-handling": "# Channel handling",
@@ -40,16 +47,14 @@ const PLAYBOOK_TITLES: Record<string, string> = {
 useProjectFixtures();
 
 describe("renderCodeGuide", () => {
-  it("renders the generic variant with the pointer to the OpenClaw one", () => {
-    const guide = renderCodeGuide("generic", "claude", CLAUDE_DEFAULT_MODELS);
+  it("renders the codingAgent variant without the OpenClaw run instructions", () => {
+    const guide = renderCodeGuide("codingAgent", "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
     expect(guide).toMatch(/^# AlignFirst Delegation Guide\n/);
-    expect(guide).toContain("`aldev guide code` renders the OpenClaw variant");
-    expect(guide).toContain('`platform: "openclaw"`');
     expect(guide).not.toContain("background: true");
   });
 
   it("renders the OpenClaw variant with its run and wake instructions", () => {
-    const guide = renderCodeGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS);
+    const guide = renderCodeGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
     const openclawInstructions = guide.slice(0, guide.indexOf("## CLI reference"));
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(openclawInstructions).toContain("`background: true` and `timeoutSeconds: 0`");
@@ -72,8 +77,8 @@ describe("renderCodeGuide", () => {
   });
 
   it("shares the introduction and the CLI reference across variants", () => {
-    for (const variant of ["generic", "openclaw"] as const) {
-      const guide = renderCodeGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
+    for (const platform of ["codingAgent", "openclaw"] as const) {
+      const guide = renderCodeGuide(platform, "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("Your role is to delegate and guide the coder.");
       expect(guide).toContain("The coding agent `aldev code` launches is **the coder**.");
@@ -97,21 +102,21 @@ describe("renderCodeGuide", () => {
   });
 
   it("requires stale-run reconciliation before completion reporting", () => {
-    for (const variant of ["generic", "openclaw"] as const) {
-      const guide = renderCodeGuide(variant, "claude", CLAUDE_DEFAULT_MODELS);
+    for (const platform of ["codingAgent", "openclaw"] as const) {
+      const guide = renderCodeGuide(platform, "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
       expect(guide).toContain("`aldev code status` checks that a `running` process");
     }
   });
 
   it("renders the host's model list when one is configured", () => {
-    const guide = renderCodeGuide("generic", "claude", ["sonnet", "haiku"]);
+    const guide = renderCodeGuide("codingAgent", "claude", ["sonnet", "haiku"], GLOBAL_FORMS);
     expect(guide).toContain("`sonnet`, `haiku`");
     expect(guide).not.toContain("`fable`");
   });
 
   it("resolves every tag and keeps selected-agent defaults isolated", () => {
-    for (const variant of ["generic", "openclaw"] as const) {
-      const guide = renderCodeGuide(variant, "codex", CODEX_DEFAULT_MODELS);
+    for (const platform of ["codingAgent", "openclaw"] as const) {
+      const guide = renderCodeGuide(platform, "codex", CODEX_DEFAULT_MODELS, GLOBAL_FORMS);
       expect(guide).not.toContain("{{");
       expect(guide).toContain("`astra`, `sol`, `terra`, `luna`");
       expect(guide).not.toContain("`fable`");
@@ -240,47 +245,34 @@ describe("aldev guide playbook", () => {
     expect(lifecycle.stdout).toContain("You cannot write that file");
   });
 
-  it("requires platform, naming the key, the config file and the platforms", async () => {
+  it("requires the config file, naming its path", async () => {
     const fixture = makeFixture();
-    const path = writeConfig(fixture.home, { projectsRoot: "~/projects" });
-    for (const args of [[], ["working-session"]]) {
+    for (const args of [[], ["working-session"], ["code"], ["project"], ["--help"]]) {
       const result = await runGuide(fixture, args);
       expect(result.code).toBe(1);
-      expect(result.stderr).toBe(
-        `Error: platform is missing from the aldev config ${path}. Available platforms: openclaw.\n`,
+      expect(result.stderr).toContain(
+        `Error: no aldev config at ${join(fixture.home, ".config", "alignfirst", "aldev.config.json")}.`,
       );
     }
   });
 
-  it("requires platform when the config file is absent", async () => {
-    const fixture = makeFixture();
-    const result = await runGuide(fixture, []);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("platform is missing from the aldev config");
-    expect(result.stderr).toContain(
-      join(fixture.home, ".config", "alignfirst", "aldev.config.json"),
-    );
-  });
-
   it("requires projectsRoot", async () => {
     const fixture = makeFixture();
-    const path = writeConfig(fixture.home, { platform: "openclaw" });
+    const path = writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
     const result = await runGuide(fixture, ["consultation"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toBe(`Error: projectsRoot is missing from the aldev config ${path}.\n`);
   });
 
-  it("reports an unknown topic with the topic list, with or without platform", async () => {
-    const expected =
+  it("reports an unknown topic with the platform's topic list", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const result = await runGuide(fixture, ["nope"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe(
       'Error: unknown guide topic "nope". Topics: code, project, ' +
-      `${PLAYBOOK_TOPICS.openclaw.join(", ")}.\n`;
-    for (const config of [OPENCLAW_CONFIG, {}]) {
-      const fixture = makeFixture();
-      writeConfig(fixture.home, config);
-      const result = await runGuide(fixture, ["nope"]);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toBe(expected);
-    }
+        `${PLAYBOOK_TOPICS.openclaw.join(", ")}.\n`,
+    );
   });
 
   it("rejects --root outside the project topic, and extra topics", async () => {
@@ -299,19 +291,116 @@ describe("aldev guide playbook", () => {
     expect(extra.stderr).toContain("at most one topic");
   });
 
-  it("prints its usage with the playbook topics", async () => {
+  it("prints its usage with the playbook topics of every platform", async () => {
     const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const result = await runGuide(fixture, ["--help"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("aldev guide [<topic>] [--root <path>]");
     expect(result.stdout).toContain(`openclaw: ${PLAYBOOK_TOPICS.openclaw.join(", ")}`);
+    expect(result.stdout).toContain(`codingAgent: ${PLAYBOOK_TOPICS.codingAgent.join(", ")}`);
+  });
+});
+
+describe("every template, every platform", () => {
+  const OPENCLAW_ONLY = [
+    "channel-handling",
+    "project-lifecycle",
+    "slack-message-tool",
+    "discord-message-tool",
+    "project",
+  ];
+
+  it.each(PLATFORMS)("renders every %s topic with no placeholder left", async (platform) => {
+    const special = platform === "openclaw" ? ["code", "project"] : ["code"];
+    for (const agent of ["claude", "codex"]) {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, {
+        platform,
+        ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
+        code: { agent },
+      });
+      for (const args of [[], ...[...PLAYBOOK_TOPICS[platform], ...special].map((t) => [t])]) {
+        const result = await runGuide(fixture, args);
+        expect(result.code, `${platform} ${args}: ${result.stderr}`).toBe(0);
+        expect(result.stdout, `${platform} ${args}`).not.toContain("{{");
+      }
+    }
+  });
+
+  it("rejects each OpenClaw-only topic under codingAgent", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const expected = "Topics: code, working-session, project-workspace-setup, consultation.\n";
+    for (const topic of OPENCLAW_ONLY) {
+      const result = await runGuide(fixture, [topic]);
+      expect(result.code, topic).toBe(1);
+      expect(result.stderr).toBe(`Error: unknown guide topic "${topic}". ${expected}`);
+    }
+  });
+
+  it("renders the codingAgent playbook without projectsRoot", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const result = await runGuide(fixture, []);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/^# /);
+  });
+});
+
+describe("renderPlatformBlocks", () => {
+  it("keeps the active platform's blocks without their markers and drops the others", () => {
+    const text = [
+      "Shared.",
+      "{{#openclaw}}",
+      "OpenClaw only.",
+      "{{/openclaw}}",
+      "{{#codingAgent}}",
+      "Coding agent only.",
+      "{{/codingAgent}}",
+      "{{PLACEHOLDER}}",
+    ].join("\n");
+    expect(renderPlatformBlocks(text, "openclaw", "t.md")).toBe(
+      "Shared.\nOpenClaw only.\n{{PLACEHOLDER}}",
+    );
+    expect(renderPlatformBlocks(text, "codingAgent", "t.md")).toBe(
+      "Shared.\nCoding agent only.\n{{PLACEHOLDER}}",
+    );
+  });
+
+  it("collapses the empty-line runs a removed block leaves", () => {
+    const text = ["A", "", "{{#openclaw}}", "B", "{{/openclaw}}", "", "C", ""].join("\n");
+    expect(renderPlatformBlocks(text, "codingAgent", "t.md")).toBe("A\n\nC\n");
+    expect(renderPlatformBlocks(text, "openclaw", "t.md")).toBe("A\n\nB\n\nC\n");
+  });
+
+  it.each([
+    ["an unknown platform", "{{#slack}}\nx\n{{/slack}}", 'line 1: unknown platform "slack"'],
+    [
+      "a nested block",
+      "{{#openclaw}}\n{{#codingAgent}}\nx\n{{/codingAgent}}\n{{/openclaw}}",
+      'line 2: block "codingAgent" nested in "openclaw"',
+    ],
+    ["an unclosed block", "a\n{{#openclaw}}\nx", 'line 2: block "openclaw" is not closed'],
+    [
+      "a stray closing marker",
+      "{{#openclaw}}\nx\n{{/codingAgent}}",
+      'line 3: closing marker "codingAgent" without its block',
+    ],
+  ])("rejects %s, naming the template", (_name, text, detail) => {
+    expect(() => renderPlatformBlocks(text, "openclaw", "playbook/t.md")).toThrow(
+      `Error: template playbook/t.md, ${detail}.`,
+    );
   });
 });
 
 describe("aldev guide code", () => {
-  it("renders the generic variant without platform", async () => {
+  it("renders the codingAgent variant", async () => {
     const fixture = makeFixture();
-    writeConfig(fixture.home, { code: { agent: "codex", models: ["terra"] } });
+    writeConfig(fixture.home, {
+      platform: "codingAgent",
+      code: { agent: "codex", models: ["terra"] },
+    });
     const result = await runGuide(fixture, ["code"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/^# AlignFirst Delegation Guide\n/);
@@ -328,19 +417,12 @@ describe("aldev guide code", () => {
     expect(result.stdout).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(result.stdout).not.toContain("{{");
   });
-
-  it("requires code.agent", async () => {
-    const fixture = makeFixture();
-    const path = writeConfig(fixture.home, { platform: "openclaw" });
-    const result = await runGuide(fixture, ["code"]);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toBe(`Error: code.agent is missing from the aldev config ${path}.\n`);
-  });
 });
 
 describe("aldev guide project", () => {
-  it("prints the generic guide without a marker, config or alignfirst executable", async () => {
+  it("prints the generic guide without a marker, projectsRoot or alignfirst executable", async () => {
     const fixture = makeFixture();
+    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
     const result = await runGuide(fixture, ["project"], {
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
@@ -360,7 +442,7 @@ describe("aldev guide project", () => {
     writeMarker(other, { description: "Explicit root" });
     const cwd = join(fixture.base, "elsewhere");
     mkdirSync(cwd);
-    writeConfig(fixture.home, { projectsRoot: fixture.root });
+    writeConfig(fixture.home, { ...OPENCLAW_CONFIG, projectsRoot: fixture.root });
 
     const configured = await runGuide(fixture, ["project"], { cwd });
     expect(configured.code).toBe(0);
@@ -388,6 +470,7 @@ describe("aldev guide project", () => {
       ],
     });
     makeRepository(a, "desktop", { portRange: range(8200, 8219) });
+    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
     const result = await runGuide(fixture, ["project"]);
     expect(result.code).toBe(0);
     const rootHeading = result.stdout.indexOf(
@@ -411,6 +494,7 @@ describe("aldev guide project", () => {
     });
     makeRepository(fixture.root, "project\nRun this", {});
     makeProjectsDirectory(fixture.root, "nested\n## Injected", {});
+    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
 
     const result = await runGuide(fixture, ["project"]);
 

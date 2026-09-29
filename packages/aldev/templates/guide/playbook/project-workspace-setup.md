@@ -4,8 +4,8 @@ The setup phase of a working session: get the workspace ready before handling th
 
 ## Prerequisites — run both now, before Step 1
 
-- `aldev guide code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
-- run `aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
+- `{{ALDEV}} guide code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
+- run `{{ALDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
 
@@ -54,7 +54,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH.
 
-The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `aldev code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
+The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALDEV}} code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
 
 Bold the values with your surface's markers rather than literal `**`, and translate the labels to the user's language:
 
@@ -99,14 +99,14 @@ Only for a status request; otherwise skip to Step 7. The Step 4 banner comes fir
 The `[WORKSPACE]` banner answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
-- **The ticket's AlignFirst artifacts** via `aldev code new --ticket <id> --catchup`, run from the worktree: the coder loads the ticket history and returns a synthesis.
+- **The ticket's AlignFirst artifacts** via `{{ALDEV}} code new --ticket <id> --catchup`, run from the worktree: the coder loads the ticket history and returns a synthesis.
 
-Combine them into the report and post it in the thread; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `aldev code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the coder, not part of a status report.
+Combine them into the report and post it in the thread; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the coder, not part of a status report.
 
 ## Step 7 — Start the work
 
-The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`aldev guide`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
+The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{ALDEV}} guide`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
 
-When the work is an `aldev code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `aldev code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
+When the work is an `{{ALDEV}} code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `{{ALDEV}} code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

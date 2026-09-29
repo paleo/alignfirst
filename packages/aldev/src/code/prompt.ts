@@ -8,12 +8,14 @@ export interface PromptInput {
   message?: string;
   catchupContent?: string;
   contextContent?: string;
+  // The alignfirst command form, e.g. `alignfirst` or `npx -y alignfirst`.
+  alignfirst: string;
 }
 
 export function buildPrompt(input: PromptInput): string {
-  const { protocol, ticket, message, catchupContent, contextContent } = input;
+  const { protocol, ticket, message, catchupContent, contextContent, alignfirst } = input;
   const instruction =
-    protocol === undefined ? message : buildProtocolPrompt(protocol, ticket, message);
+    protocol === undefined ? message : buildProtocolPrompt(alignfirst, protocol, ticket, message);
   if (catchupContent === undefined && contextContent === undefined) return instruction ?? "";
   const sections: string[] = [];
   if (contextContent !== undefined) sections.push("## Project context", contextContent.trimEnd());
@@ -33,8 +35,13 @@ function currentInstruction(
   return instruction ?? "";
 }
 
-function buildProtocolPrompt(protocol: string, ticket?: string, message?: string): string {
+function buildProtocolPrompt(
+  alignfirst: string,
+  protocol: string,
+  ticket?: string,
+  message?: string,
+): string {
   const ticketPart = ticket === undefined ? "" : ` Ticket ID = ${ticket}.`;
   const messagePart = message === undefined ? "" : `\n\n${message}`;
-  return `Run \`alignfirst guide ${protocol}\` and follow the protocol.${ticketPart}${messagePart}`;
+  return `Run \`${alignfirst} guide ${protocol}\` and follow the protocol.${ticketPart}${messagePart}`;
 }

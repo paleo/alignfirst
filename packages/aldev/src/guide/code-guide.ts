@@ -1,38 +1,27 @@
 import type { CodingAgent } from "../code/coding-agent.js";
+import type { CommandForms } from "../command-form.js";
 import type { Platform } from "../config.js";
-import { readTemplate } from "../templates.js";
+import { renderGuideTemplate } from "./render-template.js";
 
-export type GuideVariant = "generic" | Platform;
-
-// Each variant owns a full guide (templates/guide/code/<variant>-guide.md) carrying its own
-// platform-specific prose. Two shared blocks fill the tags common to every variant:
-//   {{INTRODUCTION}}  — what `aldev code` is and how to invoke it
-//   {{CLI_REFERENCE}} — the CLI reference and the protocol workflows below it
-// {{MODELS}} — the host's model list — is replaced last so the tag also resolves inside the
-// inserted blocks.
 export function renderCodeGuide(
-  variant: GuideVariant,
+  platform: Platform,
   agent: CodingAgent,
   models: readonly string[],
+  forms: CommandForms,
 ): string {
-  return readCodeTemplate(`${variant}-guide.md`)
-    .replaceAll("{{INTRODUCTION}}", readCodeTemplate("introduction.md").trimEnd())
-    .replaceAll("{{CLI_REFERENCE}}", readCodeTemplate("cli-reference.md").trimEnd())
-    .replaceAll("{{AGENT}}", agent)
-    .replaceAll(
-      "{{AUTH_COMMAND}}",
-      agent === "claude" ? "`claude`, then `/login`" : "`codex login`",
-    )
-    .replaceAll(
-      "{{PERMISSIONS}}",
+  return renderGuideTemplate("code.md", platform, forms, {
+    AGENT: agent,
+    AUTH_COMMAND: agent === "claude" ? "`claude`, then `/login`" : "`codex login`",
+    PERMISSIONS:
       agent === "claude"
         ? "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aldev config selects `--dangerously-skip-permissions`"
         : "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aldev config selects `--dangerously-bypass-approvals-and-sandbox`",
-    )
-    .replaceAll("{{MODELS}}", models.map((model) => `\`${model}\``).join(", "))
-    .trimEnd();
-}
-
-function readCodeTemplate(name: string): string {
-  return readTemplate(`guide/code/${name}`);
+    MODELS: models.map((model) => `\`${model}\``).join(", "),
+    ALIGNFIRST_SETUP: forms.viaNpx
+      ? "The project must be prepared for AlignFirst. `npx -y aldev` runs the `alignfirst` CLI through `npx`."
+      : "The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).",
+    ALIGNFIRST_USE: forms.viaNpx
+      ? "`npx -y aldev code` runs the `alignfirst` CLI through `npx`, and so does the coder: it runs `npx -y alignfirst guide <protocol>` in the project."
+      : "`aldev code` requires the `alignfirst` CLI on `PATH`. The coder runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.",
+  });
 }

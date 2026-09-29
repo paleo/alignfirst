@@ -12,9 +12,9 @@ Keep progress and completion reports in this thread. A request to notify the use
 
 A runbook is a procedure you read fully when its situation arises. Claim first, then recover context.
 
-- `aldev guide project-workspace-setup` — single-project changes, protocol requests, and ticket status requests, before project work.
-- `aldev guide project-lifecycle` — creating a project, onboarding a repository to clone, physically removing a project.
-- `aldev guide consultation` — questions, advice, brainstorming: read-only work that produces understanding rather than code.
+- `{{ALDEV}} guide project-workspace-setup` — single-project changes, protocol requests, and ticket status requests, before project work.
+- `{{ALDEV}} guide project-lifecycle` — creating a project, onboarding a repository to clone, physically removing a project.
+- `{{ALDEV}} guide consultation` — questions, advice, brainstorming: read-only work that produces understanding rather than code.
 
 ## Take over a working session
 
@@ -34,7 +34,7 @@ On the first turn of your session, react with the lobster emoji to the latest me
 
 Use `message` with `action: "react"`, following the current surface's extended message reference named by workspace `AGENTS.md`. The `emoji` value depends on the surface: `🦞` on Discord, `lobster` on Slack. If the reaction fails, continue without retrying.
 
-Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. With a starter present, its values come from the inventory the channel session consulted; run `aldev project list --json` only where a runbook, the multi-project procedure, or "A thread you did not open" asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
+Recover the task, the full request, every PROJECT / PROJECT_PATH pair, and TICKET_ID from that context. With a starter present, its values come from the inventory the channel session consulted; run `{{ALDEV}} project list --json` only where a runbook, the multi-project procedure, or "A thread you did not open" asks for it. Later human messages supply missing values or correct the request. Never reconstruct PROJECT_PATH from PROJECT or derive a project from a ticket prefix. A `missing` inventory record supplies no PROJECT_PATH either: the starter asked the user for it, so the user's message is the only source. Branch, linked-worktree path, and dev-server URL live in history under `[WORKSPACE]`.
 
 On a takeover turn:
 
@@ -51,7 +51,7 @@ A human can open a thread and tag you in it. The history then holds their messag
 What changes is where the values come from:
 
 - The human messages are the request. Read them as the starter's task and, when detailed, as its full text.
-- PROJECT and PROJECT_PATH are yours to resolve: run `aldev project list --json` and apply the resolution rules of `aldev guide channel-handling`. Ask here for whatever stays unresolved — a duplicate name, an unlisted name, several candidates with nothing to choose between them.
+- PROJECT and PROJECT_PATH are yours to resolve: run `{{ALDEV}} project list --json` and apply the resolution rules of `{{ALDEV}} guide channel-handling`. Ask here for whatever stays unresolved — a duplicate name, an unlisted name, several candidates with nothing to choose between them.
 - The thread keeps the name its author gave it. Skip the Discord rename in "Thread name" below for the whole session.
 
 Everything else is unchanged: the same runbooks, the same ticket rules, the same delegation.
@@ -63,20 +63,20 @@ The channel deliberately leaves some values for this session:
 - A PR/MR, issue, ticket, or other resource URL may identify its project and ticket. Read it through the platform's configured tool before asking for either value.
 - For a multi-project request, retain every affected project and path. Do not choose a main project merely to fit a single-project workflow.
 - A request may need no project. Do not ask for one until the work itself requires project files.
-- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions, advice and brainstormings require PROJECT and PROJECT_PATH only. Follow `aldev guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
+- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions, advice and brainstormings require PROJECT and PROJECT_PATH only. Follow `{{ALDEV}} guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
 - Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 
-Once a single-project request's PROJECT_PATH is known, run `aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
+Once a single-project request's PROJECT_PATH is known, run `{{ALDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
 
-For changes, protocol requests, and ticket status requests, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `alignfirst sync`, then `alignfirst ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `aldev code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
+For changes, protocol requests, and ticket status requests, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `{{ALDEV}} code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
 
-TICKET_DIR lies in the work-files directory, `.plans/`, which may live in the project's companion. Use TICKET_DIR exactly as `alignfirst ticket` prints it, resolved from PROJECT_PATH when relative.
+TICKET_DIR lies in the work-files directory, `.plans/`, which may live in the project's companion. Use TICKET_DIR exactly as `{{ALIGNFIRST}} ticket` prints it, resolved from PROJECT_PATH when relative.
 
 Default rule: When the user asks you to handle or implement an existing ticket and a configured account gives you access to its platform, inspect the ticket before workspace setup. If its state is To do or equivalent and its assignee is either empty or your account, ensure it is assigned to your account and move it to In progress or equivalent when that state exists.
 
 ### Step 4 — Route project lifecycle work
 
-When the request creates a project, onboards a repository to clone, or physically removes a project, run `aldev guide project-lifecycle`, read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the listed PROJECT_PATH selected in the starter or supplied by the user.
+When the request creates a project, onboards a repository to clone, or physically removes a project, run `{{ALDEV}} guide project-lifecycle`, read it fully, and follow it before considering a project workspace. Creation and onboarding may start with a proposed PROJECT and no PROJECT_PATH. Removal requires the listed PROJECT_PATH selected in the starter or supplied by the user.
 
 Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
 
@@ -86,21 +86,21 @@ Skip this step for read-only questions, project lifecycle, and operational work.
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket:
 
-1. Read DEVELOPERS_PATH and run `alignfirst context` from PROJECT_PATH.
-2. Run `alignfirst sync`, so identifier selection sees the current shared task set.
-3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
+1. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
+3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
 4. Write `{TICKET_DIR}A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
-5. Run `alignfirst sync`.
+5. Run `{{ALIGNFIRST}} sync`.
 
-The bot owns this reservation and the request capture; the coder receives TICKET_ID. Do not use `aldev code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
+The bot owns this reservation and the request capture; the coder receives TICKET_ID. Do not use `{{ALDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 
 ### Step 6 — The thread's state is its workspace
 
 The question on every turn is not a mode but a fact: does this request need a project workspace?
 
 - **The request is a code review or names an AlignFirst protocol** — follow the ticket and workspace flow below.
-- **The request is another read-only question, advice, or a brainstorming** — run `aldev guide consultation`, read it fully, and follow it.
-- **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A starter with a request block is filed first ("Detailed requests" below). Then run `aldev guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
+- **The request is another read-only question, advice, or a brainstorming** — run `{{ALDEV}} guide consultation`, read it fully, and follow it.
+- **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A starter with a request block is filed first ("Detailed requests" below). Then run `{{ALDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
 - **A required value is missing** — go to Step 7. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
 Changes to an existing project happen inside a linked workspace. Read-only questions use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
@@ -127,11 +127,11 @@ Interpret every user message in the context of the current project — something
 
 Only when the message is unambiguously about chat content ("summarize this thread", "what does this mean") should you treat it as a regular conversation.
 
-**Question, advice, or a design opinion.** The substance comes from the coder, which reads the repository. Follow `aldev guide consultation`. No code change unless asked.
+**Question, advice, or a design opinion.** The substance comes from the coder, which reads the repository. Follow `{{ALDEV}} guide consultation`. No code change unless asked.
 
 ### Read-only questions
 
-A codebase question, advice, or a brainstorming follows `aldev guide consultation`. Read it fully. It resolves the project, delegates the complete question to the coder, and records the discussion when one is worth keeping.
+A codebase question, advice, or a brainstorming follows `{{ALDEV}} guide consultation`. Read it fully. It resolves the project, delegates the complete question to the coder, and records the discussion when one is worth keeping.
 
 A request for a ticket's progress follows "Status update" instead; it needs that ticket's history and workspace state.
 
@@ -140,11 +140,11 @@ A request for a ticket's progress follows "Status update" instead; it needs that
 When one project owns a detailed change request, preserve it before delegation:
 
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
-2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the request-file path.
+2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the request-file path.
 3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
-4. Run `alignfirst sync`.
+4. Run `{{ALIGNFIRST}} sync`.
 5. When ticket editing is available, add the request-file path relative to the project to the ticket description.
-6. Continue through project workspace setup and `aldev code` as usual.
+6. Continue through project workspace setup and `{{ALDEV}} code` as usual.
 
 When Step 5 reserved a side ticket `side-N`, the request is already captured. Continue through project workspace setup and delegate from the linked worktree.
 
@@ -152,7 +152,7 @@ Skip this capture workflow for a multi-project request with no main project and 
 
 ### Multi-project and operational work
 
-Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to the coder without an AlignFirst protocol. Refresh `aldev project list --json` when the affected project set is not already recorded. Run one project-bound coder session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the coder owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to the coder without an AlignFirst protocol. Refresh `{{ALDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound coder session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the coder owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 
 ### What you delegate vs do
 
@@ -160,11 +160,11 @@ Lean toward delegating; the less you touch the project directly, the better.
 
 Delegate to the coder: workspace/branch/worktree creation, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs.
 
-Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to the coder and build on its answer. Never brainstorm alone: the coder grounds its ideas in the codebase; yours would come from memory. `aldev guide consultation` is the procedure.
+Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to the coder and build on its answer. Never brainstorm alone: the coder grounds its ideas in the codebase; yours would come from memory. `{{ALDEV}} guide consultation` is the procedure.
 
-Global tools go in the prompt. Run `aldev code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. The coder knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Global tools go in the prompt. Run `{{ALDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. The coder knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
 
-Every single-project change delegation carries TICKET_ID in the `aldev code` invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the `{{ALDEV}} code` invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 
@@ -180,13 +180,13 @@ The coder usually has no question. When it does, answer it: a technical question
 
 ### Plan files are the coder's material
 
-Before acting on any file the user names under `.plans/`, run `alignfirst sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to the coder, as the delegation guide describes.
+Before acting on any file the user names under `.plans/`, run `{{ALIGNFIRST}} sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to the coder, as the delegation guide describes.
 
-For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, run `alignfirst guide` from PROJECT_PATH; its output ends with the ticket directory and work file rules. Project instructions only define whether and how the directory is shared.
+For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, run `{{ALIGNFIRST}} guide` from PROJECT_PATH; its output ends with the ticket directory and work file rules. Project instructions only define whether and how the directory is shared.
 
 ### Hand-written changes in `.plans/`
 
-After writing or editing any file under `.plans/` yourself, run `alignfirst sync`. A change written by the coder needs nothing — the coder syncs its own.
+After writing or editing any file under `.plans/` yourself, run `{{ALIGNFIRST}} sync`. A change written by the coder needs nothing — the coder syncs its own.
 
 ### The project's entry points
 
@@ -194,7 +194,7 @@ A project has up to three entry points:
 
 - `README.md` — presentation, getting-started procedure…
 - `DEVELOPERS.md` — the coder's user, human or AI: you. Read it at DEVELOPERS_PATH.
-- `AGENTS.md` — the coder. When the project's instructions come from its companion, the companion's `.alignfirst.md` replaces it for the coder, and `alignfirst context` prints it.
+- `AGENTS.md` — the coder. When the project's instructions come from its companion, the companion's `.alignfirst.md` replaces it for the coder, and `{{ALIGNFIRST}} context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.
 
@@ -204,11 +204,11 @@ A project can have documentation files. List them all from PROJECT_PATH, the ful
 
 ### Main worktree and base branch
 
-A project in main-worktree mode (`aldev guide project-workspace-setup`) is the exception to this section: its main worktree leaves the base branch while a working thread holds it, and the edits happen there, on the thread's branch.
+A project in main-worktree mode (`{{ALDEV}} guide project-workspace-setup`) is the exception to this section: its main worktree leaves the base branch while a working thread holds it, and the edits happen there, on the thread's branch.
 
-The main worktree at PROJECT_PATH stays on the base branch, except for the repository-onboarding setup branch defined in `aldev guide project-lifecycle`. It is shared across sessions.
+The main worktree at PROJECT_PATH stays on the base branch, except for the repository-onboarding setup branch defined in `{{ALDEV}} guide project-lifecycle`. It is shared across sessions.
 
-Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `aldev guide project-lifecycle`.
+Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `{{ALDEV}} guide project-lifecycle`.
 
 Install dependencies in the main worktree from the committed lockfile, without rewriting it: `npm ci` with npm, or the frozen-lockfile install of the project's package manager. A rewritten lockfile would leave an uncommitted change on the base branch. Every coder prompt that installs dependencies in the main worktree states this rule.
 
@@ -218,7 +218,7 @@ Running the dev-server from the main worktree is fine.
 
 A project in main-worktree mode has no linked worktree: its branches are created and checked out in the main worktree with plain `git switch`, and the rule against a hand-made checkout does not apply to it. `git worktree add`/`remove`/`prune` stay out of bounds.
 
-After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the `aldev guide project-workspace-setup` instructions to set it up.
+After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the `{{ALDEV}} guide project-workspace-setup` instructions to set it up.
 
 Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPERS.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
@@ -245,8 +245,8 @@ Delegate the sequence to the coder.
 
 ### Status update
 
-- Check status from the recorded linked-worktree path. The takeover sync in `aldev guide project-workspace-setup` has already fetched and merged the remote branch, so you are reporting the latest state.
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via `aldev code new --ticket <id> --catchup` (the coder synthesizes the ticket history). Don't browse the source to describe the code; that's a separate coder delegation.
+- Check status from the recorded linked-worktree path. The takeover sync in `{{ALDEV}} guide project-workspace-setup` has already fetched and merged the remote branch, so you are reporting the latest state.
+- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via `{{ALDEV}} code new --ticket <id> --catchup` (the coder synthesizes the ticket history). Don't browse the source to describe the code; that's a separate coder delegation.
 
 ### Dev-server while working
 
@@ -283,12 +283,12 @@ Clean logs are required for the manual test to pass.
 
 When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
 
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`aldev code new --ticket <id> --catchup`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
+- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`{{ALDEV}} code new --ticket <id> --catchup`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
 - **The user runs it.** They only need the dev-server up with its URL.
 
 ### Project rules and docs
 
-A project whose `.alignfirst.md` or `DEVELOPERS.md` resolves in its companion (`locations` in `aldev project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst.md` in place of `AGENTS.md`. The coder edits them in place. They are outside the repository, so no branch or pull request is involved.
+A project whose `.alignfirst.md` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALDEV}} project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst.md` in place of `AGENTS.md`. The coder edits them in place. They are outside the repository, so no branch or pull request is involved.
 
 Two triggers, both edited through the coder:
 
@@ -323,7 +323,7 @@ A code review is the review workflow from the delegation guide: a fresh coder se
 The PR/MR review sequence:
 
 1. Read the PR/MR via the platform CLI (`gh`, `glab`). It gives the source branch, the target branch, and usually the ticket ID (branch name, title, or description); ask the user for the ticket only when none carries it.
-2. Set up or reuse a workspace on the source branch (`aldev guide project-workspace-setup`).
+2. Set up or reuse a workspace on the source branch (`{{ALDEV}} guide project-workspace-setup`).
 3. Run the `review` protocol with the target branch as base. Do not fix anything unless the user explicitly asks.
 4. Post the review file's findings on the PR/MR — a review request on a PR/MR implies the comments; no confirmation needed. One comment per finding, anchored at the file and line where the diff shows the related code — take the time to locate each one. One general comment for findings with no precise spot. Post yourself via the platform CLI, or delegate to the coder when navigating a huge PR would flood your context.
 5. End the turn on a one-line report: the comment count and a few words on the overall outcome (e.g. "Posted 6 comments on the MR — solid branch, two real bugs.").
@@ -334,9 +334,9 @@ The fix step is also how you process a review that arrives from outside — a te
 
 The author of a branch you reviewed pushes fixes and asks you to check them, or you notice new commits on that branch after your comments. This is not a new code review: the review session holds the findings, so it checks the fixes against them instead of starting over.
 
-1. In the branch's workspace, merge the remote branch as Step 5 of `aldev guide project-workspace-setup` describes, without its base-branch catch-up: the branch belongs to its author.
+1. In the branch's workspace, merge the remote branch as Step 5 of `{{ALDEV}} guide project-workspace-setup` describes, without its base-branch catch-up: the branch belongs to its author.
 2. Read the PR/MR through the platform CLI and collect the author's replies to your comments.
-3. Resume the review session without a protocol: `aldev code resume <sessionId> --message "Fixes have been pushed, please check."`, with the author's replies appended when there are any. The coder reports which findings are resolved, which remain, and its opinion on each reply. The review file stays as written.
+3. Resume the review session without a protocol: `{{ALDEV}} code resume <sessionId> --message "Fixes have been pushed, please check."`, with the author's replies appended when there are any. The coder reports which findings are resolved, which remain, and its opinion on each reply. The review file stays as written.
 4. Update the PR/MR discussion: resolve the thread of each fixed finding and answer on each remaining one with what is still missing. Without a PR/MR, report the outcome in the thread instead.
 5. End the turn on a one-line report: what is resolved and what remains.
 
@@ -346,7 +346,7 @@ You are the judge of when the ticket's scope is done — a ticket can span sever
 
 Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
-After creating the MR/PR (via `aldev code`):
+After creating the MR/PR (via `{{ALDEV}} code`):
 
 - Post the MR/PR link.
 - Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.
@@ -381,7 +381,7 @@ Run the reset **after** the final reply — it clears the session you're in.
 
 ### Project lifecycle requests
 
-Creating a project, onboarding a repository to clone, or physically removing a project follows `aldev guide project-lifecycle`. Route there before workspace setup.
+Creating a project, onboarding a repository to clone, or physically removing a project follows `{{ALDEV}} guide project-lifecycle`. Route there before workspace setup.
 
 ### Forbidden
 

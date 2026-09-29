@@ -53,7 +53,11 @@ describe("projects command surface", () => {
     writeFileSync(join(other, ".alignfirst-projects.json"), "{}\n");
     const cwd = join(fixture.base, "elsewhere");
     mkdirSync(cwd);
-    writeConfig(fixture.home, { projectsRoot: fixture.root });
+    writeConfig(fixture.home, {
+      platform: "openclaw",
+      code: { agent: "claude" },
+      projectsRoot: fixture.root,
+    });
 
     const configured = await runProjects(fixture, ["list", "--json"], { cwd });
     expect(configured.code).toBe(0);
@@ -69,7 +73,11 @@ describe("projects command surface", () => {
     const projects = join(fixture.home, "projects");
     mkdirSync(projects);
     writeFileSync(join(projects, ".alignfirst-projects.json"), "{}\n");
-    writeConfig(fixture.home, { projectsRoot: "~/projects" });
+    writeConfig(fixture.home, {
+      platform: "openclaw",
+      code: { agent: "claude" },
+      projectsRoot: "~/projects",
+    });
 
     const result = await runProjects(fixture, ["list", "--json"]);
     expect(result.code).toBe(0);

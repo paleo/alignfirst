@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 function parse(tokens: string[]): SessionArgs {
-  const command = parseCodeArgs(tokens);
+  const command = parseCodeArgs(tokens, "aldev");
   if (command.kind !== "session")
     throw new Error(`expected a session command, got ${command.kind}`);
   return command.args;
@@ -71,18 +71,19 @@ function makeHome(config?: object): string {
 }
 
 describe("coding-agent selection", () => {
-  it("requires code.agent in the config before help", async () => {
+  it("requires the config file before help", async () => {
     const stderr = makeSink();
     const home = makeHome();
     expect(await main({ argv: ["node", "aldev", "code", "--help"], env: {}, home, stderr })).toBe(
       1,
     );
-    expect(stderr.text()).toContain("code.agent is missing from the aldev config");
+    expect(stderr.text()).toContain("Error: no aldev config at ");
+    expect(stderr.text()).toContain('"code.agent"');
   });
 
   it("rejects an invalid agent in the config", async () => {
     const stderr = makeSink();
-    const home = makeHome({ code: { agent: "other" } });
+    const home = makeHome({ platform: "codingAgent", code: { agent: "other" } });
     expect(await main({ argv: ["node", "aldev", "code", "--help"], env: {}, home, stderr })).toBe(
       1,
     );
@@ -99,7 +100,7 @@ describe("coding-agent selection", () => {
       await main({
         argv: ["node", "aldev", "code", "--help"],
         env: {},
-        home: makeHome({ code: { agent: "codex" } }),
+        home: makeHome({ platform: "codingAgent", code: { agent: "codex" } }),
         stdout,
         modelResolver,
       }),
@@ -116,7 +117,10 @@ describe("coding-agent selection", () => {
 
   it("renders the configured model list", async () => {
     const stdout = makeSink();
-    const home = makeHome({ code: { agent: "claude", models: ["sonnet", "haiku"] } });
+    const home = makeHome({
+      platform: "codingAgent",
+      code: { agent: "claude", models: ["sonnet", "haiku"] },
+    });
     expect(await main({ argv: ["node", "aldev", "code", "--help"], env: {}, home, stdout })).toBe(
       0,
     );
@@ -126,26 +130,26 @@ describe("coding-agent selection", () => {
 
 describe("parseCodeArgs", () => {
   it("maps the commands and flags", () => {
-    expect(parseCodeArgs(["--help"])).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["-h"])).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", ".plans/1/_aldev/run.md"])).toEqual({
+    expect(parseCodeArgs(["--help"], "aldev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["-h"], "aldev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["status", ".plans/1/_aldev/run.md"], "aldev")).toEqual({
       kind: "status",
       target: { kind: "file", sessionFile: ".plans/1/_aldev/run.md" },
     });
-    expect(parseCodeArgs(["status", "--ticket", "AB-1"])).toEqual({
+    expect(parseCodeArgs(["status", "--ticket", "AB-1"], "aldev")).toEqual({
       kind: "status",
       target: { kind: "ticket", ticket: "AB-1" },
     });
-    expect(parseCodeArgs(["status", "--no-ticket"])).toEqual({
+    expect(parseCodeArgs(["status", "--no-ticket"], "aldev")).toEqual({
       kind: "status",
       target: { kind: "noTicket" },
     });
-    expect(parseCodeArgs(["quota"])).toEqual({ kind: "quota" });
+    expect(parseCodeArgs(["quota"], "aldev")).toEqual({ kind: "quota" });
   });
 
   it("leaves the version and guide flags to other commands", () => {
     for (const flag of ["--version", "-v", "--guide", "--openclaw-guide"]) {
-      expect(() => parseCodeArgs([flag])).toThrow(`unknown command "${flag}"`);
+      expect(() => parseCodeArgs([flag], "aldev")).toThrow(`unknown command "${flag}"`);
     }
   });
 
@@ -181,31 +185,33 @@ describe("parseCodeArgs", () => {
   });
 
   it("renders help after a command", () => {
-    expect(parseCodeArgs(["new", "--help"])).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["resume", "-h"])).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", "--help"])).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["quota", "--help"])).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["new", "--help"], "aldev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["resume", "-h"], "aldev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["status", "--help"], "aldev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["quota", "--help"], "aldev")).toEqual({ kind: "help" });
   });
 
   it("rejects a missing or unknown command", () => {
-    expect(() => parseCodeArgs([])).toThrow("no command given. Run `aldev code --help`.");
-    expect(() => parseCodeArgs(["spec"])).toThrow('unknown command "spec"');
-    expect(() => parseCodeArgs(["--new"])).toThrow('unknown command "--new"');
+    expect(() => parseCodeArgs([], "aldev")).toThrow("no command given. Run `aldev code --help`.");
+    expect(() => parseCodeArgs(["spec"], "aldev")).toThrow('unknown command "spec"');
+    expect(() => parseCodeArgs(["--new"], "aldev")).toThrow('unknown command "--new"');
   });
 
   it("rejects unknown options, stray positionals, and a resume without an id", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
     const statusTargetError = "exactly one of <session-file>, --ticket <id>, --no-ticket";
-    expect(() => parseCodeArgs(["status"])).toThrow(statusTargetError);
-    expect(() => parseCodeArgs(["status", "x.md", "--ticket", "1"])).toThrow(statusTargetError);
-    expect(() => parseCodeArgs(["status", "--ticket", "1", "--no-ticket"])).toThrow(
+    expect(() => parseCodeArgs(["status"], "aldev")).toThrow(statusTargetError);
+    expect(() => parseCodeArgs(["status", "x.md", "--ticket", "1"], "aldev")).toThrow(
       statusTargetError,
     );
-    expect(() => parseCodeArgs(["status", "--ticket", "../other"])).toThrow(
+    expect(() => parseCodeArgs(["status", "--ticket", "1", "--no-ticket"], "aldev")).toThrow(
+      statusTargetError,
+    );
+    expect(() => parseCodeArgs(["status", "--ticket", "../other"], "aldev")).toThrow(
       "--ticket must be a single path segment",
     );
-    expect(() => parseCodeArgs(["status", "--meta", "k", "--no-ticket"])).toThrow(
+    expect(() => parseCodeArgs(["status", "--meta", "k", "--no-ticket"], "aldev")).toThrow(
       statusTargetError,
     );
     expect(() => parse(["status", "--message", "go"])).toThrow();
@@ -313,6 +319,7 @@ describe("status", () => {
   let sessionFilePath: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "aldev-status-"));
+    writeConfig(dir, { platform: "codingAgent", code: { agent: "claude" } });
     sessionFilePath = join(dir, ".plans", "1", "_aldev", "run.md");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -505,7 +512,7 @@ describe("quota", () => {
         argv: ["node", "aldev", "code", "quota"],
         cwd: tmpdir(),
         env: { KEEP: "yes" },
-        home: makeHome({ code: { agent: "claude", unset: ["SECRET"] } }),
+        home: makeHome({ platform: "codingAgent", code: { agent: "claude", unset: ["SECRET"] } }),
         stdout,
         modelResolver,
         quotaReader,
@@ -529,7 +536,7 @@ describe("quota", () => {
       await main({
         argv: ["node", "aldev", "code", "quota"],
         env: {},
-        home: makeHome({ code: { agent: "codex" } }),
+        home: makeHome({ platform: "codingAgent", code: { agent: "codex" } }),
         stderr,
         quotaReader,
       }),
@@ -624,6 +631,7 @@ describe("buildRunConfig", () => {
       sessionFilePath: "/proj/.plans/_aldev/s.md",
       env: {},
       executableModel: undefined,
+      alignfirst: "alignfirst",
       ...overrides,
     });
   }
@@ -708,7 +716,7 @@ describe("launch guards", () => {
     mkdirSync(plans);
     realCwd = realpathSync(dir);
     home = join(dir, "home");
-    writeConfig(home, { code: { agent: "claude" } });
+    writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -813,7 +821,10 @@ describe("launch guards", () => {
     const before = listSessionRecords(plans, plans).length;
     const modelResolver = vi.fn(async () => "gpt-5.6-terra");
     const stderr = makeSink();
-    const otherHome = makeHome({ code: { agent: "claude", models: ["terra"] } });
+    const otherHome = makeHome({
+      platform: "codingAgent",
+      code: { agent: "claude", models: ["terra"] },
+    });
     const code = await main({
       argv: ["node", "aldev", "code", "resume", "abc", "--message", "go", "--model", "terra"],
       cwd: dir,
@@ -832,7 +843,7 @@ describe("launch guards", () => {
   it("seals model-discovery failures in the session file", async () => {
     const stdout = makeSink();
     const stderr = makeSink();
-    const codexHome = makeHome({ code: { agent: "codex" } });
+    const codexHome = makeHome({ platform: "codingAgent", code: { agent: "codex" } });
     const code = await main({
       argv: ["node", "aldev", "code", "new", "--message", "go", "--model", "terra"],
       cwd: dir,
@@ -943,7 +954,7 @@ describe("companion projects", () => {
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "aldev-companion-"));
     home = join(base, "home");
-    writeConfig(home, { code: { agent: "claude" } });
+    writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
 

@@ -4,17 +4,17 @@ A projects directory groups projects and optional nested projects directories. I
 
 A project is a git main worktree, direct child of a projects directory. Its linked worktrees are listed as its workspaces. Other child directories, those that are not git repositories, appear under `others`.
 
-A project's AlignFirst files may live in its companion directory, declared in `~/.config/alignfirst/companions.json`. `aldev project status <path>` gives each location.
+A project's AlignFirst files may live in its companion directory, declared in `~/.config/alignfirst/companions.json`. `{{ALDEV}} project status <path>` gives each location.
 
 ## Commands
 
 ```sh
-aldev project list [--json] [--root <path>]
-aldev project doctor [--root <path>]
-aldev project status <path> [--json] [--root <path>]
-aldev project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
-aldev project free-ports --size <n> [--range <code>] [--json] [--root <path>]
-aldev guide project [--root <path>]
+{{ALDEV}} project list [--json] [--root <path>]
+{{ALDEV}} project doctor [--root <path>]
+{{ALDEV}} project status <path> [--json] [--root <path>]
+{{ALDEV}} project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
+{{ALDEV}} project free-ports --size <n> [--range <code>] [--json] [--root <path>]
+{{ALDEV}} guide project [--root <path>]
 ```
 
 `--root` selects the projects directory. It defaults to `projectsRoot` in the aldev config, then to the working directory.
@@ -24,7 +24,7 @@ inventory issues.
 
 ## Port claims
 
-Run `aldev project free-ports --size <n>` with the block size required by the project's workspace scheme: `perWorkspace × maxWorkspaces`. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
+Run `{{ALDEV}} project free-ports --size <n>` with the block size required by the project's workspace scheme: `perWorkspace × maxWorkspaces`. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
 
 The project config is its registration. Deleting the project removes it from the listing. The workspace kernel refuses a `workspace` command when the project's `portRange` disagrees with its port scheme.
 

@@ -5,13 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import {
-  loadConfig,
-  requireCodeConfig,
-  requirePlatform,
-  requireProjectsRoot,
-} from "../src/config.js";
+import { type AldevConfig, loadConfig, requireProjectsRoot } from "../src/config.js";
 import { makeSink, writeConfig } from "./helpers.js";
+
+const REQUIRED = { platform: "openclaw", code: { agent: "claude" } };
 
 const homes: string[] = [];
 
@@ -29,6 +26,12 @@ function configPathOf(home: string): string {
   return join(home, ".config", "alignfirst", "aldev.config.json");
 }
 
+function loadPresentConfig(home: string): AldevConfig {
+  const config = loadConfig(home);
+  if (config === undefined) throw new Error("expected a config file");
+  return config;
+}
+
 function writeRawConfig(home: string, content: string): string {
   const path = configPathOf(home);
   mkdirSync(join(home, ".config", "alignfirst"), { recursive: true });
@@ -37,9 +40,8 @@ function writeRawConfig(home: string, content: string): string {
 }
 
 describe("loadConfig", () => {
-  it("returns only the path when the file is absent", () => {
-    const home = makeHome();
-    expect(loadConfig(home)).toEqual({ path: configPathOf(home) });
+  it("returns undefined when the file is absent", () => {
+    expect(loadConfig(makeHome())).toBeUndefined();
   });
 
   it("reads every key and applies the code defaults", () => {
@@ -57,12 +59,23 @@ describe("loadConfig", () => {
     });
   });
 
+  it("accepts the codingAgent platform without projectsRoot", () => {
+    const home = makeHome();
+    const path = writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
+    expect(loadConfig(home)).toEqual({
+      path,
+      platform: "codingAgent",
+      code: { agent: "claude", skipPermissions: false, unset: [] },
+    });
+  });
+
   it("keeps the configured code options", () => {
     const home = makeHome();
     writeConfig(home, {
+      platform: "openclaw",
       code: { agent: "claude", models: ["opus"], skipPermissions: true, unset: ["TOKEN"] },
     });
-    expect(loadConfig(home).code).toEqual({
+    expect(loadPresentConfig(home).code).toEqual({
       agent: "claude",
       models: ["opus"],
       skipPermissions: true,
@@ -72,13 +85,13 @@ describe("loadConfig", () => {
 
   it("expands ~/ against home and resolves a relative root against the config directory", () => {
     const home = makeHome();
-    writeConfig(home, { projectsRoot: "~/projects" });
-    expect(loadConfig(home).projectsRoot).toEqual({
+    writeConfig(home, { ...REQUIRED, projectsRoot: "~/projects" });
+    expect(loadPresentConfig(home).projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
     });
-    writeConfig(home, { projectsRoot: "../../work" });
-    expect(loadConfig(home).projectsRoot).toEqual({
+    writeConfig(home, { ...REQUIRED, projectsRoot: "../../work" });
+    expect(loadPresentConfig(home).projectsRoot).toEqual({
       path: join(home, "work"),
       written: "../../work",
     });
@@ -97,11 +110,17 @@ describe("loadConfig", () => {
   });
 
   it.each([
-    ["an unknown top-level key", { platfrom: "openclaw" }, "platfrom"],
-    ["an unknown code key", { code: { agent: "claude", model: "opus" } }, "model"],
-    ["an invalid agent", { code: { agent: "gemini" } }, "code.agent"],
-    ["a missing agent", { code: { models: ["opus"] } }, "code.agent"],
-    ["an invalid platform", { platform: "slack" }, "platform"],
+    ["an unknown top-level key", { ...REQUIRED, platfrom: "openclaw" }, "platfrom"],
+    [
+      "an unknown code key",
+      { platform: "openclaw", code: { agent: "claude", model: "opus" } },
+      "model",
+    ],
+    ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
+    ["a missing agent", { platform: "openclaw", code: { models: ["opus"] } }, "code.agent"],
+    ["an invalid platform", { ...REQUIRED, platform: "slack" }, "platform"],
+    ["a missing platform", { code: { agent: "claude" } }, "platform"],
+    ["a missing code", { platform: "codingAgent" }, "code"],
   ])("rejects %s", (_name, config, problem) => {
     const home = makeHome();
     const path = writeConfig(home, config);
@@ -117,19 +136,35 @@ describe("loadConfig", () => {
   });
 });
 
-describe("required keys", () => {
-  it("names the key and the file path, whether the file is present or absent", () => {
-    for (const present of [true, false]) {
-      const home = makeHome();
-      if (present) writeConfig(home, {});
-      const config = loadConfig(home);
-      const suffix = `is missing from the aldev config ${configPathOf(home)}.`;
-      expect(() => requirePlatform(config)).toThrow(
-        `Error: platform ${suffix} Available platforms: openclaw.`,
-      );
-      expect(() => requireProjectsRoot(config)).toThrow(`Error: projectsRoot ${suffix}`);
-      expect(() => requireCodeConfig(config)).toThrow(`Error: code.agent ${suffix}`);
+describe("requireProjectsRoot", () => {
+  it("names the key and the file path", () => {
+    const home = makeHome();
+    writeConfig(home, REQUIRED);
+    expect(() => requireProjectsRoot(loadPresentConfig(home))).toThrow(
+      `Error: projectsRoot is missing from the aldev config ${configPathOf(home)}.`,
+    );
+  });
+});
+
+describe("a missing config through main", () => {
+  it("fails code and guide with the path and both keys, and spares project", async () => {
+    const home = makeHome();
+    const expected =
+      `Error: no aldev config at ${configPathOf(home)}. Create it with "platform" ` +
+      '(openclaw or codingAgent) and "code.agent" (claude or codex).\n';
+    for (const args of [["guide"], ["code", "status", "--no-ticket"]]) {
+      const stderr = makeSink();
+      const code = await main({ argv: ["node", "aldev", ...args], env: {}, home, stderr });
+      expect(code).toBe(1);
+      expect(stderr.text()).toBe(expected);
     }
+    const code = await main({
+      argv: ["node", "aldev", "project", "--help"],
+      env: {},
+      home,
+      stdout: makeSink(),
+    });
+    expect(code).toBe(0);
   });
 });
 
