@@ -37,6 +37,8 @@ describe("shared runner helpers", () => {
         CLAUDECODE: "1",
         CLAUDE_CODE_SESSION_ID: "s-1",
         CLAUDE_CODE_ENTRYPOINT: "cli",
+        CLAUDE_CODE_SESSION_ATTENDED: "1",
+        CLAUDE_CODE_EXECPATH: "/usr/bin/claude",
         CODEX_THREAD_ID: "t-1",
         CODEX_SANDBOX_NETWORK_DISABLED: "1",
         CLAUDE_CODE_USE_BEDROCK: "1",
