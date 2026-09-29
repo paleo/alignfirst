@@ -21,6 +21,8 @@ export function buildCodexArgs(config: RunConfig): string[] {
   } else {
     args.push("--sandbox", "workspace-write");
   }
+  // An `exec` option, like `--sandbox`: `exec resume` does not accept it.
+  for (const dir of config.additionalDirectories) args.push("--add-dir", dir);
   if (config.executableModel !== undefined) args.push("--model", config.executableModel);
   if (config.resume !== undefined) args.push("resume", config.resume);
   args.push("-");

@@ -22,7 +22,7 @@ Usage:
 
 Run \`aldev <command> --help\` for the usage of a command.
 
-Config: ~/.config/alignfirst/aldev.json. An absent file means no configuration.
+Config: ~/.config/alignfirst/aldev.config.json. An absent file means no configuration.
 `;
 
 export interface MainOptions {

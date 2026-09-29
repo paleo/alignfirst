@@ -4,6 +4,7 @@ import { basename, isAbsolute, resolve } from "node:path";
 
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
+import type { CompanionReport, ConfigSource, ItemLocation, ItemName } from "./layout.js";
 import type { PortRange } from "./markers.js";
 
 const URL_WITH_AUTHORITY = /^[A-Za-z][A-Za-z\d+.-]*:\/\//u;
@@ -17,6 +18,9 @@ export interface ProjectDetails {
   portRangeCode: string | null;
   plansFolder: string | null;
   ticketIdPattern: string | null;
+  configSource: ConfigSource | null;
+  companion: CompanionReport | null;
+  locations: Record<ItemName, ItemLocation>;
   workspaces: string[];
   worktrees: ProjectWorktree[];
 }
@@ -32,8 +36,8 @@ export function getProjectStatus(inventory: ProjectInventory, inputPath: string)
   const project = inventory.projects.find((candidate) => candidate.path === path);
   if (project === undefined) {
     throw new Error(
-      `${path} is not a project of ${inventory.root}. Pass the main-worktree path of a project ` +
-        "holding .alignfirst.json.",
+      `${path} is not a project of ${inventory.root}. Pass the main-worktree path of a git ` +
+        "repository in that projects directory.",
     );
   }
   return buildProjectDetails(project);
@@ -59,6 +63,9 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     portRangeCode: project.portRangeCode ?? null,
     plansFolder: project.description.config?.plans?.folder ?? null,
     ticketIdPattern: project.description.config?.ticketIdPattern ?? null,
+    configSource: project.description.source,
+    companion: project.description.companion,
+    locations: project.description.locations,
     workspaces: project.workspaces,
     worktrees: readWorktrees(project.path),
   };

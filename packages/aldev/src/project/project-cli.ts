@@ -296,7 +296,6 @@ function inventoryFor(
 ): ProjectInventory {
   return buildInventory(root, marker, {
     env: ctx.env,
-    home: ctx.home,
     alignfirstCommand: ctx.alignfirstCommand,
   });
 }

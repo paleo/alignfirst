@@ -1,11 +1,17 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
-import { loadCatchup, reserveSideTicket } from "../alignfirst-cli.js";
+import { loadCatchup, loadContext, reserveSideTicket } from "../alignfirst-cli.js";
 import { type AldevConfig, type CodeConfig, requireCodeConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
+import {
+  companionInUse,
+  type ItemName,
+  type ProjectReport,
+  readProjectReport,
+} from "../project/layout.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { type ExecutableModelResolver, resolveModels } from "./models.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
@@ -13,7 +19,6 @@ import type { QuotaReader } from "./quota.js";
 import { buildAgentEnv, runAgent, type RunConfig } from "./run-agent.js";
 import {
   applyCompletion,
-  assertPlansGate,
   findNewestSessionFile,
   listSessionRecords,
   readPidStartTime,
@@ -39,6 +44,23 @@ const SESSION_OPTIONS = {
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
+// Items whose companion copy the coder may edit: the companion becomes a writable directory.
+const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
+  ".alignfirst.json",
+  ".alignfirst.md",
+  "DEVELOPERS.md",
+  "docs",
+  ".plans",
+];
+
+// Items the coder would not find in the repository: a new session gets `alignfirst context`.
+const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
+  ".alignfirst.json",
+  ".alignfirst.md",
+  "docs",
+  ".plans",
+];
+
 const TICKET_PATH_ERROR =
   "Error: --ticket must be a single path segment " +
   "(letters, digits, '.', '-', '_'); no path separators or '..'.";
@@ -51,6 +73,15 @@ export interface CodeContext {
   alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
   quotaReader: QuotaReader;
+}
+
+// Where the working directory's session files and work files live.
+interface SessionTree {
+  // Real path of the working directory, the base of the printed paths.
+  cwd: string;
+  // The `.plans`-shaped directory holding the `_aldev/` session directories.
+  sessionsDir: string;
+  plansDir: string;
 }
 
 export type CodeCommand =
@@ -107,10 +138,25 @@ export async function runCode(
 }
 
 function showStatus(ctx: CodeContext, target: StatusTarget): number {
-  const sessionFilePath = resolveStatusTargetSessionFile(ctx.cwd, target);
+  const tree = sessionTreeOf(readReport(ctx), ctx.cwd);
+  const sessionFilePath = resolveStatusTargetSessionFile(tree, target);
   const completion = reconcileSessionFile(sessionFilePath);
-  ctx.stdout.write(renderSessionStatus(ctx.cwd, sessionFilePath, completion.frontmatter));
+  ctx.stdout.write(renderSessionStatus(tree.cwd, sessionFilePath, completion.frontmatter));
   return 0;
+}
+
+function readReport(ctx: CodeContext): ProjectReport {
+  const report = readProjectReport(ctx.alignfirstCommand, ctx.cwd, ctx.env);
+  if ("error" in report) throw new Error(report.error);
+  return report;
+}
+
+function sessionTreeOf(report: ProjectReport, cwd: string): SessionTree {
+  return {
+    cwd: realpathSync(cwd),
+    sessionsDir: report.locations._aldev.path,
+    plansDir: report.locations[".plans"].path,
+  };
 }
 
 async function showQuota(ctx: CodeContext, code: CodeConfig): Promise<number> {
@@ -123,27 +169,32 @@ async function showQuota(ctx: CodeContext, code: CodeConfig): Promise<number> {
   return 0;
 }
 
-function resolveStatusTargetSessionFile(cwd: string, target: StatusTarget): string {
-  if (target.kind === "file") return resolveStatusSessionFile(cwd, target.sessionFile);
-  if (target.kind === "meta") return resolveMetaSessionFile(cwd, target.meta);
-  const relativeDir =
-    target.kind === "ticket" ? `.plans/${target.ticket}/_aldev/` : ".plans/_aldev/";
-  const sessionFilePath = findNewestSessionFile(resolve(cwd, relativeDir));
+function resolveStatusTargetSessionFile(tree: SessionTree, target: StatusTarget): string {
+  if (target.kind === "file") return resolveStatusSessionFile(tree, target.sessionFile);
+  if (target.kind === "meta") return resolveMetaSessionFile(tree, target.meta);
+  const dir = join(
+    tree.sessionsDir,
+    ...(target.kind === "ticket" ? [target.ticket] : []),
+    "_aldev",
+  );
+  const sessionFilePath = findNewestSessionFile(dir);
   if (sessionFilePath === undefined) {
-    throw new Error(`Error: no session file under ${relativeDir}.`);
+    throw new Error(`Error: no session file under ${displayPath(tree.cwd, dir)}/.`);
   }
-  return resolveStatusSessionFile(cwd, sessionFilePath);
+  return resolveStatusSessionFile(tree, sessionFilePath);
 }
 
-// A run tagged with `--meta <key>` is found by that key alone: the worktree's `.plans/` is shared,
-// so its newest run may belong to another thread.
-function resolveMetaSessionFile(cwd: string, meta: string): string {
-  const matches = listSessionRecords(cwd).filter((record) => record.frontmatter.meta === meta);
+// A run tagged with `--meta <key>` is found by that key alone: the session tree is shared across
+// worktrees, so its newest run may belong to another thread.
+function resolveMetaSessionFile(tree: SessionTree, meta: string): string {
+  const matches = listSessionRecords(tree.sessionsDir, tree.plansDir).filter(
+    (record) => record.frontmatter.meta === meta,
+  );
   if (matches.length === 0) throw new Error(`Error: no session file with meta "${meta}".`);
   const newest = matches.reduce((a, b) =>
     a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
   );
-  return resolveStatusSessionFile(cwd, newest.path);
+  return resolveStatusSessionFile(tree, newest.path);
 }
 
 function loadMessage(args: SessionArgs, cwd: string): void {
@@ -157,33 +208,45 @@ function loadMessage(args: SessionArgs, cwd: string): void {
   );
 }
 
-function resolveStatusSessionFile(cwd: string, input: string): string {
-  const sessionFilePath = resolve(cwd, input);
-  const plansPath = resolve(cwd, ".plans");
-  if (
-    !isWithinDirectory(plansPath, sessionFilePath) ||
-    basename(dirname(sessionFilePath)) !== "_aldev" ||
-    extname(sessionFilePath) !== ".md"
-  ) {
-    throw new Error("Error: status requires a session file under .plans/**/_aldev/*.md.");
+function resolveStatusSessionFile(tree: SessionTree, input: string): string {
+  const sessionFilePath = resolve(tree.cwd, input);
+  const sessionsDir = displayPath(tree.cwd, tree.sessionsDir);
+  if (!isSessionFilePath(tree.sessionsDir, sessionFilePath)) {
+    throw new Error(
+      `Error: status requires a session file under ${sessionsDir}/_aldev/ or ` +
+        `${sessionsDir}/<ticket>/_aldev/.`,
+    );
   }
   if (!existsSync(sessionFilePath)) {
-    throw new Error(`Error: session file not found: ${relative(cwd, sessionFilePath)}`);
+    throw new Error(`Error: session file not found: ${displayPath(tree.cwd, sessionFilePath)}`);
   }
-  if (!isWithinDirectory(realpathSync(plansPath), realpathSync(sessionFilePath))) {
-    throw new Error("Error: the session file resolves outside the current project's .plans/.");
+  if (!isSessionFilePath(realpathSync(tree.sessionsDir), realpathSync(sessionFilePath))) {
+    throw new Error(`Error: the session file resolves outside ${sessionsDir}/.`);
   }
   return sessionFilePath;
 }
 
-function isWithinDirectory(directory: string, path: string): boolean {
-  const childPath = relative(directory, path);
-  return (
-    childPath !== "" &&
-    childPath !== ".." &&
-    !childPath.startsWith(`..${sep}`) &&
-    !isAbsolute(childPath)
-  );
+// `_aldev/<name>.md` or `<ticket>/_aldev/<name>.md`, relative to the sessions directory.
+function isSessionFilePath(sessionsDir: string, path: string): boolean {
+  const childPath = relative(sessionsDir, path);
+  if (isAbsolute(childPath) || extname(path) !== ".md") return false;
+  const segments = childPath.split(sep);
+  if (segments.length === 2) return segments[0] === "_aldev";
+  return segments.length === 3 && segments[0] !== ".." && segments[1] === "_aldev";
+}
+
+// Relative to the working directory when inside it, absolute otherwise.
+function displayPath(cwd: string, path: string): string {
+  const childPath = relative(cwd, path);
+  if (
+    childPath === "" ||
+    childPath === ".." ||
+    childPath.startsWith(`..${sep}`) ||
+    isAbsolute(childPath)
+  ) {
+    return path;
+  }
+  return childPath;
 }
 
 function renderSessionStatus(
@@ -192,7 +255,7 @@ function renderSessionStatus(
   frontmatter: SessionFrontmatter,
 ): string {
   return [
-    `sessionFile: ${relative(cwd, sessionFilePath)}`,
+    `sessionFile: ${displayPath(cwd, sessionFilePath)}`,
     `sessionId: ${frontmatter.sessionId ?? ""}`,
     `status: ${frontmatter.status}`,
     `pid: ${frontmatter.pid ?? ""}`,
@@ -366,22 +429,25 @@ function isPathSafeTicket(ticket: string): boolean {
 // `aldev code` always runs the selected coding agent in the foreground and blocks until it exits.
 // When OpenClaw drives it, it wraps this call in its own `exec` tool (which backgrounds and wakes
 // the assistant on exit) — aldev owns no backgrounding or callback of its own. The per-run session
-// file under `.plans/` is the durable result handoff: on completion the frontmatter carries the
-// session id and status, and the `---- Result ----` block carries the outcome for a waking caller
-// (or a human).
+// file is the durable result handoff: on completion the frontmatter carries the session id and
+// status, and the `---- Result ----` block carries the outcome for a waking caller (or a human).
 async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext): Promise<number> {
   const { cwd, env, stdout, stderr, alignfirstCommand, modelResolver } = ctx;
   const { agent } = code;
 
-  const gateError = assertPlansGate(cwd);
-  if (gateError) {
-    stderr.write(`${gateError}\n`);
+  const report = readReport(ctx);
+  const tree = sessionTreeOf(report, cwd);
+  const plans = report.locations[".plans"];
+  if (!plans.exists) {
+    stderr.write(
+      `Error: no .plans/ directory at ${displayPath(tree.cwd, plans.path)}. ` +
+        "Create it, or run `alignfirst plans setup <clone>`.\n",
+    );
     return 1;
   }
 
-  const realCwd = realpathSync(cwd);
-  const records = listSessionRecords(cwd);
-  const guardError = checkLaunchGuards(args, agent, realCwd, records);
+  const records = listSessionRecords(tree.sessionsDir, tree.plansDir);
+  const guardError = checkLaunchGuards(args, agent, tree.cwd, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
@@ -398,9 +464,13 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     }
     catchupContent = loadCatchup(alignfirstCommand, cwd, ticket, env);
   }
-  const sessionFilePath = resolveSessionFilePath(cwd, ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(args, agent, now, realCwd, ticket));
-  stdout.write(`Session file: ${relative(cwd, sessionFilePath)}\n\n`);
+  const contextContent =
+    args.resume === undefined && companionInUse(report, CONTEXT_COMPANION_ITEMS)
+      ? loadContext(alignfirstCommand, cwd, env)
+      : undefined;
+  const sessionFilePath = resolveSessionFilePath(tree.sessionsDir, ticket, now);
+  writeInitialSessionFile(sessionFilePath, buildFrontmatter(args, agent, now, tree.cwd, ticket));
+  stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
   let executableModel: string | undefined;
   try {
@@ -422,7 +492,18 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
   }
 
   const result = await runAgent(
-    buildRunConfig(args, code, ticket, cwd, sessionFilePath, env, executableModel, catchupContent),
+    buildRunConfig({
+      args,
+      code,
+      report,
+      ticket,
+      cwd,
+      sessionFilePath,
+      env,
+      executableModel,
+      catchupContent,
+      contextContent,
+    }),
     createAgentAdapter(agent),
     stdout,
   );
@@ -493,7 +574,7 @@ export function checkLaunchGuards(
 
 function unknownResumeError(resume: string, records: SessionRecord[]): string {
   if (records.length === 0) {
-    return `Error: unknown session id ${resume}; no session records exist under .plans/.`;
+    return `Error: unknown session id ${resume}; no session records exist.`;
   }
   const recent = [...records]
     .sort((a, b) => b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt))
@@ -504,7 +585,7 @@ function unknownResumeError(resume: string, records: SessionRecord[]): string {
   return `Error: unknown session id ${resume}. Known recent sessions:\n${recent.join("\n")}`;
 }
 
-// The effective ticket scopes the session file to `.plans/<ticket>/_aldev/`, lands in the
+// The effective ticket scopes the session file to `<ticket>/_aldev/`, lands in the
 // frontmatter, and reaches the agent in the prompt. Exported for tests. Precedence: explicit
 // `--ticket`, then the resumed session's records, then a `.plans/<ticket>/` path in the message.
 export function resolveTicket(args: SessionArgs, records: SessionRecord[]): string | undefined {
@@ -586,25 +667,42 @@ function formatCommand(args: SessionArgs): string {
   return parts.join(" ");
 }
 
-export function buildRunConfig(
-  args: SessionArgs,
-  code: CodeConfig,
-  ticket: string | undefined,
-  cwd: string,
-  sessionFilePath: string,
-  env: NodeJS.ProcessEnv,
-  executableModel: string | undefined,
-  catchupContent?: string,
-): RunConfig {
+export interface RunInput {
+  args: SessionArgs;
+  code: CodeConfig;
+  report: ProjectReport;
+  ticket: string | undefined;
+  cwd: string;
+  sessionFilePath: string;
+  env: NodeJS.ProcessEnv;
+  executableModel: string | undefined;
+  catchupContent?: string;
+  contextContent?: string;
+}
+
+export function buildRunConfig(input: RunInput): RunConfig {
+  const { args, code, report } = input;
   return {
-    prompt: buildPrompt({ protocol: args.protocol, ticket, message: args.message, catchupContent }),
-    sessionFilePath,
-    cwd,
+    prompt: buildPrompt({
+      protocol: args.protocol,
+      ticket: input.ticket,
+      message: args.message,
+      catchupContent: input.catchupContent,
+      contextContent: input.contextContent,
+    }),
+    sessionFilePath: input.sessionFilePath,
+    cwd: input.cwd,
     resume: args.resume,
-    executableModel,
+    executableModel: input.executableModel,
     skipPermissions: code.skipPermissions,
+    additionalDirectories:
+      !code.skipPermissions &&
+      report.companion !== null &&
+      companionInUse(report, WRITABLE_COMPANION_ITEMS)
+        ? [report.companion.dir]
+        : [],
     unset: code.unset,
-    env,
+    env: input.env,
   };
 }
 
@@ -640,7 +738,7 @@ Commands:
 Options (status):
   --ticket <id>         Newest run of that ticket.
   --no-ticket           Newest run of no-ticket work.
-  --meta <key>          Newest run tagged with \`--meta <key>\`, wherever it sits under .plans/.
+  --meta <key>          Newest run tagged with \`--meta <key>\`, wherever it sits.
 
 Options (new, resume):
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.
@@ -658,21 +756,23 @@ Options (new, resume):
                         (\`meta:\`). aldev never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
 
-Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for side tickets and the
-delegated protocols.
+Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side
+tickets and the delegated protocols.
 
-Config (~/.config/alignfirst/aldev.json):
+Config (~/.config/alignfirst/aldev.config.json):
   code.agent            Required coding agent: claude or codex (selected: ${agent}).
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.
   code.unset            Env vars to strip from the coding agent child.
 
 Selected-agent permissions: ${permissionMode}
+The normal mode also makes the project's companion directory writable when it is in use.
 ${modelBehavior}
 
 aldev code runs a coding agent in the foreground and blocks until it finishes, streaming the
-transcript to stdout and to a session file under .plans/. Coding runs can be very long: always
-run aldev code as a background task. Your platform does the backgrounding; never detach it.
+transcript to stdout and to a session file under .plans/ or its companion. Coding runs can be
+very long: always run aldev code as a background task. Your platform does the backgrounding;
+never detach it.
 
 Run \`aldev guide code\` for the full delegation guide.
 `;

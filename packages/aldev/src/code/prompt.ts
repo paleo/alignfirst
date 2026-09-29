@@ -7,21 +7,30 @@ export interface PromptInput {
   ticket?: string;
   message?: string;
   catchupContent?: string;
+  contextContent?: string;
 }
 
 export function buildPrompt(input: PromptInput): string {
-  const { protocol, ticket, message } = input;
+  const { protocol, ticket, message, catchupContent, contextContent } = input;
   const instruction =
     protocol === undefined ? message : buildProtocolPrompt(protocol, ticket, message);
-  if (input.catchupContent === undefined) return instruction ?? "";
-  return [
-    "## Ticket history",
-    input.catchupContent,
-    "## Current instruction",
-    instruction === undefined || instruction.trim() === ""
-      ? "Summarize the ticket history briefly, including what remains unfinished."
-      : instruction,
-  ].join("\n\n");
+  if (catchupContent === undefined && contextContent === undefined) return instruction ?? "";
+  const sections: string[] = [];
+  if (contextContent !== undefined) sections.push("## Project context", contextContent.trimEnd());
+  if (catchupContent !== undefined) sections.push("## Ticket history", catchupContent);
+  sections.push("## Current instruction", currentInstruction(instruction, catchupContent));
+  return sections.join("\n\n");
+}
+
+function currentInstruction(
+  instruction: string | undefined,
+  catchupContent: string | undefined,
+): string {
+  const blank = instruction === undefined || instruction.trim() === "";
+  if (blank && catchupContent !== undefined) {
+    return "Summarize the ticket history briefly, including what remains unfinished.";
+  }
+  return instruction ?? "";
 }
 
 function buildProtocolPrompt(protocol: string, ticket?: string, message?: string): string {

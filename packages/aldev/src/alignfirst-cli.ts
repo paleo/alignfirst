@@ -55,6 +55,14 @@ export function loadCatchup(
   return result.stdout;
 }
 
+export function loadContext(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {
+  const result = runAlignfirst(command, ["context"], cwd, env);
+  if (result.status !== 0) {
+    throw new Error(result.stderr.trim() || "alignfirst context failed");
+  }
+  return result.stdout;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

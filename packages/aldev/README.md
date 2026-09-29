@@ -30,7 +30,9 @@ aldev code status .plans/AB-123/_aldev/20260829-135529.md
 aldev code quota
 ```
 
-The coding agent `aldev code` launches is **the coder**. Run `aldev code` from the root of the target project, which must contain a `.plans/` directory.
+The coding agent `aldev code` launches is **the coder**. Run `aldev code` from the root of the target project. The project must have a `.plans/` directory, in its repository or in its companion directory.
+
+`aldev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aldev` location: `<ticket>/_aldev/` or `_aldev/`, below the project's `.plans/` unless the companion holds a separate tree. When the project's AlignFirst files live in its companion, the normal permission modes make the companion writable for the coder (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
 
 A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side` and passes it to the coder.
 
@@ -38,7 +40,7 @@ A new protocol session needs a ticket. `--no-ticket` reserves the next side tick
 
 `--message-file <path>` reads the message from a UTF-8 file, or from stdin with `-`. The prompt reaches the coder through stdin.
 
-`aldev code status` reconciles and shows a run's durable status. It accepts session files under the current project's `.plans/**/_aldev/` tree, or selects the newest run with `--ticket <id>`, `--no-ticket` or `--meta <key>`. If a recorded process is gone, it seals the session file as `status: failed`, `exitReason: terminated`. Linux records also store the process start time to detect pid reuse. Its `contextTokens` line reports what the run left in the coder's context window; a resumed session keeps growing across runs.
+`aldev code status` reconciles and shows a run's durable status. It accepts a session file under `_aldev/` or `<ticket>/_aldev/` of the `_aldev` location, or selects the newest run with `--ticket <id>`, `--no-ticket` or `--meta <key>`. If a recorded process is gone, it seals the session file as `status: failed`, `exitReason: terminated`. Linux records also store the process start time to detect pid reuse. Its `contextTokens` line reports what the run left in the coder's context window; a resumed session keeps growing across runs.
 
 `aldev code quota` shows the selected coding agent's account limits, consumed percentages, and reset times. It works outside a project.
 
@@ -52,7 +54,7 @@ aldev project init [--root <path>] [--description <text>] [--port-range [<code>=
 aldev project free-ports --size <n> [--range <code>] [--json] [--root <path>]
 ```
 
-A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker holds an optional description and port ranges. A direct child with a root `.alignfirst.json` is a project; linked Git worktrees are listed as its workspaces.
+A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker holds an optional description and port ranges. A direct child that is a Git main worktree is a project; linked Git worktrees are listed as its workspaces. A child outside Git with a root `.alignfirst.json` is an inventory issue. `list --json` and `status` report each project's companion directory and the location of its AlignFirst files. Two projects sharing one companion directory is an inventory issue.
 
 ```json
 {
@@ -85,7 +87,7 @@ aldev guide [<topic>] [--root <path>]
 
 ## Configuration
 
-`aldev` reads one file, `~/.config/alignfirst/aldev.json`. The path is fixed: no environment variable overrides it. An absent file means no configuration, and each command then fails on the first key it needs.
+`aldev` reads one file, `~/.config/alignfirst/aldev.config.json`. The path is fixed: no environment variable overrides it. An absent file means no configuration, and each command then fails on the first key it needs.
 
 ```json
 {
@@ -108,6 +110,8 @@ aldev guide [<topic>] [--root <path>]
 - `code.unset` — environment variables stripped from the coder's environment.
 
 Unknown keys are rejected. An unreadable file, invalid JSON or an invalid value fails every command that loads the config, with an error naming the file.
+
+Companion directories are declared in `~/.config/alignfirst/companions.json`, which the `alignfirst` CLI reads for both tools. See [its README](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories).
 
 ## Execution model
 

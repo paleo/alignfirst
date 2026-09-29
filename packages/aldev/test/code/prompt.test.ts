@@ -45,6 +45,38 @@ describe("buildPrompt", () => {
     );
   });
 
+  it("puts the project context first, then the history, then the instruction", () => {
+    expect(
+      buildPrompt({
+        protocol: "plan",
+        ticket: "29",
+        catchupContent: "History",
+        contextContent: "Conventions\n",
+      }),
+    ).toBe(
+      [
+        "## Project context",
+        "Conventions",
+        "## Ticket history",
+        "History",
+        "## Current instruction",
+        "Run `alignfirst guide plan` and follow the protocol. Ticket ID = 29.",
+      ].join("\n\n"),
+    );
+  });
+
+  it("sections the instruction after the project context without catchup", () => {
+    expect(buildPrompt({ message: "Fix it", contextContent: "Conventions" })).toBe(
+      "## Project context\n\nConventions\n\n## Current instruction\n\nFix it",
+    );
+  });
+
+  it("summarizes the history after the project context when the message is empty", () => {
+    const prompt = buildPrompt({ catchupContent: "History", contextContent: "Conventions" });
+    expect(prompt).toMatch(/^## Project context\n\nConventions\n\n## Ticket history\n\nHistory/);
+    expect(prompt).toMatch(/## Current instruction\n\nSummarize the ticket history briefly/);
+  });
+
   it("defaults standalone catchup to a short synthesis and honors a supplied question", () => {
     expect(buildPrompt({ catchupContent: "History" })).toContain(
       "Summarize the ticket history briefly",

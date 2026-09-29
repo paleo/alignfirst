@@ -20,6 +20,8 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   } else {
     args.push("--permission-mode", "auto");
   }
+  // `--add-dir` is variadic: only options may follow it. The prompt goes through stdin.
+  for (const dir of config.additionalDirectories) args.push("--add-dir", dir);
   if (config.resume !== undefined) args.push("--resume", config.resume);
   if (config.executableModel !== undefined) args.push("--model", config.executableModel);
   return args;

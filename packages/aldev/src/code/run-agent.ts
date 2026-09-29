@@ -12,6 +12,8 @@ export interface RunConfig {
   resume?: string;
   executableModel: string | undefined;
   skipPermissions: boolean;
+  // Writable directories besides the working directory, e.g. the project's companion.
+  additionalDirectories: readonly string[];
   unset: readonly string[];
   env: NodeJS.ProcessEnv;
 }

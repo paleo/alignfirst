@@ -26,7 +26,7 @@ function makeHome(): string {
 }
 
 function configPathOf(home: string): string {
-  return join(home, ".config", "alignfirst", "aldev.json");
+  return join(home, ".config", "alignfirst", "aldev.config.json");
 }
 
 function writeRawConfig(home: string, content: string): string {

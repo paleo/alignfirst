@@ -184,7 +184,9 @@ describe("aldev guide playbook", () => {
     const result = await runGuide(fixture, []);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("platform is missing from the aldev config");
-    expect(result.stderr).toContain(join(fixture.home, ".config", "alignfirst", "aldev.json"));
+    expect(result.stderr).toContain(
+      join(fixture.home, ".config", "alignfirst", "aldev.config.json"),
+    );
   });
 
   it("requires projectsRoot", async () => {

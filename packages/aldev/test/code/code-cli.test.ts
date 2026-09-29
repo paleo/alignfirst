@@ -1,8 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../../src/cli.js";
@@ -10,6 +17,7 @@ import {
   buildRunConfig,
   checkLaunchGuards,
   parseCodeArgs,
+  type RunInput,
   resolveTicket,
   type SessionArgs,
   validateSessionArgs,
@@ -22,11 +30,18 @@ import {
   readCompletion,
   writeInitialSessionFile,
 } from "../../src/code/session-file.js";
-import { makeSink, writeConfig } from "../helpers.js";
+import type { CodeConfig } from "../../src/config.js";
+import type { RunConfig } from "../../src/code/run-agent.js";
+import type { ItemLocation, ItemName, ProjectReport } from "../../src/project/layout.js";
+import {
+  ALIGNFIRST_BIN,
+  type CompanionProject,
+  makeCompanionProject,
+  makeSink,
+  writeConfig,
+} from "../helpers.js";
 
-const ALIGNFIRST_BIN = fileURLToPath(
-  new URL("../../../alignfirst/bin/alignfirst.mjs", import.meta.url),
-);
+const ALIGNFIRST = [process.execPath, ALIGNFIRST_BIN];
 
 const tempDirs: string[] = [];
 
@@ -338,8 +353,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", ".plans/1/_aldev/run.md"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stdout,
       }),
     ).toBe(0);
@@ -357,8 +373,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", ".plans/1/_aldev/run.md"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stdout,
       }),
     ).toBe(0);
@@ -378,8 +395,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", "--ticket", "1"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stdout,
       }),
     ).toBe(0);
@@ -395,8 +413,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", "--no-ticket"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stdout,
       }),
     ).toBe(0);
@@ -411,8 +430,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", "--ticket", "1"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stderr,
       }),
     ).toBe(1);
@@ -425,12 +445,15 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", "notes.md"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stderr,
       }),
     ).toBe(1);
-    expect(stderr.text()).toContain("status requires a session file under .plans/**/_aldev/*.md");
+    expect(stderr.text()).toBe(
+      "Error: status requires a session file under .plans/_aldev/ or .plans/<ticket>/_aldev/.\n",
+    );
   });
 
   it("reports a missing session file in its own words", async () => {
@@ -439,8 +462,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", ".plans/1/_aldev/run.md"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stderr,
       }),
     ).toBe(1);
@@ -458,8 +482,9 @@ describe("status", () => {
       await main({
         argv: ["node", "aldev", "code", "status", ".plans/1/_aldev/run.md"],
         cwd: dir,
-        env: {},
+        env: { HOME: dir },
         home: dir,
+        alignfirstCommand: ALIGNFIRST,
         stderr,
       }),
     ).toBe(1);
@@ -587,18 +612,28 @@ describe("resolveTicket", () => {
 });
 
 describe("buildRunConfig", () => {
+  const CODE: CodeConfig = { agent: "claude", skipPermissions: false, unset: [] };
+
+  function build(overrides: Partial<RunInput>): RunConfig {
+    return buildRunConfig({
+      args: parse(["new", "--message", "go"]),
+      code: CODE,
+      report: reportWithCompanion([]),
+      ticket: undefined,
+      cwd: "/proj",
+      sessionFilePath: "/proj/.plans/_aldev/s.md",
+      env: {},
+      executableModel: undefined,
+      ...overrides,
+    });
+  }
+
   it("threads the caller env into the config so the child inherits the same source", () => {
-    const parsed = parse(["new", "--message", "go"]);
     const env = { FOO: "bar" };
-    const config = buildRunConfig(
-      parsed,
-      { agent: "claude", skipPermissions: true, unset: ["X", "Y"] },
-      undefined,
-      "/proj",
-      "/proj/.plans/_aldev/s.md",
+    const config = build({
+      code: { agent: "claude", skipPermissions: true, unset: ["X", "Y"] },
       env,
-      undefined,
-    );
+    });
     expect(config.env).toBe(env);
     expect(config.executableModel).toBeUndefined();
     expect(config.skipPermissions).toBe(true);
@@ -607,32 +642,73 @@ describe("buildRunConfig", () => {
   });
 
   it("puts the effective ticket, not the flag, in the prompt", () => {
-    const parsed = parse(["resume", "abc", "--protocol", "plan"]);
-    const config = buildRunConfig(
-      parsed,
-      { agent: "claude", skipPermissions: false, unset: [] },
-      "30",
-      "/proj",
-      "/proj/.plans/30/_aldev/s.md",
-      {},
-      undefined,
-    );
+    const config = build({ args: parse(["resume", "abc", "--protocol", "plan"]), ticket: "30" });
     expect(config.prompt).toBe(
       "Run `alignfirst guide plan` and follow the protocol. Ticket ID = 30.",
     );
     expect(config.resume).toBe("abc");
     expect(config.skipPermissions).toBe(false);
   });
+
+  it("adds the companion as a writable directory when it holds project files", () => {
+    const items: ItemName[] = [
+      ".alignfirst.json",
+      ".alignfirst.md",
+      "DEVELOPERS.md",
+      "docs",
+      ".plans",
+    ];
+    for (const item of items) {
+      const report = reportWithCompanion([item]);
+      expect(build({ report }).additionalDirectories).toEqual(["/companions/proj"]);
+    }
+  });
+
+  it("adds no directory without companion files, or with skipPermissions", () => {
+    expect(build({ report: reportWithCompanion([]) }).additionalDirectories).toEqual([]);
+    expect(build({ report: reportWithCompanion(["_aldev"]) }).additionalDirectories).toEqual([]);
+    const skipped = build({
+      code: { ...CODE, skipPermissions: true },
+      report: reportWithCompanion([".plans"]),
+    });
+    expect(skipped.additionalDirectories).toEqual([]);
+  });
 });
+
+// A report whose companion `/companions/proj` holds the given items.
+function reportWithCompanion(items: ItemName[]): ProjectReport {
+  const location = (name: string, item: ItemName): ItemLocation =>
+    items.includes(item)
+      ? { path: `/companions/proj/${name}`, in: "companion", exists: true }
+      : { path: `/proj/${name}`, in: "project", exists: true };
+  return {
+    source: "project",
+    cli: null,
+    config: null,
+    companion: { dir: "/companions/proj", exists: true },
+    locations: {
+      ".alignfirst.json": location(".alignfirst.json", ".alignfirst.json"),
+      ".alignfirst.md": location(".alignfirst.md", ".alignfirst.md"),
+      "DEVELOPERS.md": location("DEVELOPERS.md", "DEVELOPERS.md"),
+      docs: location("docs", "docs"),
+      ".plans": location(".plans", ".plans"),
+      _aldev: location(".plans", "_aldev"),
+    },
+  };
+}
 
 describe("launch guards", () => {
   let dir: string;
+  let plans: string;
+  let home: string;
   let realCwd: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "aldev-guards-"));
-    mkdirSync(join(dir, ".plans"));
+    plans = join(dir, ".plans");
+    mkdirSync(plans);
     realCwd = realpathSync(dir);
-    writeConfig(join(dir, "home"), { code: { agent: "claude" } });
+    home = join(dir, "home");
+    writeConfig(home, { code: { agent: "claude" } });
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -671,8 +747,9 @@ describe("launch guards", () => {
       stdout,
       stderr,
       cwd: dir,
-      env: {},
-      home: join(dir, "home"),
+      env: { HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
     });
     return { code, stderr: stderr.text() };
   }
@@ -733,31 +810,35 @@ describe("launch guards", () => {
 
   it("rejects a cross-agent resume before discovery or session creation", async () => {
     seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
-    const before = listSessionRecords(dir).length;
+    const before = listSessionRecords(plans, plans).length;
     const modelResolver = vi.fn(async () => "gpt-5.6-terra");
     const stderr = makeSink();
+    const otherHome = makeHome({ code: { agent: "claude", models: ["terra"] } });
     const code = await main({
       argv: ["node", "aldev", "code", "resume", "abc", "--message", "go", "--model", "terra"],
       cwd: dir,
-      env: {},
-      home: makeHome({ code: { agent: "claude", models: ["terra"] } }),
+      env: { HOME: otherHome },
+      home: otherHome,
+      alignfirstCommand: ALIGNFIRST,
       stderr,
       modelResolver,
     });
     expect(code).toBe(1);
     expect(stderr.text()).toContain("belongs to agent codex");
     expect(modelResolver).not.toHaveBeenCalled();
-    expect(listSessionRecords(dir)).toHaveLength(before);
+    expect(listSessionRecords(plans, plans)).toHaveLength(before);
   });
 
   it("seals model-discovery failures in the session file", async () => {
     const stdout = makeSink();
     const stderr = makeSink();
+    const codexHome = makeHome({ code: { agent: "codex" } });
     const code = await main({
       argv: ["node", "aldev", "code", "new", "--message", "go", "--model", "terra"],
       cwd: dir,
-      env: {},
-      home: makeHome({ code: { agent: "codex" } }),
+      env: { HOME: codexHome },
+      home: codexHome,
+      alignfirstCommand: ALIGNFIRST,
       stdout,
       stderr,
       modelResolver: async () => {
@@ -768,7 +849,7 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stdout.text()).toContain("Session file:");
     expect(stderr.text()).toContain("catalog unavailable");
-    const records = listSessionRecords(dir);
+    const records = listSessionRecords(plans, plans);
     expect(records).toHaveLength(1);
     expect(readCompletion(records[0].path)).toMatchObject({
       frontmatter: { status: "failed", exitReason: "error", sessionId: null },
@@ -782,11 +863,11 @@ describe("launch guards", () => {
     const code = await main({
       argv: ["node", "aldev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
       cwd: dir,
-      env: {},
-      home: join(dir, "home"),
+      env: { HOME: home },
+      home,
       stdout,
       stderr: makeSink(),
-      alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+      alignfirstCommand: ALIGNFIRST,
       modelResolver: async () => {
         throw new Error("stop before spawning");
       },
@@ -794,7 +875,7 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-2", "_aldev")}`);
-    const [record] = listSessionRecords(dir);
+    const [record] = listSessionRecords(plans, plans);
     expect(record.frontmatter.ticket).toBe("side-2");
     expect(record.frontmatter.command).toBe(
       'aldev code new --protocol aad --no-ticket --message "go"',
@@ -806,15 +887,15 @@ describe("launch guards", () => {
     const code = await main({
       argv: ["node", "aldev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
       cwd: dir,
-      env: {},
-      home: join(dir, "home"),
+      env: { HOME: home },
+      home,
       stderr,
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
 
     expect(code).toBe(1);
     expect(stderr.text()).toContain("alignfirst is not installed");
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listSessionRecords(plans, plans)).toEqual([]);
   });
 
   it("rejects a protocol run while another run is active in the same worktree", async () => {
@@ -855,3 +936,209 @@ describe("launch guards", () => {
     expect(checkLaunchGuards(execute, "claude", realCwd, records)).toBeUndefined();
   });
 });
+
+describe("companion projects", () => {
+  let base: string;
+  let home: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "aldev-companion-"));
+    home = join(base, "home");
+    writeConfig(home, { code: { agent: "claude" } });
+  });
+  afterEach(() => rmSync(base, { recursive: true, force: true }));
+
+  interface RunOutcome {
+    code: number;
+    stdout: string;
+    stderr: string;
+  }
+
+  async function run(
+    project: CompanionProject,
+    tokens: string[],
+    path: string = process.env.PATH ?? "",
+  ): Promise<RunOutcome> {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aldev", "code", ...tokens],
+      cwd: project.project,
+      env: { PATH: path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr,
+      modelResolver: async () => {
+        throw new Error("stop before spawning");
+      },
+    });
+    return { code, stdout: stdout.text(), stderr: stderr.text() };
+  }
+
+  it("gates on the companion .plans and writes the session file there", async () => {
+    const project = makeCompanionProject(home, { ".plans": true });
+    const plans = join(project.companion, ".plans");
+
+    const gated = await run(project, ["new", "-m", "go"]);
+    expect(gated.code).toBe(1);
+    expect(gated.stderr).toBe(
+      `Error: no .plans/ directory at ${plans}. ` +
+        "Create it, or run `alignfirst plans setup <clone>`.\n",
+    );
+
+    mkdirSync(plans, { recursive: true });
+    const started = await run(project, ["new", "-m", "go"]);
+    expect(started.stderr).toContain("stop before spawning");
+    expect(started.stdout).toContain(`Session file: ${join(plans, "_aldev")}/`);
+    expect(listSessionRecords(plans, plans)).toHaveLength(1);
+  });
+
+  it("writes a separate _aldev tree and keeps only the active tickets of .plans", async () => {
+    const project = makeCompanionProject(home, { ".plans": false, _aldev: true });
+    const plans = join(project.project, ".plans");
+    const sessions = join(project.companion, ".plans");
+    mkdirSync(join(plans, "29"), { recursive: true });
+
+    const started = await run(project, ["new", "--ticket", "29", "-m", "go"]);
+    expect(started.stdout).toContain(`Session file: ${join(sessions, "29", "_aldev")}/`);
+    expect(listSessionRecords(sessions, plans)).toHaveLength(1);
+
+    rmSync(join(plans, "29"), { recursive: true });
+    expect(listSessionRecords(sessions, plans)).toEqual([]);
+  });
+
+  it("reserves a side ticket in the companion .plans", async () => {
+    const project = makeCompanionProject(home, { ".plans": true });
+    const plans = join(project.companion, ".plans");
+    mkdirSync(join(plans, "side-1"), { recursive: true });
+
+    const started = await run(project, ["new", "--protocol", "aad", "--no-ticket", "-m", "go"]);
+    expect(started.stdout).toContain(`Session file: ${join(plans, "side-2", "_aldev")}/`);
+  });
+
+  describe("status", () => {
+    let project: CompanionProject;
+    let ticketFile: string;
+    let noTicketFile: string;
+    beforeEach(() => {
+      project = makeCompanionProject(home, { ".plans": false, _aldev: true });
+      mkdirSync(join(project.project, ".plans", "29"), { recursive: true });
+      const sessions = join(project.companion, ".plans");
+      ticketFile = join(sessions, "29", "_aldev", "20260829-115529.md");
+      noTicketFile = join(sessions, "_aldev", "20260829-115530.md");
+      writeInitialSessionFile(ticketFile, statusFrontmatter({ ticket: "29", meta: "thread-1" }));
+      writeInitialSessionFile(noTicketFile, statusFrontmatter({ ticket: null }));
+    });
+
+    it("finds a run by path, ticket, no-ticket and meta, and prints absolute paths", async () => {
+      const cases: [string[], string][] = [
+        [["status", ticketFile], ticketFile],
+        [["status", relative(project.project, ticketFile)], ticketFile],
+        [["status", "--ticket", "29"], ticketFile],
+        [["status", "--no-ticket"], noTicketFile],
+        [["status", "--meta", "thread-1"], ticketFile],
+      ];
+      for (const [tokens, expected] of cases) {
+        const result = await run(project, tokens);
+        expect(result.stderr).toBe("");
+        expect(result.stdout).toContain(`sessionFile: ${expected}\n`);
+      }
+    });
+
+    it("rejects a session file outside the sessions directory", async () => {
+      const projectFile = join(project.project, ".plans", "29", "_aldev", "20260829-115529.md");
+      writeInitialSessionFile(projectFile, statusFrontmatter({ ticket: "29" }));
+      const sessions = join(project.companion, ".plans");
+
+      const result = await run(project, ["status", ".plans/29/_aldev/20260829-115529.md"]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toBe(
+        `Error: status requires a session file under ${sessions}/_aldev/ or ` +
+          `${sessions}/<ticket>/_aldev/.\n`,
+      );
+    });
+  });
+
+  it("adds the companion directory and the project context for the coder", async () => {
+    const project = makeCompanionProject(home, { ".plans": true });
+    mkdirSync(join(project.companion, ".plans"), { recursive: true });
+    const bin = join(base, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "claude"),
+      `#!${process.execPath}
+const { writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+let prompt = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (prompt += chunk));
+process.stdin.on("end", () => {
+  writeFileSync(join(${JSON.stringify(bin)}, "prompt.txt"), prompt);
+  writeFileSync(join(${JSON.stringify(bin)}, "args.json"), JSON.stringify(process.argv.slice(2)));
+  process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));
+});
+`,
+      { mode: 0o755 },
+    );
+    const path = `${bin}:${process.env.PATH ?? ""}`;
+    const received = () => ({
+      prompt: readFileSync(join(bin, "prompt.txt"), "utf8"),
+      args: JSON.parse(readFileSync(join(bin, "args.json"), "utf8")),
+    });
+
+    const stdout = makeSink();
+    const started = await main({
+      argv: ["node", "aldev", "code", "new", "-m", "go"],
+      cwd: project.project,
+      env: { PATH: path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr: makeSink(),
+      modelResolver: async () => undefined,
+    });
+    expect(started).toBe(0);
+    const first = received();
+    expect(first.prompt).toMatch(/^## Project context\n\n# Project Conventions\n/);
+    expect(first.prompt).toMatch(/\n\n## Current instruction\n\ngo$/);
+    expect(first.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
+
+    const resumed = await main({
+      argv: ["node", "aldev", "code", "resume", "session-1", "-m", "more"],
+      cwd: project.project,
+      env: { PATH: path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelResolver: async () => undefined,
+    });
+    expect(resumed).toBe(0);
+    const second = received();
+    expect(second.prompt).toBe("more");
+    expect(second.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
+  });
+});
+
+function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFrontmatter {
+  return {
+    status: "succeeded",
+    agent: "claude",
+    protocol: "review",
+    ticket: null,
+    model: null,
+    sessionId: "sess-42",
+    command: "aldev code new --protocol review",
+    meta: null,
+    pid: null,
+    pidStartTime: null,
+    cwd: null,
+    startedAt: "2026-08-29T11:55:29.000Z",
+    endedAt: "2026-08-29T11:56:29.000Z",
+    exitReason: "completed",
+    contextTokens: null,
+    contextCompacted: false,
+    contextTokensError: null,
+    ...overrides,
+  };
+}

@@ -14,6 +14,7 @@ const BASE: RunConfig = {
   cwd: "/proj",
   executableModel: undefined,
   skipPermissions: false,
+  additionalDirectories: [],
   unset: [],
   env: {},
 };
@@ -41,6 +42,30 @@ describe("Claude adapter", () => {
       "stream-json",
       "--verbose",
       "--dangerously-skip-permissions",
+      "--resume",
+      "sess-9",
+      "--model",
+      "opus",
+    ]);
+  });
+
+  it("puts --add-dir after the permission flags, followed only by options", () => {
+    expect(
+      buildClaudeArgs({
+        ...BASE,
+        additionalDirectories: ["/companions/proj"],
+        resume: "sess-9",
+        executableModel: "opus",
+      }),
+    ).toEqual([
+      "-p",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "auto",
+      "--add-dir",
+      "/companions/proj",
       "--resume",
       "sess-9",
       "--model",

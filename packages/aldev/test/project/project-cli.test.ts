@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { writeConfig } from "../helpers.js";
+import { writeCompanions, writeConfig } from "../helpers.js";
 import {
   addWorktree,
   execGit,
@@ -248,8 +248,7 @@ describe("project inventory doctor", () => {
     const nongit = join(fixture.root, "nongit");
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
-    const invalid = join(fixture.root, "invalid");
-    mkdirSync(invalid);
+    const invalid = makeRepository(fixture.root, "invalid");
     writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
 
     const result = await runProjects(fixture, ["doctor"]);
@@ -298,6 +297,9 @@ describe("project discovery", () => {
     const result = await runProjects(fixture, ["list", "--json"], { env: {} });
     expect(result.code).toBe(0);
     const report = JSON.parse(result.stdout);
+    const projects = report.projects.map(
+      ({ companion, locations, ...project }: Record<string, unknown>) => project,
+    );
     expect(report.root).toBe(realpathSync(fixture.root));
     expect(report.directories).toEqual([
       {
@@ -313,7 +315,7 @@ describe("project discovery", () => {
         others: ["notes"],
       },
     ]);
-    expect(report.projects).toEqual([
+    expect(projects).toEqual([
       {
         name: "alpha",
         path: alpha,
@@ -350,8 +352,7 @@ describe("project discovery", () => {
     const nongit = join(fixture.root, "nongit");
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
-    const invalid = join(fixture.root, "invalid");
-    mkdirSync(invalid);
+    const invalid = makeRepository(fixture.root, "invalid");
     writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
     makeProjectsDirectory(fixture.root, "nested-outside", {
       portRanges: [range(9000, 9099)],
@@ -421,13 +422,94 @@ describe("project discovery", () => {
 
   it("fails the listing when alignfirst is missing", async () => {
     const fixture = makeFixture({});
-    mkdirSync(join(fixture.root, "candidate"));
-    writeProjectConfig(join(fixture.root, "candidate"), {});
+    makeRepository(fixture.root, "candidate");
     const result = await runProjects(fixture, ["list"], {
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("alignfirst is not installed");
+  });
+});
+
+describe("project classification and companions", () => {
+  it("lists a git repository without config as a project and a non-git config as an issue", async () => {
+    const fixture = makeFixture({});
+    const bare = makeRepository(fixture.root, "bare");
+    const nongit = join(fixture.root, "nongit");
+    mkdirSync(nongit);
+    writeProjectConfig(nongit, {});
+    mkdirSync(join(fixture.root, "plain"));
+
+    const report = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
+    expect(report.projects.map(({ path }: { path: string }) => path)).toEqual([bare]);
+    expect(report.projects[0].companion).toBeNull();
+    expect(report.projects[0].locations[".plans"]).toEqual({
+      path: join(bare, ".plans"),
+      in: "project",
+      exists: false,
+    });
+    expect(report.directories[0].others).toEqual(["plain"]);
+    expect(report.issues).toEqual([
+      { path: realpathSync(nongit), message: "not a git main worktree" },
+    ]);
+  });
+
+  it("reports the companion and the locations in list and status", async () => {
+    const fixture = makeFixture({});
+    const project = makeRepository(fixture.root, "app");
+    const companionsRoot = join(fixture.base, "companions");
+    mkdirSync(companionsRoot);
+    writeCompanions(fixture.home, {
+      root: companionsRoot,
+      paths: { [fixture.root]: { ".plans": true, "DEVELOPERS.md": true } },
+    });
+    const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+
+    const list = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
+    expect(list.projects[0].companion).toEqual({ dir: companion, exists: true });
+    expect(list.projects[0].locations[".plans"]).toEqual({
+      path: join(companion, ".plans"),
+      in: "companion",
+      exists: true,
+    });
+
+    const status = JSON.parse((await runProjects(fixture, ["status", "app", "--json"])).stdout);
+    expect(status.configSource).toBeNull();
+    expect(status.companion).toEqual({ dir: companion, exists: true });
+    expect(status.locations["DEVELOPERS.md"]).toEqual({
+      path: join(companion, "DEVELOPERS.md"),
+      in: "companion",
+      exists: false,
+    });
+
+    const text = (await runProjects(fixture, ["status", "app"])).stdout;
+    expect(text).toContain("  Config source: (none)\n");
+    expect(text).toContain(`  Companion: ${JSON.stringify(companion)}\n`);
+    expect(text).toContain(
+      `  DEVELOPERS.md: ${JSON.stringify(join(companion, "DEVELOPERS.md"))} (missing)\n`,
+    );
+    expect(text).toContain(`  Work files: ${JSON.stringify(join(companion, ".plans"))}\n`);
+  });
+
+  it("reports two projects sharing a companion directory on both", async () => {
+    const fixture = makeFixture({});
+    const flat = makeRepository(fixture.root, "a_b");
+    const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
+    writeCompanions(fixture.home, {
+      root: join(fixture.base, "companions"),
+      paths: { [fixture.root]: {} },
+    });
+
+    const result = await runProjects(fixture, ["doctor"]);
+    expect(result.code).toBe(1);
+    const companion = join(fixture.base, "companions", flat.slice(1).replaceAll("/", "_"));
+    expect(result.stdout.trim().split("\n")).toEqual([
+      `[error] Project inventory: ${JSON.stringify(flat)}: shares companion directory ` +
+        `${companion} with ${nested}`,
+      `[error] Project inventory: ${JSON.stringify(nested)}: shares companion directory ` +
+        `${companion} with ${flat}`,
+    ]);
   });
 });
 
@@ -457,6 +539,20 @@ describe("project status", () => {
       portRangeCode: "web",
       plansFolder: "project-plans",
       ticketIdPattern: "^P-\\d+$",
+      configSource: "project",
+      companion: null,
+      locations: {
+        ".alignfirst.json": {
+          path: join(project, ".alignfirst.json"),
+          in: "project",
+          exists: true,
+        },
+        ".alignfirst.md": { path: join(project, ".alignfirst.md"), in: "project", exists: false },
+        "DEVELOPERS.md": { path: join(project, "DEVELOPERS.md"), in: "project", exists: false },
+        docs: { path: join(project, "docs"), in: "project", exists: false },
+        ".plans": { path: join(project, ".plans"), in: "project", exists: false },
+        _aldev: { path: join(project, ".plans"), in: "project", exists: false },
+      },
       workspaces: ["project-workspace"],
       worktrees: [
         { branch: "main", name: "project", path: project },
@@ -469,7 +565,13 @@ describe("project status", () => {
     expect(text.stdout).toContain('  Remote host: "github.com"');
     expect(text.stdout).toContain("  Port range: 8000..8099 (web)");
     expect(text.stdout).toContain('  Ticket id pattern: "^P-\\\\d+$"');
-    expect(text.stdout).not.toContain("Config source:");
+    expect(text.stdout).toContain("  Config source: project\n  Companion: (none)\n");
+    expect(text.stdout).toContain(
+      `  DEVELOPERS.md: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
+    );
+    expect(text.stdout).toContain(
+      `  Work files: ${JSON.stringify(join(project, ".plans"))} (missing)\n`,
+    );
 
     const rejected = await runProjects(fixture, ["status", workspace]);
     expect(rejected.code).toBe(1);

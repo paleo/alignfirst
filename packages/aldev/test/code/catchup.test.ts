@@ -7,17 +7,19 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { main } from "../../src/cli.js";
 import { listSessionRecords } from "../../src/code/session-file.js";
-import { writeConfig } from "../helpers.js";
+import { ALIGNFIRST_BIN, writeConfig } from "../helpers.js";
 
 const ALDEV_BIN = fileURLToPath(new URL("../../bin/aldev.mjs", import.meta.url));
 
 let dir: string;
+let plans: string;
 let home: string;
 let env: NodeJS.ProcessEnv;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "aldev-catchup-"));
-  mkdirSync(join(dir, ".plans"));
+  plans = join(dir, ".plans");
+  mkdirSync(plans);
   home = join(dir, "home");
   writeConfig(home, { code: { agent: "claude" } });
   env = { PATH: dir, HOME: home };
@@ -34,15 +36,26 @@ process.stdin.on("end", () => {
 `,
     { mode: 0o755 },
   );
+  writeFakeAlignfirst(`
+require("node:fs").writeFileSync("catchup-args.json", JSON.stringify(process.argv.slice(2)));
+process.stdout.write("- .plans/29/A1-spec.md (40000 bytes)\\nContent omitted: total limit exceeded.\\n");
+`);
+});
+
+// The fake answers `config` through the real CLI and runs `body` for any other command.
+function writeFakeAlignfirst(body: string): void {
   writeFileSync(
     join(dir, "alignfirst"),
     `#!${process.execPath}
-require("node:fs").writeFileSync("catchup-args.json", JSON.stringify(process.argv.slice(2)));
-process.stdout.write("- .plans/29/A1-spec.md (40000 bytes)\\nContent omitted: total limit exceeded.\\n");
-`,
+if (process.argv[2] === "config") {
+  const { spawnSync } = require("node:child_process");
+  const args = [${JSON.stringify(ALIGNFIRST_BIN)}, ...process.argv.slice(2)];
+  process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status);
+}
+${body}`,
     { mode: 0o755 },
   );
-});
+}
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -71,7 +84,9 @@ describe("catchup launch", () => {
     expect(prompt).toContain("Content omitted: total limit exceeded.");
     expect(prompt).toContain("Run `alignfirst guide aad`");
     expect(prompt.endsWith(message)).toBe(true);
-    expect(listSessionRecords(dir)[0].frontmatter.command).toContain('--message-file "message.md"');
+    expect(listSessionRecords(plans, plans)[0].frontmatter.command).toContain(
+      '--message-file "message.md"',
+    );
   });
 
   it("summarizes without a message and rejects catchup on resume", async () => {
@@ -132,7 +147,7 @@ describe("catchup launch", () => {
     ["--message-file", "missing.md"],
   ])("rejects invalid inputs before creating a session: %j", async (...args) => {
     expect(await run(["new", ...args])).toBe(1);
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listSessionRecords(plans, plans)).toEqual([]);
   });
 
   it("validates empty file content and protocol requirements", async () => {
@@ -150,15 +165,11 @@ describe("catchup launch", () => {
         "empty.md",
       ]),
     ).toBe(1);
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listSessionRecords(plans, plans)).toEqual([]);
   });
 
   it("aborts before launching or creating a session when catchup fails", async () => {
-    writeFileSync(
-      join(dir, "alignfirst"),
-      `#!${process.execPath}\nprocess.stderr.write("ticket unavailable"); process.exit(1);`,
-      { mode: 0o755 },
-    );
+    writeFakeAlignfirst('process.stderr.write("ticket unavailable"); process.exit(1);');
     let error = "";
     expect(
       await main({
@@ -174,7 +185,7 @@ describe("catchup launch", () => {
       }),
     ).toBe(1);
     expect(error).toContain("ticket unavailable");
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listSessionRecords(plans, plans)).toEqual([]);
   });
 });
 

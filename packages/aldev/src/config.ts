@@ -71,7 +71,7 @@ export function loadConfig(home: string): AldevConfig {
 }
 
 function configPath(home: string): string {
-  return join(home, ".config", "alignfirst", "aldev.json");
+  return join(home, ".config", "alignfirst", "aldev.config.json");
 }
 
 function parseConfigFile(path: string): typeof configSchema.infer {

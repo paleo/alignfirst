@@ -28,8 +28,8 @@ export interface SessionFrontmatter {
   // Linux `/proc/<pid>/stat` start time. Distinguishes the original process from a later process
   // that reused its pid; null on platforms without `/proc` and in legacy records.
   pidStartTime: string | null;
-  // Realpath aldev ran from. Scopes the single-protocol-run guard to the worktree (worktree
-  // `.plans/` symlinks back to the main project, so several worktrees share one `.plans/`).
+  // Realpath aldev ran from. Scopes the single-protocol-run guard to the worktree (several
+  // worktrees share one session tree, through a `.plans/` symlink or the companion directory).
   cwd: string | null;
   startedAt: string;
   endedAt: string | null;
@@ -48,23 +48,15 @@ export interface SessionFrontmatter {
 
 export const RESULT_MARKER = "\n---- Result ----\n";
 
-// The CWD must be an AlignFirst-managed project (a `.plans/` dir marks it). Returns an error message
-// when the gate fails, `undefined` when it passes. `status`, `quota` and `--help` bypass this.
-export function assertPlansGate(cwd: string): string | undefined {
-  if (existsSync(join(cwd, ".plans"))) return;
-  return (
-    "Error: no `.plans/` directory found in the current directory. " +
-    "Run `aldev code` from the root of an AlignFirst-managed project."
-  );
-}
-
+// `sessionsDir` is the `.plans`-shaped directory holding the session directories: the resolved
+// `_aldev` location, which is the resolved `.plans` unless the companion holds a separate tree.
 export function resolveSessionFilePath(
-  cwd: string,
+  sessionsDir: string,
   ticket: string | undefined,
   now: Date,
   fileExists: (path: string) => boolean = existsSync,
 ): string {
-  const dir = ticket ? join(cwd, ".plans", ticket, "_aldev") : join(cwd, ".plans", "_aldev");
+  const dir = join(sessionsDir, ...(ticket === undefined ? [] : [ticket]), "_aldev");
   const stamp = formatStamp(now);
   let candidate = join(dir, `${stamp}.md`);
   let suffix = 2;
@@ -204,18 +196,18 @@ export interface SessionRecord {
   frontmatter: SessionFrontmatter;
 }
 
-// Lists every active session record for a project root: `.plans/_aldev/*.md` plus each ticket's
-// `.plans/<ticket>/_aldev/*.md`. Archived tickets keep their session files but leave the registry.
-// The session files are the registry — no separate registry file.
+// Lists every active session record: `<sessionsDir>/_aldev/*.md` plus
+// `<sessionsDir>/<ticket>/_aldev/*.md` for each ticket directory of `plansDir`. Archived tickets keep
+// their session files but leave the registry. The session files are the registry — no separate
+// registry file.
 // Self-healing: a `running` record whose pid is gone is a stale leftover from an interrupted run;
 // it gets sealed in passing so the launch guards never block on dead state. The returned records
 // reflect the post-healing state.
-export function listSessionRecords(cwd: string): SessionRecord[] {
-  const plansDir = join(cwd, ".plans");
-  const sessionDirs = [join(plansDir, "_aldev")];
+export function listSessionRecords(sessionsDir: string, plansDir: string): SessionRecord[] {
+  const sessionDirs = [join(sessionsDir, "_aldev")];
   for (const entry of readEntries(plansDir)) {
     if (entry.isDirectory() && !entry.name.startsWith("_")) {
-      sessionDirs.push(join(plansDir, entry.name, "_aldev"));
+      sessionDirs.push(join(sessionsDir, entry.name, "_aldev"));
     }
   }
   const records: SessionRecord[] = [];

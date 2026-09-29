@@ -1,9 +1,9 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { runAlignfirst } from "../alignfirst-cli.js";
-import { errorMessage, isNodeError } from "../errors.js";
+import { isNodeError } from "../errors.js";
 import { formatRange } from "./format.js";
+import { type ProjectReport, readProjectReport } from "./layout.js";
 import {
   containsRange,
   type MarkerPortRange,
@@ -33,22 +33,10 @@ export interface DiscoveredProject {
   name: string;
   path: string;
   directory: string;
-  description: ProjectDescription;
+  description: ProjectReport;
   portRange?: PortRange;
   portRangeCode?: string;
   workspaces: string[];
-}
-
-export interface ProjectDescription {
-  source: "root" | null;
-  cli: ProjectCliDescription | null;
-  config: ProjectConfigView | null;
-}
-
-export interface ProjectConfigView {
-  ticketIdPattern?: string;
-  plans?: { folder?: string };
-  portRange?: PortRange;
 }
 
 export interface InventoryIssue {
@@ -67,15 +55,8 @@ interface ProjectPortClaim {
   portRange: PortRange;
 }
 
-interface ProjectCliDescription {
-  installed: string;
-  range: string;
-  satisfied: boolean;
-}
-
 export interface InventoryContext {
   env: NodeJS.ProcessEnv;
-  home: string;
   alignfirstCommand: string[];
 }
 
@@ -102,10 +83,6 @@ interface ScopedPortClaim extends ProjectPortClaim {
   scope: string;
 }
 
-interface ProjectError {
-  error: string;
-}
-
 export function buildInventory(
   root: string,
   marker: ProjectsMarker,
@@ -114,6 +91,7 @@ export function buildInventory(
   const state: WalkState = { directories: [], candidates: [], directoryClaims: [], issues: [] };
   walkProjectsDirectory(root, marker, undefined, state);
   const projects = classifyCandidates(state, ctx);
+  reportSharedCompanions(projects, state.issues);
   reportOverlappingClaims(projects, state.directoryClaims, state.issues);
   sortInventory(state.directories, projects, state.issues);
   return { root, directories: state.directories, projects, issues: state.issues };
@@ -184,20 +162,17 @@ function classifyCandidate(
   state: WalkState,
   ctx: InventoryContext,
 ): DiscoveredProject[] {
-  if (!existsSync(join(candidate.path, PROJECT_CONFIG_FILENAME))) {
-    addOther(state.directories, candidate.directory, candidate.name);
+  if (mainWorktreeGitDirectory(candidate.path) === undefined) {
+    if (existsSync(join(candidate.path, PROJECT_CONFIG_FILENAME))) {
+      state.issues.push({ path: candidate.path, message: "not a git main worktree" });
+    } else {
+      addOther(state.directories, candidate.directory, candidate.name);
+    }
     return [];
   }
-  const description = describeProject(ctx.alignfirstCommand, candidate.path, {
-    ...ctx.env,
-    HOME: ctx.home,
-  });
+  const description = readProjectReport(ctx.alignfirstCommand, candidate.path, ctx.env);
   if ("error" in description) {
     state.issues.push({ path: candidate.path, message: description.error });
-    return [];
-  }
-  if (description.source === null) {
-    addOther(state.directories, candidate.directory, candidate.name);
     return [];
   }
   const project: DiscoveredProject = {
@@ -212,9 +187,6 @@ function classifyCandidate(
   };
   const enclosingRange = findEnclosingRange(candidate.enclosingRanges, project.portRange);
   if (enclosingRange?.code !== undefined) project.portRangeCode = enclosingRange.code;
-  if (mainWorktreeGitDirectory(candidate.path) === undefined) {
-    state.issues.push({ path: candidate.path, message: "not a git main worktree" });
-  }
   if (description.cli !== null && !description.cli.satisfied) {
     state.issues.push({
       path: candidate.path,
@@ -225,84 +197,6 @@ function classifyCandidate(
   }
   reportOutsideRange(project.path, project.portRange, candidate.enclosingRanges, state.issues);
   return [project];
-}
-
-function describeProject(
-  command: string[],
-  path: string,
-  env: NodeJS.ProcessEnv,
-): ProjectDescription | ProjectError {
-  const result = runAlignfirst(command, ["config", "--json"], path, env);
-  if (result.status !== 0) {
-    return { error: firstLine(result.stderr) || "alignfirst config failed" };
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(result.stdout);
-  } catch (error) {
-    throw new Error(`Invalid alignfirst config report for ${path}: ${errorMessage(error)}`);
-  }
-  return parseProjectDescription(value, path);
-}
-
-function parseProjectDescription(value: unknown, path: string): ProjectDescription {
-  if (!isRecord(value)) throw invalidDescription(path);
-  const source = parseSource(value.source, path);
-  return {
-    source,
-    cli: parseCli(value.cli, path),
-    config: parseConfig(value.config, path),
-  };
-}
-
-function parseSource(value: unknown, path: string): ProjectDescription["source"] {
-  if (value === "root" || value === null) return value;
-  throw invalidDescription(path);
-}
-
-function parseCli(value: unknown, path: string): ProjectCliDescription | null {
-  if (value === null) return null;
-  if (
-    !isRecord(value) ||
-    typeof value.installed !== "string" ||
-    typeof value.range !== "string" ||
-    typeof value.satisfied !== "boolean"
-  ) {
-    throw invalidDescription(path);
-  }
-  return { installed: value.installed, range: value.range, satisfied: value.satisfied };
-}
-
-function parseConfig(value: unknown, path: string): ProjectConfigView | null {
-  if (value === null) return null;
-  if (!isRecord(value)) throw invalidDescription(path);
-  const ticketIdPattern = value.ticketIdPattern;
-  const plans = parsePlans(value.plans, path);
-  const portRange = value.portRange;
-  if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
-    throw invalidDescription(path);
-  if (portRange !== undefined && !isPortRange(portRange)) throw invalidDescription(path);
-  return {
-    ...(ticketIdPattern === undefined ? {} : { ticketIdPattern }),
-    ...(plans === undefined ? {} : { plans }),
-    ...(portRange === undefined ? {} : { portRange }),
-  };
-}
-
-function parsePlans(value: unknown, path: string): { folder?: string } | undefined {
-  if (value === undefined) return;
-  if (!isRecord(value)) throw invalidDescription(path);
-  if (value.folder !== undefined && typeof value.folder !== "string")
-    throw invalidDescription(path);
-  return value.folder === undefined ? {} : { folder: value.folder };
-}
-
-function invalidDescription(path: string): Error {
-  return new Error(`Invalid alignfirst config report for ${path}`);
-}
-
-function firstLine(value: string): string {
-  return value.trim().split("\n", 1)[0] ?? "";
 }
 
 function isLinkedWorktree(path: string): boolean {
@@ -409,6 +303,29 @@ function findEnclosingRange(
   return ranges?.find((range) => containsRange(range, claim));
 }
 
+// Two projects can share a companion only through a `_` in a directory name.
+function reportSharedCompanions(projects: DiscoveredProject[], issues: InventoryIssue[]): void {
+  const projectsByCompanion = new Map<string, DiscoveredProject[]>();
+  for (const project of projects) {
+    const dir = project.description.companion?.dir;
+    if (dir === undefined) continue;
+    projectsByCompanion.set(dir, [...(projectsByCompanion.get(dir) ?? []), project]);
+  }
+  for (const [dir, group] of projectsByCompanion) {
+    if (group.length < 2) continue;
+    for (const project of group) {
+      const others = group
+        .filter((other) => other !== project)
+        .map((other) => other.path)
+        .toSorted();
+      issues.push({
+        path: project.path,
+        message: `shares companion directory ${dir} with ${others.join(", ")}`,
+      });
+    }
+  }
+}
+
 function reportOverlappingClaims(
   projects: DiscoveredProject[],
   directoryClaims: ScopedPortClaim[],
@@ -453,12 +370,4 @@ function sortInventory(
     directory.others.sort((left, right) => left.localeCompare(right));
   for (const project of projects)
     project.workspaces.sort((left, right) => left.localeCompare(right));
-}
-
-function isPortRange(value: unknown): value is PortRange {
-  return isRecord(value) && typeof value.first === "number" && typeof value.last === "number";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

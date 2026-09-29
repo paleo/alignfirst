@@ -18,6 +18,7 @@ const BASE: RunConfig = {
   cwd: "/proj",
   executableModel: undefined,
   skipPermissions: false,
+  additionalDirectories: [],
   unset: [],
   env: {},
 };
@@ -32,6 +33,29 @@ describe("Codex argv", () => {
       "--json",
       "--sandbox",
       "workspace-write",
+      "--model",
+      "gpt-5.6-terra",
+      "resume",
+      "thread-1",
+      "-",
+    ]);
+  });
+
+  it("passes --add-dir among the exec options, before resume", () => {
+    expect(
+      buildCodexArgs({
+        ...BASE,
+        additionalDirectories: ["/companions/proj"],
+        resume: "thread-1",
+        executableModel: "gpt-5.6-terra",
+      }),
+    ).toEqual([
+      "exec",
+      "--json",
+      "--sandbox",
+      "workspace-write",
+      "--add-dir",
+      "/companions/proj",
       "--model",
       "gpt-5.6-terra",
       "resume",

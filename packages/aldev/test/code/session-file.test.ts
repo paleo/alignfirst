@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendTranscript,
   applyCompletion,
-  assertPlansGate,
   type SessionFrontmatter,
   listSessionRecords,
   parseFrontmatter,
@@ -44,41 +43,33 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
   };
 }
 
-describe("assertPlansGate", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "aldev-gate-"));
-  });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-  it("passes when a .plans directory exists", () => {
-    mkdirSync(join(dir, ".plans"));
-    expect(assertPlansGate(dir)).toBeUndefined();
-  });
-
-  it("returns guidance when .plans is absent", () => {
-    expect(assertPlansGate(dir)).toContain("no `.plans/` directory");
-  });
-});
-
 describe("resolveSessionFilePath", () => {
+  const sessionsDir = join("/proj", ".plans");
+
   it("uses the ticket _aldev directory", () => {
-    const path = resolveSessionFilePath("/proj", "29", FIXED_DATE, () => false);
-    expect(path).toBe(join("/proj", ".plans", "29", "_aldev", "20260701-091503.md"));
+    const path = resolveSessionFilePath(sessionsDir, "29", FIXED_DATE, () => false);
+    expect(path).toBe(join(sessionsDir, "29", "_aldev", "20260701-091503.md"));
   });
 
   it("uses the root _aldev directory without a ticket", () => {
-    const path = resolveSessionFilePath("/proj", undefined, FIXED_DATE, () => false);
-    expect(path).toBe(join("/proj", ".plans", "_aldev", "20260701-091503.md"));
+    const path = resolveSessionFilePath(sessionsDir, undefined, FIXED_DATE, () => false);
+    expect(path).toBe(join(sessionsDir, "_aldev", "20260701-091503.md"));
+  });
+
+  it("writes under a separate sessions directory", () => {
+    const companionTree = join("/companions", "proj", ".plans");
+    expect(resolveSessionFilePath(companionTree, "29", FIXED_DATE, () => false)).toBe(
+      join(companionTree, "29", "_aldev", "20260701-091503.md"),
+    );
   });
 
   it("appends a numeric suffix on same-second collisions", () => {
     const taken = new Set([
-      join("/proj", ".plans", "29", "_aldev", "20260701-091503.md"),
-      join("/proj", ".plans", "29", "_aldev", "20260701-091503-2.md"),
+      join(sessionsDir, "29", "_aldev", "20260701-091503.md"),
+      join(sessionsDir, "29", "_aldev", "20260701-091503-2.md"),
     ]);
-    const path = resolveSessionFilePath("/proj", "29", FIXED_DATE, (p) => taken.has(p));
-    expect(path).toBe(join("/proj", ".plans", "29", "_aldev", "20260701-091503-3.md"));
+    const path = resolveSessionFilePath(sessionsDir, "29", FIXED_DATE, (p) => taken.has(p));
+    expect(path).toBe(join(sessionsDir, "29", "_aldev", "20260701-091503-3.md"));
   });
 });
 
@@ -234,16 +225,27 @@ describe("session file lifecycle", () => {
 
 describe("listSessionRecords", () => {
   let dir: string;
+  let plansDir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "aldev-records-"));
-    mkdirSync(join(dir, ".plans"));
+    plansDir = join(dir, ".plans");
+    mkdirSync(plansDir);
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  function seedRecord(subdir: string, name: string, frontmatter: SessionFrontmatter): string {
-    const path = join(dir, ".plans", subdir, name);
+  function seedRecord(
+    subdir: string,
+    name: string,
+    frontmatter: SessionFrontmatter,
+    sessionsDir: string = plansDir,
+  ): string {
+    const path = join(sessionsDir, subdir, name);
     writeInitialSessionFile(path, frontmatter);
     return path;
+  }
+
+  function listRecords() {
+    return listSessionRecords(plansDir, plansDir);
   }
 
   // A just-exited child's pid is guaranteed dead (and not yet reused).
@@ -254,7 +256,7 @@ describe("listSessionRecords", () => {
   }
 
   it("returns an empty list when .plans has no session directories", () => {
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listRecords()).toEqual([]);
   });
 
   it("lists records from the root and ticket _aldev directories", () => {
@@ -264,27 +266,39 @@ describe("listSessionRecords", () => {
       "b.md",
       makeFrontmatter({ status: "failed" }),
     );
-    const records = listSessionRecords(dir);
+    const records = listRecords();
     expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
+  });
+
+  it("reads a separate sessions tree, filtered by the active tickets of .plans", () => {
+    const sessionsDir = join(dir, "companion", ".plans");
+    mkdirSync(join(plansDir, "29"));
+    const rootPath = seedRecord("_aldev", "a.md", makeFrontmatter(), sessionsDir);
+    const activePath = seedRecord(join("29", "_aldev"), "b.md", makeFrontmatter(), sessionsDir);
+    seedRecord(join("30", "_aldev"), "archived.md", makeFrontmatter(), sessionsDir);
+    seedRecord(join("29", "_aldev"), "project.md", makeFrontmatter());
+
+    const records = listSessionRecords(sessionsDir, plansDir);
+    expect(records.map((r) => r.path).sort()).toEqual([rootPath, activePath].sort());
   });
 
   it("ignores session records under archived tickets", () => {
     seedRecord("_archives/29/_aldev", "archived.md", makeFrontmatter({ status: "succeeded" }));
-    expect(listSessionRecords(dir)).toEqual([]);
+    expect(listRecords()).toEqual([]);
   });
 
   it("skips non-md files and files without a frontmatter block", () => {
     seedRecord("_aldev", "good.md", makeFrontmatter({ status: "succeeded" }));
-    writeFileSync(join(dir, ".plans", "_aldev", "junk.md"), "no frontmatter here");
-    writeFileSync(join(dir, ".plans", "_aldev", "notes.txt"), "---\nstatus: running\n---\n");
-    const records = listSessionRecords(dir);
+    writeFileSync(join(plansDir, "_aldev", "junk.md"), "no frontmatter here");
+    writeFileSync(join(plansDir, "_aldev", "notes.txt"), "---\nstatus: running\n---\n");
+    const records = listRecords();
     expect(records).toHaveLength(1);
     expect(records[0].frontmatter.status).toBe("succeeded");
   });
 
   it("seals a running record whose pid is dead", () => {
     const path = seedRecord("_aldev", "stale.md", makeFrontmatter({ pid: deadPid() }));
-    const records = listSessionRecords(dir);
+    const records = listRecords();
     expect(records[0].frontmatter.status).toBe("failed");
     expect(records[0].frontmatter.exitReason).toBe("terminated");
     const sealed = readCompletion(path);
@@ -296,12 +310,12 @@ describe("listSessionRecords", () => {
 
   it("seals a running record with no pid", () => {
     seedRecord("_aldev", "no-pid.md", makeFrontmatter());
-    expect(listSessionRecords(dir)[0].frontmatter.status).toBe("failed");
+    expect(listRecords()[0].frontmatter.status).toBe("failed");
   });
 
   it("leaves a running record with a live pid untouched", () => {
     const path = seedRecord("_aldev", "live.md", makeFrontmatter({ pid: process.pid }));
-    const records = listSessionRecords(dir);
+    const records = listRecords();
     expect(records[0].frontmatter.status).toBe("running");
     expect(readCompletion(path).frontmatter.status).toBe("running");
   });

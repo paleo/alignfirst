@@ -1,5 +1,6 @@
 import type { InventoryIssue, ProjectInventory } from "./discovery.js";
 import { escapeAdditionalJsonCharacters, escapeControlCharacters, formatRange } from "./format.js";
+import type { CompanionReport, ItemLocation } from "./layout.js";
 import type { MarkerPortRange, PortRange } from "./markers.js";
 import type { ProjectDetails } from "./status.js";
 
@@ -52,6 +53,8 @@ export function renderProjectListJson(inventory: ProjectInventory): string {
       directory: project.directory,
       portRange: project.portRange ?? null,
       portRangeCode: project.portRangeCode ?? null,
+      companion: project.description.companion,
+      locations: project.description.locations,
       workspaces: project.workspaces,
     })),
     issues: inventory.issues.map(({ path, message }) => ({ path, message })),
@@ -99,6 +102,10 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Directory: ${renderOutputValue(details.directory)}`,
     `  Remote host: ${renderNullableValue(details.remoteHost)}`,
     `  Port range: ${renderProjectRange(details.portRange ?? undefined, details.portRangeCode ?? undefined)}`,
+    `  Config source: ${details.configSource ?? "(none)"}`,
+    `  Companion: ${renderCompanion(details.companion)}`,
+    `  DEVELOPERS.md: ${renderLocation(details.locations["DEVELOPERS.md"])}`,
+    `  Work files: ${renderLocation(details.locations[".plans"])}`,
     `  Work-files folder: ${renderNullableValue(details.plansFolder)}`,
     `  Ticket id pattern: ${renderNullableValue(details.ticketIdPattern)}`,
     `  Workspaces: ${renderValues(details.workspaces)}`,
@@ -113,6 +120,19 @@ export function renderProjectStatus(details: ProjectDetails): string {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+function renderCompanion(companion: CompanionReport | null): string {
+  if (companion === null) return "(none)";
+  return renderPath(companion.dir, companion.exists);
+}
+
+function renderLocation(location: ItemLocation): string {
+  return renderPath(location.path, location.exists);
+}
+
+function renderPath(path: string, exists: boolean): string {
+  return `${renderOutputValue(path)}${exists ? "" : " (missing)"}`;
 }
 
 export function renderProjectStatusJson(details: ProjectDetails): string {

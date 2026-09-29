@@ -2,16 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 import { main } from "../../src/cli.js";
-import { makeSink } from "../helpers.js";
-
-const ALIGNFIRST_BIN = fileURLToPath(
-  new URL("../../../alignfirst/bin/alignfirst.mjs", import.meta.url),
-);
+import { ALIGNFIRST_BIN, makeSink } from "../helpers.js";
 
 const fixtureDirs: string[] = [];
 let gitConfigDir: string;
@@ -22,7 +17,7 @@ export interface Fixture {
   base: string;
   // A projects directory, also the default working directory.
   root: string;
-  // The injected home, without an aldev config unless a test writes one.
+  // The injected home, also `HOME` for alignfirst, without an aldev config unless a test writes one.
   home: string;
 }
 
@@ -76,12 +71,13 @@ export async function runAldev(
 ): Promise<RunResult> {
   const stdout = makeSink();
   const stderr = makeSink();
-  const env = { ...process.env };
+  const home = overrides.home ?? fixture.home;
+  const env = { ...process.env, HOME: home };
   Object.assign(env, overrides.env);
   const code = await main({
     argv: ["node", "aldev", ...args],
     cwd: overrides.cwd ?? fixture.root,
-    home: overrides.home ?? fixture.home,
+    home,
     env: { ...env, GIT_CONFIG_GLOBAL: gitConfigPath },
     alignfirstCommand: overrides.alignfirstCommand ?? ["node", ALIGNFIRST_BIN],
     stdout,
