@@ -2,6 +2,6 @@ Run a coding agent through AlignFirst protocols with `aldev code`. It wraps a co
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the coder.**
 
-Run `aldev code` from the root of the target project, so the coder works in the right repository. The project must contain a `.plans/` directory.
+Run `aldev code` from the root of the target project, so the coder works in the right repository. The project must have a `.plans/` directory, in the repository or in its companion directory.
 
 The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).

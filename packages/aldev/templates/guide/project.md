@@ -2,7 +2,9 @@
 
 A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker contains an optional description and `portRanges`. Each range has `first`, `last`, and optional `code` and `description`. The entry without a code is the default; codes name the project kind a range serves. A directory without the marker is skipped as a projects directory. Nested markers may claim sub-ranges inside one nearest enclosing range.
 
-A project is a direct child whose `alignfirst config --json` report finds `.alignfirst.json` at its root. Linked Git worktrees are listed as its workspaces. Other child directories appear under `others`.
+A project is a git main worktree, direct child of a projects directory. Its linked worktrees are listed as its workspaces. Other child directories, those that are not git repositories, appear under `others`.
+
+A project's AlignFirst files may live in its companion directory, declared in `~/.config/alignfirst/companions.json`. `aldev project status <path>` gives each location.
 
 ## Commands
 
@@ -28,4 +30,4 @@ The project config is its registration. Deleting the project removes it from the
 
 ## Reported issues
 
-The listing reports invalid project configs, non-main root projects, project or nested-directory ranges outside their enclosing range, and overlapping project ranges.
+The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects sharing one companion directory.

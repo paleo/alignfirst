@@ -66,7 +66,11 @@ The channel deliberately leaves some values for this session:
 - Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions, advice and brainstormings require PROJECT and PROJECT_PATH only. Follow `aldev guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
 - Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 
+Once a single-project request's PROJECT_PATH is known, run `aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
+
 For changes, protocol requests, and ticket status requests, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `alignfirst sync`, then `alignfirst ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `aldev code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
+
+TICKET_DIR lies in the work-files directory, `.plans/`, which may live in the project's companion. Use TICKET_DIR exactly as `alignfirst ticket` prints it, resolved from PROJECT_PATH when relative.
 
 Default rule: When the user asks you to handle or implement an existing ticket and a configured account gives you access to its platform, inspect the ticket before workspace setup. If its state is To do or equivalent and its assignee is either empty or your account, ensure it is assigned to your account and move it to In progress or equivalent when that state exists.
 
@@ -82,10 +86,10 @@ Skip this step for read-only questions, project lifecycle, and operational work.
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket:
 
-1. Read `{PROJECT_PATH}/DEVELOPERS.md` and run `alignfirst context` from PROJECT_PATH.
+1. Read DEVELOPERS_PATH and run `alignfirst context` from PROJECT_PATH.
 2. Run `alignfirst sync`, so identifier selection sees the current shared task set.
-3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates `.plans/side-N/` and prints the directory; TICKET_ID is the `side-N` it reports.
-4. Write `.plans/{TICKET_ID}/A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
+3. Run `alignfirst ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
+4. Write `{TICKET_DIR}A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
 5. Run `alignfirst sync`.
 
 The bot owns this reservation and the request capture; the coder receives TICKET_ID. Do not use `aldev code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
@@ -136,7 +140,7 @@ A request for a ticket's progress follows "Status update" instead; it needs that
 When one project owns a detailed change request, preserve it before delegation:
 
 1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
-2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR to get the request-file path, preserving the leading dot.
+2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `alignfirst ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the request-file path.
 3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
 4. Run `alignfirst sync`.
 5. When ticket editing is available, add the request-file path relative to the project to the ticket description.
@@ -189,8 +193,8 @@ After writing or editing any file under `.plans/` yourself, run `alignfirst sync
 A project has up to three entry points:
 
 - `README.md` — presentation, getting-started procedure…
-- `DEVELOPERS.md` — the coder's user, human or AI: you.
-- `AGENTS.md` — the coder.
+- `DEVELOPERS.md` — the coder's user, human or AI: you. Read it at DEVELOPERS_PATH.
+- `AGENTS.md` — the coder. When the project's instructions come from its companion, the companion's `.alignfirst.md` replaces it for the coder, and `alignfirst context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.
 
@@ -199,6 +203,8 @@ The rest of the documentation (`docs/`, …) addresses everybody.
 A project can have documentation files. List them all from PROJECT_PATH, the full tree. Most of the time, knowing that a document exists is enough. Its content is the coder's material, and the coder reads what its task needs. Open one yourself only when it settles a decision of yours.
 
 ### Main worktree and base branch
+
+A project in main-worktree mode (`aldev guide project-workspace-setup`) is the exception to this section: its main worktree leaves the base branch while a working thread holds it, and the edits happen there, on the thread's branch.
 
 The main worktree at PROJECT_PATH stays on the base branch, except for the repository-onboarding setup branch defined in `aldev guide project-lifecycle`. It is shared across sessions.
 
@@ -209,6 +215,8 @@ Install dependencies in the main worktree from the committed lockfile, without r
 Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
+
+A project in main-worktree mode has no linked worktree: its branches are created and checked out in the main worktree with plain `git switch`, and the rule against a hand-made checkout does not apply to it. `git worktree add`/`remove`/`prune` stay out of bounds.
 
 After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the `aldev guide project-workspace-setup` instructions to set it up.
 
@@ -280,9 +288,11 @@ When the user brings up acceptance testing, first be sure who runs it — ask wh
 
 ### Project rules and docs
 
+A project whose `.alignfirst.md` or `DEVELOPERS.md` resolves in its companion (`locations` in `aldev project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst.md` in place of `AGENTS.md`. The coder edits them in place. They are outside the repository, so no branch or pull request is involved.
+
 Two triggers, both edited through the coder:
 
-- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in `DEVELOPERS.md`, ask for confirmation, then have the coder make the edit.
+- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in DEVELOPERS_PATH, ask for confirmation, then have the coder make the edit.
 - The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a ready pull request.
 
 A rule that is not about a project has no home: the workspace files are read-only and no memory persists across sessions. Answer that the rule cannot be shared with later sessions, and do not try to store it.
@@ -343,7 +353,7 @@ After creating the MR/PR (via `aldev code`):
 
 Whenever you observe that a PR/MR is merged, delegate the post-merge maintenance to the coder without a protocol:
 
-1. Remove the source branch's registered project workspace through the project's workspace tooling, when one exists.
+1. Remove the source branch's registered project workspace through the project's workspace tooling, when one exists. In main-worktree mode, switch the main worktree back to the merge target instead.
 2. Refresh the merge target in the main worktree without switching the main worktree away from its base branch. Fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when the project requires them.
 3. Report the removed workspace and refreshed branch.
 
@@ -376,4 +386,4 @@ Creating a project, onboarding a repository to clone, or physically removing a p
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-- Never touch a worktree outside the workspace tooling.
+- Never touch a worktree outside the workspace tooling. The main worktree of a project in main-worktree mode is the exception.

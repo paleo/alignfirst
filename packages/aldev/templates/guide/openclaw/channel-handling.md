@@ -16,7 +16,7 @@ Resolve PROJECT and PROJECT_PATH from that result:
 
 - **PROJECT** — the selected main-worktree directory name.
 - **PROJECT_PATH** — its canonical absolute main-worktree path.
-- Only a project in the `projects` list supplies PROJECT_PATH. A name that appears only under a directory's `others` is a directory without `.alignfirst.json`, not a prepared project: report it and ask for a usable project path. For project removal, the listed project's path is PROJECT_PATH.
+- Only a project in the `projects` list supplies PROJECT_PATH. A name that appears only under a directory's `others` is a directory that is not a git repository, so not a project: report it and ask for a usable project path. For project removal, the listed project's path is PROJECT_PATH.
 - A mentioned name with one listed match supplies both values. A name counts as mentioned wherever it appears, including inside a resource URL's path (a repository URL naming the project, for instance).
 - A mentioned name with several listed matches supplies PROJECT but leaves PROJECT_PATH unresolved. Ask the user to select one of the matching canonical paths.
 - A mentioned name with no listed match supplies the proposed PROJECT but leaves PROJECT_PATH unresolved.

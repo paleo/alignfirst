@@ -5,7 +5,7 @@ The setup phase of a working session: get the workspace ready before handling th
 ## Prerequisites — run both now, before Step 1
 
 - `aldev guide code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
-- read `{PROJECT_PATH}/DEVELOPERS.md` — how to create a worktree or a branch.
+- run `aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
 
 ## Step 1 — Requirements
 
@@ -37,9 +37,9 @@ That single call is the whole exception. The post right after it, and every one 
 
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
 
-The workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
+A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. Its main worktree at PROJECT_PATH is its only workspace, used by one working thread at a time. "Main-worktree mode" below adapts this step, and wherever the playbook names the linked workspace, you use PROJECT_PATH.
 
-A project whose `DEVELOPERS.md` has no workspaces section is not set up for you. Stop there and tell the user the project needs the workspace system installed, offering to run the setup with the `alignfirst-setup-guide` skill.
+Otherwise, the workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
 
 First, fetch remote refs from PROJECT_PATH with `git fetch --prune`. Then check what already exists for the {TICKET_ID} — two checks, both required:
 
@@ -54,7 +54,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH.
 
-The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `aldev code` from that linked workspace, never PROJECT_PATH.
+The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `aldev code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
 
 Bold the values with your surface's markers rather than literal `**`, and translate the labels to the user's language:
 
@@ -67,6 +67,18 @@ Status: {running | ready | failed}
 ```
 
 The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on.
+
+### Main-worktree mode
+
+The branch check applies; the registered-workspace check does not. Before any checkout, claim the main worktree. It is free when it is on the default branch with a clean `git status`, or already on this thread's {TICKET_ID} branch. Otherwise, end the turn telling the user the project is busy: name the checked-out branch and the uncommitted changes, and change nothing.
+
+On a free main worktree, the sub-paths above run in PROJECT_PATH with plain `git switch`:
+
+1. **Already on the branch** → use it.
+2. **Branch exists, not checked out** → `git switch <branch>`.
+3. **No branch** → a status request ends as above. Otherwise, fast-forward the base branch as above, then `git switch -c {TICKET_ID}/{1-3-words}`.
+
+The `[WORKSPACE]` banner names the main worktree: `Worktree:` is the directory name of PROJECT_PATH, and `Status:` is `ready`.
 
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
 

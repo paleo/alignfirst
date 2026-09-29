@@ -26,8 +26,8 @@ export function renderCodeGuide(
     .replaceAll(
       "{{PERMISSIONS}}",
       agent === "claude"
-        ? "Normal runs use `--permission-mode auto`. `code.skipPermissions: true` in the aldev config selects `--dangerously-skip-permissions`"
-        : "Normal runs use `--sandbox workspace-write`. `code.skipPermissions: true` in the aldev config selects `--dangerously-bypass-approvals-and-sandbox`",
+        ? "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aldev config selects `--dangerously-skip-permissions`"
+        : "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aldev config selects `--dangerously-bypass-approvals-and-sandbox`",
     )
     .replaceAll("{{MODELS}}", models.map((model) => `\`${model}\``).join(", "))
     .trimEnd();

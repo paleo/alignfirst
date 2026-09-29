@@ -66,6 +66,7 @@ describe("renderCodeGuide", () => {
     expect(openclawInstructions).toContain("--meta <KEY>");
     expect(openclawInstructions).toContain("aldev code status <session-file>");
     expect(openclawInstructions).toContain(".plans/<ticket>/_aldev/<stamp>.md");
+    expect(openclawInstructions).toContain("the `sessionFile:` line of `aldev code status`");
     expect(openclawInstructions).not.toContain("thread-reply");
     expect(openclawInstructions).not.toContain("process log");
   });
@@ -82,6 +83,8 @@ describe("renderCodeGuide", () => {
       expect(guide).toContain("alignfirst");
       expect(guide).toContain("`code.models` in the aldev config");
       expect(guide).toContain("`code.skipPermissions: true` in the aldev config");
+      expect(guide).toContain("in the repository or in its companion directory");
+      expect(guide).toContain("plus `--add-dir <companion>`");
       expect(guide).not.toContain("reserve-side-ticket");
       expect(guide).toContain("account limits and reset times");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
@@ -165,6 +168,56 @@ describe("aldev guide playbook", () => {
     expect(result.stdout).toContain(
       "**The coder** — the coding agent (Claude Code or Codex) you launch in a project with `aldev code`.",
     );
+  });
+
+  it("reads DEVELOPERS.md at the path aldev project status reports", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    for (const topic of PLAYBOOK_TOPICS.openclaw) {
+      const result = await runGuide(fixture, [topic]);
+      expect(result.stdout, topic).not.toContain("{PROJECT_PATH}/DEVELOPERS.md");
+      expect(result.stdout, topic).not.toContain("preserving the leading dot");
+    }
+    for (const topic of [
+      "working-session",
+      "consultation",
+      "project-workspace-setup",
+      "project-lifecycle",
+    ]) {
+      const result = await runGuide(fixture, [topic]);
+      expect(result.stdout, topic).toContain(
+        "`aldev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH",
+      );
+    }
+    const session = await runGuide(fixture, ["working-session"]);
+    expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
+  });
+
+  it("describes the main-worktree mode", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const setup = await runGuide(fixture, ["project-workspace-setup"]);
+    expect(setup.stdout).toContain(
+      "**main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section",
+    );
+    expect(setup.stdout).toContain("telling the user the project is busy");
+    expect(setup.stdout).toContain("`git switch -c {TICKET_ID}/{1-3-words}`");
+    expect(setup.stdout).not.toContain("not set up for you");
+    const session = await runGuide(fixture, ["working-session"]);
+    expect(session.stdout).toContain("A project in main-worktree mode has no linked worktree");
+    const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
+    expect(lifecycle.stdout).toContain("When DEVELOPERS_PATH exists, the project is prepared");
+  });
+
+  it("routes companion rules and preparation to the companion", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const session = await runGuide(fixture, ["working-session"]);
+    expect(session.stdout).toContain("with `.alignfirst.md` in place of `AGENTS.md`");
+    expect(session.stdout).toContain("no branch or pull request is involved");
+    const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
+    expect(lifecycle.stdout).toContain('its procedure "Prepare a project through its companion"');
+    expect(lifecycle.stdout).toContain("You cannot write that file");
   });
 
   it("requires platform, naming the key, the config file and the platforms", async () => {
@@ -275,6 +328,7 @@ describe("aldev guide project", () => {
     expect(result.stdout).toMatch(/^# Projects guide\n/);
     expect(result.stdout).toContain("aldev guide project [--root <path>]");
     expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
+    expect(result.stdout).toContain("`~/.config/alignfirst/companions.json`");
     expect(result.stdout).not.toContain("## Directory");
     expect(result.stdout).not.toContain("{{");
   });

@@ -4,7 +4,7 @@
 
 ## How it runs
 
-`aldev code` runs the coder in the **foreground** and blocks until it finishes, streaming the transcript to stdout and to a session file under `.plans/`. It never backgrounds or detaches itself.
+`aldev code` runs the coder in the **foreground** and blocks until it finishes, streaming the transcript to stdout and to a session file under `.plans/`. It never backgrounds or detaches itself. The session file may live in the project's companion directory; the `sessionFile:` line of `aldev code status` gives the actual path.
 
 Coding runs can be long (several hours is fine): background `aldev code` with your platform's own background-execution facility — never detach it with `&` or a detach wrapper. **One protocol run at a time per worktree**; plain messages can be sent at any time.
 

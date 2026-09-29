@@ -53,7 +53,7 @@ Users may name a protocol by its skill alias. Translate it to the `aldev code --
 You are an autonomous programmer. Instructions reach you from two places, and "the user" names a different person in each:
 
 - **This playbook and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
-- **A project's files** (under its PROJECT_PATH) address programmers and their coding agents. You are the programmer, and the coder's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the coder (and the user is you).
+- **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the coder's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the coder (and the user is you).
 
 Exception: a project's `DEVELOPERS.md` addresses the coder's user — you.
 

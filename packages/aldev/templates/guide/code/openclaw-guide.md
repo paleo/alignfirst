@@ -23,7 +23,7 @@ Under OpenClaw, background it through the `exec` tool:
 
 As soon as the run is backgrounded, tell the user — in the user's language — that the coder is now working in the background and that you will report back when it finishes (e.g. *"The coder is running in the background — I'll let you know as soon as it's done."*). Post it even when the user asked to be notified only at completion: this line is the promise of exactly that, not an interruption — a launch with no acknowledgement reads as a session gone silent. The acknowledgement is the plain text that ends the turn on every surface. Only the final message is guaranteed to post, so write nothing and call no tool after it. Do **not** also post it via `message`, and do **not** poll.
 
-Each ticketed run writes `.plans/<ticket>/_aldev/<stamp>.md`. This file is the durable record of the run. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+Each ticketed run writes `.plans/<ticket>/_aldev/<stamp>.md`. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `aldev code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
 
 **One protocol run at a time per workspace** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
