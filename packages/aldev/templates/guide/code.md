@@ -66,19 +66,30 @@ If the frontmatter's `exitReason` is `auth_required`, the coding agent is not au
 {{#codingAgent}}
 ## How it runs
 
-`{{ALDEV}} code` runs the coder in the **foreground** and blocks until it finishes, streaming the transcript to stdout and to a session file under `.plans/`. It never backgrounds or detaches itself. The session file may live in the project's companion directory; the `sessionFile:` line of `{{ALDEV}} code status` gives the actual path.
+`{{ALDEV}} code` runs the coder in the **foreground** and blocks until it finishes, streaming the transcript to stdout. It never backgrounds or detaches itself.
 
-Coding runs can be long (several hours is fine): background `{{ALDEV}} code` with your platform's own background-execution facility — never detach it with `&` or a detach wrapper. **One protocol run at a time per worktree**; plain messages can be sent at any time.
+Its first line, `Session file: <path>`, names the run's session file, the durable record of the run; retain that path. The file may live in the project's companion directory. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
 
-Running under OpenClaw? `{{ALDEV}} guide code` renders the OpenClaw variant — the same manual with the OpenClaw-specific run and wake instructions — when the aldev config sets `platform: "openclaw"`.
+Coding runs can be long (several hours is fine), and a foreground command is subject to your tool timeout (10 minutes in Claude Code). **Always start `{{ALDEV}} code` with your own background-execution facility, with no time limit.** Never detach it with `&` or a detach wrapper.
+
+Run `{{ALDEV}} code` outside your sandbox: the coder needs network access, and it writes outside the project, to its own session storage and possibly to the companion directory. In Codex, request escalated permissions for the command. In Claude Code with sandboxing enabled, run it with the sandbox disabled.
+
+**One protocol run at a time per worktree** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
+
+## Background runs and reporting
+
+Once the run is started, end the turn telling the user, in their language, that the coder is working. Do not poll the run. A run is pending until you report its outcome.
+
+- When your harness wakes the session as the command exits (Claude Code does), follow "After a run completes" on that wake.
+- Otherwise (Codex has no such wake today), the report waits for the user's next message. At the start of each later user turn, before anything else, check every pending run with `{{ALDEV}} code status <session-file>`, and report the ones that finished.
 
 ## After a run completes
 
-Run `{{ALDEV}} code status <session-file>` with the path printed on the run's first line. This reconciles a stale `running` record before reporting its status. Then read the session file: its frontmatter carries `status` (`succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. Report it to the user where the work was requested. If the run failed, say so plainly and propose the next step.
+Run `{{ALDEV}} code status <session-file>`. This reconciles a stale `running` record before reporting its status. Then read the session file and report the outcome to the user in this conversation. If the run failed, say so plainly and propose the next step; don't silently retry.
 
-An `exitReason` of `auth_required` in the frontmatter (`{{ALDEV}} code` also exits `2`) means the coding agent is not authenticated on the host. An administrator must authenticate with {{AUTH_COMMAND}} before another run.
+An `exitReason` of `auth_required` in the frontmatter (`{{ALDEV}} code` also exits `2`) means the coding agent is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry.
 
-Don't reconstruct what happened: no re-running the coder, no `git` archaeology to double-check its account — the session file is authoritative for that. Do verify that the result works, though. Run the project's checks (tests, lint, build) and exercise the change yourself before calling it done; a failing check reopens the work in a new session.
+Don't reconstruct what happened: no re-running the coder, no `git` archaeology to double-check its account — the session file is authoritative for that. Verifying the result is different: run the verification your operating instructions prescribe before reporting. A failing check is new work, in a new coder run.
 
 Keep session files in place; they are the durable audit trail.
 {{/codingAgent}}

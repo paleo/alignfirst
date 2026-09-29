@@ -8,9 +8,19 @@ The user consults you, and you consult the coder. It reads the repository; you w
 
 ## Step 1 — Select the worktree
 
+{{#openclaw}}
 Run `{{ALDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/openclaw}}
+{{#codingAgent}}
+Read DEVELOPERS_PATH, retained by Step 1 of `{{ALDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/codingAgent}}
 
+{{#openclaw}}
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+{{/openclaw}}
+{{#codingAgent}}
+Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+{{/codingAgent}}
 
 ## Step 2 — Refresh the default branch
 
@@ -24,7 +34,12 @@ Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forwa
 
 ## Step 3 — Delegate
 
+{{#openclaw}}
 Apply the takeover-turn checkpoint in the playbook (`{{ALDEV}} guide`), then run `{{ALDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
+{{/openclaw}}
+{{#codingAgent}}
+Run `{{ALDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
+{{/codingAgent}}
 
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Include the environment refresh described in the working session when the main branch advanced. Use the delegation guide's background launch and completion procedure.
 
@@ -32,7 +47,12 @@ Retain the printed session id. Later turns of the same topic resume that session
 
 ## Step 4 — Relay
 
+{{#openclaw}}
 Answer in the thread, in your own words, grounded in what the coder found.
+{{/openclaw}}
+{{#codingAgent}}
+Answer in the conversation, in your own words, grounded in what the coder found.
+{{/codingAgent}}
 
 A request for changes ends the consultation: return to the ticket and linked-workspace flow before anything is implemented.
 

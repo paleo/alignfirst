@@ -47,12 +47,6 @@ const PLAYBOOK_TITLES: Record<string, string> = {
 useProjectFixtures();
 
 describe("renderCodeGuide", () => {
-  it("renders the codingAgent variant without the OpenClaw run instructions", () => {
-    const guide = renderCodeGuide("codingAgent", "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
-    expect(guide).toMatch(/^# AlignFirst Delegation Guide\n/);
-    expect(guide).not.toContain("background: true");
-  });
-
   it("renders the OpenClaw variant with its run and wake instructions", () => {
     const guide = renderCodeGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
     const openclawInstructions = guide.slice(0, guide.indexOf("## CLI reference"));
@@ -345,6 +339,69 @@ describe("every template, every platform", () => {
     const result = await runGuide(fixture, []);
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/^# /);
+  });
+});
+
+describe("codingAgent guides", () => {
+  const TOPICS = ["playbook", ...PLAYBOOK_TOPICS.codingAgent, "code"];
+  const OPENCLAW_TERMS = [
+    "thread_handoff",
+    "`message`",
+    "HEARTBEAT_OK",
+    "NO_REPLY",
+    "aldev project",
+    "project-lifecycle",
+    "channel-handling",
+    "`exec`",
+    "starter",
+  ];
+
+  it("renders every guide with no OpenClaw tool, sentinel or topic", async () => {
+    for (const agent of ["claude", "codex"]) {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
+      for (const topic of TOPICS) {
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic]);
+        expect(result.code, `${agent} ${topic}: ${result.stderr}`).toBe(0);
+        for (const term of OPENCLAW_TERMS) {
+          expect(result.stdout, `${agent} ${topic} mentions ${term}`).not.toContain(term);
+        }
+      }
+    }
+  });
+
+  it("routes the dispatcher to the working session", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const result = await runGuide(fixture, []);
+    expect(result.stdout).toContain("run `aldev guide working-session`");
+  });
+
+  it("resolves the project from the session's repository in working-session Step 1", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["working-session"]);
+    const step = stdout.slice(stdout.indexOf("### Step 1"), stdout.indexOf("### Step 2"));
+    expect(step).toContain("`git rev-parse --path-format=absolute --git-common-dir`");
+    expect(step).toContain("`alignfirst config --json`");
+  });
+
+  it("runs the coder in the background and outside the sandbox", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["code"]);
+    expect(stdout).toMatch(/^# AlignFirst Delegation Guide\n/);
+    expect(stdout).toContain("your own background-execution facility, with no time limit");
+    expect(stdout).toContain("subject to your tool timeout (10 minutes in Claude Code)");
+    expect(stdout).toContain("wakes the session as the command exits (Claude Code does)");
+    expect(stdout).toContain(
+      "At the start of each later user turn, before anything else, check every pending run with `aldev code status",
+    );
+    expect(stdout).toContain("Run `aldev code` outside your sandbox");
+    expect(stdout).toContain("request escalated permissions");
+    expect(stdout).toContain("run it with the sandbox disabled");
+    expect(stdout).not.toContain("Running under OpenClaw");
+    expect(stdout).not.toContain("background: true");
   });
 });
 
