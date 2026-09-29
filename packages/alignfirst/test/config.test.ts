@@ -1,9 +1,16 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeTempDir, packageVersion, runMain } from "./helpers.js";
+import {
+  configureGit,
+  initRepository,
+  makeTempDir,
+  packageVersion,
+  runMain,
+  writeCompanions,
+} from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -14,15 +21,30 @@ afterEach(() => {
 describe("config command", () => {
   it("reports no config in text and JSON", async () => {
     const cwd = temp();
-    expect((await runMain(["config"], { cwd })).stdout).toBe("Source: none\nCLI range: none\n");
-    expect(JSON.parse((await runMain(["config", "--json"], { cwd })).stdout)).toEqual({
-      source: null,
-      cli: null,
-      config: null,
+    expect((await runMain(["config"], { cwd })).stdout).toBe(
+      [
+        "Source: none",
+        "CLI range: none",
+        "Companion: none",
+        `.alignfirst.json: ${join(cwd, ".alignfirst.json")} (project, missing)`,
+        `.alignfirst.md: ${join(cwd, ".alignfirst.md")} (project, missing)`,
+        `DEVELOPERS.md: ${join(cwd, "DEVELOPERS.md")} (project, missing)`,
+        `docs: ${join(cwd, "docs")} (project, missing)`,
+        `.plans: ${join(cwd, ".plans")} (project, missing)`,
+        `_aldev: ${join(cwd, ".plans")} (project, missing)`,
+        "",
+      ].join("\n"),
+    );
+    const report = JSON.parse((await runMain(["config", "--json"], { cwd })).stdout);
+    expect(report).toMatchObject({ source: null, cli: null, config: null, companion: null });
+    expect(report.locations.docs).toEqual({
+      path: join(cwd, "docs"),
+      in: "project",
+      exists: false,
     });
   });
 
-  it("reports a root config and its unsatisfied range without failing", async () => {
+  it("reports a project config and its unsatisfied range without failing", async () => {
     const cwd = temp();
     writeFileSync(
       join(cwd, ".alignfirst.json"),
@@ -30,11 +52,73 @@ describe("config command", () => {
     );
     const result = await runMain(["config", "--json"], { cwd });
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      source: "root",
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      source: "project",
       cli: { installed: packageVersion, range: ">=1.0.0", satisfied: false },
       config: { schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" },
     });
+  });
+
+  it("reports the companion, its config and every location", async () => {
+    const home = temp();
+    configureGit(home);
+    const project = join(home, "projects", "app");
+    initRepository(project);
+    const companion = join(home, "companions", "projects_app");
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
+    writeCompanions(home, {
+      root: "~/companions",
+      paths: { "~/projects/app": { ".plans": false, _aldev: true } },
+    });
+
+    const json = JSON.parse((await runMain(["config", "--json"], { cwd: project, home })).stdout);
+    expect(json).toEqual({
+      source: "companion",
+      cli: null,
+      config: { schemaVersion: 1 },
+      companion: {
+        dir: companion,
+        exists: true,
+        entries: ["~/projects/app"],
+        flags: {
+          ".alignfirst.json": "auto",
+          ".alignfirst.md": "auto",
+          "DEVELOPERS.md": "auto",
+          docs: "auto",
+          ".plans": false,
+          _aldev: true,
+        },
+      },
+      locations: {
+        ".alignfirst.json": {
+          path: join(companion, ".alignfirst.json"),
+          in: "companion",
+          exists: true,
+        },
+        ".alignfirst.md": {
+          path: join(companion, ".alignfirst.md"),
+          in: "companion",
+          exists: false,
+        },
+        "DEVELOPERS.md": { path: join(companion, "DEVELOPERS.md"), in: "companion", exists: false },
+        docs: { path: join(companion, "docs"), in: "companion", exists: false },
+        ".plans": { path: join(project, ".plans"), in: "project", exists: false },
+        _aldev: { path: join(companion, ".plans"), in: "companion", exists: false },
+      },
+    });
+
+    const text = (await runMain(["config"], { cwd: project, home })).stdout;
+    expect(text).toContain(`Source: companion\nCLI range: none\nCompanion: ${companion}\n`);
+    expect(text).toContain(
+      `.alignfirst.json: ${join(companion, ".alignfirst.json")} (companion)\n`,
+    );
+    expect(text).toContain(`.plans: ${join(project, ".plans")} (project, missing)\n`);
+
+    rmSync(companion, { recursive: true });
+    expect((await runMain(["config"], { cwd: project, home })).stdout).toContain(
+      `Companion: ${companion} (missing)\n`,
+    );
   });
 
   it("reports an invalid config as a CLI error", async () => {
@@ -43,6 +127,16 @@ describe("config command", () => {
     const result = await runMain(["config"], { cwd });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(`Invalid ${join(cwd, ".alignfirst.json")}`);
+  });
+
+  it("reports an invalid companions.json as a CLI error", async () => {
+    const home = temp();
+    writeCompanions(home, { root: "relative", paths: {} });
+    const result = await runMain(["config", "--json"], { cwd: home, home });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      `Invalid ${join(home, ".config", "alignfirst", "companions.json")}: root must be`,
+    );
   });
 });
 

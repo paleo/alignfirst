@@ -1,6 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import semver from "semver";
@@ -16,6 +15,15 @@ import {
   resolveProjectConfig,
   type ResolvedProjectConfig,
 } from "../project-config.js";
+import {
+  type CompanionLayout,
+  companionsPath,
+  ITEM_NAMES,
+  type ItemName,
+  layoutOf,
+  type ProjectLayout,
+  renderItemLocation,
+} from "../project-layout.js";
 import { COMMAND_SKILLS, findInstalledSkill, type InstalledSkill } from "../skills.js";
 import { cliRangeResult } from "../version-guard.js";
 
@@ -30,9 +38,10 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
   writeSection(ctx, "CLI", () => inspectCli(ctx));
   let resolved: ResolvedProjectConfig | undefined;
   writeSection(ctx, PROJECT_CONFIG_FILENAME, () => {
-    resolved = resolveProjectConfig(ctx.cwd);
+    resolved = resolveProjectConfig(layoutOf(ctx));
     return inspectConfig(ctx, resolved);
   });
+  writeSection(ctx, "Companion", () => inspectCompanion(ctx));
   writeSection(ctx, "Git", () => inspectGit(ctx, resolved));
   writeSection(ctx, "Work files", () => inspectPlans(ctx));
   writeSection(ctx, "Docmap", () => inspectDocmap(ctx));
@@ -83,6 +92,33 @@ function inspectConfig(
   return lines;
 }
 
+function inspectCompanion(ctx: CommandContext): DoctorLine[] {
+  const path = companionsPath(ctx.home);
+  const layout = layoutOf(ctx);
+  const file: DoctorLine = {
+    level: "ok",
+    text: `companions.json ${existsSync(path) ? "valid" : "absent"} (${path})`,
+  };
+  if (layout.companion === null) return [file, { level: "ok", text: "none" }];
+  const { companion } = layout;
+  return [
+    file,
+    { level: "ok", text: `matched by ${companion.entries.join(", ")}` },
+    { level: "ok", text: `directory ${companion.dir}${companion.exists ? "" : " (missing)"}` },
+    ...ITEM_NAMES.map((name) => describeItem(name, layout, companion)),
+  ];
+}
+
+function describeItem(
+  name: ItemName,
+  layout: ProjectLayout,
+  companion: CompanionLayout,
+): DoctorLine {
+  const location = layout.locations[name];
+  const missingCopy = companion.flags[name] === true && !location.exists;
+  return { level: missingCopy ? "warn" : "ok", text: renderItemLocation(name, location) };
+}
+
 function inspectGit(
   ctx: CommandContext,
   resolved: ResolvedProjectConfig | undefined,
@@ -94,7 +130,7 @@ function inspectGit(
 }
 
 function inspectPlans(ctx: CommandContext): DoctorLine[] {
-  const mode = resolvePlansMode(ctx.cwd, ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form);
   if (mode.kind === "shared" && findStoppedRebase(mode.repoToplevel) !== undefined)
     return [{ level: "error", text: `rebase stopped on a conflict in ${mode.repoToplevel}` }];
   return [
@@ -106,7 +142,7 @@ function inspectPlans(ctx: CommandContext): DoctorLine[] {
 }
 
 function inspectDocmap(ctx: CommandContext): DoctorLine[] {
-  const present = existsSync(join(ctx.cwd, "docs"));
+  const present = layoutOf(ctx).locations.docs.exists;
   return [
     { level: "ok", text: `docs/ ${present ? "present" : "none"}` },
     { level: "ok", text: `embedded docmap ${readDocmapVersion()}` },

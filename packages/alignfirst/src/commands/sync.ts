@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import type { CommandContext } from "../context.js";
@@ -8,6 +7,7 @@ import { parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
+import { layoutOf } from "../project-layout.js";
 
 export async function runSync(ctx: CommandContext, args: string[]): Promise<number> {
   const usage = `Usage: ${ctx.form} sync [--auto-archive | --no-auto-archive]\n`;
@@ -20,10 +20,10 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
         ? false
         : (ctx.projectConfig?.config.plans?.autoArchive ?? false);
   const thresholdDays = enabled ? archiveThresholdDays(ctx.env) : undefined;
-  const mode = resolvePlansMode(ctx.cwd, ctx.form);
-  const plansDir = join(ctx.cwd, ".plans");
+  const plans = layoutOf(ctx).locations[".plans"];
+  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
   if (mode.kind === "local") {
-    if (thresholdDays !== undefined) autoArchive(plansDir, thresholdDays, ctx.stdout);
+    if (thresholdDays !== undefined) autoArchive(plans.path, thresholdDays, ctx.stdout);
     ctx.stdout.write("(local mode, nothing to sync)\n");
     return 0;
   }
@@ -40,7 +40,7 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
       await resolveStoppedRebase(ctx, repoDir);
     }
   }
-  if (thresholdDays !== undefined && autoArchive(plansDir, thresholdDays, ctx.stdout)) {
+  if (thresholdDays !== undefined && autoArchive(plans.path, thresholdDays, ctx.stdout)) {
     await git(ctx, repoDir, "add", "-A");
     if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   }

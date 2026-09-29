@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { findStoppedRebase } from "../src/plans/rebase.js";
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeTempDir, runMain, writeCompanions } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -425,6 +425,73 @@ describe("plans commands", () => {
     expect(result.stderr).toContain("mutually exclusive");
   });
 });
+
+describe("plans commands with a companion .plans", () => {
+  it("sets up the link in the companion, relative to its parent", async () => {
+    const fixture = makeFixture();
+    const companion = useCompanion(fixture);
+    const link = join(companion, ".plans");
+    const result = await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    const target = join("..", "..", "team-plans", "product-plans");
+    expect(readlinkSync(link)).toBe(target);
+    expect(result.stdout).toContain(`Linked ${link} → ${target}\n`);
+    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
+
+    const options = { cwd: fixture.product, home: fixture.root };
+    expect((await runMain(["plans", "check"], options)).stdout).toContain("linked");
+    mkdirSync(join(link, "78"));
+    const archive = await runMain(["plans", "archive", "78"], options);
+    expect(archive.stdout).toContain("Archived 78 → _archives/78");
+    expect(existsSync(join(fixture.clone, "product-plans", "_archives", "78"))).toBe(true);
+    const stale = join(link, "79");
+    mkdirSync(stale);
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    utimesSync(stale, old, old);
+    const automatic = await runMain(["plans", "auto-archive"], {
+      ...options,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+    expect(automatic.stdout).toContain("Archived 79");
+    expect(automatic.stdout).toContain("Publish with: alignfirst sync");
+  });
+
+  it("treats a plain companion .plans as local work files", async () => {
+    const fixture = makeFixture();
+    const plans = join(useCompanion(fixture), ".plans");
+    mkdirSync(join(plans, "78"), { recursive: true });
+    const options = { cwd: fixture.product, home: fixture.root };
+    expect((await runMain(["sync"], options)).stdout).toBe("(local mode, nothing to sync)\n");
+    expect((await runMain(["plans", "check"], options)).stdout).toContain("local mode");
+    const missing = await runMain(["plans", "archive", "80"], options);
+    expect(missing.stderr).toContain(`80 must be an existing directory directly under ${plans}.`);
+    expect((await runMain(["plans", "archive", "78"], options)).code).toBe(0);
+    expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
+  });
+
+  it("accepts _project as a plans folder", async () => {
+    const fixture = makeFixture();
+    const result = await runMain(["plans", "setup", fixture.clone, "--folder", "_project"], {
+      cwd: fixture.product,
+    });
+    expect(result.code).toBe(0);
+    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(
+      join("..", "team-plans", "_project"),
+    );
+  });
+});
+
+/** The home directory is the fixture root; the companion is `<root>/companions/product`. */
+function useCompanion(fixture: Fixture): string {
+  writeCompanions(fixture.root, {
+    root: "~/companions",
+    paths: { "~/product": { ".plans": true } },
+  });
+  return join(fixture.root, "companions", "product");
+}
 
 interface Fixture {
   root: string;

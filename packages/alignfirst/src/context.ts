@@ -1,4 +1,5 @@
 import type { ResolvedProjectConfig } from "./project-config.js";
+import type { ProjectLayout } from "./project-layout.js";
 
 export interface Output {
   write(text: string): void;
@@ -16,4 +17,5 @@ export interface CommandContext extends Streams {
   form: string;
   version: string;
   projectConfig?: ResolvedProjectConfig;
+  layout?: ProjectLayout;
 }

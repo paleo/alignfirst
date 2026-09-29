@@ -1,3 +1,5 @@
+import { isAbsolute, relative, sep } from "node:path";
+
 const KIB = 1024;
 const MIB = KIB * KIB;
 
@@ -22,4 +24,11 @@ export function formatLocalTimestamp(date: Date): string {
 
 function pad(value: number): string {
   return String(value).padStart(2, "0");
+}
+
+/** Relative to `cwd` when inside it, absolute otherwise. */
+export function displayPath(cwd: string, path: string): string {
+  const rel = relative(cwd, path);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return path;
+  return rel;
 }

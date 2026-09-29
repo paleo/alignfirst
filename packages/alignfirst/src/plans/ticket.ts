@@ -14,7 +14,7 @@ import { CliError } from "../cli-error.js";
 import { isNodeError } from "../errors.js";
 import { formatLocalTimestamp } from "../format.js";
 import { gitOutputOrUndefined } from "../git.js";
-import { archivesDir, isTicketName, plansDir } from "./layout.js";
+import { archivesDir, isTicketName } from "./layout.js";
 
 const FILE_PREFIX = /^([A-Z])(\d+)-/;
 const SIDE_TICKET = /^side-(\d+)$/;
@@ -53,13 +53,13 @@ export type TicketDetection =
   | { kind: "noBranch" };
 
 export function resolveTicketDir(
-  cwd: string,
+  plansPath: string,
   id: string,
   { dryRun }: ResolveTicketOptions,
 ): ResolvedTicketDir {
-  const dir = join(plansDir(cwd), id);
+  const dir = join(plansPath, id);
   if (existsSync(dir)) return { id, dir, state: "existing", entries: listEntries(dir) };
-  const archivedDir = join(archivesDir(cwd), id);
+  const archivedDir = join(archivesDir(plansPath), id);
   if (existsSync(archivedDir)) {
     const entries = listEntries(archivedDir);
     if (!dryRun) renameSync(archivedDir, dir);
@@ -69,13 +69,11 @@ export function resolveTicketDir(
   return { id, dir, state: "created", entries: [] };
 }
 
-export function reserveSideTicket(cwd: string): string {
-  const root = plansDir(cwd);
-  const highest = Math.max(highestSideTicket(root), highestSideTicket(archivesDir(cwd)));
-  for (let number = highest + 1; ; ++number) {
+export function reserveSideTicket(plansPath: string): string {
+  for (let number = highestSideTicket(plansPath) + 1; ; ++number) {
     const ticket = `side-${number}`;
     try {
-      mkdirSync(join(root, ticket));
+      mkdirSync(join(plansPath, ticket));
       return ticket;
     } catch (error) {
       if (!isNodeError(error) || error.code !== "EEXIST") throw error;
@@ -83,16 +81,18 @@ export function reserveSideTicket(cwd: string): string {
   }
 }
 
-export function peekSideTicket(cwd: string): string {
-  const root = plansDir(cwd);
-  const highest = Math.max(highestSideTicket(root), highestSideTicket(archivesDir(cwd)));
-  for (let number = highest + 1; ; ++number) {
+export function peekSideTicket(plansPath: string): string {
+  for (let number = highestSideTicket(plansPath) + 1; ; ++number) {
     const ticket = `side-${number}`;
-    if (!existsSync(join(root, ticket))) return ticket;
+    if (!existsSync(join(plansPath, ticket))) return ticket;
   }
 }
 
-function highestSideTicket(dir: string): number {
+function highestSideTicket(plansPath: string): number {
+  return Math.max(highestSideTicketIn(plansPath), highestSideTicketIn(archivesDir(plansPath)));
+}
+
+function highestSideTicketIn(dir: string): number {
   let highest = 0;
   for (const entry of readEntries(dir)) {
     const match = entry.isDirectory() ? SIDE_TICKET.exec(entry.name) : null;
@@ -216,9 +216,10 @@ export interface DeduceFromExistingOptions {
 /** Without a ticket id pattern, the branch can still name an existing ticket directory. */
 export function deduceTicketFromExisting(
   cwd: string,
+  plansPath: string,
   { sideAllowed }: DeduceFromExistingOptions,
 ): DeducedTicket {
-  const tickets = listTickets(cwd);
+  const tickets = listTickets(plansPath);
   const branch = currentBranch(cwd);
   if (branch !== undefined) {
     const matches = tickets.filter((ticket) => branchNamesTicket(branch, ticket.id));
@@ -233,10 +234,10 @@ interface ExistingTicket {
   modifiedAt: Date;
 }
 
-function listTickets(cwd: string): ExistingTicket[] {
+function listTickets(plansPath: string): ExistingTicket[] {
   return [
-    ...ticketDirectories(plansDir(cwd), false),
-    ...ticketDirectories(archivesDir(cwd), true),
+    ...ticketDirectories(plansPath, false),
+    ...ticketDirectories(archivesDir(plansPath), true),
   ].toSorted((left, right) => right.modifiedAt.getTime() - left.modifiedAt.getTime());
 }
 

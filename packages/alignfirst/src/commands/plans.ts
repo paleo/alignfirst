@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
+import { displayPath } from "../format.js";
 import { assertMainWorktreeRoot } from "../git.js";
 import { parseBareCommandArgs, parseCommandArgs } from "../parse-args.js";
 import { archiveEntry, archiveThresholdDays, autoArchive } from "../plans/archive.js";
@@ -11,8 +12,9 @@ import { isTicketName } from "../plans/layout.js";
 import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
+import { layoutOf } from "../project-layout.js";
 
-const RESERVED_PLANS_FOLDERS = new Set([".git", ".plans", "_archives", "_project"]);
+const RESERVED_PLANS_FOLDERS = new Set([".git", ".plans", "_archives"]);
 
 export function runPlans(ctx: CommandContext, args: string[]): number {
   const [command, ...rest] = args;
@@ -51,7 +53,7 @@ function runSetup(ctx: CommandContext, args: string[]): number {
   const cloneDir = resolve(ctx.cwd, parsed.dir);
   checkClone(ctx, cloneDir);
   const projectDir = createPlansDirectory(cloneDir, parsed.folder);
-  linkPlans(ctx, projectDir);
+  linkPlans(ctx, layoutOf(ctx).locations[".plans"].path, projectDir);
   return 0;
 }
 
@@ -132,7 +134,7 @@ function checkClone(ctx: CommandContext, cloneDir: string): void {
 function runCheck(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans check\n`;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
-  const mode = resolvePlansMode(ctx.cwd, ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form);
   if (mode.kind === "shared") {
     const stopped = findStoppedRebase(mode.repoToplevel);
     if (stopped !== undefined) throw new CliError(renderStoppedRebase(stopped, ctx.form));
@@ -145,8 +147,9 @@ function runCheck(ctx: CommandContext, args: string[]): number {
 function runAutoArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans auto-archive\n`;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
-  const mode = resolvePlansMode(ctx.cwd, ctx.form);
-  const archived = autoArchive(join(ctx.cwd, ".plans"), archiveThresholdDays(ctx.env), ctx.stdout);
+  const plans = layoutOf(ctx).locations[".plans"];
+  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
+  const archived = autoArchive(plans.path, archiveThresholdDays(ctx.env), ctx.stdout);
   if (mode.kind === "shared" && archived) ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;
 }
@@ -155,9 +158,9 @@ function runArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans archive <ticket-id | path>\n`;
   const target = resolveArchiveTarget(ctx, args, usage);
   if (target === undefined) return 0;
-  const mode = resolvePlansMode(ctx.cwd, ctx.form);
-  const root = join(ctx.cwd, ".plans");
-  archiveEntry(root, target, ctx.stdout);
+  const plans = layoutOf(ctx).locations[".plans"];
+  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
+  archiveEntry(plans.path, target, ctx.stdout);
   if (mode.kind === "shared") ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;
 }
@@ -181,11 +184,13 @@ function resolveArchiveTarget(
   }
   if (positionals.length !== 1) throw new CliError(usage.trimEnd());
   const argument = positionals[0];
-  const plansDir = join(ctx.cwd, ".plans");
+  const plansDir = layoutOf(ctx).locations[".plans"].path;
   const target = isPathArgument(argument) ? resolve(ctx.cwd, argument) : join(plansDir, argument);
   const stats = statSync(target, { throwIfNoEntry: false });
   if (!stats?.isDirectory() || realpathSync(dirname(target)) !== realpathSync(plansDir))
-    throw new CliError(`${argument} must be an existing directory directly under .plans.`);
+    throw new CliError(
+      `${argument} must be an existing directory directly under ${displayPath(ctx.cwd, plansDir)}.`,
+    );
   const name = basename(target);
   if (!isTicketName(name))
     throw new CliError(`${argument}: names starting with _ are not tickets.`);

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeTempDir, packageVersion, runMain } from "./helpers.js";
+import { makeCompanionProject, makeTempDir, packageVersion, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -55,6 +55,29 @@ describe("alignfirst CLI", () => {
     const cwd = temp();
     writeFileSync(join(cwd, ".alignfirst.json"), "{");
     expect((await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd })).code).toBe(0);
+  });
+
+  it("guards with the range of a companion .alignfirst.json", async () => {
+    const { root, home, project, companion } = makeCompanionProject({});
+    dirs.push(root);
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(
+      join(companion, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0" }),
+    );
+    const guarded = await runMain(["conventions"], { cwd: project, home });
+    expect(guarded.code).toBe(1);
+    expect(guarded.stderr).toContain("this project requires >=1.0.0");
+  });
+
+  it("fails project commands on an invalid companions.json", async () => {
+    const { root, home, project } = makeCompanionProject({ docs: "yes" });
+    dirs.push(root);
+    const result = await runMain(["conventions"], { cwd: project, home });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      `Invalid ${join(home, ".config", "alignfirst", "companions.json")}: `,
+    );
   });
 });
 

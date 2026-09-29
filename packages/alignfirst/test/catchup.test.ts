@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -46,6 +46,25 @@ describe("ticket --catchup", () => {
     ].map((match) => match[1]);
     expect(paths).toEqual(included);
     for (const file of included) expect(result.stdout).toContain(`Body: ${file}`);
+  });
+
+  it("heads each file with its absolute path in a companion .plans", async () => {
+    const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+    dirs.push(root);
+    const directory = join(companion, ".plans", "78");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "A1-spec.md"), "Body: spec");
+
+    const result = await runMain(["ticket", "78", "--catchup"], { cwd: project, home });
+
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(`- TICKET_DIR: \`${directory}/\``);
+    expect(result.stdout).toMatch(
+      new RegExp(
+        `^<file path="${join(directory, "A1-spec.md")}" modified="[^"]+">\nBody: spec\n`,
+        "m",
+      ),
+    );
   });
 
   it("uses the same numeric ordering for ordinary Markdown and JSON listings", async () => {

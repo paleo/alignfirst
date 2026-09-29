@@ -62,20 +62,20 @@ describe("project config", () => {
     },
   );
 
-  it("reads a file, returns undefined when absent, and reports invalid JSON", () => {
+  it("reads a file and reports invalid JSON", () => {
     const dir = makeTempDir();
     dirs.push(dir);
-    expect(readProjectConfig(dir)).toBeUndefined();
-    writeFileSync(join(dir, ".alignfirst.json"), '{"schemaVersion":1}');
-    expect(readProjectConfig(dir)).toEqual({ schemaVersion: 1 });
-    writeFileSync(join(dir, ".alignfirst.json"), "{");
-    expect(() => readProjectConfig(dir)).toThrow(`Invalid ${join(dir, ".alignfirst.json")}`);
+    const path = join(dir, ".alignfirst.json");
+    writeFileSync(path, '{"schemaVersion":1}');
+    expect(readProjectConfig(path)).toEqual({ schemaVersion: 1 });
+    writeFileSync(path, "{");
+    expect(() => readProjectConfig(path)).toThrow(`Invalid ${path}`);
   });
 
   it("rejects a directory in place of the config file", () => {
     const dir = makeTempDir();
     dirs.push(dir);
     mkdirSync(join(dir, ".alignfirst.json"));
-    expect(() => readProjectConfig(dir)).toThrow("Invalid");
+    expect(() => readProjectConfig(join(dir, ".alignfirst.json"))).toThrow("Invalid");
   });
 });

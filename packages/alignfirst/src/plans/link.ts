@@ -2,18 +2,19 @@ import {
   cpSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
+import { displayPath } from "../format.js";
 
-export function linkPlans(ctx: CommandContext, targetDir: string): void {
-  const plansPath = join(ctx.cwd, ".plans");
+export function linkPlans(ctx: CommandContext, plansPath: string, targetDir: string): void {
   const stats = lstatSync(plansPath, { throwIfNoEntry: false });
   if (stats?.isSymbolicLink()) {
     if (existsSync(plansPath) && realpathSync(plansPath) === realpathSync(targetDir)) {
@@ -26,9 +27,11 @@ export function linkPlans(ctx: CommandContext, targetDir: string): void {
   } else if (stats) {
     throw new CliError(".plans exists and is not a directory.");
   }
-  const target = relative(ctx.cwd, targetDir);
+  const parent = dirname(plansPath);
+  mkdirSync(parent, { recursive: true });
+  const target = relative(parent, targetDir);
   symlinkSync(target, plansPath);
-  ctx.stdout.write(`Linked .plans → ${target}\n`);
+  ctx.stdout.write(`Linked ${displayPath(ctx.cwd, plansPath)} → ${target}\n`);
   ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
 }
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeTempDir, runMain } from "./helpers.js";
+import { makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -25,6 +25,21 @@ describe("docmap command", () => {
         })
       ).stdout,
     ).toContain("npx -y alignfirst docmap --check");
+  });
+
+  it("passes the companion docs as --root unless one is given", async () => {
+    const { root, home, project, companion } = makeCompanionProject({ docs: true });
+    dirs.push(root);
+    mkdirSync(join(companion, "docs"), { recursive: true });
+    writeFileSync(join(companion, "docs", "topic.md"), "---\ntitle: Topic\n---\n\n# Topic\n");
+    mkdirSync(join(project, "docs"));
+    writeFileSync(join(project, "docs", "local.md"), "---\ntitle: Local\n---\n\n# Local\n");
+    const companionDocs = await runMain(["docmap"], { cwd: project, home });
+    expect(companionDocs.stdout).toContain("topic.md` — Topic");
+    expect(companionDocs.stdout).not.toContain("Local");
+    const explicit = await runMain(["docmap", "--root", "docs"], { cwd: project, home });
+    expect(explicit.stdout).toContain("`docs/local.md` — Local");
+    expect(explicit.stdout).not.toContain("Topic");
   });
 
   it("propagates docmap exit codes", async () => {
