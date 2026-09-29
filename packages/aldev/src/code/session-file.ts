@@ -197,15 +197,14 @@ export interface SessionRecord {
 }
 
 // Lists every active session record: `<sessionsDir>/_aldev/*.md` plus
-// `<sessionsDir>/<ticket>/_aldev/*.md` for each ticket directory of `plansDir`. Archived tickets keep
-// their session files but leave the registry. The session files are the registry — no separate
-// registry file.
+// `<sessionsDir>/<ticket>/_aldev/*.md`. Archived tickets move under `_archives/` and leave the
+// registry. The session files are the registry — no separate registry file.
 // Self-healing: a `running` record whose pid is gone is a stale leftover from an interrupted run;
 // it gets sealed in passing so the launch guards never block on dead state. The returned records
 // reflect the post-healing state.
-export function listSessionRecords(sessionsDir: string, plansDir: string): SessionRecord[] {
+export function listSessionRecords(sessionsDir: string): SessionRecord[] {
   const sessionDirs = [join(sessionsDir, "_aldev")];
-  for (const entry of readEntries(plansDir)) {
+  for (const entry of readEntries(sessionsDir)) {
     if (entry.isDirectory() && !entry.name.startsWith("_")) {
       sessionDirs.push(join(sessionsDir, entry.name, "_aldev"));
     }

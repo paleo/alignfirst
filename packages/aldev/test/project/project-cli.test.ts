@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -460,6 +460,18 @@ describe("project classification and companions", () => {
     expect(report.issues).toEqual([
       { path: realpathSync(nongit), message: "not a git main worktree" },
     ]);
+  });
+
+  it("lists a repository holding another project's .plans target with the others", async () => {
+    const fixture = makeFixture({});
+    const app = makeRepository(fixture.root, "app");
+    const clone = makeRepository(fixture.root, "team-plans");
+    mkdirSync(join(clone, "app"));
+    symlinkSync(join(clone, "app"), join(app, ".plans"));
+
+    const report = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
+    expect(report.projects.map(({ path }: { path: string }) => path)).toEqual([app]);
+    expect(report.directories[0].others).toEqual(["team-plans"]);
   });
 
   it("reports the companion and the locations in list and status", async () => {

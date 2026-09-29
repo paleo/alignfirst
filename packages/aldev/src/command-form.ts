@@ -1,5 +1,6 @@
 // How printed commands name the two CLIs: the global commands, or their `npx` form when aldev runs
-// through a package manager. The variable is inherited, so the processes aldev spawns agree.
+// through a package manager. The variable is inherited, so the processes aldev spawns agree. The rule
+// mirrors `resolveCommandForm` in the alignfirst package.
 export interface CommandForms {
   viaNpx: boolean;
   aldev: string;

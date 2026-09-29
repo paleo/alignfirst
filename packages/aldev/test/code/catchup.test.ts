@@ -84,7 +84,7 @@ describe("catchup launch", () => {
     expect(prompt).toContain("Content omitted: total limit exceeded.");
     expect(prompt).toContain("Run `alignfirst guide aad`");
     expect(prompt.endsWith(message)).toBe(true);
-    expect(listSessionRecords(plans, plans)[0].frontmatter.command).toContain(
+    expect(listSessionRecords(plans)[0].frontmatter.command).toContain(
       '--message-file "message.md"',
     );
   });
@@ -147,7 +147,7 @@ describe("catchup launch", () => {
     ["--message-file", "missing.md"],
   ])("rejects invalid inputs before creating a session: %j", async (...args) => {
     expect(await run(["new", ...args])).toBe(1);
-    expect(listSessionRecords(plans, plans)).toEqual([]);
+    expect(listSessionRecords(plans)).toEqual([]);
   });
 
   it("validates empty file content and protocol requirements", async () => {
@@ -165,7 +165,7 @@ describe("catchup launch", () => {
         "empty.md",
       ]),
     ).toBe(1);
-    expect(listSessionRecords(plans, plans)).toEqual([]);
+    expect(listSessionRecords(plans)).toEqual([]);
   });
 
   it("aborts before launching or creating a session when catchup fails", async () => {
@@ -185,7 +185,7 @@ describe("catchup launch", () => {
       }),
     ).toBe(1);
     expect(error).toContain("ticket unavailable");
-    expect(listSessionRecords(plans, plans)).toEqual([]);
+    expect(listSessionRecords(plans)).toEqual([]);
   });
 });
 

@@ -244,3 +244,10 @@ function pathExists(path: string): boolean {
 export function renderItemLocation(name: ItemName, location: ItemLocation): string {
   return `${name}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
+
+/** The `_aldev` tree when it is not the resolved `.plans` and exists. */
+export function separateSessionTree(layout: ProjectLayout): string | undefined {
+  const sessions = layout.locations._aldev;
+  if (!sessions.exists || sessions.path === layout.locations[".plans"].path) return;
+  return sessions.path;
+}

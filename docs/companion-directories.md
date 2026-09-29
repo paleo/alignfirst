@@ -62,6 +62,8 @@ With a companion, every item except `_aldev` resolves as follows. Without one, e
 
 `_aldev` names the `.plans`-shaped directory under which `aldev` writes `_aldev/` and `<ticket>/_aldev/`. With `true`, it is `<companion>/.plans`; otherwise it is the resolved `.plans`.
 
+A `_aldev` location other than the resolved `.plans` is a **separate session tree**, with its own `_archives/`. `plans archive`, `plans auto-archive` and `sync` archive it by the `.plans` rules, and `ticket <id>` restores its archived `<id>/`. No move crosses from one tree to the other.
+
 An effective `"_aldev": true` with an effective `".plans": "auto"` is an error naming the matching keys. Without it, the first `aldev` session would create `<companion>/.plans/`, and `alignfirst` would silently switch its work files to it.
 
 Reads never create the companion directory. A command that creates an item there, such as `plans setup` or a new session file, creates the missing parents. Existence checks use `lstat`, so a broken `.plans` symlink still resolves in place.
@@ -89,7 +91,7 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 ### `alignfirst`
 
 - **`ticket`**: `TICKET_DIR` and every reported path are relative to the working directory when inside it, absolute otherwise (`displayPath` in `format.ts`). The guides append FILE_NAME to TICKET_DIR exactly as printed.
-- **Work-files mode**: `resolvePlansMode` takes the resolved `.plans`. A `.plans` inside another repository than the project's is shared with it. A real directory outside git is local mode. A symlink pointing outside git stays an error. `sync` and archival operate on the resolved `.plans`.
+- **Work-files mode**: `resolvePlansMode` takes the resolved `.plans`. A `.plans` inside another repository than the project's is shared with it. A real directory outside git is local mode. A symlink pointing outside git stays an error. `sync` and archival operate on the resolved `.plans`, and on a separate session tree.
 - **`plans setup`**: creates the link at the resolved `.plans` location, with a target relative to the link's parent directory.
 - **`docmap`**: adds `--root <companion docs>` when `docs` resolves in the companion and the arguments carry no `--root`.
 - **`context`**: prints the conventions, then the resolved `.alignfirst.md` under `# Project Instructions`, then the docmap section when `docs` exists, then the protocols. The conventions give a companion `.plans` by absolute path and exclude `.plans` from searches only when it resolves in the project.
@@ -99,13 +101,13 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 ### `aldev code`
 
 - **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aldev.path`, and the launch gate requires `locations[".plans"].exists`.
-- **Active tickets**: a ticket's session directory is active only when `<.plans>/<ticket>/` is a directory. With a separate `_aldev` tree, tickets archived in the repository leave the registry.
-- **Write access**: when any item but `_aldev` resolves in the companion and `code.skipPermissions` is `false`, the coder receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
-- **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst.md`, `docs` or `.plans` resolves in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
+- **Active tickets**: the registry lists `_aldev/` and every `<ticket>/_aldev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
+- **Write access**: when any item but `_aldev` exists in the companion and `code.skipPermissions` is `false`, the coder receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
+- **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst.md`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 
 ### `aldev project`
 
-A direct child whose `.git` is a directory is a project. A child without `.git` but with a root `.alignfirst.json` is the issue "not a git main worktree". `list --json` and `status` carry each project's `companion` and `locations`. Two projects with the same companion directory is an issue on both.
+A direct child whose `.git` is a directory is a project, unless it holds another project's resolved `.plans`, as a work-files clone does: it is then listed with the others. A child without `.git` but with a root `.alignfirst.json` is the issue "not a git main worktree". `list --json` and `status` carry each project's `companion` and `locations`. Two projects with the same companion directory is an issue on both.
 
 ### The playbook
 
@@ -127,5 +129,4 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `aldev 
 ## Out of scope
 
 - `alignfirst workspace`, a default workspace implementation.
-- Cleanup of no-ticket session files in a separate `_aldev` tree: `plans auto-archive` sweeps the resolved `.plans` only.
 - Moving a companion: the pairing follows the path, so a moved project needs its entry and its companion renamed by hand.

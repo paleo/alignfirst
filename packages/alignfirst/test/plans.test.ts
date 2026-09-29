@@ -484,6 +484,67 @@ describe("plans commands with a companion .plans", () => {
   });
 });
 
+describe("plans commands with a separate session tree", () => {
+  it("archives each tree into its own _archives", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    const sessions = join(useSessionTree(fixture), ".plans");
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    for (const path of [join(plans, "79", "A1-spec.md"), join(sessions, "79", "_aldev", "a.md")]) {
+      mkdirSync(join(path, ".."), { recursive: true });
+      writeFileSync(path, "x\n");
+      utimesSync(path, old, old);
+    }
+    const noTicket = join(sessions, "_aldev", "20260901-100000.md");
+    writeFileSync(noTicket, "---\nstatus: succeeded\n---\n");
+    utimesSync(noTicket, old, old);
+
+    const result = await runMain(["plans", "auto-archive"], {
+      cwd: fixture.product,
+      home: fixture.root,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+
+    expect(result.stdout).toContain("Archived 79 → _archives/79");
+    expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
+    expect(result.stdout).toContain("Archived _aldev/20260901-100000.md (session tree)");
+    expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "79", "_aldev", "a.md"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "_aldev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "_aldev"))).toBe(false);
+  });
+
+  it("archives a ticket's session directory with the ticket", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    const sessions = join(useSessionTree(fixture), ".plans");
+    mkdirSync(join(plans, "78"), { recursive: true });
+    mkdirSync(join(sessions, "78", "_aldev"), { recursive: true });
+
+    const result = await runMain(["plans", "archive", "78"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
+
+    expect(result.code).toBe(0);
+    expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "78", "_aldev"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "78", "_aldev"))).toBe(false);
+  });
+});
+
+/** Project `.plans`, session tree in `<root>/companions/product/.plans`. */
+function useSessionTree(fixture: Fixture): string {
+  writeCompanions(fixture.root, {
+    root: "~/companions",
+    paths: { "~/product": { ".plans": false, _aldev: true } },
+  });
+  const companion = join(fixture.root, "companions", "product");
+  mkdirSync(join(companion, ".plans", "_aldev"), { recursive: true });
+  mkdirSync(join(fixture.product, ".plans"), { recursive: true });
+  return companion;
+}
+
 /** The home directory is the fixture root; the companion is `<root>/companions/product`. */
 function useCompanion(fixture: Fixture): string {
   writeCompanions(fixture.root, {

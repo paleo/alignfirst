@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
-import { loadCatchup, loadContext, reserveSideTicket } from "../alignfirst-cli.js";
+import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
 import type { AldevConfig, CodeConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
@@ -83,7 +83,6 @@ interface SessionTree {
   cwd: string;
   // The `.plans`-shaped directory holding the `_aldev/` session directories.
   sessionsDir: string;
-  plansDir: string;
 }
 
 export type CodeCommand =
@@ -157,7 +156,6 @@ function sessionTreeOf(report: ProjectReport, cwd: string): SessionTree {
   return {
     cwd: realpathSync(cwd),
     sessionsDir: report.locations._aldev.path,
-    plansDir: report.locations[".plans"].path,
   };
 }
 
@@ -189,7 +187,7 @@ function resolveStatusTargetSessionFile(tree: SessionTree, target: StatusTarget)
 // A run tagged with `--meta <key>` is found by that key alone: the session tree is shared across
 // worktrees, so its newest run may belong to another thread.
 function resolveMetaSessionFile(tree: SessionTree, meta: string): string {
-  const matches = listSessionRecords(tree.sessionsDir, tree.plansDir).filter(
+  const matches = listSessionRecords(tree.sessionsDir).filter(
     (record) => record.frontmatter.meta === meta,
   );
   if (matches.length === 0) throw new Error(`Error: no session file with meta "${meta}".`);
@@ -448,7 +446,7 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     return 1;
   }
 
-  const records = listSessionRecords(tree.sessionsDir, tree.plansDir);
+  const records = listSessionRecords(tree.sessionsDir);
   const guardError = checkLaunchGuards(args, agent, tree.cwd, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
@@ -459,6 +457,9 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
   const ticket = args.noTicket
     ? reserveSideTicket(alignfirstCommand, cwd, env)
     : resolveTicket(args, records);
+  if (ticket !== undefined && !args.noTicket && args.resume === undefined) {
+    openTicket(alignfirstCommand, cwd, ticket, env);
+  }
   let catchupContent: string | undefined;
   if (args.catchup === true) {
     if (ticket === undefined) {

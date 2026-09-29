@@ -43,6 +43,17 @@ export function reserveSideTicket(command: string[], cwd: string, env: NodeJS.Pr
   return report.TICKET_ID;
 }
 
+// Creates or restores the ticket's directories, as `alignfirst ticket <id>` does for a developer.
+export function openTicket(
+  command: string[],
+  cwd: string,
+  ticket: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  const result = runAlignfirst(command, ["ticket", ticket, "--json"], cwd, env);
+  if (result.status !== 0) throw new Error(result.stderr.trim() || "alignfirst ticket failed");
+}
+
 export function loadCatchup(
   command: string[],
   cwd: string,

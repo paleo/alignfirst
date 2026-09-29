@@ -86,18 +86,30 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
    set -e
    /opt/{{SERVICE_USER}}/libexec/admin-npm uninstall -g @alignfirst/alcode @alignfirst/alproject
-   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g aldev@latest
+   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aldev@latest
    '
    ```
 
-3. Remove the playbook copy:
+3. Rename the session directories from `_alcode` to `_aldev`, so `aldev code` finds the earlier sessions. A directory printed as `skipped` already has an `_aldev` sibling: merge the two by hand. With a work-files repository, the next `alignfirst sync` publishes the rename.
+
+   ```sh
+   sudo -i -u {{SERVICE_USER}} -- bash -c '
+   find ~/projects -name node_modules -prune -o -type d -name _alcode -prune -print |
+     while read -r dir; do
+       target="$(dirname "$dir")/_aldev"
+       if [ -e "$target" ]; then echo "skipped: $dir"; else mv -T "$dir" "$target"; fi
+     done
+   '
+   ```
+
+4. Remove the playbook copy:
 
    ```sh
    sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
      rm -rf /home/{{SERVICE_USER}}/.openclaw/skills/alignfirst-openclaw-playbook
    ```
 
-4. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aldev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
+5. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aldev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
 
    ```sh
    # only when step 1 deleted coding-agent.conf
@@ -105,7 +117,7 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec
    ```
 
-5. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aldev` and `ctx7`.
+6. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aldev` and `ctx7`.
 
    ```sh
    sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0

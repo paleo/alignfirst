@@ -245,7 +245,7 @@ describe("listSessionRecords", () => {
   }
 
   function listRecords() {
-    return listSessionRecords(plansDir, plansDir);
+    return listSessionRecords(plansDir);
   }
 
   // A just-exited child's pid is guaranteed dead (and not yet reused).
@@ -270,16 +270,15 @@ describe("listSessionRecords", () => {
     expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
   });
 
-  it("reads a separate sessions tree, filtered by the active tickets of .plans", () => {
+  it("reads a separate sessions tree on its own, archives excluded", () => {
     const sessionsDir = join(dir, "companion", ".plans");
-    mkdirSync(join(plansDir, "29"));
     const rootPath = seedRecord("_aldev", "a.md", makeFrontmatter(), sessionsDir);
-    const activePath = seedRecord(join("29", "_aldev"), "b.md", makeFrontmatter(), sessionsDir);
-    seedRecord(join("30", "_aldev"), "archived.md", makeFrontmatter(), sessionsDir);
-    seedRecord(join("29", "_aldev"), "project.md", makeFrontmatter());
+    const ticketPath = seedRecord(join("29", "_aldev"), "b.md", makeFrontmatter(), sessionsDir);
+    seedRecord(join("_archives", "30", "_aldev"), "archived.md", makeFrontmatter(), sessionsDir);
+    seedRecord(join("31", "_aldev"), "project.md", makeFrontmatter());
 
-    const records = listSessionRecords(sessionsDir, plansDir);
-    expect(records.map((r) => r.path).sort()).toEqual([rootPath, activePath].sort());
+    const records = listSessionRecords(sessionsDir);
+    expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
   });
 
   it("ignores session records under archived tickets", () => {

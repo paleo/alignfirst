@@ -20,10 +20,10 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
         ? false
         : (ctx.projectConfig?.config.plans?.autoArchive ?? false);
   const thresholdDays = enabled ? archiveThresholdDays(ctx.env) : undefined;
-  const plans = layoutOf(ctx).locations[".plans"];
-  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
+  const layout = layoutOf(ctx);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
   if (mode.kind === "local") {
-    if (thresholdDays !== undefined) autoArchive(plans.path, thresholdDays, ctx.stdout);
+    if (thresholdDays !== undefined) autoArchive(layout, thresholdDays, ctx.stdout);
     ctx.stdout.write("(local mode, nothing to sync)\n");
     return 0;
   }
@@ -40,7 +40,7 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
       await resolveStoppedRebase(ctx, repoDir);
     }
   }
-  if (thresholdDays !== undefined && autoArchive(plans.path, thresholdDays, ctx.stdout)) {
+  if (thresholdDays !== undefined && autoArchive(layout, thresholdDays, ctx.stdout)) {
     await git(ctx, repoDir, "add", "-A");
     if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
   }

@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 import { isNodeError } from "../errors.js";
 import { formatRange } from "./format.js";
@@ -150,9 +150,10 @@ function classifyCandidates(state: WalkState, ctx: InventoryContext): Discovered
   for (const candidate of state.candidates) {
     (isLinkedWorktree(candidate.path) ? linkedCandidates : ordinaryCandidates).push(candidate);
   }
-  const projects = ordinaryCandidates.flatMap((candidate) =>
+  const classified = ordinaryCandidates.flatMap((candidate) =>
     classifyCandidate(candidate, state, ctx),
   );
+  const projects = excludeWorkFilesRepositories(classified, state.directories);
   attachLinkedWorktrees(linkedCandidates, projects, state.directories);
   return projects;
 }
@@ -197,6 +198,39 @@ function classifyCandidate(
   }
   reportOutsideRange(project.path, project.portRange, candidate.enclosingRanges, state.issues);
   return [project];
+}
+
+// A repository holding another project's `.plans` target, such as a work-files clone, is listed
+// with the others.
+function excludeWorkFilesRepositories(
+  projects: DiscoveredProject[],
+  directories: ProjectsDirectory[],
+): DiscoveredProject[] {
+  const plansTargets = projects.flatMap((project) => {
+    const target = realPlansPath(project);
+    return target === undefined ? [] : [{ owner: project.path, target }];
+  });
+  return projects.filter((project) => {
+    const holdsPlans = plansTargets.some(
+      ({ owner, target }) => owner !== project.path && isSameOrInside(target, project.path),
+    );
+    if (holdsPlans) addOther(directories, project.directory, project.name);
+    return !holdsPlans;
+  });
+}
+
+function realPlansPath(project: DiscoveredProject): string | undefined {
+  const plans = project.description.locations[".plans"];
+  if (!plans.exists) return;
+  try {
+    return realpathSync(plans.path);
+  } catch {
+    return;
+  }
+}
+
+function isSameOrInside(path: string, ancestor: string): boolean {
+  return path === ancestor || path.startsWith(`${ancestor}${sep}`);
 }
 
 function isLinkedWorktree(path: string): boolean {

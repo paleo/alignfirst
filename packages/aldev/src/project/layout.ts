@@ -2,6 +2,8 @@ import { runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
+const MIN_ALIGNFIRST_VERSION = "0.5.0";
+
 export type ItemName =
   | ".alignfirst.json"
   | ".alignfirst.md"
@@ -74,6 +76,7 @@ function firstLine(value: string): string {
 
 function parseProjectReport(value: unknown, path: string): ProjectReport {
   if (!isRecord(value)) throw invalidReport(path);
+  if (value.source === "root" || value.locations === undefined) throw outdatedAlignfirst(path);
   return {
     source: parseSource(value.source, path),
     cli: parseCli(value.cli, path),
@@ -162,6 +165,13 @@ function invalidReport(path: string): Error {
   return new Error(`Invalid alignfirst config report for ${path}`);
 }
 
+function outdatedAlignfirst(path: string): Error {
+  return new Error(
+    `The alignfirst CLI used in ${path} is too old: aldev requires alignfirst ` +
+      `${MIN_ALIGNFIRST_VERSION} or later.`,
+  );
+}
+
 function isPortRange(value: unknown): value is PortRange {
   return isRecord(value) && typeof value.first === "number" && typeof value.last === "number";
 }
@@ -170,7 +180,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// Some of the given items resolves in the companion directory.
+// Some of the given items exists in the companion directory.
 export function companionInUse(report: ProjectReport, items: readonly ItemName[]): boolean {
-  return items.some((item) => report.locations[item].in === "companion");
+  return items.some((item) => {
+    const location = report.locations[item];
+    return location.in === "companion" && location.exists;
+  });
 }

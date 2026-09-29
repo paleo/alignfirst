@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -818,7 +819,7 @@ describe("launch guards", () => {
 
   it("rejects a cross-agent resume before discovery or session creation", async () => {
     seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
-    const before = listSessionRecords(plans, plans).length;
+    const before = listSessionRecords(plans).length;
     const modelResolver = vi.fn(async () => "gpt-5.6-terra");
     const stderr = makeSink();
     const otherHome = makeHome({
@@ -837,7 +838,7 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stderr.text()).toContain("belongs to agent codex");
     expect(modelResolver).not.toHaveBeenCalled();
-    expect(listSessionRecords(plans, plans)).toHaveLength(before);
+    expect(listSessionRecords(plans)).toHaveLength(before);
   });
 
   it("seals model-discovery failures in the session file", async () => {
@@ -860,7 +861,7 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stdout.text()).toContain("Session file:");
     expect(stderr.text()).toContain("catalog unavailable");
-    const records = listSessionRecords(plans, plans);
+    const records = listSessionRecords(plans);
     expect(records).toHaveLength(1);
     expect(readCompletion(records[0].path)).toMatchObject({
       frontmatter: { status: "failed", exitReason: "error", sessionId: null },
@@ -886,7 +887,7 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-2", "_aldev")}`);
-    const [record] = listSessionRecords(plans, plans);
+    const [record] = listSessionRecords(plans);
     expect(record.frontmatter.ticket).toBe("side-2");
     expect(record.frontmatter.command).toBe(
       'aldev code new --protocol aad --no-ticket --message "go"',
@@ -906,7 +907,7 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stderr.text()).toContain("alignfirst is not installed");
-    expect(listSessionRecords(plans, plans)).toEqual([]);
+    expect(listSessionRecords(plans)).toEqual([]);
   });
 
   it("rejects a protocol run while another run is active in the same worktree", async () => {
@@ -1001,21 +1002,25 @@ describe("companion projects", () => {
     const started = await run(project, ["new", "-m", "go"]);
     expect(started.stderr).toContain("stop before spawning");
     expect(started.stdout).toContain(`Session file: ${join(plans, "_aldev")}/`);
-    expect(listSessionRecords(plans, plans)).toHaveLength(1);
+    expect(listSessionRecords(plans)).toHaveLength(1);
   });
 
-  it("writes a separate _aldev tree and keeps only the active tickets of .plans", async () => {
+  it("writes a separate _aldev tree and opens the ticket in both trees", async () => {
     const project = makeCompanionProject(home, { ".plans": false, _aldev: true });
     const plans = join(project.project, ".plans");
     const sessions = join(project.companion, ".plans");
-    mkdirSync(join(plans, "29"), { recursive: true });
+    mkdirSync(join(plans, "_archives", "29"), { recursive: true });
+    mkdirSync(join(sessions, "_archives", "29", "_aldev"), { recursive: true });
 
     const started = await run(project, ["new", "--ticket", "29", "-m", "go"]);
     expect(started.stdout).toContain(`Session file: ${join(sessions, "29", "_aldev")}/`);
-    expect(listSessionRecords(sessions, plans)).toHaveLength(1);
+    expect(existsSync(join(plans, "29"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "29"))).toBe(false);
+    expect(existsSync(join(plans, "29", "_aldev"))).toBe(false);
+    expect(listSessionRecords(sessions)).toHaveLength(1);
 
     rmSync(join(plans, "29"), { recursive: true });
-    expect(listSessionRecords(sessions, plans)).toEqual([]);
+    expect(listSessionRecords(sessions)).toHaveLength(1);
   });
 
   it("reserves a side ticket in the companion .plans", async () => {
@@ -1073,29 +1078,7 @@ describe("companion projects", () => {
   it("adds the companion directory and the project context for the coder", async () => {
     const project = makeCompanionProject(home, { ".plans": true });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
-    const bin = join(base, "bin");
-    mkdirSync(bin);
-    writeFileSync(
-      join(bin, "claude"),
-      `#!${process.execPath}
-const { writeFileSync } = require("node:fs");
-const { join } = require("node:path");
-let prompt = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => (prompt += chunk));
-process.stdin.on("end", () => {
-  writeFileSync(join(${JSON.stringify(bin)}, "prompt.txt"), prompt);
-  writeFileSync(join(${JSON.stringify(bin)}, "args.json"), JSON.stringify(process.argv.slice(2)));
-  process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));
-});
-`,
-      { mode: 0o755 },
-    );
-    const path = `${bin}:${process.env.PATH ?? ""}`;
-    const received = () => ({
-      prompt: readFileSync(join(bin, "prompt.txt"), "utf8"),
-      args: JSON.parse(readFileSync(join(bin, "args.json"), "utf8")),
-    });
+    const { path, received } = installFakeClaude(base);
 
     const stdout = makeSink();
     const started = await main({
@@ -1129,7 +1112,62 @@ process.stdin.on("end", () => {
     expect(second.prompt).toBe("more");
     expect(second.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
   });
+
+  it("skips the companion and the project context when nothing exists in the companion", async () => {
+    const project = makeCompanionProject(home, { ".plans": false, _aldev: true });
+    mkdirSync(join(project.project, ".plans"), { recursive: true });
+    mkdirSync(join(project.companion, ".plans"), { recursive: true });
+    const { path, received } = installFakeClaude(base);
+
+    const started = await main({
+      argv: ["node", "aldev", "code", "new", "-m", "go"],
+      cwd: project.project,
+      env: { PATH: path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelResolver: async () => undefined,
+    });
+    expect(started).toBe(0);
+    const { prompt, args } = received();
+    expect(prompt).toBe("go");
+    expect(args).not.toContain("--add-dir");
+  });
 });
+
+interface FakeClaude {
+  path: string;
+  received: () => { prompt: string; args: string[] };
+}
+
+// A `claude` on PATH that records its prompt and arguments, then reports session `session-1`.
+function installFakeClaude(base: string): FakeClaude {
+  const bin = join(base, "bin");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "claude"),
+    `#!${process.execPath}
+const { writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+let prompt = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (prompt += chunk));
+process.stdin.on("end", () => {
+  writeFileSync(join(${JSON.stringify(bin)}, "prompt.txt"), prompt);
+  writeFileSync(join(${JSON.stringify(bin)}, "args.json"), JSON.stringify(process.argv.slice(2)));
+  process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));
+});
+`,
+    { mode: 0o755 },
+  );
+  const path = `${bin}:${process.env.PATH ?? ""}`;
+  const received = () => ({
+    prompt: readFileSync(join(bin, "prompt.txt"), "utf8"),
+    args: JSON.parse(readFileSync(join(bin, "args.json"), "utf8")),
+  });
+  return { path, received };
+}
 
 function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFrontmatter {
   return {

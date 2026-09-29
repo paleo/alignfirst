@@ -7,7 +7,7 @@ import type { CommandContext } from "../context.js";
 import { displayPath } from "../format.js";
 import { assertMainWorktreeRoot } from "../git.js";
 import { parseBareCommandArgs, parseCommandArgs } from "../parse-args.js";
-import { archiveEntry, archiveThresholdDays, autoArchive } from "../plans/archive.js";
+import { archiveThresholdDays, archiveTicket, autoArchive } from "../plans/archive.js";
 import { isTicketName } from "../plans/layout.js";
 import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
@@ -147,25 +147,25 @@ function runCheck(ctx: CommandContext, args: string[]): number {
 function runAutoArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans auto-archive\n`;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
-  const plans = layoutOf(ctx).locations[".plans"];
-  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
-  const archived = autoArchive(plans.path, archiveThresholdDays(ctx.env), ctx.stdout);
+  const layout = layoutOf(ctx);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
+  const archived = autoArchive(layout, archiveThresholdDays(ctx.env), ctx.stdout);
   if (mode.kind === "shared" && archived) ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;
 }
 
 function runArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans archive <ticket-id | path>\n`;
-  const target = resolveArchiveTarget(ctx, args, usage);
-  if (target === undefined) return 0;
-  const plans = layoutOf(ctx).locations[".plans"];
-  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
-  archiveEntry(plans.path, target, ctx.stdout);
+  const ticket = resolveArchiveTicket(ctx, args, usage);
+  if (ticket === undefined) return 0;
+  const layout = layoutOf(ctx);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
+  archiveTicket(layout, ticket, ctx.stdout);
   if (mode.kind === "shared") ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;
 }
 
-function resolveArchiveTarget(
+function resolveArchiveTicket(
   ctx: CommandContext,
   args: string[],
   usage: string,
@@ -194,7 +194,7 @@ function resolveArchiveTarget(
   const name = basename(target);
   if (!isTicketName(name))
     throw new CliError(`${argument}: names starting with _ are not tickets.`);
-  return join(plansDir, name);
+  return name;
 }
 
 function isPathArgument(argument: string): boolean {

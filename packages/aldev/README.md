@@ -32,7 +32,7 @@ aldev code quota
 
 The coding agent `aldev code` launches is **the coder**. Run `aldev code` from the root of the target project. The project must have a `.plans/` directory, in its repository or in its companion directory.
 
-`aldev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aldev` location: `<ticket>/_aldev/` or `_aldev/`, below the project's `.plans/` unless the companion holds a separate tree. When the project's AlignFirst files live in its companion, the normal permission modes make the companion writable for the coder (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
+`aldev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aldev` location: `<ticket>/_aldev/` or `_aldev/`, below the project's `.plans/` unless the companion holds a separate tree. When some of the project's AlignFirst files exist in its companion, the normal permission modes make the companion writable for the coder (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
 
 A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side` and passes it to the coder.
 

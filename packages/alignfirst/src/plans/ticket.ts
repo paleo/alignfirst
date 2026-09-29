@@ -14,6 +14,7 @@ import { CliError } from "../cli-error.js";
 import { isNodeError } from "../errors.js";
 import { formatLocalTimestamp } from "../format.js";
 import { gitOutputOrUndefined } from "../git.js";
+import { type ProjectLayout, separateSessionTree } from "../project-layout.js";
 import { archivesDir, isTicketName } from "./layout.js";
 
 const FILE_PREFIX = /^([A-Z])(\d+)-/;
@@ -67,6 +68,15 @@ export function resolveTicketDir(
   }
   if (!dryRun) mkdirSync(dir);
   return { id, dir, state: "created", entries: [] };
+}
+
+/** Restores ticket `id` in a separate session tree, when only its archived copy exists. */
+export function restoreSessionTreeTicket(layout: ProjectLayout, id: string): void {
+  const sessionsDir = separateSessionTree(layout);
+  if (sessionsDir === undefined) return;
+  const dir = join(sessionsDir, id);
+  const archivedDir = join(archivesDir(sessionsDir), id);
+  if (!existsSync(dir) && existsSync(archivedDir)) renameSync(archivedDir, dir);
 }
 
 export function reserveSideTicket(plansPath: string): string {

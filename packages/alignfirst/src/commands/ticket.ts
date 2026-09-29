@@ -14,6 +14,7 @@ import {
   peekSideTicket,
   reserveSideTicket,
   resolveTicketDir,
+  restoreSessionTreeTicket,
   type ResolvedTicketDir,
   type TicketEntry,
   validateTicketId,
@@ -64,9 +65,11 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
   const usage = renderUsage(ctx);
   const parsed = parseTicketArgs(ctx, args, usage);
   if (parsed === undefined) return 0;
-  const plans = layoutOf(ctx).locations[".plans"];
+  const layout = layoutOf(ctx);
+  const plans = layout.locations[".plans"];
   assertPlansGate(plans, ctx.form);
   const result = resolveTicket(plans.path, parsed);
+  if (!parsed.side && !parsed.dryRun) restoreSessionTreeTicket(layout, result.id);
   if (parsed.catchup) {
     ctx.stdout.write(renderCatchup(ctx.cwd, result, renderReport(ctx, parsed, result)));
     return 0;
