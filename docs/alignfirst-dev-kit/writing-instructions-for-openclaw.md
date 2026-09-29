@@ -68,6 +68,14 @@ OpenClaw saves heartbeat user messages as `[OpenClaw heartbeat poll]`, even when
 
 An exception placed after the procedure it excepts gets skipped: the model acts on the first sentence. The no-branch sub-path of `project-workspace-setup.md` opened with "set up a workspace on a new branch" and closed with "status request: tell the user there's no work"; Terra created the workspace for a status request (A09 Discord, 2026-09-08). Lead with the exception, then the default.
 
+## A step's first sentence sets its scope
+
+`working-session.md` Step 1 opened with "A takeover turn starts with the plugin's `Take over this thread.` message"; the claim rule came in the next paragraph. On a turn started by a human message, Terra read the step as takeover-only and went straight to the history read and the reaction. The claim was skipped in 5 of 5 A20 cells and 6 of 8 A23 cells (2026-09-28/29), on both surfaces. The dispatcher's "a thread a human opened … carries no starter and no handoff" added a reason to skip it. The step now opens with the rule and its full trigger: "Every turn in this thread, a human message's included, starts with a claim", plus "You cannot know whether a handoff is recorded until the claim answers". After that change, every thread session claimed first.
+
+## A literal value outranks a pointer to the reference
+
+Step 2 said "react with 🦞" and pointed to the surface reference for the call. On Slack, Terra often skipped the reference and sent `🦞`, where Slack needs the name `lobster`. It failed the reaction contract in A01 (2026-09-28) and A20 (2026-09-29). When a value differs by surface, give each value in the instruction that uses it: "`🦞` on Discord, `lobster` on Slack".
+
 ## Template + variations beats N full examples
 
 A single labelled template plus a short list of variation tails beats four full-example bullets, and stops the assistant from compressing the template away. Bad:
