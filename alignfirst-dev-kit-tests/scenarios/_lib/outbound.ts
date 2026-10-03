@@ -101,7 +101,7 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
 }
 
 /**
- * The channel turn ends on one short line pointing to the thread. OpenClaw 2026.9.6 requires that
+ * The channel turn ends on one short line pointing to the thread. Since 2026.9.6, OpenClaw requires that
  * answer for a mentioned request; a silent turn gets a context-free finalizer post instead.
  */
 export async function waitForHandoffPointer(

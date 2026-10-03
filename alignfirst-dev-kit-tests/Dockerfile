@@ -71,19 +71,19 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 RUN npm ci --include=dev && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.9.6 && \
+        npm:@openclaw/codex@2026.9.8 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.9.6 && \
+        npm:@openclaw/zai-provider@2026.9.8 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.9.6 && \
+        npm:@openclaw/perplexity-plugin@2026.9.8 && \
     OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw plugins registry --refresh && \
     npm cache clean --force
 
-# OpenClaw 2026.9.6 defers plugin state migration until its update records are
-# released. Finalize the update first, then settle the deferred state in a new
+# Since 2026.9.6, OpenClaw defers plugin state migration until its update records
+# are released. Finalize the update first, then settle the deferred state in a new
 # process. Retry Doctor because a just-released SQLite lease can race once.
 RUN OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
       npx openclaw update repair --yes

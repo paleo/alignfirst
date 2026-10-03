@@ -68,7 +68,7 @@ sqlite3 -readonly ~/.openclaw/agents/main/agent/openclaw-agent.sqlite \
    order by created_at desc limit 1;"
 ```
 
-In OpenClaw 2026.9.6, `transcript_events` stores an event of 1 KiB or more zstd-compressed in `event_zstd`, with `event_json` NULL. The query above sees only smaller events; decompress `event_zstd` with `node:zlib` for the others, as the harness readers do. Confirm the columns after an upgrade with `.schema transcript_events`.
+Since OpenClaw 2026.9.6, `transcript_events` stores an event of 1 KiB or more zstd-compressed in `event_zstd`, with `event_json` NULL. The query above sees only smaller events; decompress `event_zstd` with `node:zlib` for the others, as the harness readers do. Confirm the columns after an upgrade with `.schema transcript_events`.
 
 `gateway call agent --expect-final` and `openclaw agent --session-key` start regular turns through the `agent` method; they remain useful generic probes.
 

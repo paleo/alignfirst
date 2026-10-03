@@ -89,6 +89,10 @@ OpenClaw decides at admission whether a turn owes a reply. A group or channel me
 
 Implicit mentions count as mentions. The kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in, which is the normal state of a work thread. The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on.
 
+## Other bots' messages start turns
+
+Since 2026.9.7, Discord and Slack accept messages from other bots under the rules that apply to humans: `allowBots` defaults to on. The allowlisted channel sets `requireMention: false`, so each post from a CI or integration bot there starts a model turn. OpenClaw's bot-loop protection caps a rapid exchange between two bots at 20 events a minute. For a noisy bot, set `channels.<surface>.allowBots` to `"mentions"` or `false` through [configure-assistant.md](operations/configure-assistant.md); its messages stay readable as context.
+
 ## `MEDIA:` and `message` attachments read different media roots
 
 Two outbound paths deliver a local file with different read policies. The `MEDIA:` directive adds the parent directory of each emitted file to the allowed roots, so it delivers from anywhere. The `message` tool's structured attachment reads the static roots only: the workspace plus `~/.openclaw/{media,state/*}`. A file outside them is rejected. This is why the drop zone is `~/.openclaw/workspace/scratch/`, inside the workspace: both paths read it. Move the file there instead of switching delivery paths.

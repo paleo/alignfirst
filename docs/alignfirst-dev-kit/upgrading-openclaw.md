@@ -28,7 +28,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 ## Review the upstream changes
 
-- Read the new release's changelog, `CHANGELOG/<version>.md` in the clone. It runs to thousands of lines; grep it.
+- Read the new release's changelog, `CHANGELOG/<version>.md` in the clone. It runs to thousands of lines; grep it. Grep `by default` too: a channel default set in the extension's code appears there and not in the config help. 2026.9.7 made Discord and Slack accept messages from other bots (`allowBots`) this way.
 - Diff the surfaces our documentation describes: `git -C .local/openclaw diff v<old> v<new> --stat -- src/agents src/commands`, then the files behind any suspicious stat line.
 - Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files. Doctor does not flag silent behavior shifts (the 2026.8 subagent bootstrap narrowing, for example) — only this re-reading catches them.
 - Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/alignfirst-dev-kit-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. A file the runtime stopped reading must leave the template and its `chattr` lists; 2026.8.1 retired `HEARTBEAT.md` this way and the check above did not catch it.
@@ -43,7 +43,9 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 - [`alignfirst-dev-kit-tests/package.json`](../../alignfirst-dev-kit-tests/package.json) — the exact `"openclaw"` pin.
 - [`alignfirst-dev-kit-tests/Dockerfile`](../../alignfirst-dev-kit-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
-- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — `~`-ranged dev dependencies; a patch release needs no edit, a minor one does.
+- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
+
+The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
 
 Then rebuild the harness image: `npm run env:build` in `alignfirst-dev-kit-tests/`.
 

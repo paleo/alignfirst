@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.6 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.8 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
@@ -60,7 +60,7 @@ Heartbeat wakes cannot start a thread reliably. `resolveHeartbeatWakeStage` in `
 
 ## Silent replies
 
-OpenClaw decides at admission whether a turn owes a reply (`resolveSourceReplyExpectation` in `src/auto-reply/reply/source-reply-delivery-mode.ts`). Heartbeat, inter-session and internal-system turns are optional. A group or channel message is optional only when `silentReply.group` is `"allow"` and the message does not mention the bot; an implicit mention counts. The group default changed from `"allow"` to `"disallow"` in 2026.9.6, and `"disallow"` also drops the `NO_REPLY` line from the group prompt (`src/auto-reply/reply/groups.ts`). The harness config, the deterministic gateway and the seed set `agents.defaults.silentReply.group: "allow"`: the channels are always-on (`requireMention: false`), and most of their messages need no answer.
+OpenClaw decides at admission whether a turn owes a reply (`resolveSourceReplyExpectation` in `src/auto-reply/reply/source-reply-delivery-mode.ts`). Heartbeat, inter-session and internal-system turns are optional. A group or channel message is optional only when `silentReply.group` is `"allow"` and the message does not mention the bot; an implicit mention counts. The group default changed from `"allow"` to `"disallow"` in 2026.9.6, and `"disallow"` also drops the `NO_REPLY` line from the group prompt (`src/auto-reply/reply/groups.ts`). Since 2026.9.8, `group` is the only configurable key; direct and internal conversations resolve to `"disallow"` (`src/shared/silent-reply-policy.ts`). The harness config, the deterministic gateway and the seed set `agents.defaults.silentReply.group: "allow"`: the channels are always-on (`requireMention: false`), and most of their messages need no answer.
 
 A required turn that ends on a silent token gets an isolated finalization: no system prompt, no tools, an order to produce the final answer now. Its output posts to the turn's route; an empty one becomes `The tool run finished, but no final summary was produced.` (`src/agents/embedded-agent-runner/run/settled-turn-finalization.ts`). The channel turn that calls `thread_handoff start` therefore always ends on a one-line pointer to the thread, since a request that mentions the bot stays required.
 
@@ -100,7 +100,7 @@ For Discord today:
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
 - Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
 
-A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.6; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
+A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` since 2026.9.6; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
 
 ### Outbound delivery (the surprising part)
 
@@ -162,7 +162,7 @@ Without `message` in `alsoAllow`, the channel session falls back to raw Discord 
 
 When a fresh thread session activates on Discord, its transcript starts **empty** — Slack can inject a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100), but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-The channel therefore posts the complete request in the visible starter. After the static takeover message, the playbook claims the current session and reads that starter through `message action: "read"`, combining it with human replies and its transcript. Immediately before its first coding delegation, the takeover turn reads again to catch human instructions that arrived during setup. Human turns also read history to recover answers and `[WORKSPACE]` state. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
+The channel therefore posts the complete request in the visible starter. After the static takeover message, the playbook claims the current session and reads that starter through `message action: "read"`, combining it with human replies and its transcript. Immediately before its first coding delegation, the takeover turn reads again to catch human instructions that arrived during setup. Human turns also read history to recover answers and `[WORKSPACE]` state. The `message` tool description supports the same read path: it ends with `Missing thread context: action="read" + threadId.` when the channel supports reads (`buildMessageToolDescription` in `src/agents/tools/message-tool-discovery.ts`).
 
 ### Heartbeat and `agent`-method turns deny external-plugin reads
 
