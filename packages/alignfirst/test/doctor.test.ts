@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeTempDir, runMain } from "./helpers.js";
+import { makeCompanionProject, makeTempDir, runMain, writeCompanions } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -16,15 +16,64 @@ describe("doctor command", () => {
     const cwd = temp();
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    for (const section of ["CLI", ".alignfirst.json", "Git", "Work files", "Docmap", "Skills"])
+    for (const section of [
+      "CLI",
+      ".alignfirst.json",
+      "Companion",
+      "Git",
+      "Work files",
+      "Docmap",
+      "Skills",
+    ])
       expect(result.stdout).toContain(`] ${section}:`);
     expect(result.stdout).toContain("[ok] .alignfirst.json: none");
+    expect(result.stdout).toContain(
+      `[ok] Companion: companions.json absent (${join(cwd, ".config", "alignfirst", "companions.json")})\n[ok] Companion: none\n`,
+    );
     expect(result.stdout).toContain("[warn] Git: default branch unresolved");
     expect(result.stdout).toContain("[ok] Docmap: docs/ none");
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
     expect(result.stdout).toContain("[ok] Skills: no command skill installed");
     expect(result.stdout).not.toContain("missing");
-    expect(result.stdout).not.toContain("Skills: alcode");
+    expect(result.stdout).not.toContain("Skills: aligndev");
+  });
+
+  it("reports the companion and warns about a missing item flagged true", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      docs: true,
+      ".plans": false,
+    });
+    dirs.push(root);
+    mkdirSync(join(project, ".plans"));
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(
+      [
+        `[ok] Companion: companions.json valid (${join(home, ".config", "alignfirst", "companions.json")})`,
+        "[ok] Companion: matched by ~/app",
+        `[ok] Companion: directory ${companion} (missing)`,
+        `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
+        `[ok] Companion: .alignfirst.md: ${join(companion, ".alignfirst.md")} (companion, missing)`,
+        `[ok] Companion: DEVELOPERS.md: ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
+        `[warn] Companion: docs: ${join(companion, "docs")} (companion, missing)`,
+        `[ok] Companion: .plans: ${join(project, ".plans")} (project)`,
+        `[ok] Companion: _aligndev: ${join(project, ".plans")} (project)`,
+        "[warn] Git:",
+      ].join("\n"),
+    );
+    expect(result.stdout).toContain("[ok] Work files: local");
+  });
+
+  it("reports an invalid companions.json in every section that needs the layout", async () => {
+    const cwd = temp();
+    writeCompanions(cwd, { root: "~/companions" });
+    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
+    expect(result.code).toBe(0);
+    for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])
+      expect(result.stdout).toContain(
+        `[error] ${section}: Invalid ${cwd}/.config/alignfirst/companions.json: paths`,
+      );
+    expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });
 
   it("reports an excluded CLI range without failing", async () => {

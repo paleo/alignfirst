@@ -34,7 +34,13 @@ interface HookContext {
   sessionId?: string;
 }
 
-interface CachedContext {
+/** Captured contexts and observation errors, shared by every registration of the plugin. */
+export interface ReceiptCache {
+  contexts: Map<string, CachedContext>;
+  observationErrors: Map<string, Error>;
+}
+
+export interface CachedContext {
   source: SourceContext;
   capturedAt: number;
 }
@@ -56,11 +62,11 @@ export function createReceiptCoordinator(params: {
   configuration: PluginConfiguration;
   getStore: () => HandoffStore;
   logger: PluginLogger;
+  cache?: ReceiptCache;
   now?: () => number;
 }): ReceiptCoordinator {
   const now = params.now ?? Date.now;
-  const contexts = new Map<string, CachedContext>();
-  const observationErrors = new Map<string, Error>();
+  const { contexts, observationErrors } = params.cache ?? createReceiptCache();
   return {
     captureContext(context) {
       const source = readSourceContext(context, params.configuration);
@@ -108,6 +114,10 @@ export function createReceiptCoordinator(params: {
       }
     },
   };
+}
+
+export function createReceiptCache(): ReceiptCache {
+  return { contexts: new Map(), observationErrors: new Map() };
 }
 
 function readCachedSource(

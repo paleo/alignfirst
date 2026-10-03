@@ -1,0 +1,15 @@
+{
+  "platform": "openclaw",
+  "projectsRoot": "~/projects",
+  "code": {
+    "agent": "codex",
+    "skipPermissions": true,
+    "unset": [
+      "OPENAI_API_KEY",
+      "CODEX_API_KEY",
+      "CODEX_HOME",
+      "CODEX_MANAGED_PACKAGE_ROOT",
+      "CODEX_MANAGED_BY_NPM"
+    ]
+  }
+}

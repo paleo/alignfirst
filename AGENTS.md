@@ -29,8 +29,7 @@ This repository is on *GitHub*.
 ## Packages
 
 - `alignfirst` — the AlignFirst CLI: protocols, work files and docs
-- `@alignfirst/alcode` — coding agent wrapper for the AlignFirst Dev Kit
-- `@alignfirst/alproject` — project inventory and port allocation for the AlignFirst Dev Kit host
+- `aligndev` — the AlignFirst Dev Kit CLI: the assistant's playbook, coding-agent delegation, and project inventory
 - `@alignfirst/docmap` — lightweight documentation system for AI agents and humans
 - `@alignfirst/service-openclaw-plugin` — OpenClaw plugin for an assistant, under plugin ID `alignfirst-service`
 - `@alignfirst/openclaw-channel-mock-core` — shared library for synthetic OpenClaw channel plugins (bus, actions, factories)

@@ -10,6 +10,7 @@ import {
   type ScenarioInternals,
 } from "./context.js";
 import { judgeCostUsd } from "./cost.js";
+import { archiveGatewayLog } from "./gateway-log.js";
 import {
   aggregateAgentToolCalls,
   fetchTranscriptSnapshot,
@@ -90,6 +91,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
     // The per-session store dies with the stack recreation, so keep the raw
     // transcripts as a cell artifact for post-mortems.
     writeFileSync(join(outDir, "transcripts.json"), JSON.stringify(snapshot.sessions));
+    await archiveGatewayLog(outDir);
 
     const agentCalls = aggregateAgentToolCalls(snapshot.sessions);
     pairAgentCallsWithCliMocks(agentCalls, entries);

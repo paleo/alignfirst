@@ -1,7 +1,7 @@
 import type { AgentToolCall } from "@alignfirst/openclaw-test";
 import { escapeRe } from "./common-constants.ts";
 
-const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])alproject\s+list\b.*--json/;
+const PROJECT_LIST_JSON_RE = /(^|[\s/;(&|])aligndev\s+project\s+list\b.*--json/;
 
 export function inputOf(call: AgentToolCall): Record<string, unknown> {
   return call.input && typeof call.input === "object"
@@ -50,22 +50,20 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
   return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
-// `alcode` at a word boundary — bare, absolute path (`/usr/local/bin/alcode …`), or after a shell
-// separator/subshell open (`(alcode … ; openclaw system event …)` is the guide's chained
+// `aligndev` at a word boundary — bare, absolute path (`/usr/local/bin/aligndev …`), or after a shell
+// separator/subshell open (`(aligndev code … ; openclaw system event …)` is the guide's chained
 // completion-event launch shape) — but not a substring of another token.
-const ALCODE_INVOCATION_RE = /(^|[\s/;(&|])alcode(\s|$)/;
-// Only alcode may launch a coding agent. Its subprocess appears as a cliMock entry rather than an
-// OpenClaw agent tool call.
+const ALIGNDEV_INVOCATION_RE = /(^|[\s/;(&|])aligndev(\s|$)/;
+// A coder launch. `aligndev code status` and `aligndev guide code` launch nothing.
+const ALIGNDEV_CODE_LAUNCH_RE = /(^|[\s/;(&|])aligndev\s+code\s+(new|resume)(\s|$)/;
+// Only `aligndev code` may launch a coding agent. Its subprocess appears as a cliMock entry rather
+// than an OpenClaw agent tool call.
 const CODING_AGENT_INVOCATION_RE = /(^|[\s/;(&|])(claude|codex)(\s|$)/;
 
-/** True when the call is an `exec` that invokes the real `alcode` CLI. */
-export function invokesAlcode(call: AgentToolCall): boolean {
-  const input = inputOf(call);
-  return (
-    call.toolName === "exec" &&
-    typeof input.command === "string" &&
-    ALCODE_INVOCATION_RE.test(input.command)
-  );
+/** True when the call is an `exec` that launches the coder through the real `aligndev code` CLI. */
+export function invokesAligndevCode(call: AgentToolCall): boolean {
+  const command = execCommandOf(call);
+  return command !== undefined && ALIGNDEV_CODE_LAUNCH_RE.test(command);
 }
 
 export function listsProjects(call: AgentToolCall): boolean {
@@ -93,6 +91,6 @@ export function invokesCodingAgentDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
   return (
-    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALCODE_INVOCATION_RE.test(input.command)
+    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALIGNDEV_INVOCATION_RE.test(input.command)
   );
 }

@@ -1,6 +1,43 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the `alignfirst-openclaw-playbook` skill (`skills/alignfirst-openclaw-playbook/SKILL.md` + `references/*.md`) against test regressions. The harness mounts that skill at OpenClaw's managed `~/.openclaw/skills/alignfirst-openclaw-playbook`; coding agents do not scan it. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the guide templates (`packages/aligndev/templates/guide/playbook/*.md` and `code.md`, printed by `aligndev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+
+## Shared templates
+
+The playbook templates and `code.md` serve both platforms: `openclaw` and `codingAgent`, a Claude Code or Codex session acting as the assistant. `project.md` is OpenClaw only.
+
+### Platform blocks
+
+A platform-specific paragraph sits in a block, each marker alone on its line:
+
+```text
+{{#openclaw}}
+Text only for OpenClaw.
+{{/openclaw}}
+{{#codingAgent}}
+Text only for a coding agent.
+{{/codingAgent}}
+```
+
+`aligndev guide` keeps the active platform's blocks without their marker lines and drops the others. Blocks mark whole lines and do not nest. An unknown platform name, a nested block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+
+After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the OpenClaw output.
+
+### OpenClaw text stays byte-identical
+
+The OpenClaw text was tuned against the harness scenarios. When a sentence must differ for `codingAgent`, keep the OpenClaw paragraph untouched in an `{{#openclaw}}` block and write the `codingAgent` copy in a `{{#codingAgent}}` block right after it. A paragraph is one line, so a one-word difference duplicates the whole paragraph. Check an edit by rendering every OpenClaw guide before and after it and comparing the output. Rewording OpenClaw text to share more of it needs harness runs.
+
+### Step numbers stay aligned
+
+Cross-references cite step numbers, as in "Step 5 of `{{ALIGNDEV}} guide project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
+
+### `codingAgent` prose
+
+The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either.
+
+### Placeholders
+
+Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aligndev` and `alignfirst`, or as `npx -y aligndev` and `npx -y alignfirst` when `aligndev` runs through `npx`. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
 
 ## One rule, stated once
 
@@ -11,6 +48,10 @@ State a simple rule through its trigger and action. Add procedural detail only w
 ## Address the session doing the work
 
 The OpenClaw session itself reads the playbook. Address it directly with "you" and imperative verbs. "On the first turn of your session, react…" gives the reader both a trigger and an action. Keep the session's lifetime distinct from the thread's history: a fresh session can take over an old thread.
+
+## Name the delegate by its role
+
+The playbook calls the delegate **the coder**: the coding agent launched with `aligndev code`. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename. "The coding agent" becomes ambiguous once a coding agent can itself act as the assistant.
 
 ## Keep the activation message static
 
@@ -63,6 +104,14 @@ OpenClaw saves heartbeat user messages as `[OpenClaw heartbeat poll]`, even when
 ## State the exception before the rule it excepts
 
 An exception placed after the procedure it excepts gets skipped: the model acts on the first sentence. The no-branch sub-path of `project-workspace-setup.md` opened with "set up a workspace on a new branch" and closed with "status request: tell the user there's no work"; Terra created the workspace for a status request (A09 Discord, 2026-09-08). Lead with the exception, then the default.
+
+## A step's first sentence sets its scope
+
+`working-session.md` Step 1 opened with "A takeover turn starts with the plugin's `Take over this thread.` message"; the claim rule came in the next paragraph. On a turn started by a human message, Terra read the step as takeover-only and went straight to the history read and the reaction. The claim was skipped in 5 of 5 A20 cells and 6 of 8 A23 cells (2026-09-28/29), on both surfaces. The dispatcher's "a thread a human opened … carries no starter and no handoff" added a reason to skip it. The step now opens with the rule and its full trigger: "Every turn in this thread, a human message's included, starts with a claim", plus "You cannot know whether a handoff is recorded until the claim answers". After that change, every thread session claimed first.
+
+## A literal value outranks a pointer to the reference
+
+Step 2 said "react with 🦞" and pointed to the surface reference for the call. On Slack, Terra often skipped the reference and sent `🦞`, where Slack needs the name `lobster`. It failed the reaction contract in A01 (2026-09-28) and A20 (2026-09-29). When a value differs by surface, give each value in the instruction that uses it: "`🦞` on Discord, `lobster` on Slack".
 
 ## Template + variations beats N full examples
 
@@ -120,7 +169,7 @@ The `[WORKSPACE]` banner is how a tagged header came back without reviving the f
 
 ## A nearby auto-loaded doc can crowd out the procedure
 
-The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the alcode guide (today `alcode --openclaw-guide`)). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
+The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the delegation guide, today `aligndev guide code`). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
 
 Lesson: the file the assistant reads *first* on a turn sets its frame. If that file is coaching/vocabulary-heavy (protocol names, workflow taxonomies), its language leaks into user-facing output. Keep the dispatch entry point pointed straight at the procedural playbook; defer delegation/coaching material until the assistant is actually delegating.
 
@@ -136,4 +185,4 @@ npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --ma
 
 ## Watch out for `--iterations` matrix cost
 
-Editing a bind-mounted file propagates live (the workspace dir, the playbook skill, and the mounted monorepo — including `packages/alcode/templates/` — are all mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.
+Editing a bind-mounted file propagates live (the workspace dir and the monorepo — including `packages/aligndev/templates/` — are mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.

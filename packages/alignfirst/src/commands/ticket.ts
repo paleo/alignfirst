@@ -1,9 +1,9 @@
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
-import { formatLocalTimestamp, formatSize } from "../format.js";
+import { displayPath, formatLocalTimestamp, formatSize } from "../format.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { renderCatchup } from "../plans/catchup.js";
 import { assertPlansGate } from "../plans/layout.js";
@@ -14,10 +14,12 @@ import {
   peekSideTicket,
   reserveSideTicket,
   resolveTicketDir,
+  restoreSessionTreeTicket,
   type ResolvedTicketDir,
   type TicketEntry,
   validateTicketId,
 } from "../plans/ticket.js";
+import { layoutOf } from "../project-layout.js";
 
 const USAGE = `Usage:
   {{FORM}} ticket [<id>] [--next [<filename>]] [--new-cycle] [--json] [--dry-run]
@@ -63,8 +65,11 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
   const usage = renderUsage(ctx);
   const parsed = parseTicketArgs(ctx, args, usage);
   if (parsed === undefined) return 0;
-  assertPlansGate(ctx.cwd, ctx.form);
-  const result = resolveTicket(ctx, parsed);
+  const layout = layoutOf(ctx);
+  const plans = layout.locations[".plans"];
+  assertPlansGate(plans, ctx.form);
+  const result = resolveTicket(plans.path, parsed);
+  if (!parsed.side && !parsed.dryRun) restoreSessionTreeTicket(layout, result.id);
   if (parsed.catchup) {
     ctx.stdout.write(renderCatchup(ctx.cwd, result, renderReport(ctx, parsed, result)));
     return 0;
@@ -201,8 +206,11 @@ function resolveTicketId(
     validateTicketId(positional);
     return { id: positional };
   }
-  if (flags.side)
-    return { id: flags["dry-run"] ? peekSideTicket(ctx.cwd) : reserveSideTicket(ctx.cwd) };
+  const plans = layoutOf(ctx).locations[".plans"];
+  if (flags.side) {
+    assertPlansGate(plans, ctx.form);
+    return { id: flags["dry-run"] ? peekSideTicket(plans.path) : reserveSideTicket(plans.path) };
+  }
   const template = ctx.projectConfig?.config.git?.branchNameTemplate;
   const detection = detectTicketFromBranch(ctx.cwd, pattern, template);
   if (detection.kind === "detected") {
@@ -210,7 +218,7 @@ function resolveTicketId(
     return detection;
   }
   if (pattern === undefined)
-    return deduceTicketFromExisting(ctx.cwd, { sideAllowed: !flags.catchup });
+    return deduceTicketFromExisting(ctx.cwd, plans.path, { sideAllowed: !flags.catchup });
   if (detection.kind === "noBranch")
     throw new CliError("Cannot deduce a ticket id from a detached HEAD.");
   const templateDetail = template?.includes("{TICKET_ID}") ? ` and template "${template}"` : "";
@@ -219,15 +227,10 @@ function resolveTicketId(
   );
 }
 
-function resolveTicket(ctx: CommandContext, options: TicketOptions): ResolvedTicketDir {
+function resolveTicket(plansPath: string, options: TicketOptions): ResolvedTicketDir {
   if (options.side && !options.dryRun)
-    return {
-      id: options.id,
-      dir: join(ctx.cwd, ".plans", options.id),
-      state: "created",
-      entries: [],
-    };
-  return resolveTicketDir(ctx.cwd, options.id, { dryRun: options.dryRun });
+    return { id: options.id, dir: join(plansPath, options.id), state: "created", entries: [] };
+  return resolveTicketDir(plansPath, options.id, { dryRun: options.dryRun });
 }
 
 function writeNextReport(
@@ -241,7 +244,7 @@ function writeNextReport(
   const fileName = (filename: string, offset: number) =>
     `${cycleLetter}${fileNumber + offset}-${filename}`;
   const report = {
-    TICKET_DIR: `${relative(ctx.cwd, result.dir)}/`,
+    TICKET_DIR: `${displayPath(ctx.cwd, result.dir)}/`,
     CYCLE_LETTER: cycleLetter,
     ...(request === true
       ? { FILE_NUMBER: fileNumber, FILE_PREFIX: `${cycleLetter}${fileNumber}` }
@@ -268,7 +271,7 @@ function jsonReport(
 ): TicketJsonReport {
   return {
     TICKET_ID: result.id,
-    TICKET_DIR: `${relative(ctx.cwd, result.dir)}/`,
+    TICKET_DIR: `${displayPath(ctx.cwd, result.dir)}/`,
     state: result.state,
     ...(options.branch === undefined ? {} : { branch: options.branch }),
     entries: result.entries.map((entry) => ({
@@ -287,7 +290,7 @@ function renderReport(
   const deduction =
     options.branch === undefined ? "" : ` (deduced from branch \`${options.branch}\`)`;
   const directoryState = renderDirectoryState(result.state, options.dryRun);
-  const directory = `${relative(ctx.cwd, result.dir)}/`;
+  const directory = `${displayPath(ctx.cwd, result.dir)}/`;
   const lines = [
     `- TICKET_ID: \`${result.id}\`${reservation}${deduction}`,
     `- TICKET_DIR: \`${directory}\`${directoryState}`,

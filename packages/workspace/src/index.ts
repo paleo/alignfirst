@@ -1,4 +1,5 @@
 import {
+  composeProjectName,
   detectCommonJsError,
   extractHost,
   patchEnvFile,
@@ -43,6 +44,7 @@ export type { ResolvedWorkspace } from "./workspaces.js";
 export const helpers = {
   patchEnvFile,
   extractHost,
+  composeProjectName,
   readPortFromEnvFile,
   readPortFromJsonFile,
   detectCommonJsError,

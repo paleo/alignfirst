@@ -57,15 +57,35 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
+So is the aligndev config, with its directory. The service account owns `~/.config`: with only the file locked, it could rename `~/.config/alignfirst/` and create its own `aligndev.config.json` in a new directory of that name. The locked directory also keeps the service account from creating `companions.json`.
+
+```sh
+sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
+sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
+sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst
+sudo chmod 755 /home/{{SERVICE_USER}}/.config/alignfirst
+sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst
+```
+
+When the seed installed `companions.json`, lock it the same way:
+
+```sh
+sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
+sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
+```
+
 ## Skills and instructions
 
-The setup guide and `sharp-writing` under `~/.agents/skills/` feed both OpenClaw and the delegated coding agent. Only OpenClaw automatically discovers the playbook under `~/.openclaw/skills/`. The commands below protect both trees from service-account writes: admin ownership and modes prevent content changes; the immutable flag on each root prevents its removal or replacement. Both agents can still read the files. `~/.openclaw` stays writable for gateway state.
+The setup guide and `sharp-writing` under `~/.agents/skills/` feed both OpenClaw and the delegated coding agent. OpenClaw's managed `~/.openclaw/skills/` holds no skill: the playbook ships in `aligndev` and prints through `aligndev guide`. That directory stays locked so the assistant cannot install a skill there. The commands below protect both trees from service-account writes: admin ownership and modes prevent content changes; the immutable flag on each root prevents its removal or replacement. Both agents can still read the files. `~/.openclaw` stays writable for gateway state.
 
 ```sh
 sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.agents
 sudo find /home/{{SERVICE_USER}}/.agents -type d -exec chmod 755 {} +
 sudo find /home/{{SERVICE_USER}}/.agents -type f -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.agents
+sudo mkdir -p /home/{{SERVICE_USER}}/.openclaw/skills
 sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.openclaw/skills
 sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type d -exec chmod 755 {} +
 sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type f -exec chmod 644 {} +
@@ -94,7 +114,7 @@ sudo chmod 644 \
 
 ## Global packages
 
-`~/.npm-system-global/` holds `openclaw`, the coding agent, `alignfirst`, `@alignfirst/alcode`, `@alignfirst/alproject` and `ctx7`. It is root-owned and immutable. A global install by the service account instead lands in its selected fnm runtime. The audited PATH keeps that writable runtime from shadowing `openclaw`, `alcode` or the coding agent.
+`~/.npm-system-global/` holds `openclaw`, the coding agent, `alignfirst`, `aligndev` and `ctx7`. It is root-owned and immutable. A global install by the service account instead lands in its selected fnm runtime. The audited PATH keeps that writable runtime from shadowing `openclaw`, `aligndev` or the coding agent.
 
 ```sh
 sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
@@ -124,7 +144,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. Before an unlock, it contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json`, the aligndev config with its directory, and `companions.json` when it exists. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -146,7 +166,10 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/alignfirst-openclaw-playbook/SKILL.md'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/aligndev.config.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/companions.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.config/alignfirst ~/.config/alignfirst-x'
+sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.openclaw/skills ~/.openclaw/skills-x'
 ```
@@ -172,11 +195,11 @@ command -v openclaw
 EOS
 # Expected: /opt/{{SERVICE_USER}}/bin/openclaw
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
-# Expected: exactly openclaw, the coding agent, alignfirst, @alignfirst/alcode, @alignfirst/alproject and ctx7
+# Expected: exactly openclaw, the coding agent, alignfirst, aligndev and ctx7
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-ALIGNFIRST_CODE_AGENT=<claude|codex> \
+CODING_AGENT=<claude|codex> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```

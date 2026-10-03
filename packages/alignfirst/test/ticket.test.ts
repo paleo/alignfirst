@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -479,6 +479,93 @@ describe("ticket command", () => {
     );
   });
 });
+
+describe("ticket command with a companion .plans", () => {
+  it("prints an absolute TICKET_DIR in the text, JSON and --next forms", async () => {
+    const { home, project, plans } = companionPlans();
+    const ticketDir = `${join(plans, "78")}/`;
+    const text = await runMain(["ticket", "78"], { cwd: project, home });
+    expect(text.stdout).toContain(`- TICKET_DIR: \`${ticketDir}\` (created)`);
+    expect(existsSync(join(plans, "78"))).toBe(true);
+    expect(existsSync(join(project, ".plans"))).toBe(false);
+    const json = await runMain(["ticket", "78", "--json"], { cwd: project, home });
+    expect(JSON.parse(json.stdout)).toMatchObject({ TICKET_DIR: ticketDir, state: "existing" });
+    const next = await runMain(["ticket", "78", "--next", "spec.md"], { cwd: project, home });
+    expect(next.stdout).toContain(`- TICKET_DIR: \`${ticketDir}\`\n`);
+    expect(next.stdout).toContain("- FILE_NAME: `A1-spec.md`");
+  });
+
+  it("reserves side tickets in the companion", async () => {
+    const { home, project, plans } = companionPlans();
+    mkdirSync(join(plans, "_archives", "side-1"), { recursive: true });
+    const result = await runMain(["ticket", "--side", "--json"], { cwd: project, home });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      TICKET_ID: "side-2",
+      TICKET_DIR: `${join(plans, "side-2")}/`,
+    });
+    expect(existsSync(join(plans, "side-2"))).toBe(true);
+  });
+
+  it("names the companion location when .plans is missing", async () => {
+    const { home, project, plans } = companionPlans();
+    rmSync(plans, { recursive: true });
+    const result = await runMain(["ticket", "78"], { cwd: project, home });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe(
+      `No .plans/ directory at ${plans} (companion).\nLocal work files:  mkdir -p ${plans}\nTeam work files:   alignfirst plans setup <clone-dir>\n`,
+    );
+  });
+});
+
+describe("ticket command with a separate session tree", () => {
+  it("restores the ticket's archived session directory", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      ".plans": false,
+      _aligndev: true,
+    });
+    dirs.push(root);
+    const sessions = join(companion, ".plans");
+    mkdirSync(join(project, ".plans", "_archives", "78"), { recursive: true });
+    mkdirSync(join(sessions, "_archives", "78", "_aligndev"), { recursive: true });
+
+    const result = await runMain(["ticket", "78", "--json"], { cwd: project, home });
+
+    expect(JSON.parse(result.stdout)).toMatchObject({ state: "restored" });
+    expect(existsSync(join(project, ".plans", "78"))).toBe(true);
+    expect(existsSync(join(sessions, "78", "_aligndev"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "78"))).toBe(false);
+    expect(existsSync(join(project, ".plans", "78", "_aligndev"))).toBe(false);
+  });
+
+  it("leaves the session tree alone on a dry run", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      ".plans": false,
+      _aligndev: true,
+    });
+    dirs.push(root);
+    const archived = join(companion, ".plans", "_archives", "78");
+    mkdirSync(join(project, ".plans"), { recursive: true });
+    mkdirSync(archived, { recursive: true });
+
+    await runMain(["ticket", "78", "--dry-run"], { cwd: project, home });
+
+    expect(existsSync(archived)).toBe(true);
+  });
+});
+
+interface CompanionPlans {
+  home: string;
+  project: string;
+  plans: string;
+}
+
+function companionPlans(): CompanionPlans {
+  const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+  dirs.push(root);
+  const plans = join(companion, ".plans");
+  mkdirSync(plans, { recursive: true });
+  return { home, project, plans };
+}
 
 function makeProject(withPlans = true): string {
   const cwd = makeTempDir();

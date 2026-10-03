@@ -5,7 +5,8 @@
 # Strategy: `openclaw setup` produces the installed version's default config; every
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
-# reach openclaw.json as file SecretRefs only.
+# reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aligndev
+# config and, when the admin repository ships one, companions.json.
 #
 # Run as the service account, from the seed snapshot:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
@@ -18,6 +19,9 @@ OPENCLAW_HOME="$HOME/.openclaw"
 SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
+ALIGNDEV_CONFIG_DIR="$HOME/.config/alignfirst"
+ALIGNDEV_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/aligndev.config.json"
+COMPANIONS_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/companions.json"
 
 main() {
   load_env
@@ -38,6 +42,8 @@ main() {
   configure_surface
   configure_coding_agent
   install_environment_files
+  install_aligndev_config
+  install_companions_config
   verify
 }
 
@@ -136,6 +142,28 @@ install_environment_files() {
   printf 'DOCKER_HOST=unix:///run/user/%s/podman/podman.sock\n' "$(id -u)" \
     > "$ENVIRONMENT_DIR/runtime.conf"
   echo "[seed] a changed variable needs: systemctl --user daemon-reexec, then a gateway restart"
+}
+
+install_aligndev_config() {
+  echo "[seed] aligndev config — $ALIGNDEV_CONFIG_FILE"
+  # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
+  # its directory immutable.
+  if [ ! -d "$ALIGNDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALIGNDEV_CONFIG_DIR"; fi
+  if ! cmp -s "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"; then
+    install -m 644 "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"
+  fi
+  # Fails on an invalid file or a missing code.agent.
+  aligndev guide code >/dev/null
+}
+
+install_companions_config() {
+  # Optional. Without a source, a file installed by an earlier seed stays: removing it is a
+  # maintenance operation.
+  if [ ! -f "$DIR/companions.json" ]; then return; fi
+  echo "[seed] companions config — $COMPANIONS_CONFIG_FILE"
+  if ! cmp -s "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"; then
+    install -m 644 "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"
+  fi
 }
 
 verify() {

@@ -16,7 +16,7 @@ When the user says there is no ticket or asks for a side ticket, run `{{CMD}} ti
 
 Files use `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`. FILE_PREFIX combines the cycle letter and the file number within that cycle. FILE_NAME includes the prefix and extension.
 
-Immediately before creating each file, run `{{TICKET_CMD}} --next <filename>` with the extension included. It returns TICKET_DIR, CYCLE_LETTER, FILE_NUMBER, and FILE_NAME. Append FILE_NAME to TICKET_DIR to get the file path, preserving the leading dot and existing slash.
+Immediately before creating each file, run `{{TICKET_CMD}} --next <filename>` with the extension included. It returns TICKET_DIR, CYCLE_LETTER, FILE_NUMBER, and FILE_NAME. Append FILE_NAME to TICKET_DIR exactly as printed to get the file path.
 
 With no filename, `{{TICKET_CMD}} --next` returns FILE_PREFIX instead of FILE_NAME. To name several files at once, repeat `--next <filename>` once per file: the command returns FILE_NAMES, numbered in that order. Add `--new-cycle` to any form when the protocol or user calls for a new cycle.
 

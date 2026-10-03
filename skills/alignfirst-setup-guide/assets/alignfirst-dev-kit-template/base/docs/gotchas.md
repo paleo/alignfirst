@@ -36,17 +36,15 @@ A bare `docker …` without `DOCKER_HOST` fails on `unix:///var/run/docker.sock`
 
 ## `skills` CLI writes escaped symlinks under `~/.openclaw/skills/`
 
-For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. [update-assistant.md](operations/update-assistant.md) sweeps the links inside the `skills` maintenance scope because the managed directory is locked. The copied playbook is a directory, so the `-type l` sweep leaves it in place.
+For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. [update-assistant.md](operations/update-assistant.md) sweeps the links inside the `skills` maintenance scope because the managed directory is locked.
 
 ## Shared skills live under `~/.agents/skills`
 
 The setup guide and `sharp-writing` install once under `~/.agents/skills/`. OpenClaw loads only its `agents.defaults.skills` allowlist, including `alignfirst-setup-guide` for project creation. The coding agent receives the shared skills through its own tier. `skills remove` deletes a shared skill for both.
 
-The playbook lives under OpenClaw's managed `~/.openclaw/skills/` directory, outside the coding agent's automatic skill discovery. Both agents run as the same Linux user, so the coding agent can still explicitly read the file. The separation controls prompt loading, not filesystem access.
-
 ## Moving a project breaks its workspace registry
 
-`@alignfirst/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `alproject` reads the repaired git worktrees directly.
+`@alignfirst/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `aligndev project` reads the repaired git worktrees directly.
 
 ## Heartbeat cost is a main-session problem
 
@@ -90,6 +88,10 @@ Every `openclaw` command that rewrites the config (`config set`, `plugins instal
 OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default has been `"disallow"` since 2026.9.6, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced.`, posts to the channel.
 
 Implicit mentions count as mentions. The kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in, which is the normal state of a work thread. The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on.
+
+## Other bots' messages start turns
+
+Since 2026.9.7, Discord and Slack accept messages from other bots under the rules that apply to humans: `allowBots` defaults to on. The allowlisted channel sets `requireMention: false`, so each post from a CI or integration bot there starts a model turn. OpenClaw's bot-loop protection caps a rapid exchange between two bots at 20 events a minute. For a noisy bot, set `channels.<surface>.allowBots` to `"mentions"` or `false` through [configure-assistant.md](operations/configure-assistant.md); its messages stay readable as context.
 
 ## `MEDIA:` and `message` attachments read different media roots
 

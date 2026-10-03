@@ -1,5 +1,4 @@
-import { lstatSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { CliError } from "../cli-error.js";
@@ -11,6 +10,7 @@ import { parseCommandArgs } from "../parse-args.js";
 import { missingPlansMessage } from "../plans/layout.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { detectTicketFromBranch, type TicketDetection } from "../plans/ticket.js";
+import { layoutOf } from "../project-layout.js";
 import { PROTOCOLS, type Protocol } from "../protocols.js";
 
 const TICKET_CMD_PLACEHOLDER = "{{TICKET_CMD}}";
@@ -187,10 +187,10 @@ function renderTicketDetection(pattern: string | undefined, detection: TicketDet
 }
 
 function renderPlansState(ctx: CommandContext): string {
-  const entry = lstatSync(join(ctx.cwd, ".plans"), { throwIfNoEntry: false });
-  if (entry === undefined) return `\`\`\`text\n${missingPlansMessage(ctx.form)}\n\`\`\``;
+  const plans = layoutOf(ctx).locations[".plans"];
+  if (!plans.exists) return `\`\`\`text\n${missingPlansMessage(plans, ctx.form)}\n\`\`\``;
   try {
-    return resolvePlansMode(ctx.cwd, ctx.form).kind === "shared"
+    return resolvePlansMode(ctx.cwd, plans, ctx.form).kind === "shared"
       ? "After every change in TICKET_DIR, run `{{CMD}} sync`."
       : "";
   } catch {

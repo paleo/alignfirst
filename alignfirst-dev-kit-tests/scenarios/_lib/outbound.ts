@@ -69,7 +69,7 @@ export interface WaitForReportOptions {
  * tolerates), so `predicate` plus the timeout bound the wait instead.
  *
  * The CLI grace fail-fast is off for the same reason as `waitForSetupAck`: the
- * report turn runs mocked CLIs mid-composition (`gh`, an alcode delegation),
+ * report turn runs mocked CLIs mid-composition (`gh`, an `aligndev code` delegation),
  * and on finals-only surfaces the report legitimately follows such a call by
  * more than any reasonable grace, with no outbound in between. The deadline
  * bounds the wait.
@@ -101,7 +101,7 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
 }
 
 /**
- * The channel turn ends on one short line pointing to the thread. OpenClaw 2026.9.6 requires that
+ * The channel turn ends on one short line pointing to the thread. Since 2026.9.6, OpenClaw requires that
  * answer for a mentioned request; a silent turn gets a context-free finalizer post instead.
  */
 export async function waitForHandoffPointer(

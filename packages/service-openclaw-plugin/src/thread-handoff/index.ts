@@ -1,6 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { registerThreadHandoffCli } from "./cli.js";
-import { createReceiptCoordinator } from "./receipts.js";
+import { processShared } from "./process-shared.js";
+import { createReceiptCache, createReceiptCoordinator } from "./receipts.js";
 import { createRunIdCache } from "./run-ids.js";
 import { createHandoffService } from "./service.js";
 import { createHandoffStore, type HandoffStore, resolveDatabasePath } from "./state.js";
@@ -20,8 +21,13 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
     store ??= createHandoffStore(api.runtime.state.resolveStateDir());
     return store;
   };
-  const receipts = createReceiptCoordinator({ configuration, getStore, logger: api.logger });
-  const runIds = createRunIdCache();
+  const receipts = createReceiptCoordinator({
+    configuration,
+    getStore,
+    logger: api.logger,
+    cache: processShared("receipt-cache/v1", createReceiptCache),
+  });
+  const runIds = processShared("run-ids/v1", () => createRunIdCache());
   const service = createHandoffService({
     runtime: api.runtime,
     configuration,

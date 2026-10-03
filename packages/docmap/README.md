@@ -10,28 +10,12 @@ _Inspired by the [OpenClaw](https://github.com/openclaw/openclaw/) docs system, 
 
 ## Installation
 
-Install the CLI as a dev dependency and add a `docmap` script:
-
-```bash
-npm install -D @alignfirst/docmap
-```
-
-In your `package.json`:
-
-```json
-{
-  "scripts": {
-    "docmap": "docmap"
-  }
-}
-```
-
 In your `AGENTS.md` or `CLAUDE.md` file:
 
 ```md
 ## Docmap - Seek Documentation
 
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+*Before* any investigation or code exploration, run `npx -y alignfirst docmap`, then read the relevant documentation. Mandatory for every task.
 ```
 
 ### Bootstrapping a docs/ directory (optional)
@@ -73,24 +57,6 @@ read_when:
 | `title` | No | Display name shown in listings. Falls back to the first `# heading` in the document body when absent. |
 | `summary` | No | Short description. Omit if the title is self-explanatory. |
 | `read_when` | No | When to consult this document. Omit if the scope is obvious. |
-
-## Global Installation (non-JavaScript stacks)
-
-Install the CLI globally to use it on non-JavaScript projects:
-
-```bash
-npm install -g @alignfirst/docmap
-
-docmap -v
-```
-
-In your `AGENTS.md` or `CLAUDE.md` file:
-
-```md
-## Docmap - Seek Documentation
-
-*Before* any investigation or code exploration, run `docmap`, then read the relevant documentation. Mandatory for every task.
-```
 
 ## CLI
 

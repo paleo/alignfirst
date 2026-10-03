@@ -1,11 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 import { type } from "arktype";
 import semver from "semver";
 
 import { CliError } from "./cli-error.js";
 import { errorMessage } from "./errors.js";
+import type { ProjectLayout } from "./project-layout.js";
 
 export const PROJECT_CONFIG_FILENAME = ".alignfirst.json";
 
@@ -75,17 +75,16 @@ export interface CommitConfig {
 
 export interface ResolvedProjectConfig {
   config: ProjectConfig;
-  source: "root";
+  source: "project" | "companion";
 }
 
-export function resolveProjectConfig(cwd: string): ResolvedProjectConfig | undefined {
-  const config = readProjectConfig(cwd);
-  return config === undefined ? undefined : { config, source: "root" };
+export function resolveProjectConfig(layout: ProjectLayout): ResolvedProjectConfig | undefined {
+  const location = layout.locations[PROJECT_CONFIG_FILENAME];
+  if (!location.exists) return;
+  return { config: readProjectConfig(location.path), source: location.in };
 }
 
-export function readProjectConfig(dir: string): ProjectConfig | undefined {
-  const path = join(dir, PROJECT_CONFIG_FILENAME);
-  if (!existsSync(path)) return;
+export function readProjectConfig(path: string): ProjectConfig {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf-8"));

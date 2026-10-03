@@ -53,7 +53,7 @@ export default async function humanCreatedThread(ctx: ScenarioContext): Promise<
       "comparables. It explicitly requires read-only investigation without source changes. " +
       "It does not invoke an AlignFirst protocol or request implementation, workspace creation, " +
       "or ticket creation. Judge the stdin prompt only. Ignore the CLI sandbox and permission " +
-      "flags: those are alcode defaults, not instructions to change files.",
+      "flags: those are `aligndev code` defaults, not instructions to change files.",
     label: "human-thread-question-delegation",
     timeoutMs: 300_000,
   });

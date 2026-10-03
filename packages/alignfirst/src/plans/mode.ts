@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
 
 import { CliError } from "../cli-error.js";
 import { gitOutput } from "../git.js";
+import type { ItemLocation } from "../project-layout.js";
 import { assertPlansGate } from "./layout.js";
 
 export type PlansMode = SharedPlans | LocalPlans;
@@ -16,15 +16,24 @@ export interface LocalPlans {
   kind: "local";
 }
 
-export function resolvePlansMode(cwd: string, form: string): PlansMode {
-  const plansPath = join(cwd, ".plans");
-  const stats = assertPlansGate(cwd, form);
-  if (plansRepositoryId(plansPath, stats.isSymbolicLink(), form) === repositoryId(cwd))
+/** `.plans` is shared when it sits in another repository than the project's. */
+export function resolvePlansMode(cwd: string, location: ItemLocation, form: string): PlansMode {
+  const stats = assertPlansGate(location, form);
+  const plansRepository = plansRepositoryId(location.path, stats.isSymbolicLink(), form);
+  if (plansRepository === undefined || plansRepository === repositoryId(cwd))
     return { kind: "local" };
-  return { kind: "shared", repoToplevel: gitOutput(plansPath, "rev-parse", "--show-toplevel") };
+  return {
+    kind: "shared",
+    repoToplevel: gitOutput(location.path, "rev-parse", "--show-toplevel"),
+  };
 }
 
-function plansRepositoryId(plansPath: string, isSymlink: boolean, form: string): string {
+/** Returns `undefined` for a real directory outside any git repository. */
+function plansRepositoryId(
+  plansPath: string,
+  isSymlink: boolean,
+  form: string,
+): string | undefined {
   try {
     return repositoryId(plansPath);
   } catch {
@@ -32,9 +41,7 @@ function plansRepositoryId(plansPath: string, isSymlink: boolean, form: string):
       throw new CliError(
         `.plans points outside any git repository. Re-run ${form} plans setup with the clone location.`,
       );
-    throw new CliError(
-      ".plans is not inside a git repository. Run this command from a worktree root.",
-    );
+    return;
   }
 }
 

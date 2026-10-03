@@ -11,7 +11,7 @@ read_when:
 
 - **Host:** `{{SERVER_HOST}}`, Ubuntu 24.04, time zone `{{TIME_ZONE}}`.
 - **Admin account:** `{{SERVER_ADMIN_USER}}` (sudo, key-only SSH). Holds this repository at `~/{{ADMIN_REPOSITORY_NAME}}`.
-- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{ASSISTANT_NAME}}` on system Node 26 through `/opt/{{SERVICE_USER}}/bin/openclaw`; project work uses fnm. Runs the delegated coding agent, `alignfirst`, `alcode`, `alproject`, and the managed projects under `~/projects`.
+- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{ASSISTANT_NAME}}` on system Node 26 through `/opt/{{SERVICE_USER}}/bin/openclaw`; project work uses fnm. Runs the delegated coding agent, `alignfirst`, `aligndev`, and the managed projects under `~/projects`.
 - **Public IP:** deployment-specific, written `<vps-ip>` throughout the docs. Never substitute it from a guess.
 
 ## Request flow
@@ -19,20 +19,21 @@ read_when:
 ```text
 channel message ({{ASSISTANT_NAME}} on the selected surface)
   → OpenClaw gateway (systemd --user unit, loopback :18789)
-  → playbook channel triage → native starter → durable handoff → regular thread turn
+  → playbook (aligndev guide) channel triage → native starter → durable handoff → regular thread turn
   → regular thread session claims startup
-  → alproject (project inventory, canonical paths, ports)
-  → alcode (delegation) → coding agent
+  → aligndev project (project inventory, canonical paths, ports)
+  → aligndev code (delegation) → coding agent
   → project workspace under ~/projects
 ```
 
-The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `alcode` starts the agent selected by `ALIGNFIRST_CODE_AGENT`.
+The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent selected by `code.agent` in the aligndev config.
 
 ## Ownership
 
 - This repository, in the admin account, describes the deployment. The service account never reads it; it works from the snapshot `~{{SERVICE_USER}}/seed/`, refreshed by the operator with `rsync` ([04 § 2](installations/04-openclaw.md#2-snapshot)).
 - `~{{SERVICE_USER}}/.openclaw/`: `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from the snapshot), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the plugin's durable handoff state).
 - The gateway unit is written by `openclaw gateway install`; the environment comes from `~/.config/environment.d/`, installed by the seed.
+- `~{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json` is the `aligndev` config, installed by the seed. The seed also installs `companions.json` there when the repository ships one.
 - `/opt/{{SERVICE_USER}}/` is root-owned; the gateway's persistent PATH and shell drop-in is service-owned.
 - Configuration, workspace files, skills, the coding agent's instructions and the npm prefix are immutable once [06](installations/06-security-hardening.md) has run.
 
@@ -52,11 +53,11 @@ The dev-server range `{{PORT_RANGE_FIRST}}–{{PORT_RANGE_LAST}}` is closed.
 
 ## Projects
 
-`alproject` discovers projects from `.alignfirst.json`; this repository keeps no project list.
+`aligndev project` discovers projects from `.alignfirst.json`; this repository keeps no project list.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject list --root ~/projects'
-sudo -H -u {{SERVICE_USER}} bash -lc 'alproject status <repo> --root ~/projects'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status <repo>'
 ```
 
 Adding one: [add-project.md](operations/add-project.md).

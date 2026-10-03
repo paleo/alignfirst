@@ -2,7 +2,7 @@ import type { ScenarioContext } from "@alignfirst/openclaw-test";
 import {
   execCommandOf,
   execMatches,
-  invokesAlcode,
+  invokesAligndevCode,
   invokesCodingAgentDirectly,
 } from "./agent-tool-calls.ts";
 import {
@@ -25,8 +25,8 @@ export interface DelegationChainOptions {
 }
 
 /**
- * One delegation's full chain: the alcode launch exec with the guide's chained system event, the
- * started ack, the `status: succeeded` session file started by this phase, and the completion
+ * One delegation's full chain: the `aligndev code` launch exec with the guide's chained system event,
+ * the started ack, the `status: succeeded` session file started by this phase, and the completion
  * report in the work thread.
  */
 export async function expectDelegationChain(
@@ -40,28 +40,37 @@ export async function expectDelegationChain(
   // coding-agent subprocess is a cliMock, not an OpenClaw agent tool call.
   const launch = await ctx.waitForAgentToolCall(
     (call) =>
-      invokesAlcode(call) &&
+      invokesAligndevCode(call) &&
       execMatches(call, /--protocol/) &&
       call.startedAt !== undefined &&
       call.startedAt >= notBefore,
     {
-      label: `agent delegates to the alcode CLI (launch #${launchIndex})`,
+      label: `agent delegates through \`aligndev code\` (launch #${launchIndex})`,
       timeoutMs: 180_000,
     },
   );
   if (invokesCodingAgentDirectly(launch)) {
     throw new Error(
-      `agent invoked a coding agent directly instead of alcode: ${JSON.stringify(launch.input)}`,
+      "agent invoked a coding agent directly instead of `aligndev code`: " +
+        JSON.stringify(launch.input),
     );
   }
   const input = launch.input;
   if (typeof input !== "object" || input === null) throw new Error("Missing exec input");
-  ctx.assertEqual("background" in input && input.background, true, "alcode runs in background");
-  ctx.assertEqual("timeoutSeconds" in input && input.timeoutSeconds, 0, "alcode has no timeout");
+  ctx.assertEqual(
+    "background" in input && input.background,
+    true,
+    "`aligndev code` runs in background",
+  );
+  ctx.assertEqual(
+    "timeoutSeconds" in input && input.timeoutSeconds,
+    0,
+    "`aligndev code` has no timeout",
+  );
   // Structural pin of the chained completion event — the outcome-level asserts below would also
   // pass on a bootstrap-path native wake (phase 1 always does), so assert the mechanism itself.
   const command = execCommandOf(launch);
-  if (command === undefined) throw new Error("alcode launch call carries no exec command");
+  if (command === undefined) throw new Error("`aligndev code` launch call carries no exec command");
   ctx.assertRegex(
     command,
     /openclaw system event/,
@@ -71,7 +80,7 @@ export async function expectDelegationChain(
   ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: event targets a session key`);
   const launchStartedAt = launch.startedAt;
   if (launchStartedAt === undefined) {
-    throw new Error(`alcode launch #${launchIndex} has no start timestamp`);
+    throw new Error(`\`aligndev code\` launch #${launchIndex} has no start timestamp`);
   }
 
   // The started ack: a batch judge over the thread's outbounds (see `waitForBackgroundStartedAck`).
@@ -103,7 +112,8 @@ export async function expectDelegationChain(
     timeoutMs: 420_000,
     label: `final-completion-report-${launchIndex}`,
   });
-  if (launch.sessionKey === undefined) throw new Error("alcode launch lacks session attribution");
+  if (launch.sessionKey === undefined)
+    throw new Error(`launch #${launchIndex} lacks session attribution`);
   await waitForThreadSettlement(ctx, launch.sessionKey, launch.toolUseId);
   await assertNoReportsAfterCompletion(ctx, sinceCursor, threadId, report.message.id);
 }

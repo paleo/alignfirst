@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +7,9 @@ import { main } from "../src/cli.js";
 import type { Output } from "../src/context.js";
 
 export const packageVersion = readPackageVersion();
+
+/** Keeps the developer's `~/.config/alignfirst/companions.json` out of the tests. */
+const DEFAULT_HOME = mkdtempSync(join(tmpdir(), "alignfirst-home-"));
 
 export interface Sink extends Output {
   text(): string;
@@ -41,7 +44,7 @@ export async function runMain(args: string[], options: RunOptions): Promise<RunR
     argv: ["node", "alignfirst", ...args],
     cwd: options.cwd,
     env: options.env ?? {},
-    home: options.home,
+    home: options.home ?? DEFAULT_HOME,
     stdout,
     stderr,
   });
@@ -67,6 +70,39 @@ export function git(dir: string, ...args: string[]): string {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+}
+
+/** Initializes a repository with one commit; call `configureGit` first. */
+export function initRepository(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  git(dir, "init", "--quiet");
+  writeFileSync(join(dir, "README.md"), "project\n");
+  git(dir, "add", "README.md");
+  git(dir, "commit", "--quiet", "-m", "init");
+}
+
+export function writeCompanions(home: string, value: unknown): void {
+  const dir = join(home, ".config", "alignfirst");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "companions.json"), JSON.stringify(value));
+}
+
+export interface CompanionProject {
+  root: string;
+  home: string;
+  project: string;
+  companion: string;
+}
+
+/** A repository at `~/app` whose companion is `~/companions/app`; the caller removes `root`. */
+export function makeCompanionProject(flags: Record<string, unknown>): CompanionProject {
+  const root = makeTempDir("alignfirst-companion-");
+  configureGit(root);
+  const home = join(root, "home");
+  const project = join(home, "app");
+  initRepository(project);
+  writeCompanions(home, { root: "~/companions", paths: { "~/app": flags } });
+  return { root, home, project, companion: join(home, "companions", "app") };
 }
 
 function readPackageVersion(): string {

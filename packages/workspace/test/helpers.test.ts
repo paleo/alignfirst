@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  composeProjectName,
   copyAndPatchFile,
   detectCommonJsError,
   extractHost,
@@ -53,6 +54,20 @@ describe("extractHost", () => {
 
   it("uses custom fallback", () => {
     expect(extractHost("", "API_URL", "fallback.example")).toBe("fallback.example");
+  });
+});
+
+describe("composeProjectName", () => {
+  it("lowercases the name", () => {
+    expect(composeProjectName("myrepo-feat-ABC-123")).toBe("myrepo-feat-abc-123");
+  });
+
+  it("drops characters outside [a-z0-9_-]", () => {
+    expect(composeProjectName("my.repo-v1.2")).toBe("myrepo-v12");
+  });
+
+  it("trims leading dashes and underscores", () => {
+    expect(composeProjectName("_-.repo")).toBe("repo");
   });
 });
 

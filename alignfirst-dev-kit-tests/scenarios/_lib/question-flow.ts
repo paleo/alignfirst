@@ -53,7 +53,7 @@ export async function runReadOnlyQuestion(
       "It does not invoke an AlignFirst protocol or request implementation, workspace creation, " +
       "or ticket creation. A necessary dependency or build refresh is allowed. " +
       "Judge the stdin prompt only. Ignore the CLI sandbox and permission flags: those are " +
-      "alcode defaults, not instructions to change files. The working directory and actual " +
+      "`aligndev code` defaults, not instructions to change files. The working directory and actual " +
       "absence of changes are asserted separately.",
     label: "read-only-question-delegation",
     timeoutMs: 300_000,
@@ -137,7 +137,7 @@ function assertNoChanges(
   ctx.assertEqual(readGit(options.worktreeDir, ["status", "--porcelain"]), "", "no source changes");
   const newPlanEntries = readdirSync(`${NIMBUS_PROJECT_PATH}/.plans`).filter(
     (entry) =>
-      entry !== "_alcode" && entry !== options.ticketId && !initialPlanEntries.includes(entry),
+      entry !== "_aligndev" && entry !== options.ticketId && !initialPlanEntries.includes(entry),
   );
   ctx.assertLength(newPlanEntries, 0, "no new ticket or side-ticket directory");
 }

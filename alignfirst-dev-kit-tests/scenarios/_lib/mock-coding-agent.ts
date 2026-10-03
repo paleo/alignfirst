@@ -4,7 +4,7 @@ import { text } from "node:stream/consumers";
 import type { CliMockEntry, ScenarioContext } from "@alignfirst/openclaw-test";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 
-// The coding agent's completion result, written into the alcode session file's
+// The coding agent's completion result, written into the `aligndev code` session file's
 // `---- Result ----` block. A real coding agent's result describes the task it
 // was actually given, so the mock derives it from the prompt (see
 // `codingResultFor`) rather than returning one constant — a static result that
@@ -28,7 +28,7 @@ const TOOLTIP_INTENT_RE = /\b(tooltip|infobulle|title attribute|attribut title)\
 // coding result reads as a failed run: the agent distrusts it and re-delegates
 // verification with escalating methods (dev server → curl → Playwright), never
 // posting its completion report (A12 Slack, artifacts 2026-08-23T12-46-49). So
-// verification prompts get a verification-shaped answer, like a real alcode.
+// verification prompts get a verification-shaped answer, like a real coder.
 const BOLD_VERIFY_RESULT =
   "Verified. Started the dev server cleanly (no errors in the logs) and checked the home page: the export button renders bold. No regressions found.";
 const TOOLTIP_VERIFY_RESULT =
@@ -77,7 +77,7 @@ const BRANCH_TOKEN_RE = /\b((?:[a-zA-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
 /**
- * Context-window occupancy both mocks end on, so `alcode` records the same `contextTokens:`
+ * Context-window occupancy both mocks end on, so `aligndev code` records the same `contextTokens:`
  * whichever coding agent is selected. The recorded value is the newest response's occupancy, never
  * a sum across the run: the Claude stream reports a smaller figure on its earlier turn, and the
  * Codex mock reports {@link MOCK_CODEX_STREAM_TOTAL} as the run's cumulative total.
@@ -94,8 +94,8 @@ export const MOCK_CODEX_STREAM_TOTAL = 512_000;
 /**
  * Where the mocked Codex writes its thread rollout. `codex` is the mock shim in the gateway, so no
  * real Codex reads this; the gateway sets `CODEX_HOME` to the same path, on the IPC volume both
- * containers mount, which is how `alcode` finds the occupancy the stream does not carry. It stays
- * out of the projects directory, which project discovery walks.
+ * containers mount, which is how `aligndev code` finds the occupancy the stream does not carry. It
+ * stays out of the projects directory, which project discovery walks.
  */
 const MOCK_CODEX_HOME = "/var/run/openclaw-test-ipc/codex-home";
 
@@ -138,11 +138,13 @@ function buildClaudeStreamResponse(sessionId: string, result: string): string {
   return `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
 }
 
-// Every alias alcode advertises resolves here: an agent that picks `--model astra` for a light task
-// otherwise gets "the bundled catalog contains no matching model" (A12 Slack, 2026-09-11T15-30-11).
+// Every alias `aligndev code` advertises resolves here: an agent that picks `--model astra` for a
+// light task otherwise gets "the bundled catalog contains no matching model" (A12 Slack,
+// 2026-09-11T15-30-11).
 const CODEX_MODEL_CATALOG = {
   models: [
     { slug: "gpt-6-astra" },
+    { slug: "gpt-6.1-sol" },
     { slug: "gpt-6-sol" },
     { slug: "gpt-5.6-terra" },
     { slug: "gpt-6-luna" },
@@ -161,7 +163,7 @@ export type CodexResponseVariant =
   | "nonzeroStderr";
 
 /**
- * Writes the thread rollout `alcode` reads the context occupancy from.
+ * Writes the thread rollout `aligndev code` reads the context occupancy from.
  *
  * `last_token_usage` is the occupancy and `total_token_usage` the cumulative total the stream also
  * reports; they differ, so a run that recorded the total instead fails the assertion.
@@ -193,8 +195,8 @@ export function buildCodexStreamResponse(
 ): { stdout: string; stderr?: string; exitCode: number } {
   const line = (event: unknown): string => JSON.stringify(event);
   const started = line({ type: "thread.started", thread_id: sessionId });
-  // Cumulative thread total, which is all `codex exec --json` reports. alcode uses it only to pin
-  // the rollout file to the run, never as an occupancy.
+  // Cumulative thread total, which is all `codex exec --json` reports. `aligndev code` uses it only to
+  // pin the rollout file to the run, never as an occupancy.
   const completed = line({
     type: "turn.completed",
     usage: {
@@ -255,7 +257,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 let streamSessionCounter = 0;
 function nextStreamSessionId(): string {
   streamSessionCounter += 1;
-  return `alcode-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
+  return `aligndev-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
 }
 
 export type CodingAgent = "claude" | "codex";
@@ -288,10 +290,10 @@ export interface SetupCodingAgentMockOptions {
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
   /**
-   * Delay (ms) before the stream-json (alcode) branch emits its NDJSON. alcode runs its child in
-   * the foreground and blocks on it, so this delay is what makes the whole alcode exec long enough
-   * for OpenClaw to background it (and the agent to post a "started" ack) before it exits and the
-   * completion wake fires. Default 30000.
+   * Delay (ms) before the stream-json (`aligndev code`) branch emits its NDJSON. `aligndev code` runs its
+   * child in the foreground and blocks on it, so this delay is what makes the whole `aligndev code`
+   * exec long enough for OpenClaw to background it (and the agent to post a "started" ack) before
+   * it exits and the completion wake fires. Default 30000.
    */
   streamDelayMs?: number;
   /**
@@ -523,13 +525,13 @@ export function isLogReviewPrompt(prompt: string): boolean {
 }
 
 function readConfiguredAgent(): CodingAgent {
-  const agent = process.env.ALIGNFIRST_CODE_AGENT;
+  const agent = process.env.CODING_AGENT;
   if (agent === "claude" || agent === "codex") return agent;
-  throw new Error("ALIGNFIRST_CODE_AGENT must be set to claude or codex for playbook scenarios");
+  throw new Error("CODING_AGENT must be set to claude or codex for playbook scenarios");
 }
 
 /**
- * True iff the call has the argv shape alcode emits for the call's agent.
+ * True iff the call has the argv shape `aligndev code` emits for the call's agent.
  */
 export function isAlignfirstWrapperCall(call: CodingAgentCall): boolean {
   const a = call.argv;
@@ -616,7 +618,7 @@ function parseWorktreeRequest(
 }
 
 const CODING_PROTOCOL_RE =
-  /^Run `alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./;
+  /^Run `(?:npx -y )?alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./;
 
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
@@ -871,5 +873,5 @@ export async function expectCodingDelegation(
 }
 
 function defaultCodingDelegationRubric(ticketId: string): string {
-  return `The message is a prompt sent to a coding agent via the \`alcode\` CLI. Expected: an AlignFirst protocol invocation — \`Run \`alignfirst guide spec\` and follow the protocol. Ticket ID = …\`, or the equivalent with another lowercase protocol name — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an AlignFirst protocol invocation.`;
+  return `The message is a prompt sent to a coding agent via the \`aligndev code\` CLI. Expected: an AlignFirst protocol invocation — \`Run \`alignfirst guide spec\` and follow the protocol. Ticket ID = …\`, or the equivalent with \`npx -y alignfirst\` or another lowercase protocol name — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an AlignFirst protocol invocation.`;
 }

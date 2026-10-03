@@ -34,7 +34,7 @@ The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited righ
 
 ### No hack around OpenClaw's handling of long commands
 
-`alcode` runs are long, and other commands are long too. OpenClaw owns how a background `exec` completes and how the assistant learns about it. The plugin adds nothing there: no gateway method to start a turn after a command, no command to chain onto a run, no rule about the native completion notice. The delegation guide uses OpenClaw's own means for that, and the plugin stays out of it.
+`aligndev code` runs are long, and other commands are long too. OpenClaw owns how a background `exec` completes and how the assistant learns about it. The plugin adds nothing there: no gateway method to start a turn after a command, no command to chain onto a run, no rule about the native completion notice. The delegation guide uses OpenClaw's own means for that, and the plugin stays out of it.
 
 ### Say only what is true
 
@@ -48,11 +48,13 @@ The bot claims only what it does. The channel session posts the starter, calls `
 - A recovery scan retries a pending nudge after a gateway restart, at most ten times. A record still pending after that stays claimable by the next human message in the thread.
 - `openclaw thread-handoff list | receipts | retire` inspect and maintain the records.
 
+The receipt and the claim depend on per-session state captured on one side and read on the other: the tool factory captures the session's channel context, and `before_tool_call` remembers the run ID. Since 2026.9.8, a gateway process evaluates the plugin twice. A turn takes its tools from the gateway's registration (`adoptRuntimeToolRegistrations` in `src/plugins/tool-registry-adoption.ts`) and runs its tool hooks in its own. That state therefore lives in process-wide slots (`process-shared.ts`); a per-registration cache dropped every receipt and failed each `start` with `unverifiedThreadDelivery`.
+
 `thread_handoff` is an agent tool the plugin registers itself, marked optional, so a deployment allows it explicitly. The `openclaw thread-handoff` subcommands are plugin CLI registrations. OpenClaw ships neither.
 
 ## How the nudge enters OpenClaw
 
-The handoff service owns an asynchronous boundary created outside inbound agent turns. It enters that clean context only while calling `runtime.channel.inbound.dispatchReply`, so the reply run cannot inherit a closing tool-turn work scope. The plugin builds the inbound context itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.5 in the deterministic gateway suite, which still passes on 2026.9.6:
+The handoff service owns an asynchronous boundary created outside inbound agent turns. It enters that clean context only while calling `runtime.channel.inbound.dispatchReply`, so the reply run cannot inherit a closing tool-turn work scope. The plugin builds the inbound context itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.5 in the deterministic gateway suite, which still passes on 2026.9.8:
 
 - The plugin-dispatched turn must disable block streaming. With streaming on, OpenClaw marked the response streamed through a nonposting fallback and dropped the final payload before delivery.
 - A silent plugin-dispatched turn ends on `HEARTBEAT_OK`. `NO_REPLY` invoked the isolated finalizer in six probes out of six, on both surfaces, and produced an unsolicited answer.

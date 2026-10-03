@@ -14,6 +14,7 @@ import { runSync } from "./commands/sync.js";
 import { runTicket } from "./commands/ticket.js";
 import type { CommandContext, Output } from "./context.js";
 import { resolveProjectConfig } from "./project-config.js";
+import { layoutOf } from "./project-layout.js";
 import { checkCliRange } from "./version-guard.js";
 
 export interface MainOptions {
@@ -48,7 +49,7 @@ export async function main(options?: MainOptions): Promise<number> {
       return 0;
     }
     if (command !== "config" && command !== "doctor") {
-      ctx.projectConfig = resolveProjectConfig(ctx.cwd);
+      ctx.projectConfig = resolveProjectConfig(layoutOf(ctx));
       checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args]);
     }
     const code = await dispatch(ctx, command, args);

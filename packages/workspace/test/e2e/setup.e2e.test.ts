@@ -77,7 +77,25 @@ describe("workspace setup (e2e)", () => {
       expect(result.status).toBe(1);
       expect(output).toContain("FAILED");
       expect(output).toContain("e2e boom");
+      expect(output).toContain("ran the workspace scripts of another worktree");
       expect(entryFor(repo, "fixrepo-feat-z").status).toBe("failed");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a failing finalize retried from inside the worktree omits the foreign-script hint",
+    () => {
+      const { repo } = fixture();
+      runCli(repo, ["setup", "-c", "feat-r"], { E2E_FINALIZE_FAIL: "1" });
+      const retry = runCli(join(repo, "..", "fixrepo-feat-r"), ["setup"], {
+        E2E_FINALIZE_FAIL: "1",
+      });
+      const output = retry.stdout + retry.stderr;
+
+      expect(retry.status).toBe(1);
+      expect(output).toContain("e2e boom");
+      expect(output).not.toContain("ran the workspace scripts of another worktree");
     },
     TEST_TIMEOUT_MS,
   );

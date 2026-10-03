@@ -89,7 +89,7 @@ function commandBlocks(
     recovery: [
       {
         command: `${ws} setup`,
-        comment: "retry the finalize step; blocks until READY/FAILED",
+        comment: "retry the finalize step from inside the worktree; blocks until READY/FAILED",
       },
     ],
     inspect: [

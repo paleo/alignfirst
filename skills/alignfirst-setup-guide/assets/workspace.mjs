@@ -8,14 +8,14 @@
 // =============================================================================
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWorkspace, helpers } from "@alignfirst/workspace";
 
 // ALTERNATIVE: file-based DB (SQLite). Replace the Docker block in
-// `finalizeWorkspace` and the `docker-compose.yml` gitignoredFiles entry with a
-// copy from the main worktree:
+// `finalizeWorkspace` and the `DB_PORT` line of the `.env` patch with a copy
+// from the main worktree:
 //
 //   import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 //   import { join } from "node:path";
@@ -94,18 +94,33 @@ await runWorkspace({
           PORT: String(ports.frontend),
           SERVER_PORT: String(ports.server),
           API_URL: publicUrl(content, "API_URL", ports.server),
+          // ADAPT: Docker example, a committed docker-compose.yml publishing
+          // "127.0.0.1:${DB_PORT:?run workspace setup}:5432". Compose reads this
+          // .env on its own. Drop the line on a non-Docker stack.
+          DB_PORT: String(ports.db),
         }),
     },
-    // ADAPT: Docker example. Patches the host port and the container_name so
-    // worktrees don't collide. Drop this entry on a non-Docker stack.
-    {
-      path: "docker-compose.yml",
-      source: { kind: "mainWorktree", fallback: "docker-compose.example.yml" },
-      patch: (content, { name, ports }) =>
-        content
-          .replace(/^(\s*-\s*")[^"]*:5432(")/m, `$1${ports.db}:5432$2`)
-          .replace(/^(\s*container_name:\s*).+$/m, `$1${name}-database`),
-    },
+    // ALTERNATIVE: a gitignored docker-compose.yml seeded from a committed
+    // example. Follow the pattern the repo already uses. Patch the host port, and
+    // the container_name when the file declares one:
+    //
+    //   {
+    //     path: "docker-compose.yml",
+    //     source: { kind: "mainWorktree", fallback: "docker-compose.example.yml" },
+    //     patch: (content, { name, ports }) =>
+    //       content
+    //         .replace(/^(\s*-\s*")[^"]*:5432(")/m, `$1${ports.db}:5432$2`)
+    //         .replace(/^(\s*container_name:\s*).+$/m, `$1${name}-database`),
+    //   },
+    //
+    // A container_name is global: a leftover container of that name makes `up`
+    // fail on the conflict. Force-remove it first in `finalizeWorkspace`:
+    //
+    //   try {
+    //     execFileSync("docker", ["rm", "-f", `${name}-database`], { stdio: "pipe" });
+    //   } catch {
+    //     // no leftover container
+    //   }
     // ADAPT: a verbatim copy — no ports, just a gitignored file the worktree
     // needs. No `patch`. `optional: true` skips it (with a warning) when absent.
     {
@@ -190,20 +205,12 @@ await runWorkspace({
   //
   // Run `npm install` first: any later failure then leaves a worktree with
   // usable node_modules, so `workspace setup` can re-import @alignfirst/workspace.
-  finalizeWorkspace: async ({ currentWorktree, name, ports }) => {
-    const container = `${name}-database`;
-    // A worktree of the same name, deleted out-of-band, may have leaked its container (it belongs
-    // to a different compose project, so `up` can't reuse it — it errors on the name conflict).
-    // Force-remove it by name first so `up` is idempotent when a name is reused.
-    try {
-      execFileSync("docker", ["rm", "-f", container], { stdio: "pipe" });
-    } catch {
-      // no leftover container
-    }
+  finalizeWorkspace: async ({ currentWorktree, ports }) => {
     // `npm install` and `npm run build` are idempotent.
     execSync("npm install", { stdio: "inherit", cwd: currentWorktree });
     execSync("npm run build", { stdio: "inherit", cwd: currentWorktree });
-    // `docker compose up -d` is already idempotent.
+    // `docker compose up -d` is already idempotent. A reused workspace name maps to
+    // the same compose project, so `up` takes over a container leaked by an orphan.
     execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
     const deadline = Date.now() + 30_000;
     let ready = false;
@@ -229,8 +236,8 @@ await runWorkspace({
     execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
     // Returning is OPTIONAL — omit the two lines below entirely if you have
     // nothing to record (the common case). Return `{ purgeData }` ONLY for teardown
-    // identifiers you can't re-derive at purge time: container/volume names are
-    // derived from the workspace name (see purgeInfrastructure), so they don't go
+    // identifiers you can't re-derive at purge time: the compose project is
+    // derived from the workspace name (see purgeInfrastructure), so it doesn't go
     // here, but a non-derivable external resource does — e.g. a public dev tunnel
     // opened now, whose provider hands back an opaque id.
     const tunnelId = openDevTunnel(ports.frontend); // ADAPT: your external resource
@@ -242,17 +249,14 @@ await runWorkspace({
   // and orphan removal. Drop on a non-Docker stack.
   //
   // MUST BE IDEMPOTENT — tolerate already-absent infrastructure. May run when
-  // `worktree` is gone (orphan); the container/volume names are derived from the
-  // workspace name, so teardown works without the worktree. `purgeData` carries only
-  // the non-derivable bits (here, the external tunnel id).
-  purgeInfrastructure: ({ worktree, name, purgeData }) => {
+  // `worktree` is gone (orphan). `docker compose -p` finds the stack by its
+  // compose labels, from any directory and without a compose file, so teardown
+  // works without the worktree. `purgeData` carries only the non-derivable bits
+  // (here, the external tunnel id).
+  purgeInfrastructure: ({ name, purgeData }) => {
     try {
-      if (existsSync(worktree)) {
-        execSync("docker compose down -v", { stdio: "pipe", cwd: worktree });
-      } else {
-        execFileSync("docker", ["rm", "-f", `${name}-database`], { stdio: "pipe" });
-        execFileSync("docker", ["volume", "rm", `${name}_db-data`], { stdio: "pipe" });
-      }
+      const project = helpers.composeProjectName(name);
+      execFileSync("docker", ["compose", "-p", project, "down", "-v"], { stdio: "pipe" });
       if (purgeData?.tunnelId) closeDevTunnel(purgeData.tunnelId); // ADAPT: external teardown
     } catch {
       // infra may already be gone

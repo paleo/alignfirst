@@ -73,7 +73,7 @@ The plugin commits a pending record before dispatching `Take over this thread.` 
 
 The message body is static: it carries no starter copy, routing fields, or handoff ID. The playbook routes by thread metadata, claims the current session, and reads the visible starter and human replies through thread history. The nudge supplies no missing input or approval. A takeover turn with nothing to report ends with `HEARTBEAT_OK`; the deterministic gateway probe confirmed that `NO_REPLY` still triggers isolated finalization on this path.
 
-The plugin starts the thread session and does nothing after that. Alcode completion uses OpenClaw's own completion path.
+The plugin starts the thread session and does nothing after that. `aligndev code` completion uses OpenClaw's own completion path.
 
 Each takeover turn gets the regular agent budget from `agents.defaults.timeoutSeconds`, including the 48-hour OpenClaw default and the unlimited `0` value.
 
@@ -111,7 +111,7 @@ npm run lint --workspace @alignfirst/service-openclaw-plugin
 ```
 
 The ordinary test command excludes the real-gateway suite. To exercise the package as an external
-plugin against the pinned OpenClaw 2026.9.6 runtime, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
+plugin against the OpenClaw runtime pinned in the root lockfile, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin

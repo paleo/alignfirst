@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { findStoppedRebase } from "../src/plans/rebase.js";
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeTempDir, runMain, writeCompanions } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -308,8 +308,8 @@ describe("plans commands", () => {
   it("keeps fresh running sessions while archiving stale completed sessions", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const sessionDir = join(plansDir, "_alcode");
-    const ticketSessionDir = join(plansDir, "79", "_alcode");
+    const sessionDir = join(plansDir, "_aligndev");
+    const ticketSessionDir = join(plansDir, "79", "_aligndev");
     mkdirSync(sessionDir, { recursive: true });
     mkdirSync(ticketSessionDir, { recursive: true });
     const running = join(sessionDir, "20260901-100000.md");
@@ -326,10 +326,10 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
 
-    expect(result.stdout).toContain("Archived _alcode/20260901-110000.md");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-110000.md");
     expect(existsSync(running)).toBe(true);
     expect(existsSync(succeeded)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-110000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-110000.md"))).toBe(true);
     expect(existsSync(join(plansDir, "79"))).toBe(true);
     expect(existsSync(join(plansDir, "_archives", "79"))).toBe(false);
   });
@@ -337,10 +337,10 @@ describe("plans commands", () => {
   it("archives stale running sessions and their ticket directories", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const running = join(plansDir, "_alcode", "20260901-100000.md");
-    const ticketSession = join(plansDir, "79", "_alcode", "20260901-120000.md");
-    mkdirSync(join(plansDir, "_alcode"), { recursive: true });
-    mkdirSync(join(plansDir, "79", "_alcode"), { recursive: true });
+    const running = join(plansDir, "_aligndev", "20260901-100000.md");
+    const ticketSession = join(plansDir, "79", "_aligndev", "20260901-120000.md");
+    mkdirSync(join(plansDir, "_aligndev"), { recursive: true });
+    mkdirSync(join(plansDir, "79", "_aligndev"), { recursive: true });
     writeFileSync(running, "---\nstatus: running\n---\n");
     writeFileSync(ticketSession, "---\nstatus: running\n---\n");
     const old = new Date(Date.now() - 2 * 86_400_000);
@@ -353,12 +353,12 @@ describe("plans commands", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Archived _alcode/20260901-100000.md");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md");
     expect(result.stdout).toContain("Archived 79");
     expect(existsSync(running)).toBe(false);
     expect(existsSync(ticketSession)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_alcode", "20260901-100000.md"))).toBe(true);
-    expect(existsSync(join(plansDir, "_archives", "79", "_alcode", "20260901-120000.md"))).toBe(
+    expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "79", "_aligndev", "20260901-120000.md"))).toBe(
       true,
     );
   });
@@ -425,6 +425,137 @@ describe("plans commands", () => {
     expect(result.stderr).toContain("mutually exclusive");
   });
 });
+
+describe("plans commands with a companion .plans", () => {
+  it("sets up the link in the companion, relative to its parent", async () => {
+    const fixture = makeFixture();
+    const companion = useCompanion(fixture);
+    const link = join(companion, ".plans");
+    const result = await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    const target = join("..", "..", "team-plans", "product-plans");
+    expect(readlinkSync(link)).toBe(target);
+    expect(result.stdout).toContain(`Linked ${link} → ${target}\n`);
+    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
+
+    const options = { cwd: fixture.product, home: fixture.root };
+    expect((await runMain(["plans", "check"], options)).stdout).toContain("linked");
+    mkdirSync(join(link, "78"));
+    const archive = await runMain(["plans", "archive", "78"], options);
+    expect(archive.stdout).toContain("Archived 78 → _archives/78");
+    expect(existsSync(join(fixture.clone, "product-plans", "_archives", "78"))).toBe(true);
+    const stale = join(link, "79");
+    mkdirSync(stale);
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    utimesSync(stale, old, old);
+    const automatic = await runMain(["plans", "auto-archive"], {
+      ...options,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+    expect(automatic.stdout).toContain("Archived 79");
+    expect(automatic.stdout).toContain("Publish with: alignfirst sync");
+  });
+
+  it("treats a plain companion .plans as local work files", async () => {
+    const fixture = makeFixture();
+    const plans = join(useCompanion(fixture), ".plans");
+    mkdirSync(join(plans, "78"), { recursive: true });
+    const options = { cwd: fixture.product, home: fixture.root };
+    expect((await runMain(["sync"], options)).stdout).toBe("(local mode, nothing to sync)\n");
+    expect((await runMain(["plans", "check"], options)).stdout).toContain("local mode");
+    const missing = await runMain(["plans", "archive", "80"], options);
+    expect(missing.stderr).toContain(`80 must be an existing directory directly under ${plans}.`);
+    expect((await runMain(["plans", "archive", "78"], options)).code).toBe(0);
+    expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
+  });
+
+  it("accepts _project as a plans folder", async () => {
+    const fixture = makeFixture();
+    const result = await runMain(["plans", "setup", fixture.clone, "--folder", "_project"], {
+      cwd: fixture.product,
+    });
+    expect(result.code).toBe(0);
+    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(
+      join("..", "team-plans", "_project"),
+    );
+  });
+});
+
+describe("plans commands with a separate session tree", () => {
+  it("archives each tree into its own _archives", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    const sessions = join(useSessionTree(fixture), ".plans");
+    const old = new Date(Date.now() - 2 * 86_400_000);
+    for (const path of [
+      join(plans, "79", "A1-spec.md"),
+      join(sessions, "79", "_aligndev", "a.md"),
+    ]) {
+      mkdirSync(join(path, ".."), { recursive: true });
+      writeFileSync(path, "x\n");
+      utimesSync(path, old, old);
+    }
+    const noTicket = join(sessions, "_aligndev", "20260901-100000.md");
+    writeFileSync(noTicket, "---\nstatus: succeeded\n---\n");
+    utimesSync(noTicket, old, old);
+
+    const result = await runMain(["plans", "auto-archive"], {
+      cwd: fixture.product,
+      home: fixture.root,
+      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+    });
+
+    expect(result.stdout).toContain("Archived 79 → _archives/79");
+    expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md (session tree)");
+    expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "79", "_aligndev", "a.md"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "_aligndev"))).toBe(false);
+  });
+
+  it("archives a ticket's session directory with the ticket", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    const sessions = join(useSessionTree(fixture), ".plans");
+    mkdirSync(join(plans, "78"), { recursive: true });
+    mkdirSync(join(sessions, "78", "_aligndev"), { recursive: true });
+
+    const result = await runMain(["plans", "archive", "78"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
+
+    expect(result.code).toBe(0);
+    expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "78", "_aligndev"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "78", "_aligndev"))).toBe(false);
+  });
+});
+
+/** Project `.plans`, session tree in `<root>/companions/product/.plans`. */
+function useSessionTree(fixture: Fixture): string {
+  writeCompanions(fixture.root, {
+    root: "~/companions",
+    paths: { "~/product": { ".plans": false, _aligndev: true } },
+  });
+  const companion = join(fixture.root, "companions", "product");
+  mkdirSync(join(companion, ".plans", "_aligndev"), { recursive: true });
+  mkdirSync(join(fixture.product, ".plans"), { recursive: true });
+  return companion;
+}
+
+/** The home directory is the fixture root; the companion is `<root>/companions/product`. */
+function useCompanion(fixture: Fixture): string {
+  writeCompanions(fixture.root, {
+    root: "~/companions",
+    paths: { "~/product": { ".plans": true } },
+  });
+  return join(fixture.root, "companions", "product");
+}
 
 interface Fixture {
   root: string;

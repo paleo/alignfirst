@@ -79,8 +79,9 @@ await runDevServer({
   // file, so this is the only place it can surface. Give it a row of the same
   // shape as the spawn servers — what it is reached by, then how its logs are
   // read — so one column means one thing on every row. For a database: the
-  // connection string without the password, the workspace-scoped container name,
-  // and the command that tails the container logs.
+  // connection string without the password, the container name (compose's
+  // `<project>-<service>-1`, or the seeded `container_name`), and the command
+  // that tails the container logs.
   //
   // Needs `import { readFileSync } from "node:fs";`.
   // formatSummary: ({ workspace, servers }) => {
@@ -90,10 +91,11 @@ await runDevServer({
   //     .filter(({ pid }) => pid !== undefined) // Callback servers have none.
   //     .map(({ server, pid }) => `  ${server.name}: PID ${pid}  log: .local-wt/logs/${server.name}.log`);
   //   const db = `${read("DB_USER")}@127.0.0.1:${read("DB_PORT")}/${read("DB_NAME")}`;
+  //   const container = `${helpers.composeProjectName(workspace.name)}-database-1`;
   //   return [
   //     `Dev server up for ${workspace.name}: ${read("API_URL")}`,
   //     ...rows,
-  //     `  database: ${db}  (${workspace.name}-database)  log: docker compose logs -f database`,
+  //     `  database: ${db}  (${container})  log: docker compose logs -f database`,
   //   ].join("\n");
   // },
 });

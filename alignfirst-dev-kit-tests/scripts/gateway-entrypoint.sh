@@ -3,7 +3,7 @@
 # subscription credential, then hands off to the command the base Compose stack
 # defines, so the gateway start line stays owned by @alignfirst/openclaw-test.
 #
-# Version-specific (OpenClaw 2026.9.6): the runtime no longer reads a Codex
+# Version-specific (OpenClaw 2026.9.6 and later): the runtime reads no Codex
 # `auth.json` directly, so the credential has to reach OpenClaw's own auth store.
 # See docs/alignfirst-dev-kit/upgrading-openclaw.md for the removal condition.
 #
@@ -30,5 +30,29 @@ if [ -f "$CODEX_AUTH" ]; then
   rm -rf "$import_home"
   trap - EXIT
 fi
+
+# Fatal, unlike the import: every delegation reads its coding agent from this config.
+node -e '
+  const { mkdirSync, writeFileSync } = require("node:fs");
+  const { dirname } = require("node:path");
+  const [file] = process.argv.slice(1);
+  const agent = process.env.CODING_AGENT;
+  if (agent !== "claude" && agent !== "codex") {
+    const got = JSON.stringify(agent);
+    console.error(`gateway-entrypoint: CODING_AGENT must be claude or codex, got ${got}`);
+    process.exit(1);
+  }
+  const models = (process.env.CODING_AGENT_MODELS ?? "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter((model) => model !== "");
+  const config = {
+    platform: "openclaw",
+    projectsRoot: "/home/assistant/projects",
+    code: models.length > 0 ? { agent, models } : { agent },
+  };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+' "$HOME/.config/alignfirst/aligndev.config.json" || exit 1
 
 exec "$@"

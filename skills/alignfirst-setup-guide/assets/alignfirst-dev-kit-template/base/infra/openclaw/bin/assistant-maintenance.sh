@@ -7,7 +7,9 @@
 # Usage:
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
-# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills.
+# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills. The config
+# scope covers openclaw.json, the aligndev config with its directory, and companions.json when it
+# exists.
 
 set -Eeuo pipefail
 
@@ -16,6 +18,9 @@ SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
+ALIGNDEV_CONFIG_DIR="$SERVICE_HOME/.config/alignfirst"
+ALIGNDEV_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/aligndev.config.json"
+COMPANIONS_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/companions.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
@@ -79,9 +84,9 @@ parse_arguments() {
 }
 
 resolve_paths() {
-  local config="$ADMIN_REPOSITORY/infra/openclaw/environment.d/coding-agent.conf"
+  local config="$ADMIN_REPOSITORY/infra/openclaw/aligndev.config.json"
   if [ -r "$config" ]; then
-    CODING_AGENT=$(sed -n 's/^ALIGNFIRST_CODE_AGENT=//p' "$config" | tail -1)
+    CODING_AGENT=$(jq -r '.code.agent' "$config" 2>/dev/null) || CODING_AGENT=
   fi
   case "$CODING_AGENT" in
     codex)
@@ -112,8 +117,14 @@ unlock_scopes() {
 }
 
 unlock_config() {
+  local path
   chattr -i "$SERVICE_HOME/.openclaw/openclaw.json"
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json"
+  for path in "$ALIGNDEV_CONFIG_DIR" "$ALIGNDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
+    [ -e "$path" ] || continue
+    chattr -i "$path"
+    chown "$SERVICE_USER:$SERVICE_USER" "$path"
+  done
 }
 
 unlock_workspace() {
@@ -194,9 +205,22 @@ restore_scopes() {
 }
 
 restore_config() {
+  local path status=0
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chmod 600 "$SERVICE_HOME/.openclaw/openclaw.json" &&
-    chattr +i "$SERVICE_HOME/.openclaw/openclaw.json"
+    chattr +i "$SERVICE_HOME/.openclaw/openclaw.json" || status=1
+  for path in "$ALIGNDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
+    [ -e "$path" ] || continue
+    chown root:root "$path" &&
+      chmod 644 "$path" &&
+      chattr +i "$path" || status=1
+  done
+  if [ -d "$ALIGNDEV_CONFIG_DIR" ]; then
+    chown root:root "$ALIGNDEV_CONFIG_DIR" &&
+      chmod 755 "$ALIGNDEV_CONFIG_DIR" &&
+      chattr +i "$ALIGNDEV_CONFIG_DIR" || status=1
+  fi
+  return "$status"
 }
 
 restore_workspace() {

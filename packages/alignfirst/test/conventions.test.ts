@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { configureGit, git, makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -41,6 +41,18 @@ describe("conventions command", () => {
         "Work files: use `.plans`. Automatic archival is enabled.\n" +
         "Searches: exclude `.plans`, `.local` and `.local-wt` from broad codebase searches.\n",
     );
+  });
+
+  it("gives the absolute path of a companion .plans and leaves it out of the searches", async () => {
+    const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+    dirs.push(root);
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    mkdirSync(join(project, ".plans"));
+    mkdirSync(join(project, ".local"));
+    writeFileSync(join(project, ".gitignore"), ".plans\n.local\n");
+    const result = await runMain(["conventions"], { cwd: project, home });
+    expect(result.stdout).toContain(`Work files: use \`${join(companion, ".plans")}\`.\n`);
+    expect(result.stdout).toContain("Searches: exclude `.local` from broad codebase searches.\n");
   });
 
   it("renders the agent attribution rule without a configured commit format", async () => {

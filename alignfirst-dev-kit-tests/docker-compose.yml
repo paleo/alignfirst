@@ -2,7 +2,7 @@
 # @alignfirst/openclaw-test. Requires Docker Compose v2.20+.
 #
 # `.env.local` needs OPENROUTER_API_KEY (judge), OPENCLAW_CODEX_HOME (Terra),
-# OPENCLAW_WORKSPACE_DIR, ALIGNFIRST_PLAYBOOK_SKILL_DIR.
+# OPENCLAW_WORKSPACE_DIR, ALIGNFIRST_REPO_DIR, CODING_AGENT.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
 # ASSISTANT_UID, ASSISTANT_GID are set automatically by `openclaw-test env|run`.
@@ -19,30 +19,28 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
-      ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
-      ALIGNFIRST_CODE_MODELS: ${ALIGNFIRST_CODE_MODELS:-}
+      # The entrypoint writes both into the aligndev config.
+      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
+      CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
       # `codex` is the mock shim here (symlinked in the image, first on PATH), so no real Codex
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
-      # can write the thread rollout alcode reads the context occupancy from.
+      # can write the thread rollout `aligndev code` reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
-    # Import the mounted Codex credential, then hand off to the base stack's
-    # gateway command, which stays the single owner of the start line.
+    # Import the mounted Codex credential and write the aligndev config, then hand off
+    # to the base stack's gateway command, which stays the single owner of the start line.
     entrypoint: ["/usr/local/bin/gateway-entrypoint"]
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
       - fixture-projects:/home/assistant/projects
-      # Live-mount the playbook skill over its copy in OpenClaw's managed skill
-      # directory. Set in .env.local (relative to this dir, e.g.
-      # ../skills/alignfirst-openclaw-playbook).
-      - ${ALIGNFIRST_PLAYBOOK_SKILL_DIR:?set ALIGNFIRST_PLAYBOOK_SKILL_DIR to the playbook skill directory}:/home/assistant/.openclaw/skills/alignfirst-openclaw-playbook
-      # Live-mount the built monorepo so the alcode and alignfirst wrappers resolve
-      # to this checkout. Run `npm run build` at the root first so alcode, alignfirst,
-      # and docmap have built output.
+      # Live-mount the built monorepo so the `aligndev` and `alignfirst` wrappers resolve
+      # to this checkout, playbook templates included. Run `npm run build` at the root
+      # first so aligndev, alignfirst, and docmap have built output.
       - ${ALIGNFIRST_REPO_DIR:?set ALIGNFIRST_REPO_DIR to the monorepo root}:/opt/alignfirst:ro
 
   runner:
     environment:
       OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:-openrouter/anthropic/claude-haiku-4.5}
-      ALIGNFIRST_CODE_AGENT: ${ALIGNFIRST_CODE_AGENT:?set ALIGNFIRST_CODE_AGENT to codex or claude}
+      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
+      CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
     volumes:
       - fixture-projects:/home/assistant/projects

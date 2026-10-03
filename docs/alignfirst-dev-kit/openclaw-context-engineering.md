@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.6 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.9.8 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 
@@ -13,7 +13,7 @@ These top-level files under `~/.openclaw/workspace/` are read on every turn and 
 - `MEMORY.md` — curated long-term memory (optional)
 - `BOOTSTRAP.md` — first-run ritual (optional)
 
-Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootstrap cache (`src/agents/bootstrap-cache.ts`) refreshes per turn keyed on inode/mtime, so live edits are picked up without restarting the gateway. This is why the harness can bind-mount the workspace and the playbook skill into the gateway and have playbook edits iterate without a rebuild.
+Loader: `loadWorkspaceBootstrapFiles()` in `src/agents/workspace.ts`. The bootstrap cache (`src/agents/bootstrap-cache.ts`) refreshes per turn keyed on inode/mtime, so live edits are picked up without restarting the gateway. This is why the harness can bind-mount the workspace into the gateway and have workspace edits iterate without a rebuild. `aligndev guide` reads its templates at runtime, so playbook edits in the mounted checkout apply live too.
 
 ## Subagent sessions get a filtered subset
 
@@ -27,7 +27,7 @@ Anything under `workspace/` subdirectories is **not** auto-injected. The agent m
 
 To force-load extra files into the prompt, configure the `bootstrap-extra-files` hook in `openclaw.json`. Caveat: the file basename must be one of the recognized bootstrap names (`AGENTS.md`, `SOUL.md`, …) — you can't smuggle arbitrary content this way.
 
-This is the mechanism the `alignfirst-openclaw-playbook` skill relies on: `AGENTS.md` is a thin pointer that, on each user message, including the static `Take over this thread.` message from AlignFirst Service, tells the assistant to load the skill from OpenClaw's managed `~/.openclaw/skills/` directory and read its `SKILL.md` (the dispatcher); the dispatcher in turn reads the surface-specific procedure (`references/working-session.md` or `references/channel-handling.md`). Neither coding agent scans this managed directory. None of those files is auto-loaded — they cost tokens only when a turn actually needs them. Because the catalog injects only name+description (never the body), whichever `SKILL.md` the assistant reads *first* sets the turn's frame — which is why the dispatcher is a procedural skill and the delegation manual (`alcode --openclaw-guide`) is only read at delegation time.
+This is the mechanism the playbook relies on: `AGENTS.md` is a thin pointer that, on each user message, including the static `Take over this thread.` message from AlignFirst Service, makes the first action an `exec` of `aligndev guide` (the dispatcher); the dispatcher in turn runs the surface-specific procedure (`aligndev guide working-session` or `aligndev guide channel-handling`). The playbook sits outside every skill catalog, so neither the assistant nor a coding agent sees it listed. None of those guides is auto-loaded — they cost tokens only when a turn actually needs them. Whichever guide the assistant reads *first* sets the turn's frame — which is why the dispatcher is purely procedural and the delegation manual (`aligndev guide code`) is only read at delegation time.
 
 ## Character budgets
 
@@ -46,9 +46,9 @@ The configured `agents.defaults.heartbeat.prompt` supplies the generic heartbeat
 
 System events are held in memory (2026.9.x): a queued event does not survive a gateway restart. They are peeked at prompt build and consumed after delivery, so an event survives an aborted heartbeat turn. `enqueueSystemEvent` returns `false` both for a rejection and, with `replace: true`, when an identical event for the same `contextKey` is still queued.
 
-The background `exec` acknowledgement ends with "Use process (list/poll/log/…) for follow-up". On a takeover turn with a 600-second budget, that sentence led the model to poll a backgrounded `alcode` run fifty-five times until the turn was aborted with nothing posted. The delegation guide forbids any `process` call on an `alcode` session.
+The background `exec` acknowledgement ends with "Use process (list/poll/log/…) for follow-up". On a takeover turn with a 600-second budget, that sentence led the model to poll a backgrounded `alcode` run fifty-five times until the turn was aborted with nothing posted. The delegation guide forbids any `process` call on an `aligndev code` session.
 
-Completion reporting uses the thread's ticket, including a reserved `side-N`. The CLI's `status --no-ticket` searches the shared `.plans/_alcode/` directory and can select another thread's run.
+Completion reporting uses the thread's ticket, including a reserved `side-N`. `aligndev code status --no-ticket` searches the shared `.plans/_aligndev/` directory and can select another thread's run.
 
 The saved transcript is not a copy of the live heartbeat prompt. `buildReplyPromptEnvelopeBase` in `src/auto-reply/reply/prompt-prelude.ts` saves an internal wake as a marker from `INTERNAL_WAKE_TRANSCRIPT_PROMPTS` (`src/auto-reply/heartbeat.ts`), chosen by the turn source: `[OpenClaw heartbeat poll]` for a heartbeat turn, `[OpenClaw exec completion]` for a native exec completion. A transcript showing that marker does not establish which instructions the model received. Use provider payloads to inspect the live prompt. Existing workspace rules that match the marker apply only when that text is actually present in the current prompt.
 
@@ -56,11 +56,11 @@ A completion message chained onto a background `exec` and OpenClaw's native exec
 
 Native notices have no short delivery deadline. In `src/infra/heartbeat-cooldown.ts`, a new exec event arriving after the 30-second spacing window can defer until the next configured tick; the harness cadence is 24 hours. Closely spaced events may instead coalesce and run after the spacing window. Completion tests therefore require the real chained process to exit, its report to arrive, and the thread to settle. They record native notices when observed and make no claim about deferred notices outside the observation window.
 
-Heartbeat wakes cannot start a thread reliably. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty, whatever the intent; `immediate` bypasses only the per-agent active-run check. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds, against 48 hours for a regular turn. In production on 2026-09-10, two review requests thirty seconds apart left one thread unstarted until a human wrote in it. The plugin therefore dispatches the takeover nudge as a reply run. The `alcode` completion path stays OpenClaw's own; see [`openclaw-plugin.md`](./openclaw-plugin.md).
+Heartbeat wakes cannot start a thread reliably. `resolveHeartbeatWakeStage` in `src/infra/heartbeat-runner-execution.ts` skips every intent with `requests-in-flight` while the main command lane is non-empty, whatever the intent; `immediate` bypasses only the per-agent active-run check. `agents.defaults.heartbeat.timeoutSeconds` falls back to the cadence, capped at 600 seconds, against 48 hours for a regular turn. In production on 2026-09-10, two review requests thirty seconds apart left one thread unstarted until a human wrote in it. The plugin therefore dispatches the takeover nudge as a reply run. The `aligndev code` completion path stays OpenClaw's own; see [`openclaw-plugin.md`](./openclaw-plugin.md).
 
 ## Silent replies
 
-OpenClaw decides at admission whether a turn owes a reply (`resolveSourceReplyExpectation` in `src/auto-reply/reply/source-reply-delivery-mode.ts`). Heartbeat, inter-session and internal-system turns are optional. A group or channel message is optional only when `silentReply.group` is `"allow"` and the message does not mention the bot; an implicit mention counts. The group default changed from `"allow"` to `"disallow"` in 2026.9.6, and `"disallow"` also drops the `NO_REPLY` line from the group prompt (`src/auto-reply/reply/groups.ts`). The harness config, the deterministic gateway and the seed set `agents.defaults.silentReply.group: "allow"`: the channels are always-on (`requireMention: false`), and most of their messages need no answer.
+OpenClaw decides at admission whether a turn owes a reply (`resolveSourceReplyExpectation` in `src/auto-reply/reply/source-reply-delivery-mode.ts`). Heartbeat, inter-session and internal-system turns are optional. A group or channel message is optional only when `silentReply.group` is `"allow"` and the message does not mention the bot; an implicit mention counts. The group default changed from `"allow"` to `"disallow"` in 2026.9.6, and `"disallow"` also drops the `NO_REPLY` line from the group prompt (`src/auto-reply/reply/groups.ts`). Since 2026.9.8, `group` is the only configurable key; direct and internal conversations resolve to `"disallow"` (`src/shared/silent-reply-policy.ts`). The harness config, the deterministic gateway and the seed set `agents.defaults.silentReply.group: "allow"`: the channels are always-on (`requireMention: false`), and most of their messages need no answer.
 
 A required turn that ends on a silent token gets an isolated finalization: no system prompt, no tools, an order to produce the final answer now. Its output posts to the turn's route; an empty one becomes `The tool run finished, but no final summary was produced.` (`src/agents/embedded-agent-runner/run/settled-turn-finalization.ts`). The channel turn that calls `thread_handoff start` therefore always ends on a one-line pointer to the thread, since a request that mentions the bot stays required.
 
@@ -100,7 +100,7 @@ For Discord today:
 - Channel messages → channel session (`agent:main:discord:channel:<id>`).
 - Thread messages → the thread's regular canonical session unless an explicit subagent binding owns it. The handoff plugin can start that same regular session with a reply run before the first human reply.
 
-A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` in 2026.9.6; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
+A Discord thread is its own channel route: its session key is `agent:main:discord:channel:<threadId>`, indistinguishable from a channel session by key alone. A Slack thread key carries a suffix, `agent:main:slack:channel:<C…>:thread:<ts>`. A session's last delivery route is stored as `SessionEntry.delivery` since 2026.9.6; the legacy `lastChannel` / `lastTo` fields are gone. A bot's own posts never become inbound events, so a bot cannot start a session by posting into the surface.
 
 ### Outbound delivery (the surprising part)
 
@@ -162,7 +162,7 @@ Without `message` in `alsoAllow`, the channel session falls back to raw Discord 
 
 When a fresh thread session activates on Discord, its transcript starts **empty** — Slack can inject a `ThreadHistoryBody` of up to `thread.initialHistoryLimit` (100), but Discord has no equivalent path (the API capability exists in `readMessagesDiscord()`, just not wired into thread-session init).
 
-The channel therefore posts the complete request in the visible starter. After the static takeover message, the playbook claims the current session and reads that starter through `message action: "read"`, combining it with human replies and its transcript. Immediately before its first coding delegation, the takeover turn reads again to catch human instructions that arrived during setup. Human turns also read history to recover answers and `[WORKSPACE]` state. The system prompt's `MESSAGE_TOOL_THREAD_READ_HINT` string (in `src/agents/tools/message-tool-description.ts`) supports the same read path.
+The channel therefore posts the complete request in the visible starter. After the static takeover message, the playbook claims the current session and reads that starter through `message action: "read"`, combining it with human replies and its transcript. Immediately before its first coding delegation, the takeover turn reads again to catch human instructions that arrived during setup. Human turns also read history to recover answers and `[WORKSPACE]` state. The `message` tool description supports the same read path: it ends with `Missing thread context: action="read" + threadId.` when the channel supports reads (`buildMessageToolDescription` in `src/agents/tools/message-tool-discovery.ts`).
 
 ### Heartbeat and `agent`-method turns deny external-plugin reads
 
