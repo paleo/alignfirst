@@ -52,3 +52,4 @@ Also check consistency by example: does the new code match its neighbors in stru
 | Mock added | Does it reproduce the real contract of the dependency, or an idealized version that can never fail? | 🟡 |
 | Test depending on the clock, network, execution order, or shared state | Source of flakiness. | 🟡 |
 | Assertion modified to make a test pass | Was the test fixed, or aligned with a bug? Strong signal: find out why it failed. | 🔴 |
+| Test deleted or skipped | Which behavior stops being verified? Was it fixed, or made to stop failing? | 🔴 |

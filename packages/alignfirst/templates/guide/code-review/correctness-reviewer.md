@@ -38,6 +38,7 @@ The most useful findings come from here, because nobody looks for them.
 | Signal | Question | Severity |
 | --- | --- | --- |
 | Function modified | Who calls it? Do callers outside the diff assume the old behavior? | 🔴 |
+| Code, branch or condition removed | What did it handle? Is that case now impossible, handled elsewhere, or silently dropped? | 🔴 |
 | One occurrence of a pattern fixed | Does the same pattern exist elsewhere, unfixed? Report once, with the count. | 🟡 |
 | Code the diff touches contains a bug unrelated to the diff | Report it as 🟣, without requiring a fix in this PR. | 🟣 |
 | Constant, enumeration, or type union extended | Was every place that exhausts it updated? | 🔴 |

@@ -12,7 +12,7 @@ This protocol applies when a merge or rebase has produced conflicts, or when the
 
 Run `git status` to check for conflicts.
 
-**If there are no conflicts:** start the merge — use the incoming branch if the user provided one, {{BASE_BRANCH_RULE}} If the merge completes cleanly, you are done — no summary file needed. Otherwise, continue with the steps below.
+**If there are no conflicts:** start the merge — use the incoming branch if the user provided one, {{BASE_BRANCH_RULE}} A merge that completes cleanly ends the protocol, with no summary file. Otherwise, continue with the steps below.
 
 ## 2. Investigate
 
@@ -22,9 +22,9 @@ Take the time to understand how things work in the incoming branch and in the cu
 
 Run `{{TICKET_CMD}} --next merge.summary.md` to continue the current cycle. Append FILE_NAME to TICKET_DIR, then immediately create the summary at that path. Log each notable resolution in it as you resolve (see step 5 for the expected content).
 
-Resolve the conflicts properly — preserve both intents whenever possible. Do not blindly accept one side.
+Preserve both intents whenever possible. Accepting one side wholesale is the usual failure of a merge; it silently drops the other branch's work.
 
-Resolve conflicts one at a time. Avoid batch processing, broad search-and-replace operations, and other brute-force edits.
+Resolve conflicts one at a time. Batch processing, broad search-and-replace and other brute-force edits are out.
 
 **Special case for lock files:** If a lock file has conflicts:
 
@@ -41,7 +41,7 @@ If you need to execute the project, whether through E2E tests or manual checks, 
 
 Finalize the summary file.
 
-**Keep it lean.** Only document challenging conflicts and the choices made to resolve them. Do not list straightforward resolutions — if everything was trivial, the summary should be almost empty (just a header and a one-line note that there was nothing tricky). Do not include a commit message — git already provides one for merges.
+**Keep it lean.** Document only the challenging conflicts and the choices made to resolve them. Straightforward resolutions stay out: when everything was trivial, the summary is a header and a one-line note that nothing was tricky. No commit message either; Git provides one for merges.
 
 Example:
 
@@ -59,6 +59,6 @@ Example:
 
 Omit any section with nothing to report.
 
-_Ignore markdown lint errors in the summary file._
+Ignore Markdown lint errors in the summary file.
 
 At the end, give the path of the summary file to the user.
