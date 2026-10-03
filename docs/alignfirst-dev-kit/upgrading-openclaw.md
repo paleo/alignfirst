@@ -28,12 +28,13 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 ## Review the upstream changes
 
-- Read the new release's changelog, `CHANGELOG/<version>.md` in the clone. It runs to thousands of lines; grep it.
+- Read the new release's changelog, `CHANGELOG/<version>.md` in the clone. It runs to thousands of lines; grep it. Grep `by default` too: a channel default set in the extension's code appears there and not in the config help. 2026.9.7 made Discord and Slack accept messages from other bots (`allowBots`) this way.
 - Diff the surfaces our documentation describes: `git -C .local/openclaw diff v<old> v<new> --stat -- src/agents src/commands`, then the files behind any suspicious stat line.
 - Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files. Doctor does not flag silent behavior shifts (the 2026.8 subagent bootstrap narrowing, for example) — only this re-reading catches them.
 - Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/alignfirst-dev-kit-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. A file the runtime stopped reading must leave the template and its `chattr` lists; 2026.8.1 retired `HEARTBEAT.md` this way and the check above did not catch it.
 - Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. A default that turns on a background behavior (a scheduled model run, a memory feature, a telemetry ping) or hides tool schemas from the model (2026.9.6 Tool Search and Code Mode) appears there and nowhere doctor looks; see [Propagate](#propagate-to-the-deployment-template). The changelog omitted the Code Mode change; only this diff showed it.
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@alignfirst/service-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
+- Recheck which plugin registration supplies a turn's tool factories and which runs its tool hooks (`src/agents/runtime-plugins.ts`). Since 2026.9.8 they differ in the harness gateway, while the deterministic suite still runs a single registration and missed the split.
 - Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, the core gateway `wake` method used by `openclaw system event`, and the heartbeat exec-completion prompt.
 - Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs, and the `silentReply` defaults in `src/shared/silent-reply-policy.ts`. Use the deterministic gateway suite as the judge. The 2026.9.6 flip of `silentReply.group` to `"disallow"` appeared in neither the changelog nor the config help.
 - Recheck the `transcript_events` schema in `src/state/openclaw-agent-schema.sql` against the harness readers (`packages/openclaw-test/src/transcript-store.ts`, `alignfirst-dev-kit-tests/scripts/inspect-thread.ts`). 2026.9.6 moved larger events to a compressed column, which the readers would have turned into empty transcripts without an error.
@@ -43,7 +44,9 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 - [`alignfirst-dev-kit-tests/package.json`](../../alignfirst-dev-kit-tests/package.json) — the exact `"openclaw"` pin.
 - [`alignfirst-dev-kit-tests/Dockerfile`](../../alignfirst-dev-kit-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
-- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — `~`-ranged dev dependencies; a patch release needs no edit, a minor one does.
+- `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
+
+The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
 
 Then rebuild the harness image: `npm run env:build` in `alignfirst-dev-kit-tests/`.
 

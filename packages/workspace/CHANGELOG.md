@@ -1,5 +1,11 @@
 # @alignfirst/workspace
 
+## 0.35.0
+
+### Minor Changes
+
+- 7af8fd1: Added `helpers.composeProjectName(name)`, the Docker Compose project name of a workspace. A finalize failure in a setup started from another worktree now suggests retrying from inside the target worktree.
+
 ## 0.34.0
 
 ### Minor Changes

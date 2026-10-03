@@ -65,7 +65,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The Dev Kit consumer installs no managed skill: the playbook comes from the mounted monorepo through `aligndev guide`. Shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle plugin state deferred by OpenClaw 2026.9.6.
+The Dev Kit consumer installs no managed skill: the playbook comes from the mounted monorepo through `aligndev guide`. Shared skills remain under `/home/assistant/.agents/skills/`. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle the plugin state OpenClaw defers since 2026.9.6.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
@@ -153,7 +153,7 @@ Both channels register together on every gateway boot. The runner selects which 
 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 
-- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. Free-form agent text without a tool call lands in the parent channel.
+- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. `read` takes its scope from `channelId`, `to` or the current channel and ignores `threadId`, as native Discord does. Free-form agent text without a tool call lands in the parent channel.
 - `slack-mock` — `surface: "slack"`, `autoThread: true`. Slack-shaped surface with `send`,
   `react`, `read`, `edit`, `delete`, `reactions`, and `search`; fake thread creation/rename actions
   remain disabled. Its action adapter prepares `send` for core delivery through the mock's message adapter. `replyToMode: "all"` is the compatibility default and routes an eligible root plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots in the channel session and routes only explicit replies through a thread session.
@@ -162,7 +162,7 @@ Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the regi
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
 
-Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName` in OpenClaw 2026.9.6 (`extensions/discord/src/actions/handle-action.guild-admin.ts` and `actions/runtime.messaging.send.ts`). The mock follows that distinction; rename assertions must check the stored thread title.
+Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName`: `extensions/discord/src/actions/handle-action.ts` reads it for `send` only. The mock follows that distinction; rename assertions must check the stored thread title.
 
 **Delivery semantics are the generic kernel's, and that is faithful.** The mocks dispatch through `runtime.channel.inbound.dispatchReply` with `replyPipeline: {}`; every payload the kernel hands to `delivery.deliver` becomes a bus message. Do not chase "missing" mid-turn posts in the mock: with an Anthropic model, OpenClaw itself withholds pre-tool narration (`phase: "commentary"`) from every channel — only turn finals and `message` tool-posts land, and the real Discord/Slack plugins get no more (investigated and settled 2026-07-28; see "Auto-stream delivers turn finals only on Anthropic" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). qwen/glm text is unphased and does stream mid-turn, so per-provider outbound counts legitimately differ.
 
@@ -220,7 +220,7 @@ multi-project delegation; A20 confirms that a later human message becomes the ta
 to a human-created thread whose claim returns `none`. The internal service activation is absent from
 bus history and cannot be selected.
 
-The deterministic external-plugin suite uses the real OpenClaw 2026.9.6 executable, a scripted
+The deterministic external-plugin suite uses the real OpenClaw executable pinned in the root lockfile, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
 `KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
 @alignfirst/service-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
@@ -240,10 +240,12 @@ Layout: `artifacts/<runStamp>/<modelId>-<scenario>-<channel>[-#<NN>][-<VERDICT>]
 - `-#<NN>` — iteration index, padded to the width of `--iterations`, prefixed with `#` so it reads distinctly from the model id's trailing digits. Omitted when `--iterations 1`.
 - `<VERDICT>` — `PASS` / `FAIL`. Applied by **renaming the directory** after `report.json` lands. A directory with no verdict suffix means the run is pending or crashed before the rename.
 
-Two files per task:
+Files per task:
 
 - `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
 - `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. A long string `content`, or a `read` call's text content blocks, on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
+- `transcripts.json` — the conversation's session transcripts (see below).
+- `gateway.log` — the gateway's OpenClaw file log, `/tmp/openclaw/openclaw-<date>.log`, copied through the IPC volume at the end of the cell. Provider failures such as an HTTP 401 appear here and nowhere in the transcripts. Under `--reuse-stack` it also holds earlier cells' lines. A failed copy is a runner warning, not a cell failure.
 
 Scenario verdict is reported as `result: ScenarioResult` (a discriminated union):
 

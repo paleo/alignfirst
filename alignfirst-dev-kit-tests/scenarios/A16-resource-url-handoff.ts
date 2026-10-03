@@ -17,6 +17,8 @@ import { assertWorktreePaths, bootstrapThreadFromChannel } from "./_lib/thread-b
 const PULL_REQUEST_URL = "https://github.com/acme/nimbus/pull/42";
 const TICKET_ID = "ABC-0160";
 const SOURCE_BRANCH = `${TICKET_ID}/review-export`;
+// `aligndev code` writes `npx -y alignfirst` when the playbook launched it through npx.
+const REVIEW_PROTOCOL_RE = /^Run `(?:npx -y )?alignfirst guide review` and follow the protocol\./u;
 // Pre-filter for the final review report; the judge validates the match. The model phrases
 // "no findings" freely in French, so accept the usual negations before the judge sees it.
 const REVIEW_OUTCOME_RE =
@@ -31,7 +33,7 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
   const codingAgent = setupCodingAgentMock(ctx, {
     streamDelayMs: 12_000,
     onPrompt: async (_scenario, cwd, prompt) => {
-      if (!/^Run `alignfirst guide review` and follow the protocol\./u.test(prompt)) return;
+      if (!REVIEW_PROTOCOL_RE.test(prompt)) return;
       await writeReviewFile(cwd);
       return REVIEW_RESULT;
     },
@@ -68,10 +70,7 @@ export default async function resourceUrlHandoff(ctx: ScenarioContext): Promise<
 
   const reviewCall = await expectCodingDelegation(ctx, codingAgent, {
     ticketId: TICKET_ID,
-    matches: (call) =>
-      /^Run `alignfirst guide review` and follow the protocol\./u.test(
-        extractCodingPrompt(call) ?? "",
-      ),
+    matches: (call) => REVIEW_PROTOCOL_RE.test(extractCodingPrompt(call) ?? ""),
     rubric:
       "Grade only the captured `aligndev code` delegation text. Pass if it invokes the AlignFirst " +
       `review protocol for ticket ${TICKET_ID}. Reject only if the ticket is wrong or it ` +

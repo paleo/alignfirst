@@ -1,5 +1,12 @@
 # @alignfirst/openclaw-discord-mock
 
+## 0.6.3
+
+### Patch Changes
+
+- Updated dependencies [7af8fd1]
+  - @alignfirst/openclaw-channel-mock-core@0.10.3
+
 ## 0.6.2
 
 ### Patch Changes

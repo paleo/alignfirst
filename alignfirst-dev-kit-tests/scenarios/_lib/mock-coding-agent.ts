@@ -144,6 +144,7 @@ function buildClaudeStreamResponse(sessionId: string, result: string): string {
 const CODEX_MODEL_CATALOG = {
   models: [
     { slug: "gpt-6-astra" },
+    { slug: "gpt-6.1-sol" },
     { slug: "gpt-6-sol" },
     { slug: "gpt-5.6-terra" },
     { slug: "gpt-6-luna" },
@@ -617,7 +618,7 @@ function parseWorktreeRequest(
 }
 
 const CODING_PROTOCOL_RE =
-  /^Run `alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./;
+  /^Run `(?:npx -y )?alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./;
 
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
@@ -872,5 +873,5 @@ export async function expectCodingDelegation(
 }
 
 function defaultCodingDelegationRubric(ticketId: string): string {
-  return `The message is a prompt sent to a coding agent via the \`aligndev code\` CLI. Expected: an AlignFirst protocol invocation — \`Run \`alignfirst guide spec\` and follow the protocol. Ticket ID = …\`, or the equivalent with another lowercase protocol name — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an AlignFirst protocol invocation.`;
+  return `The message is a prompt sent to a coding agent via the \`aligndev code\` CLI. Expected: an AlignFirst protocol invocation — \`Run \`alignfirst guide spec\` and follow the protocol. Ticket ID = …\`, or the equivalent with \`npx -y alignfirst\` or another lowercase protocol name — including ticket id ${ticketId} and a description of the actual task: making the export button bold (paraphrases of "passer le bouton d'export en gras" are fine). Reject if: the ticket id is missing or wrong, the task description is missing or unrelated, or the prompt does not look like an AlignFirst protocol invocation.`;
 }

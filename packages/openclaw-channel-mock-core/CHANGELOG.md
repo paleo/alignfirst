@@ -1,5 +1,11 @@
 # @alignfirst/openclaw-channel-mock-core
 
+## 0.10.3
+
+### Patch Changes
+
+- 7af8fd1: Made the Discord surface's `read` ignore `threadId`, as native Discord does: a stray id no longer empties the history of the target thread.
+
 ## 0.10.2
 
 ### Patch Changes
