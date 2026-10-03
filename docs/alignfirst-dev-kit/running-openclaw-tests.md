@@ -28,7 +28,7 @@ cp .env.local.example .env.local
 # Create bind-mount outputs as your user so Docker does not create root-owned directories.
 mkdir -p artifacts .gateway-logs
 
-# Build the real aldev and alignfirst CLIs the gateway runs.
+# Build the real aligndev and alignfirst CLIs the gateway runs.
 npm run build --prefix ..
 
 # Build and pack local packages, install them, then build the harness image.
@@ -60,8 +60,8 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
   OpenClaw 2026.9.6 does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
-- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aldev` and `alignfirst` wrappers run both CLIs from the checkout. `aldev code` runs for real, while both `claude` and `codex` resolve to the mock through PATH. `aldev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aldev/templates/guide/playbook/`, and the delegation instructions (`aldev guide code`) from `packages/aldev/templates/guide/code.md`.
-- `CODING_AGENT=codex|claude` — required selector for the coder. It does not affect the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally narrows the agent models or pins a full Codex slug. Both reach the gateway and the runner. At startup, the gateway entrypoint writes them into the aldev config at `/home/assistant/.config/alignfirst/aldev.config.json`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. A missing or invalid `CODING_AGENT` fails the start.
+- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while both `claude` and `codex` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
+- `CODING_AGENT=codex|claude` — required selector for the coder. It does not affect the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally narrows the agent models or pins a full Codex slug. Both reach the gateway and the runner. At startup, the gateway entrypoint writes them into the aligndev config at `/home/assistant/.config/alignfirst/aligndev.config.json`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. A missing or invalid `CODING_AGENT` fails the start.
 - [`docker-compose.yml`](../../alignfirst-dev-kit-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
 
 ## Fixtures
@@ -70,7 +70,7 @@ Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../alignfirst-dev-k
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and a default `portRanges` entry. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
-`aldev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
+`aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
 ## Scenarios
 
@@ -87,8 +87,8 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A05 | An unknown project name must be corrected before work starts. |
 | A06 | Small talk stays social and starts no project work. One message suffices; the former second message had no additional assertion. |
 | A07 | Status progresses from no branch to an externally created branch and its attached workspace. A repeated status with no state change is omitted. Checks actual filesystem state and report meaning, with no template requirement. Its mock reports status without claiming implementation work. A16 covers reuse of an existing workspace and the discovery of one that predates the session. |
-| A08 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Covers the `aldev code`/background contract and later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward. |
-| A09 | Deterministic `aldev code` new/resume, selected-agent protocol, catchup, recorded context size, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
+| A08 | Human hold during takeover, workspace setup, explicit release, first background coding run, then a second request and coding run in the same thread. Covers the `aligndev code`/background contract and later-run delivery. Observes the real completion chain and checks that final reporting stays quiet afterward. |
+| A09 | Deterministic `aligndev code` new/resume, selected-agent protocol, catchup, recorded context size, and failure handling. Run once per selected coding agent; it does not use a conversation model or channel behavior. |
 | A10 | With one listed project, a ticket-only request selects it automatically. |
 | A11 | Duplicate project names require choosing a canonical path; takeover waits for the answer. |
 | A12 | New project creation, initial commit, and setup on main without a ticket protocol. The report confirms completion; CLI and filesystem assertions verify port allocation without requiring the report to repeat configuration fields. |

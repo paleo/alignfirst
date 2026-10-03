@@ -11,7 +11,7 @@ read_when:
 clone uses the service account's git access from `03`.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aldev guide project'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev guide project'
 ```
 
 ## Clone and prepare
@@ -57,18 +57,18 @@ A portless project needs no claim. For a wrapper with ports, calculate
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
-aldev project free-ports --size <size>
+aligndev project free-ports --size <size>
 '
 ```
 
-When the projects directory declares several ranges, inspect `aldev guide project` and pass `--range <code>` for the project kind. Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command.
+When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command.
 
 ## Check the inventory
 
 After writing `.alignfirst.json` and before workspace setup, run the read-only inventory gate:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project doctor'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project doctor'
 ```
 
 Stop when it reports an error. Resolve every configuration, discovery, and port conflict first.
@@ -96,7 +96,7 @@ Bring the dev server up, probe the URL it prints, bring it down, then inspect th
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- down'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project status <repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status <repo>'
 ```
 
 ## Remove
@@ -107,5 +107,5 @@ next listing no longer shows it:
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- remove <workspace>'
 sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aldev project list'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
 ```

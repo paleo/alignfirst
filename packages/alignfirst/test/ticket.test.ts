@@ -521,26 +521,26 @@ describe("ticket command with a separate session tree", () => {
   it("restores the ticket's archived session directory", async () => {
     const { root, home, project, companion } = makeCompanionProject({
       ".plans": false,
-      _aldev: true,
+      _aligndev: true,
     });
     dirs.push(root);
     const sessions = join(companion, ".plans");
     mkdirSync(join(project, ".plans", "_archives", "78"), { recursive: true });
-    mkdirSync(join(sessions, "_archives", "78", "_aldev"), { recursive: true });
+    mkdirSync(join(sessions, "_archives", "78", "_aligndev"), { recursive: true });
 
     const result = await runMain(["ticket", "78", "--json"], { cwd: project, home });
 
     expect(JSON.parse(result.stdout)).toMatchObject({ state: "restored" });
     expect(existsSync(join(project, ".plans", "78"))).toBe(true);
-    expect(existsSync(join(sessions, "78", "_aldev"))).toBe(true);
+    expect(existsSync(join(sessions, "78", "_aligndev"))).toBe(true);
     expect(existsSync(join(sessions, "_archives", "78"))).toBe(false);
-    expect(existsSync(join(project, ".plans", "78", "_aldev"))).toBe(false);
+    expect(existsSync(join(project, ".plans", "78", "_aligndev"))).toBe(false);
   });
 
   it("leaves the session tree alone on a dry run", async () => {
     const { root, home, project, companion } = makeCompanionProject({
       ".plans": false,
-      _aldev: true,
+      _aligndev: true,
     });
     dirs.push(root);
     const archived = join(companion, ".plans", "_archives", "78");

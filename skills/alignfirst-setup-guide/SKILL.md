@@ -29,7 +29,7 @@ section provides this itself.
 
 A work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
-`aldev`, the Dev Kit CLI, carries the assistant's playbook, coding-agent delegation, and project
+`aligndev`, the Dev Kit CLI, carries the assistant's playbook, coding-agent delegation, and project
 discovery. An OpenClaw assistant host installs it; a coding-agent assistant runs it through `npx`.
 
 ## Named Tool
@@ -89,7 +89,7 @@ Inspect the repository before changing it. A prepared project has all of these:
 1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed as the first `##` section
    after the title and introduction. The README may offer a global CLI installation as a convenience.
    `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
-2. A clean `aldev project doctor --root <projects-directory>` result after writing
+2. A clean `aligndev project doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
 3. The work-files repository through `alignfirst plans setup` when the team has one.
 4. docmap, including project scripts or CLI instructions. When the repository has no `docs/`

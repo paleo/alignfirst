@@ -107,7 +107,7 @@ A companion directory holds a project's AlignFirst files outside its repository,
 {
   "root": "~/alignfirst-companions",
   "paths": {
-    "~/projects/team-app": { ".plans": false, "_aldev": true },
+    "~/projects/team-app": { ".plans": false, "_aligndev": true },
     "~/projects/client-api": {},
     "~/projects": {}
   }
@@ -115,7 +115,7 @@ A companion directory holds a project's AlignFirst files outside its repository,
 ```
 
 - `root` — the directory that holds the companion directories: an absolute path or a `~/` path.
-- `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` and `_aldev`. A flag is `true`, `false` or `"auto"`.
+- `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
 An absent file means no project has a companion. An invalid file makes every command fail; `doctor` reports it and continues.
 
@@ -133,7 +133,7 @@ The companion directory is `<root>/<name>`. The name is the main worktree path r
 | `false` | The project copy, present or not. |
 | `"auto"` | The companion copy when it exists, otherwise the project copy when it exists, otherwise the companion copy, where the item gets created. |
 
-`_aldev` is the directory under which `aldev` writes its session files: `<companion>/.plans` when `true`, the resolved `.plans` otherwise. `"_aldev": true` requires `.plans` set to `true` or `false`. When the two differ, archiving and `ticket <id>` apply to both trees, each with its own `_archives/`.
+`_aligndev` is the directory under which `aligndev` writes its session files: `<companion>/.plans` when `true`, the resolved `.plans` otherwise. `"_aligndev": true` requires `.plans` set to `true` or `false`. When the two differ, archiving and `ticket <id>` apply to both trees, each with its own `_archives/`.
 
 `alignfirst config` reports the companion and the location of every item. `alignfirst doctor` checks them.
 

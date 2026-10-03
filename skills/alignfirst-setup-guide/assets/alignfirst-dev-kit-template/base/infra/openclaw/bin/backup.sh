@@ -2,7 +2,7 @@
 #
 # Copies the deployment state of the service account into ~/backups/deployment/<stamp>/:
 # openclaw.json, the secret store, the gateway env file, the workspace files, environment.d, the
-# aldev config, companions.json when present, OpenClaw's archive, and thread-handoff's independent
+# aligndev config, companions.json when present, OpenClaw's archive, and thread-handoff's independent
 # state.
 #
 # Run as the service account:
@@ -23,7 +23,7 @@ main() {
   copy_file "$HOME/.openclaw/.env" openclaw.env
   copy_workspace
   copy_environment
-  copy_file "$HOME/.config/alignfirst/aldev.config.json" aldev.config.json
+  copy_file "$HOME/.config/alignfirst/aligndev.config.json" aligndev.config.json
   copy_file "$HOME/.config/alignfirst/companions.json" companions.json
   create_openclaw_archive
   copy_thread_handoff_state

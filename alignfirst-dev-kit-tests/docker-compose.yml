@@ -19,22 +19,22 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
-      # The entrypoint writes both into the aldev config.
+      # The entrypoint writes both into the aligndev config.
       CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
       CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
       # `codex` is the mock shim here (symlinked in the image, first on PATH), so no real Codex
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
-      # can write the thread rollout `aldev code` reads the context occupancy from.
+      # can write the thread rollout `aligndev code` reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
-    # Import the mounted Codex credential and write the aldev config, then hand off
+    # Import the mounted Codex credential and write the aligndev config, then hand off
     # to the base stack's gateway command, which stays the single owner of the start line.
     entrypoint: ["/usr/local/bin/gateway-entrypoint"]
     volumes:
       - ${OPENCLAW_CODEX_HOME:-openclaw-codex-home}:/home/assistant/.codex:ro
       - fixture-projects:/home/assistant/projects
-      # Live-mount the built monorepo so the `aldev` and `alignfirst` wrappers resolve
+      # Live-mount the built monorepo so the `aligndev` and `alignfirst` wrappers resolve
       # to this checkout, playbook templates included. Run `npm run build` at the root
-      # first so aldev, alignfirst, and docmap have built output.
+      # first so aligndev, alignfirst, and docmap have built output.
       - ${ALIGNFIRST_REPO_DIR:?set ALIGNFIRST_REPO_DIR to the monorepo root}:/opt/alignfirst:ro
 
   runner:

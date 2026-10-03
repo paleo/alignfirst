@@ -52,8 +52,8 @@ export default async function ticketStatusLifecycle(ctx: ScenarioContext): Promi
   await expectWorkspaceStatus(ctx, starter.threadId, branchCursor);
   assertWorktreePaths(ctx, [worktreeDir]);
 
-  await ctx.waitForAgentToolCall((call) => execMatches(call, /aldev\s+guide\s+code\b/), {
-    label: "thread reads the `aldev guide code` delegation guide",
+  await ctx.waitForAgentToolCall((call) => execMatches(call, /aligndev\s+guide\s+code\b/), {
+    label: "thread reads the `aligndev guide code` delegation guide",
     timeoutMs: 120_000,
   });
   await assertNoChannelRootLeak(ctx, {

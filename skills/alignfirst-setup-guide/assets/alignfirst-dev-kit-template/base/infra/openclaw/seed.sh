@@ -5,7 +5,7 @@
 # Strategy: `openclaw setup` produces the installed version's default config; every
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
-# reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aldev
+# reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aligndev
 # config and, when the admin repository ships one, companions.json.
 #
 # Run as the service account, from the seed snapshot:
@@ -19,9 +19,9 @@ OPENCLAW_HOME="$HOME/.openclaw"
 SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
-ALDEV_CONFIG_DIR="$HOME/.config/alignfirst"
-ALDEV_CONFIG_FILE="$ALDEV_CONFIG_DIR/aldev.config.json"
-COMPANIONS_CONFIG_FILE="$ALDEV_CONFIG_DIR/companions.json"
+ALIGNDEV_CONFIG_DIR="$HOME/.config/alignfirst"
+ALIGNDEV_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/aligndev.config.json"
+COMPANIONS_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/companions.json"
 
 main() {
   load_env
@@ -42,7 +42,7 @@ main() {
   configure_surface
   configure_coding_agent
   install_environment_files
-  install_aldev_config
+  install_aligndev_config
   install_companions_config
   verify
 }
@@ -144,16 +144,16 @@ install_environment_files() {
   echo "[seed] a changed variable needs: systemctl --user daemon-reexec, then a gateway restart"
 }
 
-install_aldev_config() {
-  echo "[seed] aldev config — $ALDEV_CONFIG_FILE"
+install_aligndev_config() {
+  echo "[seed] aligndev config — $ALIGNDEV_CONFIG_FILE"
   # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
   # its directory immutable.
-  if [ ! -d "$ALDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALDEV_CONFIG_DIR"; fi
-  if ! cmp -s "$DIR/aldev.config.json" "$ALDEV_CONFIG_FILE"; then
-    install -m 644 "$DIR/aldev.config.json" "$ALDEV_CONFIG_FILE"
+  if [ ! -d "$ALIGNDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALIGNDEV_CONFIG_DIR"; fi
+  if ! cmp -s "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"; then
+    install -m 644 "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"
   fi
   # Fails on an invalid file or a missing code.agent.
-  aldev guide code >/dev/null
+  aligndev guide code >/dev/null
 }
 
 install_companions_config() {

@@ -1,6 +1,6 @@
 # Prepare a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. `~/.config/alignfirst/companions.json` declares which projects have one. `alignfirst` and `aldev` read each item from the companion, so nothing is written in the repository.
+Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. `~/.config/alignfirst/companions.json` declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
 The `alignfirst` package README documents the file: its schema, how an entry matches a project, and how each item resolves.
 
@@ -18,7 +18,7 @@ Write each item below at its companion path, `<companion>/<item>`. Under the def
 
 ## 2. Project config
 
-Write `.alignfirst.json` in the companion, following [With `.alignfirst.json`](alignfirst-skills-setup.md#with-alignfirstjson). The `.gitignore` line does not apply. For an assistant-managed project that declares ports, reserve its block with `aldev project free-ports --size <n>` first, then write it as `portRange`.
+Write `.alignfirst.json` in the companion, following [With `.alignfirst.json`](alignfirst-skills-setup.md#with-alignfirstjson). The `.gitignore` line does not apply. For an assistant-managed project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 
 ## 3. Project instructions
 
@@ -47,12 +47,12 @@ Name the project's Node version in `DEVELOPERS.md`. The repository receives no `
 ## 8. Check
 
 ```sh
-aldev project doctor --root <projects-directory>
+aligndev project doctor --root <projects-directory>
 git status
 ```
 
 The doctor must pass, and `git status` in the repository must show no change.
 
-## Keep only aldev's session files out
+## Keep only aligndev's session files out
 
-A project whose team uses AlignFirst keeps its files in the repository. When only `aldev`'s session files must live elsewhere, the entry sets `{ ".plans": false, "_aldev": true }`. This procedure does not apply.
+A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry sets `{ ".plans": false, "_aligndev": true }`. This procedure does not apply.

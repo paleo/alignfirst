@@ -22,7 +22,7 @@ describe("project layout", () => {
       in: "project",
       exists: false,
     });
-    expect(layout.locations._aldev).toEqual(layout.locations[".plans"]);
+    expect(layout.locations._aligndev).toEqual(layout.locations[".plans"]);
   });
 
   it.each([
@@ -57,7 +57,7 @@ describe("project layout", () => {
         "DEVELOPERS.md": "auto",
         docs: "auto",
         ".plans": "auto",
-        _aldev: "auto",
+        _aligndev: "auto",
       },
     });
   });
@@ -158,34 +158,37 @@ describe("project layout", () => {
     });
   });
 
-  it("resolves _aldev to the companion only when flagged true", () => {
+  it("resolves _aligndev to the companion only when flagged true", () => {
     const { home, project } = makeHome();
     const companion = join(home, "companions", "projects_app");
     writeCompanions(home, {
       root: "~/companions",
-      paths: { "~/projects/app": { ".plans": false, _aldev: true } },
+      paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
     });
     const separate = resolveProjectLayout(project, home).locations;
     expect(separate[".plans"].path).toBe(join(project, ".plans"));
-    expect(separate._aldev).toEqual({
+    expect(separate._aligndev).toEqual({
       path: join(companion, ".plans"),
       in: "companion",
       exists: false,
     });
 
-    writeCompanions(home, { root: "~/companions", paths: { "~/projects/app": { _aldev: false } } });
+    writeCompanions(home, {
+      root: "~/companions",
+      paths: { "~/projects/app": { _aligndev: false } },
+    });
     const shared = resolveProjectLayout(project, home).locations;
-    expect(shared._aldev).toEqual(shared[".plans"]);
+    expect(shared._aligndev).toEqual(shared[".plans"]);
   });
 
-  it("rejects _aldev true with an automatic .plans, naming the matching keys", () => {
+  it("rejects _aligndev true with an automatic .plans, naming the matching keys", () => {
     const { home, project } = makeHome();
     writeCompanions(home, {
       root: "~/companions",
-      paths: { "~/projects": {}, "~/projects/app": { _aldev: true } },
+      paths: { "~/projects": {}, "~/projects/app": { _aligndev: true } },
     });
     expect(() => resolveProjectLayout(project, home)).toThrow(
-      '"_aldev": true requires ".plans" set to true or false (matching keys: ~/projects/app, ~/projects)',
+      '"_aligndev": true requires ".plans" set to true or false (matching keys: ~/projects/app, ~/projects)',
     );
   });
 

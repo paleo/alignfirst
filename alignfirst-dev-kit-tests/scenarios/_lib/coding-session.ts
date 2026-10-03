@@ -145,11 +145,11 @@ async function judgeMatches(
 }
 
 /**
- * Poll the gateway for `aldev code`'s per-run coding-session file reaching `status: succeeded` —
+ * Poll the gateway for `aligndev code`'s per-run coding-session file reaching `status: succeeded` —
  * the model-independent proof the delegated session finished, and the ground truth the completion
  * wake rides on. `find` (not a shell glob) so an absent match in any single project dir does not
- * error; `aldev code` writes under `<project>/.plans/<ticket>/_aldev/<stamp>.md` (or
- * `.plans/_aldev/` without a ticket), and worktree `.plans` symlinks back to the main
+ * error; `aligndev code` writes under `<project>/.plans/<ticket>/_aligndev/<stamp>.md` (or
+ * `.plans/_aligndev/` without a ticket), and worktree `.plans` symlinks back to the main
  * project so either path resolves. `notBefore` correlates a session to a known launch and excludes
  * earlier auxiliary runs. Without it, `minCount` (default 1) requires that many distinct succeeded
  * files and the newest is returned.
@@ -160,8 +160,8 @@ export async function waitForCodingSessionSucceeded(
     ticketId?: string;
     /**
      * Also accept the no-ticket dir. For a no-protocol delegation the ticket may
-     * ride in the message instead of `--ticket`, and `aldev code` then writes under
-     * `.plans/_aldev/` — both are playbook-compliant.
+     * ride in the message instead of `--ticket`, and `aligndev code` then writes under
+     * `.plans/_aligndev/` — both are playbook-compliant.
      */
     allowNoTicketDir?: boolean;
     timeoutMs: number;
@@ -173,8 +173,8 @@ export async function waitForCodingSessionSucceeded(
   const minCount = opts.minCount ?? 1;
   const sessionStarts = new Map<string, string>();
   const sessionsDirs = [
-    ...(opts.ticketId ? [`.plans/${opts.ticketId}/_aldev`] : []),
-    ...(opts.ticketId === undefined || opts.allowNoTicketDir ? [".plans/_aldev"] : []),
+    ...(opts.ticketId ? [`.plans/${opts.ticketId}/_aligndev`] : []),
+    ...(opts.ticketId === undefined || opts.allowNoTicketDir ? [".plans/_aligndev"] : []),
   ];
   const deadline = Date.now() + opts.timeoutMs;
   const pathArgs = sessionsDirs.flatMap((dir, i) => [
@@ -213,7 +213,7 @@ export async function waitForCodingSessionSucceeded(
     await delay(3_000);
   }
   throw new Error(
-    `fewer than ${minCount} matching \`aldev code\` coding-session file(s) ` +
+    `fewer than ${minCount} matching \`aligndev code\` coding-session file(s) ` +
       `under ${sessionsDirs.join(" or ")} ` +
       `reached "status: succeeded" within ${opts.timeoutMs}ms${lastStderr ? ` (last stderr: ${lastStderr})` : ""}`,
   );

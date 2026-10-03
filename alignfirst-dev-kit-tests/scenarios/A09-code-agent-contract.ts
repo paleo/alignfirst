@@ -28,7 +28,7 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
   const agent = await readGatewayAgent(ctx);
   assertEqual(agent, mock.selectedAgent, "runner and gateway coding-agent selectors");
 
-  const first = await runAldevCode(ctx, [
+  const first = await runAligndevCode(ctx, [
     "new",
     "--ticket",
     TICKET_ID,
@@ -37,13 +37,13 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
     "--model",
     agent === "codex" ? "terra" : "sonnet",
   ]);
-  assertEqual(first.exitCode, 0, "new aldev code exit code");
+  assertEqual(first.exitCode, 0, "new aligndev code exit code");
   const firstSession = await readSession(ctx, first.stdout);
   assertSucceededSession(firstSession, agent, agent === "codex" ? "terra" : "sonnet");
   const sessionId = requiredFrontmatter(firstSession, "sessionId");
   assertSelectedNewCall(mock, agent);
 
-  const resumed = await runAldevCode(ctx, [
+  const resumed = await runAligndevCode(ctx, [
     "resume",
     sessionId,
     "--message",
@@ -51,7 +51,7 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
     "--model",
     agent === "codex" ? "terra" : "sonnet",
   ]);
-  assertEqual(resumed.exitCode, 0, "resume aldev code exit code");
+  assertEqual(resumed.exitCode, 0, "resume aligndev code exit code");
   const resumedSession = await readSession(ctx, resumed.stdout);
   assertSucceededSession(resumedSession, agent, agent === "codex" ? "terra" : "sonnet");
   assertEqual(requiredFrontmatter(resumedSession, "sessionId"), sessionId, "resumed session id");
@@ -74,8 +74,8 @@ async function readGatewayAgent(ctx: ScenarioContext): Promise<CodingAgent> {
   throw new Error(`gateway CODING_AGENT is invalid: ${JSON.stringify(result.stdout)}`);
 }
 
-async function runAldevCode(ctx: ScenarioContext, args: string[]): Promise<ExecResult> {
-  return ctx.execInGateway(["aldev", "code", ...args], { cwd: PROJECT_DIR, timeoutMs: 60_000 });
+async function runAligndevCode(ctx: ScenarioContext, args: string[]): Promise<ExecResult> {
+  return ctx.execInGateway(["aligndev", "code", ...args], { cwd: PROJECT_DIR, timeoutMs: 60_000 });
 }
 
 interface SessionSnapshot {
@@ -86,7 +86,7 @@ interface SessionSnapshot {
 async function readSession(ctx: ScenarioContext, stdout: string): Promise<SessionSnapshot> {
   const relativePath = stdout.match(/^Session file: (.+)$/m)?.[1];
   if (relativePath === undefined) {
-    throw new Error(`aldev code output has no session-file path: ${JSON.stringify(stdout)}`);
+    throw new Error(`aligndev code output has no session-file path: ${JSON.stringify(stdout)}`);
   }
   const path = `${PROJECT_DIR}/${relativePath}`;
   const read = await ctx.execInGateway(["sed", "-n", "1,160p", path]);
@@ -231,7 +231,7 @@ async function assertLiveCatchup(
   const history = "Preserve the export keyboard behavior.";
   await writeFile(`${PROJECT_DIR}/.plans/${TICKET_ID}/A1-request.md`, `# Request\n\n${history}\n`);
   const model = agent === "codex" ? "terra" : "sonnet";
-  const run = await runAldevCode(ctx, [
+  const run = await runAligndevCode(ctx, [
     "new",
     "--ticket",
     TICKET_ID,
@@ -281,7 +281,7 @@ async function assertCodexFailure(
   resultFragment: string,
 ): Promise<void> {
   mock.queueCodexResponse(variant);
-  const run = await runAldevCode(ctx, [
+  const run = await runAligndevCode(ctx, [
     "new",
     "--ticket",
     TICKET_ID,

@@ -2,7 +2,7 @@ import type { ScenarioContext } from "@alignfirst/openclaw-test";
 import {
   execCommandOf,
   execMatches,
-  invokesAldevCode,
+  invokesAligndevCode,
   invokesCodingAgentDirectly,
 } from "./agent-tool-calls.ts";
 import {
@@ -25,7 +25,7 @@ export interface DelegationChainOptions {
 }
 
 /**
- * One delegation's full chain: the `aldev code` launch exec with the guide's chained system event,
+ * One delegation's full chain: the `aligndev code` launch exec with the guide's chained system event,
  * the started ack, the `status: succeeded` session file started by this phase, and the completion
  * report in the work thread.
  */
@@ -40,18 +40,18 @@ export async function expectDelegationChain(
   // coding-agent subprocess is a cliMock, not an OpenClaw agent tool call.
   const launch = await ctx.waitForAgentToolCall(
     (call) =>
-      invokesAldevCode(call) &&
+      invokesAligndevCode(call) &&
       execMatches(call, /--protocol/) &&
       call.startedAt !== undefined &&
       call.startedAt >= notBefore,
     {
-      label: `agent delegates through \`aldev code\` (launch #${launchIndex})`,
+      label: `agent delegates through \`aligndev code\` (launch #${launchIndex})`,
       timeoutMs: 180_000,
     },
   );
   if (invokesCodingAgentDirectly(launch)) {
     throw new Error(
-      "agent invoked a coding agent directly instead of `aldev code`: " +
+      "agent invoked a coding agent directly instead of `aligndev code`: " +
         JSON.stringify(launch.input),
     );
   }
@@ -60,17 +60,17 @@ export async function expectDelegationChain(
   ctx.assertEqual(
     "background" in input && input.background,
     true,
-    "`aldev code` runs in background",
+    "`aligndev code` runs in background",
   );
   ctx.assertEqual(
     "timeoutSeconds" in input && input.timeoutSeconds,
     0,
-    "`aldev code` has no timeout",
+    "`aligndev code` has no timeout",
   );
   // Structural pin of the chained completion event — the outcome-level asserts below would also
   // pass on a bootstrap-path native wake (phase 1 always does), so assert the mechanism itself.
   const command = execCommandOf(launch);
-  if (command === undefined) throw new Error("`aldev code` launch call carries no exec command");
+  if (command === undefined) throw new Error("`aligndev code` launch call carries no exec command");
   ctx.assertRegex(
     command,
     /openclaw system event/,
@@ -80,7 +80,7 @@ export async function expectDelegationChain(
   ctx.assertRegex(command, /--session-key/, `launch #${launchIndex}: event targets a session key`);
   const launchStartedAt = launch.startedAt;
   if (launchStartedAt === undefined) {
-    throw new Error(`\`aldev code\` launch #${launchIndex} has no start timestamp`);
+    throw new Error(`\`aligndev code\` launch #${launchIndex} has no start timestamp`);
   }
 
   // The started ack: a batch judge over the thread's outbounds (see `waitForBackgroundStartedAck`).

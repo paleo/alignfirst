@@ -12,7 +12,7 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm through Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `aldev` runs for real,
+# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `aligndev` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl sqlite && \
     npm install --global corepack@0.36.0 && \
@@ -23,14 +23,14 @@ RUN apk add --no-cache git curl sqlite && \
 
 # PATH wrappers for the real CLIs. `/opt/alignfirst` is the read-only monorepo root
 # mount, so @alignfirst/docmap, arktype, and semver resolve through its root node_modules.
-# `aldev project` spawns `alignfirst`.
-RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/aldev/bin/aldev.mjs "$@"\n' > /usr/local/bin/aldev && \
+# `aligndev project` spawns `alignfirst`.
+RUN printf '#!/bin/sh\nexec node /opt/alignfirst/packages/aligndev/bin/aligndev.mjs "$@"\n' > /usr/local/bin/aligndev && \
     printf '#!/bin/sh\nexec node /opt/alignfirst/packages/alignfirst/bin/alignfirst.mjs "$@"\n' > /usr/local/bin/alignfirst && \
-    chmod +x /usr/local/bin/aldev /usr/local/bin/alignfirst
+    chmod +x /usr/local/bin/aligndev /usr/local/bin/alignfirst
 
 # PATH wrapper for the `openclaw` CLI. OpenClaw is only a local npm dependency
 # of /opt/openclaw-test/src (nothing puts its node_modules/.bin on the exec
-# PATHs), yet the `aldev guide code` delegation manual chains `openclaw system event …`
+# PATHs), yet the `aligndev guide code` delegation manual chains `openclaw system event …`
 # onto every delegated run for the completion wake. The server's `--auth none` flag does
 # not exempt the CLI: it checks credentials client-side from the config, so
 # openclaw.json also declares `gateway.auth.mode: "none"`.

@@ -1,8 +1,8 @@
 ---
 title: Update the Assistant
 read_when:
-  - upgrading OpenClaw, the coding agent, alignfirst, aldev, ctx7 or the skills
-  - replacing alcode and alproject with aldev
+  - upgrading OpenClaw, the coding agent, alignfirst, aligndev, ctx7 or the skills
+  - replacing alcode and alproject with aligndev
 ---
 
 # Update the Assistant
@@ -75,28 +75,28 @@ EOS
 
 The login hook must remain after the environment bridge and any PATH assignments. The [gateway step](#gateway-unit-and-restart) installs or refreshes the systemd drop-in before restarting.
 
-## One-time: replace alcode and alproject with aldev
+## One-time: replace alcode and alproject with aligndev
 
-Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aldev` replaces both and prints the playbook through `aldev guide`, so OpenClaw's managed playbook copy goes away.
+Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aligndev` replaces both and prints the playbook through `aligndev guide`, so OpenClaw's managed playbook copy goes away.
 
-1. Bring the admin repository to the current template: the variant's `infra/openclaw/aldev.config.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aldev.config.json`, and its `config` scope covers the aldev config.
+1. Bring the admin repository to the current template: the variant's `infra/openclaw/aligndev.config.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aligndev.config.json`, and its `config` scope covers the aligndev config.
 2. Swap the packages:
 
    ```sh
    sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
    set -e
    /opt/{{SERVICE_USER}}/libexec/admin-npm uninstall -g @alignfirst/alcode @alignfirst/alproject
-   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aldev@latest
+   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aligndev@latest
    '
    ```
 
-3. Rename the session directories from `_alcode` to `_aldev`, so `aldev code` finds the earlier sessions. A directory printed as `skipped` already has an `_aldev` sibling: merge the two by hand. With a work-files repository, the next `alignfirst sync` publishes the rename.
+3. Rename the session directories from `_alcode` to `_aligndev`, so `aligndev code` finds the earlier sessions. A directory printed as `skipped` already has an `_aligndev` sibling: merge the two by hand. With a work-files repository, the next `alignfirst sync` publishes the rename.
 
    ```sh
    sudo -i -u {{SERVICE_USER}} -- bash -c '
    find ~/projects -name node_modules -prune -o -type d -name _alcode -prune -print |
      while read -r dir; do
-       target="$(dirname "$dir")/_aldev"
+       target="$(dirname "$dir")/_aligndev"
        if [ -e "$target" ]; then echo "skipped: $dir"; else mv -T "$dir" "$target"; fi
      done
    '
@@ -109,7 +109,7 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
      rm -rf /home/{{SERVICE_USER}}/.openclaw/skills/alignfirst-openclaw-playbook
    ```
 
-5. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aldev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
+5. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aligndev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
 
    ```sh
    # only when step 1 deleted coding-agent.conf
@@ -117,11 +117,11 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec
    ```
 
-6. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aldev` and `ctx7`.
+6. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aligndev` and `ctx7`.
 
    ```sh
    sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
-   sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev project doctor && aldev guide >/dev/null && echo aldev-ok'
+   sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev project doctor && aligndev guide >/dev/null && echo aligndev-ok'
    ```
 
 Continue with the regular steps below.
@@ -135,7 +135,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- bash -lc '
 openclaw update --yes --no-restart --accept-capabilities
 openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
   openclaw plugins update @alignfirst/service-openclaw-plugin@latest --accept-capabilities
-/opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aldev@latest ctx7@latest
+/opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aligndev@latest ctx7@latest
 '
 ```
 
@@ -145,8 +145,8 @@ Immediately replace the projects marker, then validate with the new CLI. The wra
 sudo /usr/local/sbin/alignfirst-assistant-maintenance projects -- bash -lc '
 set -e
 install -m 644 ~/seed/projects/.alignfirst-projects.json ~/projects/.alignfirst-projects.json
-aldev project doctor
-aldev project list
+aligndev project doctor
+aligndev project list
 '
 ```
 
@@ -162,10 +162,10 @@ Update the coding agent through its package-scoped command: [08-coding-agent.md 
 
 `openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts, and the migration step below finishes what the lock interrupted.
 
-Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `alignfirst`, `aldev`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
+Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `alignfirst`, `aligndev`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && aldev --version && aldev code --help >/dev/null && echo aldev-ok && ctx7 --version'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && aligndev --version && aligndev code --help >/dev/null && echo aligndev-ok && ctx7 --version'
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \

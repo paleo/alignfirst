@@ -14,7 +14,7 @@ export const ITEM_NAMES = [
   "DEVELOPERS.md",
   "docs",
   ".plans",
-  "_aldev",
+  "_aligndev",
 ] as const;
 
 const FLAG = "boolean | 'auto'";
@@ -25,7 +25,7 @@ const flagsSchema = type({
   "DEVELOPERS.md?": FLAG,
   "docs?": FLAG,
   ".plans?": FLAG,
-  "_aldev?": FLAG,
+  "_aligndev?": FLAG,
 });
 const companionsSchema = type({
   "+": "reject",
@@ -58,7 +58,7 @@ export interface ItemLocation {
   exists: boolean;
 }
 
-type FileItemName = Exclude<ItemName, "_aldev">;
+type FileItemName = Exclude<ItemName, "_aligndev">;
 
 interface CompanionsFile {
   path: string;
@@ -172,7 +172,7 @@ function mergeFlags(matches: MatchingEntry[]): Record<ItemName, Flag> {
     "DEVELOPERS.md": flagOf("DEVELOPERS.md"),
     docs: flagOf("docs"),
     ".plans": flagOf(".plans"),
-    _aldev: flagOf("_aldev"),
+    _aligndev: flagOf("_aligndev"),
   };
 }
 
@@ -181,11 +181,11 @@ function assertValidFlags(
   flags: Record<ItemName, Flag>,
   matches: MatchingEntry[],
 ): void {
-  if (flags._aldev !== true || flags[".plans"] !== "auto") return;
+  if (flags._aligndev !== true || flags[".plans"] !== "auto") return;
   const keys = matches.map((match) => match.key).join(", ");
   throw invalidCompanions(
     file.path,
-    `"_aldev": true requires ".plans" set to true or false (matching keys: ${keys})`,
+    `"_aligndev": true requires ".plans" set to true or false (matching keys: ${keys})`,
   );
 }
 
@@ -209,7 +209,7 @@ function resolveLocations(
     "DEVELOPERS.md": locate("DEVELOPERS.md"),
     docs: locate("docs"),
     ".plans": plans,
-    _aldev: companion?.flags._aldev === true ? companionCopy(companion, ".plans") : plans,
+    _aligndev: companion?.flags._aligndev === true ? companionCopy(companion, ".plans") : plans,
   };
 }
 
@@ -245,9 +245,9 @@ export function renderItemLocation(name: ItemName, location: ItemLocation): stri
   return `${name}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 
-/** The `_aldev` tree when it is not the resolved `.plans` and exists. */
+/** The `_aligndev` tree when it is not the resolved `.plans` and exists. */
 export function separateSessionTree(layout: ProjectLayout): string | undefined {
-  const sessions = layout.locations._aldev;
+  const sessions = layout.locations._aligndev;
   if (!sessions.exists || sessions.path === layout.locations[".plans"].path) return;
   return sessions.path;
 }

@@ -1,6 +1,6 @@
 # Writing workspace & playbook files — heuristics
 
-Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the guide templates (`packages/aldev/templates/guide/playbook/*.md` and `code.md`, printed by `aldev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
+Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-dev-kit-tests/workspace/*.md`) and the guide templates (`packages/aligndev/templates/guide/playbook/*.md` and `code.md`, printed by `aligndev guide`) against test regressions. Read before editing any of these files. Read [`openclaw-context-engineering.md`](./openclaw-context-engineering.md) first for the loading model, and [`openclaw-test-architecture.md`](./openclaw-test-architecture.md) for how the harness exercises them.
 
 ## Shared templates
 
@@ -19,7 +19,7 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-`aldev guide` keeps the active platform's blocks without their marker lines and drops the others. Blocks mark whole lines and do not nest. An unknown platform name, a nested block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+`aligndev guide` keeps the active platform's blocks without their marker lines and drops the others. Blocks mark whole lines and do not nest. An unknown platform name, a nested block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
 After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the OpenClaw output.
 
@@ -29,15 +29,15 @@ The OpenClaw text was tuned against the harness scenarios. When a sentence must 
 
 ### Step numbers stay aligned
 
-Cross-references cite step numbers, as in "Step 5 of `{{ALDEV}} guide project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
+Cross-references cite step numbers, as in "Step 5 of `{{ALIGNDEV}} guide project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
 
 ### `codingAgent` prose
 
-The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aldev project` or the project inventory either.
+The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either.
 
 ### Placeholders
 
-Write every command as `{{ALDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aldev` and `alignfirst`, or as `npx -y aldev` and `npx -y alignfirst` when `aldev` runs through `npx`. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
+Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aligndev` and `alignfirst`, or as `npx -y aligndev` and `npx -y alignfirst` when `aligndev` runs through `npx`. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
 
 ## One rule, stated once
 
@@ -51,7 +51,7 @@ The OpenClaw session itself reads the playbook. Address it directly with "you" a
 
 ## Name the delegate by its role
 
-The playbook calls the delegate **the coder**: the coding agent launched with `aldev code`. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename. "The coding agent" becomes ambiguous once a coding agent can itself act as the assistant.
+The playbook calls the delegate **the coder**: the coding agent launched with `aligndev code`. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename. "The coding agent" becomes ambiguous once a coding agent can itself act as the assistant.
 
 ## Keep the activation message static
 
@@ -169,7 +169,7 @@ The `[WORKSPACE]` banner is how a tagged header came back without reviving the f
 
 ## A nearby auto-loaded doc can crowd out the procedure
 
-The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the delegation guide, today `aldev guide code`). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
+The same A1 ack failed **8 of 10** iterations here while the equivalent passed ~9 of 10 in the predecessor setup. The difference was structural, not luck: the workspace `AGENTS.md` was changed from a self-contained dispatcher (first action = read the surface playbook) to *"load the `alignfirst-coaching` skill, then follow its `dispatcher.md`"* (that coaching skill has since been retired into the delegation guide, today `aligndev guide code`). That makes the assistant read the skill's `SKILL.md` **first** — and that file foregrounds *"Light Workflow (AAD) — for straightforward changes like moving a button."* Faced with "make the export button bold," the assistant matches that framing and surfaces the protocol choice in the thread, ahead of the worktree/branch setup the playbook actually wants.
 
 Lesson: the file the assistant reads *first* on a turn sets its frame. If that file is coaching/vocabulary-heavy (protocol names, workflow taxonomies), its language leaks into user-facing output. Keep the dispatch entry point pointed straight at the procedural playbook; defer delegation/coaching material until the assistant is actually delegating.
 
@@ -185,4 +185,4 @@ npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --ma
 
 ## Watch out for `--iterations` matrix cost
 
-Editing a bind-mounted file propagates live (the workspace dir and the monorepo — including `packages/aldev/templates/` — are mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.
+Editing a bind-mounted file propagates live (the workspace dir and the monorepo — including `packages/aligndev/templates/` — are mounted into the gateway), but iterations that started before your edit ran against the old text. After a substantive edit, expect to re-run from scratch. Each cell recreates the bus + gateway for fresh state and costs real API tokens (gateway turns + judge), so scope iteration counts deliberately.

@@ -10,7 +10,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. Two sections run earlier: [Admin Account](#admin-account) during `01-server-setup.md`, [Install](#install) during `03-toolchain.md`. Every Codex command of this deployment lives here; the base runbooks link to these sections.
 
-Codex is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `aldev code`, one fresh `codex` process per delegated run.
+Codex is installed in both accounts. The operator drives the admin account with it and the project-local `sysadmin` skill; the service account runs it through `aligndev code`, one fresh `codex` process per delegated run.
 
 ## Admin Account
 
@@ -47,7 +47,7 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aldev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.unset` in `infra/openclaw/aldev.config.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aligndev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.unset` in `infra/openclaw/aligndev.config.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
 
@@ -62,7 +62,7 @@ exit
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The delegated coder needs no protocol skill: `aldev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The delegated coder needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
@@ -162,8 +162,8 @@ The `skills` scope of `update-assistant.md` covers `~/.agents` and `~/.openclaw/
 After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev code --help | grep selected'   # names codex as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aldev guide project >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev code --help | grep selected'   # names codex as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev guide project >/dev/null && echo projects-ok'
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'        # 2 skills
 ```
 
@@ -180,4 +180,4 @@ EOF
 
 The private turn must return `RUNTIME_OK`.
 
-The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_aldev/*.md` records `agent: codex`.
+The surface smoke test in `07-channel.md` delegates a read-only run from the channel; its session file under `.plans/**/_aligndev/*.md` records `agent: codex`.

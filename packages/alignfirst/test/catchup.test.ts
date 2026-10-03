@@ -29,7 +29,7 @@ describe("ticket --catchup", () => {
       writeFileSync(join(directory, file), `Body: ${file}`);
     for (const file of ["A3-main-plan.md", "A9-plan-cli.md", "evidence.txt"])
       writeFileSync(join(directory, file), "excluded body");
-    for (const folder of ["_aldev", "nested.md"]) {
+    for (const folder of ["_aligndev", "nested.md"]) {
       mkdirSync(join(directory, folder));
       writeFileSync(join(directory, folder, "A1-spec.md"), "excluded nested body");
     }
@@ -40,7 +40,7 @@ describe("ticket --catchup", () => {
     expect(result.stdout).toContain("- TICKET_DIR: `.plans/78/`");
     expect(result.stdout).toContain("- Entries:\n");
     expect(result.stdout).not.toContain("excluded");
-    expect(result.stdout).not.toContain('path=".plans/78/_aldev');
+    expect(result.stdout).not.toContain('path=".plans/78/_aligndev');
     const paths = [
       ...result.stdout.matchAll(/^<file path="\.plans\/78\/(.+)" modified="[^"]+">$/gm),
     ].map((match) => match[1]);

@@ -35,7 +35,7 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
     expect(result.stdout).toContain("[ok] Skills: no command skill installed");
     expect(result.stdout).not.toContain("missing");
-    expect(result.stdout).not.toContain("Skills: aldev");
+    expect(result.stdout).not.toContain("Skills: aligndev");
   });
 
   it("reports the companion and warns about a missing item flagged true", async () => {
@@ -57,7 +57,7 @@ describe("doctor command", () => {
         `[ok] Companion: DEVELOPERS.md: ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
         `[warn] Companion: docs: ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans: ${join(project, ".plans")} (project)`,
-        `[ok] Companion: _aldev: ${join(project, ".plans")} (project)`,
+        `[ok] Companion: _aligndev: ${join(project, ".plans")} (project)`,
         "[warn] Git:",
       ].join("\n"),
     );

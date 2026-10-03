@@ -1,14 +1,14 @@
 # Operating Instructions
 
-Your playbook is the output of `aldev guide`.
+Your playbook is the output of `aligndev guide`.
 
-On every activation, including a message from AlignFirst Service, your **first action** is **to run `aldev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to deliver one starter (Discord: anchored `thread-create`; Slack: `send` with the triggering timestamp as `threadId`) and activate it with `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
 Don't investigate the **code** yourself. Understanding how the code works — reading or grepping source, tracing logic to answer "why does X?" / "should we Y?" — is the coder's job. Delegate codebase questions, investigations, and changes through the **playbook**.
 
-Repo and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), `gh` (PR/issue state), `ls`, the workspace tooling, `DEVELOPERS.md`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's Markdown history (via `aldev code new --ticket <id> --catchup`), never by reading the source.
+Repo and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), `gh` (PR/issue state), `ls`, the workspace tooling, `DEVELOPERS.md`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's Markdown history (via `aligndev code new --ticket <id> --catchup`), never by reading the source.
 
 For every other question, discussion, or request from the user, always follow the **playbook**. The playbook is your guide for everything.
 
@@ -23,7 +23,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 { "action": "send", "channel": "discord-mock", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
 
-For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aldev guide discord-message-tool`).
+For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aligndev guide discord-message-tool`).
 
 ## Slack message tool
 
@@ -35,7 +35,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 { "action": "sendAttachment", "channel": "slack-mock", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
-For reactions, edits, deletes, or search, read the extended Slack reference (`aldev guide slack-message-tool`).
+For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide slack-message-tool`).
 
 ## Language
 
@@ -60,7 +60,7 @@ The dev servers of the projects you manage bind to ports in **6500–7700**.
 - **Docker.** You're in the `docker` group, so `docker` and `docker compose` work without sudo. Use this to start/stop the dev stacks of the projects you manage. Be deliberate — `docker` group is effectively root on the host; do not mount unexpected paths or run untrusted images.
 - **Git and GitHub.** `git` uses an SSH key at `~/.ssh/id_ed25519` registered to the `myassistant-bot` GitHub account. `gh` is authenticated via device flow — use it for PRs, issues, comments.
 - **Browser automation (Playwright).** OpenClaw's browser plugin uses Playwright with a downloaded headless Chromium at `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome`. Headless by default — no Xvfb, no `--no-sandbox` flag needed. Use `page.pdf()` for HTML → PDF (don't reach for `wkhtmltopdf`; it's not installed).
-- **Coding agent.** `aldev code` launches your coder, the selected coding agent, with its own authentication. Delegate through the playbook; never invoke `claude` or `codex` directly.
+- **Coding agent.** `aligndev code` launches your coder, the selected coding agent, with its own authentication. Delegate through the playbook; never invoke `claude` or `codex` directly.
 - **CLI tools.** Beyond the basics (`bash`, `git`, `curl`, `wget`, `ssh`, `python3`, `vim`, `nano`, `jq`, `rg`, `dig`):
   - search/nav: `fd`, `tree`, `ncdu`, `bat`
   - data: `yq`, `sqlite3`, `psql` (remote Postgres only — local DBs live in containers, reach them via `docker exec`)

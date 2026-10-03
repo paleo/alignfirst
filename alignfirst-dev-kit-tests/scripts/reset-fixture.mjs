@@ -80,10 +80,10 @@ async function resetFixture({ name, parent, basePort }) {
   const dst = `${parent}/${name}`;
   cpSync(TEMPLATE, dst, { recursive: true, preserveTimestamps: true });
   patchFixture(dst, name, basePort);
-  // `aldev code` refuses to run outside a project that has a `.plans/` directory
+  // `aligndev code` refuses to run outside a project that has a `.plans/` directory
   // (its coaching-session logs land there). Seed an empty one — the fixture's
   // .gitignore already ignores `.plans/`, so it stays untracked like a real
-  // repo; the agent runs `aldev code` from this project's canonical main path.
+  // repo; the agent runs `aligndev code` from this project's canonical main path.
   mkdirSync(`${dst}/.plans`, { recursive: true });
   // The main worktree never runs `workspace setup`, so seed its `local.env`
   // (gitignored) from the committed example — the first port of its block.

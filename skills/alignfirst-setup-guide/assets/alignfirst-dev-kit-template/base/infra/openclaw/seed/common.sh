@@ -118,7 +118,7 @@ configure_common() {
   unset_key plugins.entries.memory-core
 
   echo "[seed] heartbeat — on, one periodic tick a day"
-  # Heartbeat stays on: the `aldev code` completion wake is a heartbeat-sourced turn. `every` only
+  # Heartbeat stays on: the `aligndev code` completion wake is a heartbeat-sourced turn. `every` only
   # governs periodic ticks; the gateway derives the system-owned `heartbeat:main` cron job from
   # it. isolatedSession, lightContext and activeHours would each break the wake (throwaway
   # session, no workspace bootstrap, deferred run), so they are cleared. Thread handoff itself

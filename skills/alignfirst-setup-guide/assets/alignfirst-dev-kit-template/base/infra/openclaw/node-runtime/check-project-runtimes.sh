@@ -181,28 +181,28 @@ check_command_precedence() {
   output=$(cd "$fixture_root/default" && "$PROJECT_SHELL" -c '
     printf "%s\n" "$FNM_MULTISHELL_PATH/bin" "$(dirname "$(command -v node)")" \
       "$(dirname "$(command -v npm)")" "$(command -v openclaw)" \
-      "$(command -v aldev)" "$(command -v "$CODING_AGENT")"
+      "$(command -v aligndev)" "$(command -v "$CODING_AGENT")"
   ' 2>/dev/null) || return 1
   runtime_bin=$(printf '%s\n' "$output" | sed -n '1p')
   [ "$(printf '%s\n' "$output" | sed -n '2p')" = "$runtime_bin" ] || return 1
   [ "$(printf '%s\n' "$output" | sed -n '3p')" = "$runtime_bin" ] || return 1
   [ "$(printf '%s\n' "$output" | sed -n '4p')" = /opt/{{SERVICE_USER}}/bin/openclaw ] || return 1
-  [ "$(printf '%s\n' "$output" | sed -n '5p')" = /home/{{SERVICE_USER}}/.npm-system-global/bin/aldev ] || return 1
+  [ "$(printf '%s\n' "$output" | sed -n '5p')" = /home/{{SERVICE_USER}}/.npm-system-global/bin/aligndev ] || return 1
   [ "$(printf '%s\n' "$output" | sed -n '6p')" = "$expected_agent" ] || return 1
   install_runtime_stubs || return 1
   output=$(cd "$fixture_root/default" && "$PROJECT_SHELL" -c '
     command -v openclaw
-    command -v aldev
+    command -v aligndev
     command -v "$CODING_AGENT"
   ' 2>/dev/null) || return 1
   [ "$output" = "/opt/{{SERVICE_USER}}/bin/openclaw
-/home/{{SERVICE_USER}}/.npm-system-global/bin/aldev
+/home/{{SERVICE_USER}}/.npm-system-global/bin/aligndev
 $expected_agent" ]
 }
 
 install_runtime_stubs() {
   local name path
-  for name in openclaw aldev "$CODING_AGENT"; do
+  for name in openclaw aligndev "$CODING_AGENT"; do
     path="$runtime_bin/$name"
     [ ! -e "$path" ] || return 1
     printf '#!/bin/sh\nexit 99\n' > "$path"
@@ -215,7 +215,7 @@ check_cli_commands() {
   (cd "$fixture_root/default" && "$PROJECT_SHELL" -c '
     pnpm --version >/dev/null &&
       "$CODING_AGENT" --version >/dev/null &&
-      aldev --version >/dev/null &&
+      aligndev --version >/dev/null &&
       alignfirst --version >/dev/null &&
       openclaw --version >/dev/null
   ' >/dev/null 2>&1)

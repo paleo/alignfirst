@@ -31,7 +31,7 @@ describe("config command", () => {
         `DEVELOPERS.md: ${join(cwd, "DEVELOPERS.md")} (project, missing)`,
         `docs: ${join(cwd, "docs")} (project, missing)`,
         `.plans: ${join(cwd, ".plans")} (project, missing)`,
-        `_aldev: ${join(cwd, ".plans")} (project, missing)`,
+        `_aligndev: ${join(cwd, ".plans")} (project, missing)`,
         "",
       ].join("\n"),
     );
@@ -69,7 +69,7 @@ describe("config command", () => {
     writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
     writeCompanions(home, {
       root: "~/companions",
-      paths: { "~/projects/app": { ".plans": false, _aldev: true } },
+      paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
     });
 
     const json = JSON.parse((await runMain(["config", "--json"], { cwd: project, home })).stdout);
@@ -87,7 +87,7 @@ describe("config command", () => {
           "DEVELOPERS.md": "auto",
           docs: "auto",
           ".plans": false,
-          _aldev: true,
+          _aligndev: true,
         },
       },
       locations: {
@@ -104,7 +104,7 @@ describe("config command", () => {
         "DEVELOPERS.md": { path: join(companion, "DEVELOPERS.md"), in: "companion", exists: false },
         docs: { path: join(companion, "docs"), in: "companion", exists: false },
         ".plans": { path: join(project, ".plans"), in: "project", exists: false },
-        _aldev: { path: join(companion, ".plans"), in: "companion", exists: false },
+        _aligndev: { path: join(companion, ".plans"), in: "companion", exists: false },
       },
     });
 

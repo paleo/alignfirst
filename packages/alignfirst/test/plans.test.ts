@@ -308,8 +308,8 @@ describe("plans commands", () => {
   it("keeps fresh running sessions while archiving stale completed sessions", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const sessionDir = join(plansDir, "_aldev");
-    const ticketSessionDir = join(plansDir, "79", "_aldev");
+    const sessionDir = join(plansDir, "_aligndev");
+    const ticketSessionDir = join(plansDir, "79", "_aligndev");
     mkdirSync(sessionDir, { recursive: true });
     mkdirSync(ticketSessionDir, { recursive: true });
     const running = join(sessionDir, "20260901-100000.md");
@@ -326,10 +326,10 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
 
-    expect(result.stdout).toContain("Archived _aldev/20260901-110000.md");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-110000.md");
     expect(existsSync(running)).toBe(true);
     expect(existsSync(succeeded)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_aldev", "20260901-110000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-110000.md"))).toBe(true);
     expect(existsSync(join(plansDir, "79"))).toBe(true);
     expect(existsSync(join(plansDir, "_archives", "79"))).toBe(false);
   });
@@ -337,10 +337,10 @@ describe("plans commands", () => {
   it("archives stale running sessions and their ticket directories", async () => {
     const fixture = makeFixture();
     const plansDir = join(fixture.product, ".plans");
-    const running = join(plansDir, "_aldev", "20260901-100000.md");
-    const ticketSession = join(plansDir, "79", "_aldev", "20260901-120000.md");
-    mkdirSync(join(plansDir, "_aldev"), { recursive: true });
-    mkdirSync(join(plansDir, "79", "_aldev"), { recursive: true });
+    const running = join(plansDir, "_aligndev", "20260901-100000.md");
+    const ticketSession = join(plansDir, "79", "_aligndev", "20260901-120000.md");
+    mkdirSync(join(plansDir, "_aligndev"), { recursive: true });
+    mkdirSync(join(plansDir, "79", "_aligndev"), { recursive: true });
     writeFileSync(running, "---\nstatus: running\n---\n");
     writeFileSync(ticketSession, "---\nstatus: running\n---\n");
     const old = new Date(Date.now() - 2 * 86_400_000);
@@ -353,12 +353,12 @@ describe("plans commands", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Archived _aldev/20260901-100000.md");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md");
     expect(result.stdout).toContain("Archived 79");
     expect(existsSync(running)).toBe(false);
     expect(existsSync(ticketSession)).toBe(false);
-    expect(existsSync(join(plansDir, "_archives", "_aldev", "20260901-100000.md"))).toBe(true);
-    expect(existsSync(join(plansDir, "_archives", "79", "_aldev", "20260901-120000.md"))).toBe(
+    expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plansDir, "_archives", "79", "_aligndev", "20260901-120000.md"))).toBe(
       true,
     );
   });
@@ -490,12 +490,15 @@ describe("plans commands with a separate session tree", () => {
     const plans = join(fixture.product, ".plans");
     const sessions = join(useSessionTree(fixture), ".plans");
     const old = new Date(Date.now() - 2 * 86_400_000);
-    for (const path of [join(plans, "79", "A1-spec.md"), join(sessions, "79", "_aldev", "a.md")]) {
+    for (const path of [
+      join(plans, "79", "A1-spec.md"),
+      join(sessions, "79", "_aligndev", "a.md"),
+    ]) {
       mkdirSync(join(path, ".."), { recursive: true });
       writeFileSync(path, "x\n");
       utimesSync(path, old, old);
     }
-    const noTicket = join(sessions, "_aldev", "20260901-100000.md");
+    const noTicket = join(sessions, "_aligndev", "20260901-100000.md");
     writeFileSync(noTicket, "---\nstatus: succeeded\n---\n");
     utimesSync(noTicket, old, old);
 
@@ -507,11 +510,11 @@ describe("plans commands with a separate session tree", () => {
 
     expect(result.stdout).toContain("Archived 79 → _archives/79");
     expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
-    expect(result.stdout).toContain("Archived _aldev/20260901-100000.md (session tree)");
+    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md (session tree)");
     expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "79", "_aldev", "a.md"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "_aldev", "20260901-100000.md"))).toBe(true);
-    expect(existsSync(join(plans, "_archives", "_aldev"))).toBe(false);
+    expect(existsSync(join(sessions, "_archives", "79", "_aligndev", "a.md"))).toBe(true);
+    expect(existsSync(join(sessions, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "_aligndev"))).toBe(false);
   });
 
   it("archives a ticket's session directory with the ticket", async () => {
@@ -519,7 +522,7 @@ describe("plans commands with a separate session tree", () => {
     const plans = join(fixture.product, ".plans");
     const sessions = join(useSessionTree(fixture), ".plans");
     mkdirSync(join(plans, "78"), { recursive: true });
-    mkdirSync(join(sessions, "78", "_aldev"), { recursive: true });
+    mkdirSync(join(sessions, "78", "_aligndev"), { recursive: true });
 
     const result = await runMain(["plans", "archive", "78"], {
       cwd: fixture.product,
@@ -528,8 +531,8 @@ describe("plans commands with a separate session tree", () => {
 
     expect(result.code).toBe(0);
     expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "78", "_aldev"))).toBe(true);
-    expect(existsSync(join(plans, "_archives", "78", "_aldev"))).toBe(false);
+    expect(existsSync(join(sessions, "_archives", "78", "_aligndev"))).toBe(true);
+    expect(existsSync(join(plans, "_archives", "78", "_aligndev"))).toBe(false);
   });
 });
 
@@ -537,10 +540,10 @@ describe("plans commands with a separate session tree", () => {
 function useSessionTree(fixture: Fixture): string {
   writeCompanions(fixture.root, {
     root: "~/companions",
-    paths: { "~/product": { ".plans": false, _aldev: true } },
+    paths: { "~/product": { ".plans": false, _aligndev: true } },
   });
   const companion = join(fixture.root, "companions", "product");
-  mkdirSync(join(companion, ".plans", "_aldev"), { recursive: true });
+  mkdirSync(join(companion, ".plans", "_aligndev"), { recursive: true });
   mkdirSync(join(fixture.product, ".plans"), { recursive: true });
   return companion;
 }

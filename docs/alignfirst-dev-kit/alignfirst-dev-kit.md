@@ -12,20 +12,20 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 1. **Reference workspace** —
    [`alignfirst-dev-kit-tests/workspace/`](../../alignfirst-dev-kit-tests/workspace/). The
    `myassistant` OpenClaw instance's bootstrap files (`AGENTS.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`)
-   load into the system prompt every turn. `AGENTS.md` makes `aldev guide` the first action on
+   load into the system prompt every turn. `AGENTS.md` makes `aligndev guide` the first action on
    every activation. The workspace carries no playbook copy.
-2. **Operating-instructions playbook** — the `aldev guide` topics, rendered from
-   [`packages/aldev/templates/guide/playbook/`](../../packages/aldev/templates/guide/playbook/).
-   The dispatcher (`aldev guide`) routes thread sessions to `aldev guide working-session` and
-   channel/DM sessions to `aldev guide channel-handling`. The other topics own the runbooks for
+2. **Operating-instructions playbook** — the `aligndev guide` topics, rendered from
+   [`packages/aligndev/templates/guide/playbook/`](../../packages/aligndev/templates/guide/playbook/).
+   The dispatcher (`aligndev guide`) routes thread sessions to `aligndev guide working-session` and
+   channel/DM sessions to `aligndev guide channel-handling`. The other topics own the runbooks for
    project workspace setup, project lifecycle and consultations, and the `message` tool per
    surface.
-   Project discovery comes from `aldev guide project`; the delegation procedure comes from
-   `aldev guide code` only when delegation starts.
+   Project discovery comes from `aligndev guide project`; the delegation procedure comes from
+   `aligndev guide code` only when delegation starts.
 3. **Regression-test harness** —
    [`alignfirst-dev-kit-tests/`](../../alignfirst-dev-kit-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
-   It bind-mounts the workspace and the monorepo root into the gateway, so `aldev` and `alignfirst` run from the checkout and `aldev guide` prints the checkout's playbook.
+   It bind-mounts the workspace and the monorepo root into the gateway, so `aligndev` and `alignfirst` run from the checkout and `aligndev guide` prints the checkout's playbook.
    The harness intercepts both supported delegated-agent subprocesses.
 
 ## How a turn flows
@@ -33,19 +33,19 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 ```text
 user message
   → workspace AGENTS.md (auto-loaded)                                       layer 1
-  → aldev guide (read first)                                                layer 2  ← procedural dispatcher
-  → aldev guide working-session | channel-handling                          layer 2
-  → aldev guide project-lifecycle (create/onboard/remove)                   layer 2
-  → aldev guide consultation (question, advice, brainstorming)              layer 2
-  → aldev guide project-workspace-setup (if the thread gets its workspace)  layer 2
-  → aldev guide code (delegation manual, read last), then delegate via aldev code
+  → aligndev guide (read first)                                                layer 2  ← procedural dispatcher
+  → aligndev guide working-session | channel-handling                          layer 2
+  → aligndev guide project-lifecycle (create/onboard/remove)                   layer 2
+  → aligndev guide consultation (question, advice, brainstorming)              layer 2
+  → aligndev guide project-workspace-setup (if the thread gets its workspace)  layer 2
+  → aligndev guide code (delegation manual, read last), then delegate via aligndev code
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aldev guide` commands run through `exec`. The dispatcher is read **first** and is purely procedural; the `aldev guide code` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aligndev guide` commands run through `exec`. The dispatcher is read **first** and is purely procedural; the `aligndev guide code` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
 
 ## The channel session only bootstraps a thread
 
-A channel session answers ordinary conversation at the root. For project work, it runs `aldev project list --json`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably records the handoff and dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical thread session, with core delivering into the thread. The channel turn then ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
+A channel session answers ordinary conversation at the root. For project work, it runs `aligndev project list --json`, resolves listed projects, records known project paths, ticket, one-line task, URLs, and the full text of a detailed request, then delivers one native thread starter. Discord uses anchored `thread-create`; Slack uses `send` with the triggering timestamp as `threadId`. After confirmed delivery, `thread_handoff start` durably records the handoff and dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical thread session, with core delivering into the thread. The channel turn then ends. Resource URLs, multi-project requests, and requests that may need no project can leave values for the working session to resolve. Duplicate names and missing paths remain unresolved. The channel session never performs project work.
 
 Every fresh thread session routes by `topic_id`, calls `thread_handoff` with `{ "action": "claim" }`, and reads its own history before acting. It reacts with 🦞 to the newest visible message from that completed history snapshot before setup or another visible action. This applies to new threads, human-created threads, and fresh sessions taking over existing threads. The static service message only starts a takeover turn. It is internal to OpenClaw, absent from the surface history and therefore cannot be the reaction target. The visible starter carries the request. When the starter already asks for missing input, the takeover waits quietly until a human supplies it. An explicit hold remains in force. A final history read before coding catches human instructions that arrived during setup. Completion and later user turns stay on the same canonical thread session. Project creation and repository onboarding remain exceptions to the initial path requirement. The older manual-follow-up contract and, before it, channel-owned setup both produced avoidable routing failures; the historical artifact at `alignfirst-dev-kit-tests/artifacts/2026-07-15T10-31-39-655Z/` documents the latter.
 
@@ -53,11 +53,11 @@ The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate
 
 ## Companion-backed projects
 
-A managed project can keep its AlignFirst files in a companion directory, outside its repository. The operator enables this by shipping `infra/openclaw/companions.json` in the admin repository; the seed installs it into the locked `~/.config/alignfirst/`. The playbook reads each file's location from `aldev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
+A managed project can keep its AlignFirst files in a companion directory, outside its repository. The operator enables this by shipping `infra/openclaw/companions.json` in the admin repository; the seed installs it into the locked `~/.config/alignfirst/`. The playbook reads each file's location from `aligndev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
 
 ## A coding agent as the assistant
 
-The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aldev guide` selects the platform from `platform` in the `aldev` config, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aldev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
+The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the `aligndev` config, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
 
 ## Reading order for maintainers
 

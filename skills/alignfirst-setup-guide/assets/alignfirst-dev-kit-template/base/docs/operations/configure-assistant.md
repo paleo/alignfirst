@@ -1,13 +1,13 @@
 ---
 title: Configure the Assistant
 read_when:
-  - infra/openclaw/.env, aldev.config.json, companions.json or a seed module changed
+  - infra/openclaw/.env, aligndev.config.json, companions.json or a seed module changed
   - a secret was rotated
 ---
 
 # Configure the Assistant
 
-**Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, `aldev.config.json`, `companions.json`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
+**Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, `aligndev.config.json`, `companions.json`, a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
 
 Changing the model never changes the agent runtime. Keep
 `models.providers.<provider>.agentRuntime.id` set to `openclaw`; the assistant requires OpenClaw's
@@ -44,7 +44,7 @@ Run these commands only after the wrapper reports that hardening was restored an
 
 ## Scope
 
-The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf`, `~/.config/alignfirst/aldev.config.json` and, when shipped, `~/.config/alignfirst/companions.json`, and merges the coding agent's global instruction file. It does not touch:
+The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf`, `~/.config/alignfirst/aligndev.config.json` and, when shipped, `~/.config/alignfirst/companions.json`, and merges the coding agent's global instruction file. It does not touch:
 
 - `~/.openclaw/workspace/*.md` — [update-workspace.md](update-workspace.md).
 - `~/projects/.alignfirst-projects.json` — [update-assistant.md](update-assistant.md).

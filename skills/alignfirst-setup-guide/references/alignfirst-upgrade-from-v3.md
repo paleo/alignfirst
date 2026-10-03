@@ -13,10 +13,10 @@ Installing the CLI globally on a developer machine is a convenience:
 npm install -g alignfirst
 ```
 
-An assistant host installs it globally with `aldev`, the Dev Kit CLI:
+An assistant host installs it globally with `aligndev`, the Dev Kit CLI:
 
 ```sh
-npm install -g alignfirst aldev
+npm install -g alignfirst aligndev
 ```
 
 ## Inventory the `plans-share` Contract

@@ -61,7 +61,7 @@ function newestFileMtime(dir: string): number {
 }
 
 function staleNoTicketSessionFiles(root: string, cutoff: number): string[] {
-  const sessionDir = join(root, "_aldev");
+  const sessionDir = join(root, "_aligndev");
   if (!existsSync(sessionDir)) return [];
   return readdirSync(sessionDir, { withFileTypes: true })
     .filter((entry) => entry.isFile())
