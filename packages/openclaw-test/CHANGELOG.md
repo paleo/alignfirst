@@ -1,5 +1,18 @@
 # @alignfirst/openclaw-test
 
+## 0.23.0
+
+### Minor Changes
+
+- 7af8fd1: Archived the gateway's OpenClaw log as `gateway.log` in each cell's artifact directory.
+
+### Patch Changes
+
+- Updated dependencies [7af8fd1]
+  - @alignfirst/openclaw-channel-mock-core@0.10.3
+  - @alignfirst/openclaw-discord-mock@0.6.3
+  - @alignfirst/openclaw-slack-mock@0.6.3
+
 ## 0.22.0
 
 ### Minor Changes

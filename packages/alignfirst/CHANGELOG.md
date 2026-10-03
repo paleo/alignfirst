@@ -1,5 +1,17 @@
 # alignfirst
 
+## 0.5.0
+
+### Minor Changes
+
+- 7af8fd1: Added companion directories, declared in `~/.config/alignfirst/companions.json`, to keep a project's AlignFirst files outside its repository. A separate `_aligndev` session tree is archived and restored along with `.plans`. `alignfirst context` now prints the project instructions from `.alignfirst.md`. In `alignfirst config --json`, `source: "project"` replaced `"root"`, and the report gained `companion` and `locations`.
+
+### Patch Changes
+
+- 7af8fd1: The work-file archive now sweeps the no-ticket session files of `aligndev code`, under `.plans/_aligndev/`.
+- Updated dependencies [7af8fd1]
+  - @alignfirst/docmap@0.11.1
+
 ## 0.4.0
 
 ### Minor Changes

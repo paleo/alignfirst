@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.4.2
+
+### Patch Changes
+
+- 7af8fd1: Fixed `thread_handoff start` failing with `unverifiedThreadDelivery` on OpenClaw 2026.9.8.
+
 ## 0.4.1
 
 ### Patch Changes

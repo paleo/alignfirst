@@ -1,5 +1,11 @@
 # @alignfirst/docmap
 
+## 0.11.1
+
+### Patch Changes
+
+- 7af8fd1: Use the `npx` command by default.
+
 ## 0.11.0
 
 ### Minor Changes
