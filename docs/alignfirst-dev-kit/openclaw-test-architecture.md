@@ -153,7 +153,7 @@ Both channels register together on every gateway boot. The runner selects which 
 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 
-- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. Free-form agent text without a tool call lands in the parent channel.
+- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. `read` takes its scope from `channelId`, `to` or the current channel and ignores `threadId`, as native Discord does. Free-form agent text without a tool call lands in the parent channel.
 - `slack-mock` — `surface: "slack"`, `autoThread: true`. Slack-shaped surface with `send`,
   `react`, `read`, `edit`, `delete`, `reactions`, and `search`; fake thread creation/rename actions
   remain disabled. Its action adapter prepares `send` for core delivery through the mock's message adapter. `replyToMode: "all"` is the compatibility default and routes an eligible root plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots in the channel session and routes only explicit replies through a thread session.
@@ -240,10 +240,12 @@ Layout: `artifacts/<runStamp>/<modelId>-<scenario>-<channel>[-#<NN>][-<VERDICT>]
 - `-#<NN>` — iteration index, padded to the width of `--iterations`, prefixed with `#` so it reads distinctly from the model id's trailing digits. Omitted when `--iterations 1`.
 - `<VERDICT>` — `PASS` / `FAIL`. Applied by **renaming the directory** after `report.json` lands. A directory with no verdict suffix means the run is pending or crashed before the rename.
 
-Two files per task:
+Files per task:
 
 - `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
 - `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. A long string `content`, or a `read` call's text content blocks, on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
+- `transcripts.json` — the conversation's session transcripts (see below).
+- `gateway.log` — the gateway's OpenClaw file log, `/tmp/openclaw/openclaw-<date>.log`, copied through the IPC volume at the end of the cell. Provider failures such as an HTTP 401 appear here and nowhere in the transcripts. Under `--reuse-stack` it also holds earlier cells' lines. A failed copy is a runner warning, not a cell failure.
 
 Scenario verdict is reported as `result: ScenarioResult` (a discriminated union):
 

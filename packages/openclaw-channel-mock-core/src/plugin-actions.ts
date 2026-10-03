@@ -358,17 +358,16 @@ export function createChannelMockMessageActions(params: {
         }
         case "read": {
           // Bulk read prior messages. Real Discord lists a channel's messages
-          // (a thread is a channel) via `channelId ?? to ?? currentChannelId`;
-          // real Slack requires channelId/to and honors threadId as a filter.
-          // Unlike real Discord we also honor the threadId param — the message
-          // tool's thread-read hint endorses it, and in a thread session the
-          // real currentChannelId fallback lands on the same messages. Single-
-          // message fetch lives under `reactions`.
+          // (a thread is a channel) via `channelId ?? to ?? currentChannelId`
+          // and ignores `threadId`: a stray id there (a handoff ID taken from
+          // the nudge's message ID, 2026-10-03) still reads the target thread.
+          // Real Slack requires channelId/to and honors threadId as a filter.
+          // Single-message fetch lives under `reactions`.
           if (surface === "slack" && resolveDestination(actionParams) === undefined) {
             throw new Error(`${channelId} read requires a destination (to/channelId)`);
           }
           const { conversationId, threadId } = resolveHistoryScope(
-            actionParams,
+            surface === "discord" ? withoutThreadId(actionParams) : actionParams,
             toolContext?.currentChannelId,
           );
           if (conversationId === undefined && threadId === undefined) {
@@ -436,6 +435,11 @@ export function createChannelMockMessageActions(params: {
       }
     },
   };
+}
+
+function withoutThreadId(params: Record<string, unknown>): Record<string, unknown> {
+  const { threadId: _ignored, ...rest } = params;
+  return rest;
 }
 
 function resolveThreadReplyDeliveryAlias(args: Record<string, unknown>): string | undefined {

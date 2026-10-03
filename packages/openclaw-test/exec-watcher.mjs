@@ -12,6 +12,7 @@ const STALE_SUFFIXES = [
   ".res.json.tmp",
   ".transcript.json",
   ".transcript.json.tmp",
+  ".gateway.log",
 ];
 
 mkdirSync(IPC_DIR, { recursive: true });

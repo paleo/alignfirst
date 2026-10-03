@@ -94,6 +94,10 @@ RUN for attempt in 1 2 3; do \
       sleep 2; \
     done
 
+# The build's OpenClaw commands wrote the rolling file log. Drop it so each cell's
+# archived `gateway.log` starts with the gateway's own lines.
+RUN rm -rf /tmp/openclaw
+
 # Single fixture template baked into the image. scripts/reset-fixture.mjs copies
 # from here into the nested fixture tree at scenario start, materializing nimbus,
 # lumen, and external-team project orion with per-name patches.
