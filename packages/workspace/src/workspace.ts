@@ -14,7 +14,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import {
   parseWorkspaceArgs,
@@ -1083,11 +1083,25 @@ async function waitForWorkspace(
       ticker.stop();
       console.error(`FAILED: ${entry.failure?.message ?? "(no message)"}`);
       console.error(`Full log: ${setupLogPath(entry.worktree, config.runtimeDir)}`);
+      printForeignScriptHint(config.workspaceScript, entry.worktree);
       process.exit(1);
     }
     ticker.tick();
     await new Promise((r) => setTimeout(r, pollMs));
   }
+}
+
+/**
+ * A setup started from another worktree ran that worktree's scripts, not the target branch's. When
+ * they differ, a retry from inside the target uses the branch's own.
+ */
+function printForeignScriptHint(workspaceScript: string, worktree: string): void {
+  const rel = relative(worktree, workspaceScript);
+  if (!rel.startsWith("..") && !isAbsolute(rel)) return;
+  console.error(
+    `This setup ran the workspace scripts of another worktree. If the branch's own scripts ` +
+      `differ, run \`${wsCmd("setup")}\` from inside ${worktree}.`,
+  );
 }
 
 interface SetupTicker {

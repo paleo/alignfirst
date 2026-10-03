@@ -31,6 +31,18 @@ export function extractHost(content: string, key: string, fallback = "localhost"
   return m ? m[1] : fallback;
 }
 
+/**
+ * The project name Docker Compose derives from a directory name: lowercased, every character
+ * outside `[a-z0-9_-]` dropped, leading `-` and `_` trimmed. Compose prefixes its containers
+ * (`<project>-<service>-1`) and volumes (`<project>_<volume>`) with it.
+ */
+export function composeProjectName(workspaceName: string): string {
+  return workspaceName
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .replace(/^[-_]+/, "");
+}
+
 export function lastLines(content: string, count: number): string {
   if (count <= 0) return "";
   return content.split("\n").slice(-count).join("\n");

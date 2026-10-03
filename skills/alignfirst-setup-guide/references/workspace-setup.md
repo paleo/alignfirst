@@ -27,7 +27,7 @@ Reading this document in portless mode, skip [Contiguous port scheme](#contiguou
 Apply in order. The per-project decisions live in the [checklist](#checklist); this section is the sequence and its guardrails.
 
 1. **Require a clean working tree.** Run `git status` first. If it isn't clean, stop and ask the developer to commit or stash. Testing commits scaffolding and creates/removes worktrees and branches — safe and reviewable only from a clean baseline.
-2. **Investigate.** Read this doc, then inspect the repo to answer every checklist item: current ports and config files, shared vs per-worktree gitignored directories, database provisioning, package manager, and the dev-server's ready / fatal log markers. Note what needs migrating (scattered ports, a config file not yet gitignored, a colliding dev-script name).
+2. **Investigate.** Read this doc, then inspect the repo to answer every checklist item: current ports and config files, shared vs per-worktree gitignored directories, database provisioning, package manager, and the dev-server's ready / fatal log markers. Note what needs migrating (scattered ports, a tracked config file with hard-coded ports, a colliding dev-script name).
 3. **Present findings and plan, then get approval.** Port scheme or portless mode, the shared / per-worktree split, config files to patch, database strategy, dev-server command (and any rename), migrations. **Change nothing until the developer agrees.**
 4. **Implement.** Work the checklist: install the package, write the wrappers, add the npm scripts, migrate ports / config, update `.gitignore`, write the agent docs.
 5. **Commit once, then test.** Make a **single commit** with all the scaffolding — a prerequisite for testing, not a wrap-up: `workspace setup -c <branch>` builds the linked worktree from the committed `HEAD`, so the scripts and `package.json` changes must be committed to exist there. Then exercise the CLI end to end (the command sequence is in `workspace --guide`): bootstrap the main worktree, create a throwaway workspace, start / stop dev servers if the project has any, `list` and `status`, remove the throwaway, then delete the test branch you created — your own artifact, the one case where deleting a branch is expected.
@@ -96,7 +96,7 @@ Host RAM is shared; parallel dev-servers can exhaust it. Pass `maxConcurrentDevS
 
 ### Gitignored files: **all** of them
 
-Config files carrying ports (`.env`, `docker-compose.yml`, …) **must be gitignored**: worktrees share one git history, so a tracked config would be identical everywhere, defeating per-worktree ports.
+Per-worktree values (ports, workspace-scoped names) **must live in gitignored files**: worktrees share one git history, so a tracked file is identical everywhere. A tracked file may reference them through interpolation, like a committed `docker-compose.yml` reading its ports from the gitignored `.env`.
 
 `gitignoredFiles` seeds a gitignored file into each new worktree, then patches it per workspace. It is **not only for port-bearing files** — it is for **every gitignored file a worktree needs to function**. Each entry declares where its initial content comes from via `source.kind`:
 
@@ -129,8 +129,8 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree", fallback? }`, `{ kind: "committed", path }`, or `{ kind: "content", content }`. Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, ports, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
 - `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, profile?, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the work-files link with `npx alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work. `profile` is set only during `setup --profile <name>`: check the profile's external requirements here (an environment variable, a reachable host) to fail before any file is written.
 - `setupProfiles: { <name>: { description, apply } }` — optional; enables `setup --profile <name>`. The kernel checks the name and lists each `description` (one line) in `--help` and `--guide`. `apply({ name, ports, currentWorktree, mainWorktree, isMainWorktree, log })` runs on the **main worktree only**, after `gitignoredFiles` are seeded, and rewrites the ignored files for that environment. The profile rewrites the ignored main files once; linked worktrees inherit them through `mainWorktree` sources, so patchers stay profile-agnostic. Check every computed change before the first write, leave unrelated files untouched, and **MUST be idempotent** — reapplying the same profile produces the same files.
-- `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (force-remove the stale container named after the workspace before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
-- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so branch on its presence and tear down *by name* in that case — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree`, and read `ctx.purgeData` for non-derivable ids. Swallow errors.
+- `finalizeWorkspace(ctx)` — the detached background step: infrastructure startup, DB readiness wait, install / build, migrations, seed. `ctx` carries `name`, `ports`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it; idempotency also covers a name reused after an orphan (with a seeded `container_name`, force-remove the stale container of that name before `up`). **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`. May `return { purgeData }` — an opaque blob persisted on the registry entry and handed to `purgeInfrastructure`; use it **only** for teardown identifiers you can't re-derive at purge time (deterministic container / volume names come from `name` + paths, so they don't go here).
+- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so tear down *by name* — derive names from `ctx.name` / `ctx.worktree` / `ctx.mainWorktree` (a Docker stack: `docker compose -p <project> down -v`, see [Docker Compose](#docker-compose)), and read `ctx.purgeData` for non-derivable ids. Swallow errors.
 - `formatSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
 
 ### `dev-server.mjs`
@@ -146,7 +146,7 @@ Builds a `DevServerConfig` and calls `runDevServer`. `servers: ServerDescriptor[
 - Let a failing command throw (run with `stdio: "inherit"`, or print `err.stderr` on `"pipe"`). Never swallow it — a false success starts later servers against a dead dependency and hides the root cause.
 - Thread `ctx.cwd` into every child process and resolve every path against it. Never call bare `execSync("docker compose …")` — it picks up `process.cwd()` and breaks cross-worktree stop.
 - Resolve everything inside the callback, not at module load.
-- A callback server gets no port, no PID and no log file, so `formatSummary` is the only place it can surface. Give it a row of the same shape as the spawn servers — what reaches it, then how its logs are read — so one column means one thing on every row. For a database: the connection string without the password, the workspace-scoped container name, and the command that tails the container logs.
+- A callback server gets no port, no PID and no log file, so `formatSummary` is the only place it can surface. Give it a row of the same shape as the spawn servers — what reaches it, then how its logs are read — so one column means one thing on every row. For a database: the connection string without the password, the container name (`<project>-<service>-1`, or the seeded `container_name`), and the command that tails the container logs.
 
 Also: `maxConcurrentDevServers` (the cap), optional `formatSummary({ workspace, servers })` — `workspace` being `{ name, worktree, main? }`.
 
@@ -155,9 +155,29 @@ Also: `maxConcurrentDevServers` (the cap), optional `formatSummary({ workspace, 
 Each worktree needs its own database; how is project-specific. The setup must end with a working DB.
 
 - **File-based (SQLite, etc.):** copy the data directory from the main worktree — the simplest case.
-- **Docker (PostgreSQL, MySQL, etc.):** copy `docker-compose.yml` (as a `gitignoredFiles` entry, patching the host port and a workspace-scoped `container_name` so containers don't collide), `docker compose up -d`, wait for readiness, run migrations, run the seed.
+- **Docker (PostgreSQL, MySQL, etc.):** give each worktree its own ports through the compose file ([Docker Compose](#docker-compose)), `docker compose up -d`, wait for readiness, run migrations, run the seed.
 
 **Postgres readiness gotcha:** poll `pg_isready -h 127.0.0.1` (a TCP check), not a plain probe. On a fresh volume, Postgres first runs a throwaway Unix-socket-only server for `initdb` that answers a socket-side `pg_isready` too early; gating on TCP — which that init server doesn't listen on — stops the next step from connecting to it and losing the connection on handoff.
+
+#### Docker Compose
+
+The compose file reaches each worktree through one of two patterns. Follow the one the repo already uses. With no compose file yet, choose the committed pattern, the common layout in repositories.
+
+- **Committed compose file.** `docker-compose.yml` is tracked and identical in every worktree. Each published port is a required variable: `"127.0.0.1:${DB_PORT:?run workspace setup}:5432"`. The gitignored `.env` carries the values: add them to its patch, or generate the file with a `content` source when the project has no root `.env`. Compose reads `.env` from the project directory on its own. A tracked compose file with hard-coded ports moves to this pattern: interpolate each published port, and drop `container_name`.
+- **Seeded compose file.** `docker-compose.yml` is gitignored and seeded from a committed `docker-compose.example.yml` by a `gitignoredFiles` entry. Its patch writes the host port, and a workspace-scoped `container_name` when the file declares one.
+
+A required variable (`:?`) fails `up` when `.env` lacks it. A default (`:-8102`) would fall back silently to the main worktree's ports. Keep a default only when the repo already relies on one, such as a CI job running compose without `.env`.
+
+**Isolation comes from the compose project name**, which Compose derives from the worktree directory. Containers are `<project>-<service>-1`, volumes `<project>_<volume>`. Keep it that way: no top-level `name:` in the compose file, no `COMPOSE_PROJECT_NAME` in `.env`.
+
+**The project name is normalized.** Compose lowercases the directory name, drops every character outside `[a-z0-9_-]`, and trims leading `-` and `_`. A workspace name keeps the branch's case (`myrepo-feat-ABC-123`), so derive the project with `helpers.composeProjectName(name)`. This holds in both patterns: `container_name` renames a container, never its volumes.
+
+**Teardown needs no compose file.** `docker compose -p <project> down -v` removes the project's containers, volumes and network by label, from any directory. It also catches a volume that a branch added.
+
+**Changing the layout** (seeded to committed, or back) affects every branch on the other side of the change:
+
+- `workspace setup <branch>` runs the invoking worktree's scripts, including the detached finalize, so a setup across the change can fail. Re-run `workspace setup` from inside the new worktree: it uses that branch's scripts. The kernel prints this hint on a failed cross-worktree setup.
+- Moving to the committed pattern, Git overwrites the ignored compose file when a checkout, merge or rebase brings the tracked one. Update a worktree in this order: stop its dev server, update the branch, run `workspace setup`, start the dev server.
 
 ### npm scripts to add
 
@@ -262,7 +282,7 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Standalone workspace setup does not require this file. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
-- [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed.
+- [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed. With Docker, follow the repo's compose pattern, committed by default ([Docker Compose](#docker-compose)).
 - [ ] **Decide the dev-server ready marker** and **fatal markers** (or leave empty) for fast-fail. *(dev server)*
 - [ ] **Pair main-worktree sources with committed fallbacks.** Declare each existing `.example` template as `fallback` so fresh main and linked setup work while siblings still prefer customized main files.
 - [ ] **Install `@alignfirst/workspace`** (Node consumers).
