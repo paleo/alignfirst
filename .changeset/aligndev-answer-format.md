@@ -2,4 +2,4 @@
 "aligndev": patch
 ---
 
-The delegation guide describes the coder's question blocks and how to accept or veto a recommendation.
+The delegation guide describes the coder's numbered questions and how to answer or accept them.

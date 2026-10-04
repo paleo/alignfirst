@@ -22,7 +22,7 @@ Nothing is implemented, and nothing is written in TICKET_DIR, before the user ag
 
 The user is a developer who carries the global vision of the project and decides the choices that matter. You carry the details of the code you just read. The discussion keeps the user aware of what you found and hands them every decision worth taking.
 
-Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per point that deserves a decision. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
+Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per independent decision that needs the user. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
 
 A block is a question and a recommendation:
 
@@ -34,9 +34,11 @@ A block is a question and a recommendation:
 
 Look for edge cases and impacts on the rest of the system; each one that needs a decision gets its block.
 
-A ❓ is open: the user's answer shapes what you build. When the only answers are go or veto, the block shrinks to a single ➡️ line stating your choice. The more obvious the choice, the shorter the line. Leave out the investigation narrative and the list of files you read.
+Every decision for the user is a numbered question, a yes/no one included; the simpler it is, the shorter its block. Numbering continues across rounds.
 
-Settle on your own what the code can answer. Ask the user what needs their judgement: product behavior, scope, priorities, constraints the code does not show. Every ❓ carries a ➡️, so that "fine with all recommendations" is a valid answer. Ask in rounds: a question whose answer depends on another question still open waits for the next round.
+Settle on your own what the code can answer; routine choices belong in the opening approach. Ask the user what needs their judgement: product behavior, scope, priorities, constraints the code does not show. Leave out the investigation narrative and the list of files you read.
+
+Ask in rounds: a question whose answer depends on another question still open waits for the next round. A question the reply skips stays open.
 
 When there is nothing to decide, say so in a few lines and ask for an explicit go.
 
