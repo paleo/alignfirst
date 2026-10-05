@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -199,7 +207,7 @@ describe("copyAndPatchFile", () => {
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("A=1\nB=2\n");
   });
 
-  it("skips when the target exists without force", () => {
+  it("skips an existing target without force when the entry has no patch", () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "orig\n");
     const logs: string[] = [];
@@ -207,12 +215,61 @@ describe("copyAndPatchFile", () => {
       { currentWorktree: cur, log: (m) => logs.push(m) },
       "out.txt",
       { content: "new\n" },
-      (c) => c,
+      undefined,
       "out",
       false,
     );
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("orig\n");
     expect(logs.some((l) => l.includes("Skipped"))).toBe(true);
+  });
+
+  it("re-applies the patch to an existing target without force, keeping the rest", () => {
+    const cur = tmp();
+    writeFileSync(join(cur, "out.txt"), "PORT=1\nCUSTOM=kept\n");
+    const logs: string[] = [];
+    copyAndPatchFile(
+      { currentWorktree: cur, log: (m) => logs.push(m) },
+      "out.txt",
+      { content: "PORT=9\n" },
+      (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
+      "out",
+      false,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\nCUSTOM=kept\n");
+    expect(logs).toEqual(["Updated out."]);
+  });
+
+  it("leaves an existing target alone when the patch changes nothing", () => {
+    const cur = tmp();
+    const target = join(cur, "out.txt");
+    writeFileSync(target, "PORT=2\n");
+    const past = new Date("2020-01-01T00:00:00Z");
+    utimesSync(target, past, past);
+    const logs: string[] = [];
+    copyAndPatchFile(
+      { currentWorktree: cur, log: (m) => logs.push(m) },
+      "out.txt",
+      { content: "PORT=9\n" },
+      (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
+      "out",
+      false,
+    );
+    expect(statSync(target).mtime).toEqual(past);
+    expect(logs).toEqual(["Skipped out (already up to date)."]);
+  });
+
+  it("does not read the source when patching an existing target", () => {
+    const cur = tmp();
+    writeFileSync(join(cur, "out.txt"), "PORT=1\n");
+    copyAndPatchFile(
+      { currentWorktree: cur, log: () => {} },
+      "out.txt",
+      { path: join(cur, "nope.txt") },
+      (c) => c.replace("1", "2"),
+      "out",
+      false,
+    );
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\n");
   });
 
   it("overwrites the target with force", () => {
