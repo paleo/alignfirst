@@ -59,7 +59,12 @@ The main worktree's `.plans` may itself be a symlink — into a clone of the wor
 
 ### Contiguous port scheme
 
-Most projects scatter ports (server 3000, db 5432, frontend 5173). The system needs **all ports configurable and reorganized into a contiguous block** — one block per workspace. E.g. 3000 / 5432 / 5173 → 8100 / 8101 / 8102 in the main worktree, and 8110 / 8111 / 8112 in the next workspace. A one-time migration.
+Most projects scatter ports (server 3000, db 5432, frontend 5173). The system needs **all ports configurable and reorganized into a contiguous scheme** of `perWorkspace × maxWorkspaces` ports from `base`, arranged by one of two layouts:
+
+- `workspaceMajor` (default) — one block of `perWorkspace` consecutive ports per workspace. E.g. 3000 / 5432 / 5173 → 8100 / 8101 / 8102 in the main worktree, and 8110 / 8111 / 8112 in the next workspace. Adding a name beyond the block means raising `perWorkspace`, which moves every workspace's ports.
+- `serviceMajor` — one range of `maxWorkspaces` consecutive ports per name; workspace `index` takes the `index`-th port of each range. With `maxWorkspaces: 20`: 8100 / 8120 / 8140 in the main worktree, 8101 / 8121 / 8141 in the next. Appending a name appends a range, and no existing port moves — pick it when ports leak into places that are costly to change (OAuth callback allowlists, derived ports in application code, documentation).
+
+Either way, a one-time migration.
 
 **Choose a base port that starts a range of at least 200 contiguous ports free on all common operating systems.** 8100 is a safe default (8100–8299). Steer a user away from 8000 — it collides with common HTTP alternates on some systems.
 
@@ -71,9 +76,9 @@ A workspace is identified by its **name**: the basename of its worktree director
 
 **Limitation**: names must be unique. Registering a worktree whose basename already belongs to another path fails with an error naming the existing entry and its path. It surfaces only when worktrees live under different parent directories; the kernel dedupes siblings on its own.
 
-With a `ports` group configured, an entry also carries a **block index** (`portIndex`): `0` for the main worktree — implicit, never stored — and 1.. for linked workspaces. The block starts at `firstPort = base + perWorkspace × index`. Setup takes the lowest free index, and a re-registered worktree keeps the one it had; when every index is taken, setup fails and points at `workspace remove`.
+With a `ports` group configured, an entry also carries a **workspace index** (`portIndex`): `0` for the main worktree — implicit, never stored — and 1.. for linked workspaces. The `offset`-th name takes `base + perWorkspace × index + offset` in `workspaceMajor`, `base + maxWorkspaces × offset + index` in `serviceMajor`. Setup takes the lowest free index, and a re-registered worktree keeps the one it had; when every index is taken, setup fails and points at `workspace remove`.
 
-`perWorkspace` is both the block size and its spacing, so it caps the ports one workspace can declare. It defaults to `names.length` — the block is exactly the ports you declared — and is required with `compute`. Adding a port later shifts every workspace's block under the default; set `perWorkspace` explicitly to reserve headroom. The scheme spans `maxWorkspaces × perWorkspace` contiguous ports from `base` — e.g. 20 × 10 = 200, the range the base-port choice above must keep free.
+`perWorkspace` is the number of ports each workspace gets, so it caps the ports one workspace can declare. It defaults to `names.length` — exactly the ports you declared — and is required with `compute`. Set it explicitly to reserve headroom: under the default, adding a name grows the claimed range, and in `workspaceMajor` also shifts every workspace's block. The scheme spans `maxWorkspaces × perWorkspace` contiguous ports from `base` in both layouts — e.g. 20 × 10 = 200, the range the base-port choice above must keep free.
 
 Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/workspaces.json`):
 
@@ -124,7 +129,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 
 - `workspaceScript` — absolute path; leave the `import.meta.url` line as-is (the package re-spawns the script for the detached finalize phase).
 - `devServerScript` — absolute path to `dev-server.mjs`, so removal can shell out to it. Omit it when the project has no dev-server script.
-- `ports` — optional group: `base` (first port of the main worktree's block), `maxWorkspaces` (main included, required), `perWorkspace` (defaults to `names.length`; required with `compute`), and exactly one of `names` (consecutive ports from `firstPort`) or `compute({ index, firstPort })` (full control; computed ports must stay within the block). Omit the whole group for [portless mode](#portless-mode). See [The workspace registry](#the-workspace-registry).
+- `ports` — optional group: `base` (first port of the scheme), `maxWorkspaces` (main included, required), `perWorkspace` (defaults to `names.length`; required with `compute`), `layout` (`"workspaceMajor"`, the default, or `"serviceMajor"`), and exactly one of `names` (one port per name, from offset 0) or `compute({ index, firstPort })` (full control; computed ports must be ones the workspace owns — consecutive offsets are 1 apart in `workspaceMajor`, `maxWorkspaces` apart in `serviceMajor`). Omit the whole group for [portless mode](#portless-mode). See [The workspace registry](#the-workspace-registry).
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — one entry per gitignored file (see above). `source` (required) is `{ kind: "mainWorktree", fallback? }`, `{ kind: "committed", path }`, or `{ kind: "content", content }`. Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, ports, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
 - `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, profile?, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the work-files link with `npx alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work. `profile` is set only during `setup --profile <name>`: check the profile's external requirements here (an environment variable, a reachable host) to fail before any file is written.
@@ -279,7 +284,7 @@ Public-IP variant: the same section without the `export` line, introduced by "Wh
 Items marked *(ports)* drop out without a port scheme, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable and contiguous.** *(ports)* Prerequisite.
-- [ ] **Design and claim the port scheme.** *(ports)* `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to the whole block: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Standalone workspace setup does not require this file. Document the resulting layout in `docs/`.
+- [ ] **Design and claim the port scheme.** *(ports)* Pick the layout (`serviceMajor` when existing ports must stay put as services are added). `perWorkspace` defaults to `names.length`; set it explicitly to reserve headroom. Base port 8100 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to the whole scheme, the same in both layouts: `first = base`, `last = base + perWorkspace × maxWorkspaces − 1`. The workspace kernel checks both ranges on every command and refuses a mismatch. Standalone workspace setup does not require this file. Document the resulting layout in `docs/`.
 - [ ] **Identify your gitignored files.** Every gitignored file a worktree needs — port-bearing *and* verbatim (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning.** File copy (SQLite) or Docker + migrate + seed. With Docker, follow the repo's compose pattern, committed by default ([Docker Compose](#docker-compose)).

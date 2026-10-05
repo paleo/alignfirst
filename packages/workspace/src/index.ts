@@ -27,7 +27,7 @@ export type {
   ContentSource,
   PurgeContext,
 } from "./workspace.js";
-export type { PortsConfig, PortComputeContext } from "./ports.js";
+export type { PortsConfig, PortsLayout, PortComputeContext } from "./ports.js";
 
 export { runDevServer } from "./dev-server.js";
 export type {

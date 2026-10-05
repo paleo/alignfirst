@@ -93,13 +93,13 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 
 ## Port blocks and stale entries
 
-The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored block index (`base + perWorkspace × index`) — never persisted. Editing `names`, `perWorkspace` or `base` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match.
+The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored index — never persisted: the `offset`-th name takes `base + perWorkspace × index + offset` in the `workspaceMajor` layout, `base + maxWorkspaces × offset + index` in `serviceMajor`, where each name owns a range of `maxWorkspaces` ports and an appended name moves nothing. Editing `names`, `perWorkspace`, `base` or `layout` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match.
 
-Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column. The main worktree is never stale — its index is 0 by definition, and never stored.
+Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column (`INDEX` in `serviceMajor`, where a workspace has no first port to show). The main worktree is never stale — its index is 0 by definition, and never stored.
 
 ## Port claim check
 
-Every workspace command compares `portRange` in the current worktree's `.alignfirst.json` with the whole block reserved by the `ports` scheme. A missing project config skips the check. The `alignfirst` CLI owns the file's schema; the workspace kernel reads only the two range integers.
+Every workspace command compares `portRange` in the current worktree's `.alignfirst.json` with the whole range reserved by the `ports` scheme — `perWorkspace × maxWorkspaces` ports from `base` in both layouts. A missing project config skips the check. The `alignfirst` CLI owns the file's schema; the workspace kernel reads only the two range integers.
 
 ## Registry migration
 

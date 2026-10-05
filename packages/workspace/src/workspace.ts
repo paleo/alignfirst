@@ -878,7 +878,7 @@ function runList(kernel: Kernel): void {
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
   const resolvedPorts = kernel.ports;
   const headers = ["NAME", "TYPE", "STATUS", "DEV"];
-  if (resolvedPorts) headers.push("PORTS");
+  if (resolvedPorts) headers.push(portsColumnHeader(resolvedPorts));
   headers.push("BRANCH", "PATH", "CREATED");
   const rows = entries.map(([name, entry]) => {
     const cells = [
@@ -887,7 +887,7 @@ function runList(kernel: Kernel): void {
       entry.status,
       liveSet.has(resolve(entry.worktree)) ? "up" : "-",
     ];
-    if (resolvedPorts) cells.push(firstPortCell(resolvedPorts, entry));
+    if (resolvedPorts) cells.push(portsCell(resolvedPorts, entry));
     cells.push(getWorktreeBranch(entry.worktree) ?? "(detached)", entry.worktree, entry.createdAt);
     return cells;
   });
@@ -903,10 +903,21 @@ function sortedEntries(registry: WorkspacesRegistry): [string, WorkspaceEntry][]
   });
 }
 
-/** The first port of the entry's block, or `?` when the entry predates the `ports` config. */
-function firstPortCell(resolvedPorts: ResolvedPortsConfig, entry: WorkspaceEntry): string {
+/** `PORTS` shows each block's first port; `serviceMajor` has no block, so `INDEX` shows the index. */
+function portsColumnHeader(resolvedPorts: ResolvedPortsConfig): string {
+  return resolvedPorts.layout === "serviceMajor" ? "INDEX" : "PORTS";
+}
+
+/**
+ * The first port of the entry's block (its index in `serviceMajor`), or `?` when the entry predates
+ * the `ports` config.
+ */
+function portsCell(resolvedPorts: ResolvedPortsConfig, entry: WorkspaceEntry): string {
   const index = indexOfEntry(entry);
-  return index === undefined ? "?" : String(firstPortOf(resolvedPorts, index));
+  if (index === undefined) return "?";
+  return String(
+    resolvedPorts.layout === "serviceMajor" ? index : firstPortOf(resolvedPorts, index),
+  );
 }
 
 function renderTable(headers: string[], rows: string[][]): string[] {
