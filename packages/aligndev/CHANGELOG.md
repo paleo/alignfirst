@@ -1,5 +1,17 @@
 # aligndev
 
+## 0.20.0
+
+### Minor Changes
+
+- 393b05a: Moved the config to `~/.alignfirst/aligndev.config.json`. A relative `projectsRoot` now resolves against `~/.alignfirst/`.
+- 393b05a: Made `~/.alignfirst/aligndev.config.json` optional: `platform` defaults to `codingAgent`, and `code.agent` defaults to the coding agent that runs `aligndev`, Claude Code or Codex.
+
+### Patch Changes
+
+- 393b05a: The playbook now calls the coding agent it launches "the agent".
+- 393b05a: Supported Node 22.11 and later.
+
 ## 0.19.0
 
 ### Minor Changes
