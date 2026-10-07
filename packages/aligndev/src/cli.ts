@@ -87,7 +87,7 @@ ${usage}
 
 Run \`${aligndev} <command> --help\` for the usage of a command.
 
-Config: ~/.config/alignfirst/aligndev.config.json, with "platform" (${PLATFORMS.join(" or ")}) and
+Config: ~/.alignfirst/aligndev.config.json, with "platform" (${PLATFORMS.join(" or ")}) and
 "code.agent" (${CODING_AGENTS.join(" or ")}). \`${aligndev} code\` and \`${aligndev} guide\` require it.
 `;
 }

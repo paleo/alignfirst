@@ -12,7 +12,7 @@ The assistant reads the project's `DEVELOPERS.md` when it exists. [Prepare a Pro
 
 ## 2. Configure `aligndev`
 
-Write `~/.config/alignfirst/aligndev.config.json`:
+Write `~/.alignfirst/aligndev.config.json`:
 
 ```json
 {

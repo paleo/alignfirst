@@ -237,7 +237,9 @@ describe("aligndev guide playbook", () => {
     expect(session.stdout).toContain("with `.alignfirst.md` in place of `AGENTS.md`");
     expect(session.stdout).toContain("no branch or pull request is involved");
     const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
-    expect(lifecycle.stdout).toContain('its procedure "Prepare a project through its companion"');
+    expect(lifecycle.stdout).toContain(
+      'its procedure "Set up a project through its companion" for an assistant',
+    );
     expect(lifecycle.stdout).toContain("You cannot write that file");
   });
 
@@ -247,7 +249,7 @@ describe("aligndev guide playbook", () => {
       const result = await runGuide(fixture, args);
       expect(result.code).toBe(1);
       expect(result.stderr).toContain(
-        `Error: no aligndev config at ${join(fixture.home, ".config", "alignfirst", "aligndev.config.json")}.`,
+        `Error: no aligndev config at ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
       );
     }
   });
@@ -491,7 +493,7 @@ describe("aligndev guide project", () => {
     expect(result.stdout).toMatch(/^# Projects guide\n/);
     expect(result.stdout).toContain("aligndev guide project [--root <path>]");
     expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
-    expect(result.stdout).toContain("`~/.config/alignfirst/companions.json`");
+    expect(result.stdout).toContain("`~/.alignfirst/companions.json`");
     expect(result.stdout).not.toContain("## Directory");
     expect(result.stdout).not.toContain("{{");
   });

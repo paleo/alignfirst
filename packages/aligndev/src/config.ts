@@ -67,7 +67,7 @@ export function loadConfig(home: string): AligndevConfig | undefined {
 }
 
 function configPath(home: string): string {
-  return join(home, ".config", "alignfirst", "aligndev.config.json");
+  return join(home, ".alignfirst", "aligndev.config.json");
 }
 
 function parseConfigFile(path: string): typeof configSchema.infer {

@@ -135,7 +135,7 @@ describe("config command", () => {
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(
-      `Invalid ${join(home, ".config", "alignfirst", "companions.json")}: root must be`,
+      `Invalid ${join(home, ".alignfirst", "companions.json")}: root must be`,
     );
   });
 });

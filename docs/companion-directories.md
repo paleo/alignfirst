@@ -25,11 +25,10 @@ Two cases drive the feature:
 
 ## The file
 
-`~/.config/alignfirst/companions.json` has a fixed path, with no environment variable. An absent file means no project has a companion.
+`~/.alignfirst/companions.json` has a fixed path, with no environment variable. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.config.json` and, by default, the companions. An absent file means no project has a companion.
 
 ```json
 {
-  "root": "~/alignfirst-companions",
   "paths": {
     "~/projects/team-app": { ".plans": false, "_aligndev": true },
     "~/projects": {}
@@ -37,7 +36,7 @@ Two cases drive the feature:
 }
 ```
 
-- `root` — the directory holding the companions: an absolute or `~/` path.
+- `root` — optional, the directory holding the companions: an absolute or `~/` path. It defaults to `~/.alignfirst/companions`.
 - `paths` — keys are absolute or `~/` paths. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
 The arktype schema rejects unknown keys at every level. An unreadable or invalid file is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
@@ -125,6 +124,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 - **A per-file project-then-companion fallback without flags**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.
+- **XDG directories** (`~/.config/alignfirst/` for the files, `~/.local/share/` for the companions): the companions are hard to find, and work files would land in dotfiles repositories that track `~/.config`.
 
 ## Out of scope
 

@@ -16,6 +16,7 @@ export const ITEM_NAMES = [
   ".plans",
   "_aligndev",
 ] as const;
+const DEFAULT_ROOT = "~/.alignfirst/companions";
 
 const FLAG = "boolean | 'auto'";
 const flagsSchema = type({
@@ -29,7 +30,7 @@ const flagsSchema = type({
 });
 const companionsSchema = type({
   "+": "reject",
-  root: "string > 0",
+  "root?": "string > 0",
   paths: type.Record("string", flagsSchema),
 });
 
@@ -107,16 +108,17 @@ function readCompanionsFile(home: string): CompanionsFile | undefined {
   }
   const file = companionsSchema(value);
   if (file instanceof type.errors) throw invalidCompanions(path, file.summary.split("\n", 1)[0]);
-  if (!isUserPath(file.root))
-    throw invalidCompanions(path, `root must be an absolute path or start with ~/: ${file.root}`);
+  const root = file.root ?? DEFAULT_ROOT;
+  if (!isUserPath(root))
+    throw invalidCompanions(path, `root must be an absolute path or start with ~/: ${root}`);
   const badKey = Object.keys(file.paths).find((key) => !isUserPath(key));
   if (badKey !== undefined)
     throw invalidCompanions(path, `paths key must be an absolute path or start with ~/: ${badKey}`);
-  return { path, root: file.root, paths: file.paths };
+  return { path, root, paths: file.paths };
 }
 
 export function companionsPath(home: string): string {
-  return join(home, ".config", "alignfirst", "companions.json");
+  return join(home, ".alignfirst", "companions.json");
 }
 
 function invalidCompanions(path: string, detail: string): CliError {

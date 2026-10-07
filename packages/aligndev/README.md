@@ -93,7 +93,7 @@ Under `openclaw`, the playbook topics require `projectsRoot`.
 
 ## Configuration
 
-`aligndev` reads one file, `~/.config/alignfirst/aligndev.config.json`. The path is fixed: no environment variable overrides it. `aligndev code` and `aligndev guide` require it, `--help` included. Without it, they fail with an error naming the path and the required keys. `aligndev project`, `aligndev --help` and `aligndev --version` run without it.
+`aligndev` reads one file, `~/.alignfirst/aligndev.config.json`. The path is fixed: no environment variable overrides it. `aligndev code` and `aligndev guide` require it, `--help` included. Without it, they fail with an error naming the path and the required keys. `aligndev project`, `aligndev --help` and `aligndev --version` run without it.
 
 ```json
 {
@@ -126,7 +126,7 @@ A coding agent acting as the assistant needs only the required keys:
 
 Unknown keys are rejected. An unreadable file, invalid JSON or an invalid value fails every command that loads the config, with an error naming the file.
 
-Companion directories are declared in `~/.config/alignfirst/companions.json`, which the `alignfirst` CLI reads for both tools. See [its README](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories).
+Companion directories are declared in `~/.alignfirst/companions.json`, which the `alignfirst` CLI reads for both tools. See [its README](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories).
 
 ## Execution model
 

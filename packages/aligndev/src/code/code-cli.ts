@@ -769,7 +769,7 @@ Options (new, resume):
 
 ${requires}
 
-Config (~/.config/alignfirst/aligndev.config.json):
+Config (~/.alignfirst/aligndev.config.json):
   code.agent            Required coding agent: claude or codex (selected: ${agent}).
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.

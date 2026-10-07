@@ -8,7 +8,7 @@ import type { Output } from "../src/context.js";
 
 export const packageVersion = readPackageVersion();
 
-/** Keeps the developer's `~/.config/alignfirst/companions.json` out of the tests. */
+/** Keeps the developer's `~/.alignfirst/companions.json` out of the tests. */
 const DEFAULT_HOME = mkdtempSync(join(tmpdir(), "alignfirst-home-"));
 
 export interface Sink extends Output {
@@ -82,7 +82,7 @@ export function initRepository(dir: string): void {
 }
 
 export function writeCompanions(home: string, value: unknown): void {
-  const dir = join(home, ".config", "alignfirst");
+  const dir = join(home, ".alignfirst");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "companions.json"), JSON.stringify(value));
 }

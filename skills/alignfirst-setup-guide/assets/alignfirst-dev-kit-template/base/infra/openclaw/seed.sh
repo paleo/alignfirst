@@ -6,7 +6,7 @@
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
 # reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aligndev
-# config and, when the admin repository ships one, companions.json.
+# config, companions.json when the admin repository ships one, and the companions directory.
 #
 # Run as the service account, from the seed snapshot:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
@@ -19,9 +19,10 @@ OPENCLAW_HOME="$HOME/.openclaw"
 SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
-ALIGNDEV_CONFIG_DIR="$HOME/.config/alignfirst"
-ALIGNDEV_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/aligndev.config.json"
-COMPANIONS_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/companions.json"
+ALIGNFIRST_HOME="$HOME/.alignfirst"
+ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.config.json"
+COMPANIONS_CONFIG_FILE="$ALIGNFIRST_HOME/companions.json"
+COMPANIONS_DIR="$ALIGNFIRST_HOME/companions"
 
 main() {
   load_env
@@ -148,7 +149,7 @@ install_aligndev_config() {
   echo "[seed] aligndev config — $ALIGNDEV_CONFIG_FILE"
   # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
   # its directory immutable.
-  if [ ! -d "$ALIGNDEV_CONFIG_DIR" ]; then install -d -m 755 "$ALIGNDEV_CONFIG_DIR"; fi
+  if [ ! -d "$ALIGNFIRST_HOME" ]; then install -d -m 755 "$ALIGNFIRST_HOME"; fi
   if ! cmp -s "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"; then
     install -m 644 "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"
   fi
@@ -157,6 +158,9 @@ install_aligndev_config() {
 }
 
 install_companions_config() {
+  # The default companions root. It stays service-owned inside the locked directory, so the
+  # assistant creates a project's companion on its own.
+  if [ ! -d "$COMPANIONS_DIR" ]; then install -d -m 755 "$COMPANIONS_DIR"; fi
   # Optional. Without a source, a file installed by an earlier seed stays: removing it is a
   # maintenance operation.
   if [ ! -f "$DIR/companions.json" ]; then return; fi

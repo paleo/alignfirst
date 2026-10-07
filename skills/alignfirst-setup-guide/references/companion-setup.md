@@ -1,58 +1,87 @@
-# Prepare a Project Through Its Companion
+# Set Up a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. `~/.config/alignfirst/companions.json` declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
+Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. `~/.alignfirst/companions.json` declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
 The `alignfirst` package README documents the file: its schema, how an entry matches a project, and how each item resolves.
 
-## 1. Check the entry
+This mode supports the AlignFirst protocols, the skills, the work files and docmap through the `alignfirst` CLI. It excludes the workspace system, the standalone `@alignfirst/docmap` package, a local `alignfirst` dependency, and any instruction-file section.
 
-A matching `companions.json` entry must exist. The user or the operator writes it. An assistant cannot: the Dev Kit locks `~/.config/alignfirst/`. From the repository, read the layout:
+For a project prepared for an assistant, apply [For an Assistant](#for-an-assistant) to the steps below.
+
+## 1. Install the CLI
 
 ```sh
-npx alignfirst config --json
+npm install -g alignfirst
 ```
 
-`companion.dir` is the companion directory, and `locations` gives each item's path. With `companion: null`, stop and ask for an entry.
+The global CLI is required: the agent bootstrap line runs the bare `alignfirst`. Install the skills through [Install the Skills](alignfirst-skills-setup.md#install-the-skills) when the user wants them. The `alignfirst` skill is unnecessary: `alignfirst context` prints the protocols.
 
-Write each item below at its companion path, `<companion>/<item>`. Under the default `"auto"` flag, a companion copy takes precedence over a repository copy once it exists.
+## 2. Declare the companion
 
-## 2. Project config
+From the repository, read the layout:
 
-Write `.alignfirst.json` in the companion, following [With `.alignfirst.json`](alignfirst-skills-setup.md#with-alignfirstjson). The `.gitignore` line does not apply. For an assistant-managed project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
+```sh
+alignfirst config --json
+```
 
-## 3. Project instructions
+`companion.dir` is the companion directory, and `locations` gives each item's path. With `companion: null`, no entry matches the project. Show the user the entry for the project's main worktree, then write it once they agree:
 
-Write `.alignfirst.md` in the companion. It holds the project instructions a prepared project keeps in its `AGENTS.md`, including the essential-documentation list, without the bootstrap section. `alignfirst context` prints the file. A developer's agent runs that command through the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions).
+```json
+{
+  "paths": {
+    "~/projects/client-api": {}
+  }
+}
+```
 
-## 4. Docs
+Create `~/.alignfirst/companions.json` when it is missing. Otherwise, add the key and keep the other entries. The empty value leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion, under the default root `~/.alignfirst/companions`. Read the layout again.
 
-Bootstrap `docs/` through [docmap-bootstrapping.md](docmap-bootstrapping.md), writing under the companion path the report gives. `alignfirst docmap` reads it there.
+Write each item below at its `locations` path. Skip an item located in the project (`"in": "project"`): the repository provides it.
 
-## 5. Work files
+## 3. Project config
 
-Create `.plans` in the companion. With a work-files repository, run `npx alignfirst plans setup <clone>` from the repository: it creates the link at the companion location when the entry targets it. Otherwise:
+Write `.alignfirst.json`, following [With `.alignfirst.json`](alignfirst-skills-setup.md#with-alignfirstjson). The `.gitignore` line does not apply.
+
+## 4. Project instructions
+
+Write `.alignfirst.md` when the project needs instructions beyond `.alignfirst.json`, such as an essential-documentation list. It holds the prose a prepared project keeps in its `AGENTS.md`, without the bootstrap section. `alignfirst context` prints it.
+
+## 5. Docs
+
+A `docs/` directory in the repository stays in use. Otherwise, bootstrap one at the companion path through [docmap-bootstrapping.md](docmap-bootstrapping.md) when the user wants project documentation. `alignfirst docmap` reads it there.
+
+## 6. Work files
+
+Create `.plans` in the companion. With a work-files repository, run `alignfirst plans setup <clone>` from the repository: it creates the link at the companion location. Otherwise:
 
 ```sh
 mkdir -p <companion>/.plans
 ```
 
-## 6. Developer guide
+## 7. Agent bootstrap
 
-Write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree.
-
-## 7. Node version
-
-Name the project's Node version in `DEVELOPERS.md`. The repository receives no `.nvmrc`.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) to the agent's global instruction file, after the user confirms. Skip it when the file already has it.
 
 ## 8. Check
 
 ```sh
-aligndev project doctor --root <projects-directory>
+alignfirst doctor
 git status
 ```
 
 The doctor must pass, and `git status` in the repository must show no change.
 
-## Keep only aligndev's session files out
+## For an Assistant
+
+The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
+
+- **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the coder's prompt.
+- **Companion (step 2):** on an OpenClaw Dev Kit host, the operator writes the entry: the deployment locks `~/.alignfirst/`. With `companion: null`, stop and ask for an entry.
+- **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
+- **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
+- **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.
+- **Check (step 8):** `aligndev project doctor --root <projects-directory>` must pass too.
+
+## Keep Only aligndev's Session Files Out
 
 A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry sets `{ ".plans": false, "_aligndev": true }`. This procedure does not apply.

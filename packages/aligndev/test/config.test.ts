@@ -23,7 +23,7 @@ function makeHome(): string {
 }
 
 function configPathOf(home: string): string {
-  return join(home, ".config", "alignfirst", "aligndev.config.json");
+  return join(home, ".alignfirst", "aligndev.config.json");
 }
 
 function loadPresentConfig(home: string): AligndevConfig {
@@ -34,7 +34,7 @@ function loadPresentConfig(home: string): AligndevConfig {
 
 function writeRawConfig(home: string, content: string): string {
   const path = configPathOf(home);
-  mkdirSync(join(home, ".config", "alignfirst"), { recursive: true });
+  mkdirSync(join(home, ".alignfirst"), { recursive: true });
   writeFileSync(path, content);
   return path;
 }
@@ -90,10 +90,10 @@ describe("loadConfig", () => {
       path: join(home, "projects"),
       written: "~/projects",
     });
-    writeConfig(home, { ...REQUIRED, projectsRoot: "../../work" });
+    writeConfig(home, { ...REQUIRED, projectsRoot: "../work" });
     expect(loadPresentConfig(home).projectsRoot).toEqual({
       path: join(home, "work"),
-      written: "../../work",
+      written: "../work",
     });
   });
 

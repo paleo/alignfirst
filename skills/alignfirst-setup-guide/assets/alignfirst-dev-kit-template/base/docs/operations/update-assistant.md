@@ -3,6 +3,7 @@ title: Update the Assistant
 read_when:
   - upgrading OpenClaw, the coding agent, alignfirst, aligndev, ctx7 or the skills
   - replacing alcode and alproject with aligndev
+  - moving the AlignFirst config from ~/.config/alignfirst to ~/.alignfirst
 ---
 
 # Update the Assistant
@@ -125,6 +126,21 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    ```
 
 Continue with the regular steps below.
+
+## One-time: move the AlignFirst config to `~/.alignfirst`
+
+Run this section once, on a deployment whose config is in `~/.config/alignfirst/`. `alignfirst` and `aligndev` now read `~/.alignfirst/` only.
+
+1. Bring the admin repository to the current template: `infra/openclaw/companions.json`, the seed, `bin/backup.sh` and the maintenance wrapper. When the existing `companions.json` sets a `root`, keep it: those companions stay where they are. Then repeat [Maintenance controls](#maintenance-controls).
+2. Remove the old directory. The re-seed rebuilds both files from the repository:
+
+   ```sh
+   sudo chattr -i /home/{{SERVICE_USER}}/.config/alignfirst \
+     /home/{{SERVICE_USER}}/.config/alignfirst/*.json
+   sudo rm -r /home/{{SERVICE_USER}}/.config/alignfirst
+   ```
+
+3. Continue with the regular steps below: the package update brings the CLIs that read `~/.alignfirst/`, and the re-seed creates it. The maintenance window locks it.
 
 ## npm packages
 

@@ -27,7 +27,7 @@ describe("project layout", () => {
 
   it.each([
     ["{", "JSON"],
-    [JSON.stringify({ paths: {} }), "root"],
+    [JSON.stringify({ root: "~/c" }), "paths"],
     [JSON.stringify({ root: "", paths: {} }), "root must be non-empty"],
     [JSON.stringify({ root: "~/c", paths: {}, extra: 1 }), "extra must be removed"],
     [JSON.stringify({ root: "~/c", paths: { "~/p": { other: true } } }), "other must be removed"],
@@ -37,10 +37,17 @@ describe("project layout", () => {
     [JSON.stringify({ root: "~/c", paths: { "~p": {} } }), "paths key must be"],
   ])("rejects an invalid file %#", (content, message) => {
     const { home, project } = makeHome();
-    mkdirSync(join(home, ".config", "alignfirst"), { recursive: true });
+    mkdirSync(join(home, ".alignfirst"), { recursive: true });
     writeFileSync(companionsPath(home), content);
     expect(() => resolveProjectLayout(project, home)).toThrow(`Invalid ${companionsPath(home)}: `);
     expect(() => resolveProjectLayout(project, home)).toThrow(message);
+  });
+
+  it("defaults the root to ~/.alignfirst/companions", () => {
+    const { home, project } = makeHome();
+    writeCompanions(home, { paths: { "~": {} } });
+    const layout = resolveProjectLayout(project, home);
+    expect(layout.companion?.dir).toBe(join(home, ".alignfirst", "companions", "projects_app"));
   });
 
   it("expands ~ and ~/ against the home directory and names the companion", () => {
