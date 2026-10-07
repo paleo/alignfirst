@@ -28,7 +28,7 @@ describe("doctor command", () => {
       expect(result.stdout).toContain(`] ${section}:`);
     expect(result.stdout).toContain("[ok] .alignfirst.json: none");
     expect(result.stdout).toContain(
-      `[ok] Companion: companions.json absent (${join(cwd, ".config", "alignfirst", "companions.json")})\n[ok] Companion: none\n`,
+      `[ok] Companion: companions.json absent (${join(cwd, ".alignfirst", "companions.json")})\n[ok] Companion: none\n`,
     );
     expect(result.stdout).toContain("[warn] Git: default branch unresolved");
     expect(result.stdout).toContain("[ok] Docmap: docs/ none");
@@ -49,7 +49,7 @@ describe("doctor command", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain(
       [
-        `[ok] Companion: companions.json valid (${join(home, ".config", "alignfirst", "companions.json")})`,
+        `[ok] Companion: companions.json valid (${join(home, ".alignfirst", "companions.json")})`,
         "[ok] Companion: matched by ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
@@ -66,12 +66,12 @@ describe("doctor command", () => {
 
   it("reports an invalid companions.json in every section that needs the layout", async () => {
     const cwd = temp();
-    writeCompanions(cwd, { root: "~/companions" });
+    writeCompanions(cwd, {});
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
     for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])
       expect(result.stdout).toContain(
-        `[error] ${section}: Invalid ${cwd}/.config/alignfirst/companions.json: paths`,
+        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions.json: paths`,
       );
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });

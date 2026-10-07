@@ -43,7 +43,7 @@ describe("aligndev", () => {
       for (const command of ["aligndev code", "aligndev project", "aligndev guide"]) {
         expect(result.stdout).toContain(command);
       }
-      expect(result.stdout).toContain("~/.config/alignfirst/aligndev.config.json");
+      expect(result.stdout).toContain("~/.alignfirst/aligndev.config.json");
     }
   });
 

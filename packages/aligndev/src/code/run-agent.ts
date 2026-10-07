@@ -6,7 +6,7 @@ import { appendTranscript, applyCompletion, type CompletionUpdate } from "./sess
 const TERMINATION_GRACE_MS = 2000;
 
 // A coding-agent session exports its own identity to every command it runs; when the assistant
-// runs in one, the coder must not inherit it.
+// runs in one, the agent it launches must not inherit it.
 const ASSISTANT_SESSION_VARIABLES = [
   "CLAUDECODE",
   "CLAUDE_CODE_SESSION_ID",

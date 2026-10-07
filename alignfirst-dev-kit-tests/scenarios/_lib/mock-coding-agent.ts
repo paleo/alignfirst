@@ -28,7 +28,7 @@ const TOOLTIP_INTENT_RE = /\b(tooltip|infobulle|title attribute|attribut title)\
 // coding result reads as a failed run: the agent distrusts it and re-delegates
 // verification with escalating methods (dev server → curl → Playwright), never
 // posting its completion report (A12 Slack, artifacts 2026-08-23T12-46-49). So
-// verification prompts get a verification-shaped answer, like a real coder.
+// verification prompts get a verification-shaped answer, like a real coding agent.
 const BOLD_VERIFY_RESULT =
   "Verified. Started the dev server cleanly (no errors in the logs) and checked the home page: the export button renders bold. No regressions found.";
 const TOOLTIP_VERIFY_RESULT =

@@ -477,10 +477,9 @@ describe("project classification and companions", () => {
   it("reports the companion and the locations in list and status", async () => {
     const fixture = makeFixture({});
     const project = makeRepository(fixture.root, "app");
-    const companionsRoot = join(fixture.base, "companions");
-    mkdirSync(companionsRoot);
+    const companionsRoot = join(fixture.home, ".alignfirst", "companions");
+    mkdirSync(companionsRoot, { recursive: true });
     writeCompanions(fixture.home, {
-      root: companionsRoot,
       paths: { [fixture.root]: { ".plans": true, "DEVELOPERS.md": true } },
     });
     const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
@@ -516,14 +515,16 @@ describe("project classification and companions", () => {
     const fixture = makeFixture({});
     const flat = makeRepository(fixture.root, "a_b");
     const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
-    writeCompanions(fixture.home, {
-      root: join(fixture.base, "companions"),
-      paths: { [fixture.root]: {} },
-    });
+    writeCompanions(fixture.home, { paths: { [fixture.root]: {} } });
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);
-    const companion = join(fixture.base, "companions", flat.slice(1).replaceAll("/", "_"));
+    const companion = join(
+      fixture.home,
+      ".alignfirst",
+      "companions",
+      flat.slice(1).replaceAll("/", "_"),
+    );
     expect(result.stdout.trim().split("\n")).toEqual([
       `[error] Project inventory: ${JSON.stringify(flat)}: shares companion directory ` +
         `${companion} with ${nested}`,

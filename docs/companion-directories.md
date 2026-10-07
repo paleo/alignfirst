@@ -13,7 +13,7 @@ read_when:
 A **companion directory** holds a project's AlignFirst files outside its repository, and reproduces the project's layout for those files only. User-facing references:
 
 - [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the file, matching, resolution and the agent bootstrap line.
-- [`aligndev` README](../packages/aligndev/README.md) — session files, `--add-dir` and the project inventory.
+- [aligndev Architecture](aligndev-architecture.md) — session files, `--add-dir` and the project inventory.
 - [`companion-setup.md`](../skills/alignfirst-setup-guide/references/companion-setup.md) — preparing a project through its companion.
 
 ## Goal
@@ -25,11 +25,10 @@ Two cases drive the feature:
 
 ## The file
 
-`~/.config/alignfirst/companions.json` has a fixed path, with no environment variable. An absent file means no project has a companion.
+`~/.alignfirst/companions.json` has a fixed path, with no environment variable. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.config.json` and, by default, the companions. An absent file means no project has a companion.
 
 ```json
 {
-  "root": "~/alignfirst-companions",
   "paths": {
     "~/projects/team-app": { ".plans": false, "_aligndev": true },
     "~/projects": {}
@@ -37,7 +36,6 @@ Two cases drive the feature:
 }
 ```
 
-- `root` — the directory holding the companions: an absolute or `~/` path.
 - `paths` — keys are absolute or `~/` paths. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
 The arktype schema rejects unknown keys at every level. An unreadable or invalid file is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
@@ -46,9 +44,9 @@ The arktype schema rejects unknown keys at every level. An unreadable or invalid
 
 A project is identified by its **main worktree path**: the parent of `git rev-parse --path-format=absolute --git-common-dir`, as a real path. Every linked worktree therefore shares one companion. A bare repository or a directory outside git has none.
 
-A key matches when it equals the main worktree path or is an ancestor of it. Keys and the root are compared by real path when they exist, after `resolve` otherwise. For each item, the most specific matching key (the longest path) that sets the flag wins; an item no key sets is `"auto"`.
+A key matches when it equals the main worktree path or is an ancestor of it. Keys are compared by real path when they exist, after `resolve` otherwise. For each item, the most specific matching key (the longest path) that sets the flag wins; an item no key sets is `"auto"`.
 
-The companion is `<root>/<name>`. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
+The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
 
 ## Resolution
 
@@ -102,7 +100,7 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 
 - **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`, and the launch gate requires `locations[".plans"].exists`.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
-- **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the coder receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
+- **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst.md`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 
 ### `aligndev project`
@@ -117,7 +115,7 @@ A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has 
 
 ## Bootstrap
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the coder's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#agent-bootstrap), so their agent runs `alignfirst context` in any git repository.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the launched agent's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#agent-bootstrap), so their agent runs `alignfirst context` in any git repository.
 
 ## Rejected alternatives
 
@@ -125,6 +123,8 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 - **A per-file project-then-companion fallback without flags**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.
+- **A configurable companions root**: a symlink at `~/.alignfirst/companions` does the same with no schema key.
+- **XDG directories** (`~/.config/alignfirst/` for the files, `~/.local/share/` for the companions): the companions are hard to find, and work files would land in dotfiles repositories that track `~/.config`.
 
 ## Out of scope
 

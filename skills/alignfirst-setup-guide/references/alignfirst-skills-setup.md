@@ -139,9 +139,9 @@ npx alignfirst doctor
 When the repository adopts AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first. It works with or without `.alignfirst.json`:
 
 ```markdown
-## Seek project conventions and documentation
+## Start every session with the project context
 
-Run `npx -y alignfirst context` once from the repository root, _before_ any investigation or code exploration. It prints the project conventions, the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
 ```
 
 Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `.alignfirst.json`.
@@ -151,7 +151,7 @@ Replace any `Docmap - Seek Documentation` section and redundant protocol instruc
 A developer who works in repositories without this section, such as companion-backed ones ([companion-setup.md](companion-setup.md)), adds one line to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent):
 
 ```markdown
-In a git repository, run `alignfirst context` once before investigating, unless the project's instructions already say so.
+In a git repository, run `alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
 ```
 
 The line uses the global CLI and no agent-specific mechanism. `alignfirst context` works in any repository, with or without AlignFirst files.

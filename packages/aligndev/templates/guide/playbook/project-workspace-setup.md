@@ -144,8 +144,8 @@ The `[WORKSPACE]` banner names the main worktree: `Worktree:` is the directory n
 Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 
 1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
-2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the coder commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
-3. **Merge the remote branch.** If the branch has a remote counterpart, merge its freshly fetched ref into the local branch to catch up. Delegate to the coder (`merge` protocol) when it doesn't fast-forward or conflicts.
+2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
+3. **Merge the remote branch.** If the branch has a remote counterpart, merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
 4. **Catch up with the base branch.** If the freshly fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
 5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
 6. **Check for an open MR/PR** on this branch and note its state.
@@ -158,13 +158,13 @@ Only for a status request; otherwise skip to Step 7. The Step 4 banner comes fir
 The `[WORKSPACE]` banner answers "is the env ready", not "where does the work stand". For the work content — what was done, what remains — draw on two complementary sources:
 
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
-- **The ticket's AlignFirst artifacts** via `{{ALIGNDEV}} code new --ticket <id> --catchup`, run from the worktree: the coder loads the ticket history and returns a synthesis.
+- **The ticket's AlignFirst artifacts** via `{{ALIGNDEV}} code new --ticket <id> --catchup`, run from the worktree: the agent loads the ticket history and returns a synthesis.
 
 {{#openclaw}}
-Combine them into the report and post it in the thread; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the coder, not part of a status report.
+Combine them into the report and post it in the thread; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the agent, not part of a status report.
 {{/openclaw}}
 {{#codingAgent}}
-Combine them into the report and post it in the conversation; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the coder, not part of a status report.
+Combine them into the report and post it in the conversation; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the agent, not part of a status report.
 {{/codingAgent}}
 
 ## Step 7 — Start the work

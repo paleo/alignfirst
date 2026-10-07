@@ -27,17 +27,16 @@ describe("project layout", () => {
 
   it.each([
     ["{", "JSON"],
-    [JSON.stringify({ paths: {} }), "root"],
-    [JSON.stringify({ root: "", paths: {} }), "root must be non-empty"],
-    [JSON.stringify({ root: "~/c", paths: {}, extra: 1 }), "extra must be removed"],
-    [JSON.stringify({ root: "~/c", paths: { "~/p": { other: true } } }), "other must be removed"],
-    [JSON.stringify({ root: "~/c", paths: { "~/p": { docs: "yes" } } }), "docs"],
-    [JSON.stringify({ root: "c", paths: {} }), "root must be an absolute path"],
-    [JSON.stringify({ root: "~/c", paths: { "/a": {}, "p/q": {} } }), "paths key must be"],
-    [JSON.stringify({ root: "~/c", paths: { "~p": {} } }), "paths key must be"],
+    [JSON.stringify({}), "paths"],
+    [JSON.stringify({ root: "~/c", paths: {} }), "root must be removed"],
+    [JSON.stringify({ paths: {}, extra: 1 }), "extra must be removed"],
+    [JSON.stringify({ paths: { "~/p": { other: true } } }), "other must be removed"],
+    [JSON.stringify({ paths: { "~/p": { docs: "yes" } } }), "docs"],
+    [JSON.stringify({ paths: { "/a": {}, "p/q": {} } }), "paths key must be"],
+    [JSON.stringify({ paths: { "~p": {} } }), "paths key must be"],
   ])("rejects an invalid file %#", (content, message) => {
     const { home, project } = makeHome();
-    mkdirSync(join(home, ".config", "alignfirst"), { recursive: true });
+    mkdirSync(join(home, ".alignfirst"), { recursive: true });
     writeFileSync(companionsPath(home), content);
     expect(() => resolveProjectLayout(project, home)).toThrow(`Invalid ${companionsPath(home)}: `);
     expect(() => resolveProjectLayout(project, home)).toThrow(message);
@@ -45,10 +44,10 @@ describe("project layout", () => {
 
   it("expands ~ and ~/ against the home directory and names the companion", () => {
     const { home, project } = makeHome();
-    writeCompanions(home, { root: "~/companions", paths: { "~": {} } });
+    writeCompanions(home, { paths: { "~": {} } });
     const layout = resolveProjectLayout(project, home);
     expect(layout.companion).toEqual({
-      dir: join(home, "companions", "projects_app"),
+      dir: join(home, ".alignfirst", "companions", "projects_app"),
       exists: false,
       entries: ["~"],
       flags: {
@@ -67,19 +66,19 @@ describe("project layout", () => {
     const linked = join(home, "worktrees", "app-feature");
     git(project, "worktree", "add", "--quiet", "-b", "feature", linked);
     writeCompanions(home, {
-      root: "~/companions",
       paths: { "~/projects/app": { docs: true, ".plans": false } },
     });
     const layout = resolveProjectLayout(linked, home);
-    expect(layout.companion?.dir).toBe(join(home, "companions", "projects_app"));
-    expect(layout.locations.docs.path).toBe(join(home, "companions", "projects_app", "docs"));
+    expect(layout.companion?.dir).toBe(join(home, ".alignfirst", "companions", "projects_app"));
+    expect(layout.locations.docs.path).toBe(
+      join(home, ".alignfirst", "companions", "projects_app", "docs"),
+    );
     expect(layout.locations[".plans"].path).toBe(join(linked, ".plans"));
   });
 
   it("merges flags item by item, the most specific key first", () => {
     const { home, project } = makeHome();
     writeCompanions(home, {
-      root: "~/companions",
       paths: {
         "~/projects": { docs: true, ".plans": true },
         [project]: { ".plans": false },
@@ -98,9 +97,9 @@ describe("project layout", () => {
   it("matches a key through its real path and ignores a sibling prefix", () => {
     const { root, home, project } = makeHome();
     symlinkSync(join(home, "projects"), join(root, "linked-projects"));
-    writeCompanions(home, { root: "~/companions", paths: { "~/projects/ap": {} } });
+    writeCompanions(home, { paths: { "~/projects/ap": {} } });
     expect(resolveProjectLayout(project, home).companion).toBeNull();
-    writeCompanions(home, { root: "~/companions", paths: { [join(root, "linked-projects")]: {} } });
+    writeCompanions(home, { paths: { [join(root, "linked-projects")]: {} } });
     expect(resolveProjectLayout(project, home).companion?.entries).toEqual([
       join(root, "linked-projects"),
     ]);
@@ -110,17 +109,27 @@ describe("project layout", () => {
     const { root, home } = makeHome();
     const outside = join(root, "srv", "api");
     initRepository(outside);
-    writeCompanions(home, { root: join(root, "companions"), paths: { [outside]: {} } });
+    writeCompanions(home, { paths: { [outside]: {} } });
     expect(resolveProjectLayout(outside, home).companion?.dir).toBe(
-      join(root, "companions", outside.slice(1).replaceAll("/", "_")),
+      join(home, ".alignfirst", "companions", outside.slice(1).replaceAll("/", "_")),
+    );
+  });
+
+  it("follows a symlinked companions directory", () => {
+    const { root, home, project } = makeHome();
+    const elsewhere = join(root, "elsewhere");
+    mkdirSync(elsewhere);
+    writeCompanions(home, { paths: { "~": {} } });
+    symlinkSync(elsewhere, join(home, ".alignfirst", "companions"));
+    expect(resolveProjectLayout(project, home).companion?.dir).toBe(
+      join(elsewhere, "projects_app"),
     );
   });
 
   it("applies the resolution table", () => {
     const { home, project } = makeHome();
-    const companion = join(home, "companions", "projects_app");
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
     writeCompanions(home, {
-      root: "~/companions",
       paths: {
         "~/projects/app": {
           ".alignfirst.json": true,
@@ -160,9 +169,8 @@ describe("project layout", () => {
 
   it("resolves _aligndev to the companion only when flagged true", () => {
     const { home, project } = makeHome();
-    const companion = join(home, "companions", "projects_app");
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
     writeCompanions(home, {
-      root: "~/companions",
       paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
     });
     const separate = resolveProjectLayout(project, home).locations;
@@ -174,7 +182,6 @@ describe("project layout", () => {
     });
 
     writeCompanions(home, {
-      root: "~/companions",
       paths: { "~/projects/app": { _aligndev: false } },
     });
     const shared = resolveProjectLayout(project, home).locations;
@@ -184,7 +191,6 @@ describe("project layout", () => {
   it("rejects _aligndev true with an automatic .plans, naming the matching keys", () => {
     const { home, project } = makeHome();
     writeCompanions(home, {
-      root: "~/companions",
       paths: { "~/projects": {}, "~/projects/app": { _aligndev: true } },
     });
     expect(() => resolveProjectLayout(project, home)).toThrow(
@@ -198,7 +204,7 @@ describe("project layout", () => {
     git(root, "init", "--quiet", "--bare", bare);
     const plain = join(home, "projects", "plain");
     mkdirSync(plain);
-    writeCompanions(home, { root: "~/companions", paths: { "~": {} } });
+    writeCompanions(home, { paths: { "~": {} } });
     expect(resolveProjectLayout(bare, home).companion).toBeNull();
     expect(resolveProjectLayout(plain, home).companion).toBeNull();
   });

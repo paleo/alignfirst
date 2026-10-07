@@ -52,7 +52,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         scaffoldCreated = true;
       }
       // A verifying bot may ask for the `packageManager` declaration the template omits;
-      // comply, like a real coder would.
+      // comply, like a real coding agent would.
       if (/\bpackageManager\b/u.test(prompt)) await declarePackageManager(scenario);
       await verifyProjectInventory(scenario);
       const holdsCommit = /\b(?:do not|don't|never)\s+(?:\w+\s+){0,3}commit\b/iu.test(prompt);

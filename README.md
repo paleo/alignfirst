@@ -24,11 +24,13 @@ Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Clau
 
 `@alignfirst/openclaw-test` and three companion channel packages are a Dockerised regression-test harness that drives OpenClaw through synthetic Discord and Slack channels. See [packages/openclaw-test/README.md](packages/openclaw-test/README.md).
 
-## AlignFirst Dev Kit for OpenClaw
+## aligndev - Autonomous software development
 
-The Dev Kit turns an OpenClaw **assistant** into a developer who works with AlignFirst. One deployment is a dedicated service account running it under its own name and channel identity. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
+`aligndev` turns a Claude Code or Codex session, or an OpenClaw bot, into an **assistant**: you talk to it, and it delegates the coding to an AI coding agent through the AlignFirst protocols. See [packages/aligndev/README.md](packages/aligndev/README.md).
 
-[`aligndev`](packages/aligndev/README.md) is the Dev Kit CLI. It prints the assistant's playbook, delegates repository work to a coding agent, and inventories the managed projects.
+### AlignFirst Dev Kit for OpenClaw
+
+The Dev Kit deploys the assistant as an OpenClaw bot. One deployment is a dedicated service account running it under its own name and channel identity. See [alignfirst-dev-kit.md](alignfirst-dev-kit.md).
 
 [`@alignfirst/service-openclaw-plugin`](packages/service-openclaw-plugin/README.md) supplies an assistant's OpenClaw capabilities under plugin ID `alignfirst-service`. Its first capability, thread handoff, durably activates the ordinary thread session after confirmed native starter delivery.
 
