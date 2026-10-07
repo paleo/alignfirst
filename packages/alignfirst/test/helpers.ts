@@ -94,15 +94,15 @@ export interface CompanionProject {
   companion: string;
 }
 
-/** A repository at `~/app` whose companion is `~/companions/app`; the caller removes `root`. */
+/** A repository at `~/app` whose companion is `~/.alignfirst/companions/app`; the caller removes `root`. */
 export function makeCompanionProject(flags: Record<string, unknown>): CompanionProject {
   const root = makeTempDir("alignfirst-companion-");
   configureGit(root);
   const home = join(root, "home");
   const project = join(home, "app");
   initRepository(project);
-  writeCompanions(home, { root: "~/companions", paths: { "~/app": flags } });
-  return { root, home, project, companion: join(home, "companions", "app") };
+  writeCompanions(home, { paths: { "~/app": flags } });
+  return { root, home, project, companion: join(home, ".alignfirst", "companions", "app") };
 }
 
 function readPackageVersion(): string {

@@ -43,7 +43,7 @@ When the user names a tool, inspect the repository and proceed directly to that 
 upgrade only what they requested.
 
 - **AlignFirst CLI, protocols, or skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Install only the requested components; skills invoke the CLI through `npx` without a separate installation.
-  For an existing v1, v2, or v3 installation, start with
+  For an existing v1, v2, or v3 installation, or a machine with `~/.config/alignfirst/`, start with
   [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
 - **docmap**: [docmap-setup.md](references/docmap-setup.md).

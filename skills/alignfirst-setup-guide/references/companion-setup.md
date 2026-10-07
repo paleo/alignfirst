@@ -34,7 +34,7 @@ alignfirst config --json
 }
 ```
 
-Create `~/.alignfirst/companions.json` when it is missing. Otherwise, add the key and keep the other entries. The empty value leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion, under the default root `~/.alignfirst/companions`. Read the layout again.
+Create `~/.alignfirst/companions.json` when it is missing. Otherwise, add the key and keep the other entries. The empty value leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion, under `~/.alignfirst/companions`. Read the layout again.
 
 Write each item below at its `locations` path. Skip an item located in the project (`"in": "project"`): the repository provides it.
 

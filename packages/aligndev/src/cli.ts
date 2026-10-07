@@ -6,7 +6,7 @@ import { CODING_AGENTS } from "./code/coding-agent.js";
 import { type ExecutableModelResolver, resolveExecutableModel } from "./code/models.js";
 import { type QuotaReader, readQuota } from "./code/quota.js";
 import { type CommandForms, resolveCommandForms } from "./command-form.js";
-import { loadConfig, PLATFORMS, resolveCodingAgent } from "./config.js";
+import { loadConfig, PLATFORMS } from "./config.js";
 import { errorMessage } from "./errors.js";
 import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
@@ -54,9 +54,8 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
   try {
-    const loaded = loadConfig(ctx.home);
-    if (command === "project") return runProject(tokens, loaded, ctx);
-    const config = resolveCodingAgent(loaded, ctx.env);
+    const config = loadConfig(ctx.home);
+    if (command === "project") return runProject(tokens, config, ctx);
     if (command === "code") return await runCode(tokens, config, ctx);
     return runGuide(tokens, config, ctx);
   } catch (error) {

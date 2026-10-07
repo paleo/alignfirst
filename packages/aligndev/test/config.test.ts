@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import { loadConfig, requireProjectsRoot, resolveCodingAgent } from "../src/config.js";
+import { loadConfig, requireProjectsRoot, resolveCodeConfig } from "../src/config.js";
 import { makeSink, writeConfig } from "./helpers.js";
 
-const REQUIRED = { platform: "openclaw", code: { agent: "claude" } };
+const EXPLICIT = { platform: "openclaw", code: { agent: "claude" } };
 
 const homes: string[] = [];
 
@@ -94,12 +94,12 @@ describe("loadConfig", () => {
 
   it("expands ~/ against home and resolves a relative root against the config directory", () => {
     const home = makeHome();
-    writeConfig(home, { ...REQUIRED, projectsRoot: "~/projects" });
+    writeConfig(home, { ...EXPLICIT, projectsRoot: "~/projects" });
     expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
     });
-    writeConfig(home, { ...REQUIRED, projectsRoot: "../work" });
+    writeConfig(home, { ...EXPLICIT, projectsRoot: "../work" });
     expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "work"),
       written: "../work",
@@ -121,14 +121,14 @@ describe("loadConfig", () => {
   });
 
   it.each([
-    ["an unknown top-level key", { ...REQUIRED, platfrom: "openclaw" }, "platfrom"],
+    ["an unknown top-level key", { ...EXPLICIT, platfrom: "openclaw" }, "platfrom"],
     [
       "an unknown code key",
       { platform: "openclaw", code: { agent: "claude", model: "opus" } },
       "model",
     ],
     ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
-    ["an invalid platform", { ...REQUIRED, platform: "slack" }, "platform"],
+    ["an invalid platform", { ...EXPLICIT, platform: "slack" }, "platform"],
   ])("rejects %s", (_name, config, problem) => {
     const home = makeHome();
     const path = writeConfig(home, config);
@@ -144,23 +144,23 @@ describe("loadConfig", () => {
   });
 });
 
-describe("resolveCodingAgent", () => {
+describe("resolveCodeConfig", () => {
   it("keeps the configured agent without detection", () => {
     const home = makeHome();
     writeConfig(home, { code: { agent: "codex" } });
-    expect(resolveCodingAgent(loadConfig(home), { CLAUDECODE: "1" }).code.agent).toBe("codex");
+    expect(resolveCodeConfig(loadConfig(home), { CLAUDECODE: "1" }).agent).toBe("codex");
   });
 
   it.each([
     ["claude", { CLAUDECODE: "1" }],
     ["codex", { CODEX_THREAD_ID: "019a" }],
   ])("detects %s from its environment", (agent, env) => {
-    expect(resolveCodingAgent(loadConfig(makeHome()), env).code.agent).toBe(agent);
+    expect(resolveCodeConfig(loadConfig(makeHome()), env).agent).toBe(agent);
   });
 
   it("fails when no coding agent is detected, naming the key and the path", () => {
     const home = makeHome();
-    expect(() => resolveCodingAgent(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
+    expect(() => resolveCodeConfig(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
       "Error: no coding agent detected: run aligndev from Claude Code or Codex, or set " +
         `"code.agent" (claude or codex) in ${configPathOf(home)}.`,
     );
@@ -169,7 +169,7 @@ describe("resolveCodingAgent", () => {
   it("fails when both coding agents are detected", () => {
     const home = makeHome();
     const env = { CLAUDECODE: "1", CODEX_THREAD_ID: "019a" };
-    expect(() => resolveCodingAgent(loadConfig(home), env)).toThrow(
+    expect(() => resolveCodeConfig(loadConfig(home), env)).toThrow(
       `Error: both Claude Code and Codex detected: set "code.agent" (claude or codex) in ${configPathOf(home)}.`,
     );
   });
@@ -178,7 +178,7 @@ describe("resolveCodingAgent", () => {
 describe("requireProjectsRoot", () => {
   it("names the key and the file path", () => {
     const home = makeHome();
-    writeConfig(home, REQUIRED);
+    writeConfig(home, EXPLICIT);
     expect(() => requireProjectsRoot(loadConfig(home))).toThrow(
       `Error: projectsRoot is missing from the aligndev config ${configPathOf(home)}.`,
     );
@@ -198,21 +198,22 @@ describe("an absent config through main", () => {
     expect(guide.text()).toContain("in a coding-agent session");
   });
 
-  it("fails code and guide without a detected agent, and spares project", async () => {
+  it("fails only the agent-specific paths without a detected agent", async () => {
     const home = makeHome();
-    for (const args of [["guide"], ["code", "status", "--no-ticket"]]) {
+    for (const args of [
+      ["guide", "code"],
+      ["code", "--help"],
+    ]) {
       const stderr = makeSink();
       const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stderr });
       expect(code).toBe(1);
       expect(stderr.text()).toContain("Error: no coding agent detected");
     }
-    const code = await main({
-      argv: ["node", "aligndev", "project", "--help"],
-      env: {},
-      home,
-      stdout: makeSink(),
-    });
-    expect(code).toBe(0);
+    for (const args of [["guide"], ["guide", "--help"], ["project", "--help"]]) {
+      const stdout = makeSink();
+      const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stdout });
+      expect(code).toBe(0);
+    }
   });
 });
 

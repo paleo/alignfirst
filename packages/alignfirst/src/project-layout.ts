@@ -16,7 +16,8 @@ export const ITEM_NAMES = [
   ".plans",
   "_aligndev",
 ] as const;
-const DEFAULT_ROOT = "~/.alignfirst/companions";
+// The directory holding the companions. A symlink there moves them elsewhere.
+const COMPANIONS_ROOT = "~/.alignfirst/companions";
 
 const FLAG = "boolean | 'auto'";
 const flagsSchema = type({
@@ -30,7 +31,6 @@ const flagsSchema = type({
 });
 const companionsSchema = type({
   "+": "reject",
-  "root?": "string > 0",
   paths: type.Record("string", flagsSchema),
 });
 
@@ -63,7 +63,6 @@ type FileItemName = Exclude<ItemName, "_aligndev">;
 
 interface CompanionsFile {
   path: string;
-  root: string;
   paths: Record<string, Partial<Record<ItemName, Flag>>>;
 }
 
@@ -93,7 +92,7 @@ function resolveCompanion(cwd: string, home: string): CompanionLayout | null {
   if (matches.length === 0) return null;
   const flags = mergeFlags(matches);
   assertValidFlags(file, flags, matches);
-  const dir = join(normalizePath(file.root, realHome), companionName(mainWorktree, realHome));
+  const dir = join(normalizePath(COMPANIONS_ROOT, realHome), companionName(mainWorktree, realHome));
   return { dir, exists: pathExists(dir), entries: matches.map((match) => match.key), flags };
 }
 
@@ -108,13 +107,10 @@ function readCompanionsFile(home: string): CompanionsFile | undefined {
   }
   const file = companionsSchema(value);
   if (file instanceof type.errors) throw invalidCompanions(path, file.summary.split("\n", 1)[0]);
-  const root = file.root ?? DEFAULT_ROOT;
-  if (!isUserPath(root))
-    throw invalidCompanions(path, `root must be an absolute path or start with ~/: ${root}`);
   const badKey = Object.keys(file.paths).find((key) => !isUserPath(key));
   if (badKey !== undefined)
     throw invalidCompanions(path, `paths key must be an absolute path or start with ~/: ${badKey}`);
-  return { path, root, paths: file.paths };
+  return { path, paths: file.paths };
 }
 
 export function companionsPath(home: string): string {

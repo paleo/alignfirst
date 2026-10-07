@@ -243,14 +243,15 @@ describe("aligndev guide playbook", () => {
     expect(lifecycle.stdout).toContain("You cannot write that file");
   });
 
-  it("requires a configured or detected agent, naming the config path", async () => {
+  it("requires a configured or detected agent for the code topic only", async () => {
     const fixture = makeFixture();
-    for (const args of [[], ["working-session"], ["code"], ["project"], ["--help"]]) {
-      const result = await runGuide(fixture, args);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain(
-        `in ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
-      );
+    const code = await runGuide(fixture, ["code"]);
+    expect(code.code).toBe(1);
+    expect(code.stderr).toContain(
+      `in ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
+    );
+    for (const args of [[], ["working-session"], ["--help"]]) {
+      expect((await runGuide(fixture, args)).code).toBe(0);
     }
   });
 

@@ -44,7 +44,7 @@ export interface CompanionProject {
   companion: string;
 }
 
-// A git repository `<home>/app` whose companion is `<home>/companions/app` (not created). Paths
+// A git repository `<home>/app` whose companion is `<home>/.alignfirst/companions/app` (not created). Paths
 // are real.
 export function makeCompanionProject(
   home: string,
@@ -53,7 +53,11 @@ export function makeCompanionProject(
   const project = join(home, "app");
   mkdirSync(project, { recursive: true });
   execFileSync("git", ["init", "--quiet", project]);
-  writeCompanions(home, { root: "~/companions", paths: { "~/app": flags } });
+  writeCompanions(home, { paths: { "~/app": flags } });
   const realHome = realpathSync(home);
-  return { home, project: realpathSync(project), companion: join(realHome, "companions", "app") };
+  return {
+    home,
+    project: realpathSync(project),
+    companion: join(realHome, ".alignfirst", "companions", "app"),
+  };
 }

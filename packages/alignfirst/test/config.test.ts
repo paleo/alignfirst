@@ -64,11 +64,10 @@ describe("config command", () => {
     configureGit(home);
     const project = join(home, "projects", "app");
     initRepository(project);
-    const companion = join(home, "companions", "projects_app");
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
     mkdirSync(companion, { recursive: true });
     writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
     writeCompanions(home, {
-      root: "~/companions",
       paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
     });
 
@@ -131,11 +130,11 @@ describe("config command", () => {
 
   it("reports an invalid companions.json as a CLI error", async () => {
     const home = temp();
-    writeCompanions(home, { root: "relative", paths: {} });
+    writeCompanions(home, { root: "~/c", paths: {} });
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(
-      `Invalid ${join(home, ".alignfirst", "companions.json")}: root must be`,
+      `Invalid ${join(home, ".alignfirst", "companions.json")}: root must be removed`,
     );
   });
 });

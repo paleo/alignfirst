@@ -66,7 +66,7 @@ describe("doctor command", () => {
 
   it("reports an invalid companions.json in every section that needs the layout", async () => {
     const cwd = temp();
-    writeCompanions(cwd, { root: "~/companions" });
+    writeCompanions(cwd, {});
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
     for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])

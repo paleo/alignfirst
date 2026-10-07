@@ -25,7 +25,7 @@ const configSchema = type({
 export type Platform = (typeof PLATFORMS)[number];
 
 // The config file with its defaults applied. Without `code.agent`, the coding agent is unknown
-// until `resolveCodingAgent` detects it.
+// until `resolveCodeConfig` detects it.
 export interface LoadedConfig {
   // The config file path, for error messages. The file may be absent.
   path: string;
@@ -46,10 +46,6 @@ export interface LoadedCodeConfig {
   models?: string[];
   skipPermissions: boolean;
   unset: string[];
-}
-
-export interface AligndevConfig extends LoadedConfig {
-  code: CodeConfig;
 }
 
 export interface CodeConfig extends LoadedCodeConfig {
@@ -98,11 +94,11 @@ function resolveProjectsRoot(written: string, home: string, path: string): Proje
 }
 
 // The configured `code.agent` wins; otherwise, the coding agent that runs aligndev.
-export function resolveCodingAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): AligndevConfig {
+export function resolveCodeConfig(config: LoadedConfig, env: NodeJS.ProcessEnv): CodeConfig {
   const { agent } = config.code;
-  if (agent !== undefined) return { ...config, code: { ...config.code, agent } };
+  if (agent !== undefined) return { ...config.code, agent };
   const detected = detectCodingAgents(env);
-  if (detected.length === 1) return { ...config, code: { ...config.code, agent: detected[0] } };
+  if (detected.length === 1) return { ...config.code, agent: detected[0] };
   const problem =
     detected.length === 0
       ? "no coding agent detected: run aligndev from Claude Code or Codex, or set"

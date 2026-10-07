@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
-import type { AligndevConfig, CodeConfig } from "../config.js";
+import { type CodeConfig, type LoadedConfig, resolveCodeConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import {
@@ -112,13 +112,13 @@ export interface SessionArgs {
 
 export async function runCode(
   tokens: string[],
-  config: AligndevConfig,
+  config: LoadedConfig,
   ctx: CodeContext,
 ): Promise<number> {
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
     if (command.kind === "status") return showStatus(ctx, command.target);
-    const { code } = config;
+    const code = resolveCodeConfig(config, ctx.env);
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.agent, code.models);
     if (command.kind === "help") {

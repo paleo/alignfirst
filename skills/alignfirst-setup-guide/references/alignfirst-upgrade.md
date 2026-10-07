@@ -40,3 +40,13 @@ generated output.
 
 The v1 and v2 migrations preserve project knowledge and remove their legacy layouts. After either
 one, continue with the v3 migration for the CLI installation and project config.
+
+## Move the Home Directory
+
+`alignfirst` 0.6.0 and `aligndev` 0.20.0 read their files from `~/.alignfirst/` only. When `~/.config/alignfirst/` exists on the machine, migrate it once:
+
+1. Move `aligndev.config.json` and `companions.json` to `~/.alignfirst/`. A relative `projectsRoot` now resolves against `~/.alignfirst/`.
+2. Remove `root` from `companions.json`; the file no longer accepts it. Move the companion directories it held to `~/.alignfirst/companions/`, or make `~/.alignfirst/companions` a symlink to it.
+3. Remove `~/.config/alignfirst/`, then run `alignfirst doctor` in a project that has a companion.
+
+On an AlignFirst Dev Kit host, both files are immutable. The operator unlocks them, moves them, re-seeds, and locks `~/.alignfirst/` as `06-security-hardening.md` describes.

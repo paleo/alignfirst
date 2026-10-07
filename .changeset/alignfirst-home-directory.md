@@ -2,4 +2,4 @@
 "alignfirst": minor
 ---
 
-Moved `companions.json` to `~/.alignfirst/companions.json`. Its `root` is now optional and defaults to `~/.alignfirst/companions`.
+Moved `companions.json` to `~/.alignfirst/companions.json`. Removed its `root`: the companions live in `~/.alignfirst/companions`.

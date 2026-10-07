@@ -64,7 +64,7 @@ An adapter (`claude-agent.ts`, `codex-agent.ts`) builds each CLI's arguments, pa
 - **Permissions:** normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `code.skipPermissions` selects each CLI's bypass flag.
 - **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves to the newest matching slug of `codex debug models --bundled`. `code.models` replaces the list.
 - **Resume:** session files record `agent`, and a session resumes only with the same agent. Agentless legacy sessions stay readable but need a new session.
-- **Detection:** without `code.agent`, the agent is the one that runs `aligndev`: Claude Code sets `CLAUDECODE=1` (documented), Codex sets `CODEX_THREAD_ID` (from its source). Neither or both is an error.
+- **Detection:** without `code.agent`, the agent is the one that runs `aligndev`: Claude Code sets `CLAUDECODE=1` (documented), Codex sets `CODEX_THREAD_ID` (from its source). Neither or both is an error, raised only by the commands that need the agent: `guide code`, `code --help`, `code quota`, and `code new` or `resume`.
 
 ## Project Inventory
 
