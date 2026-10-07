@@ -13,7 +13,7 @@ read_when:
 A **companion directory** holds a project's AlignFirst files outside its repository, and reproduces the project's layout for those files only. User-facing references:
 
 - [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the file, matching, resolution and the agent bootstrap line.
-- [`aligndev` README](../packages/aligndev/README.md) — session files, `--add-dir` and the project inventory.
+- [aligndev Architecture](aligndev-architecture.md) — session files, `--add-dir` and the project inventory.
 - [`companion-setup.md`](../skills/alignfirst-setup-guide/references/companion-setup.md) — preparing a project through its companion.
 
 ## Goal

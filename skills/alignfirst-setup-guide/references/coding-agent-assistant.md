@@ -16,12 +16,19 @@ Without a config, `aligndev` launches the same agent as the one that runs the as
 
 ```json
 {
-  "platform": "codingAgent",
   "code": { "agent": "claude" }
 }
 ```
 
 `code.agent` names the agent that `aligndev code` launches: `claude` or `codex`. It may differ from the agent that runs the assistant. The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents the optional `code` keys.
+
+Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or `CODEX_API_KEY` (Codex); check the names only, never print the values. The agent runs non-interactively (`claude -p`, `codex exec`), where such a key overrides the subscription login, even when the developer's own session declined it. When the developer wants the agent on their subscription, list the key in `code.unset`:
+
+```json
+{
+  "code": { "agent": "claude", "unset": ["ANTHROPIC_API_KEY"] }
+}
+```
 
 ## 3. Install the skill
 
@@ -30,6 +37,8 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes --skill ali
 ```
 
 Add `--agent claude-code` or `--agent codex` to target one agent. Restart the agent after installation.
+
+Without a skill, add the "Aligndev" section from the [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#without-a-skill) to the developer's global agent instructions instead. The user then asks the session to work with aligndev.
 
 ## 4. Start the assistant
 
