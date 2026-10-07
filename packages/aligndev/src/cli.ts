@@ -6,7 +6,7 @@ import { CODING_AGENTS } from "./code/coding-agent.js";
 import { type ExecutableModelResolver, resolveExecutableModel } from "./code/models.js";
 import { type QuotaReader, readQuota } from "./code/quota.js";
 import { type CommandForms, resolveCommandForms } from "./command-form.js";
-import { type AligndevConfig, loadConfig, missingConfigMessage, PLATFORMS } from "./config.js";
+import { loadConfig, PLATFORMS, resolveCodingAgent } from "./config.js";
 import { errorMessage } from "./errors.js";
 import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
@@ -53,20 +53,16 @@ export async function main(options?: MainOptions): Promise<number> {
     ctx.stderr.write(`${error}\n\n${renderHelp(ctx.forms.aligndev)}`);
     return 1;
   }
-  let config: AligndevConfig | undefined;
   try {
-    config = loadConfig(ctx.home);
+    const loaded = loadConfig(ctx.home);
+    if (command === "project") return runProject(tokens, loaded, ctx);
+    const config = resolveCodingAgent(loaded, ctx.env);
+    if (command === "code") return await runCode(tokens, config, ctx);
+    return runGuide(tokens, config, ctx);
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
     return 1;
   }
-  if (command === "project") return runProject(tokens, config, ctx);
-  if (config === undefined) {
-    ctx.stderr.write(`${missingConfigMessage(ctx.home)}\n`);
-    return 1;
-  }
-  if (command === "code") return runCode(tokens, config, ctx);
-  return runGuide(tokens, config, ctx);
 }
 
 function renderHelp(aligndev: string): string {
@@ -87,8 +83,9 @@ ${usage}
 
 Run \`${aligndev} <command> --help\` for the usage of a command.
 
-Config: ~/.alignfirst/aligndev.config.json, with "platform" (${PLATFORMS.join(" or ")}) and
-"code.agent" (${CODING_AGENTS.join(" or ")}). \`${aligndev} code\` and \`${aligndev} guide\` require it.
+Config (optional): ~/.alignfirst/aligndev.config.json. "platform" (${PLATFORMS.join(" or ")})
+defaults to codingAgent. "code.agent" (${CODING_AGENTS.join(" or ")}) defaults to the coding agent that
+runs aligndev, detected from its environment.
 `;
 }
 

@@ -72,13 +72,13 @@ function makeHome(config?: object): string {
 }
 
 describe("coding-agent selection", () => {
-  it("requires the config file before help", async () => {
+  it("requires a configured or detected agent before help", async () => {
     const stderr = makeSink();
     const home = makeHome();
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
-    expect(stderr.text()).toContain("Error: no aligndev config at ");
+    expect(stderr.text()).toContain("Error: no coding agent detected");
     expect(stderr.text()).toContain('"code.agent"');
   });
 
@@ -107,7 +107,7 @@ describe("coding-agent selection", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain("aligndev code new --protocol <protocol>");
-    expect(stdout.text()).toContain("code.agent            Required coding agent");
+    expect(stdout.text()).toContain("code.agent            Coding agent");
     expect(stdout.text()).toContain("(selected: codex)");
     expect(stdout.text()).toContain("astra, sol, terra, luna");
     expect(stdout.text()).toContain("aligndev guide code");
@@ -1080,7 +1080,7 @@ describe("companion projects", () => {
     });
   });
 
-  it("adds the companion directory and the project context for the coder", async () => {
+  it("adds the companion directory and the project context for the agent", async () => {
     const project = makeCompanionProject(home, { ".plans": true });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);

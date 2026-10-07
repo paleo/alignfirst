@@ -45,7 +45,7 @@ const SESSION_OPTIONS = {
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
-// Items whose companion copy the coder may edit: the companion becomes a writable directory.
+// Items whose companion copy the agent may edit: the companion becomes a writable directory.
 const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
   ".alignfirst.md",
@@ -54,7 +54,7 @@ const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
   ".plans",
 ];
 
-// Items the coder would not find in the repository: a new session gets `alignfirst context`.
+// Items the agent would not find in the repository: a new session gets `alignfirst context`.
 const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
   ".alignfirst.md",
@@ -682,7 +682,7 @@ export interface RunInput {
   executableModel: string | undefined;
   catchupContent?: string;
   contextContent?: string;
-  // The alignfirst command form the coder is told to run.
+  // The alignfirst command form the agent is told to run.
   alignfirst: string;
 }
 
@@ -770,7 +770,8 @@ Options (new, resume):
 ${requires}
 
 Config (~/.alignfirst/aligndev.config.json):
-  code.agent            Required coding agent: claude or codex (selected: ${agent}).
+  code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
+                        agent that runs aligndev.
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.
   code.unset            Env vars to strip from the coding agent child.

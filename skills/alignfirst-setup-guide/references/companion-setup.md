@@ -75,7 +75,7 @@ The doctor must pass, and `git status` in the repository must show no change.
 
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
-- **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the coder's prompt.
+- **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the launched agent's prompt.
 - **Companion (step 2):** on an OpenClaw Dev Kit host, the operator writes the entry: the deployment locks `~/.alignfirst/`. With `companion: null`, stop and ask for an entry.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.

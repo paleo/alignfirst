@@ -69,6 +69,8 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    npm deprecate @alignfirst/workspace@0.33.1 "Bootstrap publish, use 0.34.0 or later"
    ```
 
+   npm still prefers a deprecated version whose `engines` accepts the running Node over a newer version whose `engines` rejects it. On a Node below the current `engines.node` floor, `npx` therefore runs the bootstrap tarball: `npx aligndev` once resolved to the bin-less `aligndev@0.0.0` and failed with "could not determine executable to run". Keep each package's `engines.node` floor as low as its code allows.
+
 2. Register the trusted publisher and require 2FA for each name, with npm CLI ≥ 11.19. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 
    ```bash

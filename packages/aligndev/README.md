@@ -30,17 +30,17 @@ aligndev code status .plans/AB-123/_aligndev/20260829-135529.md
 aligndev code quota
 ```
 
-The coding agent `aligndev code` launches is **the coder**. Run `aligndev code` from the root of the target project. The project must have a `.plans/` directory, in its repository or in its companion directory.
+The coding agent `aligndev code` launches is **the agent**. Run `aligndev code` from the root of the target project. The project must have a `.plans/` directory, in its repository or in its companion directory.
 
-`aligndev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aligndev` location: `<ticket>/_aligndev/` or `_aligndev/`, below the project's `.plans/` unless the companion holds a separate tree. When some of the project's AlignFirst files exist in its companion, the normal permission modes make the companion writable for the coder (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
+`aligndev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aligndev` location: `<ticket>/_aligndev/` or `_aligndev/`, below the project's `.plans/` unless the companion holds a separate tree. When some of the project's AlignFirst files exist in its companion, the normal permission modes make the companion writable for the agent (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
 
-A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side` and passes it to the coder.
+A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side` and passes it to the agent.
 
 `--catchup` loads the ticket's history (through `alignfirst ticket --catchup`) before the protocol and message. Alone, it returns a short synthesis.
 
-`--message-file <path>` reads the message from a UTF-8 file, or from stdin with `-`. The prompt reaches the coder through stdin.
+`--message-file <path>` reads the message from a UTF-8 file, or from stdin with `-`. The prompt reaches the agent through stdin.
 
-`aligndev code status` reconciles and shows a run's durable status. It accepts a session file under `_aligndev/` or `<ticket>/_aligndev/` of the `_aligndev` location, or selects the newest run with `--ticket <id>`, `--no-ticket` or `--meta <key>`. If a recorded process is gone, it seals the session file as `status: failed`, `exitReason: terminated`. Linux records also store the process start time to detect pid reuse. Its `contextTokens` line reports what the run left in the coder's context window; a resumed session keeps growing across runs.
+`aligndev code status` reconciles and shows a run's durable status. It accepts a session file under `_aligndev/` or `<ticket>/_aligndev/` of the `_aligndev` location, or selects the newest run with `--ticket <id>`, `--no-ticket` or `--meta <key>`. If a recorded process is gone, it seals the session file as `status: failed`, `exitReason: terminated`. Linux records also store the process start time to detect pid reuse. Its `contextTokens` line reports what the run left in the agent's context window; a resumed session keeps growing across runs.
 
 `aligndev code quota` shows the selected coding agent's account limits, consumed percentages, and reset times. It works outside a project.
 
@@ -93,7 +93,7 @@ Under `openclaw`, the playbook topics require `projectsRoot`.
 
 ## Configuration
 
-`aligndev` reads one file, `~/.alignfirst/aligndev.config.json`. The path is fixed: no environment variable overrides it. `aligndev code` and `aligndev guide` require it, `--help` included. Without it, they fail with an error naming the path and the required keys. `aligndev project`, `aligndev --help` and `aligndev --version` run without it.
+`aligndev` reads one optional file, `~/.alignfirst/aligndev.config.json`. The path is fixed: no environment variable overrides it. Without it, every key takes its default.
 
 ```json
 {
@@ -108,21 +108,12 @@ Under `openclaw`, the playbook topics require `projectsRoot`.
 }
 ```
 
-A coding agent acting as the assistant needs only the required keys:
-
-```json
-{
-  "platform": "codingAgent",
-  "code": { "agent": "codex" }
-}
-```
-
-- `platform` — required. Selects the variant of every `aligndev guide` topic: `openclaw` for an OpenClaw assistant, `codingAgent` for a coding agent acting as the assistant.
+- `platform` — `openclaw` or `codingAgent` (default). Selects the variant of every `aligndev guide` topic: `openclaw` for an OpenClaw assistant, `codingAgent` for a coding agent acting as the assistant.
 - `projectsRoot` — the default projects directory of `aligndev project` and `aligndev guide project`. Required by the `openclaw` playbook. `~/` expands to the home directory; a relative path resolves against the config file's directory.
-- `code.agent` — required. The coder: `claude` or `codex`.
+- `code.agent` — the agent `aligndev code` launches: `claude` or `codex`. Default: the coding agent that runs `aligndev`, detected from the variable it sets on its commands, `CLAUDECODE=1` for Claude Code or `CODEX_THREAD_ID` for Codex. `aligndev code` and `aligndev guide` fail when neither or both are set. `aligndev project` does not need it.
 - `code.models` — replaces the selected agent's accepted models.
 - `code.skipPermissions` — `true` selects each CLI's dangerous permission-bypass flag. Default: `false`.
-- `code.unset` — environment variables stripped from the coder's environment. `aligndev code` always strips the assistant session's identity variables first (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …), whatever the agent.
+- `code.unset` — environment variables stripped from the agent's environment. `aligndev code` always strips the assistant session's identity variables first (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …), whatever the agent.
 
 Unknown keys are rejected. An unreadable file, invalid JSON or an invalid value fails every command that loads the config, with an error naming the file.
 
@@ -130,7 +121,7 @@ Companion directories are declared in `~/.alignfirst/companions.json`, which the
 
 ## Execution model
 
-`aligndev code` runs the coder as a direct **foreground** child of its own process. It streams a live transcript to stdout and to a per-run session file, whose frontmatter status goes from `running` to `succeeded` or `failed`, and blocks until the coder exits. It never backgrounds or detaches itself.
+`aligndev code` runs the agent as a direct **foreground** child of its own process. It streams a live transcript to stdout and to a per-run session file, whose frontmatter status goes from `running` to `succeeded` or `failed`, and blocks until the agent exits. It never backgrounds or detaches itself.
 
 Coding runs can be very long, so the caller always runs `aligndev code` as a background task and owns the backgrounding, as `aligndev guide code` prescribes:
 
@@ -139,7 +130,7 @@ Coding runs can be very long, so the caller always runs `aligndev code` as a bac
 
 The completion turn locates the session file with `aligndev code status` and reads the result. The session file is the durable result handoff: frontmatter `sessionId` and status, and the `---- Result ----` block.
 
-If `aligndev code` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`), then send `SIGTERM` to the coder. After a short grace period, a `SIGKILL` guarantees no orphan is left behind. Only a `SIGKILL` of `aligndev` itself can leave a stale `running` status, which the next `status` call seals.
+If `aligndev code` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`), then send `SIGTERM` to the agent. After a short grace period, a `SIGKILL` guarantees no orphan is left behind. Only a `SIGKILL` of `aligndev` itself can leave a stale `running` status, which the next `status` call seals.
 
 When the coding agent's session on the host is missing or expired, `aligndev code` detects the authentication failure in its stream, seals the session file with `exitReason: auth_required`, and exits `2` with a one-line stderr message.
 

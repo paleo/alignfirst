@@ -72,8 +72,14 @@ export async function runAligndev(
   const stdout = makeSink();
   const stderr = makeSink();
   const home = overrides.home ?? fixture.home;
-  // Under `npm test`, npm sets its user agent: the guides would print the npx forms.
-  const { npm_config_user_agent: _userAgent, ...baseEnv } = process.env;
+  // Under `npm test`, npm sets its user agent: the guides would print the npx forms. A coding agent
+  // running the tests would be detected as the selected agent.
+  const {
+    npm_config_user_agent: _userAgent,
+    CLAUDECODE: _claude,
+    CODEX_THREAD_ID: _codex,
+    ...baseEnv
+  } = process.env;
   const env = { ...baseEnv, HOME: home };
   Object.assign(env, overrides.env);
   const code = await main({

@@ -74,8 +74,8 @@ describe("renderCodeGuide", () => {
     for (const platform of ["codingAgent", "openclaw"] as const) {
       const guide = renderCodeGuide(platform, "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
-      expect(guide).toContain("Your role is to delegate and guide the coder.");
-      expect(guide).toContain("The coding agent `aligndev code` launches is **the coder**.");
+      expect(guide).toContain("Your role is to delegate and guide the agent.");
+      expect(guide).toContain("The coding agent `aligndev code` launches is **the agent**.");
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain(
         "aligndev code status (<session-file> | --ticket <id> | --no-ticket)",
@@ -159,7 +159,7 @@ describe("aligndev guide playbook", () => {
     }
   });
 
-  it("routes the dispatcher through guide commands and defines the coder", async () => {
+  it("routes the dispatcher through guide commands and defines the agent", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     const result = await runGuide(fixture, []);
@@ -167,7 +167,7 @@ describe("aligndev guide playbook", () => {
     expect(result.stdout).toContain("run `aligndev guide channel-handling`");
     expect(result.stdout).toContain("run `aligndev guide code`");
     expect(result.stdout).toContain(
-      "**The coder** — the coding agent (Claude Code or Codex) you launch in a project with `aligndev code`.",
+      "**The agent** — the coding agent (Claude Code or Codex) you launch in a project with `aligndev code`.",
     );
   });
 
@@ -243,13 +243,13 @@ describe("aligndev guide playbook", () => {
     expect(lifecycle.stdout).toContain("You cannot write that file");
   });
 
-  it("requires the config file, naming its path", async () => {
+  it("requires a configured or detected agent, naming the config path", async () => {
     const fixture = makeFixture();
     for (const args of [[], ["working-session"], ["code"], ["project"], ["--help"]]) {
       const result = await runGuide(fixture, args);
       expect(result.code).toBe(1);
       expect(result.stderr).toContain(
-        `Error: no aligndev config at ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
+        `in ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
       );
     }
   });
@@ -392,7 +392,7 @@ describe("codingAgent guides", () => {
     expect(step).toContain("`alignfirst config --json`");
   });
 
-  it("runs the coder in the background and outside the sandbox", async () => {
+  it("runs the agent in the background and outside the sandbox", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const { stdout } = await runGuide(fixture, ["code"]);

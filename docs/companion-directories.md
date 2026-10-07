@@ -101,7 +101,7 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 
 - **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`, and the launch gate requires `locations[".plans"].exists`.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
-- **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the coder receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
+- **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst.md`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 
 ### `aligndev project`
@@ -116,7 +116,7 @@ A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has 
 
 ## Bootstrap
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the coder's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#agent-bootstrap), so their agent runs `alignfirst context` in any git repository.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the launched agent's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#agent-bootstrap), so their agent runs `alignfirst context` in any git repository.
 
 ## Rejected alternatives
 

@@ -21,7 +21,7 @@ export function renderCodeGuide(
       ? "The project must be prepared for AlignFirst. `npx -y aligndev` runs the `alignfirst` CLI through `npx`."
       : "The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).",
     ALIGNFIRST_USE: forms.viaNpx
-      ? "`npx -y aligndev code` runs the `alignfirst` CLI through `npx`, and so does the coder: it runs `npx -y alignfirst guide <protocol>` in the project."
-      : "`aligndev code` requires the `alignfirst` CLI on `PATH`. The coder runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.",
+      ? "`npx -y aligndev code` runs the `alignfirst` CLI through `npx`, and so does the agent: it runs `npx -y alignfirst guide <protocol>` in the project."
+      : "`aligndev code` requires the `alignfirst` CLI on `PATH`. The agent runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.",
   });
 }
