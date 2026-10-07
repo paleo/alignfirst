@@ -1,6 +1,6 @@
 {
   "name": "aligndev",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "The AlignFirst Dev Kit CLI: the assistant's playbook, coding-agent delegation, and project inventory.",
@@ -22,7 +22,7 @@
     "directory": "packages/aligndev"
   },
   "engines": {
-    "node": ">=24.16.0"
+    "node": ">=22.11.0"
   },
   "packageManager": "npm@11.19.0",
   "type": "module",

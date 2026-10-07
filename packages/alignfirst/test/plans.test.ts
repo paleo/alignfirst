@@ -436,7 +436,7 @@ describe("plans commands with a companion .plans", () => {
       home: fixture.root,
     });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    const target = join("..", "..", "team-plans", "product-plans");
+    const target = join("..", "..", "..", "team-plans", "product-plans");
     expect(readlinkSync(link)).toBe(target);
     expect(result.stdout).toContain(`Linked ${link} → ${target}\n`);
     expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
@@ -536,25 +536,23 @@ describe("plans commands with a separate session tree", () => {
   });
 });
 
-/** Project `.plans`, session tree in `<root>/companions/product/.plans`. */
+/** Project `.plans`, session tree in `<root>/.alignfirst/companions/product/.plans`. */
 function useSessionTree(fixture: Fixture): string {
   writeCompanions(fixture.root, {
-    root: "~/companions",
     paths: { "~/product": { ".plans": false, _aligndev: true } },
   });
-  const companion = join(fixture.root, "companions", "product");
+  const companion = join(fixture.root, ".alignfirst", "companions", "product");
   mkdirSync(join(companion, ".plans", "_aligndev"), { recursive: true });
   mkdirSync(join(fixture.product, ".plans"), { recursive: true });
   return companion;
 }
 
-/** The home directory is the fixture root; the companion is `<root>/companions/product`. */
+/** The home directory is the fixture root; the companion is `<root>/.alignfirst/companions/product`. */
 function useCompanion(fixture: Fixture): string {
   writeCompanions(fixture.root, {
-    root: "~/companions",
     paths: { "~/product": { ".plans": true } },
   });
-  return join(fixture.root, "companions", "product");
+  return join(fixture.root, ".alignfirst", "companions", "product");
 }
 
 interface Fixture {

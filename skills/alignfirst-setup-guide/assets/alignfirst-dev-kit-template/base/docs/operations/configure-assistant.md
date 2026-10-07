@@ -44,7 +44,7 @@ Run these commands only after the wrapper reports that hardening was restored an
 
 ## Scope
 
-The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf`, `~/.config/alignfirst/aligndev.config.json` and, when shipped, `~/.config/alignfirst/companions.json`, and merges the coding agent's global instruction file. It does not touch:
+The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf`, `~/.alignfirst/aligndev.config.json` and, when shipped, `~/.alignfirst/companions.json`, creates `~/.alignfirst/companions/`, and merges the coding agent's global instruction file. It does not touch:
 
 - `~/.openclaw/workspace/*.md` — [update-workspace.md](update-workspace.md).
 - `~/projects/.alignfirst-projects.json` — [update-assistant.md](update-assistant.md).

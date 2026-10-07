@@ -62,7 +62,7 @@ exit
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The delegated coder needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent codex` records the same canonical in the lock file for the `codex` CLI, which reads `~/.agents/skills/` too and needs no symlink. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
@@ -102,7 +102,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- bash -lc \
   < /dev/null
 ```
 
-The bundled `skill-creator` and `skill-installer` become visible to the delegated coder. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
+The bundled `skill-creator` and `skill-installer` become visible to the delegated agent. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
 
 ### Global Instructions
 
@@ -112,7 +112,7 @@ To change the instructions, edit the repository file and run `docs/operations/co
 
 ### Hardening
 
-**Role: operator**, during `06-security-hardening.md`, after the system-skills block of [Skills](#skills). `~/.codex/skills` and `~/.codex/AGENTS.md` feed the delegated coder's prompt, so both become admin-owned and immutable. `~/.codex` itself stays writable: the CLI keeps `auth.json` (a secret) and its session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
+**Role: operator**, during `06-security-hardening.md`, after the system-skills block of [Skills](#skills). `~/.codex/skills` and `~/.codex/AGENTS.md` feed the delegated agent's prompt, so both become admin-owned and immutable. `~/.codex` itself stays writable: the CLI keeps `auth.json` (a secret) and its session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
 
 ```sh
 sudo chattr -i /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md 2>/dev/null || true

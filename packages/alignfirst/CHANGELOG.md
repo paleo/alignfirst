@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.6.0
+
+### Minor Changes
+
+- 393b05a: Moved `companions.json` to `~/.alignfirst/companions.json`. Removed its `root`: the companions live in `~/.alignfirst/companions`.
+
 ## 0.5.0
 
 ### Minor Changes

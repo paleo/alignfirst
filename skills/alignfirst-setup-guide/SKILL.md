@@ -2,12 +2,13 @@
 name: alignfirst-setup-guide
 description: >-
   Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a
-  consumer repository, prepare a repository and Linux deployment for the AlignFirst Dev Kit, or set
-  up a coding agent as the AlignFirst assistant.
+  consumer repository, or through a companion directory that leaves the repository untouched;
+  prepare a repository and Linux deployment for the AlignFirst Dev Kit, or set up a coding agent as
+  the AlignFirst assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.44.0"
+  version: "0.45.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -32,13 +33,17 @@ A work-files repository is an optional CLI mode configured through `alignfirst p
 `aligndev`, the Dev Kit CLI, carries the assistant's playbook, coding-agent delegation, and project
 discovery. An OpenClaw assistant host installs it; a coding-agent assistant runs it through `npx`.
 
+## An Untouched Repository
+
+When the user wants nothing written in the repository, every route below goes through [companion-setup.md](references/companion-setup.md). The project's AlignFirst files then live in its companion directory, and only the tools that mode supports apply.
+
 ## Named Tool
 
 When the user names a tool, inspect the repository and proceed directly to that tool. Install or
 upgrade only what they requested.
 
 - **AlignFirst CLI, protocols, or skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Install only the requested components; skills invoke the CLI through `npx` without a separate installation.
-  For an existing v1, v2, or v3 installation, start with
+  For an existing v1, v2, or v3 installation, or a machine with `~/.config/alignfirst/`, start with
   [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
 - **docmap**: [docmap-setup.md](references/docmap-setup.md).
@@ -101,7 +106,7 @@ Inspect the repository before changing it. A prepared project has all of these:
 7. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
 
-When the user says the repository must stay untouched, follow [companion-setup.md](references/companion-setup.md) instead. The same contract lives in the project's companion directory, except the workspace system and the Node version file.
+When the user says the repository must stay untouched, follow [companion-setup.md](references/companion-setup.md) with its section [For an Assistant](references/companion-setup.md#for-an-assistant) instead.
 
 Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
 directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
@@ -136,7 +141,8 @@ Detect existing footprints before proposing changes:
   `@paleo/` import specifiers in the wrapper scripts (`scripts/workspace/*.mjs`); the two scopes
   install side by side, so a manifest-only change leaves the wrappers importing the old package.
 - AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
-  `npx alignfirst context`, an AlignFirst instruction section, or a canonical skill installation.
+  `npx alignfirst context`, an AlignFirst instruction section, a canonical skill installation, or a
+  companion reported by `npx alignfirst config`.
 - work-files repository: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.
 - Assistant preparation: the complete seven-part contract above.
 

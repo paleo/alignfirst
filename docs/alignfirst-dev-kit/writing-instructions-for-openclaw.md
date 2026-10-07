@@ -51,7 +51,7 @@ The OpenClaw session itself reads the playbook. Address it directly with "you" a
 
 ## Name the delegate by its role
 
-The playbook calls the delegate **the coder**: the coding agent launched with `aligndev code`. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename. "The coding agent" becomes ambiguous once a coding agent can itself act as the assistant.
+The playbook calls the delegate **the agent**: the coding agent launched with `aligndev code`. The word matches the code (`code.agent`) and translates well. The playbook also states that the assistant is never an agent, since it may itself run inside Claude Code, Codex or OpenClaw. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename.
 
 ## Keep the activation message static
 

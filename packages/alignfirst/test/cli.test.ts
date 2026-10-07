@@ -75,9 +75,7 @@ describe("alignfirst CLI", () => {
     dirs.push(root);
     const result = await runMain(["conventions"], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `Invalid ${join(home, ".config", "alignfirst", "companions.json")}: `,
-    );
+    expect(result.stderr).toContain(`Invalid ${join(home, ".alignfirst", "companions.json")}: `);
   });
 });
 
