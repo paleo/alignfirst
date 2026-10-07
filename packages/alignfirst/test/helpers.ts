@@ -94,7 +94,7 @@ export interface CompanionProject {
   companion: string;
 }
 
-/** A repository at `~/app` whose companion is `~/.alignfirst/companions/app`; the caller removes `root`. */
+/** A repository at `~/app` whose companion is `~/.alignfirst/companions/app`; the caller removes the returned `root` temp directory. */
 export function makeCompanionProject(flags: Record<string, unknown>): CompanionProject {
   const root = makeTempDir("alignfirst-companion-");
   configureGit(root);

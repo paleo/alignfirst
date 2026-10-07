@@ -83,15 +83,15 @@ copy_workspace() {
     \( -name '*.md' -o -name '*.png' -o -name '*.svg' \) -print0)
 }
 
-# The companions hold work files, docs and project instructions the seed cannot rebuild. A `.plans`
-# symlink to the work-files clone is copied as a link.
+# The companions hold work files, docs and project instructions the seed cannot rebuild. A symlinked
+# companions directory is followed; a `.plans` symlink to the work-files clone is copied as a link.
 copy_companions() {
   local source="$HOME/.alignfirst/companions"
   if [ ! -d "$source" ]; then
     echo "[backup] absent, skipped: $source" >&2
     return
   fi
-  cp -a "$source" "$BACKUP_DIR/companions"
+  cp -a "$source/." "$BACKUP_DIR/companions"
 }
 
 copy_environment() {
