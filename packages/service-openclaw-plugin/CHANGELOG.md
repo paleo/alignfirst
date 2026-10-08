@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.5.0
+
+### Minor Changes
+
+- 2245262: On Discord, the handoff receipt is now the starter `thread-reply` into a thread the session created with an anchored `thread-create`. A `thread-create` carrying the starter no longer starts a handoff.
+
 ## 0.4.2
 
 ### Patch Changes
