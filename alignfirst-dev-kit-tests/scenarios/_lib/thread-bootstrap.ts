@@ -1,23 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import type { ScenarioContext } from "@alignfirst/openclaw-test";
+import type { AgentToolCall, ScenarioContext } from "@alignfirst/openclaw-test";
 import { execMatches, inputOf, invokesAligndevCode, readsFile } from "./agent-tool-calls.ts";
 import { escapeRe } from "./common-constants.ts";
-import {
-  assertNoChannelRootLeak,
-  requireThreadId,
-  waitForHandoffPointer,
-  waitForStarter,
-} from "./outbound.ts";
+import { assertSilentChannelTurn, requireThreadId, waitForStarter } from "./outbound.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 import type { Step } from "./types.ts";
 
 const SENDER_ID = "ROBIN01";
-
-export interface ChannelThreadStart extends Step {
-  /** The channel-root line that closes the handoff; exempt from later root-leak sweeps. */
-  handoffPointerId: string;
-}
 
 export interface ChannelBootstrapOptions {
   /** The channel/DM message that triggers the bootstrap. */
@@ -37,13 +27,13 @@ export interface ChannelBootstrapOptions {
 
 /**
  * Open a thread, confirm its native starter and durable handoff, then return after the plugin
- * starts the thread session with a reply run. Target work may already be in progress before
- * the parent turn posts its closing pointer to the thread.
+ * starts the thread session with a reply run. The starter is the parent turn's reply: the turn
+ * ends silent, and target work may already be in progress when this returns.
  */
 export async function bootstrapThreadFromChannel(
   ctx: ScenarioContext,
   opts: ChannelBootstrapOptions,
-): Promise<ChannelThreadStart> {
+): Promise<Step> {
   const startCursor = await ctx.getCursor();
   await ctx.sendInbound({ senderId: SENDER_ID, senderName: SENDER_ID, text: opts.text });
 
@@ -72,7 +62,6 @@ export async function bootstrapThreadFromChannel(
     nextCursor: wait.nextCursor,
     sourceSessionKey: handoff.sourceSessionKey,
     targetSessionKey: handoff.targetSessionKey,
-    handoffPointerId: handoff.pointerId,
   };
 }
 
@@ -149,7 +138,7 @@ interface ChannelSessionHandedOffOptions {
 async function assertChannelSessionHandedOff(
   ctx: ScenarioContext,
   opts: ChannelSessionHandedOffOptions,
-): Promise<{ sourceSessionKey: string; targetSessionKey?: string; pointerId: string }> {
+): Promise<{ sourceSessionKey: string; targetSessionKey?: string }> {
   const startCall = await ctx.waitForAgentToolCall(
     (call) => {
       const input = inputOf(call);
@@ -174,10 +163,7 @@ async function assertChannelSessionHandedOff(
     return call.toolName === "thread_handoff" && input.action === "start";
   });
   ctx.assertLength(starts, 1, "parent session issued exactly one handoff start");
-  const starterPosts = parentCalls.filter(
-    (call) => call.toolName === "message" && JSON.stringify(call.result).includes(opts.threadId),
-  );
-  ctx.assertLength(starterPosts, 1, "one confirmed native starter created the handoff target");
+  assertStarterCalls(ctx, parentCalls, opts.threadId);
   const forbidden = parentCalls.filter(
     (call) =>
       readsFile(call, "DEVELOPERS.md") ||
@@ -186,19 +172,39 @@ async function assertChannelSessionHandedOff(
       execMatches(call, /\b(workspace|worktree|git\s+(?:-C\s+\S+\s+)?(?:status|log|show|diff))\b/i),
   );
   ctx.assertLength(forbidden, 0, "parent session performed no target work");
-  const pointer = await waitForHandoffPointer(ctx, { sinceCursor: opts.startCursor });
-  await assertNoChannelRootLeak(ctx, {
-    sinceCursor: opts.startCursor,
-    exceptIds: [pointer.match.id],
-  });
+  await assertSilentChannelTurn(ctx, { sinceCursor: opts.startCursor });
   const resultText = JSON.stringify(startCall.result ?? {});
   const targetSessionKey = readJsonString(resultText, "sessionKey");
   ctx.log(`parent session handed off to ${targetSessionKey ?? opts.threadId} — OK`);
-  return {
-    sourceSessionKey: startCall.sessionKey,
-    targetSessionKey,
-    pointerId: pointer.match.id,
-  };
+  return { sourceSessionKey: startCall.sessionKey, targetSessionKey };
+}
+
+/**
+ * The starter is the parent turn's reply, so it travels through the action OpenClaw counts as
+ * one: Slack `send` into the thread, Discord `thread-reply` into a thread whose `thread-create`
+ * carried no content (that content is not counted, and the turn would owe another reply).
+ */
+function assertStarterCalls(
+  ctx: ScenarioContext,
+  parentCalls: readonly AgentToolCall[],
+  threadId: string,
+): void {
+  const messageCalls = parentCalls.filter((call) => call.toolName === "message");
+  const starterAction = ctx.channel === "discord-mock" ? "thread-reply" : "send";
+  const starterPosts = messageCalls.filter(
+    (call) =>
+      inputOf(call).action === starterAction && JSON.stringify(call.result).includes(threadId),
+  );
+  ctx.assertLength(starterPosts, 1, `one confirmed starter \`${starterAction}\` into the thread`);
+  if (ctx.channel !== "discord-mock") return;
+  const creations = messageCalls.filter((call) => inputOf(call).action === "thread-create");
+  ctx.assertLength(creations, 1, "one thread-create opened the handoff target");
+  const input = inputOf(creations[0] as AgentToolCall);
+  const content = ["message", "text", "content"].filter((field) => {
+    const value = input[field];
+    return typeof value === "string" && value.trim() !== "";
+  });
+  ctx.assertLength(content, 0, "thread-create carries no starter content");
 }
 
 function readJsonString(value: string, field: string): string | undefined {

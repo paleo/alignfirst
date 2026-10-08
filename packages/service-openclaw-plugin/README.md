@@ -43,8 +43,7 @@ their IDs to the corresponding native contract:
 The plugin observes successful native `message` actions but never creates a thread itself.
 
 - Slack evidence is a `send` to the current parent channel with an explicit `threadId`, nonempty body, `deliveryStatus: "sent"`, and `messageDelivery: { status: "settled", partialDelivery: false }`. The result must include a channel-kind `target` naming the parent and a nonempty `messageId`; `result.receipt.threadId`, when present, must match the requested thread. The plugin-path `{ ok, result }` shape used by team-qualified Slack sends is rejected.
-- Discord evidence is a successful anchored `thread-create` in the current parent channel with a
-  nonempty starter and returned thread ID. A partial result is rejected.
+- Discord evidence is the starter `thread-reply` into a thread the session created. A successful `thread-create` in the current parent channel, anchored on a message and returning a thread ID, records the thread for the session; it is never evidence by itself, even with content. The `thread-reply` into that thread must carry a nonempty starter, and a returned `result.channelId` must name the thread; `result.messageId` becomes the starter message ID. A partial result is rejected at either step. The created thread is kept in gateway memory for one hour.
 - `thread_handoff { "action": "start", "threadId": "..." }` returns `queued` or
   `alreadyStarted`, plus the opaque handoff ID and canonical target session key.
 
@@ -61,7 +60,7 @@ The receiving turn calls `thread_handoff { "action": "claim" }` once before task
 Inputs are strict. Errors begin with a stable reason code: `unsupportedContext`,
 `unverifiedThreadDelivery`, `conflictingHandoff`, `invalidTarget`, or
 `unavailablePersistentState`. A capacity failure preserves `STORE_LIMIT_EXCEEDED` as its cause.
-Rejected eligible delivery observations emit one debug line with `notSent`, `partialDelivery`, `channelMismatch`, `threadMismatch`, `missingMessageId`, `missingThread`, `missingStarter`, or `accountMismatch`. The line contains no starter text or result payload.
+Rejected eligible delivery observations emit one debug line with `notSent`, `partialDelivery`, `channelMismatch`, `threadMismatch`, `missingMessageId`, `missingThread`, `missingStarter`, `unknownThread`, or `accountMismatch`. The line contains no starter text or result payload.
 
 Starts are limited to distinct regular parent-channel sessions. DMs, group DMs, Slack Agent View,
 ACP, subagent, cron, global/shared, already-threaded, and ambiguous cross-account routes are not

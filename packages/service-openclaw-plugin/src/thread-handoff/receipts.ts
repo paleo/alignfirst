@@ -34,14 +34,21 @@ interface HookContext {
   sessionId?: string;
 }
 
-/** Captured contexts and observation errors, shared by every registration of the plugin. */
+/**
+ * Captured contexts, threads created by a session and observation errors, shared by every
+ * registration of the plugin.
+ */
 export interface ReceiptCache {
   contexts: Map<string, CachedContext>;
+  createdThreads: Map<string, CachedEntry>;
   observationErrors: Map<string, Error>;
 }
 
-export interface CachedContext {
+export interface CachedContext extends CachedEntry {
   source: SourceContext;
+}
+
+export interface CachedEntry {
   capturedAt: number;
 }
 
@@ -54,9 +61,14 @@ type RejectionReason =
   | "missingMessageId"
   | "missingThread"
   | "missingStarter"
+  | "unknownThread"
   | "accountMismatch";
 
-type ReceiptParseResult = DeliveryReceipt | RejectionReason;
+type ObservationResult = DeliveryReceipt | CreatedThread | RejectionReason;
+
+interface CreatedThread {
+  createdThreadId: string;
+}
 
 export function createReceiptCoordinator(params: {
   configuration: PluginConfiguration;
@@ -66,41 +78,41 @@ export function createReceiptCoordinator(params: {
   now?: () => number;
 }): ReceiptCoordinator {
   const now = params.now ?? Date.now;
-  const { contexts, observationErrors } = params.cache ?? createReceiptCache();
+  const { contexts, createdThreads, observationErrors } = params.cache ?? createReceiptCache();
   return {
     captureContext(context) {
       const source = readSourceContext(context, params.configuration);
       if (!source) return;
       contexts.set(contextKey(source.sessionKey, source.sessionId), { source, capturedAt: now() });
-      pruneContexts(contexts, now());
+      pruneEntries(contexts, now());
     },
     observe(event, context) {
       const source = readCachedSource(contexts, context, now());
       if (!source || event.toolName !== "message" || event.error !== undefined) return;
       const surface = params.configuration.channelSurfaces[source.channelId];
-      const receipt = parseDeliveryReceipt({
+      pruneEntries(createdThreads, now());
+      const result = parseObservation({
         event,
         source,
         surface,
+        isCreatedThread: (threadId) =>
+          createdThreads.has(lookupKey(source.sessionKey, source.sessionId, threadId)),
         now: now(),
       });
-      if (!receipt) return;
-      if (typeof receipt === "string") {
+      if (!result) return;
+      if (typeof result === "string") {
         const threadId = readObservedThreadId(event, surface);
         params.logger.debug?.(
-          `thread-handoff receipt rejected: surface=${surface} session=${source.sessionKey} thread=${threadId ?? "-"} reason=${receipt}`,
+          `thread-handoff receipt rejected: surface=${surface} session=${source.sessionKey} thread=${threadId ?? "-"} reason=${result}`,
         );
         return;
       }
-      const key = lookupKey(receipt.sessionKey, receipt.sessionId, receipt.threadId);
-      try {
-        params.getStore().insertReceipt(receipt, now());
-        observationErrors.delete(key);
-      } catch (error) {
-        const storedError = error instanceof Error ? error : new Error(String(error));
-        observationErrors.set(key, storedError);
-        params.logger.error(`thread-handoff receipt persistence failed: ${storedError.message}`);
+      if ("createdThreadId" in result) {
+        const key = lookupKey(source.sessionKey, source.sessionId, result.createdThreadId);
+        createdThreads.set(key, { capturedAt: now() });
+        return;
       }
+      persistReceipt({ ...params, receipt: result, observationErrors, now: now() });
     },
     async waitForReceipt(identity) {
       const key = lookupKey(identity.sourceSessionKey, identity.sourceSessionId, identity.threadId);
@@ -116,8 +128,27 @@ export function createReceiptCoordinator(params: {
   };
 }
 
+function persistReceipt(params: {
+  getStore: () => HandoffStore;
+  logger: PluginLogger;
+  receipt: DeliveryReceipt;
+  observationErrors: Map<string, Error>;
+  now: number;
+}): void {
+  const { receipt, observationErrors } = params;
+  const key = lookupKey(receipt.sessionKey, receipt.sessionId, receipt.threadId);
+  try {
+    params.getStore().insertReceipt(receipt, params.now);
+    observationErrors.delete(key);
+  } catch (error) {
+    const storedError = error instanceof Error ? error : new Error(String(error));
+    observationErrors.set(key, storedError);
+    params.logger.error(`thread-handoff receipt persistence failed: ${storedError.message}`);
+  }
+}
+
 export function createReceiptCache(): ReceiptCache {
-  return { contexts: new Map(), observationErrors: new Map() };
+  return { contexts: new Map(), createdThreads: new Map(), observationErrors: new Map() };
 }
 
 function readCachedSource(
@@ -128,33 +159,33 @@ function readCachedSource(
   const sessionKey = nonempty(context.sessionKey);
   const sessionId = nonempty(context.sessionId);
   if (!sessionKey || !sessionId) return;
-  pruneContexts(contexts, now);
+  pruneEntries(contexts, now);
   return contexts.get(contextKey(sessionKey, sessionId))?.source;
 }
 
-function pruneContexts(contexts: Map<string, CachedContext>, now: number): void {
-  for (const [key, value] of contexts) {
-    if (value.capturedAt + RECEIPT_TTL_MS <= now) contexts.delete(key);
+function pruneEntries(entries: Map<string, CachedEntry>, now: number): void {
+  for (const [key, value] of entries) {
+    if (value.capturedAt + RECEIPT_TTL_MS <= now) entries.delete(key);
   }
-  while (contexts.size > CONTEXT_LIMIT) {
-    const oldest = contexts.keys().next().value;
+  while (entries.size > CONTEXT_LIMIT) {
+    const oldest = entries.keys().next().value;
     if (typeof oldest !== "string") return;
-    contexts.delete(oldest);
+    entries.delete(oldest);
   }
 }
 
-function parseDeliveryReceipt(params: {
+function parseObservation(params: {
   event: ToolObservation;
   source: SourceContext;
   surface?: "slack" | "discord";
+  isCreatedThread: (threadId: string) => boolean;
   now: number;
-}): ReceiptParseResult | undefined {
-  if (params.surface === "slack" && params.event.params.action === "send") {
-    return parseSlackReceipt(params);
-  }
-  if (params.surface === "discord" && params.event.params.action === "thread-create") {
-    return parseDiscordReceipt(params);
-  }
+}): ObservationResult | undefined {
+  const action = params.event.params.action;
+  if (params.surface === "slack" && action === "send") return parseSlackReceipt(params);
+  if (params.surface !== "discord") return;
+  if (action === "thread-create") return parseDiscordThreadCreation(params);
+  if (action === "thread-reply") return parseDiscordStarterReply(params);
   return;
 }
 
@@ -162,7 +193,7 @@ function parseSlackReceipt(params: {
   event: ToolObservation;
   source: SourceContext;
   now: number;
-}): ReceiptParseResult {
+}): DeliveryReceipt | RejectionReason {
   const { event, source } = params;
   const threadId = nonempty(event.params.threadId);
   if (!threadId) return "missingThread";
@@ -206,20 +237,18 @@ function parseSlackReceipt(params: {
   });
 }
 
-function parseDiscordReceipt(params: {
+/** A thread this session created in its own channel, anchored on a message. Not a receipt. */
+function parseDiscordThreadCreation(params: {
   event: ToolObservation;
   source: SourceContext;
-  now: number;
-}): ReceiptParseResult {
+}): CreatedThread | RejectionReason {
   const { event, source } = params;
-  const starterText = readStarter(event.params);
   const destination = readDestination(event.params);
   const anchorMessageId = nonempty(event.params.messageId);
   const details = readResultDetails(event.result);
   const thread = asRecord(details?.thread);
   const threadId = nonempty(thread?.id);
   if (!threadId) return "missingThread";
-  if (starterText === undefined) return "missingStarter";
   if (!anchorMessageId) return "missingMessageId";
   const returnedParent = nonempty(thread?.parent_id) ?? nonempty(thread?.parentId);
   if (
@@ -232,13 +261,42 @@ function parseDiscordReceipt(params: {
   if (details?.ok !== true) return "notSent";
   if (details.partial === true) return "partialDelivery";
   if (!accountMatches(event.params, source.accountId)) return "accountMismatch";
+  return { createdThreadId: threadId };
+}
+
+/** The starter posted by `thread-reply` into a thread this session created. */
+function parseDiscordStarterReply(params: {
+  event: ToolObservation;
+  source: SourceContext;
+  isCreatedThread: (threadId: string) => boolean;
+  now: number;
+}): DeliveryReceipt | RejectionReason {
+  const { event, source } = params;
+  const threadId = readReplyThreadId(event.params);
+  if (!threadId) return "missingThread";
+  const starterText = readStarter(event.params);
+  if (starterText === undefined) return "missingStarter";
+  if (!params.isCreatedThread(threadId)) return "unknownThread";
+  const details = readResultDetails(event.result);
+  if (details?.ok !== true) return "notSent";
+  if (details.partial === true) return "partialDelivery";
+  const result = asRecord(details.result);
+  const returnedChannelId = nonempty(result?.channelId);
+  if (returnedChannelId !== undefined && returnedChannelId !== threadId) return "threadMismatch";
+  if (!accountMatches(event.params, source.accountId)) return "accountMismatch";
   return createReceipt({
     source,
     threadId,
     starterText,
+    starterMessageId: nonempty(result?.messageId),
     toolCallId: event.toolCallId,
     now: params.now,
   });
+}
+
+/** Bundled Discord replies into `threadId`, or into the target when it is absent. */
+function readReplyThreadId(params: Record<string, unknown>): string | undefined {
+  return nonempty(params.threadId) ?? readDestination(params)?.replace(/^channel:/i, "");
 }
 
 function readObservedThreadId(
@@ -247,6 +305,7 @@ function readObservedThreadId(
 ): string | undefined {
   if (surface === "slack") return nonempty(event.params.threadId);
   if (surface !== "discord") return;
+  if (event.params.action === "thread-reply") return readReplyThreadId(event.params);
   const details = readResultDetails(event.result);
   const thread = asRecord(details?.thread);
   return nonempty(thread?.id);

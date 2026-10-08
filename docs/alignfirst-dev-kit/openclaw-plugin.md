@@ -38,11 +38,11 @@ The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited righ
 
 ### Say only what is true
 
-The bot claims only what it does. The channel session posts the starter, calls `thread_handoff start` and ends its turn on a one-line pointer to the thread. That line never says that this session handles the work or that the work has begun: it has left the thread, and the thread session may still be waiting for a value. In a DM, where the plugin cannot start a thread, the bot says so instead of promising an activation. A completion report relays what the coding agent claims and what the bot verified; it does not call the work done.
+The bot claims only what it does. The channel session posts the starter in the thread, calls `thread_handoff start` and ends its turn on `NO_REPLY`. The starter is the turn's reply, and nothing else reaches the channel. The starter never says that the work has begun: the thread session may still be waiting for a value. In a DM, where the plugin cannot start a thread, the bot says so instead of promising an activation. A completion report relays what the coding agent claims and what the bot verified; it does not call the work done.
 
 ## What the plugin does
 
-- It observes successful native `message` actions (`after_tool_call`) and keeps a delivery receipt as evidence that a starter reached a thread. A receipt never triggers anything: an arbitrary thread ID from the model cannot authorize a handoff.
+- It observes successful native `message` actions (`after_tool_call`) and keeps a delivery receipt as evidence that a starter reached a thread. On Slack, the receipt is the threaded `send`. On Discord, it is the starter `thread-reply` into a thread the session created with an anchored `thread-create`. A receipt never triggers anything: an arbitrary thread ID from the model cannot authorize a handoff.
 - `thread_handoff start` matches the receipt, records a pending handoff in its SQLite database and posts the nudge on the canonical thread session. A repeated `start` for the same thread returns `alreadyStarted`.
 - `thread_handoff claim`, called by the thread session before any task effect, marks the handoff claimed. A repeated claim by the same run returns `claimed` again; another run gets `alreadyClaimed`.
 - A recovery scan retries a pending nudge after a gateway restart, at most ten times. A record still pending after that stays claimable by the next human message in the thread.
@@ -51,6 +51,16 @@ The bot claims only what it does. The channel session posts the starter, calls `
 The receipt and the claim depend on per-session state captured on one side and read on the other: the tool factory captures the session's channel context, and `before_tool_call` remembers the run ID. Since 2026.9.8, a gateway process evaluates the plugin twice. A turn takes its tools from the gateway's registration (`adoptRuntimeToolRegistrations` in `src/plugins/tool-registry-adoption.ts`) and runs its tool hooks in its own. That state therefore lives in process-wide slots (`process-shared.ts`); a per-registration cache dropped every receipt and failed each `start` with `unverifiedThreadDelivery`.
 
 `thread_handoff` is an agent tool the plugin registers itself, marked optional, so a deployment allows it explicitly. The `openclaw thread-handoff` subcommands are plugin CLI registrations. OpenClaw ships neither.
+
+## How the channel turn ends silently
+
+A channel message that mentions the bot requires a reply. A turn that ends on `NO_REPLY` stays silent only when core counts a message-tool post as the turn's source reply; otherwise OpenClaw runs the isolated finalizer, which posts an unsolicited answer. The starter therefore has to be that source reply. Facts established on OpenClaw 2026.9.8 in the deterministic gateway suite, with a mentioning root message:
+
+- Slack: a `send` to the current channel with the triggering message as `threadId` is the source reply. Core matches the delivered thread with the turn's current thread, which native Slack sets to the triggering message on a root turn. The turn ends on `NO_REPLY` with the starter as its only post.
+- Discord: an anchored `thread-create` without content, then a `thread-reply` carrying the starter, is the source reply. The thread-create adopts the thread, which moves the turn's final delivery into it, and the extension tags the `thread-reply` into the adopted thread as current-source. The turn ends on `NO_REPLY` with the starter as its only post.
+- Discord control: a `thread-create` carrying the starter is no source reply. The same `NO_REPLY` runs the isolated finalizer, and its answer lands in the adopted thread. The former one-line pointer landed there the same way.
+
+The Discord facts rest on the mock, which reproduces native adoption and tagging (see [OpenClaw Test Harness Architecture](./openclaw-test-architecture.md#channel-plugin-internals)); the classification and the finalizer are OpenClaw's own.
 
 ## How the nudge enters OpenClaw
 

@@ -13,11 +13,7 @@ import { setupGhMock } from "./_lib/mock-gh.ts";
 import { assertNoChannelRootLeak, assertNoSelfThreadMessagePost } from "./_lib/outbound.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import {
-  bootstrapThreadFromChannel,
-  type ChannelThreadStart,
-  sendInThread,
-} from "./_lib/thread-bootstrap.ts";
+import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 import type { Step } from "./_lib/types.ts";
 import { settleOnWorkspaceReport } from "./_lib/workspace-flow.ts";
 
@@ -88,7 +84,7 @@ async function runSetupPhaseWithoutDelegation(
 
 async function runGoAheadPhase(
   ctx: ScenarioContext,
-  starter: ChannelThreadStart,
+  starter: Step,
   startCursor: number,
 ): Promise<void> {
   const { threadId } = starter;
@@ -122,9 +118,6 @@ async function runGoAheadPhase(
     0,
     "working thread never starts another handoff",
   );
-  await assertNoChannelRootLeak(ctx, {
-    sinceCursor: startCursor,
-    exceptIds: [starter.handoffPointerId],
-  });
+  await assertNoChannelRootLeak(ctx, { sinceCursor: startCursor });
   await assertNoSelfThreadMessagePost(ctx, threadId, startCursor);
 }

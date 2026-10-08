@@ -18,7 +18,6 @@ import {
 const openclawNoticeRe = /^(?:⚠️|LLM request failed\b)/u;
 // Printed by OpenClaw's context-free finalizer when a required reply ends silent.
 const FINALIZER_FALLBACK = "The tool run finished, but no final summary was produced.";
-const HANDOFF_POINTER_MAX_CHARS = 200;
 
 export function isOpenclawNotice(text: string): boolean {
   return openclawNoticeRe.test(text);
@@ -101,34 +100,24 @@ export function requireThreadId(wait: WaitForOutboundResult): string {
 }
 
 /**
- * The channel turn ends on one short line pointing to the thread. Since 2026.9.6, OpenClaw requires that
- * answer for a mentioned request; a silent turn gets a context-free finalizer post instead.
+ * The channel turn that hands off ends on `NO_REPLY`: its starter is its reply. Sweep the
+ * conversation over a quiet window: no post at the channel root, no finalizer fallback anywhere
+ * (on Discord the finalizer would post into the adopted thread), no literal `NO_REPLY`. A
+ * model-written finalizer answer inside the thread is not distinguishable here; the
+ * deterministic gateway suite covers that path.
  */
-export async function waitForHandoffPointer(
+export async function assertSilentChannelTurn(
   ctx: ScenarioContext,
-  opts: { sinceCursor: number; timeoutMs?: number },
-): Promise<WaitForOutboundResult> {
-  const wait = await ctx.waitForOutbound(
-    (m) =>
-      m.direction === "outbound" &&
-      m.conversation.id === ctx.conversationId &&
-      m.threadId === undefined &&
-      !isOpenclawNotice(m.text),
-    {
-      timeoutMs: opts.timeoutMs ?? 60_000,
-      sinceCursor: opts.sinceCursor,
-      failFastUnmatchedOutbounds: false,
-    },
-  );
-  const text = wait.match.text.trim();
-  if (text.includes("\n") || text.length > HANDOFF_POINTER_MAX_CHARS) {
-    throw new Error(`handoff pointer is not one short line: ${JSON.stringify(text)}`);
-  }
-  if (text.startsWith(FINALIZER_FALLBACK)) {
-    throw new Error("the channel turn ended silent and OpenClaw posted its finalizer fallback");
-  }
-  ctx.log({ attachTo: wait.entry, label: `handoff pointer: ${JSON.stringify(text)}` });
-  return wait;
+  opts: { sinceCursor: number; withinMs?: number },
+): Promise<void> {
+  await assertNoChannelRootLeak(ctx, {
+    sinceCursor: opts.sinceCursor,
+    withinMs: opts.withinMs ?? 20_000,
+  });
+  const outbounds = await collectOutbounds(ctx, opts.sinceCursor);
+  const fallbacks = outbounds.filter((m) => m.text.includes(FINALIZER_FALLBACK));
+  ctx.assertLength(fallbacks, 0, "the channel turn ended silent without a finalizer post");
+  await assertNoLiteralNoReply(ctx, opts.sinceCursor);
 }
 
 /**
@@ -185,26 +174,25 @@ export async function assertNoLiteralNoReply(
   ctx: ScenarioContext,
   sinceCursor: number,
 ): Promise<void> {
-  const leaks: BusMessage[] = [];
-  let cursor = sinceCursor;
-  // A poll page is capped by the bus; walk every page since the cursor.
-  while (true) {
-    const { messages, nextCursor } = await ctx.poll({ sinceCursor: cursor, timeoutMs: 1_000 });
-    if (messages.length === 0) break;
-    cursor = nextCursor;
-    for (const m of messages) {
-      if (
-        m.direction === "outbound" &&
-        m.conversation.id === ctx.conversationId &&
-        /\bNO_REPLY\b/u.test(m.text)
-      ) {
-        leaks.push(m);
-      }
-    }
-  }
+  const outbounds = await collectOutbounds(ctx, sinceCursor);
+  const leaks = outbounds.filter((m) => /\bNO_REPLY\b/u.test(m.text));
   for (const m of leaks)
     ctx.log(`literal NO_REPLY posted: ${JSON.stringify(m.text.slice(0, 120))}`);
   ctx.assertLength(leaks, 0, "no literal NO_REPLY reached the user");
+}
+
+/** Every outbound of the conversation since `sinceCursor`. A poll page is capped by the bus. */
+async function collectOutbounds(ctx: ScenarioContext, sinceCursor: number): Promise<BusMessage[]> {
+  const outbounds: BusMessage[] = [];
+  let cursor = sinceCursor;
+  while (true) {
+    const { messages, nextCursor } = await ctx.poll({ sinceCursor: cursor, timeoutMs: 1_000 });
+    if (messages.length === 0) return outbounds;
+    cursor = nextCursor;
+    for (const m of messages) {
+      if (m.direction === "outbound" && m.conversation.id === ctx.conversationId) outbounds.push(m);
+    }
+  }
 }
 
 // The message-tool actions that post content (vs `read`, rename, reactions…).

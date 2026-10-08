@@ -9,7 +9,7 @@ import {
   makeTempDir,
   packageVersion,
   runMain,
-  writeCompanions,
+  writeRegistry,
 } from "./helpers.js";
 
 const dirs: string[] = [];
@@ -67,7 +67,7 @@ describe("config command", () => {
     const companion = join(home, ".alignfirst", "companions", "projects_app");
     mkdirSync(companion, { recursive: true });
     writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
-    writeCompanions(home, {
+    writeRegistry(home, {
       paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
     });
 
@@ -128,13 +128,13 @@ describe("config command", () => {
     expect(result.stderr).toContain(`Invalid ${join(cwd, ".alignfirst.json")}`);
   });
 
-  it("reports an invalid companions.json as a CLI error", async () => {
+  it("reports an invalid registry as a CLI error", async () => {
     const home = temp();
-    writeCompanions(home, { root: "~/c", paths: {} });
+    writeRegistry(home, { root: "~/c", paths: {} });
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(
-      `Invalid ${join(home, ".alignfirst", "companions.json")}: root must be removed`,
+      `Invalid ${join(home, ".alignfirst", "companions", "registry.json")}: root must be removed`,
     );
   });
 });

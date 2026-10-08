@@ -65,6 +65,38 @@ const SLACK_REJECTIONS: Array<{ details: unknown; reason: string }> = [
   },
 ];
 
+const DISCORD_THREAD_CREATE = {
+  toolName: "message",
+  params: {
+    action: "thread-create",
+    to: "channel:C1",
+    messageId: "anchor-1",
+    threadName: "Work",
+  },
+  result: { details: { ok: true, thread: { id: "T1", parent_id: "C1" } } },
+};
+const DISCORD_STARTER_REPLY = {
+  toolName: "message",
+  toolCallId: "call-2",
+  params: { action: "thread-reply", threadId: "T1", message: STARTER },
+  result: { details: { ok: true, result: { messageId: "M2", channelId: "T1" } } },
+};
+const DISCORD_REPLY_REJECTIONS: Array<{
+  params?: Record<string, unknown>;
+  details?: unknown;
+  reason: string;
+}> = [
+  { params: { threadId: "T-OTHER" }, reason: "unknownThread" },
+  { params: { message: " " }, reason: "missingStarter" },
+  { details: { ok: false }, reason: "notSent" },
+  { details: { ok: true, partial: true }, reason: "partialDelivery" },
+  {
+    details: { ok: true, result: { messageId: "M2", channelId: "T-OTHER" } },
+    reason: "threadMismatch",
+  },
+  { params: { accountId: "other-account" }, reason: "accountMismatch" },
+];
+
 describe("native delivery receipts", () => {
   it("accepts the production Slack result and preserves exact starter text", async () => {
     const fixture = coordinator("slack", undefined, "C0BJ7KLRXEZ");
@@ -110,33 +142,53 @@ describe("native delivery receipts", () => {
     expect(diagnostic).not.toContain(STARTER);
   });
 
-  it("rejects partial Discord creation and accepts a complete anchored result", async () => {
+  it("accepts a Discord starter reply into a thread the session created", async () => {
     const fixture = coordinator("discord");
-    const observation = {
-      toolName: "message",
-      params: {
-        action: "thread-create",
-        to: "channel:C1",
-        messageId: "anchor-1",
-        message: "starter",
-      },
-      result: { details: { ok: true, partial: true, thread: { id: "T1", parent_id: "C1" } } },
-    };
-    fixture.receipts.observe(observation, {
-      sessionKey: fixture.context.sessionKey,
-      sessionId: fixture.context.sessionId,
+    observe(fixture, DISCORD_THREAD_CREATE);
+    observe(fixture, DISCORD_STARTER_REPLY);
+    await expect(lookup(fixture, "T1")).resolves.toMatchObject({
+      threadId: "T1",
+      starterText: STARTER,
+      starterMessageId: "M2",
     });
-    fixture.receipts.observe(
-      {
-        ...observation,
-        result: { details: { ok: true, thread: { id: "T1", parent_id: "C1" } } },
-      },
-      { sessionKey: fixture.context.sessionKey, sessionId: fixture.context.sessionId },
-    );
-    const stored = await lookup(fixture, "T1");
-    expect(stored).toMatchObject({ threadId: "T1" });
-    expect(stored).not.toHaveProperty("starterMessageId");
+    expect(fixture.logger.debug).not.toHaveBeenCalled();
   });
+
+  it("does not take a Discord thread creation with content as a receipt", async () => {
+    const fixture = coordinator("discord");
+    observe(fixture, {
+      ...DISCORD_THREAD_CREATE,
+      params: { ...DISCORD_THREAD_CREATE.params, message: STARTER },
+    });
+    await expect(lookup(fixture, "T1")).resolves.toBeUndefined();
+  });
+
+  it("forgets a partial Discord thread creation", async () => {
+    const fixture = coordinator("discord");
+    observe(fixture, {
+      ...DISCORD_THREAD_CREATE,
+      result: { details: { ok: true, partial: true, thread: { id: "T1", parent_id: "C1" } } },
+    });
+    observe(fixture, DISCORD_STARTER_REPLY);
+    await expect(lookup(fixture, "T1")).resolves.toBeUndefined();
+    expect(reasons(fixture)).toEqual(["partialDelivery", "unknownThread"]);
+  });
+
+  it.each(DISCORD_REPLY_REJECTIONS)(
+    "rejects a Discord starter reply with reason=$reason",
+    async (rejection) => {
+      const fixture = coordinator("discord");
+      observe(fixture, DISCORD_THREAD_CREATE);
+      observe(fixture, {
+        ...DISCORD_STARTER_REPLY,
+        params: { ...DISCORD_STARTER_REPLY.params, ...rejection.params },
+        result: { details: rejection.details ?? DISCORD_STARTER_REPLY.result.details },
+      });
+      await expect(lookup(fixture, "T1")).resolves.toBeUndefined();
+      expect(reasons(fixture)).toEqual([rejection.reason]);
+      expect(fixture.logger.debug.mock.calls[0]?.[0]).not.toContain(STARTER);
+    },
+  );
 
   it("exposes receipt write failures", async () => {
     const fixture = coordinator(
@@ -191,6 +243,22 @@ function coordinator(
   });
   receipts.captureContext(context);
   return { receipts, context, logger };
+}
+
+function observe(
+  fixture: ReturnType<typeof coordinator>,
+  observation: Parameters<ReturnType<typeof coordinator>["receipts"]["observe"]>[0],
+) {
+  fixture.receipts.observe(observation, {
+    sessionKey: fixture.context.sessionKey,
+    sessionId: fixture.context.sessionId,
+  });
+}
+
+function reasons(fixture: ReturnType<typeof coordinator>): string[] {
+  return fixture.logger.debug.mock.calls.map(
+    (call) => /reason=(\w+)/u.exec(String(call[0]))?.[1] ?? "-",
+  );
 }
 
 function lookup(fixture: ReturnType<typeof coordinator>, threadId: string) {

@@ -17,7 +17,7 @@ import {
 } from "../project-config.js";
 import {
   type CompanionLayout,
-  companionsPath,
+  registryPath,
   ITEM_NAMES,
   type ItemName,
   layoutOf,
@@ -93,11 +93,11 @@ function inspectConfig(
 }
 
 function inspectCompanion(ctx: CommandContext): DoctorLine[] {
-  const path = companionsPath(ctx.home);
+  const path = registryPath(ctx.home);
   const layout = layoutOf(ctx);
   const file: DoctorLine = {
     level: "ok",
-    text: `companions.json ${existsSync(path) ? "valid" : "absent"} (${path})`,
+    text: `registry ${existsSync(path) ? "valid" : "absent"} (${path})`,
   };
   if (layout.companion === null) return [file, { level: "ok", text: "none" }];
   const { companion } = layout;

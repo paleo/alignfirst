@@ -10,6 +10,10 @@ import {
   saveMediaSource,
 } from "openclaw/plugin-sdk/media-runtime";
 import { buildAgentSessionKey, resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
+import {
+  type ActiveTurnThreadRoute,
+  beginActiveTurnThreadRoute,
+} from "./active-turn-thread-route.js";
 import { buildQaTarget, sendQaBusMessage } from "./bus-client.js";
 import type { ChannelSurface } from "./plugin-actions.js";
 import {
@@ -107,13 +111,30 @@ export function buildDeliveryCallback(params: {
   // OpenClaw captures it as the turn's current thread and a later background-exec wake replies back
   // into it (the real-Slack behavior).
   autoThreadId?: string;
+  // Discord thread adoption: once the turn creates a thread anchored on its triggering message,
+  // the remaining deliveries land in that thread, without a reply reference.
+  threadRoute?: ActiveTurnThreadRoute;
 }): (payload: unknown) => Promise<void> {
-  const { account, inbound, target, toolCalls, autoThreadId } = params;
+  const { account, inbound, target, toolCalls, autoThreadId, threadRoute } = params;
   let autoThreadDeliveries = 0;
 
   return async (payload: unknown) => {
     const text = extractDeliveryText(payload);
     if (!text.trim()) {
+      return;
+    }
+    const adoptedThread = threadRoute?.adoptedThread;
+    if (adoptedThread) {
+      await sendQaBusMessage({
+        baseUrl: account.baseUrl,
+        accountId: account.accountId,
+        to: `thread:${adoptedThread.conversationId}/${adoptedThread.threadId}`,
+        text,
+        senderId: account.botUserId,
+        senderName: account.botDisplayName,
+        threadId: adoptedThread.threadId,
+        toolCalls,
+      });
       return;
     }
     if (autoThreadId) {
@@ -309,56 +330,74 @@ export async function handleInbound(params: {
     ...mediaPayload,
   });
 
-  await runtime.channel.inbound.dispatchReply({
-    cfg: params.config as OpenClawConfig,
-    channel: params.channelId,
-    accountId: params.account.accountId,
-    agentId: route.agentId,
-    routeSessionKey: sessionKey,
-    storePath,
-    ctxPayload,
-    recordInboundSession: runtime.channel.session.recordInboundSession,
-    dispatchReplyWithBufferedBlockDispatcher:
-      runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher,
-    delivery: {
-      deliver: buildDeliveryCallback({
-        account: params.account,
-        inbound,
-        target: busTarget,
-        toolCalls,
-        autoThreadId,
-      }),
-      onError: (error) => {
-        throw error instanceof Error
-          ? error
-          : new Error(`${params.channelId} dispatch failed: ${String(error)}`);
-      },
-    },
-    replyOptions: {
-      onToolStart: (payload) => {
-        if (payload.phase && payload.phase !== "start") {
-          return;
+  const threadRoute: ActiveTurnThreadRoute | undefined =
+    params.surface === "discord"
+      ? {
+          accountId: params.account.accountId,
+          sourceChannelId: inbound.threadId ?? inbound.conversation.id,
+          sourceMessageId: inbound.id,
         }
-        const name = payload.name?.trim();
-        if (!name) {
-          return;
-        }
-        const args = sanitizeQaBusToolCallArguments(payload.args);
-        toolCalls.push({
-          name,
-          ...(args && Object.keys(args).length > 0 ? { arguments: args } : {}),
-        });
+      : undefined;
+  const endThreadRoute = threadRoute && beginActiveTurnThreadRoute(sessionKey, threadRoute);
+  try {
+    await dispatchInboundReply();
+  } finally {
+    endThreadRoute?.();
+  }
+
+  async function dispatchInboundReply() {
+    await runtime.channel.inbound.dispatchReply({
+      cfg: params.config as OpenClawConfig,
+      channel: params.channelId,
+      accountId: params.account.accountId,
+      agentId: route.agentId,
+      routeSessionKey: sessionKey,
+      storePath,
+      ctxPayload,
+      recordInboundSession: runtime.channel.session.recordInboundSession,
+      dispatchReplyWithBufferedBlockDispatcher:
+        runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher,
+      delivery: {
+        deliver: buildDeliveryCallback({
+          account: params.account,
+          inbound,
+          target: busTarget,
+          toolCalls,
+          autoThreadId,
+          threadRoute,
+        }),
+        onError: (error) => {
+          throw error instanceof Error
+            ? error
+            : new Error(`${params.channelId} dispatch failed: ${String(error)}`);
+        },
       },
-    },
-    replyPipeline: {},
-    record: {
-      onRecordError: (error) => {
-        throw error instanceof Error
-          ? error
-          : new Error(`${params.channelId} session record failed: ${String(error)}`);
+      replyOptions: {
+        onToolStart: (payload) => {
+          if (payload.phase && payload.phase !== "start") {
+            return;
+          }
+          const name = payload.name?.trim();
+          if (!name) {
+            return;
+          }
+          const args = sanitizeQaBusToolCallArguments(payload.args);
+          toolCalls.push({
+            name,
+            ...(args && Object.keys(args).length > 0 ? { arguments: args } : {}),
+          });
+        },
       },
-    },
-  });
+      replyPipeline: {},
+      record: {
+        onRecordError: (error) => {
+          throw error instanceof Error
+            ? error
+            : new Error(`${params.channelId} session record failed: ${String(error)}`);
+        },
+      },
+    });
+  }
 }
 
 export function buildInboundEnvelopeTarget(params: {

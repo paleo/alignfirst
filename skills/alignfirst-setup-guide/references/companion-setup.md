@@ -1,8 +1,8 @@
 # Set Up a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. `~/.alignfirst/companions.json` declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
+Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
-The `alignfirst` package README documents the file: its schema, how an entry matches a project, and how each item resolves.
+The `alignfirst` package README documents the registry: its schema, how an entry matches a project, and how each item resolves.
 
 This mode supports the AlignFirst protocols, the skills, the work files and docmap through the `alignfirst` CLI. It excludes the workspace system, the standalone `@alignfirst/docmap` package, a local `alignfirst` dependency, and any instruction-file section.
 
@@ -18,23 +18,16 @@ The global CLI is required: the agent bootstrap line runs the bare `alignfirst`.
 
 ## 2. Declare the companion
 
-From the repository, read the layout:
+From the repository, register the project and read the layout:
 
 ```sh
+alignfirst companion add
 alignfirst config --json
 ```
 
-`companion.dir` is the companion directory, and `locations` gives each item's path. With `companion: null`, no entry matches the project. Show the user the entry for the project's main worktree, then write it once they agree:
+`companion add` adds the project's main worktree to the registry, unless an entry already covers it, and creates the companion directory. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
 
-```json
-{
-  "paths": {
-    "~/projects/client-api": {}
-  }
-}
-```
-
-Create `~/.alignfirst/companions.json` when it is missing. Otherwise, add the key and keep the other entries. The empty value leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion, under `~/.alignfirst/companions`. Read the layout again.
+`companion.dir` is the companion directory, and `locations` gives each item's path.
 
 Write each item below at its `locations` path. Skip an item located in the project (`"in": "project"`): the repository provides it.
 
@@ -76,7 +69,7 @@ The doctor must pass, and `git status` in the repository must show no change.
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
 - **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the launched agent's prompt.
-- **Companion (step 2):** on an OpenClaw Dev Kit host, the operator writes the entry: the deployment locks `~/.alignfirst/`. With `companion: null`, stop and ask for an entry.
+- **Companion (step 2):** on an OpenClaw Dev Kit host, the assistant runs `alignfirst companion add` itself before it delegates the preparation.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
 - **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.

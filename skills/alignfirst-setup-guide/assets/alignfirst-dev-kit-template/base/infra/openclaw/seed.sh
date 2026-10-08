@@ -5,8 +5,8 @@
 # Strategy: `openclaw setup` produces the installed version's default config; every
 # customization then goes through `openclaw config set`, which runs the validator and migrates
 # across versions. Secrets are derived from .env into ~/.openclaw/secrets/secrets.json and
-# reach openclaw.json as file SecretRefs only. The seed also installs environment.d, the aligndev
-# config, companions.json when the admin repository ships one, and the companions directory.
+# reach openclaw.json as file SecretRefs only. The seed also installs environment.d and the aligndev
+# config, and creates the companions directory.
 #
 # Run as the service account, from the seed snapshot:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/seed.sh
@@ -21,7 +21,6 @@ GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
 ALIGNFIRST_HOME="$HOME/.alignfirst"
 ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.config.json"
-COMPANIONS_CONFIG_FILE="$ALIGNFIRST_HOME/companions.json"
 COMPANIONS_DIR="$ALIGNFIRST_HOME/companions"
 
 main() {
@@ -44,7 +43,7 @@ main() {
   configure_coding_agent
   install_environment_files
   install_aligndev_config
-  install_companions_config
+  create_companions_dir
   verify
 }
 
@@ -157,17 +156,10 @@ install_aligndev_config() {
   aligndev guide code >/dev/null
 }
 
-install_companions_config() {
-  # The default companions root. It stays service-owned inside the locked directory, so the
-  # assistant creates a project's companion on its own.
+create_companions_dir() {
+  # The companions and their registry. The directory stays service-owned inside the locked
+  # directory, so the assistant registers a project and creates its companion on its own.
   if [ ! -d "$COMPANIONS_DIR" ]; then install -d -m 755 "$COMPANIONS_DIR"; fi
-  # Optional. Without a source, a file installed by an earlier seed stays: removing it is a
-  # maintenance operation.
-  if [ ! -f "$DIR/companions.json" ]; then return; fi
-  echo "[seed] companions config — $COMPANIONS_CONFIG_FILE"
-  if ! cmp -s "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"; then
-    install -m 644 "$DIR/companions.json" "$COMPANIONS_CONFIG_FILE"
-  fi
 }
 
 verify() {

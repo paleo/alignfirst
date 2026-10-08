@@ -32,8 +32,8 @@ export function makeSink(): Sink {
   };
 }
 
-export function writeCompanions(home: string, value: object): void {
-  const path = join(home, ".alignfirst", "companions.json");
+export function writeRegistry(home: string, value: object): void {
+  const path = join(home, ".alignfirst", "companions", "registry.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, undefined, 2)}\n`);
 }
@@ -53,7 +53,7 @@ export function makeCompanionProject(
   const project = join(home, "app");
   mkdirSync(project, { recursive: true });
   execFileSync("git", ["init", "--quiet", project]);
-  writeCompanions(home, { paths: { "~/app": flags } });
+  writeRegistry(home, { paths: { "~/app": flags } });
   const realHome = realpathSync(home);
   return {
     home,

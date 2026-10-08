@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { writeCompanions, writeConfig } from "../helpers.js";
+import { writeRegistry, writeConfig } from "../helpers.js";
 import {
   addWorktree,
   execGit,
@@ -479,7 +479,7 @@ describe("project classification and companions", () => {
     const project = makeRepository(fixture.root, "app");
     const companionsRoot = join(fixture.home, ".alignfirst", "companions");
     mkdirSync(companionsRoot, { recursive: true });
-    writeCompanions(fixture.home, {
+    writeRegistry(fixture.home, {
       paths: { [fixture.root]: { ".plans": true, "DEVELOPERS.md": true } },
     });
     const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
@@ -515,7 +515,7 @@ describe("project classification and companions", () => {
     const fixture = makeFixture({});
     const flat = makeRepository(fixture.root, "a_b");
     const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
-    writeCompanions(fixture.home, { paths: { [fixture.root]: {} } });
+    writeRegistry(fixture.home, { paths: { [fixture.root]: {} } });
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);
