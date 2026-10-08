@@ -19,12 +19,12 @@ export default async function recoverableHandoffFailure(ctx: ScenarioContext): P
   await resetFixtures(ctx);
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
-  // Slack starters are threaded sends; root narration must not consume the fault.
+  // The starter is a threaded post on both surfaces; root narration must not consume the fault.
+  // On Discord the thread exists already, so the retry must reuse it.
   await failNextQaBusOperation({
     baseUrl: ctx.busUrl,
-    ...(ctx.channel === "slack-mock"
-      ? { operation: "outbound-message", threadOnly: true }
-      : { operation: "thread-create" }),
+    operation: "outbound-message",
+    threadOnly: true,
     message: "planned recoverable starter failure",
   });
 
@@ -41,7 +41,7 @@ export default async function recoverableHandoffFailure(ctx: ScenarioContext): P
     const input = inputOf(call);
     return (
       call.toolName === "message" &&
-      (input.action === "send" || input.action === "thread-create") &&
+      (input.action === "send" || input.action === "thread-reply") &&
       JSON.stringify(call.result).includes("planned recoverable starter failure")
     );
   });

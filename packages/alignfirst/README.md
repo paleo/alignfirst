@@ -96,6 +96,7 @@ Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print the conventions, the project instructions from `.alignfirst.md`, the documentation map when `docs/` exists, and the protocol aliases.
+- `companion add` — Register the current project in the companion registry and create its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
 - `doctor` — Diagnose an AlignFirst setup.
 
@@ -107,7 +108,7 @@ Run `alignfirst --help` for command usage or `alignfirst guide` to choose a prot
 
 ## Companion directories
 
-A companion directory holds a project's AlignFirst files outside its repository, so the repository stays untouched. `~/.alignfirst/companions.json` declares which projects have one:
+A companion directory holds a project's AlignFirst files outside its repository, so the repository stays untouched. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one:
 
 ```json
 {
@@ -121,13 +122,15 @@ A companion directory holds a project's AlignFirst files outside its repository,
 
 - `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
-An absent file means no project has a companion. An invalid file makes every command fail; `doctor` reports it and continues.
+An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues.
+
+Run `alignfirst companion add` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless a key already matches it, and creates the companion directory. Set the flags by editing the registry.
 
 ### Matching
 
 A key matches a project when it names the project's main worktree or one of its ancestors, so every worktree of a project shares one companion. `"~": {}` matches every project under the home directory. For each item, the longest matching key that sets the flag wins, and an unset flag is `"auto"`. A bare repository or a directory outside git has no companion.
 
-The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. To keep the companions elsewhere, make `~/.alignfirst/companions` a symlink.
+The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink.
 
 ### Resolution
 

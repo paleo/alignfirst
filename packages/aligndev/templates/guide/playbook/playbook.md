@@ -36,7 +36,7 @@ A channel session answers ordinary conversation directly. Project investigation,
 
 Your plain text streams to your bound route: in a thread it is the reply, in a channel it is the root reply. Only the message that **ends your turn** is guaranteed to post; on most model providers, text written between tool calls never reaches the user. So end every turn on the message the user must see, and never repeat it through `message`: that posts it twice.
 
-The `message` tool serves the starter (Discord `thread-create`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. After `thread_handoff start`, the channel turn ends on a one-line pointer to the thread.
+The `message` tool serves the starter (Discord `thread-create` then `thread-reply`, Slack `send` with the triggering timestamp as `threadId`), history reads, Discord renames, cross-surface posts, and attachments. The starter is the channel turn's reply: after `thread_handoff start`, that turn ends on exactly `NO_REPLY`.
 {{/openclaw}}
 
 ## Reply style

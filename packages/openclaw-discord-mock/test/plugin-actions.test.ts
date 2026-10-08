@@ -184,10 +184,17 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
       conversationId: "sample-project",
       title: "T",
     });
-    await runHandler(fixture, "thread-reply", { threadId: thread.id, text: "reply body" });
+    const result = (await runHandler(fixture, "thread-reply", {
+      threadId: thread.id,
+      text: "reply body",
+    })) as { details: unknown };
     const reply = fixture.bus.state.getSnapshot().messages.find((m) => m.threadId === thread.id);
     expect(reply?.conversation.id).toBe("sample-project");
     expect(reply?.text).toBe("reply body");
+    expect(result.details).toEqual({
+      ok: true,
+      result: { messageId: reply?.id, channelId: thread.id },
+    });
   });
 
   it("thread-reply ignores threadName and preserves the existing title", async () => {

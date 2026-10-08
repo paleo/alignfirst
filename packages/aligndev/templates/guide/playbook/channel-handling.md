@@ -60,10 +60,9 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 - `target`: the **raw `chat_id`** from inbound metadata
 - `messageId`: the user's triggering message id from inbound metadata, so the thread anchors on it
 - `threadName`: the name above
-- `message`: the starter from Step 3
 - `channel`: `<channel>`
 
-The tool returns the thread's `chat_id` — that is the THREAD_ID.
+The tool returns the thread's `chat_id` — that is the THREAD_ID. Post the Step 3 starter into the thread: call `message` with `action: "thread-reply"`, `threadId` set to the bare THREAD_ID, `message` set to the starter, and `channel` set to the current surface. Pass no `target`.
 
 **Slack** — Slack threads have no name. Call `message` with `action: "send"`, `target` set to the raw current `chat_id`, `threadId` set to the triggering message timestamp, `message` set to the Step 3 starter, and `channel` set to the current surface. The bare root timestamp is the THREAD_ID. Slack has no `thread-create`, `thread-reply`, or rename action.
 
@@ -105,6 +104,6 @@ Whichever case applies, the `{ask}` never says that this channel session handles
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 
-After the native action confirms delivery, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end the turn on one line in the user's language that points to the thread, such as "Continuing in the thread." On Discord, add the thread mention `<#…>` with the bare thread ID. Do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, report the concise actionable error in the channel. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
+Once the starter's delivery is confirmed, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end the turn on exactly `NO_REPLY`: the starter is this turn's reply, and the thread shows under the user's message. Do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, end the turn on the concise actionable error. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
 
 In a DM or group DM, `start` is unsupported. Explain that project work must be requested from a supported channel; do not promise automatic thread activation there.

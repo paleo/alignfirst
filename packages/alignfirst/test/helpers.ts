@@ -8,7 +8,7 @@ import type { Output } from "../src/context.js";
 
 export const packageVersion = readPackageVersion();
 
-/** Keeps the developer's `~/.alignfirst/companions.json` out of the tests. */
+/** Keeps the developer's companion registry out of the tests. */
 const DEFAULT_HOME = mkdtempSync(join(tmpdir(), "alignfirst-home-"));
 
 export interface Sink extends Output {
@@ -63,6 +63,8 @@ export function configureGit(dir: string): void {
   );
   process.env.GIT_CONFIG_GLOBAL = config;
   process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+  // English git messages, whatever the developer's locale.
+  process.env.LC_ALL = "C";
 }
 
 export function git(dir: string, ...args: string[]): string {
@@ -81,10 +83,10 @@ export function initRepository(dir: string): void {
   git(dir, "commit", "--quiet", "-m", "init");
 }
 
-export function writeCompanions(home: string, value: unknown): void {
-  const dir = join(home, ".alignfirst");
+export function writeRegistry(home: string, value: unknown): void {
+  const dir = join(home, ".alignfirst", "companions");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "companions.json"), JSON.stringify(value));
+  writeFileSync(join(dir, "registry.json"), JSON.stringify(value));
 }
 
 export interface CompanionProject {
@@ -101,7 +103,7 @@ export function makeCompanionProject(flags: Record<string, unknown>): CompanionP
   const home = join(root, "home");
   const project = join(home, "app");
   initRepository(project);
-  writeCompanions(home, { paths: { "~/app": flags } });
+  writeRegistry(home, { paths: { "~/app": flags } });
   return { root, home, project, companion: join(home, ".alignfirst", "companions", "app") };
 }
 

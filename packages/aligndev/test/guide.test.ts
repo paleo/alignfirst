@@ -240,7 +240,7 @@ describe("aligndev guide playbook", () => {
     expect(lifecycle.stdout).toContain(
       'its procedure "Set up a project through its companion" for an assistant',
     );
-    expect(lifecycle.stdout).toContain("You cannot write that file");
+    expect(lifecycle.stdout).toContain("Run `alignfirst companion add` from PROJECT_PATH.");
   });
 
   it("requires a configured or detected agent for the code topic only", async () => {
@@ -494,7 +494,7 @@ describe("aligndev guide project", () => {
     expect(result.stdout).toMatch(/^# Projects guide\n/);
     expect(result.stdout).toContain("aligndev guide project [--root <path>]");
     expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
-    expect(result.stdout).toContain("`~/.alignfirst/companions.json`");
+    expect(result.stdout).toContain("`~/.alignfirst/companions/registry.json`");
     expect(result.stdout).not.toContain("## Directory");
     expect(result.stdout).not.toContain("{{");
   });

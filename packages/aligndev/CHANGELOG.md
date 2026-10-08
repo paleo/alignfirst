@@ -1,5 +1,12 @@
 # aligndev
 
+## 0.20.1
+
+### Patch Changes
+
+- 2245262: The playbook now registers a project through `alignfirst companion add` before preparing it through its companion, instead of asking the operator for an entry.
+- 2245262: On OpenClaw, the starter is the channel turn's reply: the turn ends on `NO_REPLY` instead of a pointer to the thread, which Discord posted inside the thread. On Discord, `thread-create` opens the thread without content and `thread-reply` posts the starter.
+
 ## 0.20.0
 
 ### Minor Changes

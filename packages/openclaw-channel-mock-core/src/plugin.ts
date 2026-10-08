@@ -245,7 +245,9 @@ function buildSlackShapedThreadingToolContext(params: {
   const transportThreadId = normalizeThreadValue(context.TransportThreadId);
   const replyToId = normalizeThreadValue(context.ReplyToId);
   const currentMessageId = normalizeThreadValue(context.CurrentMessageId);
-  const currentThreadTs = messageThreadId ?? transportThreadId ?? replyToId;
+  // A root turn falls back to its own message id: native Slack threads a reply on the root's ts,
+  // so a threaded `send` rooted there is the turn's current-source reply.
+  const currentThreadTs = messageThreadId ?? transportThreadId ?? replyToId ?? currentMessageId;
   const hasExplicitThreadTarget =
     messageThreadId != null ||
     transportThreadId != null ||
@@ -253,13 +255,23 @@ function buildSlackShapedThreadingToolContext(params: {
   const currentMessagingTarget = normalizeThreadValue(context.To);
   return {
     ...(currentMessagingTarget !== undefined
-      ? { currentChannelId: currentMessagingTarget, currentMessagingTarget }
+      ? {
+          currentChannelId: resolveSlackShapedChannelId(currentMessagingTarget),
+          currentMessagingTarget,
+        }
       : {}),
     ...(currentThreadTs !== undefined ? { currentThreadTs } : {}),
     replyToMode: hasExplicitThreadTarget ? "all" : (context.ReplyToMode ?? "all"),
     hasRepliedRef,
     sameChannelThreadRequired: hasExplicitThreadTarget,
   };
+}
+
+// Native Slack names a channel by its bare ID here, which core matches against the bare channel ID
+// of a delivery receipt's target.
+function resolveSlackShapedChannelId(target: string): string {
+  const parsed = parseQaTarget(target);
+  return parsed.chatType === "channel" ? parsed.conversationId : target;
 }
 
 function normalizeThreadValue(value: string | number | null | undefined): string | undefined {

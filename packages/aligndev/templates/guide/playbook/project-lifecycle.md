@@ -79,7 +79,7 @@ When the user reports the merge, or you observe it while checking the PR:
 
 The preparation targets the project's companion directory. It writes nothing in the repository and creates no branch, commit or pull request.
 
-1. Read the `Companion:` line of `{{ALIGNDEV}} project status <PROJECT_PATH>`. `(none)` means no entry of `~/.alignfirst/companions.json` matches the project. You cannot write that file: the deployment locks `~/.alignfirst/`. End the turn asking the operator for an entry covering PROJECT_PATH, and stop there.
+1. Run `{{ALIGNFIRST}} companion add` from PROJECT_PATH. It registers the project in the companion registry unless an entry already covers it, and creates the companion directory.
 2. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
 3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
 4. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
