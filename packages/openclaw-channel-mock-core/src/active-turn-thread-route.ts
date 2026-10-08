@@ -43,8 +43,8 @@ export function notifyActiveTurnThreadCreated(params: {
   sourceChannelId: string;
   sourceMessageId?: string;
   thread: AdoptedThread;
-}): boolean {
-  if (params.sessionKey == null || params.sourceMessageId === undefined) return false;
+}): void {
+  if (params.sessionKey == null || params.sourceMessageId === undefined) return;
   const route = findRoute(
     params.sessionKey,
     (candidate) =>
@@ -52,9 +52,7 @@ export function notifyActiveTurnThreadCreated(params: {
       candidate.sourceChannelId === params.sourceChannelId &&
       candidate.sourceMessageId === params.sourceMessageId,
   );
-  if (!route) return false;
-  route.adoptedThread = params.thread;
-  return true;
+  if (route) route.adoptedThread = params.thread;
 }
 
 export function isActiveTurnAdoptedThread(params: {

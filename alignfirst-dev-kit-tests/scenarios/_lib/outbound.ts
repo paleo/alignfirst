@@ -136,7 +136,7 @@ export async function assertSilentChannelTurn(
  */
 export async function assertNoChannelRootLeak(
   ctx: ScenarioContext,
-  opts: { sinceCursor: number; withinMs?: number; exceptIds?: readonly string[] },
+  opts: { sinceCursor: number; withinMs?: number },
 ): Promise<void> {
   const deadline = Date.now() + (opts.withinMs ?? 5_000);
   let cursor = opts.sinceCursor;
@@ -147,7 +147,6 @@ export async function assertNoChannelRootLeak(
     for (const m of messages) {
       if (m.direction !== "outbound" || m.conversation.id !== ctx.conversationId) continue;
       if (m.threadId !== undefined || isOpenclawNotice(m.text)) continue;
-      if (opts.exceptIds?.includes(m.id)) continue;
       if (await isMetaNarration(ctx, m.text)) {
         ++tolerated;
         ctx.log(`channel-root narration tolerated: ${JSON.stringify(m.text.slice(0, 80))}`);

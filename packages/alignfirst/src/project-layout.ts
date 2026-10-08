@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -297,5 +298,7 @@ function userPathOf(path: string, realHome: string): string {
 function writeRegistry(registry: Registry, key: string): void {
   mkdirSync(dirname(registry.path), { recursive: true });
   const paths = { ...registry.paths, [key]: {} };
-  writeFileSync(registry.path, `${JSON.stringify({ paths }, undefined, 2)}\n`);
+  const tmpPath = `${registry.path}.${process.pid}.tmp`;
+  writeFileSync(tmpPath, `${JSON.stringify({ paths }, undefined, 2)}\n`);
+  renameSync(tmpPath, registry.path);
 }

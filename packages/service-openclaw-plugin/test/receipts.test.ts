@@ -87,6 +87,7 @@ const DISCORD_REPLY_REJECTIONS: Array<{
   reason: string;
 }> = [
   { params: { threadId: "T-OTHER" }, reason: "unknownThread" },
+  { params: { threadId: undefined }, reason: "missingThread" },
   { params: { message: " " }, reason: "missingStarter" },
   { details: { ok: false }, reason: "notSent" },
   { details: { ok: true, partial: true }, reason: "partialDelivery" },
@@ -151,6 +152,17 @@ describe("native delivery receipts", () => {
       starterText: STARTER,
       starterMessageId: "M2",
     });
+    expect(fixture.logger.debug).not.toHaveBeenCalled();
+  });
+
+  it("reads the Discord reply thread from the target when threadId is absent", async () => {
+    const fixture = coordinator("discord");
+    observe(fixture, DISCORD_THREAD_CREATE);
+    observe(fixture, {
+      ...DISCORD_STARTER_REPLY,
+      params: { action: "thread-reply", to: "channel:T1", message: STARTER },
+    });
+    await expect(lookup(fixture, "T1")).resolves.toMatchObject({ threadId: "T1" });
     expect(fixture.logger.debug).not.toHaveBeenCalled();
   });
 

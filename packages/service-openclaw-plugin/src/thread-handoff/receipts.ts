@@ -44,12 +44,12 @@ export interface ReceiptCache {
   observationErrors: Map<string, Error>;
 }
 
-export interface CachedContext extends CachedEntry {
-  source: SourceContext;
-}
-
 export interface CachedEntry {
   capturedAt: number;
+}
+
+export interface CachedContext extends CachedEntry {
+  source: SourceContext;
 }
 
 type RejectionReason =
