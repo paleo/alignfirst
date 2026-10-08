@@ -3,9 +3,14 @@
 Synthetic Discord-shaped OpenClaw channel plugin. Registers as channel `discord-mock`. Full
 Discord-shaped action surface: `send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`,
 `delete`, `search`. `thread-create` retains the supplied parent-message anchor and returns Discord's
-native `{ ok: true, thread }` shape. If the thread exists but its optional starter fails, the result
-is explicitly partial and is not a confirmed handoff receipt. Free-form agent text without a tool
-call lands in the parent channel.
+native `{ ok: true, thread }` shape. Its content is optional; if the thread exists but the content
+fails, the result is explicitly partial. `thread-reply` returns `{ ok: true, result: { messageId,
+channelId } }`.
+
+Like native Discord, a turn adopts a thread it creates in its channel, anchored on its triggering
+message. The turn's final reply then lands in that thread, and a `thread-reply` into it is tagged
+`sourceReplyRoute: "current-source"`, so OpenClaw counts it as the turn's reply. Otherwise free-form
+agent text lands in the parent channel.
 
 Backed by [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core) (`surface: "discord"`, `autoThread: false`). Pair with [`@alignfirst/openclaw-test`](https://www.npmjs.com/package/@alignfirst/openclaw-test) for the test harness.
 

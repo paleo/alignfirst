@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 
 import { CliError } from "./cli-error.js";
 import { resolveCommandForm } from "./command-form.js";
+import { runCompanion } from "./commands/companion.js";
 import { runConfig } from "./commands/config.js";
 import { runContext } from "./commands/context.js";
 import { runConventions } from "./commands/conventions.js";
@@ -80,6 +81,7 @@ Usage:
   ${ctx.form} docmap [<arguments>]
   ${ctx.form} conventions
   ${ctx.form} context
+  ${ctx.form} companion add
   ${ctx.form} config [--json]
   ${ctx.form} doctor
   ${ctx.form} --help
@@ -103,6 +105,8 @@ function dispatch(ctx: CommandContext, command: string, args: string[]): number 
       return runConventions(ctx, args);
     case "context":
       return runContext(ctx, args);
+    case "companion":
+      return runCompanion(ctx, args);
     case "config":
       return runConfig(ctx, args);
     case "doctor":

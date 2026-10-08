@@ -1,6 +1,6 @@
 ---
 title: Companion Directories
-summary: How `alignfirst` and `aligndev` keep a project's AlignFirst files outside its repository: `companions.json`, matching, resolution, the `config --json` contract and the commands that read it.
+summary: How `alignfirst` and `aligndev` keep a project's AlignFirst files outside its repository: the companion registry, matching, resolution, the `config --json` contract and the commands that read it.
 read_when:
   - changing how either CLI locates `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` or `_aligndev`
   - changing the `alignfirst config --json` report or its parser in `aligndev`
@@ -12,7 +12,7 @@ read_when:
 
 A **companion directory** holds a project's AlignFirst files outside its repository, and reproduces the project's layout for those files only. User-facing references:
 
-- [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the file, matching, resolution and the agent bootstrap line.
+- [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the registry, matching, resolution and the agent bootstrap line.
 - [aligndev Architecture](aligndev-architecture.md) — session files, `--add-dir` and the project inventory.
 - [`companion-setup.md`](../skills/alignfirst-setup-guide/references/companion-setup.md) — preparing a project through its companion.
 
@@ -23,9 +23,9 @@ Two cases drive the feature:
 - A team uses AlignFirst and keeps `.plans/` in its repository, but `aligndev`'s session files (`_aligndev/`) must live elsewhere.
 - A team does not use AlignFirst. `.alignfirst.json`, `.plans/`, `docs/`, `DEVELOPERS.md` and the project instructions come from outside the repository, which stays untouched.
 
-## The file
+## The registry
 
-`~/.alignfirst/companions.json` has a fixed path, with no environment variable. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.config.json` and, by default, the companions. An absent file means no project has a companion.
+The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed path, with no environment variable. It sits in the companions directory, beside the companions. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.config.json`. An absent registry means no project has a companion.
 
 ```json
 {
@@ -38,7 +38,7 @@ Two cases drive the feature:
 
 - `paths` — keys are absolute or `~/` paths. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
-The arktype schema rejects unknown keys at every level. An unreadable or invalid file is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
+The arktype schema rejects unknown keys at every level. An unreadable or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
 
 ## Matching and naming
 
@@ -46,7 +46,7 @@ A project is identified by its **main worktree path**: the parent of `git rev-pa
 
 A key matches when it equals the main worktree path or is an ancestor of it. Keys are compared by real path when they exist, after `resolve` otherwise. For each item, the most specific matching key (the longest path) that sets the flag wins; an item no key sets is `"auto"`.
 
-The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
+The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion and the registry elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
 
 ## Resolution
 
@@ -70,7 +70,7 @@ Reads never create the companion directory. A command that creates an item there
 
 `alignfirst` owns parsing and resolution in `packages/alignfirst/src/project-layout.ts`. `resolveProjectLayout(cwd, home)` runs once per command and is cached on `ctx.layout` (`layoutOf(ctx)`). Every command reads `.alignfirst.json`, `.plans` and `docs` through it.
 
-`aligndev` never reads `companions.json`. `packages/aligndev/src/project/layout.ts` runs `alignfirst config --json` in a directory and parses the report:
+`aligndev` never reads the registry. `packages/aligndev/src/project/layout.ts` runs `alignfirst config --json` in a directory and parses the report:
 
 ```ts
 interface ConfigReport {
@@ -94,7 +94,8 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 - **`docmap`**: adds `--root <companion docs>` when `docs` resolves in the companion and the arguments carry no `--root`.
 - **`context`**: prints the conventions, then the resolved `.alignfirst.md` under `# Project Instructions`, then the docmap section when `docs` exists, then the protocols. The conventions give a companion `.plans` by absolute path and exclude `.plans` from searches only when it resolves in the project.
 - **`config`**: the report above; the text form adds a `Companion:` line and one line per item.
-- **`doctor`**: a `Companion` section with the file state, the matching keys, the directory and each item. An item flagged `true` with a missing companion copy is a warning.
+- **`companion add`**: registers the main worktree path, as a `~/` key inside the home directory and an absolute one outside it, with `{}`. A key that already matches, exact or ancestor, leaves the registry unchanged. The command creates the registry when missing and always creates the companion directory. Flags are edited by hand.
+- **`doctor`**: a `Companion` section with the registry state, the matching keys, the directory and each item. An item flagged `true` with a missing companion copy is a warning.
 
 ### `aligndev code`
 
@@ -124,6 +125,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.
 - **A configurable companions root**: a symlink at `~/.alignfirst/companions` does the same with no schema key.
+- **The registry at `~/.alignfirst/companions.json`**, outside the companions directory: a symlink did not move it with the companions, and a Dev Kit host had to lock it with the CLI config, so the assistant could not register a project.
 - **XDG directories** (`~/.config/alignfirst/` for the files, `~/.local/share/` for the companions): the companions are hard to find, and work files would land in dotfiles repositories that track `~/.config`.
 
 ## Out of scope

@@ -29,7 +29,8 @@ describe("git failures", () => {
     await expect(
       runGit({ stdout, stderr }, dir, "-c", "core.editor=true", "rebase", "--continue"),
     ).rejects.toThrow("git rebase failed. See the git output above.");
-    expect(stderr.text()).toContain("no rebase in progress");
+    // Git 2.39 prints "No rebase in progress?".
+    expect(stderr.text()).toMatch(/no rebase in progress/i);
   });
 
   it("streams output beyond the synchronous child-process buffer limit", async () => {

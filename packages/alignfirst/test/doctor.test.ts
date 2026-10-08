@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeCompanionProject, makeTempDir, runMain, writeCompanions } from "./helpers.js";
+import { makeCompanionProject, makeTempDir, runMain, writeRegistry } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -28,7 +28,7 @@ describe("doctor command", () => {
       expect(result.stdout).toContain(`] ${section}:`);
     expect(result.stdout).toContain("[ok] .alignfirst.json: none");
     expect(result.stdout).toContain(
-      `[ok] Companion: companions.json absent (${join(cwd, ".alignfirst", "companions.json")})\n[ok] Companion: none\n`,
+      `[ok] Companion: registry absent (${join(cwd, ".alignfirst", "companions", "registry.json")})\n[ok] Companion: none\n`,
     );
     expect(result.stdout).toContain("[warn] Git: default branch unresolved");
     expect(result.stdout).toContain("[ok] Docmap: docs/ none");
@@ -49,7 +49,7 @@ describe("doctor command", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain(
       [
-        `[ok] Companion: companions.json valid (${join(home, ".alignfirst", "companions.json")})`,
+        `[ok] Companion: registry valid (${join(home, ".alignfirst", "companions", "registry.json")})`,
         "[ok] Companion: matched by ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
@@ -64,14 +64,14 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Work files: local");
   });
 
-  it("reports an invalid companions.json in every section that needs the layout", async () => {
+  it("reports an invalid registry in every section that needs the layout", async () => {
     const cwd = temp();
-    writeCompanions(cwd, {});
+    writeRegistry(cwd, {});
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
     for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])
       expect(result.stdout).toContain(
-        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions.json: paths`,
+        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions/registry.json: paths`,
       );
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });

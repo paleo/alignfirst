@@ -11,7 +11,10 @@ const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
 const TAKEOVER_MESSAGE = "Take over this thread.";
 const SILENT_TOKEN = "HEARTBEAT_OK";
-const HANDOFF_POINTER = "Continuing in the thread.";
+const BOT_MENTION = "@openclaw";
+const FINALIZER_ANSWER = "ISOLATED_FINALIZER_ANSWER";
+const FINALIZER_FALLBACK = "no final summary was produced";
+const ISOLATED_FINALIZATION_LOG = "running isolated finalization";
 const STARTER = "Project: Project-X\nTask: preserve this exact starter.";
 const MARKER = "TARGET_SESSION_STARTED";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted by a gateway restart";
@@ -24,8 +27,10 @@ const execFileAsync = promisify(execFile);
 type Surface = "slack" | "discord";
 
 type FixtureOptions = {
+  answerFinalizer?: boolean;
   claimTwice?: boolean;
   duplicateStart?: boolean;
+  starterInThreadCreate?: boolean;
   holdFirstSeed?: boolean;
   silenceAfterClaim?: boolean;
   stallChannelReplyMs?: number;
@@ -87,9 +92,60 @@ describe("OpenClaw external-plugin gateway", () => {
           .getSnapshot()
           .messages.filter((message) => message.direction === "outbound")
           .map((message) => message.text),
-      ).toEqual([STARTER, HANDOFF_POINTER]);
+      ).toEqual([STARTER]);
     },
   );
+
+  it.each(["slack", "discord"] as const)(
+    "ends a mentioning %s channel turn silently on its starter",
+    async (surface) => {
+      const fixture = await startFixture(surface, {
+        answerFinalizer: true,
+        silenceAfterClaim: true,
+      });
+      await injectRootMessage(fixture, "Project-X", `${BOT_MENTION} start a task.`);
+      await waitUntil(
+        () => providerContentIncludes(fixture, '"status": "claimed"'),
+        20_000,
+        () => `claim result not observed\n${fixture.gatewayLog.join("")}`,
+      );
+      await new Promise((resolveWait) => setTimeout(resolveWait, 5_000));
+
+      expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
+      expect(providerContentIncludes(fixture, TAKEOVER_MESSAGE)).toBe(true);
+      expect(await handoffStates(fixture)).toEqual(["claimed"]);
+      const snapshot = fixture.bus.state.getSnapshot();
+      const expectedThreadId =
+        surface === "slack"
+          ? snapshot.messages.find((message) => message.direction === "inbound")?.id
+          : snapshot.threads[0]?.id;
+      expect(expectedThreadId).toBeTruthy();
+      expect(
+        allOutbound(fixture).map((message) => [
+          message.text,
+          message.conversation.id,
+          message.threadId,
+        ]),
+      ).toEqual([[STARTER, "Project-X", expectedThreadId]]);
+      expectNoIsolatedFinalization(fixture);
+    },
+  );
+
+  it("posts the isolated finalizer into a Discord thread created with its starter", async () => {
+    const fixture = await startFixture("discord", {
+      answerFinalizer: true,
+      starterInThreadCreate: true,
+    });
+    await injectRootMessage(fixture, "Project-X", `${BOT_MENTION} start a task.`);
+    const finalizer = await waitForMessage(fixture, (message) =>
+      message.text.includes(FINALIZER_ANSWER),
+    );
+    const threadId = fixture.bus.state.getSnapshot().threads[0]?.id;
+    expect(threadId).toBeTruthy();
+    expect(finalizer.threadId).toBe(threadId);
+    expect(fixture.gatewayLog.join("")).toContain(ISOLATED_FINALIZATION_LOG);
+    expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([threadId, threadId]);
+  });
 
   it.each(["slack", "discord"] as const)(
     "starts and continues the canonical %s thread without a human nudge",
@@ -124,9 +180,6 @@ describe("OpenClaw external-plugin gateway", () => {
             (message) => message.direction === "outbound" && message.text === STARTER,
           ),
       ).toHaveLength(1);
-      const pointer = await waitForMessage(fixture, (message) => message.text === HANDOFF_POINTER);
-      expect(pointer.threadId).toBeUndefined();
-
       const records = JSON.parse(
         await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
       ) as Array<{
@@ -164,8 +217,8 @@ describe("OpenClaw external-plugin gateway", () => {
         surface === "slack"
           ? providerContentIncludes(fixture, '"receipt"') &&
               providerContentIncludes(fixture, '"deliveryStatus"')
-          : providerContentIncludes(fixture, '"thread"') &&
-              providerContentIncludes(fixture, '"parentMessageId"'),
+          : providerContentIncludes(fixture, '"parentMessageId"') &&
+              providerToolCallIncludes(fixture, "message", { action: "thread-reply" }),
       ).toBe(true);
 
       await injectQaBusInboundMessage({
@@ -195,7 +248,7 @@ describe("OpenClaw external-plugin gateway", () => {
             (message) => message.direction === "outbound" && message.text === MARKER,
           ),
       ).toHaveLength(1);
-      expect(outboundMessages(fixture, HANDOFF_POINTER)).toHaveLength(1);
+      expect(allOutbound(fixture).filter((message) => message.threadId === undefined)).toEqual([]);
     },
   );
 
@@ -489,6 +542,7 @@ function buildConfig(params: {
       },
       slots: { memory: "none" },
     },
+    messages: { groupChat: { mentionPatterns: [BOT_MENTION] } },
     tools: {
       profile: "coding",
       alsoAllow: ["message", "thread_handoff"],
@@ -548,7 +602,10 @@ function createProviderScript(
   let repeatedStart = false;
   let repeatedClaim = false;
   return (body: Record<string, unknown>) => {
-    if (options.silenceAfterClaim && !Array.isArray(body.tools)) return { content: "NO_REPLY" };
+    if (!Array.isArray(body.tools)) {
+      if (options.answerFinalizer) return { content: FINALIZER_ANSWER };
+      if (options.silenceAfterClaim) return { content: "NO_REPLY" };
+    }
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const allMessages = messages as Array<{ role?: unknown; content?: unknown }>;
     const tailMessages = allMessages.slice(-4);
@@ -631,10 +688,10 @@ function createProviderScript(
         const threadId = resolveThreadId(surface, snapshot, conversationId);
         return { tool: "thread_handoff", arguments: { action: "start", threadId } };
       }
-      return { content: HANDOFF_POINTER };
+      return { content: "NO_REPLY" };
     }
     if (/"status"\s*:\s*"alreadyStarted"/u.test(latestToolText ?? "")) {
-      return { content: HANDOFF_POINTER };
+      return { content: "NO_REPLY" };
     }
     const snapshot = bus.state.getSnapshot();
     const conversationId = resolveConversationId(snapshot, all);
@@ -646,6 +703,7 @@ function createProviderScript(
           message.conversation.id === conversationId,
       )
     ) {
+      if (options.starterInThreadCreate) return { content: "NO_REPLY" };
       const threadId = resolveThreadId(surface, snapshot, conversationId);
       return { tool: "thread_handoff", arguments: { action: "start", threadId } };
     }
@@ -657,28 +715,40 @@ function createProviderScript(
     );
     if (!root) throw new Error("provider received a root turn before the bus message existed");
     callSequence += 1;
-    return surface === "slack"
-      ? {
-          tool: "message",
-          arguments: {
-            action: "send",
-            to: `channel:${conversationId}`,
-            threadId: root.id,
-            message: STARTER,
-          },
-          id: `native-starter-${callSequence}`,
-        }
-      : {
-          tool: "message",
-          arguments: {
-            action: "thread-create",
-            to: `channel:${conversationId}`,
-            threadName: `${conversationId} work`,
-            messageId: root.id,
-            message: STARTER,
-          },
-          id: `native-starter-${callSequence}`,
-        };
+    const id = `native-starter-${callSequence}`;
+    if (surface === "slack") {
+      return {
+        tool: "message",
+        arguments: {
+          action: "send",
+          target: `channel:${conversationId}`,
+          threadId: root.id,
+          message: STARTER,
+        },
+        id,
+      };
+    }
+    const thread = snapshot.threads.find(
+      (candidate) => candidate.conversationId === conversationId,
+    );
+    if (thread) {
+      return {
+        tool: "message",
+        arguments: { action: "thread-reply", threadId: thread.id, message: STARTER },
+        id,
+      };
+    }
+    return {
+      tool: "message",
+      arguments: {
+        action: "thread-create",
+        target: `channel:${conversationId}`,
+        threadName: `${conversationId} work`,
+        messageId: root.id,
+        ...(options.starterInThreadCreate ? { message: STARTER } : {}),
+      },
+      id,
+    };
   };
 }
 
@@ -782,6 +852,22 @@ async function waitForMessage(
   );
   if (!found) throw new Error("message wait ended without a match");
   return found;
+}
+
+function allOutbound(fixture: Fixture) {
+  return fixture.bus.state
+    .getSnapshot()
+    .messages.filter((message) => message.direction === "outbound");
+}
+
+function expectNoIsolatedFinalization(fixture: Fixture) {
+  expect(fixture.gatewayLog.join("")).not.toContain(ISOLATED_FINALIZATION_LOG);
+  expect(
+    allOutbound(fixture).filter(
+      (message) =>
+        message.text.includes(FINALIZER_ANSWER) || message.text.includes(FINALIZER_FALLBACK),
+    ),
+  ).toEqual([]);
 }
 
 function outboundMessages(fixture: Fixture, text: string) {
