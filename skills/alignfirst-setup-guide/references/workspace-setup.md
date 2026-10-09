@@ -6,7 +6,7 @@ Workspace can be installed on its own. Add the workspace instructions below; Ali
 
 **Node consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation, branch lifecycle, process control, log polling, CLI). You supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an assistant must also meet [the Dev Kit contract](#the-dev-kit-contract).
+**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an assistant must also meet [the AlignDev contract](#the-aligndev-contract).
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -239,7 +239,7 @@ The release process is not one of them: a multi-step procedure followed occasion
 
 The port layout is not one of them either: the block table, what raising `perWorkspace` costs elsewhere in the repo, which config file each port reaches. That reference material belongs in `docs/`, with nothing left behind in the entry points. Point at the document from the `ports` group in `workspace.mjs`. Entry points keep only what a reader needs every session: the ports are printed at startup, read them from the log.
 
-## The Dev Kit Contract
+## The AlignDev Contract
 
 An assistant creates every worktree through the workspace system and has no manual fallback. `@alignfirst/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
 
@@ -298,5 +298,5 @@ Items marked *(ports)* drop out without a port scheme, items marked *(dev server
 - [ ] **Give every callback server its own row in the `dev up` summary.** *(dev server)* The spawn servers get a URL, a PID and a log path for free; a database or a mock container gets none of the three. Print its connection string, its container name and the container-logs command, in the same column order as the spawn rows.
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.
 - [ ] **Wire agents** — a workspaces section pointing at `workspace --guide` (also in `DEVELOPERS.md` for a managed project), the conventions, and the project-specific facts. Add the search-ignore line unless the instruction file runs `alignfirst context`.
-- [ ] **Meet [the Dev Kit contract](#the-dev-kit-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
+- [ ] **Meet [the AlignDev contract](#the-aligndev-contract)** on a managed project: the `remote` setup profile in the variant matching the deployment, the public URL in the `dev up` summary *(dev server)*, and the README section.
 - [ ] **Verify the whole lifecycle** on a throwaway branch: `workspace setup -c <branch>`, then check the linked worktree's gitignored files carry its own ports, start its dev server *(dev server)*, and finish with `workspace remove`. On a managed project, also run `setup --profile remote` on the main worktree (gateway variant: with `REMOTE_DEV_DOMAIN` set to a placeholder domain), check the rewritten URLs there and in a new linked worktree, then restore the main files. A wrapper that merely loads proves nothing.

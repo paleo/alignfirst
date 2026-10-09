@@ -3,7 +3,7 @@ name: alignfirst-setup-guide
 description: >-
   Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a
   consumer repository, or through a companion directory that leaves the repository untouched;
-  prepare a repository and Linux deployment for the AlignFirst Dev Kit, or set up a coding agent as
+  prepare a repository and a Linux deployment of AlignDev for OpenClaw, or set up a coding agent as
   the AlignFirst assistant.
 license: CC0 1.0
 metadata:
@@ -30,7 +30,7 @@ section provides this itself.
 
 A work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
 
-`aligndev`, the Dev Kit CLI, carries the assistant's playbook, coding-agent delegation, and project
+`aligndev`, the AlignDev CLI, carries the assistant's playbook, coding-agent delegation, and project
 discovery. An OpenClaw assistant host installs it; a coding-agent assistant runs it through `npx`.
 
 ## An Untouched Repository
@@ -74,9 +74,9 @@ Choose the `AGENTS.md` or `CLAUDE.md` discovery section from the project's adopt
 
 Installing Docmap or workspace alone does not opt the project into AlignFirst protocols. Installing skills globally does not opt every repository into them.
 
-## AlignFirst Dev Kit for OpenClaw
+## AlignDev for OpenClaw
 
-The **Dev Kit** turns an OpenClaw **assistant** into a developer who works with AlignFirst. The
+**AlignDev for OpenClaw** turns an OpenClaw **assistant** into a developer who works with AlignFirst. The
 assistant holds a chat identity, its channels and its sessions, and runs repository work through a
 coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
 
@@ -101,7 +101,7 @@ Inspect the repository before changing it. A prepared project has all of these:
    directory, bootstrap its documentation through
    [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
 5. workspace, adapted to the project's runtime and development lifecycle, meeting
-   [the Dev Kit contract](references/workspace-setup.md#the-dev-kit-contract).
+   [the AlignDev contract](references/workspace-setup.md#the-aligndev-contract).
 6. A Node version declaration (`.nvmrc`, `.node-version` or `engines.node`) so fnm selects the project runtime. Ask which version to declare when the repository has none.
 7. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
@@ -115,7 +115,7 @@ repository. Follow each selected tool reference above, then complete `DEVELOPERS
 ## Create an Assistant
 
 For creating or operating the assistant deployment itself, read
-[alignfirst-dev-kit.md](references/alignfirst-dev-kit.md). Do not load that workflow for ordinary
+[aligndev-openclaw.md](references/aligndev-openclaw.md). Do not load that workflow for ordinary
 tool setup.
 
 ## A Coding Agent as the Assistant

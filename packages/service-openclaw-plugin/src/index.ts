@@ -16,7 +16,7 @@ const configSchema = buildJsonPluginConfigSchema({
 export default definePluginEntry({
   id: "alignfirst-service",
   name: "AlignFirst Service",
-  description: "OpenClaw capabilities for the AlignFirst Dev Kit.",
+  description: "OpenClaw capabilities for AlignDev.",
   configSchema,
   register: registerThreadHandoff,
 });

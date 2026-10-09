@@ -42,7 +42,7 @@ Before any discussion:
 3. Retain the canonical path as PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. When the project's workspace wrapper declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <perWorkspace × maxWorkspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`.
 4. Install dependencies and build, following the repository's own README.
 
-### Step 2 — Check the Dev Kit contract
+### Step 2 — Check the AlignDev contract
 
 The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Project for an Assistant": AlignFirst skills configuration, docmap, the workspace system, and a `DEVELOPERS.md` with a workspaces section. The workspace system and its section belong to the contract only for a project that installs them; a project without them runs in main-worktree mode. When DEVELOPERS_PATH exists, the project is prepared: continue with the normal working-session flow for the user's request. Otherwise, continue to Step 3.
 

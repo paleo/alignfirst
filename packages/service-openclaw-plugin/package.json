@@ -1,7 +1,7 @@
 {
   "name": "@alignfirst/service-openclaw-plugin",
   "version": "0.5.0",
-  "description": "OpenClaw capabilities for the AlignFirst Dev Kit.",
+  "description": "OpenClaw capabilities for AlignDev.",
   "keywords": [
     "alignfirst",
     "openclaw",

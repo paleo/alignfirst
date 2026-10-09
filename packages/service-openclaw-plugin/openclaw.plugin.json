@@ -1,7 +1,7 @@
 {
   "id": "alignfirst-service",
   "name": "AlignFirst Service",
-  "description": "OpenClaw capabilities for the AlignFirst Dev Kit.",
+  "description": "OpenClaw capabilities for AlignDev.",
   "activation": { "onStartup": true },
   "contracts": { "tools": ["thread_handoff"] },
   "configSchema": {

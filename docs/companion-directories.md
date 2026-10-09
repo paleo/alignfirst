@@ -128,12 +128,12 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 ## Rejected alternatives
 
 - **Matching by git remote**, from the earlier overlay design: forks, mirrors and renamed remotes break it, and a wrong match silently serves another project's conventions.
-- **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, `companion add` created a directory per project, and no project could be unregistered alone. They existed while the Dev Kit locked the registry; `companion add` replaced them.
+- **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, `companion add` created a directory per project, and no project could be unregistered alone. They existed while AlignDev for OpenClaw locked the registry; `companion add` replaced them.
 - **A per-file project-then-companion fallback without flags**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.
 - **A configurable companions root**: a symlink at `~/.alignfirst/companions` does the same with no schema key.
-- **The registry at `~/.alignfirst/companions.json`**, outside the companions directory: a symlink did not move it with the companions, and a Dev Kit host had to lock it with the CLI config, so the assistant could not register a project.
+- **The registry at `~/.alignfirst/companions.json`**, outside the companions directory: a symlink did not move it with the companions, and an AlignDev OpenClaw host had to lock it with the CLI config, so the assistant could not register a project.
 - **XDG directories** (`~/.config/alignfirst/` for the files, `~/.local/share/` for the companions): the companions are hard to find, and work files would land in dotfiles repositories that track `~/.config`.
 
 ## Out of scope

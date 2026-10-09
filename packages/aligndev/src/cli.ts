@@ -75,7 +75,7 @@ function renderHelp(aligndev: string): string {
     [`${aligndev} -h, --help`],
     [`${aligndev} -v, --version`],
   ]);
-  return `aligndev — the AlignFirst Dev Kit CLI.
+  return `aligndev — the AlignDev CLI.
 
 Usage:
 ${usage}

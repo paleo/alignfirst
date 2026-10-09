@@ -13,7 +13,7 @@ Write the file directly. `npm run changeset` is the interactive equivalent, for 
 1. **Identify modified packages.** Map changed file paths to their workspace packages:
    `packages/<name>/` → `@alignfirst/<name>`, except `packages/alignfirst/` → `alignfirst`. Only include
    packages with actual source changes. Changes confined to `skills/`,
-   `alignfirst-dev-kit-tests/`, `alignfirst-dev-kit.md`, or `docs/` release nothing and need no
+   `aligndev-openclaw-tests/` or `docs/` release nothing and need no
    changeset.
 
    ```sh
