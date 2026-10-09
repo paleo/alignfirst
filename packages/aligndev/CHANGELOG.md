@@ -1,5 +1,11 @@
 # aligndev
 
+## 0.20.2
+
+### Patch Changes
+
+- e5ac2f5: The delegation guide describes the coder's numbered questions and how to answer or accept them.
+
 ## 0.20.1
 
 ### Patch Changes
