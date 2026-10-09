@@ -32,6 +32,7 @@ import {
 import { ConfigError, WorkspaceError } from "./errors.js";
 import { printGuide } from "./guide.js";
 import {
+  type CopyAndPatchOutcome,
   copyAndPatchFile,
   formatDuration,
   type ResolvedFileSource,
@@ -259,7 +260,8 @@ export interface GitignoredFileEntry {
   /**
    * Rewrites the source content per workspace. Omit to copy the content verbatim. When the file
    * already exists, `setup` re-applies it to the current content and rewrites the file only when
-   * the result differs, so it MUST be idempotent and leave the lines it does not know untouched.
+   * the result differs. It must leave the lines it does not know untouched; `setup` refuses (throws)
+   * a patch that is not idempotent.
    */
   patch?: (content: string, ctx: PatchContext) => string;
   /**
@@ -618,14 +620,7 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
   }
   linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
   linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
-  await seedGitignoredFiles(
-    setupCtx,
-    config.gitignoredFiles,
-    name,
-    ports,
-    command.force,
-    log.verbose,
-  );
+  await seedGitignoredFiles(setupCtx, config.gitignoredFiles, name, ports, command.force, log);
   if (profile) await applySelectedProfile(profile, { ...setupCtx, name, ports, log: log.tee });
 }
 
@@ -882,7 +877,7 @@ function runList(kernel: Kernel): void {
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
   const resolvedPorts = kernel.ports;
   const headers = ["NAME", "TYPE", "STATUS", "DEV"];
-  if (resolvedPorts) headers.push(portsColumnHeader(resolvedPorts));
+  if (resolvedPorts) headers.push("PORTS");
   headers.push("BRANCH", "PATH", "CREATED");
   const rows = entries.map(([name, entry]) => {
     const cells = [
@@ -891,7 +886,7 @@ function runList(kernel: Kernel): void {
       entry.status,
       liveSet.has(resolve(entry.worktree)) ? "up" : "-",
     ];
-    if (resolvedPorts) cells.push(portsCell(resolvedPorts, entry));
+    if (resolvedPorts) cells.push(firstPortCell(resolvedPorts, entry));
     cells.push(getWorktreeBranch(entry.worktree) ?? "(detached)", entry.worktree, entry.createdAt);
     return cells;
   });
@@ -907,21 +902,11 @@ function sortedEntries(registry: WorkspacesRegistry): [string, WorkspaceEntry][]
   });
 }
 
-/** `PORTS` shows each block's first port; `serviceMajor` has no block, so `INDEX` shows the index. */
-function portsColumnHeader(resolvedPorts: ResolvedPortsConfig): string {
-  return resolvedPorts.layout === "serviceMajor" ? "INDEX" : "PORTS";
-}
-
-/**
- * The first port of the entry's block (its index in `serviceMajor`), or `?` when the entry predates
- * the `ports` config.
- */
-function portsCell(resolvedPorts: ResolvedPortsConfig, entry: WorkspaceEntry): string {
+/** The first port of the entry, or `?` when the entry predates the `ports` config. */
+function firstPortCell(resolvedPorts: ResolvedPortsConfig, entry: WorkspaceEntry): string {
   const index = indexOfEntry(entry);
   if (index === undefined) return "?";
-  return String(
-    resolvedPorts.layout === "serviceMajor" ? index : firstPortOf(resolvedPorts, index),
-  );
+  return String(firstPortOf(resolvedPorts, index));
 }
 
 function renderTable(headers: string[], rows: string[][]): string[] {
@@ -1432,7 +1417,7 @@ async function seedGitignoredFiles(
   name: string,
   ports: Record<string, number>,
   force: boolean,
-  log: (msg: string) => void,
+  log: SetupLog,
 ): Promise<void> {
   const patchCtx: PatchContext = {
     name,
@@ -1441,18 +1426,37 @@ async function seedGitignoredFiles(
     currentWorktree: ctx.currentWorktree,
     isMainWorktree: ctx.isMainWorktree,
   };
+  const updated: string[] = [];
   for (const entry of entries) {
     const { patch } = entry;
-    const patchFn = patch ? (content: string) => patch(content, patchCtx) : undefined;
-    copyAndPatchFile(
-      { currentWorktree: ctx.currentWorktree, log },
-      entry.path,
-      await resolveFileSource(entry, patchCtx),
-      patchFn,
-      entry.path,
+    const outcome = await copyAndPatchFile({
+      currentWorktree: ctx.currentWorktree,
+      relPath: entry.path,
+      resolveSource: () => resolveFileSource(entry, patchCtx),
+      patch: patch ? (content: string) => patch(content, patchCtx) : undefined,
       force,
-      entry.optional ?? false,
-    );
+      optional: entry.optional ?? false,
+    });
+    if (outcome.kind === "updated") updated.push(entry.path);
+    else log.verbose(outcomeLine(entry.path, outcome));
+  }
+  if (updated.length > 0) log.tee(`Updated ${updated.join(", ")}.`);
+}
+
+function outcomeLine(relPath: string, outcome: CopyAndPatchOutcome): string {
+  switch (outcome.kind) {
+    case "created":
+      return `Created ${relPath}.`;
+    case "overwritten":
+      return `Overwritten ${relPath}.`;
+    case "updated":
+      return `Updated ${relPath}.`;
+    case "upToDate":
+      return `Skipped ${relPath} (already up to date).`;
+    case "keptExisting":
+      return `Skipped ${relPath} (already exists; use --force to overwrite).`;
+    case "sourceMissing":
+      return `Warning: source ${outcome.sourcePath} not found, skipping (optional).`;
   }
 }
 

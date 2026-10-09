@@ -155,6 +155,7 @@ describe("workspace setup (e2e)", () => {
       writeFileSync(join(repo, "workspace.local"), "edited-by-hand\n");
       const rerun = runCli(repo, ["setup"]);
       expect(rerun.status).toBe(0);
+      expect(rerun.stdout).toContain("Updated workspace.local.");
       expect(setupLog(repo, "fixrepo")).toContain("Updated workspace.local.");
       expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe(
         "edited-by-hand\nworktree=main\n",
@@ -162,6 +163,7 @@ describe("workspace setup (e2e)", () => {
 
       const unchanged = runCli(repo, ["setup"]);
       expect(unchanged.status).toBe(0);
+      expect(unchanged.stdout).not.toContain("Updated");
       expect(setupLog(repo, "fixrepo")).toContain("Skipped workspace.local (already up to date).");
     },
     TEST_TIMEOUT_MS,
@@ -170,7 +172,7 @@ describe("workspace setup (e2e)", () => {
 
 describe("serviceMajor layout (e2e)", () => {
   it(
-    "allocates one port per name range and lists the workspace index",
+    "allocates one port per name range and lists the first port",
     () => {
       const { repo } = fixture({ serviceMajor: true });
       expect(runCli(repo, ["setup"]).status).toBe(0);
@@ -183,11 +185,11 @@ describe("serviceMajor layout (e2e)", () => {
       const list = runCli(repo, ["list"]);
       expect(list.status).toBe(0);
       const [header, ...rows] = list.stdout.trim().split("\n");
-      expect(header).toMatch(/\bINDEX\b/);
-      expect(header).not.toMatch(/\bPORTS\b/);
-      const column = header.split(/\s+/).indexOf("INDEX");
+      expect(header).toMatch(/\bPORTS\b/);
+      expect(header).not.toMatch(/\bINDEX\b/);
+      const column = header.split(/\s+/).indexOf("PORTS");
       const linked = rows.find((row) => row.startsWith("fixrepo-feat-sm"));
-      expect(linked?.split(/\s+/)[column]).toBe("1");
+      expect(linked?.split(/\s+/)[column]).toBe("8101");
     },
     TEST_TIMEOUT_MS,
   );

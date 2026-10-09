@@ -91,77 +91,78 @@ export function readPortFromJsonFile(file: string, jsonPath: string): number {
   return toPort(String(cur), file);
 }
 
-export interface CopyAndPatchCtx {
-  currentWorktree: string;
-  log: (msg: string) => void;
-}
-
 /** Resolved initial-content source for {@link copyAndPatchFile}. `path` is absolute. */
 export type ResolvedFileSource = { path: string } | { content: string };
 
-export function copyAndPatchFile(
-  ctx: CopyAndPatchCtx,
-  relPath: string,
-  source: ResolvedFileSource,
-  patchFn: ((content: string) => string) | undefined,
-  label: string,
-  force: boolean,
-  optional = false,
-): void {
-  const targetPath = join(ctx.currentWorktree, relPath);
+export interface CopyAndPatchOptions {
+  currentWorktree: string;
+  /** Target path, relative to `currentWorktree`. Also the label of the outcome. */
+  relPath: string;
+  /** Called only when the target is (re)seeded from its source. */
+  resolveSource: () => Promise<ResolvedFileSource>;
+  patch?: (content: string) => string;
+  force: boolean;
+  optional: boolean;
+}
+
+export type CopyAndPatchOutcome =
+  | { kind: "created" | "overwritten" | "updated" | "upToDate" | "keptExisting" }
+  | { kind: "sourceMissing"; sourcePath: string };
+
+export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<CopyAndPatchOutcome> {
+  const { relPath, patch } = options;
+  const targetPath = join(options.currentWorktree, relPath);
   const alreadyExists = existsSync(targetPath);
 
-  if (alreadyExists && !force) {
-    if (patchFn === undefined) {
-      ctx.log(`Skipped ${label} (already exists; use --force to overwrite).`);
-      return;
-    }
-    reconcileExistingFile(ctx, targetPath, patchFn, label);
-    return;
+  if (alreadyExists && !options.force) {
+    if (patch === undefined) return { kind: "keptExisting" };
+    return reconcileExistingFile(targetPath, relPath, patch);
   }
 
+  const source = await options.resolveSource();
   let content: string;
   if ("content" in source) {
     content = source.content;
   } else {
     if (!existsSync(source.path)) {
-      if (!optional) {
+      if (!options.optional) {
         throw new WorkspaceError(
           `config source ${source.path} not found. Bootstrap it first ` +
             `(\`${wsCmd("setup")}\`, or commit the template), or mark the entry as optional.`,
         );
       }
-      ctx.log(`Warning: source ${source.path} not found, skipping (optional).`);
-      return;
+      return { kind: "sourceMissing", sourcePath: source.path };
     }
     content = readFileSync(source.path, "utf-8");
   }
 
-  const patched = patchFn === undefined ? content : patchFn(content);
+  const patched = patch === undefined ? content : patch(content);
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
-  ctx.log(`${alreadyExists ? "Overwritten" : "Created"} ${label}.`);
+  return { kind: alreadyExists ? "overwritten" : "created" };
 }
 
 /**
- * Re-applies `patchFn` to the file as it is: a patch rewrites only the keys it knows, so local
- * customizations survive. The source is not read, and the file is rewritten only when the result
- * differs.
+ * Re-applies `patch` to the file as it is: a patch rewrites only the keys it knows, so local
+ * customizations survive. The source is never resolved, and the file is rewritten only when the
+ * result differs. Throws, before any write, when the patch is not idempotent.
  */
 function reconcileExistingFile(
-  ctx: CopyAndPatchCtx,
   targetPath: string,
-  patchFn: (content: string) => string,
-  label: string,
-): void {
+  relPath: string,
+  patch: (content: string) => string,
+): CopyAndPatchOutcome {
   const content = readFileSync(targetPath, "utf-8");
-  const patched = patchFn(content);
-  if (patched === content) {
-    ctx.log(`Skipped ${label} (already up to date).`);
-    return;
+  const patched = patch(content);
+  if (patched === content) return { kind: "upToDate" };
+  if (patch(patched) !== patched) {
+    throw new WorkspaceError(
+      `patch of ${relPath} is not idempotent: applying it twice gives a different result. ` +
+        "A patch must rewrite only the keys it owns.",
+    );
   }
   writeFileSync(targetPath, patched);
-  ctx.log(`Updated ${label}.`);
+  return { kind: "updated" };
 }
 
 /**

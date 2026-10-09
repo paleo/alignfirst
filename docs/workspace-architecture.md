@@ -1,6 +1,6 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-block allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
+summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-index allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
 read_when:
   - onboarding to the @alignfirst/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
@@ -23,7 +23,7 @@ The child is spawned as `__finalize` with no target argument and `cwd` set to th
 
 ### Failure before the finalize spawn
 
-`registerWorkspace` writes the entry as `pending`, and a plain `setup` refuses a `pending` entry (`refuseIfFinalizePending`, bypassed by `--force`). An error in the pre-finalize phase that follows — `preSetup`, seeding, a profile's `apply`, `formatSummary` — is therefore caught in `runSetup`: it appends `FAILED: <message>` and the stack to the setup log, marks a `pending` entry `failed` (`markWorkspaceFailed`), and rethrows. A `failed` entry passes the pending check, so the retry after any setup failure is a plain `setup`. A `ready` entry keeps its status: an already-finalized main worktree whose `preSetup` or profile refuses stays usable and is not re-finalized. `copyAndPatchFile` throws a `WorkspaceError` on a missing required source for the same reason: a `process.exit` there would skip the catch.
+`registerWorkspace` writes the entry as `pending`, and a plain `setup` refuses a `pending` entry (`refuseIfFinalizePending`, bypassed by `--force`). An error in the pre-finalize phase that follows — `preSetup`, seeding, a profile's `apply`, `formatSummary` — is therefore caught in `runSetup`: it appends `FAILED: <message>` and the stack to the setup log, marks a `pending` entry `failed` (`markWorkspaceFailed`), and rethrows. A `failed` entry passes the pending check, so the retry after any setup failure is a plain `setup`. A `ready` entry keeps its status: an already-finalized main worktree whose `preSetup` or profile refuses stays usable and is not re-finalized. `copyAndPatchFile` throws a `WorkspaceError` on a missing required source or a non-idempotent patch for the same reason: a `process.exit` there would skip the catch.
 
 ### Setup profiles
 
@@ -91,11 +91,11 @@ The cap check and the subsequent register in `enforceCap` are not atomic. Two co
 
 An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs is alive; dead entries are pruned on every read. Liveness is purely PID-based on spawn servers — it knows nothing about callback-managed infrastructure. So if a user kills the spawn processes manually instead of running `dev down`, the entry is pruned but the callback `stop()` never fires and infrastructure (e.g. a Docker stack) is orphaned. Always stop via `dev down`.
 
-## Port blocks and stale entries
+## Port indexes and stale entries
 
-The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored index — never persisted: the `offset`-th name takes `base + perWorkspace × index + offset` in the `workspaceMajor` layout, `base + maxWorkspaces × offset + index` in `serviceMajor`, where each name owns a range of `maxWorkspaces` ports and an appended name moves nothing. Editing `names`, `perWorkspace`, `base` or `layout` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match: `copyAndPatchFile` re-applies each entry's `patch` to the existing file and rewrites it only when the result differs (`Updated <path>`), so local customizations survive and `--force` stays the reseed-from-source path. An entry without `patch` is never touched without `--force`.
+The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored index — never persisted: the `offset`-th name takes `base + perWorkspace × index + offset` in the `workspaceMajor` layout, `base + maxWorkspaces × offset + index` in `serviceMajor`, where each name owns a range of `maxWorkspaces` ports and an appended name moves nothing. Editing `names`, `perWorkspace`, `base` or `layout` therefore re-derives every workspace's ports on the next command, and re-running `workspace setup` in each worktree rewrites the config files to match. There, `copyAndPatchFile` re-applies each entry's `patch` to the existing file, rewrites it only when the result differs, and refuses a patch that is not idempotent; `setup` reports the rewritten files in one `Updated <paths>` line on stdout. A patch rewrites only the keys it owns, so local customizations survive. `--force` still reseeds the file from its source. An entry without `patch` is never touched without `--force`.
 
-Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column (`INDEX` in `serviceMajor`, where a workspace has no first port to show). The main worktree is never stale — its index is 0 by definition, and never stored.
+Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column. The main worktree is never stale — its index is 0 by definition, and never stored.
 
 ## Port claim check
 

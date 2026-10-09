@@ -40,10 +40,14 @@ export interface PortComputeContext {
   index: number;
   /**
    * The port offset `0` takes: `base + perWorkspace × index` in `workspaceMajor`, `base + index` in
-   * `serviceMajor`. Consecutive offsets are `1` apart in `workspaceMajor`, `maxWorkspaces` apart
-   * in `serviceMajor`.
+   * `serviceMajor`.
    */
   firstPort: number;
+  /**
+   * Distance between two consecutive offsets: `1` in `workspaceMajor`, `maxWorkspaces` in
+   * `serviceMajor`. The `offset`-th port is `firstPort + step × offset` in both layouts.
+   */
+  step: number;
 }
 
 /** {@link PortsConfig} with its defaults applied. */
@@ -105,7 +109,11 @@ export function portsForIndex(
   index: number,
 ): Record<string, number> {
   if (resolved.compute) {
-    const ports = resolved.compute({ index, firstPort: firstPortOf(resolved, index) });
+    const ports = resolved.compute({
+      index,
+      firstPort: firstPortOf(resolved, index),
+      step: portStrides(resolved).offset,
+    });
     checkComputedPorts(ports, resolved, index);
     return ports;
   }
@@ -114,6 +122,18 @@ export function portsForIndex(
     ports[name] = portAt(resolved, index, offset);
   });
   return ports;
+}
+
+interface PortStrides {
+  /** Distance between the same offset of two consecutive workspace indexes. */
+  index: number;
+  /** Distance between two consecutive offsets of one workspace. */
+  offset: number;
+}
+
+function portStrides(resolved: ResolvedPortsConfig): PortStrides {
+  if (resolved.layout === "serviceMajor") return { index: 1, offset: resolved.maxWorkspaces };
+  return { index: resolved.perWorkspace, offset: 1 };
 }
 
 /**
@@ -136,7 +156,7 @@ function checkComputedPorts(
 
 function ownsPort(resolved: ResolvedPortsConfig, index: number, port: number): boolean {
   const distance = port - firstPortOf(resolved, index);
-  const step = offsetStep(resolved);
+  const step = portStrides(resolved).offset;
   return distance >= 0 && distance % step === 0 && distance / step < resolved.perWorkspace;
 }
 
@@ -144,23 +164,17 @@ function describeOwnedPorts(resolved: ResolvedPortsConfig, index: number): strin
   const first = firstPortOf(resolved, index);
   const last = portAt(resolved, index, resolved.perWorkspace - 1);
   if (resolved.layout === "workspaceMajor") return `block [${first}, ${last}]`;
-  return `ports ${first}, ${first + offsetStep(resolved)}, … ${last} (every ${offsetStep(resolved)})`;
+  const step = portStrides(resolved).offset;
+  return `ports ${first}, ${first + step}, … ${last} (every ${step})`;
 }
 
-/** The port offset `0` takes in workspace `index`: the block's first port in `workspaceMajor`. */
+/** The port offset `0` takes in workspace `index`. */
 export function firstPortOf(resolved: ResolvedPortsConfig, index: number): number {
   return portAt(resolved, index, 0);
 }
 
 /** The port the `offset`-th name takes in workspace `index`. */
 export function portAt(resolved: ResolvedPortsConfig, index: number, offset: number): number {
-  if (resolved.layout === "serviceMajor") {
-    return resolved.base + resolved.maxWorkspaces * offset + index;
-  }
-  return resolved.base + resolved.perWorkspace * index + offset;
-}
-
-/** The distance between two consecutive offsets of one workspace. */
-function offsetStep(resolved: ResolvedPortsConfig): number {
-  return resolved.layout === "serviceMajor" ? resolved.maxWorkspaces : 1;
+  const strides = portStrides(resolved);
+  return resolved.base + index * strides.index + offset * strides.offset;
 }
