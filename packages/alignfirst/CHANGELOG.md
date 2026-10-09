@@ -1,5 +1,15 @@
 # alignfirst
 
+## 0.8.0
+
+### Minor Changes
+
+- e5ac2f5: Reworked the protocol guides: calmer wording with each hard rule stated once through its trigger, and a Discuss step for spec and AAD that keeps the developer aware of the findings and hands them the decisions that matter. Every decision is a numbered question with a recommendation.
+
+### Patch Changes
+
+- e5ac2f5: The code reviewers look for how the change goes wrong: a posture sentence in the common rules, signals for removed code, deleted or skipped tests, fixes that add code instead of removing the cause, and guards for impossible cases. The intent reviewer questions a diff that adds more lines than it removes.
+
 ## 0.7.0
 
 ### Minor Changes
