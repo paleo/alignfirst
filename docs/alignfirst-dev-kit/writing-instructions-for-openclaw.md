@@ -6,9 +6,9 @@ Hard-won notes from tightening the `myassistant` workspace files (`alignfirst-de
 
 The playbook templates and `code.md` serve both platforms: `openclaw` and `codingAgent`, a Claude Code or Codex session acting as the assistant. `project.md` is OpenClaw only.
 
-### Platform blocks
+### Blocks
 
-A platform-specific paragraph sits in a block, each marker alone on its line:
+A platform-specific paragraph sits in a platform block, each marker alone on its line:
 
 ```text
 {{#openclaw}}
@@ -19,7 +19,21 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-`aligndev guide` keeps the active platform's blocks without their marker lines and drops the others. Blocks mark whole lines and do not nest. An unknown platform name, a nested block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+A `codingAgent` sentence that depends on the project's guide file sits in a condition block: `{{#developers}}` for a project with `DEVELOPERS.md`, `{{#readme}}` for one with `README.md` only, `{{#noGuide}}` for neither. `aligndev guide` resolves the condition from its working directory. A condition block holds only the differing sentence:
+
+```text
+{{#codingAgent}}
+Shared coding-agent sentence.
+{{#developers}}
+Sentence for a project with DEVELOPERS.md.
+{{/developers}}
+{{#noGuide}}
+Sentence for a project without a guide file.
+{{/noGuide}}
+{{/codingAgent}}
+```
+
+`aligndev guide` keeps the active blocks without their marker lines and drops the others. Blocks mark whole lines. A platform block sits at the top level; a condition block sits directly inside a `{{#codingAgent}}` block and holds text only, which keeps the OpenClaw output independent of the project. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
 After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the OpenClaw output.
 

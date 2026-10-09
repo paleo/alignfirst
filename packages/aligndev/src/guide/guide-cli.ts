@@ -12,6 +12,7 @@ import {
 import { errorMessage } from "../errors.js";
 import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
+import { resolveGuideFile } from "./guide-file.js";
 import { renderGuideTemplate } from "./render-template.js";
 import { PLAYBOOK_DISPATCHER, PLAYBOOK_TOPICS } from "./topics.js";
 
@@ -78,7 +79,7 @@ function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerC
   if (args.topic === "project" && config.platform === "openclaw") {
     return renderProjectsGuideForRoot({ ...ctx, projectsRoot: config.projectsRoot }, args.root);
   }
-  return renderPlaybookTopic(args.topic, config, ctx.forms);
+  return renderPlaybookTopic(args.topic, config, ctx);
 }
 
 function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): string {
@@ -90,19 +91,17 @@ function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): stri
 function renderPlaybookTopic(
   topic: string | undefined,
   config: LoadedConfig,
-  forms: CommandForms,
+  ctx: ProjectsCallerContext,
 ): string {
   if (topic !== undefined) assertPlaybookTopic(topic, config.platform);
-  const values =
-    config.platform === "openclaw"
-      ? { PROJECTS_ROOT: requireProjectsRoot(config).written }
-      : undefined;
-  return renderGuideTemplate(
-    `playbook/${topic ?? PLAYBOOK_DISPATCHER}.md`,
-    config.platform,
-    forms,
-    values,
-  );
+  const name = `playbook/${topic ?? PLAYBOOK_DISPATCHER}.md`;
+  if (config.platform === "codingAgent") {
+    const active = { platform: config.platform, guideFile: resolveGuideFile(ctx) };
+    return renderGuideTemplate(name, active, ctx.forms);
+  }
+  return renderGuideTemplate(name, { platform: config.platform }, ctx.forms, {
+    PROJECTS_ROOT: requireProjectsRoot(config).written,
+  });
 }
 
 function assertPlaybookTopic(topic: string, platform: Platform): void {

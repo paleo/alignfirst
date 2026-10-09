@@ -19,7 +19,7 @@ For every other question, discussion, or request from the user, always follow th
 Plain text posts to your bound surface. Use `message` for opening or renaming threads, history, cross-surface posts, attachments, and reactions. Keep the complete `chat_id`, including its prefix, as `target`. For `threadId`, use only the bare thread ID, never a `thread:<channel>/<id>` value.
 
 ```jsonc
-{ "action": "thread-create", "channel": "discord", "target": "<chat_id>", "messageId": "<message_id>", "threadName": "<TICKET_ID> - <PROJECT> - <description>", "message": "<starter>", "autoArchiveMin": 1440 }
+{ "action": "thread-create", "channel": "discord", "target": "<chat_id>", "messageId": "<message_id>", "threadName": "<TICKET_ID> - <PROJECT> - <description>", "autoArchiveMin": 1440 }
 { "action": "read", "channel": "discord", "target": "<current thread chat_id>", "threadId": "<bare thread id>", "limit": 50 }
 { "action": "send", "channel": "discord", "target": "<current thread chat_id>", "threadName": "<new name>", "message": "<reply that carries the rename>" }
 { "action": "send", "channel": "discord", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }

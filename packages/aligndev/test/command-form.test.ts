@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import { makeSink, writeConfig } from "./helpers.js";
+import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
 
 const NPX_ENV = { npm_config_user_agent: "npm/11.19.0 node/v26.0.0 linux x64" };
 
@@ -87,8 +87,9 @@ async function run(
   const code = await main({
     argv: ["node", "aligndev", ...args],
     cwd: home,
-    env,
+    env: { ...env, HOME: home },
     home,
+    alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
     stdout,
     stderr,
   });

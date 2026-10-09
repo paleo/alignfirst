@@ -9,6 +9,16 @@ read_when:
 
 # Upgrading OpenClaw
 
+## Pick the release
+
+Target the release under the npm `latest` tag; skip `beta` and `extended-stable`:
+
+```sh
+npm view openclaw dist-tags
+```
+
+The current version is the exact `"openclaw"` pin in [`alignfirst-dev-kit-tests/package.json`](../../alignfirst-dev-kit-tests/package.json).
+
 ## Refresh the read-only clone
 
 `.local/openclaw/` is a shallow clone of the upstream repository, kept for verifying source claims ([openclaw-context-engineering.md](./openclaw-context-engineering.md)). Move it to the new tag:
@@ -45,6 +55,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - [`alignfirst-dev-kit-tests/package.json`](../../alignfirst-dev-kit-tests/package.json) — the exact `"openclaw"` pin.
 - [`alignfirst-dev-kit-tests/Dockerfile`](../../alignfirst-dev-kit-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
 - `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
+- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (`<2026.10.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
 
 The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
 
@@ -75,7 +86,7 @@ for ws in /tmp/doctor-harness /tmp/doctor-template; do
 done
 ```
 
-Four findings are expected noise, because no gateway ever runs in this container: the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`), the plaintext-secrets warning (the harness injects keys through the environment on purpose), and the node-hosting preconditions about the loopback bind and disabled device pairing. Investigate anything else.
+Two findings are expected noise, because no gateway ever runs in this container: the node-hosting preconditions about the loopback bind and disabled device pairing. Releases up to 2026.9.8 also reported the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`) and the plaintext-secrets warning (the harness injects keys through the environment on purpose). Investigate anything else.
 
 ## Inspect a running gateway
 
@@ -89,10 +100,11 @@ docker exec alignfirst-dev-kit-tests-w1-gateway-1 openclaw plugins list
 
 Expected: `heartbeat:main` as the only enabled job (the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff.
 
-## Run the regression suite
+## Run the regression scenarios
+
+Pick the scenarios that exercise what the release changed, from the table in [Running the OpenClaw Tests](./running-openclaw-tests.md#scenarios), and run them on both surfaces with the command given there. A change to plugin loading or to the tool and hook registrations hits the handoff, which every thread bootstrap goes through (A01). A change to reply delivery hits the starter retry (A21) and later-run delivery (A08). A change to cron, heartbeats or turn queuing hits the background completion chain (A08) and the takeover race (A20).
 
 ```sh
-npm run e2e -- --channel all --all
 npm run env:down
 ```
 

@@ -43,7 +43,8 @@ await runWorkspace({
   // Omit the whole group for a portless project: nothing is allocated, and
   // `ctx.ports` is empty everywhere.
   ports: {
-    // ADAPT: first port of the main worktree's block. 8100 is the safe default.
+    // ADAPT: first port of the scheme (the main worktree's first port). 8100 is
+    // the safe default.
     base: 8100,
 
     // ADAPT: maximum workspaces, main worktree included. The scheme spans
@@ -62,13 +63,13 @@ await runWorkspace({
     // appending a name moves no existing port.
     // layout: "serviceMajor",
 
-    // ADAPT: exactly one of `names` (consecutive ports from the block's first
-    // port) or `compute` (full control over the block).
+    // ADAPT: exactly one of `names` (one port per name, from offset 0) or
+    // `compute` (full control over the workspace's ports).
     names: ["server", "frontend", "db"],
-    // compute: ({ index, firstPort }) => ({
+    // compute: ({ firstPort, step }) => ({
     //   server: firstPort,
-    //   frontend: firstPort + 1,
-    //   db: firstPort + 2,
+    //   frontend: firstPort + step,
+    //   db: firstPort + 2 * step,
     // }),
   },
 

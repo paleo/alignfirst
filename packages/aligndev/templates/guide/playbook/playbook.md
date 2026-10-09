@@ -63,14 +63,23 @@ You work on one project: the repository where this session started. Keep these v
 - **PROJECT** — the main-worktree directory name shown to the user.
 - **PROJECT_PATH** — the absolute main-worktree path.
 
-Step 1 of `{{ALIGNDEV}} guide working-session` resolves both, and DEVELOPERS_PATH. PROJECT_PATH anchors project-file reads, main-worktree Git commands, and workspace tooling. After workspace setup, use the returned linked-worktree path for branch work and `{{ALIGNDEV}} code`.
+Step 1 of `{{ALIGNDEV}} guide working-session` resolves both, and the workplace: the session's worktree and its branch, by default.
+{{#hasGuide}}
+It also retains DEVELOPERS_PATH, the project's guide for you.
+{{/hasGuide}}
+PROJECT_PATH anchors project-file reads, main-worktree Git commands, and workspace tooling. Branch work and `{{ALIGNDEV}} code` happen in the workplace, which the setup procedure may move to a workspace.
 
 Creating, onboarding, or removing a project is not handled in this mode. When the user asks for it, say so.
 {{/codingAgent}}
 
 ## Tickets and AlignFirst protocols
 
+{{#openclaw}}
 Code reviews and explicitly requested AlignFirst protocols follow their protocol workflow, including its ticket and workspace requirements. Other read-only questions, advice and brainstormings need no ticket or AlignFirst protocol to start. They use the refreshed main worktree unless they explicitly concern another branch; follow the working session's consultation runbook, which also records a discussion worth keeping.
+{{/openclaw}}
+{{#codingAgent}}
+Code reviews and explicitly requested AlignFirst protocols follow their protocol workflow, including its ticket and workspace requirements. Other read-only questions, advice and brainstormings need no ticket or AlignFirst protocol to start. They use the session's worktree as it is; follow the working session's consultation runbook, which also records a discussion worth keeping.
+{{/codingAgent}}
 
 A development task that changes one project needs a TICKET_ID. A project's or deployment's instructions define whether you can create or update tickets. When they provide no ticket-system access, skip those external operations and ask the user for an ID. When the user explicitly says there is no ticket, the working session reserves a side ticket `side-N` before workspace setup. Operational maintenance on existing branches and workspaces does not create a new ticket context.
 
@@ -117,7 +126,7 @@ Coding runs are long. Run `{{ALIGNDEV}} code` through `exec` in the background, 
 For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"channel:#####"`). Never reconstruct, paraphrase, or guess a `chat_id`. A `threadId` parameter is different: pass only the bare thread ID from the conversation metadata or tool result, never a `thread:<channel>/<id>` target.
 {{/openclaw}}
 {{#codingAgent}}
-To delegate, run `{{ALIGNDEV}} code` from PROJECT_PATH or the linked worktree created from it. Before your first `{{ALIGNDEV}} code` run of a session, run `{{ALIGNDEV}} guide code` and follow it — it is the delegation manual, and it stays the last guide you read. Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents or tasks, and never an AlignFirst protocol skill run by yourself.
+To delegate, run `{{ALIGNDEV}} code` from the workplace, or from PROJECT_PATH for operational work. Before your first `{{ALIGNDEV}} code` run of a session, run `{{ALIGNDEV}} guide code` and follow it — it is the delegation manual, and it stays the last guide you read. Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents or tasks, and never an AlignFirst protocol skill run by yourself.
 
 Coding runs are long. Run `{{ALIGNDEV}} code` in the background, as the delegation guide describes.
 {{/codingAgent}}

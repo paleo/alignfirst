@@ -129,7 +129,7 @@ function lowestFreePortIndex(registry: WorkspacesRegistry, ports: ResolvedPortsC
     if (!taken.has(index)) return index;
   }
   console.error(
-    `Error: All ${ports.maxWorkspaces} port blocks are taken. ` +
+    `Error: All ${ports.maxWorkspaces} workspace indexes are taken. ` +
       `Remove a workspace with \`${wsCmd("remove")}\` first.`,
   );
   process.exit(1);

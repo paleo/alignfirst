@@ -131,7 +131,7 @@ describe("registerWorkspace", () => {
     register("/repo/wt-a", { ports: capped });
     register("/repo/wt-b", { ports: capped });
     const message = captureExit(() => register("/repo/wt-c", { ports: capped }));
-    expect(message).toContain("All 3 port blocks are taken");
+    expect(message).toContain("All 3 workspace indexes are taken");
   });
 });
 

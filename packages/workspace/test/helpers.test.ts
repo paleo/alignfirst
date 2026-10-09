@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   composeProjectName,
@@ -19,6 +19,7 @@ import {
   formatDuration,
   lastLines,
   patchEnvFile,
+  type ResolvedFileSource,
 } from "../src/helpers.js";
 import { WorkspaceError } from "../src/errors.js";
 
@@ -175,145 +176,185 @@ describe("copyAndPatchFile", () => {
     dirs.push(dir);
     return dir;
   };
+  const source = (resolved: ResolvedFileSource) => async () => resolved;
+  const noSource = () => vi.fn(async (): Promise<ResolvedFileSource> => ({ content: "unused\n" }));
   afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it("reads from a path source and patches it", () => {
+  it("reads from a path source and patches it", async () => {
     const cur = tmp();
     const src = join(tmp(), "in.txt");
     writeFileSync(src, "PORT=1\n");
-    copyAndPatchFile(
-      { currentWorktree: cur, log: () => {} },
-      "out.txt",
-      { path: src },
-      (c) => c.replace("1", "2"),
-      "out",
-      false,
-    );
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ path: src }),
+      patch: (c) => c.replace("1", "2"),
+      force: false,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "created" });
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\n");
   });
 
-  it("uses a content source verbatim through patch", () => {
+  it("uses a content source verbatim through patch", async () => {
     const cur = tmp();
-    copyAndPatchFile(
-      { currentWorktree: cur, log: () => {} },
-      "out.txt",
-      { content: "A=1\n" },
-      (c) => `${c}B=2\n`,
-      "out",
-      false,
-    );
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "A=1\nB=1\n" }),
+      patch: (c) => c.replace(/^B=.*$/m, "B=2"),
+      force: false,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "created" });
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("A=1\nB=2\n");
   });
 
-  it("skips an existing target without force when the entry has no patch", () => {
+  it("keeps an existing target without force when the entry has no patch", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "orig\n");
-    const logs: string[] = [];
-    copyAndPatchFile(
-      { currentWorktree: cur, log: (m) => logs.push(m) },
-      "out.txt",
-      { content: "new\n" },
-      undefined,
-      "out",
-      false,
-    );
+    const resolveSource = noSource();
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource,
+      force: false,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "keptExisting" });
+    expect(resolveSource).not.toHaveBeenCalled();
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("orig\n");
-    expect(logs.some((l) => l.includes("Skipped"))).toBe(true);
   });
 
-  it("re-applies the patch to an existing target without force, keeping the rest", () => {
+  it("re-applies the patch to an existing target without force, keeping the rest", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "PORT=1\nCUSTOM=kept\n");
-    const logs: string[] = [];
-    copyAndPatchFile(
-      { currentWorktree: cur, log: (m) => logs.push(m) },
-      "out.txt",
-      { content: "PORT=9\n" },
-      (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      "out",
-      false,
-    );
+    const resolveSource = noSource();
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource,
+      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
+      force: false,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "updated" });
+    expect(resolveSource).not.toHaveBeenCalled();
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\nCUSTOM=kept\n");
-    expect(logs).toEqual(["Updated out."]);
   });
 
-  it("leaves an existing target alone when the patch changes nothing", () => {
+  it("leaves an existing target alone when the patch changes nothing", async () => {
     const cur = tmp();
     const target = join(cur, "out.txt");
     writeFileSync(target, "PORT=2\n");
     const past = new Date("2020-01-01T00:00:00Z");
     utimesSync(target, past, past);
-    const logs: string[] = [];
-    copyAndPatchFile(
-      { currentWorktree: cur, log: (m) => logs.push(m) },
-      "out.txt",
-      { content: "PORT=9\n" },
-      (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      "out",
-      false,
-    );
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: noSource(),
+      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
+      force: false,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "upToDate" });
     expect(statSync(target).mtime).toEqual(past);
-    expect(logs).toEqual(["Skipped out (already up to date)."]);
   });
 
-  it("does not read the source when patching an existing target", () => {
+  it("refuses a patch that is not idempotent on re-apply, leaving the target untouched", async () => {
     const cur = tmp();
-    writeFileSync(join(cur, "out.txt"), "PORT=1\n");
-    copyAndPatchFile(
-      { currentWorktree: cur, log: () => {} },
-      "out.txt",
-      { path: join(cur, "nope.txt") },
-      (c) => c.replace("1", "2"),
-      "out",
-      false,
-    );
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\n");
+    const target = join(cur, "out.txt");
+    writeFileSync(target, "PORT=2\n");
+    const past = new Date("2020-01-01T00:00:00Z");
+    utimesSync(target, past, past);
+    const run = copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: noSource(),
+      patch: (c) => `${c}x\n`,
+      force: false,
+      optional: false,
+    });
+    await expect(run).rejects.toThrow(WorkspaceError);
+    await expect(run).rejects.toThrow(/not idempotent/);
+    expect(readFileSync(target, "utf-8")).toBe("PORT=2\n");
+    expect(statSync(target).mtime).toEqual(past);
   });
 
-  it("overwrites the target with force", () => {
+  it("refuses a patch that is not idempotent on create, writing nothing", async () => {
+    const cur = tmp();
+    const run = copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "PORT=2\n" }),
+      patch: (c) => `${c}x\n`,
+      force: false,
+      optional: false,
+    });
+    await expect(run).rejects.toThrow(/not idempotent/);
+    expect(existsSync(join(cur, "out.txt"))).toBe(false);
+  });
+
+  it("refuses a patch that is not idempotent with force, leaving the target untouched", async () => {
+    const cur = tmp();
+    const target = join(cur, "out.txt");
+    writeFileSync(target, "orig\n");
+    const run = copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "PORT=2\n" }),
+      patch: (c) => `${c}x\n`,
+      force: true,
+      optional: false,
+    });
+    await expect(run).rejects.toThrow(/not idempotent/);
+    expect(readFileSync(target, "utf-8")).toBe("orig\n");
+  });
+
+  it("overwrites the target with force", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "orig\n");
-    copyAndPatchFile(
-      { currentWorktree: cur, log: () => {} },
-      "out.txt",
-      { content: "new\n" },
-      (c) => c,
-      "out",
-      true,
-    );
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "new\n" }),
+      patch: (c) => c,
+      force: true,
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "overwritten" });
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("new\n");
   });
 
-  it("skips an optional path source that is missing", () => {
+  it("skips an optional path source that is missing", async () => {
     const cur = tmp();
-    const logs: string[] = [];
-    copyAndPatchFile(
-      { currentWorktree: cur, log: (m) => logs.push(m) },
-      "out.txt",
-      { path: join(cur, "nope.txt") },
-      (c) => c,
-      "out",
-      false,
-      true,
-    );
+    const sourcePath = join(cur, "nope.txt");
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ path: sourcePath }),
+      patch: (c) => c,
+      force: false,
+      optional: true,
+    });
+    expect(outcome).toEqual({ kind: "sourceMissing", sourcePath });
     expect(existsSync(join(cur, "out.txt"))).toBe(false);
-    expect(logs.some((l) => l.includes("optional"))).toBe(true);
   });
 
-  it("throws a WorkspaceError on a missing required path source", () => {
+  it("throws a WorkspaceError on a missing required path source", async () => {
     const cur = tmp();
-    expect(() =>
-      copyAndPatchFile(
-        { currentWorktree: cur, log: () => {} },
-        "out.txt",
-        { path: join(cur, "nope.txt") },
-        (c) => c,
-        "out",
-        false,
-      ),
-    ).toThrow(WorkspaceError);
+    await expect(
+      copyAndPatchFile({
+        currentWorktree: cur,
+        relPath: "out.txt",
+        resolveSource: source({ path: join(cur, "nope.txt") }),
+        patch: (c) => c,
+        force: false,
+        optional: false,
+      }),
+    ).rejects.toThrow(WorkspaceError);
     expect(existsSync(join(cur, "out.txt"))).toBe(false);
   });
 });

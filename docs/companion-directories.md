@@ -104,15 +104,21 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 - **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst.md`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 
+### `aligndev guide`
+
+Under `codingAgent`, a playbook topic reads the report in the main worktree of the working directory. `locations["DEVELOPERS.md"].exists` selects the `DEVELOPERS.md` variant of the playbook. Otherwise a `README.md` at the root of that main worktree selects the README variant. A report error fails the command.
+
 ### `aligndev project`
 
 A direct child whose `.git` is a directory is a project, unless it holds another project's resolved `.plans`, as a work-files clone does: it is then listed with the others. A child without `.git` but with a root `.alignfirst.json` is the issue "not a git main worktree". `list --json` and `status` carry each project's `companion` and `locations`. Two projects with the same companion directory is an issue on both.
 
 ### The playbook
 
-Each procedure retains the `DEVELOPERS.md` path from `aligndev project status <PROJECT_PATH>` as DEVELOPERS_PATH. Project rules for a companion-backed project go into its companion `.alignfirst.md` or `DEVELOPERS.md`, edited in place, with no branch or pull request.
+DEVELOPERS_PATH is the project's guide file for the assistant. Under OpenClaw, each procedure retains the `DEVELOPERS.md` path from `aligndev project status <PROJECT_PATH>`. A coding-agent assistant retains `locations["DEVELOPERS.md"].path` from `alignfirst config --json` when that file exists, else `README.md` at the root of the main worktree; with neither, its playbook has no DEVELOPERS_PATH. Project rules for a companion-backed project go into its companion `.alignfirst.md` or `DEVELOPERS.md`, edited in place, with no branch or pull request.
 
-A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. The main worktree is its only workspace, claimed by one working thread at a time. It is free when it is clean on the default branch, or already on the thread's own branch. Branches are created and checked out there with `git switch`.
+Under OpenClaw, a project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. The main worktree is its only workspace, claimed by one working thread at a time. It is free when it is clean on the default branch, or already on the thread's own branch. Branches are created and checked out there with `git switch`.
+
+A coding-agent assistant has no main-worktree mode: it works in the session's directory and branch. A project without workspace tooling gets a branch switched in that directory, on the user's answer.
 
 ## Bootstrap
 

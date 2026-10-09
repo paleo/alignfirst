@@ -12,16 +12,22 @@ The user consults you, and you consult the agent. It reads the repository; you w
 Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/openclaw}}
 {{#codingAgent}}
+{{#hasGuide}}
 Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/hasGuide}}
+{{#noGuide}}
+Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/noGuide}}
 {{/codingAgent}}
 
 {{#openclaw}}
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
 {{/openclaw}}
 {{#codingAgent}}
-Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists.
 {{/codingAgent}}
 
+{{#openclaw}}
 ## Step 2 — Refresh the default branch
 
 Skip this step when Step 1 selected an existing branch workspace; inspect its current state as it is, without the workspace setup or branch-sync procedure.
@@ -31,6 +37,14 @@ Before delegating against the default branch, verify that the main worktree is c
 Stop and report the obstacle when the branch is wrong, the worktree is dirty, the upstream is missing, or the refresh fails. Preserve local work: a question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
 
 Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forward the same worktree, so this records which revision the answer came from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
+{{/openclaw}}
+{{#codingAgent}}
+## Step 2 — Record the revision
+
+Skip the refresh of the default branch: the tree stays as the user left it. A question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
+
+Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
+{{/codingAgent}}
 
 ## Step 3 — Delegate
 
@@ -41,7 +55,12 @@ Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then 
 Run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
 {{/codingAgent}}
 
+{{#openclaw}}
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Include the environment refresh described in the working session when the main branch advanced. Use the delegation guide's background launch and completion procedure.
+{{/openclaw}}
+{{#codingAgent}}
+The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Use the delegation guide's background launch and completion procedure.
+{{/codingAgent}}
 
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 
@@ -54,7 +73,12 @@ Answer in the thread, in your own words, grounded in what the agent found.
 Answer in the conversation, in your own words, grounded in what the agent found.
 {{/codingAgent}}
 
+{{#openclaw}}
 A request for changes ends the consultation: return to the ticket and linked-workspace flow before anything is implemented.
+{{/openclaw}}
+{{#codingAgent}}
+A request for changes ends the consultation: return to the ticket and workspace flow before anything is implemented.
+{{/codingAgent}}
 
 ## Step 5 — Record a discussion
 

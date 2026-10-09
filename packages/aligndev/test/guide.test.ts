@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import { CLAUDE_DEFAULT_MODELS, CODEX_DEFAULT_MODELS } from "../src/code/models.
 import { PLATFORMS } from "../src/config.js";
 import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
-import { renderPlatformBlocks } from "../src/guide/render-template.js";
+import { type GuideFileCondition, renderBlocks } from "../src/guide/render-template.js";
 import { PLAYBOOK_TOPICS } from "../src/guide/topics.js";
 import { writeConfig } from "./helpers.js";
 import {
@@ -15,6 +15,7 @@ import {
   makeFixture,
   makeProjectsDirectory,
   makeRepository,
+  addWorktree,
   range,
   type RunOverrides,
   type RunResult,
@@ -363,18 +364,135 @@ describe("codingAgent guides", () => {
     "starter",
   ];
 
-  it("renders every guide with no OpenClaw tool, sentinel or topic", async () => {
-    for (const agent of ["claude", "codex"]) {
+  const GUIDE_VARIANTS: GuideFileCondition[] = ["developers", "readme", "noGuide"];
+
+  it.each(
+    ["claude", "codex"].flatMap((agent) =>
+      GUIDE_VARIANTS.map((variant) => [agent, variant] as const),
+    ),
+  )(
+    "renders every %s guide for %s with no OpenClaw tool, sentinel or topic",
+    async (agent, variant) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
+      const cwd = makeGuideVariants(fixture)[variant];
       for (const topic of TOPICS) {
-        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic]);
-        expect(result.code, `${agent} ${topic}: ${result.stderr}`).toBe(0);
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
+        expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
         for (const term of OPENCLAW_TERMS) {
-          expect(result.stdout, `${agent} ${topic} mentions ${term}`).not.toContain(term);
+          expect(result.stdout, `${topic} mentions ${term}`).not.toContain(term);
         }
       }
+    },
+  );
+
+  it("renders every topic for the project's guide file", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    for (const [variant, cwd] of Object.entries(makeGuideVariants(fixture))) {
+      for (const topic of TOPICS) {
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
+        const label = `${variant} ${topic}`;
+        expect(result.code, `${label}: ${result.stderr}`).toBe(0);
+        expect(result.stdout, label).not.toContain("{{");
+        expect(result.stdout, label).not.toContain("main-worktree mode");
+        if (variant === "noGuide") expect(result.stdout, label).not.toContain("DEVELOPERS_PATH");
+      }
     }
+  });
+
+  it("retains DEVELOPERS_PATH in working-session Step 1 from the project's guide file", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const variants = makeGuideVariants(fixture);
+    const step1 = async (variant: GuideFileCondition) => {
+      const { stdout } = await runGuide(fixture, ["working-session"], { cwd: variants[variant] });
+      return stdout.slice(stdout.indexOf("### Step 1"), stdout.indexOf("### Step 2"));
+    };
+    expect(await step1("developers")).toContain(
+      'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
+    );
+    expect(await step1("readme")).toContain(
+      "Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH",
+    );
+    const noGuide = await step1("noGuide");
+    expect(noGuide).toContain("`git rev-parse --path-format=absolute --git-common-dir`");
+    expect(noGuide).toContain("`alignfirst config --json`");
+  });
+
+  it("resolves the guide file from the main worktree", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const main = makeGuideVariants(fixture).developers;
+    const subdirectory = join(main, "packages", "foo");
+    mkdirSync(subdirectory, { recursive: true });
+    const worktree = join(fixture.root, "linked");
+    addWorktree(main, worktree, "feature");
+    for (const cwd of [subdirectory, worktree]) {
+      const { stdout } = await runGuide(fixture, ["working-session"], { cwd });
+      expect(stdout, cwd).toContain(
+        'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
+      );
+    }
+  });
+
+  it("fails with the alignfirst report error", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const result = await runGuide(fixture, ["working-session"], {
+      cwd: makeRepository(fixture.root, "project"),
+      alignfirstCommand: [
+        "node",
+        "-e",
+        "console.error('Error: broken registry.'); process.exit(1)",
+      ],
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("Error: broken registry.\n");
+  });
+
+  it("decides the workplace in the setup runbook before the setup signal", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["project-workspace-setup"]);
+    expect(stdout).toContain("## Step 2 — Decide the workplace");
+    expect(stdout).toContain("## Step 3 — Post the setup signal");
+    const step2 = stdout.slice(stdout.indexOf("## Step 2"), stdout.indexOf("## Step 3"));
+    const cases = [
+      "**The user's request or instructions name the place**",
+      "**The session's branch carries TICKET_ID**",
+      "**The session's branch is long-lived**",
+      "**Any other branch**",
+    ].map((phrase) => step2.indexOf(phrase));
+    expect(cases[0]).toBeGreaterThan(0);
+    for (const [index, position] of cases.slice(1).entries()) {
+      expect(position).toBeGreaterThan(cases[index]);
+    }
+    const step5 = stdout.slice(stdout.indexOf("## Step 5"), stdout.indexOf("## Step 6"));
+    expect(step5).toContain(
+      "A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking",
+    );
+    expect(step5).toContain("ends the turn on one message stating what will happen");
+  });
+
+  it("answers a consultation from the session's worktree without a refresh", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["consultation"]);
+    const step2 = stdout.slice(stdout.indexOf("## Step 2"), stdout.indexOf("## Step 3"));
+    expect(step2).toContain("Skip the refresh of the default branch");
+    expect(step2).toContain("Retain `git rev-parse --short HEAD`");
+    expect(step2).not.toContain("git merge --ff-only");
+  });
+
+  it("answers a consultation about another branch from its registered workspace", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["consultation"]);
+    const step1 = stdout.slice(stdout.indexOf("## Step 1"), stdout.indexOf("## Step 2"));
+    expect(step1).toContain("use that branch's existing registered workspace instead");
+    expect(stdout).not.toContain("environment refresh");
+    expect(stdout).not.toContain("linked-workspace");
   });
 
   it("routes the dispatcher to the working session", async () => {
@@ -412,7 +530,7 @@ describe("codingAgent guides", () => {
   });
 });
 
-describe("renderPlatformBlocks", () => {
+describe("renderBlocks", () => {
   it("keeps the active platform's blocks without their markers and drops the others", () => {
     const text = [
       "Shared.",
@@ -424,26 +542,78 @@ describe("renderPlatformBlocks", () => {
       "{{/codingAgent}}",
       "{{PLACEHOLDER}}",
     ].join("\n");
-    expect(renderPlatformBlocks(text, "openclaw", "t.md")).toBe(
+    expect(renderBlocks(text, { platform: "openclaw" }, "t.md")).toBe(
       "Shared.\nOpenClaw only.\n{{PLACEHOLDER}}",
     );
-    expect(renderPlatformBlocks(text, "codingAgent", "t.md")).toBe(
+    expect(renderBlocks(text, { platform: "codingAgent" }, "t.md")).toBe(
       "Shared.\nCoding agent only.\n{{PLACEHOLDER}}",
     );
   });
 
+  it("keeps a condition block inside codingAgent for its guide file only", () => {
+    const text = [
+      "{{#codingAgent}}",
+      "Coding agent.",
+      "{{#developers}}",
+      "Developers.",
+      "{{/developers}}",
+      "{{#readme}}",
+      "Readme.",
+      "{{/readme}}",
+      "After.",
+      "{{/codingAgent}}",
+      "Shared.",
+    ].join("\n");
+    const render = (guideFile: GuideFileCondition) =>
+      renderBlocks(text, { platform: "codingAgent", guideFile }, "t.md");
+    expect(render("developers")).toBe("Coding agent.\nDevelopers.\nAfter.\nShared.");
+    expect(render("readme")).toBe("Coding agent.\nReadme.\nAfter.\nShared.");
+    expect(render("noGuide")).toBe("Coding agent.\nAfter.\nShared.");
+    expect(renderBlocks(text, { platform: "openclaw" }, "t.md")).toBe("Shared.");
+  });
+
+  it("keeps a hasGuide block for both guide files", () => {
+    const text = [
+      "{{#codingAgent}}",
+      "{{#hasGuide}}",
+      "Guide.",
+      "{{/hasGuide}}",
+      "{{/codingAgent}}",
+    ];
+    const render = (guideFile: GuideFileCondition) =>
+      renderBlocks(text.join("\n"), { platform: "codingAgent", guideFile }, "t.md");
+    expect(render("developers")).toBe("Guide.");
+    expect(render("readme")).toBe("Guide.");
+    expect(render("noGuide")).toBe("");
+  });
+
   it("collapses the empty-line runs a removed block leaves", () => {
     const text = ["A", "", "{{#openclaw}}", "B", "{{/openclaw}}", "", "C", ""].join("\n");
-    expect(renderPlatformBlocks(text, "codingAgent", "t.md")).toBe("A\n\nC\n");
-    expect(renderPlatformBlocks(text, "openclaw", "t.md")).toBe("A\n\nB\n\nC\n");
+    expect(renderBlocks(text, { platform: "codingAgent" }, "t.md")).toBe("A\n\nC\n");
+    expect(renderBlocks(text, { platform: "openclaw" }, "t.md")).toBe("A\n\nB\n\nC\n");
   });
 
   it.each([
-    ["an unknown platform", "{{#slack}}\nx\n{{/slack}}", 'line 1: unknown platform "slack"'],
+    ["an unknown block", "{{#slack}}\nx\n{{/slack}}", 'line 1: unknown block "slack"'],
     [
-      "a nested block",
+      "a platform block inside a platform block",
       "{{#openclaw}}\n{{#codingAgent}}\nx\n{{/codingAgent}}\n{{/openclaw}}",
-      'line 2: block "codingAgent" nested in "openclaw"',
+      'line 2: platform block "codingAgent" inside "openclaw"',
+    ],
+    [
+      "a condition block outside any block",
+      "{{#readme}}\nx\n{{/readme}}",
+      'line 1: condition block "readme" outside a codingAgent block',
+    ],
+    [
+      "a condition block inside openclaw",
+      "{{#openclaw}}\n{{#developers}}\nx\n{{/developers}}\n{{/openclaw}}",
+      'line 2: condition block "developers" outside a codingAgent block',
+    ],
+    [
+      "a condition block inside a condition block",
+      "{{#codingAgent}}\n{{#readme}}\n{{#noGuide}}\nx\n{{/noGuide}}\n{{/readme}}\n{{/codingAgent}}",
+      'line 3: condition block "noGuide" outside a codingAgent block',
     ],
     ["an unclosed block", "a\n{{#openclaw}}\nx", 'line 2: block "openclaw" is not closed'],
     [
@@ -452,7 +622,7 @@ describe("renderPlatformBlocks", () => {
       'line 3: closing marker "codingAgent" without its block',
     ],
   ])("rejects %s, naming the template", (_name, text, detail) => {
-    expect(() => renderPlatformBlocks(text, "openclaw", "playbook/t.md")).toThrow(
+    expect(() => renderBlocks(text, { platform: "openclaw" }, "playbook/t.md")).toThrow(
       `Error: template playbook/t.md, ${detail}.`,
     );
   });
@@ -576,4 +746,16 @@ describe("aligndev guide project", () => {
 
 function runGuide(fixture: Fixture, args: string[], overrides?: RunOverrides): Promise<RunResult> {
   return runAligndev(fixture, ["guide", ...args], overrides);
+}
+
+// A working directory per guide file: a repository with `DEVELOPERS.md`, one with `README.md` only,
+// and the projects directory, outside git.
+function makeGuideVariants(fixture: Fixture): Record<GuideFileCondition, string> {
+  const developers = makeRepository(fixture.root, "with-developers");
+  writeFileSync(join(developers, "DEVELOPERS.md"), "# Developers\n");
+  return {
+    developers,
+    readme: makeRepository(fixture.root, "readme-only"),
+    noGuide: fixture.root,
+  };
 }

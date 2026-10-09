@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ConfigError } from "../src/errors.js";
 import {
   firstPortOf,
+  type PortComputeContext,
   portAt,
   type PortsConfig,
   portsForIndex,
@@ -113,14 +114,19 @@ describe("portsForIndex", () => {
     expect(portsForIndex(spaced, 3)).toEqual({ web: 9015 });
   });
 
-  it("hands the index and first port to `compute`", () => {
+  it("hands the index, first port and step to `compute`", () => {
+    const compute = vi.fn(({ index, firstPort }: PortComputeContext) => ({
+      web: firstPort,
+      debug: firstPort + 5 + (index % 2),
+    }));
     const computed = resolvePortsConfig({
       base: 8100,
       perWorkspace: 10,
       maxWorkspaces: 20,
-      compute: ({ index, firstPort }) => ({ web: firstPort, debug: firstPort + 5 + (index % 2) }),
+      compute,
     });
     expect(portsForIndex(computed, 2)).toEqual({ web: 8120, debug: 8125 });
+    expect(compute).toHaveBeenCalledWith({ index: 2, firstPort: 8120, step: 1 });
   });
 
   it("rejects a computed port outside the workspace's block", () => {
@@ -162,18 +168,20 @@ describe("portsForIndex (serviceMajor)", () => {
     });
   });
 
-  it("hands `compute` the index and the port of offset 0", () => {
+  it("hands `compute` the index, the port of offset 0 and the step", () => {
+    const compute = vi.fn(({ index, firstPort, step }: PortComputeContext) => ({
+      web: firstPort,
+      debug: firstPort + step * (5 + (index % 2)),
+    }));
     const computed = resolvePortsConfig({
       base: 8100,
       perWorkspace: 10,
       maxWorkspaces: 20,
       layout: "serviceMajor",
-      compute: ({ index, firstPort }) => ({
-        web: firstPort,
-        debug: firstPort + 20 * (5 + (index % 2)),
-      }),
+      compute,
     });
     expect(portsForIndex(computed, 2)).toEqual({ web: 8102, debug: 8202 });
+    expect(compute).toHaveBeenCalledWith({ index: 2, firstPort: 8102, step: 20 });
   });
 
   it("rejects a computed port that belongs to another workspace", () => {
@@ -185,6 +193,21 @@ describe("portsForIndex (serviceMajor)", () => {
       compute: ({ firstPort }) => ({ web: firstPort, debug: firstPort + 1 }),
     });
     expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's ports/);
+  });
+});
+
+describe("portsForIndex (both layouts)", () => {
+  it("accepts one `compute` written with `firstPort + step × offset` in each layout", () => {
+    const config: PortsConfig = {
+      base: 8100,
+      perWorkspace: 3,
+      maxWorkspaces: 20,
+      compute: ({ firstPort, step }) => ({ web: firstPort, db: firstPort + step * 2 }),
+    };
+    const workspaceMajor = resolvePortsConfig(config);
+    const serviceMajor = resolvePortsConfig({ ...config, layout: "serviceMajor" });
+    expect(portsForIndex(workspaceMajor, 2)).toEqual({ web: 8106, db: 8108 });
+    expect(portsForIndex(serviceMajor, 2)).toEqual({ web: 8102, db: 8142 });
   });
 });
 
