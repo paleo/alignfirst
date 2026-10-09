@@ -64,12 +64,9 @@ You work on one project: the repository where this session started. Keep these v
 - **PROJECT_PATH** — the absolute main-worktree path.
 
 Step 1 of `{{ALIGNDEV}} guide working-session` resolves both, and the workplace: the session's worktree and its branch, by default.
-{{#developers}}
+{{#hasGuide}}
 It also retains DEVELOPERS_PATH, the project's guide for you.
-{{/developers}}
-{{#readme}}
-It also retains DEVELOPERS_PATH, the project's guide for you.
-{{/readme}}
+{{/hasGuide}}
 PROJECT_PATH anchors project-file reads, main-worktree Git commands, and workspace tooling. Branch work and `{{ALIGNDEV}} code` happen in the workplace, which the setup procedure may move to a workspace.
 
 Creating, onboarding, or removing a project is not handled in this mode. When the user asks for it, say so.

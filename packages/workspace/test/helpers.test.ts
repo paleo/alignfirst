@@ -203,8 +203,8 @@ describe("copyAndPatchFile", () => {
     const outcome = await copyAndPatchFile({
       currentWorktree: cur,
       relPath: "out.txt",
-      resolveSource: source({ content: "A=1\n" }),
-      patch: (c) => `${c}B=2\n`,
+      resolveSource: source({ content: "A=1\nB=1\n" }),
+      patch: (c) => c.replace(/^B=.*$/m, "B=2"),
       force: false,
       optional: false,
     });
@@ -263,7 +263,7 @@ describe("copyAndPatchFile", () => {
     expect(statSync(target).mtime).toEqual(past);
   });
 
-  it("refuses a patch that is not idempotent, leaving the target untouched", async () => {
+  it("refuses a patch that is not idempotent on re-apply, leaving the target untouched", async () => {
     const cur = tmp();
     const target = join(cur, "out.txt");
     writeFileSync(target, "PORT=2\n");
@@ -281,6 +281,36 @@ describe("copyAndPatchFile", () => {
     await expect(run).rejects.toThrow(/not idempotent/);
     expect(readFileSync(target, "utf-8")).toBe("PORT=2\n");
     expect(statSync(target).mtime).toEqual(past);
+  });
+
+  it("refuses a patch that is not idempotent on create, writing nothing", async () => {
+    const cur = tmp();
+    const run = copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "PORT=2\n" }),
+      patch: (c) => `${c}x\n`,
+      force: false,
+      optional: false,
+    });
+    await expect(run).rejects.toThrow(/not idempotent/);
+    expect(existsSync(join(cur, "out.txt"))).toBe(false);
+  });
+
+  it("refuses a patch that is not idempotent with force, leaving the target untouched", async () => {
+    const cur = tmp();
+    const target = join(cur, "out.txt");
+    writeFileSync(target, "orig\n");
+    const run = copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: source({ content: "PORT=2\n" }),
+      patch: (c) => `${c}x\n`,
+      force: true,
+      optional: false,
+    });
+    await expect(run).rejects.toThrow(/not idempotent/);
+    expect(readFileSync(target, "utf-8")).toBe("orig\n");
   });
 
   it("overwrites the target with force", async () => {

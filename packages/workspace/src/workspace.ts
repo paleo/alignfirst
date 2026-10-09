@@ -1427,30 +1427,35 @@ async function seedGitignoredFiles(
     isMainWorktree: ctx.isMainWorktree,
   };
   const updated: string[] = [];
-  for (const entry of entries) {
-    const { patch } = entry;
-    const outcome = await copyAndPatchFile({
-      currentWorktree: ctx.currentWorktree,
-      relPath: entry.path,
-      resolveSource: () => resolveFileSource(entry, patchCtx),
-      patch: patch ? (content: string) => patch(content, patchCtx) : undefined,
-      force,
-      optional: entry.optional ?? false,
-    });
-    if (outcome.kind === "updated") updated.push(entry.path);
-    else log.verbose(outcomeLine(entry.path, outcome));
+  try {
+    for (const entry of entries) {
+      const { patch } = entry;
+      const outcome = await copyAndPatchFile({
+        currentWorktree: ctx.currentWorktree,
+        relPath: entry.path,
+        resolveSource: () => resolveFileSource(entry, patchCtx),
+        patch: patch ? (content: string) => patch(content, patchCtx) : undefined,
+        force,
+        optional: entry.optional ?? false,
+      });
+      if (outcome.kind === "updated") updated.push(entry.path);
+      else log.verbose(outcomeLine(entry.path, outcome));
+    }
+  } finally {
+    // Also on a later entry's failure: the files already rewritten stay reported.
+    if (updated.length > 0) log.tee(`Updated ${updated.join(", ")}.`);
   }
-  if (updated.length > 0) log.tee(`Updated ${updated.join(", ")}.`);
 }
 
-function outcomeLine(relPath: string, outcome: CopyAndPatchOutcome): string {
+function outcomeLine(
+  relPath: string,
+  outcome: Exclude<CopyAndPatchOutcome, { kind: "updated" }>,
+): string {
   switch (outcome.kind) {
     case "created":
       return `Created ${relPath}.`;
     case "overwritten":
       return `Overwritten ${relPath}.`;
-    case "updated":
-      return `Updated ${relPath}.`;
     case "upToDate":
       return `Skipped ${relPath} (already up to date).`;
     case "keptExisting":

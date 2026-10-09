@@ -168,6 +168,24 @@ describe("workspace setup (e2e)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "reports a file already rewritten when a later entry fails",
+    () => {
+      const { repo } = fixture({ fallbackSeeding: true });
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+
+      writeFileSync(join(repo, "workspace.local"), "edited-by-hand\n");
+      const rerun = runCli(repo, ["setup"], { E2E_SEED_FAIL: "1" });
+      expect(rerun.status).toBe(1);
+      expect(rerun.stdout).toContain("Updated workspace.local.");
+      const log = setupLog(repo, "fixrepo");
+      expect(log).toContain("Updated workspace.local.");
+      expect(log).toContain("FAILED");
+      expect(log.indexOf("Updated workspace.local.")).toBeLessThan(log.lastIndexOf("FAILED"));
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe("serviceMajor layout (e2e)", () => {

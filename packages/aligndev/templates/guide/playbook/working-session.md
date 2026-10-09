@@ -58,7 +58,7 @@ Outside a git repository, tell the user to start the session inside the project'
 - Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.
 {{/developers}}
 {{#readme}}
-- Retain `README.md` at the root of the session's worktree as DEVELOPERS_PATH: the project has no `DEVELOPERS.md`, and its README is your guide.
+- Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH: the project has no `DEVELOPERS.md`, and its README is your guide.
 {{/readme}}
 
 These values hold for the whole session. Only `{{ALIGNDEV}} guide project-workspace-setup` moves the workplace.
@@ -164,12 +164,9 @@ For new single-project work where the user explicitly says there is no ticket or
 {{/openclaw}}
 {{#codingAgent}}
 1. Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{#developers}}
+{{#hasGuide}}
    Read DEVELOPERS_PATH.
-{{/developers}}
-{{#readme}}
-   Read DEVELOPERS_PATH.
-{{/readme}}
+{{/hasGuide}}
 {{/codingAgent}}
 2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
 {{#openclaw}}
@@ -391,7 +388,7 @@ After a project's initial commit exists, editing the codebase happens on another
 Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPERS.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 {{/openclaw}}
 {{#codingAgent}}
-A project with workspace tooling (Step 4 of `{{ALIGNDEV}} guide project-workspace-setup`) owns its worktrees through it. Every creation, reuse, and teardown goes through the commands its guide (`workspace --guide`) gives. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
+A project with workspace tooling (Step 2 of `{{ALIGNDEV}} guide project-workspace-setup`) owns its worktrees through it. Every creation, reuse, and teardown goes through the commands its guide (`workspace --guide`) gives. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
 
 Without workspace tooling, create a worktree with `git worktree add` only when the user asks for one.
 {{/codingAgent}}

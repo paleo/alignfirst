@@ -106,7 +106,8 @@ export interface CopyAndPatchOptions {
 }
 
 export type CopyAndPatchOutcome =
-  | { kind: "created" | "overwritten" | "updated" | "upToDate" | "keptExisting" }
+  | { kind: "updated" }
+  | { kind: "created" | "overwritten" | "upToDate" | "keptExisting" }
   | { kind: "sourceMissing"; sourcePath: string };
 
 export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<CopyAndPatchOutcome> {
@@ -136,7 +137,7 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
     content = readFileSync(source.path, "utf-8");
   }
 
-  const patched = patch === undefined ? content : patch(content);
+  const patched = patch === undefined ? content : applyPatch(relPath, patch, content);
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
   return { kind: alreadyExists ? "overwritten" : "created" };
@@ -145,7 +146,7 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
 /**
  * Re-applies `patch` to the file as it is: a patch rewrites only the keys it knows, so local
  * customizations survive. The source is never resolved, and the file is rewritten only when the
- * result differs. Throws, before any write, when the patch is not idempotent.
+ * result differs.
  */
 function reconcileExistingFile(
   targetPath: string,
@@ -153,16 +154,22 @@ function reconcileExistingFile(
   patch: (content: string) => string,
 ): CopyAndPatchOutcome {
   const content = readFileSync(targetPath, "utf-8");
-  const patched = patch(content);
+  const patched = applyPatch(relPath, patch, content);
   if (patched === content) return { kind: "upToDate" };
+  writeFileSync(targetPath, patched);
+  return { kind: "updated" };
+}
+
+/** Returns the patched content. Throws when the patch is not idempotent. */
+function applyPatch(relPath: string, patch: (content: string) => string, content: string): string {
+  const patched = patch(content);
   if (patch(patched) !== patched) {
     throw new WorkspaceError(
       `patch of ${relPath} is not idempotent: applying it twice gives a different result. ` +
         "A patch must rewrite only the keys it owns.",
     );
   }
-  writeFileSync(targetPath, patched);
-  return { kind: "updated" };
+  return patched;
 }
 
 /**

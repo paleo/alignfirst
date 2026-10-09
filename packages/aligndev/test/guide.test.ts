@@ -15,6 +15,7 @@ import {
   makeFixture,
   makeProjectsDirectory,
   makeRepository,
+  addWorktree,
   range,
   type RunOverrides,
   type RunResult,
@@ -408,17 +409,34 @@ describe("codingAgent guides", () => {
       'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
     );
     expect(await step1("readme")).toContain(
-      "Retain `README.md` at the root of the session's worktree as DEVELOPERS_PATH",
+      "Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH",
     );
     const noGuide = await step1("noGuide");
     expect(noGuide).toContain("`git rev-parse --path-format=absolute --git-common-dir`");
     expect(noGuide).toContain("`alignfirst config --json`");
   });
 
+  it("resolves the guide file from the main worktree", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const main = makeGuideVariants(fixture).developers;
+    const subdirectory = join(main, "packages", "foo");
+    mkdirSync(subdirectory, { recursive: true });
+    const worktree = join(fixture.root, "linked");
+    addWorktree(main, worktree, "feature");
+    for (const cwd of [subdirectory, worktree]) {
+      const { stdout } = await runGuide(fixture, ["working-session"], { cwd });
+      expect(stdout, cwd).toContain(
+        'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
+      );
+    }
+  });
+
   it("fails with the alignfirst report error", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const result = await runGuide(fixture, ["working-session"], {
+      cwd: makeRepository(fixture.root, "project"),
       alignfirstCommand: [
         "node",
         "-e",
@@ -429,17 +447,19 @@ describe("codingAgent guides", () => {
     expect(result.stderr).toBe("Error: broken registry.\n");
   });
 
-  it("decides the workplace in the setup runbook, in place before any workspace", async () => {
+  it("decides the workplace in the setup runbook before the setup signal", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const { stdout } = await runGuide(fixture, ["project-workspace-setup"]);
-    const step4 = stdout.slice(stdout.indexOf("## Step 4"), stdout.indexOf("## Step 5"));
+    expect(stdout).toContain("## Step 2 — Decide the workplace");
+    expect(stdout).toContain("## Step 3 — Post the setup signal");
+    const step2 = stdout.slice(stdout.indexOf("## Step 2"), stdout.indexOf("## Step 3"));
     const cases = [
       "**The user's request or instructions name the place**",
       "**The session's branch carries TICKET_ID**",
       "**The session's branch is long-lived**",
       "**Any other branch**",
-    ].map((phrase) => step4.indexOf(phrase));
+    ].map((phrase) => step2.indexOf(phrase));
     expect(cases[0]).toBeGreaterThan(0);
     for (const [index, position] of cases.slice(1).entries()) {
       expect(position).toBeGreaterThan(cases[index]);
@@ -459,6 +479,16 @@ describe("codingAgent guides", () => {
     expect(step2).toContain("Skip the refresh of the default branch");
     expect(step2).toContain("Retain `git rev-parse --short HEAD`");
     expect(step2).not.toContain("git merge --ff-only");
+  });
+
+  it("answers a consultation about another branch from its registered workspace", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const { stdout } = await runGuide(fixture, ["consultation"]);
+    const step1 = stdout.slice(stdout.indexOf("## Step 1"), stdout.indexOf("## Step 2"));
+    expect(step1).toContain("use that branch's existing registered workspace instead");
+    expect(stdout).not.toContain("environment refresh");
+    expect(stdout).not.toContain("linked-workspace");
   });
 
   it("routes the dispatcher to the working session", async () => {
@@ -536,6 +566,21 @@ describe("renderBlocks", () => {
     expect(render("readme")).toBe("Coding agent.\nReadme.\nAfter.\nShared.");
     expect(render("noGuide")).toBe("Coding agent.\nAfter.\nShared.");
     expect(renderBlocks(text, { platform: "openclaw" }, "t.md")).toBe("Shared.");
+  });
+
+  it("keeps a hasGuide block for both guide files", () => {
+    const text = [
+      "{{#codingAgent}}",
+      "{{#hasGuide}}",
+      "Guide.",
+      "{{/hasGuide}}",
+      "{{/codingAgent}}",
+    ];
+    const render = (guideFile: GuideFileCondition) =>
+      renderBlocks(text.join("\n"), { platform: "codingAgent", guideFile }, "t.md");
+    expect(render("developers")).toBe("Guide.");
+    expect(render("readme")).toBe("Guide.");
+    expect(render("noGuide")).toBe("");
   });
 
   it("collapses the empty-line runs a removed block leaves", () => {

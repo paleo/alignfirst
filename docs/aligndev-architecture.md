@@ -27,9 +27,9 @@ read_when:
 Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for the command forms. Under `npx`, both commands print as `npx -y …`. Variants sit in blocks, each marker alone on its line:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
-- A condition block, `{{#developers}}`, `{{#readme}}` or `{{#noGuide}}`, sits directly inside a `{{#codingAgent}}` block and holds text only.
+- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits directly inside a `{{#codingAgent}}` block and holds text only.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per call, before rendering a playbook topic: it runs `alignfirst config --json` in the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of the working directory's repository gives `readme`; otherwise, outside git included, `noGuide`. OpenClaw rendering and the `code` topic read no report.
+The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per call, before rendering a playbook topic: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. OpenClaw rendering and the `code` topic read no report.
 
 ## Running the Agent
 

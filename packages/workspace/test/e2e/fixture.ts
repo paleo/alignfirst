@@ -27,6 +27,7 @@ export interface FixtureOptions {
   /**
    * Seeds a gitignored file from a committed fallback or the customized main file. Its patch
    * owns the `worktree=` line and leaves the rest alone, so re-running `setup` can re-apply it.
+   * With `E2E_SEED_FAIL=1`, a second entry follows whose required source is missing.
    */
   fallbackSeeding?: boolean;
   /**
@@ -106,6 +107,9 @@ function workspaceMjsSource(
           .concat("worktree=" + (ctx.isMainWorktree ? "main" : "linked"))
           .join("\\n") + "\\n",
     },
+    ...(process.env.E2E_SEED_FAIL === "1"
+      ? [{ path: "required.local", source: { kind: "committed", path: "missing.template" } }]
+      : []),
   ]`
     : "[]";
   return `import { existsSync, readFileSync, writeFileSync } from "node:fs";

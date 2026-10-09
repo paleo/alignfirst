@@ -106,7 +106,7 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 
 ### `aligndev guide`
 
-Under `codingAgent`, a playbook topic reads the report in the working directory. `locations["DEVELOPERS.md"].exists` selects the `DEVELOPERS.md` variant of the playbook. Otherwise a `README.md` at the root of the working directory's repository selects the README variant. A report error fails the command.
+Under `codingAgent`, a playbook topic reads the report in the main worktree of the working directory. `locations["DEVELOPERS.md"].exists` selects the `DEVELOPERS.md` variant of the playbook. Otherwise a `README.md` at the root of that main worktree selects the README variant. A report error fails the command.
 
 ### `aligndev project`
 
@@ -114,7 +114,7 @@ A direct child whose `.git` is a directory is a project, unless it holds another
 
 ### The playbook
 
-DEVELOPERS_PATH is the project's guide file for the assistant. Under OpenClaw, each procedure retains the `DEVELOPERS.md` path from `aligndev project status <PROJECT_PATH>`. A coding-agent assistant retains `locations["DEVELOPERS.md"].path` from `alignfirst config --json` when that file exists, else `README.md` at the repository root; with neither, its playbook has no DEVELOPERS_PATH. Project rules for a companion-backed project go into its companion `.alignfirst.md` or `DEVELOPERS.md`, edited in place, with no branch or pull request.
+DEVELOPERS_PATH is the project's guide file for the assistant. Under OpenClaw, each procedure retains the `DEVELOPERS.md` path from `aligndev project status <PROJECT_PATH>`. A coding-agent assistant retains `locations["DEVELOPERS.md"].path` from `alignfirst config --json` when that file exists, else `README.md` at the root of the main worktree; with neither, its playbook has no DEVELOPERS_PATH. Project rules for a companion-backed project go into its companion `.alignfirst.md` or `DEVELOPERS.md`, edited in place, with no branch or pull request.
 
 Under OpenClaw, a project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. The main worktree is its only workspace, claimed by one working thread at a time. It is free when it is clean on the default branch, or already on the thread's own branch. Branches are created and checked out there with `git switch`.
 

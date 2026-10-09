@@ -4,6 +4,9 @@ import { readTemplate } from "../templates.js";
 
 const GUIDE_FILE_CONDITIONS = ["developers", "readme", "noGuide"] as const;
 
+// Active for both guide files: `developers` and `readme`.
+const HAS_GUIDE = "hasGuide";
+
 const MARKER = /^\{\{([#/])([A-Za-z]+)\}\}$/;
 
 // The project's guide file for the assistant: `DEVELOPERS.md`, `README.md`, or none.
@@ -15,9 +18,11 @@ export interface ActiveBlocks {
 }
 
 interface OpenBlock {
-  name: Platform | GuideFileCondition;
+  name: Platform | ConditionName;
   line: number;
 }
+
+type ConditionName = GuideFileCondition | typeof HAS_GUIDE;
 
 // Renders `templates/guide/<name>`: the blocks first, then the placeholders — the command forms
 // and every key of `values`.
@@ -40,7 +45,7 @@ export function renderGuideTemplate(
 }
 
 // A block is `{{#<name>}}` … `{{/<name>}}`, each marker alone on its line. A platform block sits
-// at the top level; a guide-file condition block sits directly inside a `codingAgent` block. A line
+// at the top level; a condition block sits directly inside a `codingAgent` block. A line
 // is kept when every block around it is active. The runs of empty lines that removed blocks leave
 // collapse to one.
 export function renderBlocks(text: string, active: ActiveBlocks, templateName: string): string {
@@ -65,6 +70,7 @@ export function renderBlocks(text: string, active: ActiveBlocks, templateName: s
 }
 
 function isActive(name: OpenBlock["name"], active: ActiveBlocks): boolean {
+  if (name === HAS_GUIDE) return active.guideFile === "developers" || active.guideFile === "readme";
   return name === active.platform || name === active.guideFile;
 }
 
@@ -81,7 +87,7 @@ function openBlock(
     }
     return { name, line };
   }
-  if (isGuideFileCondition(name)) {
+  if (isCondition(name)) {
     if (outer?.name !== "codingAgent") {
       throw blockError(templateName, line, `condition block "${name}" outside a codingAgent block`);
     }
@@ -91,7 +97,7 @@ function openBlock(
 }
 
 function closeBlock(name: string, line: number, open: OpenBlock[], templateName: string): void {
-  if (!isPlatform(name) && !isGuideFileCondition(name)) {
+  if (!isPlatform(name) && !isCondition(name)) {
     throw blockError(templateName, line, `unknown block "${name}"`);
   }
   if (open.at(-1)?.name !== name) {
@@ -104,8 +110,8 @@ function isPlatform(name: string): name is Platform {
   return (PLATFORMS as readonly string[]).includes(name);
 }
 
-function isGuideFileCondition(name: string): name is GuideFileCondition {
-  return (GUIDE_FILE_CONDITIONS as readonly string[]).includes(name);
+function isCondition(name: string): name is ConditionName {
+  return name === HAS_GUIDE || (GUIDE_FILE_CONDITIONS as readonly string[]).includes(name);
 }
 
 function blockError(templateName: string, line: number, detail: string): Error {

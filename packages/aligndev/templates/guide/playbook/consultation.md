@@ -12,12 +12,9 @@ The user consults you, and you consult the agent. It reads the repository; you w
 Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/openclaw}}
 {{#codingAgent}}
-{{#developers}}
+{{#hasGuide}}
 Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/developers}}
-{{#readme}}
-Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/readme}}
+{{/hasGuide}}
 {{#noGuide}}
 Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/noGuide}}
@@ -27,7 +24,7 @@ Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
 {{/openclaw}}
 {{#codingAgent}}
-Use the session's worktree and its branch as they are.
+Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -58,7 +55,12 @@ Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then 
 Run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
 {{/codingAgent}}
 
+{{#openclaw}}
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Include the environment refresh described in the working session when the main branch advanced. Use the delegation guide's background launch and completion procedure.
+{{/openclaw}}
+{{#codingAgent}}
+The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Use the delegation guide's background launch and completion procedure.
+{{/codingAgent}}
 
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 
@@ -71,7 +73,12 @@ Answer in the thread, in your own words, grounded in what the agent found.
 Answer in the conversation, in your own words, grounded in what the agent found.
 {{/codingAgent}}
 
+{{#openclaw}}
 A request for changes ends the consultation: return to the ticket and linked-workspace flow before anything is implemented.
+{{/openclaw}}
+{{#codingAgent}}
+A request for changes ends the consultation: return to the ticket and workspace flow before anything is implemented.
+{{/codingAgent}}
 
 ## Step 5 — Record a discussion
 
