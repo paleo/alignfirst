@@ -364,23 +364,27 @@ describe("codingAgent guides", () => {
     "starter",
   ];
 
-  it("renders every guide with no OpenClaw tool, sentinel or topic", async () => {
-    for (const agent of ["claude", "codex"]) {
+  const GUIDE_VARIANTS: GuideFileCondition[] = ["developers", "readme", "noGuide"];
+
+  it.each(
+    ["claude", "codex"].flatMap((agent) =>
+      GUIDE_VARIANTS.map((variant) => [agent, variant] as const),
+    ),
+  )(
+    "renders every %s guide for %s with no OpenClaw tool, sentinel or topic",
+    async (agent, variant) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
-      for (const [variant, cwd] of Object.entries(makeGuideVariants(fixture))) {
-        for (const topic of TOPICS) {
-          const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
-          expect(result.code, `${agent} ${variant} ${topic}: ${result.stderr}`).toBe(0);
-          for (const term of OPENCLAW_TERMS) {
-            expect(result.stdout, `${agent} ${variant} ${topic} mentions ${term}`).not.toContain(
-              term,
-            );
-          }
+      const cwd = makeGuideVariants(fixture)[variant];
+      for (const topic of TOPICS) {
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
+        expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
+        for (const term of OPENCLAW_TERMS) {
+          expect(result.stdout, `${topic} mentions ${term}`).not.toContain(term);
         }
       }
-    }
-  });
+    },
+  );
 
   it("renders every topic for the project's guide file", async () => {
     const fixture = makeFixture();
