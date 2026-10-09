@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
 import { loadConfig, requireProjectsRoot, resolveCodeConfig } from "../src/config.js";
-import { makeSink, writeConfig } from "./helpers.js";
+import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
 
 const EXPLICIT = { platform: "openclaw", code: { agent: "claude" } };
 
@@ -20,6 +20,16 @@ function makeHome(): string {
   const home = mkdtempSync(join(tmpdir(), "aligndev-config-"));
   homes.push(home);
   return home;
+}
+
+// `main` options to render the playbook in `home`, with the repository's alignfirst.
+function guideRun(home: string) {
+  return {
+    cwd: home,
+    env: { HOME: home },
+    home,
+    alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+  };
 }
 
 function configPathOf(home: string): string {
@@ -194,7 +204,14 @@ describe("an absent config through main", () => {
     expect(code).toBe(0);
     expect(stdout.text()).toContain("(selected: codex)");
     const guide = makeSink();
-    expect(await main({ argv: ["node", "aligndev", "guide"], env, home, stdout: guide })).toBe(0);
+    expect(
+      await main({
+        ...guideRun(home),
+        argv: ["node", "aligndev", "guide"],
+        env: { ...env, HOME: home },
+        stdout: guide,
+      }),
+    ).toBe(0);
     expect(guide.text()).toContain("in a coding-agent session");
   });
 
@@ -211,7 +228,7 @@ describe("an absent config through main", () => {
     }
     for (const args of [["guide"], ["guide", "--help"], ["project", "--help"]]) {
       const stdout = makeSink();
-      const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stdout });
+      const code = await main({ ...guideRun(home), argv: ["node", "aligndev", ...args], stdout });
       expect(code).toBe(0);
     }
   });

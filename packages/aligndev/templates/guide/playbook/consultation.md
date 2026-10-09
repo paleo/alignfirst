@@ -12,16 +12,25 @@ The user consults you, and you consult the agent. It reads the repository; you w
 Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/openclaw}}
 {{#codingAgent}}
+{{#developers}}
 Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/developers}}
+{{#readme}}
+Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/readme}}
+{{#noGuide}}
+Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+{{/noGuide}}
 {{/codingAgent}}
 
 {{#openclaw}}
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
 {{/openclaw}}
 {{#codingAgent}}
-Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+Use the session's worktree and its branch as they are.
 {{/codingAgent}}
 
+{{#openclaw}}
 ## Step 2 — Refresh the default branch
 
 Skip this step when Step 1 selected an existing branch workspace; inspect its current state as it is, without the workspace setup or branch-sync procedure.
@@ -31,6 +40,14 @@ Before delegating against the default branch, verify that the main worktree is c
 Stop and report the obstacle when the branch is wrong, the worktree is dirty, the upstream is missing, or the refresh fails. Preserve local work: a question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
 
 Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forward the same worktree, so this records which revision the answer came from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
+{{/openclaw}}
+{{#codingAgent}}
+## Step 2 — Record the revision
+
+Skip the refresh of the default branch: the tree stays as the user left it. A question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
+
+Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
+{{/codingAgent}}
 
 ## Step 3 — Delegate
 

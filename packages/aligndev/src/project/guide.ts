@@ -8,7 +8,7 @@ import type { MarkerPortRange, PortRange } from "./markers.js";
 
 // The projects guide serves the OpenClaw playbook only.
 export function renderProjectsGuide(forms: CommandForms, inventory?: ProjectInventory): string {
-  const guide = renderGuideTemplate("project.md", "openclaw", forms);
+  const guide = renderGuideTemplate("project.md", { platform: "openclaw" }, forms);
   if (inventory === undefined) return guide;
   const sections = inventory.directories.map((directory) => renderDirectory(inventory, directory));
   return `${guide}\n\n${sections.join("\n\n")}`;

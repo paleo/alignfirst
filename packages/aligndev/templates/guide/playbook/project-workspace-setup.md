@@ -4,10 +4,15 @@
 The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies are your delivery — but only the message that **ends your turn** is guaranteed to post; mid-turn lines may never leave the transcript. The message you end the setup turn with must carry everything the user needs: the `[WORKSPACE]` banner (Step 4) and what you did or launched. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
 {{/openclaw}}
 {{#codingAgent}}
-The setup phase of a working session: get the workspace ready before handling the user's request. The message you end the setup turn with carries the `[WORKSPACE]` banner (Step 4) and what you did or launched.
+The setup phase of a working session: decide the workplace and get it ready before handling the user's request. The message you end the setup turn with carries the `[WORKSPACE]` banner (Step 4) and what you did or launched, or the question Step 4 or Step 5 asks the user.
 {{/codingAgent}}
 
+{{#openclaw}}
 ## Prerequisites — run both now, before Step 1
+{{/openclaw}}
+{{#codingAgent}}
+## Prerequisites — before Step 1
+{{/codingAgent}}
 
 {{#openclaw}}
 - `{{ALIGNDEV}} guide code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
@@ -19,7 +24,12 @@ The setup phase of a working session: get the workspace ready before handling th
 - run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
 {{/openclaw}}
 {{#codingAgent}}
-- read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, when it exists — how to create a worktree or a branch.
+{{#developers}}
+- Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session` — whether the project has workspace tooling, and how to create a worktree or a branch.
+{{/developers}}
+{{#readme}}
+- Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session` — whether the project has workspace tooling, and how to create a worktree or a branch.
+{{/readme}}
 {{/codingAgent}}
 
 ## Step 1 — Requirements
@@ -32,6 +42,7 @@ You need:
 {{/openclaw}}
 {{#codingAgent}}
 - **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of `{{ALIGNDEV}} guide working-session`.
+- **The workplace and the default branch** — The session's worktree, its branch, and the project's default branch, retained by the same step.
 {{/codingAgent}}
 - **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
 
@@ -43,6 +54,8 @@ If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess 
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the known project, ticket and task, so restating them here just repeats a message they can see.
 {{/openclaw}}
 {{#codingAgent}}
+Post the signal only when Step 4 opens or creates a workspace: decide the workplace in Step 4 first, then come back here. Working in place, or ending the turn on a question, posts no signal.
+
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the user already knows the project, ticket and task, so restating them here just repeats what they have seen.
 {{/codingAgent}}
 
@@ -74,13 +87,35 @@ That single call is the whole exception. The post right after it, and every one 
 Continue with Step 4.
 {{/codingAgent}}
 
+{{#openclaw}}
 ## Step 4 — Set up the project workspace (worktree, branch, dev server)
+{{/openclaw}}
+{{#codingAgent}}
+## Step 4 — Decide the workplace and set it up (worktree, branch, dev server)
+{{/codingAgent}}
 
 {{#openclaw}}
 A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. Its main worktree at PROJECT_PATH is its only workspace, used by one working thread at a time. "Main-worktree mode" below adapts this step, and wherever the playbook names the linked workspace, you use PROJECT_PATH.
 {{/openclaw}}
 {{#codingAgent}}
-A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. Its main worktree at PROJECT_PATH is its only workspace, used by one working session at a time. "Main-worktree mode" below adapts this step, and wherever the playbook names the linked workspace, you use PROJECT_PATH.
+{{#developers}}
+The project has **workspace tooling** when DEVELOPERS_PATH describes workspaces.
+{{/developers}}
+{{#readme}}
+The project has **workspace tooling** when DEVELOPERS_PATH describes workspaces.
+{{/readme}}
+{{#noGuide}}
+The project has no **workspace tooling**.
+{{/noGuide}}
+
+The workplace is the first case that matches:
+
+1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there.
+2. **The session's branch carries TICKET_ID** — work in place. Skip the setup signal and the checks below: post the `[WORKSPACE]` banner with the session's worktree and branch and `Status: ready`, then go to Step 5.
+3. **The session's branch is long-lived** — the default branch, or a name such as `main`, `master`, `develop`, `release` or `production`: open or create the ticket's workspace below, without asking.
+4. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
+
+Without workspace tooling, case 3 also ends the turn on that question, and "here" means the ticket's branch in the session's worktree: `git switch <branch>` when it exists, else a fast-forward of the base branch, then `git switch -c {TICKET_ID}/{1-3-words}`. The banner then follows case 2.
 {{/codingAgent}}
 
 Otherwise, the workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
@@ -88,7 +123,12 @@ Otherwise, the workspace tooling owns worktrees. Run its main-worktree commands 
 First, fetch remote refs from PROJECT_PATH with `git fetch --prune`. Then check what already exists for the {TICKET_ID} — two checks, both required:
 
 - **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
+{{#openclaw}}
 - **Registered workspaces**: `DEVELOPERS.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+{{/openclaw}}
+{{#codingAgent}}
+- **Registered workspaces**: the workspace tooling's guide command (`workspace --guide`, with the project's own runner) gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
+{{/codingAgent}}
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
@@ -102,7 +142,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
 {{/openclaw}}
 {{#codingAgent}}
-The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
+The moment you have the workplace — in place, attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from the workplace.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -122,15 +162,15 @@ Status: {running | ready | failed}
 
 The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on.
 
+{{#openclaw}}
 ### Main-worktree mode
+{{/openclaw}}
 
 {{#openclaw}}
 The branch check applies; the registered-workspace check does not. Before any checkout, claim the main worktree. It is free when it is on the default branch with a clean `git status`, or already on this thread's {TICKET_ID} branch. Otherwise, end the turn telling the user the project is busy: name the checked-out branch and the uncommitted changes, and change nothing.
 {{/openclaw}}
-{{#codingAgent}}
-The branch check applies; the registered-workspace check does not. Before any checkout, claim the main worktree. It is free when it is on the default branch with a clean `git status`, or already on this session's {TICKET_ID} branch. Otherwise, end the turn telling the user the project is busy: name the checked-out branch and the uncommitted changes, and change nothing.
-{{/codingAgent}}
 
+{{#openclaw}}
 On a free main worktree, the sub-paths above run in PROJECT_PATH with plain `git switch`:
 
 1. **Already on the branch** → use it.
@@ -138,8 +178,18 @@ On a free main worktree, the sub-paths above run in PROJECT_PATH with plain `git
 3. **No branch** → a status request ends as above. Otherwise, fast-forward the base branch as above, then `git switch -c {TICKET_ID}/{1-3-words}`.
 
 The `[WORKSPACE]` banner names the main worktree: `Worktree:` is the directory name of PROJECT_PATH, and `Status:` is `ready`.
+{{/openclaw}}
 
+{{#openclaw}}
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
+{{/openclaw}}
+{{#codingAgent}}
+## Step 5 — Sync an existing branch
+{{/codingAgent}}
+
+{{#codingAgent}}
+In place on an existing branch, fetch first. A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking: do it, then report it in one line. Anything else — uncommitted changes, a remote branch that does not fast-forward, a base-branch catch-up that needs a merge commit — ends the turn on one message stating what will happen ("I'll commit your changes as WIP and merge `main`, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
+{{/codingAgent}}
 
 Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 

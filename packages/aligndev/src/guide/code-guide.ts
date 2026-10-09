@@ -9,7 +9,7 @@ export function renderCodeGuide(
   models: readonly string[],
   forms: CommandForms,
 ): string {
-  return renderGuideTemplate("code.md", platform, forms, {
+  return renderGuideTemplate("code.md", { platform }, forms, {
     AGENT: agent,
     AUTH_COMMAND: agent === "claude" ? "`claude`, then `/login`" : "`codex login`",
     PERMISSIONS:

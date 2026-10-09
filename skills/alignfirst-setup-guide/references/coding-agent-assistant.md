@@ -8,7 +8,7 @@ Supported systems: Linux and macOS, and Windows through WSL.
 
 The project needs a `.plans` directory, in its repository or in its companion directory. Follow [AlignFirst setup](alignfirst-skills-setup.md#configure-the-project), with [plans-setup.md](plans-setup.md) for a work-files repository, or [companion-setup.md](companion-setup.md) for a repository that must stay untouched.
 
-The assistant reads the project's `DEVELOPERS.md` when it exists. [Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) describes its content.
+The assistant reads the project's `DEVELOPERS.md` when it exists, else the `README.md` at the repository root. [Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) describes its content.
 
 ## 2. Configure `aligndev` (recommended)
 
