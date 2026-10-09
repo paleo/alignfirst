@@ -93,7 +93,7 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 
 ## Port blocks and stale entries
 
-The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored block index (`base + perWorkspace × index`) — never persisted. Editing `names`, `perWorkspace` or `base` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match.
+The `ports` config group is resolved once per invocation, and a workspace's ports are derived from its stored block index (`base + perWorkspace × index`) — never persisted. Editing `names`, `perWorkspace` or `base` therefore re-derives every workspace's ports on the next command; re-running `workspace setup` in each worktree is what rewrites the config files to match: `copyAndPatchFile` re-applies each entry's `patch` to the existing file and rewrites it only when the result differs (`Updated <path>`), so local customizations survive and `--force` stays the reseed-from-source path. An entry without `patch` is never touched without `--force`.
 
 Indexes are allocated only when `ports` is configured. A workspace registered while the config was portless carries no `portIndex`, so declaring `ports` later leaves it **stale**: any command needing its ports fails with a message pointing at `workspace setup --force` in that worktree, and `list` shows `?` in its `PORTS` column. The main worktree is never stale — its index is 0 by definition, and never stored.
 

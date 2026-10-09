@@ -22,7 +22,10 @@ export interface FixtureRepo {
 export interface FixtureOptions {
   /** Setup-only variant: no `ports` group, no dev-server script. */
   portless?: boolean;
-  /** Seeds a gitignored file from a committed fallback or the customized main file. */
+  /**
+   * Seeds a gitignored file from a committed fallback or the customized main file. Its patch
+   * owns the `worktree=` line and leaves the rest alone, so re-running `setup` can re-apply it.
+   */
   fallbackSeeding?: boolean;
   /**
    * Declares one setup profile, `assistant`, whose `apply` throws with `E2E_PROFILE_FAIL=1` and otherwise
@@ -92,7 +95,12 @@ function workspaceMjsSource(
       path: "workspace.local",
       source: { kind: "mainWorktree", fallback: "workspace.template" },
       patch: (content, ctx) =>
-        content.trim() + "\\nworktree=" + (ctx.isMainWorktree ? "main" : "linked") + "\\n",
+        content
+          .trim()
+          .split("\\n")
+          .filter((line) => !line.startsWith("worktree="))
+          .concat("worktree=" + (ctx.isMainWorktree ? "main" : "linked"))
+          .join("\\n") + "\\n",
     },
   ]`
     : "[]";
