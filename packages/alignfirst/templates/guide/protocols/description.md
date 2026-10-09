@@ -24,23 +24,23 @@ Run `{{TICKET_CMD}}` once to identify TICKET_DIR and load the ticket directory c
 [description body]
 ```
 
-Start with a suggested commit message {{COMMIT_RULE}}. Refine it from the suggested commit messages found in the specs and summaries you read. Keep it brief—usually 3-5 words for the description part. Shorter is better when it's clear.
+Start with a suggested commit message {{COMMIT_RULE}}. Refine it from the suggested commit messages found in the specs and summaries you read. Keep it brief, usually 3 to 5 words for the description part. Shorter is better when it stays clear.
 
 ## Guidelines for the Description Body
 
 - Write in markdown:
   - If there is one subject, write a single paragraph.
   - Otherwise, write a bulleted list with one subject per item.
-- **Describe only WHAT was done, never WHY.** Never include explanations, justifications, or reasoning for the changes. Only state what was implemented or modified.
-- **Keep it minimal and functional.** Mention each subject very concisely—just the essentials. Most subjects can be summarized in one sentence of about 5 to 15 words.
-- **Always prefer functional/business descriptions.** Avoid technical implementation details unless absolutely necessary.
-- **CRITICAL: Merge related subjects whenever possible.** Look for opportunities to combine similar changes into a single, cohesive subject. This keeps the description focused and readable.
+- **Describe what was done, never why.** Explanations, justifications and reasoning stay out; the reader gets the result.
+- **Keep it minimal and functional.** Mention each subject very concisely, the essentials only. Most subjects fit in one sentence of about 5 to 15 words.
+- **Prefer functional descriptions.** Technical implementation details appear only when the reader needs them.
+- **Merge related subjects.** A long list of small items is the usual failure of a description; combine similar changes into one cohesive subject.
 - Include technical details only for major structural changes (e.g., renaming a database table, significant linter config changes, major codebase refactors).
-- Do not mention specs that were not implemented. If in doubt, explore the codebase to confirm what was actually done.
-- **Absorb fix-only summaries**: If a summary is about fixing issues introduced by previous summaries in the same ticket (e.g., bug fixes, corrections, adjustments to earlier work), do not mention it as a separate subject. An external reader only cares about the end state.
+- Leave out specs that were not implemented. In doubt, explore the codebase to confirm what was done.
+- **Absorb fix-only summaries.** A summary that fixes issues introduced by earlier work in the same ticket is not a subject of its own. An external reader only cares about the end state.
 
 ---
 
-_Ignore lint errors (formatting issues) in the description file._
+Ignore Markdown lint errors in the description file.
 
 At the end, give the path of the description file to the user.
