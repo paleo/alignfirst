@@ -1,6 +1,6 @@
 {
   "name": "aligndev",
-  "version": "0.20.2",
+  "version": "0.21.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
   "description": "The AlignFirst Dev Kit CLI: the assistant's playbook, coding-agent delegation, and project inventory.",
