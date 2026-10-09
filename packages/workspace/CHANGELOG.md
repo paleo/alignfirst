@@ -1,5 +1,12 @@
 # @alignfirst/workspace
 
+## 0.36.0
+
+### Minor Changes
+
+- 5ca2919: `workspace setup` now re-applies the `patch` of an existing gitignored file without `--force`, rewrites the file only when the result differs, and reports the rewritten files on stdout (`Updated <paths>`). It refuses a `patch` that is not idempotent; entries without `patch` keep skipping existing files.
+- d30843d: Added `ports.layout: "serviceMajor"`: each name owns a range of `maxWorkspaces` consecutive ports and a workspace takes its index in every range, so appending a name moves no existing port. The default `workspaceMajor` layout is unchanged. `compute` now receives `step`, the distance between two consecutive offsets.
+
 ## 0.35.0
 
 ### Minor Changes

@@ -1,5 +1,15 @@
 # aligndev
 
+## 0.21.0
+
+### Minor Changes
+
+- 24f0212: The coding-agent assistant works in the session's directory and branch, asks before moving uncommitted work, and reads `README.md` when the project has no `DEVELOPERS.md`.
+
+### Patch Changes
+
+- 24f0212: Fixed the Discord channel handoff, which could post a line in the new thread ahead of the starter.
+
 ## 0.20.2
 
 ### Patch Changes
