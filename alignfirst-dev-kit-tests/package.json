@@ -23,7 +23,7 @@
     "@alignfirst/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
     "@alignfirst/openclaw-test": "file:vendor/openclaw-test.tgz",
     "@alignfirst/service-openclaw-plugin": "file:vendor/service-openclaw-plugin.tgz",
-    "openclaw": "2026.9.8"
+    "openclaw": "2026.9.9"
   },
   "devDependencies": {
     "@types/node": "~26.5.0",
