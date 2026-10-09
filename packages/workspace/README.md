@@ -11,7 +11,7 @@ A **workspace** is one isolated stream of work. It is close to [Conductor's](htt
 - a **branch**;
 - a **git worktree** checked out to it;
 - an optional **dev-server** setup:
-  - a **port range** (a block of contiguous ports).
+  - a **port range**: a block of contiguous ports, or — with `layout: "serviceMajor"` — one port in each service's range, so that adding a service moves no existing port.
   - the **gitignored files** for configuration (`.env`, compose files, …) rewritten to that range, so the dev servers run in isolation.
 
 Several workspaces run at once without colliding, so you can develop, test, or hand a branch to an agent in parallel.

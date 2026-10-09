@@ -168,6 +168,31 @@ describe("workspace setup (e2e)", () => {
   );
 });
 
+describe("serviceMajor layout (e2e)", () => {
+  it(
+    "allocates one port per name range and lists the workspace index",
+    () => {
+      const { repo } = fixture({ serviceMajor: true });
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+      expect(runCli(repo, ["setup", "-c", "feat-sm"]).status).toBe(0);
+      expect(entryFor(repo, "fixrepo-feat-sm").portIndex).toBe(1);
+
+      const linkedPorts = readFileSync(join(repo, "..", "fixrepo-feat-sm", "ports.json"), "utf-8");
+      expect(JSON.parse(linkedPorts)).toEqual({ web: 8101, db: 8121 });
+
+      const list = runCli(repo, ["list"]);
+      expect(list.status).toBe(0);
+      const [header, ...rows] = list.stdout.trim().split("\n");
+      expect(header).toMatch(/\bINDEX\b/);
+      expect(header).not.toMatch(/\bPORTS\b/);
+      const column = header.split(/\s+/).indexOf("INDEX");
+      const linked = rows.find((row) => row.startsWith("fixrepo-feat-sm"));
+      expect(linked?.split(/\s+/)[column]).toBe("1");
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
 describe("portless workspace (e2e)", () => {
   it(
     "sets up and removes a workspace with no ports and no dev-server script",

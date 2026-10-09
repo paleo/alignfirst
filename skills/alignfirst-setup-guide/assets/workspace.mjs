@@ -38,8 +38,8 @@ await runWorkspace({
   // setup-only project.
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
 
-  // ADAPT (optional): the port scheme. Each workspace gets a contiguous block of
-  // `perWorkspace` ports; the main worktree's block starts at `base`.
+  // ADAPT (optional): the port scheme. Each workspace gets `perWorkspace` ports
+  // out of `maxWorkspaces * perWorkspace` from `base`, arranged by `layout`.
   // Omit the whole group for a portless project: nothing is allocated, and
   // `ctx.ports` is empty everywhere.
   ports: {
@@ -50,11 +50,17 @@ await runWorkspace({
     // `maxWorkspaces * perWorkspace` ports from `base`.
     maxWorkspaces: 20,
 
-    // ADAPT (optional): block size and spacing, so also the maximum ports per
-    // workspace. Defaults to `names.length` (required with `compute`); set it
-    // explicitly to reserve headroom, since adding a name later shifts every
-    // workspace's block under the default.
+    // ADAPT (optional): ports per workspace, so also the maximum names. Defaults
+    // to `names.length` (required with `compute`); set it explicitly to reserve
+    // headroom, since adding a name under the default grows the claimed range
+    // and, in the default layout, shifts every workspace's block.
     // perWorkspace: 10,
+
+    // ADAPT (optional): "workspaceMajor" (default) gives each workspace a block
+    // of consecutive ports. "serviceMajor" gives each name a range of
+    // `maxWorkspaces` consecutive ports and the workspace its index in each, so
+    // appending a name moves no existing port.
+    // layout: "serviceMajor",
 
     // ADAPT: exactly one of `names` (consecutive ports from the block's first
     // port) or `compute` (full control over the block).
