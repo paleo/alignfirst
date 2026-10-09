@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { ConfigError } from "../src/errors.js";
-import { firstPortOf, type PortsConfig, portsForIndex, resolvePortsConfig } from "../src/ports.js";
+import {
+  firstPortOf,
+  portAt,
+  type PortsConfig,
+  portsForIndex,
+  resolvePortsConfig,
+} from "../src/ports.js";
 
 describe("resolvePortsConfig", () => {
   it("defaults `perWorkspace` to the number of names", () => {
@@ -54,6 +60,22 @@ describe("resolvePortsConfig", () => {
     expect(() =>
       resolvePortsConfig({ base: 8100, maxWorkspaces: 20, compute: () => ({ web: 8100 }) }),
     ).toThrow(/perWorkspace/);
+  });
+
+  it("defaults `layout` to workspaceMajor", () => {
+    const resolved = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web"] });
+    expect(resolved.layout).toBe("workspaceMajor");
+  });
+
+  it("rejects an unknown `layout`", () => {
+    expect(() =>
+      resolvePortsConfig({
+        base: 8100,
+        maxWorkspaces: 20,
+        names: ["web"],
+        layout: "diagonal" as PortsConfig["layout"],
+      }),
+    ).toThrow(/layout/);
   });
 
   it("rejects more names than `perWorkspace`", () => {
@@ -109,6 +131,70 @@ describe("portsForIndex", () => {
       compute: ({ index, firstPort }) => ({ web: firstPort, debug: 9000 + index }),
     });
     expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's block/);
+  });
+});
+
+describe("portsForIndex (serviceMajor)", () => {
+  const serviceMajor = resolvePortsConfig({
+    base: 8100,
+    perWorkspace: 10,
+    maxWorkspaces: 20,
+    layout: "serviceMajor",
+    names: ["server", "frontend", "db"],
+  });
+
+  it("gives each name a range of `maxWorkspaces` ports and the workspace its index in each", () => {
+    expect(portsForIndex(serviceMajor, 0)).toEqual({ server: 8100, frontend: 8120, db: 8140 });
+    expect(portsForIndex(serviceMajor, 2)).toEqual({ server: 8102, frontend: 8122, db: 8142 });
+  });
+
+  it("keeps every existing port when a name is appended", () => {
+    const extended = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      layout: "serviceMajor",
+      names: ["server", "frontend", "db", "mail"],
+    });
+    expect(portsForIndex(extended, 3)).toEqual({
+      ...portsForIndex(serviceMajor, 3),
+      mail: 8163,
+    });
+  });
+
+  it("hands `compute` the index and the port of offset 0", () => {
+    const computed = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      layout: "serviceMajor",
+      compute: ({ index, firstPort }) => ({
+        web: firstPort,
+        debug: firstPort + 20 * (5 + (index % 2)),
+      }),
+    });
+    expect(portsForIndex(computed, 2)).toEqual({ web: 8102, debug: 8202 });
+  });
+
+  it("rejects a computed port that belongs to another workspace", () => {
+    const escaping = resolvePortsConfig({
+      base: 8100,
+      perWorkspace: 10,
+      maxWorkspaces: 20,
+      layout: "serviceMajor",
+      compute: ({ firstPort }) => ({ web: firstPort, debug: firstPort + 1 }),
+    });
+    expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's ports/);
+  });
+});
+
+describe("portAt", () => {
+  it("ends both layouts on the same last port", () => {
+    const config: PortsConfig = { base: 8100, perWorkspace: 10, maxWorkspaces: 20, names: ["web"] };
+    const workspaceMajor = resolvePortsConfig(config);
+    const serviceMajor = resolvePortsConfig({ ...config, layout: "serviceMajor" });
+    expect(portAt(workspaceMajor, 19, 9)).toBe(8299);
+    expect(portAt(serviceMajor, 19, 9)).toBe(8299);
   });
 });
 

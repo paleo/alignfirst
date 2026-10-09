@@ -56,6 +56,10 @@ function isPortRange(value: unknown): value is PortRange {
   return isRecord(value) && Number.isInteger(value.first) && Number.isInteger(value.last);
 }
 
+/**
+ * Both layouts tile the same `perWorkspace × maxWorkspaces` ports from `base`, so the claim is
+ * layout-independent.
+ */
 function expectedPortRange(ports: ResolvedPortsConfig): PortRange {
   return {
     first: ports.base,

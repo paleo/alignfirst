@@ -13,6 +13,7 @@ const ports: ResolvedPortsConfig = {
   base: 8100,
   perWorkspace: 2,
   maxWorkspaces: 10,
+  layout: "workspaceMajor",
   names: ["web"],
 };
 
@@ -29,6 +30,12 @@ describe("port claim", () => {
     const dir = temp();
     writeConfig(dir, { schemaVersion: 1, other: true, portRange: { first: 8100, last: 8119 } });
     expect(() => checkPortClaim(dir, ports)).not.toThrow();
+  });
+
+  it("claims the same range under the serviceMajor layout", () => {
+    const dir = temp();
+    writeConfig(dir, { portRange: { first: 8100, last: 8119 } });
+    expect(() => checkPortClaim(dir, { ...ports, layout: "serviceMajor" })).not.toThrow();
   });
 
   it("reports both ranges for a mismatch", () => {
