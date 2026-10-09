@@ -62,7 +62,7 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 - `threadName`: the name above
 - `channel`: `<channel>`
 
-The tool returns the thread's `chat_id` — that is the THREAD_ID. Post the Step 3 starter into the thread: call `message` with `action: "thread-reply"`, `threadId` set to the bare THREAD_ID, `message` set to the starter, and `channel` set to the current surface. Pass no `target`.
+Pass no `message`: content on `thread-create` would post ahead of the starter. The tool returns the thread's `chat_id` — that is the THREAD_ID. Post the Step 3 starter into the thread: call `message` with `action: "thread-reply"`, `threadId` set to the bare THREAD_ID, `message` set to the starter, and `channel` set to the current surface. Pass no `target`.
 
 **Slack** — Slack threads have no name. Call `message` with `action: "send"`, `target` set to the raw current `chat_id`, `threadId` set to the triggering message timestamp, `message` set to the Step 3 starter, and `channel` set to the current surface. The bare root timestamp is the THREAD_ID. Slack has no `thread-create`, `thread-reply`, or rename action.
 
