@@ -42,14 +42,14 @@ describe("project layout", () => {
     expect(() => resolveProjectLayout(project, home)).toThrow(message);
   });
 
-  it("expands ~ and ~/ against the home directory and names the companion", () => {
+  it("expands ~/ against the home directory and names the companion", () => {
     const { home, project } = makeHome();
-    writeRegistry(home, { paths: { "~": {} } });
+    writeRegistry(home, { paths: { "~/projects/app": {} } });
     const layout = resolveProjectLayout(project, home);
     expect(layout.companion).toEqual({
       dir: join(home, ".alignfirst", "companions", "projects_app"),
       exists: false,
-      entries: ["~"],
+      key: "~/projects/app",
       flags: {
         ".alignfirst.json": "auto",
         ".alignfirst-instructions": "auto",
@@ -76,22 +76,16 @@ describe("project layout", () => {
     expect(layout.locations[".plans"].path).toBe(join(linked, ".plans"));
   });
 
-  it("merges flags item by item, the most specific key first", () => {
+  it("matches the project's own key only, never an ancestor", () => {
     const { home, project } = makeHome();
+    writeRegistry(home, { paths: { "~/projects": { docs: true } } });
+    expect(resolveProjectLayout(project, home).companion).toBeNull();
     writeRegistry(home, {
-      paths: {
-        "~/projects": { docs: true, ".plans": true },
-        [project]: { ".plans": false },
-        "~/projects/ap": { "DEVELOPERS.md": true },
-      },
+      paths: { "~/projects": { docs: true }, [project]: { ".plans": false } },
     });
     const companion = resolveProjectLayout(project, home).companion;
-    expect(companion?.entries).toEqual([project, "~/projects"]);
-    expect(companion?.flags).toMatchObject({
-      docs: true,
-      ".plans": false,
-      "DEVELOPERS.md": "auto",
-    });
+    expect(companion?.key).toBe(project);
+    expect(companion?.flags).toMatchObject({ docs: "auto", ".plans": false });
   });
 
   it("matches a key through its real path and ignores a sibling prefix", () => {
@@ -99,10 +93,9 @@ describe("project layout", () => {
     symlinkSync(join(home, "projects"), join(root, "linked-projects"));
     writeRegistry(home, { paths: { "~/projects/ap": {} } });
     expect(resolveProjectLayout(project, home).companion).toBeNull();
-    writeRegistry(home, { paths: { [join(root, "linked-projects")]: {} } });
-    expect(resolveProjectLayout(project, home).companion?.entries).toEqual([
-      join(root, "linked-projects"),
-    ]);
+    const key = join(root, "linked-projects", "app");
+    writeRegistry(home, { paths: { [key]: {} } });
+    expect(resolveProjectLayout(project, home).companion?.key).toBe(key);
   });
 
   it("names a companion outside the home directory by its absolute path", () => {
@@ -121,7 +114,7 @@ describe("project layout", () => {
     mkdirSync(elsewhere);
     mkdirSync(join(home, ".alignfirst"));
     symlinkSync(elsewhere, join(home, ".alignfirst", "companions"));
-    writeRegistry(home, { paths: { "~": {} } });
+    writeRegistry(home, { paths: { "~/projects/app": {} } });
     expect(existsSync(join(elsewhere, "registry.json"))).toBe(true);
     expect(resolveProjectLayout(project, home).companion?.dir).toBe(
       join(elsewhere, "projects_app"),
@@ -190,13 +183,11 @@ describe("project layout", () => {
     expect(shared._aligndev).toEqual(shared[".plans"]);
   });
 
-  it("rejects _aligndev true with an automatic .plans, naming the matching keys", () => {
+  it("rejects _aligndev true with an automatic .plans, naming the key", () => {
     const { home, project } = makeHome();
-    writeRegistry(home, {
-      paths: { "~/projects": {}, "~/projects/app": { _aligndev: true } },
-    });
+    writeRegistry(home, { paths: { "~/projects/app": { _aligndev: true } } });
     expect(() => resolveProjectLayout(project, home)).toThrow(
-      '"_aligndev": true requires ".plans" set to true or false (matching keys: ~/projects/app, ~/projects)',
+      '"_aligndev": true requires ".plans" set to true or false (key: ~/projects/app)',
     );
   });
 
@@ -206,7 +197,7 @@ describe("project layout", () => {
     git(root, "init", "--quiet", "--bare", bare);
     const plain = join(home, "projects", "plain");
     mkdirSync(plain);
-    writeRegistry(home, { paths: { "~": {} } });
+    writeRegistry(home, { paths: { "~/projects/bare.git": {}, "~/projects/plain": {} } });
     expect(resolveProjectLayout(bare, home).companion).toBeNull();
     expect(resolveProjectLayout(plain, home).companion).toBeNull();
   });

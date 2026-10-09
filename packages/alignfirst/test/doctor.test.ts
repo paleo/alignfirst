@@ -50,7 +50,7 @@ describe("doctor command", () => {
     expect(result.stdout).toContain(
       [
         `[ok] Companion: registry valid (${join(home, ".alignfirst", "companions", "registry.json")})`,
-        "[ok] Companion: matched by ~/app",
+        "[ok] Companion: key ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
         `[ok] Companion: .alignfirst-instructions: ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
@@ -62,6 +62,20 @@ describe("doctor command", () => {
       ].join("\n"),
     );
     expect(result.stdout).toContain("[ok] Work files: local");
+  });
+
+  it("warns about registry keys that name no git main worktree", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    mkdirSync(join(project, "src"));
+    writeRegistry(home, { paths: { "~": {}, "~/app": {}, "~/app/src": {}, "~/gone": {} } });
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    expect(result.code).toBe(0);
+    for (const key of ["~", "~/app/src", "~/gone"])
+      expect(result.stdout).toContain(
+        `[warn] Companion: key ${key} names no git main worktree (ignored)\n`,
+      );
+    expect(result.stdout).toContain("[ok] Companion: key ~/app\n");
   });
 
   it("reports an invalid registry in every section that needs the layout", async () => {

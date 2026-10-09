@@ -79,7 +79,7 @@ describe("config command", () => {
       companion: {
         dir: companion,
         exists: true,
-        entries: ["~/projects/app"],
+        key: "~/projects/app",
         flags: {
           ".alignfirst.json": "auto",
           ".alignfirst-instructions": "auto",

@@ -127,7 +127,7 @@ function parsePlans(value: unknown, path: string): { folder?: string } | undefin
   return value.folder === undefined ? {} : { folder: value.folder };
 }
 
-// The report's other companion fields (`entries`, `flags`) are alignfirst's concern.
+// The report's other companion fields (`key`, `flags`) are alignfirst's concern.
 function parseCompanion(value: unknown, path: string): CompanionReport | null {
   if (value === null) return null;
   if (!isRecord(value) || typeof value.dir !== "string" || typeof value.exists !== "boolean") {

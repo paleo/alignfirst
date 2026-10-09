@@ -480,7 +480,7 @@ describe("project classification and companions", () => {
     const companionsRoot = join(fixture.home, ".alignfirst", "companions");
     mkdirSync(companionsRoot, { recursive: true });
     writeRegistry(fixture.home, {
-      paths: { [fixture.root]: { ".plans": true, "DEVELOPERS.md": true } },
+      paths: { [project]: { ".plans": true, "DEVELOPERS.md": true } },
     });
     const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
     mkdirSync(join(companion, ".plans"), { recursive: true });
@@ -515,7 +515,7 @@ describe("project classification and companions", () => {
     const fixture = makeFixture({});
     const flat = makeRepository(fixture.root, "a_b");
     const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
-    writeRegistry(fixture.home, { paths: { [fixture.root]: {} } });
+    writeRegistry(fixture.home, { paths: { [flat]: {}, [nested]: {} } });
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);

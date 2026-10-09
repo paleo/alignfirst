@@ -31,12 +31,12 @@ The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed pa
 {
   "paths": {
     "~/projects/team-app": { ".plans": false, "_aligndev": true },
-    "~/projects": {}
+    "~/projects/client-api": {}
   }
 }
 ```
 
-- `paths` — keys are absolute or `~/` paths. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
+- `paths` — keys are the main worktree paths of projects, absolute or `~/`. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
 The arktype schema rejects unknown keys at every level. An unreadable or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
 
@@ -44,7 +44,7 @@ The arktype schema rejects unknown keys at every level. An unreadable or invalid
 
 A project is identified by its **main worktree path**: the parent of `git rev-parse --path-format=absolute --git-common-dir`, as a real path. Every linked worktree therefore shares one companion. A bare repository or a directory outside git has none.
 
-A key matches when it equals the main worktree path or is an ancestor of it. Keys are compared by real path when they exist, after `resolve` otherwise. For each item, the most specific matching key (the longest path) that sets the flag wins; an item no key sets is `"auto"`.
+A key matches when it equals the main worktree path. Keys are compared by real path when they exist, after `resolve` otherwise. An item the entry does not set is `"auto"`. A key that names no git main worktree, such as a parent directory or a deleted repository, matches nothing; `doctor` warns about it.
 
 The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion and the registry elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
 
@@ -62,7 +62,7 @@ With a companion, every item except `_aligndev` resolves as follows. Without one
 
 A `_aligndev` location other than the resolved `.plans` is a **separate session tree**, with its own `_archives/`. `plans archive`, `plans auto-archive` and `sync` archive it by the `.plans` rules, and `ticket <id>` restores its archived `<id>/`. No move crosses from one tree to the other.
 
-An effective `"_aligndev": true` with an effective `".plans": "auto"` is an error naming the matching keys. Without it, the first `aligndev` session would create `<companion>/.plans/`, and `alignfirst` would silently switch its work files to it.
+An effective `"_aligndev": true` with an effective `".plans": "auto"` is an error naming the key. Without it, the first `aligndev` session would create `<companion>/.plans/`, and `alignfirst` would silently switch its work files to it.
 
 Reads never create the companion directory. A command that creates an item there, such as `plans setup` or a new session file, creates the missing parents. Existence checks use `lstat`, so a broken `.plans` symlink still resolves in place.
 
@@ -77,12 +77,12 @@ interface ConfigReport {
   source: "project" | "companion" | null; // where .alignfirst.json was read
   cli: CliReport | null;
   config: ProjectConfig | null;
-  companion: { dir: string; exists: boolean; entries: string[]; flags: Record<ItemName, Flag> } | null;
+  companion: { dir: string; exists: boolean; key: string; flags: Record<ItemName, Flag> } | null;
   locations: Record<ItemName, { path: string; in: "project" | "companion"; exists: boolean }>;
 }
 ```
 
-Paths are absolute. `entries` lists the matching keys as written, most specific first; `aligndev` ignores `entries` and `flags`.
+Paths are absolute. `key` is the registry key as written; `aligndev` ignores `key` and `flags`.
 
 ## Consumers
 
@@ -94,8 +94,9 @@ Paths are absolute. `entries` lists the matching keys as written, most specific 
 - **`docmap`**: adds `--root <companion docs>` when `docs` resolves in the companion and the arguments carry no `--root`.
 - **`context`**: prints the conventions, then `context.md` from the resolved `.alignfirst-instructions` under `# Project Instructions`, then the docmap section when `docs` exists, then the protocols. The conventions give a companion `.plans` by absolute path and exclude `.plans` from searches only when it resolves in the project.
 - **`config`**: the report above; the text form adds a `Companion:` line and one line per item.
-- **`companion add`**: registers the main worktree path, as a `~/` key inside the home directory and an absolute one outside it, with `{}`. A key that already matches, exact or ancestor, leaves the registry unchanged. The command creates the registry and the companion directory when missing, and marks a new directory `(created)`. Flags are edited by hand.
-- **`doctor`**: a `Companion` section with the registry state, the matching keys, the directory and each item. An item flagged `true` with a missing companion copy is a warning.
+- **`companion add`**: registers the main worktree path, as a `~/` key inside the home directory and an absolute one outside it, with `{}`. A registered project leaves the registry unchanged. The command creates the registry and the companion directory when missing, and marks a new directory `(created)`. Flags are edited by hand.
+- **`companion unregister`**: removes the project's key and keeps the companion directory, reported as orphaned. A project without a key is an error.
+- **`doctor`**: a `Companion` section with the registry state, the project's key, the directory and each item. A key that names no git main worktree, and an item flagged `true` with a missing companion copy, are warnings.
 
 ### `aligndev code`
 
@@ -127,6 +128,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 ## Rejected alternatives
 
 - **Matching by git remote**, from the earlier overlay design: forks, mirrors and renamed remotes break it, and a wrong match silently serves another project's conventions.
+- **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, `companion add` created a directory per project, and no project could be unregistered alone. They existed while the Dev Kit locked the registry; `companion add` replaced them.
 - **A per-file project-then-companion fallback without flags**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.

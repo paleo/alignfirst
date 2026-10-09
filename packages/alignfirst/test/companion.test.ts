@@ -36,19 +36,16 @@ describe("companion add", () => {
     );
   });
 
-  it("keeps the registry when a parent key already matches", async () => {
+  it("registers the project beside an ancestor key, from a subdirectory", async () => {
     const { home, project } = makeHome();
-    writeRegistry(home, { paths: { "~/projects": { ".plans": false } } });
+    writeRegistry(home, { paths: { "~/projects": {} } });
     const registry = join(home, ".alignfirst", "companions", "registry.json");
-    const before = readFileSync(registry, "utf-8");
     mkdirSync(join(project, "src"));
     const result = await runMain(["companion", "add"], { cwd: join(project, "src"), home });
-    const companion = join(home, ".alignfirst", "companions", "projects_app");
-    expect(result.stdout).toContain(
-      `Already registered by ~/projects in ${registry}.\nCompanion: ${companion} (created)\n`,
-    );
-    expect(readFileSync(registry, "utf-8")).toBe(before);
-    expect(existsSync(companion)).toBe(true);
+    expect(result.stdout).toContain(`Registered ~/projects/app in ${registry}.`);
+    expect(JSON.parse(readFileSync(registry, "utf-8"))).toEqual({
+      paths: { "~/projects": {}, "~/projects/app": {} },
+    });
   });
 
   it("adds an absolute key for a project outside the home directory", async () => {
@@ -67,6 +64,46 @@ describe("companion add", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("A companion needs a git repository with a main worktree.");
     expect(existsSync(join(home, ".alignfirst"))).toBe(false);
+  });
+});
+
+describe("companion unregister", () => {
+  it("removes the key and reports the orphaned companion directory", async () => {
+    const { home, project } = makeHome();
+    writeRegistry(home, { paths: { "~/other": {}, "~/projects/app": { docs: true } } });
+    const registry = join(home, ".alignfirst", "companions", "registry.json");
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
+    mkdirSync(join(companion, "docs"), { recursive: true });
+    const result = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(result).toEqual({
+      code: 0,
+      stdout: `Unregistered ~/projects/app from ${registry}.\nOrphaned companion directory: ${companion}\n`,
+      stderr: "",
+    });
+    expect(JSON.parse(readFileSync(registry, "utf-8"))).toEqual({ paths: { "~/other": {} } });
+    expect(existsSync(join(companion, "docs"))).toBe(true);
+  });
+
+  it("marks an empty directory and omits a missing one", async () => {
+    const { home, project } = makeHome();
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
+    await runMain(["companion", "add"], { cwd: project, home });
+    const empty = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(empty.stdout).toContain(`Orphaned companion directory: ${companion} (empty)\n`);
+    rmSync(companion, { recursive: true });
+    await runMain(["companion", "add"], { cwd: project, home });
+    rmSync(companion, { recursive: true });
+    const missing = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(missing.code).toBe(0);
+    expect(missing.stdout).not.toContain("Orphaned");
+  });
+
+  it("fails when the project has no key of its own", async () => {
+    const { home, project } = makeHome();
+    writeRegistry(home, { paths: { "~/projects": {} } });
+    const result = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(`${project} is not registered in `);
   });
 });
 

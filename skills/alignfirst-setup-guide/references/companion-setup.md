@@ -25,7 +25,7 @@ alignfirst companion add
 alignfirst config --json
 ```
 
-`companion add` adds the project's main worktree to the registry, unless an entry already covers it, and creates the companion directory when missing. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
+`companion add` adds the project's main worktree to the registry, unless it is registered, and creates the companion directory when missing. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
 
 `companion.dir` is the companion directory, and `locations` gives each item's path.
 

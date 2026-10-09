@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -55,8 +56,8 @@ export interface CompanionLayout {
   /** Absolute. */
   dir: string;
   exists: boolean;
-  /** Matching keys as written, most specific first. */
-  entries: string[];
+  /** The registry key, as written. */
+  key: string;
   /** Effective flags. */
   flags: Record<ItemName, Flag>;
 }
@@ -75,9 +76,8 @@ interface Registry {
   paths: Record<string, Partial<Record<ItemName, Flag>>>;
 }
 
-interface MatchingEntry {
+interface RegistryEntry {
   key: string;
-  path: string;
   flags: Partial<Record<ItemName, Flag>>;
 }
 
@@ -97,12 +97,12 @@ function resolveCompanion(cwd: string, home: string): CompanionLayout | null {
   const mainWorktree = findMainWorktree(cwd);
   if (mainWorktree === undefined) return null;
   const realHome = realOrResolved(home);
-  const matches = matchingEntries(registry, mainWorktree, realHome);
-  if (matches.length === 0) return null;
-  const flags = mergeFlags(matches);
-  assertValidFlags(registry, flags, matches);
+  const entry = findEntry(registry, mainWorktree, realHome);
+  if (entry === undefined) return null;
+  const flags = effectiveFlags(entry);
+  assertValidFlags(registry, flags, entry);
   const dir = companionDir(mainWorktree, realHome);
-  return { dir, exists: pathExists(dir), entries: matches.map((match) => match.key), flags };
+  return { dir, exists: pathExists(dir), key: entry.key, flags };
 }
 
 function readRegistry(home: string): Registry | undefined {
@@ -155,24 +155,23 @@ function realOrResolved(path: string): string {
   return existsSync(path) ? realpathSync(path) : resolve(path);
 }
 
-function matchingEntries(
+function findEntry(
   registry: Registry,
   mainWorktree: string,
   realHome: string,
-): MatchingEntry[] {
-  return Object.entries(registry.paths)
-    .map(([key, flags]) => ({ key, path: normalizePath(key, realHome), flags }))
-    .filter((entry) => isSameOrInside(mainWorktree, entry.path))
-    .toSorted((left, right) => right.path.length - left.path.length);
+): RegistryEntry | undefined {
+  const key = Object.keys(registry.paths).find(
+    (candidate) => normalizePath(candidate, realHome) === mainWorktree,
+  );
+  return key === undefined ? undefined : { key, flags: registry.paths[key] };
 }
 
 function isSameOrInside(path: string, ancestor: string): boolean {
   return path === ancestor || path.startsWith(ancestor.endsWith(sep) ? ancestor : ancestor + sep);
 }
 
-function mergeFlags(matches: MatchingEntry[]): Record<ItemName, Flag> {
-  const flagOf = (item: ItemName): Flag =>
-    matches.find((match) => match.flags[item] !== undefined)?.flags[item] ?? "auto";
+function effectiveFlags(entry: RegistryEntry): Record<ItemName, Flag> {
+  const flagOf = (item: ItemName): Flag => entry.flags[item] ?? "auto";
   return {
     ".alignfirst.json": flagOf(".alignfirst.json"),
     ".alignfirst-instructions": flagOf(".alignfirst-instructions"),
@@ -186,13 +185,12 @@ function mergeFlags(matches: MatchingEntry[]): Record<ItemName, Flag> {
 function assertValidFlags(
   registry: Registry,
   flags: Record<ItemName, Flag>,
-  matches: MatchingEntry[],
+  entry: RegistryEntry,
 ): void {
   if (flags._aligndev !== true || flags[".plans"] !== "auto") return;
-  const keys = matches.map((match) => match.key).join(", ");
   throw invalidRegistry(
     registry.path,
-    `"_aligndev": true requires ".plans" set to true or false (matching keys: ${keys})`,
+    `"_aligndev": true requires ".plans" set to true or false (key: ${entry.key})`,
   );
 }
 
@@ -265,7 +263,7 @@ export function separateSessionTree(layout: ProjectLayout): string | undefined {
 
 export interface CompanionRegistration {
   registry: string;
-  /** The key added, or the most specific key that already matched. */
+  /** The key added, or the key already present. */
   key: string;
   added: boolean;
   /** Absolute. */
@@ -274,22 +272,27 @@ export interface CompanionRegistration {
 }
 
 /**
- * Registers the main worktree of `cwd` with every item on `"auto"`, unless a key already matches
- * it, and creates its companion directory when missing. Creates the registry when it is missing.
+ * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered, and
+ * creates its companion directory when missing. Creates the registry when it is missing.
  */
 export function addCompanion(cwd: string, home: string): CompanionRegistration {
-  const mainWorktree = findMainWorktree(cwd);
-  if (mainWorktree === undefined)
-    throw new CliError("A companion needs a git repository with a main worktree.");
+  const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const registry = readRegistry(home) ?? { path: registryPath(home), paths: {} };
-  const match = matchingEntries(registry, mainWorktree, realHome)[0];
-  const key = match?.key ?? userPathOf(mainWorktree, realHome);
-  if (match === undefined) writeRegistry(registry, key);
+  const entry = findEntry(registry, mainWorktree, realHome);
+  const key = entry?.key ?? userPathOf(mainWorktree, realHome);
+  if (entry === undefined) writeRegistry(registry.path, { ...registry.paths, [key]: {} });
   const dir = companionDir(mainWorktree, realHome);
   const created = !existsSync(dir);
   if (created) mkdirSync(dir, { recursive: true });
-  return { registry: registry.path, key, added: match === undefined, dir, created };
+  return { registry: registry.path, key, added: entry === undefined, dir, created };
+}
+
+function requireMainWorktree(cwd: string): string {
+  const mainWorktree = findMainWorktree(cwd);
+  if (mainWorktree === undefined)
+    throw new CliError("A companion needs a git repository with a main worktree.");
+  return mainWorktree;
 }
 
 function userPathOf(path: string, realHome: string): string {
@@ -297,10 +300,49 @@ function userPathOf(path: string, realHome: string): string {
   return isSameOrInside(path, realHome) ? `~/${relative(realHome, path)}` : path;
 }
 
-function writeRegistry(registry: Registry, key: string): void {
-  mkdirSync(dirname(registry.path), { recursive: true });
-  const paths = { ...registry.paths, [key]: {} };
-  const tmpPath = `${registry.path}.${process.pid}.tmp`;
+function writeRegistry(path: string, paths: Registry["paths"]): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const tmpPath = `${path}.${process.pid}.tmp`;
   writeFileSync(tmpPath, `${JSON.stringify({ paths }, undefined, 2)}\n`);
-  renameSync(tmpPath, registry.path);
+  renameSync(tmpPath, path);
+}
+
+export interface CompanionUnregistration {
+  registry: string;
+  key: string;
+  /** Absolute. */
+  dir: string;
+  /** `undefined` when the directory is missing. */
+  empty?: boolean;
+}
+
+/** Removes the registry key of the main worktree of `cwd`. Keeps the companion directory. */
+export function unregisterCompanion(cwd: string, home: string): CompanionUnregistration {
+  const mainWorktree = requireMainWorktree(cwd);
+  const realHome = realOrResolved(home);
+  const path = registryPath(home);
+  const registry = readRegistry(home);
+  const entry = registry && findEntry(registry, mainWorktree, realHome);
+  if (!registry || entry === undefined)
+    throw new CliError(`${mainWorktree} is not registered in ${path}.`);
+  const { [entry.key]: _removed, ...paths } = registry.paths;
+  writeRegistry(path, paths);
+  const dir = companionDir(mainWorktree, realHome);
+  return { registry: path, key: entry.key, dir, empty: isEmptyDirectory(dir) };
+}
+
+function isEmptyDirectory(path: string): boolean | undefined {
+  if (!existsSync(path)) return;
+  return readdirSync(path).length === 0;
+}
+
+/** The registry keys that name no git main worktree: they match nothing. */
+export function strayRegistryKeys(home: string): string[] {
+  const registry = readRegistry(home);
+  if (registry === undefined) return [];
+  const realHome = realOrResolved(home);
+  return Object.keys(registry.paths).filter((key) => {
+    const path = normalizePath(key, realHome);
+    return !existsSync(path) || findMainWorktree(path) !== path;
+  });
 }

@@ -53,7 +53,7 @@ The heartbeat wake was retired after the 2026-09-10 incident: the heartbeat gate
 
 ## Companion-backed projects
 
-A managed project can keep its AlignFirst files in a companion directory, outside its repository. The seed creates the service-owned `~/.alignfirst/companions/` inside the locked `~/.alignfirst/`. The assistant registers a project in the companion registry there with `alignfirst companion add`. The playbook reads each file's location from `aligndev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
+A managed project can keep its AlignFirst files in a companion directory, outside its repository. The seed creates the service-owned `~/.alignfirst/companions/` inside the locked `~/.alignfirst/`. The assistant registers a project in the companion registry there with `alignfirst companion add`, and unregisters it with `alignfirst companion unregister` before removing the project. The playbook reads each file's location from `aligndev project status`. A project whose `DEVELOPERS.md` is missing or has no workspaces section runs in main-worktree mode: its main worktree is its only workspace, claimed by one working thread at a time. See [companion-directories.md](../companion-directories.md).
 
 ## A coding agent as the assistant
 
