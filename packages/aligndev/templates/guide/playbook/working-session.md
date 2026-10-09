@@ -406,7 +406,9 @@ For an active development branch that needs to catch up with its base, follow th
 {{/codingAgent}}
 
 1. Fetch and fast-forward the local base branch ref without checking it out.
-2. Inspect the working tree (`git status`, `git diff`). Commit a dirty tree first, even if it's WIP or doesn't compile.
+2. Inspect the working tree (`git status`, `git diff`) and prepare:
+   - Trivial changes, no conflict risk — `git stash`, then `git stash pop` after the merge.
+   - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile.
 3. Delegate the merge to the agent (`merge` protocol).
 {{#openclaw}}
 4. Push if the thread already has remote commits.
