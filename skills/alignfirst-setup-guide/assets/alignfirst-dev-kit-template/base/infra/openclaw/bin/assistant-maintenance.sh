@@ -8,8 +8,8 @@
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
 # Scopes: config, workspace, packages, skills, projects, instructions, agent-skills. The config
-# scope covers openclaw.json, the aligndev config with its directory, and companions.json when it
-# exists.
+# scope covers openclaw.json and the aligndev config with its directory ~/.alignfirst. The
+# companions directory, with its registry, stays service-owned.
 
 set -Eeuo pipefail
 
@@ -18,9 +18,8 @@ SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
-ALIGNDEV_CONFIG_DIR="$SERVICE_HOME/.config/alignfirst"
-ALIGNDEV_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/aligndev.config.json"
-COMPANIONS_CONFIG_FILE="$ALIGNDEV_CONFIG_DIR/companions.json"
+ALIGNFIRST_HOME="$SERVICE_HOME/.alignfirst"
+ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.config.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
@@ -120,7 +119,7 @@ unlock_config() {
   local path
   chattr -i "$SERVICE_HOME/.openclaw/openclaw.json"
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json"
-  for path in "$ALIGNDEV_CONFIG_DIR" "$ALIGNDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
+  for path in "$ALIGNFIRST_HOME" "$ALIGNDEV_CONFIG_FILE"; do
     [ -e "$path" ] || continue
     chattr -i "$path"
     chown "$SERVICE_USER:$SERVICE_USER" "$path"
@@ -205,20 +204,19 @@ restore_scopes() {
 }
 
 restore_config() {
-  local path status=0
+  local status=0
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chmod 600 "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chattr +i "$SERVICE_HOME/.openclaw/openclaw.json" || status=1
-  for path in "$ALIGNDEV_CONFIG_FILE" "$COMPANIONS_CONFIG_FILE"; do
-    [ -e "$path" ] || continue
-    chown root:root "$path" &&
-      chmod 644 "$path" &&
-      chattr +i "$path" || status=1
-  done
-  if [ -d "$ALIGNDEV_CONFIG_DIR" ]; then
-    chown root:root "$ALIGNDEV_CONFIG_DIR" &&
-      chmod 755 "$ALIGNDEV_CONFIG_DIR" &&
-      chattr +i "$ALIGNDEV_CONFIG_DIR" || status=1
+  if [ -e "$ALIGNDEV_CONFIG_FILE" ]; then
+    chown root:root "$ALIGNDEV_CONFIG_FILE" &&
+      chmod 644 "$ALIGNDEV_CONFIG_FILE" &&
+      chattr +i "$ALIGNDEV_CONFIG_FILE" || status=1
+  fi
+  if [ -d "$ALIGNFIRST_HOME" ]; then
+    chown root:root "$ALIGNFIRST_HOME" &&
+      chmod 755 "$ALIGNFIRST_HOME" &&
+      chattr +i "$ALIGNFIRST_HOME" || status=1
   fi
   return "$status"
 }

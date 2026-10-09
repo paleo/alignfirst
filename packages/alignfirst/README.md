@@ -81,6 +81,12 @@ Use your alignfirst-setup-guide skill. What AlignFirst tooling could we add in t
 
 The guide installs the selected components and configures the repository. You can remove the setup-guide skill once setup is complete.
 
+To leave the repository untouched, the guide keeps the project's AlignFirst files in a [companion directory](#companion-directories):
+
+```text
+Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
+```
+
 ## CLI commands
 
 - `guide` — Print an AlignFirst protocol.
@@ -90,6 +96,7 @@ The guide installs the selected components and configures the repository. You ca
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print the conventions, the project instructions from `.alignfirst.md`, the documentation map when `docs/` exists, and the protocol aliases.
+- `companion add` — Register the current project in the companion registry and create its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
 - `doctor` — Diagnose an AlignFirst setup.
 
@@ -101,11 +108,10 @@ Run `alignfirst --help` for command usage or `alignfirst guide` to choose a prot
 
 ## Companion directories
 
-A companion directory holds a project's AlignFirst files outside its repository, so the repository stays untouched. `~/.config/alignfirst/companions.json` declares which projects have one:
+A companion directory holds a project's AlignFirst files outside its repository, so the repository stays untouched. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one:
 
 ```json
 {
-  "root": "~/alignfirst-companions",
   "paths": {
     "~/projects/team-app": { ".plans": false, "_aligndev": true },
     "~/projects/client-api": {},
@@ -114,16 +120,17 @@ A companion directory holds a project's AlignFirst files outside its repository,
 }
 ```
 
-- `root` — the directory that holds the companion directories: an absolute path or a `~/` path.
 - `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
-An absent file means no project has a companion. An invalid file makes every command fail; `doctor` reports it and continues.
+An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues.
+
+Run `alignfirst companion add` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless a key already matches it, and creates the companion directory. Set the flags by editing the registry.
 
 ### Matching
 
 A key matches a project when it names the project's main worktree or one of its ancestors, so every worktree of a project shares one companion. `"~": {}` matches every project under the home directory. For each item, the longest matching key that sets the flag wins, and an unset flag is `"auto"`. A bare repository or a directory outside git has no companion.
 
-The companion directory is `<root>/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `<root>/projects_client-api/`.
+The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink.
 
 ### Resolution
 
@@ -146,7 +153,7 @@ The companion directory is `<root>/<name>`. The name is the main worktree path r
 An agent reads a repository's `AGENTS.md` on its own, but never a companion. When your repositories carry no AlignFirst instructions, add this line to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
 
 ```text
-In a git repository, run `alignfirst context` once before investigating, unless the project's instructions already say so.
+In a git repository, run `alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
 ```
 
 ## Upgrade from v1, v2, or v3

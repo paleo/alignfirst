@@ -12,8 +12,9 @@ Both wrappers register as OpenClaw channels and talk to a single bus (`http://bu
 Slack supports `replyToMode: "off" | "all"`, including account overrides. The default `"all"`
 routes an eligible root and its replies to one thread session keyed by the root message ID. `"off"`
 keeps roots in the channel session while explicit thread replies use their canonical thread
-session. Slack `send` and Discord `thread-create` return native-shaped delivery receipts so gateway
-plugins can distinguish confirmed, failed, and partial starter delivery.
+session. Slack `send` and Discord `thread-create` and `thread-reply` return native-shaped results so gateway plugins can distinguish confirmed, failed, and partial starter delivery.
+
+Source replies follow the native plugins. A Slack root turn names its own message as the current thread, so a threaded `send` rooted there is its current-source reply. A Discord turn adopts a thread it creates on its triggering message: the turn's final reply lands in that thread, and a `thread-reply` into it is tagged as the current-source reply.
 
 Test scenarios can arm one recoverable transport fault with
 `failNextQaBusOperation({ baseUrl, operation: "outbound-message" | "thread-create" })`. The bus

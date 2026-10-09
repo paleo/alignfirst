@@ -12,7 +12,7 @@ Each marked projects directory governs its own direct children. Apply only the s
 
 Creation may begin with a proposed PROJECT and no PROJECT_PATH.
 
-Project creation is bootstrap work, not an AlignFirst protocol. Through the initial commit, every delegation to the coder uses a fresh session with a plain message. Never pass `--protocol`, even when `.plans/` exists or the bootstrap resembles development work.
+Project creation is bootstrap work, not an AlignFirst protocol. Through the initial commit, every delegation to the agent uses a fresh session with a plain message. Never pass `--protocol`, even when `.plans/` exists or the bootstrap resembles development work.
 
 Before creating a directory, load the `alignfirst-setup-guide` skill. If the skill is unavailable or cannot be read, project creation is disabled: report that requirement and stop. Use the skill throughout the bootstrap.
 
@@ -21,7 +21,7 @@ Creation has a hard user-input gate. Before any filesystem, Git, port-allocation
 1. Settle the stack, allowed parent directory, project name, and port requirements with the user. Use the `{{ALIGNDEV}} guide project` output to constrain the choices.
 2. Create the main-worktree directory under the selected allowed parent. Initialize its Git repository on `main`.
 3. Once the directory contains its `.git` directory, retain the canonical path as PROJECT_PATH. When the project declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <perWorkspace × maxWorkspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`. The selected parent's marker owns its port range. Report that `.alignfirst.json` was written and name the block.
-4. Create `.plans/`, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from the starter and every later human message that supplied the gate's values. Record the project name, selected parent, stack, port requirements, and requested stopping point; never copy only the starter's task line. Then run `{{ALIGNFIRST}} sync`. The bot chooses the identifier and writes the request; the coder does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
+4. Create `.plans/`, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from the starter and every later human message that supplied the gate's values. Record the project name, selected parent, stack, port requirements, and requested stopping point; never copy only the starter's task line. Then run `{{ALIGNFIRST}} sync`. The bot chooses the identifier and writes the request; the agent does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
 5. Before delegating the bootstrap, run `{{ALIGNDEV}} guide code`. On a takeover turn, apply the pre-delegation race checkpoint in the playbook (`{{ALIGNDEV}} guide`) immediately before `{{ALIGNDEV}} code new`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Include `.local/` as a gitignored shared directory in the workspace mechanism. Follow the selected stack and the host-specific guide.
 6. Verify the project through the setup guide, run `{{ALIGNFIRST}} sync`, and make its initial commit on `main` in PROJECT_PATH. Do not ask for confirmation before committing.
 7. When a remote destination is known from the request, environment, or host instructions, configure it when needed and push `main`. Do not ask for confirmation before pushing. When no destination is known, or the user requested a local-only project, leave the committed project local and report that no remote was configured.
@@ -31,7 +31,7 @@ The direct main-worktree bootstrap is the creation exception. It ends with the i
 
 ## Onboard a repository
 
-The user hands you a repository URL to clone instead of asking for a new project. Onboarding is bootstrap work like creation. Before the project is prepared, every delegation to the coder uses a fresh session with a plain message, never a protocol.
+The user hands you a repository URL to clone instead of asking for a new project. Onboarding is bootstrap work like creation. Before the project is prepared, every delegation to the agent uses a fresh session with a plain message, never a protocol.
 
 ### Step 1 — Clone and build
 
@@ -50,7 +50,7 @@ The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Proj
 
 When the user says the repository must stay untouched, follow "Prepare through the companion" below instead of Steps 3 to 5.
 
-End the turn on a message that explains the procedure: a branch created in the main worktree, preparation commits by the coder, a pull request the user must merge, and work waiting for that merge before the original request resumes.
+End the turn on a message that explains the procedure: a branch created in the main worktree, preparation commits by the agent, a pull request the user must merge, and work waiting for that merge before the original request resumes.
 
 Ask the user to approve this procedure and whether `.plans` must be shared through a work-files repository. If yes, ask for the repository URL. If no, `.plans` stays a plain directory. Wait for explicit approval.
 
@@ -60,8 +60,8 @@ On approval:
 
 1. Create `.plans/` in the main worktree and run `{{ALIGNFIRST}} sync`. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH, write `{TICKET_DIR}A1-request.md` with the recorded request, then run `{{ALIGNFIRST}} sync`.
 2. Create `{TICKET_ID}/alignfirst-setup` in the main worktree. This setup branch is the second main-worktree exception, next to new-project bootstrap.
-3. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the coder without a protocol: use the `alignfirst-setup-guide` skill and prepare the repository for an assistant, with the user's work-files repository decision and its URL. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Instruct the coder to commit and push the branch. The setup guide's rule against pushing addresses a human's laptop session, not this procedure.
-4. Have the coder create a ready pull request, not a draft.
+3. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and prepare the repository for an assistant, with the user's work-files repository decision and its URL. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Instruct the agent to commit and push the branch. The setup guide's rule against pushing addresses a human's laptop session, not this procedure.
+4. Have the agent create a ready pull request, not a draft.
 5. End the turn on the PR link and state that work resumes once the PR is merged.
 
 ### Step 5 — After the merge
@@ -79,10 +79,10 @@ When the user reports the merge, or you observe it while checking the PR:
 
 The preparation targets the project's companion directory. It writes nothing in the repository and creates no branch, commit or pull request.
 
-1. Read the `Companion:` line of `{{ALIGNDEV}} project status <PROJECT_PATH>`. `(none)` means no entry of `~/.config/alignfirst/companions.json` matches the project. You cannot write that file: the deployment locks `~/.config/alignfirst/`. End the turn asking the operator for an entry covering PROJECT_PATH, and stop there.
+1. Run `{{ALIGNFIRST}} companion add` from PROJECT_PATH. It registers the project in the companion registry unless an entry already covers it, and creates the companion directory.
 2. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
 3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
-4. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the coder without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Prepare a project through its companion", with the work-files clone path when there is one.
+4. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
 5. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
 6. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`. The project runs in main-worktree mode.
 

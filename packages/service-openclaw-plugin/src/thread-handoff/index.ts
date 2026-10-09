@@ -25,7 +25,7 @@ export function registerThreadHandoff(api: OpenClawPluginApi): void {
     configuration,
     getStore,
     logger: api.logger,
-    cache: processShared("receipt-cache/v1", createReceiptCache),
+    cache: processShared("receipt-cache/v2", createReceiptCache),
   });
   const runIds = processShared("run-ids/v1", () => createRunIdCache());
   const service = createHandoffService({

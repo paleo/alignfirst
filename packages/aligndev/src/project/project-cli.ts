@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import type { CommandForms } from "../command-form.js";
-import type { AligndevConfig, ProjectsRoot } from "../config.js";
+import type { LoadedConfig, ProjectsRoot } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import { buildInventory, type ProjectInventory } from "./discovery.js";
@@ -58,10 +58,10 @@ interface ProjectsArgs {
 
 export function runProject(
   tokens: string[],
-  config: AligndevConfig | undefined,
+  config: LoadedConfig,
   caller: ProjectsCallerContext,
 ): number {
-  const ctx: ProjectsContext = { ...caller, projectsRoot: config?.projectsRoot };
+  const ctx: ProjectsContext = { ...caller, projectsRoot: config.projectsRoot };
   try {
     return runProjectCommand(ctx, parseProjectsArgs(tokens));
   } catch (error) {

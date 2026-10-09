@@ -16,6 +16,8 @@ Also check consistency by example: does the new code match its neighbors in stru
 | Abstraction introduced with a single implementation | Does it solve a present problem, or an anticipated one? | 🟡 |
 | Boolean parameter added to an existing function | Does the function now do two things? | 🟡 |
 | New file | Is it in the right place per the repo's conventions? | 🟡 |
+| Defect fixed by adding code | Is the line that caused it still there? Removing the cause is often a proper fix. | 🟡 |
+| Check or branch for a case already ruled out by a type, a caller or an earlier check | What guarantees it? A guard for an impossible case hides the real contract. | 🟡 |
 
 ## DRY and YAGNI
 
@@ -52,3 +54,4 @@ Also check consistency by example: does the new code match its neighbors in stru
 | Mock added | Does it reproduce the real contract of the dependency, or an idealized version that can never fail? | 🟡 |
 | Test depending on the clock, network, execution order, or shared state | Source of flakiness. | 🟡 |
 | Assertion modified to make a test pass | Was the test fixed, or aligned with a bug? Strong signal: find out why it failed. | 🔴 |
+| Test deleted or skipped | Which behavior stops being verified? Was it fixed, or made to stop failing? | 🔴 |

@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import { type AligndevConfig, loadConfig, requireProjectsRoot } from "../src/config.js";
+import { loadConfig, requireProjectsRoot, resolveCodeConfig } from "../src/config.js";
 import { makeSink, writeConfig } from "./helpers.js";
 
-const REQUIRED = { platform: "openclaw", code: { agent: "claude" } };
+const EXPLICIT = { platform: "openclaw", code: { agent: "claude" } };
 
 const homes: string[] = [];
 
@@ -23,25 +23,34 @@ function makeHome(): string {
 }
 
 function configPathOf(home: string): string {
-  return join(home, ".config", "alignfirst", "aligndev.config.json");
-}
-
-function loadPresentConfig(home: string): AligndevConfig {
-  const config = loadConfig(home);
-  if (config === undefined) throw new Error("expected a config file");
-  return config;
+  return join(home, ".alignfirst", "aligndev.config.json");
 }
 
 function writeRawConfig(home: string, content: string): string {
   const path = configPathOf(home);
-  mkdirSync(join(home, ".config", "alignfirst"), { recursive: true });
+  mkdirSync(join(home, ".alignfirst"), { recursive: true });
   writeFileSync(path, content);
   return path;
 }
 
 describe("loadConfig", () => {
-  it("returns undefined when the file is absent", () => {
-    expect(loadConfig(makeHome())).toBeUndefined();
+  it("applies the defaults when the file is absent", () => {
+    const home = makeHome();
+    expect(loadConfig(home)).toEqual({
+      path: configPathOf(home),
+      platform: "codingAgent",
+      code: { skipPermissions: false, unset: [] },
+    });
+  });
+
+  it("applies the defaults to the keys the file omits", () => {
+    const home = makeHome();
+    const path = writeConfig(home, { code: { models: ["opus"] } });
+    expect(loadConfig(home)).toEqual({
+      path,
+      platform: "codingAgent",
+      code: { models: ["opus"], skipPermissions: false, unset: [] },
+    });
   });
 
   it("reads every key and applies the code defaults", () => {
@@ -75,7 +84,7 @@ describe("loadConfig", () => {
       platform: "openclaw",
       code: { agent: "claude", models: ["opus"], skipPermissions: true, unset: ["TOKEN"] },
     });
-    expect(loadPresentConfig(home).code).toEqual({
+    expect(loadConfig(home).code).toEqual({
       agent: "claude",
       models: ["opus"],
       skipPermissions: true,
@@ -85,15 +94,15 @@ describe("loadConfig", () => {
 
   it("expands ~/ against home and resolves a relative root against the config directory", () => {
     const home = makeHome();
-    writeConfig(home, { ...REQUIRED, projectsRoot: "~/projects" });
-    expect(loadPresentConfig(home).projectsRoot).toEqual({
+    writeConfig(home, { ...EXPLICIT, projectsRoot: "~/projects" });
+    expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
     });
-    writeConfig(home, { ...REQUIRED, projectsRoot: "../../work" });
-    expect(loadPresentConfig(home).projectsRoot).toEqual({
+    writeConfig(home, { ...EXPLICIT, projectsRoot: "../work" });
+    expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "work"),
-      written: "../../work",
+      written: "../work",
     });
   });
 
@@ -112,17 +121,14 @@ describe("loadConfig", () => {
   });
 
   it.each([
-    ["an unknown top-level key", { ...REQUIRED, platfrom: "openclaw" }, "platfrom"],
+    ["an unknown top-level key", { ...EXPLICIT, platfrom: "openclaw" }, "platfrom"],
     [
       "an unknown code key",
       { platform: "openclaw", code: { agent: "claude", model: "opus" } },
       "model",
     ],
     ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
-    ["a missing agent", { platform: "openclaw", code: { models: ["opus"] } }, "code.agent"],
-    ["an invalid platform", { ...REQUIRED, platform: "slack" }, "platform"],
-    ["a missing platform", { code: { agent: "claude" } }, "platform"],
-    ["a missing code", { platform: "codingAgent" }, "code"],
+    ["an invalid platform", { ...EXPLICIT, platform: "slack" }, "platform"],
   ])("rejects %s", (_name, config, problem) => {
     const home = makeHome();
     const path = writeConfig(home, config);
@@ -138,35 +144,76 @@ describe("loadConfig", () => {
   });
 });
 
+describe("resolveCodeConfig", () => {
+  it("keeps the configured agent without detection", () => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent: "codex" } });
+    expect(resolveCodeConfig(loadConfig(home), { CLAUDECODE: "1" }).agent).toBe("codex");
+  });
+
+  it.each([
+    ["claude", { CLAUDECODE: "1" }],
+    ["codex", { CODEX_THREAD_ID: "019a" }],
+  ])("detects %s from its environment", (agent, env) => {
+    expect(resolveCodeConfig(loadConfig(makeHome()), env).agent).toBe(agent);
+  });
+
+  it("fails when no coding agent is detected, naming the key and the path", () => {
+    const home = makeHome();
+    expect(() => resolveCodeConfig(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
+      "Error: no coding agent detected: run aligndev from Claude Code or Codex, or set " +
+        `"code.agent" (claude or codex) in ${configPathOf(home)}.`,
+    );
+  });
+
+  it("fails when both coding agents are detected", () => {
+    const home = makeHome();
+    const env = { CLAUDECODE: "1", CODEX_THREAD_ID: "019a" };
+    expect(() => resolveCodeConfig(loadConfig(home), env)).toThrow(
+      `Error: both Claude Code and Codex detected: set "code.agent" (claude or codex) in ${configPathOf(home)}.`,
+    );
+  });
+});
+
 describe("requireProjectsRoot", () => {
   it("names the key and the file path", () => {
     const home = makeHome();
-    writeConfig(home, REQUIRED);
-    expect(() => requireProjectsRoot(loadPresentConfig(home))).toThrow(
+    writeConfig(home, EXPLICIT);
+    expect(() => requireProjectsRoot(loadConfig(home))).toThrow(
       `Error: projectsRoot is missing from the aligndev config ${configPathOf(home)}.`,
     );
   });
 });
 
-describe("a missing config through main", () => {
-  it("fails code and guide with the path and both keys, and spares project", async () => {
+describe("an absent config through main", () => {
+  it("runs guide and code with the detected agent", async () => {
     const home = makeHome();
-    const expected =
-      `Error: no aligndev config at ${configPathOf(home)}. Create it with "platform" ` +
-      '(openclaw or codingAgent) and "code.agent" (claude or codex).\n';
-    for (const args of [["guide"], ["code", "status", "--no-ticket"]]) {
+    const env = { CODEX_THREAD_ID: "019a" };
+    const stdout = makeSink();
+    const code = await main({ argv: ["node", "aligndev", "code", "--help"], env, home, stdout });
+    expect(code).toBe(0);
+    expect(stdout.text()).toContain("(selected: codex)");
+    const guide = makeSink();
+    expect(await main({ argv: ["node", "aligndev", "guide"], env, home, stdout: guide })).toBe(0);
+    expect(guide.text()).toContain("in a coding-agent session");
+  });
+
+  it("fails only the agent-specific paths without a detected agent", async () => {
+    const home = makeHome();
+    for (const args of [
+      ["guide", "code"],
+      ["code", "--help"],
+    ]) {
       const stderr = makeSink();
       const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stderr });
       expect(code).toBe(1);
-      expect(stderr.text()).toBe(expected);
+      expect(stderr.text()).toContain("Error: no coding agent detected");
     }
-    const code = await main({
-      argv: ["node", "aligndev", "project", "--help"],
-      env: {},
-      home,
-      stdout: makeSink(),
-    });
-    expect(code).toBe(0);
+    for (const args of [["guide"], ["guide", "--help"], ["project", "--help"]]) {
+      const stdout = makeSink();
+      const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stdout });
+      expect(code).toBe(0);
+    }
   });
 });
 

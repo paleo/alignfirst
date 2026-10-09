@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   test:
+    # The Version Packages PR only bumps versions and changelogs.
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,6 +28,8 @@ jobs:
       - run: npm test
 
   node-22:
+    # The Version Packages PR only bumps versions and changelogs.
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,5 +41,5 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-      - run: npm run build --workspace @alignfirst/docmap --workspace alignfirst --workspace @alignfirst/workspace
-      - run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace @alignfirst/workspace
+      - run: npm run build --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace
+      - run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace

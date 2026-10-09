@@ -57,24 +57,18 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So is the aligndev config, with its directory. The service account owns `~/.config`: with only the file locked, it could rename `~/.config/alignfirst/` and create its own `aligndev.config.json` in a new directory of that name. The locked directory also keeps the service account from creating `companions.json`.
+So is the aligndev config, with its directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own config in a new directory of that name.
 
 ```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
-sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/aligndev.config.json
-sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst
-sudo chmod 755 /home/{{SERVICE_USER}}/.config/alignfirst
-sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst
+sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
+sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst
+sudo chmod 755 /home/{{SERVICE_USER}}/.alignfirst
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst
 ```
 
-When the seed installed `companions.json`, lock it the same way:
-
-```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
-sudo chattr +i /home/{{SERVICE_USER}}/.config/alignfirst/companions.json
-```
+The seed's `~/.alignfirst/companions/` stays service-owned, its companion registry included. The locked parent keeps it in place, and the assistant registers a project and creates its companion there on its own.
 
 ## Skills and instructions
 
@@ -144,7 +138,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json`, the aligndev config with its directory, and `companions.json` when it exists. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json` and the aligndev config with its directory `~/.alignfirst/`. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -166,9 +160,9 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/aligndev.config.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.config/alignfirst/companions.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.config/alignfirst ~/.config/alignfirst-x'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/aligndev.config.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst ~/.alignfirst-x'
+sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst/companions ~/.alignfirst/companions-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.openclaw/skills ~/.openclaw/skills-x'

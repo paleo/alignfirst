@@ -2,7 +2,13 @@ import { parseArgs } from "node:util";
 
 import { resolveModels } from "../code/models.js";
 import type { CommandForms } from "../command-form.js";
-import { type AligndevConfig, PLATFORMS, type Platform, requireProjectsRoot } from "../config.js";
+import {
+  type LoadedConfig,
+  PLATFORMS,
+  type Platform,
+  requireProjectsRoot,
+  resolveCodeConfig,
+} from "../config.js";
 import { errorMessage } from "../errors.js";
 import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
@@ -17,7 +23,7 @@ interface GuideArgs {
 
 export function runGuide(
   tokens: string[],
-  config: AligndevConfig,
+  config: LoadedConfig,
   ctx: ProjectsCallerContext,
 ): number {
   try {
@@ -67,23 +73,23 @@ ${playbookTopics.join("\n")}
 `;
 }
 
-function renderTopic(args: GuideArgs, config: AligndevConfig, ctx: ProjectsCallerContext): string {
-  if (args.topic === "code") return renderCodeTopic(config, ctx.forms);
+function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerContext): string {
+  if (args.topic === "code") return renderCodeTopic(config, ctx);
   if (args.topic === "project" && config.platform === "openclaw") {
     return renderProjectsGuideForRoot({ ...ctx, projectsRoot: config.projectsRoot }, args.root);
   }
   return renderPlaybookTopic(args.topic, config, ctx.forms);
 }
 
-function renderCodeTopic(config: AligndevConfig, forms: CommandForms): string {
-  const { code } = config;
+function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): string {
+  const code = resolveCodeConfig(config, ctx.env);
   const models = resolveModels(code.agent, code.models);
-  return renderCodeGuide(config.platform, code.agent, models, forms);
+  return renderCodeGuide(config.platform, code.agent, models, ctx.forms);
 }
 
 function renderPlaybookTopic(
   topic: string | undefined,
-  config: AligndevConfig,
+  config: LoadedConfig,
   forms: CommandForms,
 ): string {
   if (topic !== undefined) assertPlaybookTopic(topic, config.platform);

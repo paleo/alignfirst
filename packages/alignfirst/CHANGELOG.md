@@ -1,5 +1,27 @@
 # alignfirst
 
+## 0.8.0
+
+### Minor Changes
+
+- e5ac2f5: Reworked the protocol guides: calmer wording with each hard rule stated once through its trigger, and a Discuss step for spec and AAD that keeps the developer aware of the findings and hands them the decisions that matter. Every decision is a numbered question with a recommendation.
+
+### Patch Changes
+
+- e5ac2f5: The code reviewers look for how the change goes wrong: a posture sentence in the common rules, signals for removed code, deleted or skipped tests, fixes that add code instead of removing the cause, and guards for impossible cases. The intent reviewer questions a diff that adds more lines than it removes.
+
+## 0.7.0
+
+### Minor Changes
+
+- 2245262: Moved the companion registry from `~/.alignfirst/companions.json` to `~/.alignfirst/companions/registry.json`, so a symlink at `~/.alignfirst/companions` moves it with the companions. Added `alignfirst companion add`, which registers the current project and creates its companion directory.
+
+## 0.6.0
+
+### Minor Changes
+
+- 393b05a: Moved `companions.json` to `~/.alignfirst/companions.json`. Removed its `root`: the companions live in `~/.alignfirst/companions`.
+
 ## 0.5.0
 
 ### Minor Changes

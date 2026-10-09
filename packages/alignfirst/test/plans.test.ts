@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { findStoppedRebase } from "../src/plans/rebase.js";
-import { configureGit, git, makeTempDir, runMain, writeCompanions } from "./helpers.js";
+import { configureGit, git, makeTempDir, runMain, writeRegistry } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -188,7 +188,7 @@ describe("plans commands", () => {
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
   });
 
-  it("keeps both paths on an archive versus edit conflict without rename detection", async () => {
+  it("keeps both paths on an archive versus edit conflict that git sees as no rename", async () => {
     const fixture = makeFixture();
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
@@ -202,11 +202,13 @@ describe("plans commands", () => {
     git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
     mkdirSync(join(other, "product-plans", "_archives", "78"), { recursive: true });
     git(other, "mv", "product-plans/78/A1-spec.md", "product-plans/_archives/78/A1-spec.md");
-    git(other, "commit", "--quiet", "-m", "archive");
+    // The rewrite hides the rename from every git version; git 2.39 ignores `merge.renames=false`
+    // in a rebase.
+    writeFileSync(join(other, "product-plans", "_archives", "78", "A1-spec.md"), "archived\n");
+    git(other, "commit", "--quiet", "-am", "archive");
     git(other, "push", "--quiet");
 
     writeFileSync(plan, "local\n");
-    git(fixture.clone, "config", "merge.renames", "false");
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(0);
     expect(conflict.stdout).toContain(
@@ -217,7 +219,7 @@ describe("plans commands", () => {
     );
     expect(
       git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/_archives/78/A1-spec.md"),
-    ).toBe("first");
+    ).toBe("archived");
   });
 
   it("leaves a rebase it did not start alone", async () => {
@@ -436,7 +438,7 @@ describe("plans commands with a companion .plans", () => {
       home: fixture.root,
     });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    const target = join("..", "..", "team-plans", "product-plans");
+    const target = join("..", "..", "..", "team-plans", "product-plans");
     expect(readlinkSync(link)).toBe(target);
     expect(result.stdout).toContain(`Linked ${link} → ${target}\n`);
     expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
@@ -536,25 +538,23 @@ describe("plans commands with a separate session tree", () => {
   });
 });
 
-/** Project `.plans`, session tree in `<root>/companions/product/.plans`. */
+/** Project `.plans`, session tree in `<root>/.alignfirst/companions/product/.plans`. */
 function useSessionTree(fixture: Fixture): string {
-  writeCompanions(fixture.root, {
-    root: "~/companions",
+  writeRegistry(fixture.root, {
     paths: { "~/product": { ".plans": false, _aligndev: true } },
   });
-  const companion = join(fixture.root, "companions", "product");
+  const companion = join(fixture.root, ".alignfirst", "companions", "product");
   mkdirSync(join(companion, ".plans", "_aligndev"), { recursive: true });
   mkdirSync(join(fixture.product, ".plans"), { recursive: true });
   return companion;
 }
 
-/** The home directory is the fixture root; the companion is `<root>/companions/product`. */
+/** The home directory is the fixture root; the companion is `<root>/.alignfirst/companions/product`. */
 function useCompanion(fixture: Fixture): string {
-  writeCompanions(fixture.root, {
-    root: "~/companions",
+  writeRegistry(fixture.root, {
     paths: { "~/product": { ".plans": true } },
   });
-  return join(fixture.root, "companions", "product");
+  return join(fixture.root, ".alignfirst", "companions", "product");
 }
 
 interface Fixture {

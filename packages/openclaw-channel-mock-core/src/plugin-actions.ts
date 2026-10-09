@@ -3,6 +3,10 @@ import { extractToolSend } from "openclaw/plugin-sdk/tool-send";
 import { Type } from "typebox";
 import type { ChannelMockAccountHelpers } from "./accounts.js";
 import {
+  isActiveTurnAdoptedThread,
+  notifyActiveTurnThreadCreated,
+} from "./active-turn-thread-route.js";
+import {
   buildQaTarget,
   createQaBusThread,
   getQaBusThread,
@@ -209,7 +213,7 @@ export function createChannelMockMessageActions(params: {
         }
       : {}),
     handleAction: async (context) => {
-      const { action, cfg, accountId, params: actionParams, toolContext } = context;
+      const { action, cfg, accountId, params: actionParams, toolContext, sessionKey } = context;
       if (surface === "slack" && SLACK_DISABLED_ACTIONS.has(action)) {
         throw new Error(`${channelId} slack surface does not expose action "${action}"`);
       }
@@ -268,13 +272,21 @@ export function createChannelMockMessageActions(params: {
             readStringParam(actionParams, "threadName") ??
             readStringParam(actionParams, "title") ??
             "Test thread";
+          const anchorMessageId = readStringParam(actionParams, "messageId");
           const { thread } = await createQaBusThread({
             baseUrl,
             accountId: account.accountId,
             conversationId,
             title,
             createdBy: account.botUserId,
-            parentMessageId: readStringParam(actionParams, "messageId"),
+            parentMessageId: anchorMessageId,
+          });
+          notifyActiveTurnThreadCreated({
+            sessionKey,
+            accountId: account.accountId,
+            sourceChannelId: conversationId,
+            sourceMessageId: anchorMessageId,
+            thread: { conversationId, threadId: thread.id },
           });
           const body = readSendText(actionParams);
           const target = `thread:${conversationId}/${thread.id}`;
@@ -327,7 +339,19 @@ export function createChannelMockMessageActions(params: {
             senderName: account.botDisplayName,
             threadId: thread.id,
           });
-          return jsonResult({ message });
+          const result = jsonResult({
+            ok: true,
+            result: { messageId: message.id, channelId: thread.id },
+          });
+          // Bundled Discord tags the details of a reply into the thread the turn adopted as its
+          // source reply (`withAdoptedThreadReplyRoute` in `actions/handle-action.ts`).
+          const adopted = isActiveTurnAdoptedThread({
+            sessionKey,
+            accountId: account.accountId,
+            threadId: thread.id,
+          });
+          if (!adopted) return result;
+          return { ...result, details: { ...result.details, sourceReplyRoute: "current-source" } };
         }
         case "react": {
           const messageId = readStringParam(actionParams, "messageId");

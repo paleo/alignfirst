@@ -10,30 +10,39 @@ This is a 4-step protocol. Follow each step in order.
 
 ## 1. Investigate
 
-Check your context for available **documentation** and **skills**. Read every document and skill relevant to any aspect of the task — this is not optional. For each skill, also **read its relevant references**.
+Your context lists the available **documentation** and **skills**. Read every document and skill that applies to any aspect of the task, and the relevant references of each skill. A familiar-looking task tempts you to skip this reading; the project conventions live in these files.
 
-Explore the codebase. Take the time to understand how it currently works and what needs to change.
+Explore the codebase. Take the time to understand how it works today and what needs to change.
 
-Always seek a clean break solution by default. Never consider backward compatibility unless explicitly requested.
+Seek a clean break solution by default. Consider backward compatibility only when the user asks for it.
 
 ## 2. Discuss
 
-Present your findings and proposed approach. Ask clarifying questions. Explore trade-offs and edge cases.
+Nothing is implemented, and nothing is written in TICKET_DIR, before the user agrees. This step is where a small task reveals itself as a large one. It is never skipped.
 
-**Remember**: This discussion happens BEFORE any implementation or formal specification writing.
+The user is a developer who carries the global vision of the project and decides the choices that matter. You carry the details of the code you just read. The discussion keeps the user aware of what you found and hands them every decision worth taking.
 
-Engage in a thorough collaborative discussion covering:
+Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per independent decision that needs the user. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
 
-- **Problem/Goal exploration**: Present your understanding and ask clarifying questions
-- **Current implementation analysis**: Share what you discovered and ask for confirmation or corrections
-- **Approach evaluation**: Discuss potential solutions and their trade-offs
-- **Edge cases and implications**: Explore potential issues and broader system impacts
+A block is a question and a recommendation:
 
-You're new to this project, the user can guide you.
+```
+❓ **Q1 - <title>**: <the problem in plain words, what the code does today in the words needed to decide, the options with their consequence>
 
-Do not use your question tool. Always ask in plain text. Your questions will be the opportunity for a real discussion.
+➡️ <your recommendation>
+```
 
-**This phase is mandatory.** If there is nothing to discuss, ask the user for an explicit validation.
+Look for edge cases and impacts on the rest of the system; each one that needs a decision gets its block.
+
+Every decision for the user is a numbered question, a yes/no one included; the simpler it is, the shorter its block. Numbering continues across rounds.
+
+Settle on your own what the code can answer; routine choices belong in the opening approach. Ask the user what needs their judgement: product behavior, scope, priorities, constraints the code does not show. Leave out the investigation narrative and the list of files you read.
+
+Ask in rounds: a question whose answer depends on another question still open waits for the next round. A question the reply skips stays open.
+
+When there is nothing to decide, say so in a few lines and ask for an explicit go.
+
+Do not use your question tool. Ask in plain text: your questions open a real discussion, a multiple-choice widget closes it.
 
 ## 3. Act
 
@@ -47,7 +56,7 @@ Use subagents (your subagent tool) for distinct, isolated units of work when ben
 
 Finalize the summary file: replace the working notes with the final content described below.
 
-Start the summary with a header, then a suggested commit message {{COMMIT_RULE}}. The shorter the better. Omit any field with nothing to list. Always exclude `alignfirst` from skills.
+Start the summary with a header, then a suggested commit message {{COMMIT_RULE}}. The shorter the better. Omit any field with nothing to list. Exclude `alignfirst` from the skills.
 
 Example:
 
@@ -64,15 +73,15 @@ Used documentation:
 Used skills: `skill-a`, `skill-b`
 ```
 
-The finalized summary is a **very concise handover document** that should capture:
+The finalized summary is a **very concise handover document**. It captures:
 
 - What was the topic or problem
 - What was decided or discovered
-- What action was taken (if any)
+- What action was taken, if any
 - Key outcomes or next steps
 
 The shorter the better.
 
-_Ignore markdown lint errors in the summary file._
+Ignore Markdown lint errors in the summary file.
 
 At the end, give the path of the summary file to the user.

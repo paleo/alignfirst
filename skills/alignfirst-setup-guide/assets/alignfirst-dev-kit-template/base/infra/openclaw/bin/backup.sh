@@ -2,8 +2,8 @@
 #
 # Copies the deployment state of the service account into ~/backups/deployment/<stamp>/:
 # openclaw.json, the secret store, the gateway env file, the workspace files, environment.d, the
-# aligndev config, companions.json when present, OpenClaw's archive, and thread-handoff's independent
-# state.
+# aligndev config, the companions with their registry when present, OpenClaw's archive, and
+# thread-handoff's independent state.
 #
 # Run as the service account:
 #   sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
@@ -23,8 +23,8 @@ main() {
   copy_file "$HOME/.openclaw/.env" openclaw.env
   copy_workspace
   copy_environment
-  copy_file "$HOME/.config/alignfirst/aligndev.config.json" aligndev.config.json
-  copy_file "$HOME/.config/alignfirst/companions.json" companions.json
+  copy_file "$HOME/.alignfirst/aligndev.config.json" aligndev.config.json
+  copy_companions
   create_openclaw_archive
   copy_thread_handoff_state
   chmod -R go-rwx "$BACKUP_DIR"
@@ -80,6 +80,17 @@ copy_workspace() {
     install -D -m 600 "$src" "$BACKUP_DIR/workspace/${src#"$WORKSPACE"/}"
   done < <(find "$WORKSPACE" -path "$WORKSPACE/scratch" -prune -o -type f \
     \( -name '*.md' -o -name '*.png' -o -name '*.svg' \) -print0)
+}
+
+# The companions hold work files, docs and project instructions the seed cannot rebuild. A symlinked
+# companions directory is followed; a `.plans` symlink to the work-files clone is copied as a link.
+copy_companions() {
+  local source="$HOME/.alignfirst/companions"
+  if [ ! -d "$source" ]; then
+    echo "[backup] absent, skipped: $source" >&2
+    return
+  fi
+  cp -a "$source/." "$BACKUP_DIR/companions"
 }
 
 copy_environment() {

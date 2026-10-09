@@ -70,13 +70,13 @@ describe("alignfirst CLI", () => {
     expect(guarded.stderr).toContain("this project requires >=1.0.0");
   });
 
-  it("fails project commands on an invalid companions.json", async () => {
+  it("fails project commands on an invalid registry", async () => {
     const { root, home, project } = makeCompanionProject({ docs: "yes" });
     dirs.push(root);
     const result = await runMain(["conventions"], { cwd: project, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(
-      `Invalid ${join(home, ".config", "alignfirst", "companions.json")}: `,
+      `Invalid ${join(home, ".alignfirst", "companions", "registry.json")}: `,
     );
   });
 });

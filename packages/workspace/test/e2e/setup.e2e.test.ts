@@ -145,6 +145,27 @@ describe("workspace setup (e2e)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "re-applies the patch to an existing seeded file without --force",
+    () => {
+      const { repo } = fixture({ fallbackSeeding: true });
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+
+      writeFileSync(join(repo, "workspace.local"), "edited-by-hand\n");
+      const rerun = runCli(repo, ["setup"]);
+      expect(rerun.status).toBe(0);
+      expect(setupLog(repo, "fixrepo")).toContain("Updated workspace.local.");
+      expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe(
+        "edited-by-hand\nworktree=main\n",
+      );
+
+      const unchanged = runCli(repo, ["setup"]);
+      expect(unchanged.status).toBe(0);
+      expect(setupLog(repo, "fixrepo")).toContain("Skipped workspace.local (already up to date).");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe("serviceMajor layout (e2e)", () => {

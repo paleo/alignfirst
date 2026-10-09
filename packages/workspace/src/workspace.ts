@@ -256,7 +256,11 @@ export interface GitignoredFileEntry {
   path: string;
   /** Where the initial content comes from. */
   source: GitignoredFileSource;
-  /** Rewrites the source content per workspace. Omit to copy the content verbatim. */
+  /**
+   * Rewrites the source content per workspace. Omit to copy the content verbatim. When the file
+   * already exists, `setup` re-applies it to the current content and rewrites the file only when
+   * the result differs, so it MUST be idempotent and leave the lines it does not know untouched.
+   */
   patch?: (content: string, ctx: PatchContext) => string;
   /**
    * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
@@ -1439,9 +1443,7 @@ async function seedGitignoredFiles(
   };
   for (const entry of entries) {
     const { patch } = entry;
-    const patchFn = patch
-      ? (content: string) => patch(content, patchCtx)
-      : (content: string) => content;
+    const patchFn = patch ? (content: string) => patch(content, patchCtx) : undefined;
     copyAndPatchFile(
       { currentWorktree: ctx.currentWorktree, log },
       entry.path,

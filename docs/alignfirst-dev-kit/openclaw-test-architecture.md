@@ -82,7 +82,7 @@ include:
 
 Compose v2.20+ required. The Dev Kit overlay adds environment variables, bind mounts, and a gateway `entrypoint:` that imports the Codex credential and writes the aligndev config before handing off. The base file owns the shared build context, volumes, healthchecks, and the service commands, including the gateway start line the overlay inherits.
 
-The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so [`scripts/gateway-entrypoint.sh`](../../alignfirst-dev-kit-tests/scripts/gateway-entrypoint.sh) copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. It then writes `/home/assistant/.config/alignfirst/aligndev.config.json` from `CODING_AGENT` and `CODING_AGENT_MODELS`; a missing or invalid `CODING_AGENT` fails the start. It ends with `exec "$@"`, so the base stack stays the single owner of the gateway start line. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
+The Codex home is mounted read-only. OpenClaw's importer needs a writable source directory, so [`scripts/gateway-entrypoint.sh`](../../alignfirst-dev-kit-tests/scripts/gateway-entrypoint.sh) copies `auth.json` into a temporary directory, imports only `auth:openai`, then deletes the copy. It then writes `/home/assistant/.alignfirst/aligndev.config.json` from `CODING_AGENT` and `CODING_AGENT_MODELS`; a missing or invalid `CODING_AGENT` fails the start. It ends with `exec "$@"`, so the base stack stays the single owner of the gateway start line. The provider configuration routes that subscription credential to the ChatGPT Codex endpoint. See [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration) for operator setup.
 
 Path-shaped vars from `.env.local` (`OPENCLAW_WORKSPACE_DIR`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_TEST_SCENARIOS_DIR`, `OPENCLAW_TEST_ARTIFACTS_DIR`, `OPENCLAW_TEST_GATEWAY_LOGS_DIR`) are resolved by the CLI against the consumer's `cwd` before invoking Compose — otherwise Compose `include:` would resolve them relative to the package's compose file under `node_modules/`, breaking natural relative paths.
 
@@ -153,14 +153,16 @@ Both channels register together on every gateway boot. The runner selects which 
 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 
-- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. `read` takes its scope from `channelId`, `to` or the current channel and ignores `threadId`, as native Discord does. Free-form agent text without a tool call lands in the parent channel.
+- `discord-mock` — `surface: "discord"`, `autoThread: false`. Full Discord-shaped surface (`send`, `thread-create`, `thread-reply`, `react`, `read`, `edit`, `delete`, `search`). `thread-create` posts an optional `text`/`message`/`content` atomically with the new thread. `read` takes its scope from `channelId`, `to` or the current channel and ignores `threadId`, as native Discord does. Free-form agent text without a tool call lands in the parent channel, unless the turn adopted a thread (see below).
 - `slack-mock` — `surface: "slack"`, `autoThread: true`. Slack-shaped surface with `send`,
   `react`, `read`, `edit`, `delete`, `reactions`, and `search`; fake thread creation/rename actions
-  remain disabled. Its action adapter prepares `send` for core delivery through the mock's message adapter. `replyToMode: "all"` is the compatibility default and routes an eligible root plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots in the channel session and routes only explicit replies through a thread session.
+  remain disabled. Its action adapter prepares `send` for core delivery through the mock's message adapter. `replyToMode: "all"` is the compatibility default and routes an eligible root plus later replies through one thread session keyed by the root message ID. `"off"` keeps roots in the channel session and routes only explicit replies through a thread session. As in native Slack, a root turn's tool context names its own message as the current thread and its channel by bare ID, so core matches a threaded `send` rooted there as the turn's current-source reply.
 
 Inbound metadata claims `Provider` / `Surface` / `OriginatingChannel` = the registered channel id, so the SDK routes tool-schema discovery back to the right plugin. Envelope targets follow the native surface: a Discord thread is `channel:<thread-id>`, while a Slack thread is `thread:<channel-id>/<thread-ts>`. The bus generates numeric snowflake-shaped thread IDs and records each thread's parent conversation. Transcript collection uses that ownership to include thread sessions without embedding scenario names in their IDs.
 
 The mocks are external plugins, so the host's exact-current gate applies to their conversation-read actions. A heartbeat turn mints no message-action capability, and the gate denies `read` for any target; bundled Slack and Discord skip it through `providerOwnedReadGates` (see "Heartbeat and `agent`-method turns deny external-plugin reads" in [`openclaw-context-engineering.md`](./openclaw-context-engineering.md)). The takeover message arrives through a reply run that mints the capability. The playbook reads thread history to recover the request, then reads again before coding to catch human instructions that arrived during setup.
+
+Discord thread adoption is mirrored from `extensions/discord/src/active-turn-thread-route.ts`. Each Discord-shaped inbound turn registers a route keyed by its session. A `thread-create` from that session, in the turn's channel and anchored on its triggering message, adopts the new thread: the turn's remaining final deliveries land in that thread without a reply reference. A `thread-reply` into the adopted thread adds `sourceReplyRoute: "current-source"` to its tool details, as `withAdoptedThreadReplyRoute` does, so core counts the turn's source reply as delivered. A Discord `send` into the thread stays untagged; native Discord sends it through core delivery, which compares the thread with the parent channel. The routes live in a process-wide slot, because OpenClaw may evaluate a plugin module twice in one gateway. The mock does not reproduce the draft-preview and progress retargeting that native adoption also performs.
 
 Discord renames an existing thread through `send` with `threadName`, targeting the thread's own channel ID. `thread-reply` ignores `threadName`: `extensions/discord/src/actions/handle-action.ts` reads it for `send` only. The mock follows that distinction; rename assertions must check the stored thread title.
 
@@ -204,13 +206,13 @@ Canonical destination param is `to`. Accepted shapes:
 
 Resolved in the order `to → target → channelId` to match the normalizer's output.
 
-Plugin actions and prepared sends route through different handlers in `message-action-runner.ts`. Slack `send` uses `prepareSendPayload`, then core delivers it through the mock's message adapter and returns a `MessageSendResult` with `deliveryStatus`, `result.target`, `result.receipt.threadId`, and `messageDelivery`. Discord `thread-create` stays on the plugin path, reports `{ ok: true, thread }`, and retains its parent-message anchor. A Discord starter-delivery failure is an explicit partial result. The handoff plugin accepts only confirmed native results.
+Plugin actions and prepared sends route through different handlers in `message-action-runner.ts`. Slack `send` uses `prepareSendPayload`, then core delivers it through the mock's message adapter and returns a `MessageSendResult` with `deliveryStatus`, `result.target`, `result.receipt.threadId`, and `messageDelivery`. Discord `thread-create` and `thread-reply` stay on the plugin path. `thread-create` reports `{ ok: true, thread }` and retains its parent-message anchor; a failure of its optional content is an explicit partial result. `thread-reply` reports `{ ok: true, result: { messageId, channelId } }`, like native Discord. The handoff plugin accepts only confirmed native results.
 
 The Dev Kit consumer sets Slack to `replyToMode: "off"`. Its parent channel session
-posts one explicit native starter, then calls `thread_handoff start`. The plugin durably records and
+posts one explicit native starter, calls `thread_handoff start`, then ends its turn on `NO_REPLY`. The plugin durably records and
 dispatches `Take over this thread.` from `AlignFirst Service` as a reply run on the canonical target session. That session claims with `{ "action": "claim" }` and reads thread history before work. Scenario assertions correlate
-tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn's
-closing pointer to the thread.
+tool calls by `AgentToolCall.sessionKey`, because target work may start before the parent turn
+ends.
 
 The shared fresh-session assertion binds the claim, history read, and lobster reaction by
 tool-use ID within that target session. It rejects an earlier surface mutation, derives the reaction
@@ -227,7 +229,7 @@ local provider, the synthetic bus, and disposable state. Run it with
 provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
 both surfaces: a static takeover with its reply in the thread, a human message delivered while the takeover
 turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
-takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery.
+takeover turn, duplicate starts, same-session continuation, and pending and post-claim restart recovery. A mentioning channel turn that ends on `NO_REPLY` after its starter must stay silent, without the isolated finalizer. A Discord control with the starter in `thread-create` must show the finalizer's answer in the thread.
 
 The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 

@@ -12,11 +12,11 @@ export interface Sink {
   text(): string;
 }
 
-// Writes `<home>/.config/alignfirst/aligndev.config.json` and returns its path. Every `main` call in
+// Writes `<home>/.alignfirst/aligndev.config.json` and returns its path. Every `main` call in
 // the suites injects a temporary `home`, and sets `HOME` to it for alignfirst, so no test reads the
 // developer's real config.
 export function writeConfig(home: string, config: object): string {
-  const path = join(home, ".config", "alignfirst", "aligndev.config.json");
+  const path = join(home, ".alignfirst", "aligndev.config.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(config, undefined, 2)}\n`);
   return path;
@@ -32,8 +32,8 @@ export function makeSink(): Sink {
   };
 }
 
-export function writeCompanions(home: string, value: object): void {
-  const path = join(home, ".config", "alignfirst", "companions.json");
+export function writeRegistry(home: string, value: object): void {
+  const path = join(home, ".alignfirst", "companions", "registry.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, undefined, 2)}\n`);
 }
@@ -44,7 +44,7 @@ export interface CompanionProject {
   companion: string;
 }
 
-// A git repository `<home>/app` whose companion is `<home>/companions/app` (not created). Paths
+// A git repository `<home>/app` whose companion is `<home>/.alignfirst/companions/app` (not created). Paths
 // are real.
 export function makeCompanionProject(
   home: string,
@@ -53,7 +53,11 @@ export function makeCompanionProject(
   const project = join(home, "app");
   mkdirSync(project, { recursive: true });
   execFileSync("git", ["init", "--quiet", project]);
-  writeCompanions(home, { root: "~/companions", paths: { "~/app": flags } });
+  writeRegistry(home, { paths: { "~/app": flags } });
   const realHome = realpathSync(home);
-  return { home, project: realpathSync(project), companion: join(realHome, "companions", "app") };
+  return {
+    home,
+    project: realpathSync(project),
+    companion: join(realHome, ".alignfirst", "companions", "app"),
+  };
 }

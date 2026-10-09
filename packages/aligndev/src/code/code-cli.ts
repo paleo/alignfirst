@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
-import type { AligndevConfig, CodeConfig } from "../config.js";
+import { type CodeConfig, type LoadedConfig, resolveCodeConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import {
@@ -45,7 +45,7 @@ const SESSION_OPTIONS = {
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
-// Items whose companion copy the coder may edit: the companion becomes a writable directory.
+// Items whose companion copy the agent may edit: the companion becomes a writable directory.
 const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
   ".alignfirst.md",
@@ -54,7 +54,7 @@ const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
   ".plans",
 ];
 
-// Items the coder would not find in the repository: a new session gets `alignfirst context`.
+// Items the agent would not find in the repository: a new session gets `alignfirst context`.
 const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
   ".alignfirst.md",
@@ -112,13 +112,13 @@ export interface SessionArgs {
 
 export async function runCode(
   tokens: string[],
-  config: AligndevConfig,
+  config: LoadedConfig,
   ctx: CodeContext,
 ): Promise<number> {
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
     if (command.kind === "status") return showStatus(ctx, command.target);
-    const { code } = config;
+    const code = resolveCodeConfig(config, ctx.env);
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.agent, code.models);
     if (command.kind === "help") {
@@ -682,7 +682,7 @@ export interface RunInput {
   executableModel: string | undefined;
   catchupContent?: string;
   contextContent?: string;
-  // The alignfirst command form the coder is told to run.
+  // The alignfirst command form the agent is told to run.
   alignfirst: string;
 }
 
@@ -769,8 +769,9 @@ Options (new, resume):
 
 ${requires}
 
-Config (~/.config/alignfirst/aligndev.config.json):
-  code.agent            Required coding agent: claude or codex (selected: ${agent}).
+Config (~/.alignfirst/aligndev.config.json):
+  code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
+                        agent that runs aligndev.
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.
   code.unset            Env vars to strip from the coding agent child.

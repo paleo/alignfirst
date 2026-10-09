@@ -1,168 +1,72 @@
 # aligndev
 
-The AlignFirst Dev Kit CLI. It carries the assistant's playbook, runs a coding agent through [AlignFirst](https://github.com/paleo/alignfirst) protocols, and keeps the inventory of the host's projects and their port ranges. The assistant is an OpenClaw bot, or a coding agent working on one project.
+Autonomous software development. You say what you want; the assistant drives the coding agents and brings you the decisions.
 
-Run `aligndev` through `npx` (`npx -y aligndev …`), or install it with `npm install -g aligndev`. Through `npx`, it runs `alignfirst` through `npx` too, and its help and guides print both commands in that form. A global `aligndev` needs the `alignfirst` CLI on `PATH`: `npm install -g alignfirst`.
+You talk to an **assistant**, the way you would to a developer on your team. It never touches the code itself. It isolates each task in its own workspace, then hands the investigation and the coding to an AI coding agent, **the agent**, which follows the [AlignFirst](https://alignfirst.paroi.tech/) protocols: specify, plan, implement, review. The assistant reads the agent's work, tests it, asks you what only you can decide, and opens the pull request.
 
-Supported systems: Linux and macOS, and Windows through WSL.
+`aligndev` is the assistant's CLI. It gives the assistant its playbook, launches and tracks the agent, and keeps the inventory of your projects. You never run it yourself: the assistant does.
 
-## Commands
+## Two Ways to Run the Assistant
 
-```sh
-aligndev code <command> [<options>]      # run a coding agent through AlignFirst protocols
-aligndev project <command> [<options>]   # list projects, check the inventory, claim port ranges
-aligndev guide [<topic>]                 # print the playbook and the guides
-aligndev --help
-aligndev --version
-```
+**In your coding agent.** A Claude Code or Codex session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
 
-Each command prints its own usage with `--help`.
+**As an OpenClaw bot.** The [AlignFirst Dev Kit](https://alignfirst.paroi.tech/openclaw-dev-kit) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
-### `aligndev code`
+Either way, the agent is Claude Code or Codex. A coding-agent assistant launches its own kind by default.
 
-```sh
-aligndev code new --protocol spec --ticket AB-123 --message "Feature description"
-aligndev code resume <sessionId> --protocol plan
-aligndev code new --message "Execute the plan: .plans/AB-123/A2-plan.md"
-aligndev code new --protocol aad --no-ticket --message "Task description"
-aligndev code new --ticket AB-123 --catchup --protocol aad --message-file message.md
-aligndev code status .plans/AB-123/_aligndev/20260829-135529.md
-aligndev code quota
-```
+## Start in Claude Code or Codex
 
-The coding agent `aligndev code` launches is **the coder**. Run `aligndev code` from the root of the target project. The project must have a `.plans/` directory, in its repository or in its companion directory.
+The project needs an AlignFirst `.plans` directory, in its repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it.
 
-`aligndev code` reads the project's layout from `alignfirst config --json`. Session files go under its `_aligndev` location: `<ticket>/_aligndev/` or `_aligndev/`, below the project's `.plans/` unless the companion holds a separate tree. When some of the project's AlignFirst files exist in its companion, the normal permission modes make the companion writable for the coder (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output.
+The agent needs network access and writes outside the repository, so the assistant launches it outside its sandbox: approve that request when it comes.
 
-A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side` and passes it to the coder.
+### With the Skill
 
-`--catchup` loads the ticket's history (through `alignfirst ticket --catchup`) before the protocol and message. Alone, it returns a short synthesis.
-
-`--message-file <path>` reads the message from a UTF-8 file, or from stdin with `-`. The prompt reaches the coder through stdin.
-
-`aligndev code status` reconciles and shows a run's durable status. It accepts a session file under `_aligndev/` or `<ticket>/_aligndev/` of the `_aligndev` location, or selects the newest run with `--ticket <id>`, `--no-ticket` or `--meta <key>`. If a recorded process is gone, it seals the session file as `status: failed`, `exitReason: terminated`. Linux records also store the process start time to detect pid reuse. Its `contextTokens` line reports what the run left in the coder's context window; a resumed session keeps growing across runs.
-
-`aligndev code quota` shows the selected coding agent's account limits, consumed percentages, and reset times. It works outside a project.
-
-### `aligndev project`
-
-```sh
-aligndev project list [--json] [--root <path>]
-aligndev project doctor [--root <path>]
-aligndev project status <path> [--json] [--root <path>]
-aligndev project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
-aligndev project free-ports --size <n> [--range <code>] [--json] [--root <path>]
-```
-
-A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker holds an optional description and port ranges. A direct child that is a Git main worktree is a project; linked Git worktrees are listed as its workspaces. A child outside Git with a root `.alignfirst.json` is an inventory issue. `list --json` and `status` report each project's companion directory and the location of its AlignFirst files. Two projects sharing one companion directory is an inventory issue.
-
-```json
-{
-  "description": "Every project is a direct child of ~/projects.",
-  "portRanges": [
-    { "first": 28000, "last": 28599, "description": "Web projects, exposed through the gateway." },
-    { "code": "local", "first": 29000, "last": 29199, "description": "Desktop apps, never exposed." }
-  ]
-}
-```
-
-`--root` defaults to `projectsRoot` in the config, then to the working directory. `doctor` is a read-only health gate: it succeeds only when discovery completes with no inventory issue.
-
-An older marker carrying `"portRange": { ... }` is rejected; replace the key with `"portRanges": [{ ... }]`. Project configuration in `.alignfirst.json` keeps its singular `portRange` key.
-
-### `aligndev guide`
-
-```sh
-aligndev guide [<topic>] [--root <path>]
-```
-
-Each topic renders the variant of the configured `platform`.
-
-| Topic | Output | Platforms |
-|-------|--------|-----------|
-| (none) | The playbook dispatcher. | both |
-| `working-session` | The work procedure: a thread under OpenClaw, the conversation for a coding agent. | both |
-| `project-workspace-setup`, `consultation` | Runbooks. | both |
-| `code` | The delegation guide. | both |
-| `channel-handling` | The channel and DM procedure. | `openclaw` |
-| `project-lifecycle` | The runbook to create, onboard or remove a project. | `openclaw` |
-| `slack-message-tool`, `discord-message-tool` | Extended `message` references. | `openclaw` |
-| `project` | The projects guide, followed by the directory sections when the root carries a marker. `--root` overrides `projectsRoot`. | `openclaw` |
-
-Under `openclaw`, the playbook topics require `projectsRoot`.
-
-## Configuration
-
-`aligndev` reads one file, `~/.config/alignfirst/aligndev.config.json`. The path is fixed: no environment variable overrides it. `aligndev code` and `aligndev guide` require it, `--help` included. Without it, they fail with an error naming the path and the required keys. `aligndev project`, `aligndev --help` and `aligndev --version` run without it.
-
-```json
-{
-  "platform": "openclaw",
-  "projectsRoot": "~/projects",
-  "code": {
-    "agent": "claude",
-    "models": ["opus", "sonnet"],
-    "skipPermissions": false,
-    "unset": ["ANTHROPIC_API_KEY"]
-  }
-}
-```
-
-A coding agent acting as the assistant needs only the required keys:
-
-```json
-{
-  "platform": "codingAgent",
-  "code": { "agent": "codex" }
-}
-```
-
-- `platform` — required. Selects the variant of every `aligndev guide` topic: `openclaw` for an OpenClaw assistant, `codingAgent` for a coding agent acting as the assistant.
-- `projectsRoot` — the default projects directory of `aligndev project` and `aligndev guide project`. Required by the `openclaw` playbook. `~/` expands to the home directory; a relative path resolves against the config file's directory.
-- `code.agent` — required. The coder: `claude` or `codex`.
-- `code.models` — replaces the selected agent's accepted models.
-- `code.skipPermissions` — `true` selects each CLI's dangerous permission-bypass flag. Default: `false`.
-- `code.unset` — environment variables stripped from the coder's environment. `aligndev code` always strips the assistant session's identity variables first (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …), whatever the agent.
-
-Unknown keys are rejected. An unreadable file, invalid JSON or an invalid value fails every command that loads the config, with an error naming the file.
-
-Companion directories are declared in `~/.config/alignfirst/companions.json`, which the `alignfirst` CLI reads for both tools. See [its README](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories).
-
-## Execution model
-
-`aligndev code` runs the coder as a direct **foreground** child of its own process. It streams a live transcript to stdout and to a per-run session file, whose frontmatter status goes from `running` to `succeeded` or `failed`, and blocks until the coder exits. It never backgrounds or detaches itself.
-
-Coding runs can be very long, so the caller always runs `aligndev code` as a background task and owns the backgrounding, as `aligndev guide code` prescribes:
-
-- Under OpenClaw, the assistant invokes it through the `exec` tool with `background: true` and `timeoutSeconds: 0`, and chains `openclaw system event --mode now --session-key <key>` onto the command.
-- A coding-agent assistant starts it with its own background-execution facility, with no time limit, and outside its sandbox. When the agent wakes the session as the command exits, as Claude Code does, the assistant handles the completion on that wake. Otherwise, the assistant checks its pending runs at the start of the next user turn.
-
-The completion turn locates the session file with `aligndev code status` and reads the result. The session file is the durable result handoff: frontmatter `sessionId` and status, and the `---- Result ----` block.
-
-If `aligndev code` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`), then send `SIGTERM` to the coder. After a short grace period, a `SIGKILL` guarantees no orphan is left behind. Only a `SIGKILL` of `aligndev` itself can leave a stale `running` status, which the next `status` call seals.
-
-When the coding agent's session on the host is missing or expired, `aligndev code` detects the authentication failure in its stream, seals the session file with `exitReason: auth_required`, and exits `2` with a one-line stderr message.
-
-## Coding agents
-
-Install the selected CLI and authenticate it on the host: run `claude`, then `/login`, for Claude Code; run `codex login` for Codex.
-
-Normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`.
-
-Claude's default model list is `fable`, `opus`, `sonnet`, `haiku`. Codex's is `astra`, `sol`, `terra`, `luna`; `aligndev code` resolves a selected Codex alias against `codex debug models --bundled`. Set `code.models` to narrow the list or to advertise an explicit Codex slug such as `gpt-5.6-terra`.
-
-Session files record `agent`. A session resumes only with the same selected agent. Agentless legacy sessions stay readable but require a new session.
-
-## The `aligndev` skill
-
-The `aligndev` agent skill makes a Claude Code or Codex session the assistant of the project it runs in. Invoked as `/aligndev` in Claude Code, or `$aligndev` in Codex, it loads the playbook through `npx -y aligndev guide`, which needs `platform: "codingAgent"` in the config. Install it:
+Install the `aligndev` skill:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global --skill aligndev
 ```
 
-The setup guide's [coding-agent assistant reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) covers the project, the configuration and the sandbox.
+Then start a session in the project and invoke `/aligndev` in Claude Code, or `$aligndev` in Codex.
 
-## Port claims
+### Without a Skill
 
-Run `aligndev project free-ports --size <n>` with the block size required by the project's workspace scheme: `perWorkspace × maxWorkspaces`. A marker entry without a code is the default range. Pass `--range <code>` to select a coded range. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
+Add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
+
+```markdown
+## Aligndev
+
+When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it.
+```
+
+Then ask your session to work with aligndev.
+
+### Requirements
+
+- Node.js 22.11 or later. The assistant runs `aligndev` through `npx`, so there is nothing to install.
+- Claude Code or Codex installed and logged in: `claude` then `/login`, or `codex login`.
+- Linux or macOS, or Windows through WSL.
+
+## Configuration
+
+`~/.alignfirst/aligndev.config.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant:
+
+```json
+{
+  "code": { "agent": "codex" }
+}
+```
+
+- `platform` — `codingAgent` (default) for a coding-agent assistant, `openclaw` for an OpenClaw bot.
+- `projectsRoot` — the projects directory of an OpenClaw host. Required by `openclaw`. `~/` expands to the home directory; a relative path resolves against `~/.alignfirst/`.
+- `code.agent` — the agent: `claude` or `codex`. Default: the coding agent that runs the assistant, detected from its environment. Set it to launch the other one, or when both are detected, as with Codex in a VS Code terminal where the Claude Code extension is installed.
+- `code.models` — the models the assistant may choose from. Default: Claude's `fable`, `opus`, `sonnet`, `haiku`, or Codex's `astra`, `sol`, `terra`, `luna`.
+- `code.skipPermissions` — `true` runs Claude Code with `--dangerously-skip-permissions` instead of `--permission-mode auto`, and Codex with `--dangerously-bypass-approvals-and-sandbox` instead of `--sandbox workspace-write`. Default: `false`.
+- `code.unset` — environment variables to hide from the agent, such as an API key meant for another tool on the host.
+
+Unknown keys and invalid values are errors.
+
+## Under the Hood
+
+`aligndev` documents itself for the assistant: `aligndev --help`, then `aligndev guide`, print everything it needs. Maintainers: see [aligndev Architecture](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-architecture.md).

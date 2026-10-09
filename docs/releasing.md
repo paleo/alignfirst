@@ -14,7 +14,7 @@ Packages publish from GitHub Actions through npm trusted publishing (OIDC). Ther
 ## Flow
 
 1. A PR authors a changeset (see [writing-a-changeset.md](writing-a-changeset.md)) and is squash-merged into `main`.
-2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs.
+2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs. CI skips its jobs on that PR's branch, `changeset-release/main`.
 3. Merging that PR pushes the bumped versions to `main`. The `check` job now finds versions absent from the registry and enables the `publish` job.
 4. `publish` is bound to the `release` environment, so it waits for one approval. After approval it builds, tests, strips the `scripts` field from the workspace manifests, and runs `changeset publish`. npm attaches a provenance attestation to each tarball. The action then pushes git tags and creates the GitHub releases.
 5. `verify` waits 15 minutes, then installs the freshly published versions in an empty directory, runs `npm audit signatures`, and asserts that each version carries a provenance attestation. The wait is the `verify` environment's timer: npm's CDN keeps serving a stale packument for several minutes after a publish, and a job held by a wait timer occupies no runner.
@@ -68,6 +68,8 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    ```bash
    npm deprecate @alignfirst/workspace@0.33.1 "Bootstrap publish, use 0.34.0 or later"
    ```
+
+   npm still prefers a deprecated version whose `engines` accepts the running Node over a newer version whose `engines` rejects it. On a Node below the current `engines.node` floor, `npx` therefore runs the bootstrap tarball: `npx aligndev` once resolved to the bin-less `aligndev@0.0.0` and failed with "could not determine executable to run". Keep each package's `engines.node` floor as low as its code allows.
 
 2. Register the trusted publisher and require 2FA for each name, with npm CLI ≥ 11.19. Earlier CLIs omit the `permissions` field the registry now requires and fail with `400 Bad Request`:
 

@@ -103,7 +103,7 @@ export function copyAndPatchFile(
   ctx: CopyAndPatchCtx,
   relPath: string,
   source: ResolvedFileSource,
-  patchFn: (content: string) => string,
+  patchFn: ((content: string) => string) | undefined,
   label: string,
   force: boolean,
   optional = false,
@@ -112,7 +112,11 @@ export function copyAndPatchFile(
   const alreadyExists = existsSync(targetPath);
 
   if (alreadyExists && !force) {
-    ctx.log(`Skipped ${label} (already exists; use --force to overwrite).`);
+    if (patchFn === undefined) {
+      ctx.log(`Skipped ${label} (already exists; use --force to overwrite).`);
+      return;
+    }
+    reconcileExistingFile(ctx, targetPath, patchFn, label);
     return;
   }
 
@@ -133,10 +137,31 @@ export function copyAndPatchFile(
     content = readFileSync(source.path, "utf-8");
   }
 
-  const patched = patchFn(content);
+  const patched = patchFn === undefined ? content : patchFn(content);
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
   ctx.log(`${alreadyExists ? "Overwritten" : "Created"} ${label}.`);
+}
+
+/**
+ * Re-applies `patchFn` to the file as it is: a patch rewrites only the keys it knows, so local
+ * customizations survive. The source is not read, and the file is rewritten only when the result
+ * differs.
+ */
+function reconcileExistingFile(
+  ctx: CopyAndPatchCtx,
+  targetPath: string,
+  patchFn: (content: string) => string,
+  label: string,
+): void {
+  const content = readFileSync(targetPath, "utf-8");
+  const patched = patchFn(content);
+  if (patched === content) {
+    ctx.log(`Skipped ${label} (already up to date).`);
+    return;
+  }
+  writeFileSync(targetPath, patched);
+  ctx.log(`Updated ${label}.`);
 }
 
 /**

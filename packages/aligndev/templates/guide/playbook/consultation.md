@@ -4,7 +4,7 @@ Read-only work: a question about the codebase, advice, a design opinion, a brain
 
 A code review or an explicitly named AlignFirst protocol is not a consultation: those follow the ticket and workspace flow. Everything else here needs PROJECT and PROJECT_PATH, and nothing more — no ticket to start, no request file, no project workspace.
 
-The user consults you, and you consult the coder. It reads the repository; you would answer from memory. So every question, every request for ideas, and every opinion you need for your own next step goes to the coder, and you relay its answer in your own words.
+The user consults you, and you consult the agent. It reads the repository; you would answer from memory. So every question, every request for ideas, and every opinion you need for your own next step goes to the agent, and you relay its answer in your own words.
 
 ## Step 1 — Select the worktree
 
@@ -48,10 +48,10 @@ Retain the printed session id. Later turns of the same topic resume that session
 ## Step 4 — Relay
 
 {{#openclaw}}
-Answer in the thread, in your own words, grounded in what the coder found.
+Answer in the thread, in your own words, grounded in what the agent found.
 {{/openclaw}}
 {{#codingAgent}}
-Answer in the conversation, in your own words, grounded in what the coder found.
+Answer in the conversation, in your own words, grounded in what the agent found.
 {{/codingAgent}}
 
 A request for changes ends the consultation: return to the ticket and linked-workspace flow before anything is implemented.
@@ -65,7 +65,7 @@ Record the exchange when it produced something worth keeping: the user asked for
 1. **Ask about the ticket, without waiting for it.** Add one sentence to the answer you are already sending, in the user's language: *"Is there a ticket to attach this discussion to, or do we continue without one?"* Ask it once in the session, then carry on regardless of the reply.
 2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH and take the `side-N` it reports.
 3. **Name the file.** Run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID} --next consultation.md --new-cycle`, both from PROJECT_PATH, and append FILE_NAME to TICKET_DIR exactly as printed. Syncing first brings down the ticket's existing work files, so the new file is numbered after them. A consultation opens its own cycle, and the flag is harmless on a ticket with no work files yet.
-4. **Have the coder write it.** Resume the consultation's session with no protocol, naming that exact path. Ask for the discussion's summary, the ideas considered, the decisions reached, and the open questions named as open. The coder syncs its own writes.
+4. **Have the agent write it.** Resume the consultation's session with no protocol, naming that exact path. Ask for the discussion's summary, the ideas considered, the decisions reached, and the open questions named as open. The agent syncs its own writes.
 5. **Report where it landed.** Your closing message states TICKET_ID and the file path. The file names the revision retained at Step 2.
 
 Writing under `.plans/` from the main worktree is allowed on the base branch; the prohibition covers the codebase. This step creates no branch and no project workspace.

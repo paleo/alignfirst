@@ -69,7 +69,7 @@ Trusting `~/projects` once covers every project cloned under it; `aligndev code`
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent claude-code` adds the `~/.claude/skills/<name>` symlink that the `claude` CLI reads. The delegated coder needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent claude-code` adds the `~/.claude/skills/<name>` symlink that the `claude` CLI reads. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} bash <<'EOS'
@@ -96,7 +96,7 @@ To change the instructions, edit the repository file and run `docs/operations/co
 
 ### Hardening
 
-**Role: operator**, during `06-security-hardening.md`. `~/.claude/skills` (the symlinks) and `~/.claude/CLAUDE.md` feed the delegated coder's prompt, so both become admin-owned and immutable. `~/.claude` itself stays writable: the CLI keeps its login and session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
+**Role: operator**, during `06-security-hardening.md`. `~/.claude/skills` (the symlinks) and `~/.claude/CLAUDE.md` feed the delegated agent's prompt, so both become admin-owned and immutable. `~/.claude` itself stays writable: the CLI keeps its login and session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
 
 ```sh
 sudo chattr -i /home/{{SERVICE_USER}}/.claude/skills /home/{{SERVICE_USER}}/.claude/CLAUDE.md 2>/dev/null || true

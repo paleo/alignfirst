@@ -1,5 +1,30 @@
 # aligndev
 
+## 0.20.2
+
+### Patch Changes
+
+- e5ac2f5: The delegation guide describes the coder's numbered questions and how to answer or accept them.
+
+## 0.20.1
+
+### Patch Changes
+
+- 2245262: The playbook now registers a project through `alignfirst companion add` before preparing it through its companion, instead of asking the operator for an entry.
+- 2245262: On OpenClaw, the starter is the channel turn's reply: the turn ends on `NO_REPLY` instead of a pointer to the thread, which Discord posted inside the thread. On Discord, `thread-create` opens the thread without content and `thread-reply` posts the starter.
+
+## 0.20.0
+
+### Minor Changes
+
+- 393b05a: Moved the config to `~/.alignfirst/aligndev.config.json`. A relative `projectsRoot` now resolves against `~/.alignfirst/`.
+- 393b05a: Made `~/.alignfirst/aligndev.config.json` optional: `platform` defaults to `codingAgent`, and `code.agent` defaults to the coding agent that runs `aligndev`, Claude Code or Codex.
+
+### Patch Changes
+
+- 393b05a: The playbook now calls the coding agent it launches "the agent".
+- 393b05a: Supported Node 22.11 and later.
+
 ## 0.19.0
 
 ### Minor Changes

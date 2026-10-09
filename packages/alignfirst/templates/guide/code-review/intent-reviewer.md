@@ -8,7 +8,7 @@ Evaluate the change as a whole: what it tries to accomplish, and whether the imp
    - Is there a simpler design that achieves the same intent?
    - Does the change fit the architecture and conventions of the codebase, or work against them?
    - Does it leave the codebase healthier than before?
-   - Is the size proportionate to the intent? Layers, options, and generality nobody asked for cost as much as missing pieces.
+   - Is the size proportionate to the intent? A diff that adds more lines than it removes owes a reason; layers, options, and generality nobody asked for cost as much as missing pieces.
    - Does the diff mix a refactor with a behavior change? If they cannot be told apart, say so — it is what makes a review reliable or not.
 4. Report portions of code that deserve a **rewrite** as findings: 🟡, or 🔴 when the flaw defeats the intent. Observations about the change as a whole belong in the assessment, not in the findings list.
 
