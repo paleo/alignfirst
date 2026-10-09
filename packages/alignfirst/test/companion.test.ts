@@ -19,7 +19,9 @@ describe("companion add", () => {
     const companion = join(home, ".alignfirst", "companions", "projects_app");
     expect(result).toEqual({
       code: 0,
-      stdout: `Registered ~/projects/app in ${registry}.\nCompanion: ${companion}\n`,
+      stdout:
+        `Registered ~/projects/app in ${registry}.\nCompanion: ${companion} (created)\n` +
+        "Next: write the items at the paths `alignfirst config` reports.\n",
       stderr: "",
     });
     expect(JSON.parse(readFileSync(registry, "utf-8"))).toEqual({
@@ -29,7 +31,8 @@ describe("companion add", () => {
 
     const again = await runMain(["companion", "add"], { cwd: project, home });
     expect(again.stdout).toBe(
-      `Already registered by ~/projects/app in ${registry}.\nCompanion: ${companion}\n`,
+      `Already registered by ~/projects/app in ${registry}.\nCompanion: ${companion}\n` +
+        "Next: write the items at the paths `alignfirst config` reports.\n",
     );
   });
 
@@ -40,9 +43,12 @@ describe("companion add", () => {
     const before = readFileSync(registry, "utf-8");
     mkdirSync(join(project, "src"));
     const result = await runMain(["companion", "add"], { cwd: join(project, "src"), home });
-    expect(result.stdout).toContain(`Already registered by ~/projects in ${registry}.`);
+    const companion = join(home, ".alignfirst", "companions", "projects_app");
+    expect(result.stdout).toContain(
+      `Already registered by ~/projects in ${registry}.\nCompanion: ${companion} (created)\n`,
+    );
     expect(readFileSync(registry, "utf-8")).toBe(before);
-    expect(existsSync(join(home, ".alignfirst", "companions", "projects_app"))).toBe(true);
+    expect(existsSync(companion)).toBe(true);
   });
 
   it("adds an absolute key for a project outside the home directory", async () => {
@@ -52,7 +58,7 @@ describe("companion add", () => {
     const result = await runMain(["companion", "add"], { cwd: project, home });
     const key = realpathSync(project);
     expect(result.stdout).toContain(`Registered ${key} in `);
-    expect(result.stdout).toContain(`companions/${key.slice(1).replaceAll("/", "_")}\n`);
+    expect(result.stdout).toContain(`companions/${key.slice(1).replaceAll("/", "_")} (created)\n`);
   });
 
   it("fails outside a git repository", async () => {

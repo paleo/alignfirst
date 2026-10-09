@@ -568,7 +568,11 @@ describe("project status", () => {
           in: "project",
           exists: true,
         },
-        ".alignfirst.md": { path: join(project, ".alignfirst.md"), in: "project", exists: false },
+        ".alignfirst-instructions": {
+          path: join(project, ".alignfirst-instructions"),
+          in: "project",
+          exists: false,
+        },
         "DEVELOPERS.md": { path: join(project, "DEVELOPERS.md"), in: "project", exists: false },
         docs: { path: join(project, "docs"), in: "project", exists: false },
         ".plans": { path: join(project, ".plans"), in: "project", exists: false },
@@ -598,6 +602,17 @@ describe("project status", () => {
     expect(rejected.code).toBe(1);
     expect(rejected.stderr).toContain("is not a project of");
     expect(rejected.stderr).toContain("main-worktree path");
+  });
+
+  it("resolves a relative path against the working directory", async () => {
+    const fixture = makeFixture({});
+    const project = makeRepository(fixture.root, "project");
+
+    const result = await runProjects(fixture, ["status", ".", "--json", "--root", fixture.root], {
+      cwd: project,
+    });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).path).toBe(project);
   });
 });
 

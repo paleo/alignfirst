@@ -27,7 +27,8 @@ function runAdd(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} companion add
 
 Registers the current project in ~/.alignfirst/companions/registry.json, with every item on
-"auto", and creates its companion directory. A project that a key already matches stays as is.
+"auto". A project that a key already matches keeps its registration. Creates the companion
+directory when it is missing.
 `;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const registration = addCompanion(ctx.cwd, ctx.home);
@@ -36,6 +37,7 @@ Registers the current project in ~/.alignfirst/companions/registry.json, with ev
       ? `Registered ${registration.key} in ${registration.registry}.\n`
       : `Already registered by ${registration.key} in ${registration.registry}.\n`,
   );
-  ctx.stdout.write(`Companion: ${registration.dir}\n`);
+  ctx.stdout.write(`Companion: ${registration.dir}${registration.created ? " (created)" : ""}\n`);
+  ctx.stdout.write(`Next: write the items at the paths \`${ctx.form} config\` reports.\n`);
   return 0;
 }

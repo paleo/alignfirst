@@ -53,7 +53,7 @@ describe("doctor command", () => {
         "[ok] Companion: matched by ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
-        `[ok] Companion: .alignfirst.md: ${join(companion, ".alignfirst.md")} (companion, missing)`,
+        `[ok] Companion: .alignfirst-instructions: ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
         `[ok] Companion: DEVELOPERS.md: ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
         `[warn] Companion: docs: ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans: ${join(project, ".plans")} (project)`,

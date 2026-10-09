@@ -48,7 +48,7 @@ const SESSION_OPTIONS = {
 // Items whose companion copy the agent may edit: the companion becomes a writable directory.
 const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
-  ".alignfirst.md",
+  ".alignfirst-instructions",
   "DEVELOPERS.md",
   "docs",
   ".plans",
@@ -57,7 +57,7 @@ const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
 // Items the agent would not find in the repository: a new session gets `alignfirst context`.
 const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
   ".alignfirst.json",
-  ".alignfirst.md",
+  ".alignfirst-instructions",
   "docs",
   ".plans",
 ];

@@ -52,7 +52,7 @@ describe("project layout", () => {
       entries: ["~"],
       flags: {
         ".alignfirst.json": "auto",
-        ".alignfirst.md": "auto",
+        ".alignfirst-instructions": "auto",
         "DEVELOPERS.md": "auto",
         docs: "auto",
         ".plans": "auto",
@@ -135,14 +135,14 @@ describe("project layout", () => {
       paths: {
         "~/projects/app": {
           ".alignfirst.json": true,
-          ".alignfirst.md": false,
+          ".alignfirst-instructions": false,
           "DEVELOPERS.md": "auto",
         },
       },
     });
     mkdirSync(companion, { recursive: true });
-    for (const name of [".alignfirst.md", "DEVELOPERS.md"])
-      writeFileSync(join(companion, name), "companion\n");
+    mkdirSync(join(companion, ".alignfirst-instructions"));
+    writeFileSync(join(companion, "DEVELOPERS.md"), "companion\n");
     writeFileSync(join(project, "DEVELOPERS.md"), "project\n");
     mkdirSync(join(project, "docs"));
     const { locations } = resolveProjectLayout(project, home);
@@ -151,8 +151,8 @@ describe("project layout", () => {
       in: "companion",
       exists: false,
     });
-    expect(locations[".alignfirst.md"]).toEqual({
-      path: join(project, ".alignfirst.md"),
+    expect(locations[".alignfirst-instructions"]).toEqual({
+      path: join(project, ".alignfirst-instructions"),
       in: "project",
       exists: false,
     });

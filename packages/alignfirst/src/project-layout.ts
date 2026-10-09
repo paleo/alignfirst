@@ -18,7 +18,7 @@ import { gitOutputOrUndefined } from "./git.js";
 
 export const ITEM_NAMES = [
   ".alignfirst.json",
-  ".alignfirst.md",
+  ".alignfirst-instructions",
   "DEVELOPERS.md",
   "docs",
   ".plans",
@@ -32,7 +32,7 @@ const FLAG = "boolean | 'auto'";
 const flagsSchema = type({
   "+": "reject",
   ".alignfirst.json?": FLAG,
-  ".alignfirst.md?": FLAG,
+  ".alignfirst-instructions?": FLAG,
   "DEVELOPERS.md?": FLAG,
   "docs?": FLAG,
   ".plans?": FLAG,
@@ -175,7 +175,7 @@ function mergeFlags(matches: MatchingEntry[]): Record<ItemName, Flag> {
     matches.find((match) => match.flags[item] !== undefined)?.flags[item] ?? "auto";
   return {
     ".alignfirst.json": flagOf(".alignfirst.json"),
-    ".alignfirst.md": flagOf(".alignfirst.md"),
+    ".alignfirst-instructions": flagOf(".alignfirst-instructions"),
     "DEVELOPERS.md": flagOf("DEVELOPERS.md"),
     docs: flagOf("docs"),
     ".plans": flagOf(".plans"),
@@ -216,7 +216,7 @@ function resolveLocations(
   const plans = locate(".plans");
   return {
     ".alignfirst.json": locate(".alignfirst.json"),
-    ".alignfirst.md": locate(".alignfirst.md"),
+    ".alignfirst-instructions": locate(".alignfirst-instructions"),
     "DEVELOPERS.md": locate("DEVELOPERS.md"),
     docs: locate("docs"),
     ".plans": plans,
@@ -270,11 +270,12 @@ export interface CompanionRegistration {
   added: boolean;
   /** Absolute. */
   dir: string;
+  created: boolean;
 }
 
 /**
  * Registers the main worktree of `cwd` with every item on `"auto"`, unless a key already matches
- * it, and creates its companion directory. Creates the registry when it is missing.
+ * it, and creates its companion directory when missing. Creates the registry when it is missing.
  */
 export function addCompanion(cwd: string, home: string): CompanionRegistration {
   const mainWorktree = findMainWorktree(cwd);
@@ -286,8 +287,9 @@ export function addCompanion(cwd: string, home: string): CompanionRegistration {
   const key = match?.key ?? userPathOf(mainWorktree, realHome);
   if (match === undefined) writeRegistry(registry, key);
   const dir = companionDir(mainWorktree, realHome);
-  mkdirSync(dir, { recursive: true });
-  return { registry: registry.path, key, added: match === undefined, dir };
+  const created = !existsSync(dir);
+  if (created) mkdirSync(dir, { recursive: true });
+  return { registry: registry.path, key, added: match === undefined, dir, created };
 }
 
 function userPathOf(path: string, realHome: string): string {

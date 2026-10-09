@@ -235,7 +235,9 @@ describe("aligndev guide playbook", () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     const session = await runGuide(fixture, ["working-session"]);
-    expect(session.stdout).toContain("with `.alignfirst.md` in place of `AGENTS.md`");
+    expect(session.stdout).toContain(
+      "with `.alignfirst-instructions/context.md` in place of `AGENTS.md`",
+    );
     expect(session.stdout).toContain("no branch or pull request is involved");
     const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
     expect(lifecycle.stdout).toContain(

@@ -25,7 +25,7 @@ alignfirst companion add
 alignfirst config --json
 ```
 
-`companion add` adds the project's main worktree to the registry, unless an entry already covers it, and creates the companion directory. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
+`companion add` adds the project's main worktree to the registry, unless an entry already covers it, and creates the companion directory when missing. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
 
 `companion.dir` is the companion directory, and `locations` gives each item's path.
 
@@ -37,7 +37,7 @@ Write `.alignfirst.json`, following [With `.alignfirst.json`](alignfirst-skills-
 
 ## 4. Project instructions
 
-Write `.alignfirst.md` when the project needs instructions beyond `.alignfirst.json`, such as an essential-documentation list. It holds the prose a prepared project keeps in its `AGENTS.md`, without the bootstrap section. `alignfirst context` prints it.
+Write `.alignfirst-instructions/context.md` when the project needs instructions beyond `.alignfirst.json`, such as an essential-documentation list. It holds the prose a prepared project keeps in its `AGENTS.md`, without the bootstrap section. `alignfirst context` prints it.
 
 ## 5. Docs
 

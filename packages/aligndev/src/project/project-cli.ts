@@ -85,7 +85,7 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
     return 0;
   }
   if (args.command === "status" && args.path !== undefined) {
-    const details = getProjectStatus(inventory, args.path);
+    const details = getProjectStatus(inventory, resolve(ctx.cwd, args.path));
     ctx.stdout.write(args.json ? renderProjectStatusJson(details) : renderProjectStatus(details));
     return 0;
   }
@@ -107,6 +107,7 @@ function renderUsage(aligndev: string): string {
   ${aligndev} project --help
 
 --root defaults to projectsRoot in the aligndev config, then to the working directory.
+A relative status <path> starts from the working directory.
 `;
 }
 

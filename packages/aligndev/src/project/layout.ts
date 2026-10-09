@@ -6,7 +6,7 @@ const MIN_ALIGNFIRST_VERSION = "0.5.0";
 
 export type ItemName =
   | ".alignfirst.json"
-  | ".alignfirst.md"
+  | ".alignfirst-instructions"
   | "DEVELOPERS.md"
   | "docs"
   | ".plans"
@@ -141,7 +141,7 @@ function parseLocations(value: unknown, path: string): Record<ItemName, ItemLoca
   const location = (name: ItemName) => parseLocation(value[name], path);
   return {
     ".alignfirst.json": location(".alignfirst.json"),
-    ".alignfirst.md": location(".alignfirst.md"),
+    ".alignfirst-instructions": location(".alignfirst-instructions"),
     "DEVELOPERS.md": location("DEVELOPERS.md"),
     docs: location("docs"),
     ".plans": location(".plans"),
