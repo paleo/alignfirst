@@ -51,20 +51,6 @@ To implement a plan, start a fresh agent context and ask it to execute the plan 
 
 AlignFirst stores the work files of a ticket, such as specifications, plans and summaries, in `.plans/<ticket-id>/`. It normally derives the ticket ID from the request or branch and asks when none is available. Files use a cycle letter and sequence number, such as `A1-spec.md` and `A2-plan.md`.
 
-## Global CLI
-
-To type `alignfirst` instead of `npx alignfirst`, install the CLI globally:
-
-```sh
-npm install -g alignfirst
-```
-
-### Update the global CLI
-
-```sh
-npm update -g alignfirst
-```
-
 ## Set up a project (with your agent)
 
 Temporarily install the setup-guide skill:

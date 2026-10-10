@@ -6,6 +6,22 @@ You talk to an **assistant**, the way you would to a developer on your team. It 
 
 `aligndev` is the assistant's CLI. It gives the assistant its playbook, launches and tracks the agent, and keeps the inventory of your projects. You never run it yourself: the assistant does.
 
+## The Assistant's Workflow
+
+For each task, the assistant:
+
+1. Discusses the task with the agent and has it write a **spec**.
+2. Has it write the **plans**.
+3. Has the plans **executed** in a fresh session.
+4. Has a **code review** done in another session.
+5. Has the review findings **fixed** in yet another session.
+6. For UI changes, **tests manually** and checks the dev-server logs.
+7. Has fixes made as needed.
+8. Takes **screenshots** for good measure.
+9. Has the agent **open a draft PR**.
+
+A task can also start at any intermediate step.
+
 ## Two Ways to Run the Assistant
 
 **In your coding agent.** A Claude Code or Codex session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
@@ -48,25 +64,6 @@ Then ask your session to work with aligndev.
 - Claude Code or Codex installed and logged in: `claude` then `/login`, or `codex login`.
 - Linux or macOS, or Windows through WSL.
 
-## Start as an OpenClaw Bot
-
-AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a dedicated service account running the assistant under its own name and channel identity. The communication surface, the agent and the assistant's model provider are independent choices. Each task moves from a channel into its own thread, then into an isolated project workspace. See the [product page](https://alignfirst.paroi.tech/openclaw-dev-kit) for an overview.
-
-```mermaid
-flowchart TD
-  U([User]) -->|Slack or Discord| O[OpenClaw]
-  O -->|aligndev guide and aligndev code| CA[Claude Code or Codex]
-  CA -->|AlignFirst protocols| FS[(Managed project)]
-```
-
-Install the setup skill where your agent will assemble the deployment's private administration repository:
-
-```sh
-npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
-```
-
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
-
 ## Configuration
 
 `~/.alignfirst/aligndev.config.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant:
@@ -85,6 +82,25 @@ Then ask the agent to create an assistant. The skill collects the deployment val
 - `code.unset` — environment variables to hide from the agent, such as an API key meant for another tool on the host.
 
 Unknown keys and invalid values are errors.
+
+## Start as an OpenClaw Bot
+
+AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a dedicated service account running the assistant under its own name and channel identity. The communication surface, the agent and the assistant's model provider are independent choices. Each task moves from a channel into its own thread, then into an isolated project workspace. See the [product page](https://alignfirst.paroi.tech/openclaw-dev-kit) for an overview.
+
+```mermaid
+flowchart TD
+  U([User]) -->|Slack or Discord| O[OpenClaw]
+  O -->|aligndev guide and aligndev code| CA[Claude Code or Codex]
+  CA -->|AlignFirst protocols| FS[(Managed project)]
+```
+
+Install the setup skill where your agent will assemble the deployment's private administration repository:
+
+```sh
+npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
+```
+
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 
 ## Under the Hood
 
