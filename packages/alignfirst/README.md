@@ -51,20 +51,6 @@ To implement a plan, start a fresh agent context and ask it to execute the plan 
 
 AlignFirst stores the work files of a ticket, such as specifications, plans and summaries, in `.plans/<ticket-id>/`. It normally derives the ticket ID from the request or branch and asks when none is available. Files use a cycle letter and sequence number, such as `A1-spec.md` and `A2-plan.md`.
 
-## Global CLI
-
-To type `alignfirst` instead of `npx alignfirst`, install the CLI globally:
-
-```sh
-npm install -g alignfirst
-```
-
-### Update the global CLI
-
-```sh
-npm update -g alignfirst
-```
-
 ## Set up a project (with your agent)
 
 Temporarily install the setup-guide skill:
@@ -95,8 +81,9 @@ Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without
 - `plans` — Link `.plans` to the work-files repository, check the link, archive tickets.
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
-- `context` — Print the conventions, the project instructions from `.alignfirst.md`, the documentation map when `docs/` exists, and the protocol aliases.
-- `companion add` — Register the current project in the companion registry and create its companion directory.
+- `context` — Print the conventions, the project instructions from `.alignfirst-instructions/context.md`, the documentation map when `docs/` exists, and the protocol aliases.
+- `companion register` — Register the current project in the companion registry. `--create-dir` also creates its companion directory.
+- `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
 - `doctor` — Diagnose an AlignFirst setup.
 
@@ -114,23 +101,24 @@ A companion directory holds a project's AlignFirst files outside its repository,
 {
   "paths": {
     "~/projects/team-app": { ".plans": false, "_aligndev": true },
-    "~/projects/client-api": {},
-    "~/projects": {}
+    "~/projects/client-api": {}
   }
 }
 ```
 
-- `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst.md`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
+- `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
 An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues.
 
-Run `alignfirst companion add` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless a key already matches it, and creates the companion directory. Set the flags by editing the registry.
+Run `alignfirst companion register` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless it is registered. The companion directory is created on the first write, or at once with `--create-dir`. Set the flags by editing the registry.
+
+`alignfirst companion unregister` removes the entry and keeps the directory. With `--remove-dir`, it also removes an empty directory; a non-empty one requires `--force`.
 
 ### Matching
 
-A key matches a project when it names the project's main worktree or one of its ancestors, so every worktree of a project shares one companion. `"~": {}` matches every project under the home directory. For each item, the longest matching key that sets the flag wins, and an unset flag is `"auto"`. A bare repository or a directory outside git has no companion.
+A key matches a project when it names the project's main worktree, so every worktree of a project shares one companion. A key that names another directory matches nothing, and `alignfirst doctor` warns about it. An unset flag is `"auto"`. A bare repository or a directory outside git has no companion.
 
-The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink.
+The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. Two keys can only share a directory through a `_` in a directory name: `companion register` refuses such a project, and `doctor` warns about it. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink.
 
 ### Resolution
 
@@ -146,7 +134,7 @@ The companion directory is `~/.alignfirst/companions/<name>`. The name is the ma
 
 ### Project instructions
 
-`.alignfirst.md` holds free prose for the coding agent: the project instructions a prepared project keeps in its `AGENTS.md`. `alignfirst context` prints it under `# Project Instructions`. It resolves like the other items, so a project copy works too.
+`.alignfirst-instructions/` holds Markdown instructions for the coding agent, one file per moment they apply. `context.md` holds the project instructions a prepared project keeps in its `AGENTS.md`, and `alignfirst context` prints it under `# Project Instructions`. The directory resolves like the other items, so a project copy works too.
 
 ### Agent bootstrap
 

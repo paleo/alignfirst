@@ -27,7 +27,7 @@ describe("config command", () => {
         "CLI range: none",
         "Companion: none",
         `.alignfirst.json: ${join(cwd, ".alignfirst.json")} (project, missing)`,
-        `.alignfirst.md: ${join(cwd, ".alignfirst.md")} (project, missing)`,
+        `.alignfirst-instructions: ${join(cwd, ".alignfirst-instructions")} (project, missing)`,
         `DEVELOPERS.md: ${join(cwd, "DEVELOPERS.md")} (project, missing)`,
         `docs: ${join(cwd, "docs")} (project, missing)`,
         `.plans: ${join(cwd, ".plans")} (project, missing)`,
@@ -79,10 +79,10 @@ describe("config command", () => {
       companion: {
         dir: companion,
         exists: true,
-        entries: ["~/projects/app"],
+        key: "~/projects/app",
         flags: {
           ".alignfirst.json": "auto",
-          ".alignfirst.md": "auto",
+          ".alignfirst-instructions": "auto",
           "DEVELOPERS.md": "auto",
           docs: "auto",
           ".plans": false,
@@ -95,8 +95,8 @@ describe("config command", () => {
           in: "companion",
           exists: true,
         },
-        ".alignfirst.md": {
-          path: join(companion, ".alignfirst.md"),
+        ".alignfirst-instructions": {
+          path: join(companion, ".alignfirst-instructions"),
           in: "companion",
           exists: false,
         },

@@ -664,7 +664,7 @@ describe("buildRunConfig", () => {
   it("adds the companion as a writable directory when it holds project files", () => {
     const items: ItemName[] = [
       ".alignfirst.json",
-      ".alignfirst.md",
+      ".alignfirst-instructions",
       "DEVELOPERS.md",
       "docs",
       ".plans",
@@ -699,7 +699,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     companion: { dir: "/companions/proj", exists: true },
     locations: {
       ".alignfirst.json": location(".alignfirst.json", ".alignfirst.json"),
-      ".alignfirst.md": location(".alignfirst.md", ".alignfirst.md"),
+      ".alignfirst-instructions": location(".alignfirst-instructions", ".alignfirst-instructions"),
       "DEVELOPERS.md": location("DEVELOPERS.md", "DEVELOPERS.md"),
       docs: location("docs", "docs"),
       ".plans": location(".plans", ".plans"),

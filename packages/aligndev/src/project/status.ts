@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename } from "node:path";
 
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
@@ -31,8 +31,8 @@ export interface ProjectWorktree {
   path: string;
 }
 
-export function getProjectStatus(inventory: ProjectInventory, inputPath: string): ProjectDetails {
-  const path = resolveProjectPath(inventory.root, inputPath);
+export function getProjectStatus(inventory: ProjectInventory, projectPath: string): ProjectDetails {
+  const path = realPathOrSelf(projectPath);
   const project = inventory.projects.find((candidate) => candidate.path === path);
   if (project === undefined) {
     throw new Error(
@@ -43,8 +43,7 @@ export function getProjectStatus(inventory: ProjectInventory, inputPath: string)
   return buildProjectDetails(project);
 }
 
-function resolveProjectPath(root: string, inputPath: string): string {
-  const path = isAbsolute(inputPath) ? inputPath : resolve(root, inputPath);
+function realPathOrSelf(path: string): string {
   try {
     return realpathSync(path);
   } catch (error) {

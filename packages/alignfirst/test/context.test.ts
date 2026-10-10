@@ -43,10 +43,14 @@ describe("context command", () => {
     );
   });
 
-  it("prints the project instructions from .alignfirst.md after the conventions", async () => {
+  it("prints the context instructions after the conventions", async () => {
     const cwd = temp();
     mkdirSync(join(cwd, "docs"));
-    writeFileSync(join(cwd, ".alignfirst.md"), "\nRun the tests with `npm test`.\n\n");
+    mkdirSync(join(cwd, ".alignfirst-instructions"));
+    writeFileSync(
+      join(cwd, ".alignfirst-instructions", "context.md"),
+      "\nRun the tests with `npm test`.\n\n",
+    );
     const result = await runMain(["context"], { cwd });
     expect(result.stdout).toContain(
       "ask before default-branch operations.\n\n# Project Instructions\n\nRun the tests with `npm test`.\n\n# Docmap Usage\n\n",
@@ -58,7 +62,11 @@ describe("context command", () => {
     dirs.push(root);
     mkdirSync(join(companion, "docs"), { recursive: true });
     writeFileSync(join(companion, "docs", "topic.md"), "---\ntitle: Topic\n---\n\n# Topic\n");
-    writeFileSync(join(companion, ".alignfirst.md"), "Companion instructions.\n");
+    mkdirSync(join(companion, ".alignfirst-instructions"));
+    writeFileSync(
+      join(companion, ".alignfirst-instructions", "context.md"),
+      "Companion instructions.\n",
+    );
     const result = await runMain(["context"], { cwd: project, home });
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("# Project Instructions\n\nCompanion instructions.\n");

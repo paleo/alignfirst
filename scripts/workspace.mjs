@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-  sharedDirs: [".plans", ".local", "alignfirst-dev-kit-tests/artifacts"],
+  sharedDirs: [".plans", ".local", "aligndev-openclaw-tests/artifacts"],
   runtimeDir: ".local-wt",
   gitignoredFiles: [
     { path: ".vscode/settings.json", source: { kind: "mainWorktree" }, optional: true },
     {
-      path: "alignfirst-dev-kit-tests/.env.local",
+      path: "aligndev-openclaw-tests/.env.local",
       source: { kind: "mainWorktree" },
       optional: true,
     },

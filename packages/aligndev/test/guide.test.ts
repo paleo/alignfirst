@@ -235,13 +235,15 @@ describe("aligndev guide playbook", () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     const session = await runGuide(fixture, ["working-session"]);
-    expect(session.stdout).toContain("with `.alignfirst.md` in place of `AGENTS.md`");
+    expect(session.stdout).toContain(
+      "with `.alignfirst-instructions/context.md` in place of `AGENTS.md`",
+    );
     expect(session.stdout).toContain("no branch or pull request is involved");
     const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
     expect(lifecycle.stdout).toContain(
       'its procedure "Set up a project through its companion" for an assistant',
     );
-    expect(lifecycle.stdout).toContain("Run `alignfirst companion add` from PROJECT_PATH.");
+    expect(lifecycle.stdout).toContain("Run `alignfirst companion register` from PROJECT_PATH.");
   });
 
   it("requires a configured or detected agent for the code topic only", async () => {

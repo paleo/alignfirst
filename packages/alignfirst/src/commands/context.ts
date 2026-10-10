@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { CliError } from "../cli-error.js";
 import { renderCommandForm } from "../command-form.js";
@@ -20,9 +21,9 @@ export function runContext(ctx: CommandContext, args: string[]): number {
 }
 
 function writeProjectInstructions(ctx: CommandContext): void {
-  const location = layoutOf(ctx).locations[".alignfirst.md"];
-  if (!location.exists) return;
-  const content = readInstructions(location.path).trim();
+  const path = join(layoutOf(ctx).locations[".alignfirst-instructions"].path, "context.md");
+  if (!existsSync(path)) return;
+  const content = readInstructions(path).trim();
   if (content === "") return;
   ctx.stdout.write(`\n# Project Instructions\n\n${content}\n`);
 }

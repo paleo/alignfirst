@@ -2,15 +2,33 @@
 
 Autonomous software development. You say what you want; the assistant drives the coding agents and brings you the decisions.
 
-You talk to an **assistant**, the way you would to a developer on your team. It never touches the code itself. It isolates each task in its own workspace, then hands the investigation and the coding to an AI coding agent, **the agent**, which follows the [AlignFirst](https://alignfirst.paroi.tech/) protocols: specify, plan, implement, review. The assistant reads the agent's work, tests it, asks you what only you can decide, and opens the pull request.
+See the [product page](https://alignfirst.paroi.tech/aligndev) for an overview.
+
+You talk to an **assistant**, the way you would to a developer on your team. It never touches the code itself. It isolates each task in its own workspace, then hands the investigation and the coding to an AI coding agent, **the agent**, which follows the AlignFirst protocols: specify, plan, implement. The assistant reads the agent's work, tests it, asks you what only you can decide, and opens the pull request.
 
 `aligndev` is the assistant's CLI. It gives the assistant its playbook, launches and tracks the agent, and keeps the inventory of your projects. You never run it yourself: the assistant does.
+
+## The Assistant's Workflow
+
+For each task, the assistant:
+
+1. Discusses the task with the agent and has it write a **spec**.
+2. Has it write the **plans**.
+3. Has the plans **executed** in a fresh session.
+4. Has a **code review** done in another session.
+5. Has the review findings **fixed** in yet another session.
+6. For UI changes, **tests manually** and checks the dev-server logs.
+7. Has fixes made as needed.
+8. Takes **screenshots** for good measure.
+9. Has the agent **open a draft PR**.
+
+A task can also start at any intermediate step.
 
 ## Two Ways to Run the Assistant
 
 **In your coding agent.** A Claude Code or Codex session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
 
-**As an OpenClaw bot.** The [AlignFirst Dev Kit](https://alignfirst.paroi.tech/openclaw-dev-kit) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
+**As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
 Either way, the agent is Claude Code or Codex. A coding-agent assistant launches its own kind by default.
 
@@ -35,7 +53,7 @@ Then start a session in the project and invoke `/aligndev` in Claude Code, or `$
 Add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
 
 ```markdown
-## Aligndev
+## AlignDev
 
 When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it.
 ```
@@ -67,6 +85,25 @@ Then ask your session to work with aligndev.
 
 Unknown keys and invalid values are errors.
 
+## Start as an OpenClaw Bot
+
+AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a dedicated service account running the assistant under its own name and channel identity. The communication surface, the agent and the assistant's model provider are independent choices. Each task moves from a channel into its own thread, then into an isolated project workspace.
+
+```mermaid
+flowchart TD
+  U([User]) -->|Slack or Discord| O[OpenClaw]
+  O -->|aligndev guide and aligndev code| CA[Claude Code or Codex]
+  CA -->|AlignFirst protocols| FS[(Managed project)]
+```
+
+Install the setup skill where your agent will assemble the deployment's private administration repository:
+
+```sh
+npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
+```
+
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+
 ## Under the Hood
 
-`aligndev` documents itself for the assistant: `aligndev --help`, then `aligndev guide`, print everything it needs. Maintainers: see [aligndev Architecture](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-architecture.md).
+`aligndev` documents itself for the assistant: `aligndev --help`, then `aligndev guide`, print everything it needs. Maintainers: see [aligndev Architecture](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-architecture.md) and the [AlignDev for OpenClaw map](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-openclaw/aligndev-openclaw.md).

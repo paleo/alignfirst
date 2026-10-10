@@ -18,6 +18,8 @@ import {
 import {
   type CompanionLayout,
   registryPath,
+  sharedCompanionDirs,
+  strayRegistryKeys,
   ITEM_NAMES,
   type ItemName,
   layoutOf,
@@ -99,14 +101,27 @@ function inspectCompanion(ctx: CommandContext): DoctorLine[] {
     level: "ok",
     text: `registry ${existsSync(path) ? "valid" : "absent"} (${path})`,
   };
-  if (layout.companion === null) return [file, { level: "ok", text: "none" }];
+  const registryLines = [
+    file,
+    ...strayRegistryKeys(ctx.home).map(describeStrayKey),
+    ...sharedCompanionDirs(ctx.home).map(describeSharedDir),
+  ];
+  if (layout.companion === null) return [...registryLines, { level: "ok", text: "none" }];
   const { companion } = layout;
   return [
-    file,
-    { level: "ok", text: `matched by ${companion.entries.join(", ")}` },
+    ...registryLines,
+    { level: "ok", text: `key ${companion.key}` },
     { level: "ok", text: `directory ${companion.dir}${companion.exists ? "" : " (missing)"}` },
     ...ITEM_NAMES.map((name) => describeItem(name, layout, companion)),
   ];
+}
+
+function describeStrayKey(key: string): DoctorLine {
+  return { level: "warn", text: `key ${key} names no git main worktree (ignored)` };
+}
+
+function describeSharedDir({ dir, keys }: { dir: string; keys: string[] }): DoctorLine {
+  return { level: "warn", text: `keys ${keys.join(", ")} share the companion directory ${dir}` };
 }
 
 function describeItem(

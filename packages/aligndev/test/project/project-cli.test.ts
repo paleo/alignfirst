@@ -480,7 +480,7 @@ describe("project classification and companions", () => {
     const companionsRoot = join(fixture.home, ".alignfirst", "companions");
     mkdirSync(companionsRoot, { recursive: true });
     writeRegistry(fixture.home, {
-      paths: { [fixture.root]: { ".plans": true, "DEVELOPERS.md": true } },
+      paths: { [project]: { ".plans": true, "DEVELOPERS.md": true } },
     });
     const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
     mkdirSync(join(companion, ".plans"), { recursive: true });
@@ -515,7 +515,7 @@ describe("project classification and companions", () => {
     const fixture = makeFixture({});
     const flat = makeRepository(fixture.root, "a_b");
     const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
-    writeRegistry(fixture.home, { paths: { [fixture.root]: {} } });
+    writeRegistry(fixture.home, { paths: { [flat]: {}, [nested]: {} } });
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);
@@ -568,7 +568,11 @@ describe("project status", () => {
           in: "project",
           exists: true,
         },
-        ".alignfirst.md": { path: join(project, ".alignfirst.md"), in: "project", exists: false },
+        ".alignfirst-instructions": {
+          path: join(project, ".alignfirst-instructions"),
+          in: "project",
+          exists: false,
+        },
         "DEVELOPERS.md": { path: join(project, "DEVELOPERS.md"), in: "project", exists: false },
         docs: { path: join(project, "docs"), in: "project", exists: false },
         ".plans": { path: join(project, ".plans"), in: "project", exists: false },
@@ -598,6 +602,17 @@ describe("project status", () => {
     expect(rejected.code).toBe(1);
     expect(rejected.stderr).toContain("is not a project of");
     expect(rejected.stderr).toContain("main-worktree path");
+  });
+
+  it("resolves a relative path against the working directory", async () => {
+    const fixture = makeFixture({});
+    const project = makeRepository(fixture.root, "project");
+
+    const result = await runProjects(fixture, ["status", ".", "--json", "--root", fixture.root], {
+      cwd: project,
+    });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).path).toBe(project);
   });
 });
 

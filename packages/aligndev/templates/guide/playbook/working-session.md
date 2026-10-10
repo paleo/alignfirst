@@ -349,7 +349,7 @@ A project has up to three entry points:
 - `DEVELOPERS.md` — the agent's user, human or AI: you. This project has none, so `README.md` is also your guide, read at DEVELOPERS_PATH.
 {{/readme}}
 {{/codingAgent}}
-- `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
+- `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst-instructions/context.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.
 
@@ -490,10 +490,10 @@ When the user brings up acceptance testing, first be sure who runs it — ask wh
 ### Project rules and docs
 
 {{#openclaw}}
-A project whose `.alignfirst.md` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNDEV}} project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
+A project whose `.alignfirst-instructions` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNDEV}} project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
 {{/openclaw}}
 {{#codingAgent}}
-A project whose `.alignfirst.md` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNFIRST}} config --json`, run from PROJECT_PATH) keeps its rules in those companion files, with `.alignfirst.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
+A project whose `.alignfirst-instructions` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNFIRST}} config --json`, run from PROJECT_PATH) keeps its rules in those companion files, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
 {{/codingAgent}}
 
 Two triggers, both edited through the agent:

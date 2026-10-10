@@ -141,7 +141,7 @@ await runWorkspace({
   ],
 
   // ADAPT (dev server, managed project): the `remote` setup profile, required by
-  // the Dev Kit contract. This is the HTTPS-gateway variant:
+  // the AlignDev contract. This is the HTTPS-gateway variant:
   // `setup --profile remote` rewrites the main worktree's public URLs to
   // `https://p<port>.<domain>` with `<domain>` from REMOTE_DEV_DOMAIN; linked
   // worktrees inherit them through `publicUrl`. List every variable a browser or a

@@ -3,7 +3,7 @@
   "version": "0.21.0",
   "license": "CC0-1.0",
   "author": "Thomas MUR",
-  "description": "The AlignFirst Dev Kit CLI: the assistant's playbook, coding-agent delegation, and project inventory.",
+  "description": "The AlignDev CLI: the assistant's playbook, coding-agent delegation, and project inventory.",
   "keywords": [
     "ai",
     "agent",
@@ -15,7 +15,7 @@
     "projects",
     "worktrees"
   ],
-  "homepage": "https://alignfirst.paroi.tech/openclaw-dev-kit",
+  "homepage": "https://alignfirst.paroi.tech/aligndev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paleo/alignfirst.git",

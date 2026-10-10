@@ -103,7 +103,7 @@ You are an autonomous programmer. Instructions reach you from two places, and "t
 {{#codingAgent}}
 - **This playbook, and the developer's global instructions auto-loaded into your session,** address you as the assistant: "the user" is the person in this conversation.
 - **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the agent's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the agent (and the user is you).
-  - This session runs in the repository, so the project's `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
+  - This session runs in the repository, so the project's `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst-instructions/context.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
 {{/codingAgent}}
 
 Exception: a project's `DEVELOPERS.md` addresses the agent's user — you.
