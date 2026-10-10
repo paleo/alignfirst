@@ -1,5 +1,13 @@
 # aligndev
 
+## 0.22.1
+
+### Patch Changes
+
+- 77ad859: Dropped the `arktype` dependency.
+- 77ad859: Requires alignfirst 0.9.0 or later. An older alignfirst in a project is reported as an issue on that project, and no longer stops the inventory commands.
+- 77ad859: Raised the context threshold for planning in the spec session from 150k to 160k tokens.
+
 ## 0.22.0
 
 ### Minor Changes

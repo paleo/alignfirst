@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.10.0
+
+### Minor Changes
+
+- 77ad859: Dropped the `arktype` and `semver` dependencies. The `cli` field of `.alignfirst.json` now accepts full `x.y.z` versions with `^`, `~`, `>=`, `>`, `<=`, `<` or `=`, joined by spaces or `||`; other ranges are rejected.
+
 ## 0.9.0
 
 ### Minor Changes
