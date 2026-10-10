@@ -30,7 +30,9 @@ Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or
 }
 ```
 
-## 3. Install the skill
+## 3. Install the skill globally
+
+The `aligndev` skill goes in the developer's global agent configuration:
 
 ```sh
 npx -y skills add https://github.com/paleo/alignfirst --global --yes --skill aligndev </dev/null

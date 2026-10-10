@@ -1,14 +1,11 @@
 ---
 name: alignfirst-setup-guide
 description: >-
-  Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a
-  consumer repository, or through a companion directory that leaves the repository untouched;
-  prepare a repository and a Linux deployment of AlignDev for OpenClaw, or set up a coding agent as
-  the AlignFirst assistant.
+  Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a consumer repository, or through a companion directory that leaves the repository untouched; set up AlignDev (`aligndev`), either as a repository and a Linux deployment for OpenClaw, or as a global skill that makes a coding agent the AlignFirst assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.47.1"
+  version: "0.47.2"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -48,6 +45,7 @@ upgrade only what they requested.
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
 - **docmap**: [docmap-setup.md](references/docmap-setup.md).
 - **workspace**: [workspace-setup.md](references/workspace-setup.md).
+- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code or Codex). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally.
 
 Do not present the tooling menu or add unrelated tools on this route.
 
