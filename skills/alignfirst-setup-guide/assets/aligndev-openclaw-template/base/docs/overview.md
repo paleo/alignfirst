@@ -57,7 +57,7 @@ The dev-server range `{{PORT_RANGE_FIRST}}–{{PORT_RANGE_LAST}}` is closed.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status <repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
 ```
 
 Adding one: [add-project.md](operations/add-project.md).

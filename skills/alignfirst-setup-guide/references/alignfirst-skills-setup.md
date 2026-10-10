@@ -151,7 +151,7 @@ Replace any `Docmap - Seek Documentation` section and redundant protocol instruc
 A developer who works in repositories without this section, such as companion-backed ones ([companion-setup.md](companion-setup.md)), adds one line to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent):
 
 ```markdown
-In a git repository, run `alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
+In a git repository, run `npx -y alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
 ```
 
-The line uses the global CLI and no agent-specific mechanism. `alignfirst context` works in any repository, with or without AlignFirst files.
+The line uses no agent-specific mechanism. `alignfirst context` works in any repository, with or without AlignFirst files.

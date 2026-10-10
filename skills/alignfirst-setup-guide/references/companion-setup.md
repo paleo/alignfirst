@@ -8,21 +8,17 @@ This mode supports the AlignFirst protocols, the skills, the work files and docm
 
 For a project prepared for an assistant, apply [For an Assistant](#for-an-assistant) to the steps below.
 
-## 1. Install the CLI
+## 1. Skills
 
-```sh
-npm install -g alignfirst
-```
-
-The global CLI is required: the agent bootstrap line runs the bare `alignfirst`. Install the skills through [Install the Skills](alignfirst-skills-setup.md#install-the-skills) when the user wants them. The `alignfirst` skill is unnecessary: `alignfirst context` prints the protocols.
+The commands below run the CLI through `npx`, with no installation. Install the skills through [Install the Skills](alignfirst-skills-setup.md#install-the-skills) when the user wants them. The `alignfirst` skill is unnecessary: `alignfirst context` prints the protocols.
 
 ## 2. Declare the companion
 
 From the repository, register the project and read the layout:
 
 ```sh
-alignfirst companion register
-alignfirst config --json
+npx -y alignfirst companion register
+npx -y alignfirst config --json
 ```
 
 `companion register` adds the project's main worktree to the registry, unless it is registered. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
@@ -45,7 +41,7 @@ A `docs/` directory in the repository stays in use. Otherwise, bootstrap one at 
 
 ## 6. Work files
 
-Create `.plans` in the companion. With a work-files repository, run `alignfirst plans setup <clone>` from the repository: it creates the link at the companion location. Otherwise:
+Create `.plans` in the companion. With a work-files repository, run `npx -y alignfirst plans setup <clone>` from the repository: it creates the link at the companion location. Otherwise:
 
 ```sh
 mkdir -p <companion>/.plans
@@ -58,7 +54,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the
 ## 8. Check
 
 ```sh
-alignfirst doctor
+npx -y alignfirst doctor
 git status
 ```
 
@@ -68,7 +64,7 @@ The doctor must pass, and `git status` in the repository must show no change.
 
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
-- **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the launched agent's prompt.
+- **Skills and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI globally, and `aligndev code` puts the context into the launched agent's prompt.
 - **Companion (step 2):** on an AlignDev OpenClaw host, the assistant runs `alignfirst companion register` itself before it delegates the preparation.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.

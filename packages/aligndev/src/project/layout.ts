@@ -2,7 +2,7 @@ import { runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
-const MIN_ALIGNFIRST_VERSION = "0.5.0";
+const MIN_ALIGNFIRST_VERSION = "0.9.0";
 
 export type ItemName =
   | ".alignfirst.json"
@@ -67,6 +67,7 @@ export function readProjectReport(
   } catch (error) {
     throw new Error(`Invalid alignfirst config report for ${cwd}: ${errorMessage(error)}`);
   }
+  if (isOutdatedReport(value)) return { error: outdatedAlignfirst(cwd) };
   return parseProjectReport(value, cwd);
 }
 
@@ -74,9 +75,22 @@ function firstLine(value: string): string {
   return value.trim().split("\n", 1)[0] ?? "";
 }
 
+// Before alignfirst 0.9.0, the report had no `.alignfirst-instructions` location.
+function isOutdatedReport(value: unknown): boolean {
+  return (
+    isRecord(value) && !(isRecord(value.locations) && ".alignfirst-instructions" in value.locations)
+  );
+}
+
+function outdatedAlignfirst(path: string): string {
+  return (
+    `The alignfirst CLI used in ${path} is too old: aligndev requires alignfirst ` +
+    `${MIN_ALIGNFIRST_VERSION} or later.`
+  );
+}
+
 function parseProjectReport(value: unknown, path: string): ProjectReport {
   if (!isRecord(value)) throw invalidReport(path);
-  if (value.source === "root" || value.locations === undefined) throw outdatedAlignfirst(path);
   return {
     source: parseSource(value.source, path),
     cli: parseCli(value.cli, path),
@@ -163,13 +177,6 @@ function parseLocation(value: unknown, path: string): ItemLocation {
 
 function invalidReport(path: string): Error {
   return new Error(`Invalid alignfirst config report for ${path}`);
-}
-
-function outdatedAlignfirst(path: string): Error {
-  return new Error(
-    `The alignfirst CLI used in ${path} is too old: aligndev requires alignfirst ` +
-      `${MIN_ALIGNFIRST_VERSION} or later.`,
-  );
 }
 
 function isPortRange(value: unknown): value is PortRange {
