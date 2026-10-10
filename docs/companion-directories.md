@@ -38,7 +38,7 @@ The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed pa
 
 - `paths` — keys are the main worktree paths of projects, absolute or `~/`. Each value sets optional flags for the six **items**: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans`, `_aligndev`. A flag is `true`, `false` or `"auto"`.
 
-The arktype schema rejects unknown keys at every level. An unreadable or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
+Registry validation rejects unknown keys at every level. An unreadable or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
 
 ## Matching and naming
 

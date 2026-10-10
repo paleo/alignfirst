@@ -23,7 +23,7 @@ Run `secrets audit` from a login shell, as above: the file provider resolves fro
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list --json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status <repo> --json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo> --json'
 ```
 
 A project absent from the listing has no `.alignfirst.json` or sits outside a marked projects directory. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project-breaks-its-workspace-registry).

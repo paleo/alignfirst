@@ -428,6 +428,26 @@ describe("project discovery", () => {
     );
   });
 
+  it("reports a project whose alignfirst is too old as an issue", async () => {
+    const fixture = makeFixture({});
+    const old = makeRepository(fixture.root, "old");
+    const report = JSON.stringify({ source: null, cli: null, config: null, locations: {} });
+    const result = await runProjects(fixture, ["list", "--json"], {
+      alignfirstCommand: [
+        process.execPath,
+        "-e",
+        `process.stdout.write(${JSON.stringify(report)})`,
+      ],
+    });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).issues).toEqual([
+      {
+        path: old,
+        message: `The alignfirst CLI used in ${old} is too old: aligndev requires alignfirst 0.9.0 or later.`,
+      },
+    ]);
+  });
+
   it("fails the listing when alignfirst is missing", async () => {
     const fixture = makeFixture({});
     makeRepository(fixture.root, "candidate");

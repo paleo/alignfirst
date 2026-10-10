@@ -1,25 +1,31 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { type } from "arktype";
-
 import { CODING_AGENTS, type CodingAgent, detectCodingAgents } from "./code/coding-agent.js";
 import { errorMessage } from "./errors.js";
+import {
+  arrayOf,
+  boolean,
+  literal,
+  nonEmptyString,
+  object,
+  optional,
+  parseShape,
+  string,
+} from "./json-shape.js";
 
 export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 
-const codeSchema = type({
-  "+": "reject",
-  "agent?": type.enumerated(...CODING_AGENTS),
-  "models?": "string[]",
-  "skipPermissions?": "boolean",
-  "unset?": "string[]",
+const codeShape = object<CodeConfigFile>({
+  agent: optional(literal(...CODING_AGENTS)),
+  models: optional(arrayOf(string)),
+  skipPermissions: optional(boolean),
+  unset: optional(arrayOf(string)),
 });
-const configSchema = type({
-  "+": "reject",
-  "platform?": type.enumerated(...PLATFORMS),
-  "projectsRoot?": "string > 0",
-  "code?": codeSchema,
+const configShape = object<ConfigFile>({
+  platform: optional(literal(...PLATFORMS)),
+  projectsRoot: optional(nonEmptyString),
+  code: optional(codeShape),
 });
 
 export type Platform = (typeof PLATFORMS)[number];
@@ -52,6 +58,19 @@ export interface CodeConfig extends LoadedCodeConfig {
   agent: CodingAgent;
 }
 
+interface ConfigFile {
+  platform?: Platform;
+  projectsRoot?: string;
+  code?: CodeConfigFile;
+}
+
+interface CodeConfigFile {
+  agent?: CodingAgent;
+  models?: string[];
+  skipPermissions?: boolean;
+  unset?: string[];
+}
+
 // An absent file is a normal state: every key takes its default.
 export function loadConfig(home: string): LoadedConfig {
   const path = join(home, ".alignfirst", "aligndev.config.json");
@@ -72,16 +91,14 @@ export function loadConfig(home: string): LoadedConfig {
   };
 }
 
-function parseConfigFile(path: string): typeof configSchema.infer {
+function parseConfigFile(path: string): ConfigFile {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     throw invalidConfig(path, errorMessage(error));
   }
-  const config = configSchema(value);
-  if (config instanceof type.errors) throw invalidConfig(path, config.summary.split("\n", 1)[0]);
-  return config;
+  return parseShape(configShape, value, (detail) => invalidConfig(path, detail));
 }
 
 function invalidConfig(path: string, detail: string): Error {

@@ -141,7 +141,7 @@ The companion directory is `~/.alignfirst/companions/<name>`. The name is the ma
 An agent reads a repository's `AGENTS.md` on its own, but never a companion. When your repositories carry no AlignFirst instructions, add this line to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
 
 ```text
-In a git repository, run `alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
+In a git repository, run `npx -y alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
 ```
 
 ## Upgrade from v1, v2, or v3

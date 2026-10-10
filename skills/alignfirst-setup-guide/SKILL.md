@@ -8,7 +8,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.47.0"
+  version: "0.47.1"
   repository: https://github.com/paleo/alignfirst
 ---
 

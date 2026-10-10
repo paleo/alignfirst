@@ -1,24 +1,29 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { type } from "arktype";
-
 import { errorMessage } from "../errors.js";
+import {
+  integerBetween,
+  matching,
+  nonEmptyArrayOf,
+  object,
+  optional,
+  parseShape,
+  string,
+} from "../json-shape.js";
 import { formatRange } from "./format.js";
 
 export const MARKER_FILENAME = ".alignfirst-projects.json";
 
-const markerPortRangeSchema = type({
-  "+": "reject",
-  first: "1 <= number.integer <= 65535",
-  last: "1 <= number.integer <= 65535",
-  "code?": /^[a-z][a-z0-9-]*$/,
-  "description?": "string",
+const markerPortRangeShape = object<MarkerPortRange>({
+  first: integerBetween(1, 65_535),
+  last: integerBetween(1, 65_535),
+  code: optional(matching(/^[a-z][a-z0-9-]*$/)),
+  description: optional(string),
 });
-const markerSchema = type({
-  "+": "reject",
-  "description?": "string",
-  "portRanges?": markerPortRangeSchema.array().atLeastLength(1),
+const markerShape = object<ProjectsMarker>({
+  description: optional(string),
+  portRanges: optional(nonEmptyArrayOf(markerPortRangeShape)),
 });
 
 export interface PortRange {
@@ -45,10 +50,7 @@ export function readMarker(dir: string): ProjectsMarker | undefined {
   } catch (error) {
     throw invalidMarker(path, errorMessage(error));
   }
-  const marker = markerSchema(value);
-  if (marker instanceof type.errors) {
-    throw invalidMarker(path, marker.summary.split("\n", 1)[0]);
-  }
+  const marker = parseShape(markerShape, value, (detail) => invalidMarker(path, detail));
   if (marker.portRanges !== undefined) assertValidPortRanges(marker.portRanges, path);
   return marker;
 }

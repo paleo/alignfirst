@@ -5,12 +5,28 @@ import { describe, expect, it } from "vitest";
 import { readProjectReport } from "../../src/project/layout.js";
 
 describe("readProjectReport", () => {
+  const cwd = tmpdir();
+  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires alignfirst 0.9.0 or later.`;
+
   it("names the minimum alignfirst version for a report without locations", () => {
-    const report = JSON.stringify({ source: "root", cli: null, config: null });
-    const command = [process.execPath, "-e", `process.stdout.write(${JSON.stringify(report)})`];
-    const cwd = tmpdir();
-    expect(() => readProjectReport(command, cwd, process.env)).toThrow(
-      `The alignfirst CLI used in ${cwd} is too old: aligndev requires alignfirst 0.5.0 or later.`,
-    );
+    const command = reportCommand({ source: "root", cli: null, config: null });
+    expect(readProjectReport(command, cwd, process.env)).toEqual({ error: tooOld });
+  });
+
+  it("names the minimum alignfirst version for a report without .alignfirst-instructions", () => {
+    const location = { path: cwd, in: "project", exists: false };
+    const command = reportCommand({
+      source: null,
+      cli: null,
+      config: null,
+      companion: null,
+      locations: { ".alignfirst.json": location, ".alignfirst.md": location },
+    });
+    expect(readProjectReport(command, cwd, process.env)).toEqual({ error: tooOld });
   });
 });
+
+function reportCommand(report: object): string[] {
+  const json = JSON.stringify(report);
+  return [process.execPath, "-e", `process.stdout.write(${JSON.stringify(json)})`];
+}

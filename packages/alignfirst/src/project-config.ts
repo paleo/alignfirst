@@ -1,45 +1,46 @@
 import { readFileSync } from "node:fs";
 
-import { type } from "arktype";
-import semver from "semver";
-
 import { CliError } from "./cli-error.js";
 import { errorMessage } from "./errors.js";
+import {
+  boolean,
+  integerBetween,
+  literal,
+  nonEmptyString,
+  object,
+  optional,
+  parseShape,
+} from "./json-shape.js";
 import type { ProjectLayout } from "./project-layout.js";
+import { isValidVersionRange } from "./version-range.js";
 
 export const PROJECT_CONFIG_FILENAME = ".alignfirst.json";
 
-const portRangeSchema = type({
-  "+": "reject",
-  first: "1 <= number.integer <= 65535",
-  last: "1 <= number.integer <= 65535",
+const portRangeShape = object<PortRange>({
+  first: integerBetween(1, 65_535),
+  last: integerBetween(1, 65_535),
 });
-
-const plansSchema = type({
-  "+": "reject",
-  "folder?": "string > 0",
-  "autoArchive?": "boolean",
+const plansShape = object<PlansConfig>({
+  folder: optional(nonEmptyString),
+  autoArchive: optional(boolean),
 });
-const commitSchema = type({
-  "+": "reject",
-  style: "'conventionalCommit'",
-  "ticketReference?": "'bracketed' | 'bracketedHash'",
+const commitShape = object<CommitConfig>({
+  style: literal("conventionalCommit"),
+  ticketReference: optional(literal("bracketed", "bracketedHash")),
 });
-const gitSchema = type({
-  "+": "reject",
-  "defaultBranch?": "string > 0",
-  "branchNameTemplate?": "string > 0",
-  "commit?": commitSchema,
-  "agentCoauthoring?": "boolean",
+const gitShape = object<GitConfig>({
+  defaultBranch: optional(nonEmptyString),
+  branchNameTemplate: optional(nonEmptyString),
+  commit: optional(commitShape),
+  agentCoauthoring: optional(boolean),
 });
-const projectConfigSchema = type({
-  "+": "reject",
-  schemaVersion: "1",
-  "cli?": "string > 0",
-  "ticketIdPattern?": "string > 0",
-  "plans?": plansSchema,
-  "portRange?": portRangeSchema,
-  "git?": gitSchema,
+const projectConfigShape = object<ProjectConfig>({
+  schemaVersion: literal(1),
+  cli: optional(nonEmptyString),
+  ticketIdPattern: optional(nonEmptyString),
+  plans: optional(plansShape),
+  portRange: optional(portRangeShape),
+  git: optional(gitShape),
 });
 
 export interface ProjectConfig {
@@ -95,10 +96,9 @@ export function readProjectConfig(path: string): ProjectConfig {
 }
 
 export function validateProjectConfig(value: unknown, label: string): ProjectConfig {
-  const config = projectConfigSchema(value);
-  if (config instanceof type.errors) throw invalidConfig(label, config.summary.split("\n", 1)[0]);
-  if (config.cli !== undefined && semver.validRange(config.cli) === null)
-    throw invalidConfig(label, `cli is not a valid semver range: ${config.cli}`);
+  const config = parseShape(projectConfigShape, value, (detail) => invalidConfig(label, detail));
+  if (config.cli !== undefined && !isValidVersionRange(config.cli))
+    throw invalidConfig(label, `cli is not a supported version range: ${config.cli}`);
   if (config.ticketIdPattern !== undefined) assertValidPattern(config.ticketIdPattern, label);
   if (config.portRange !== undefined) assertValidPortRange(config.portRange, label);
   return config;

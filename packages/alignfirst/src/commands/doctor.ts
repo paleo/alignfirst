@@ -2,8 +2,6 @@ import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-import semver from "semver";
-
 import type { CommandContext } from "../context.js";
 import { resolveDefaultBranch } from "../default-branch.js";
 import { errorMessage } from "../errors.js";
@@ -28,6 +26,7 @@ import {
 } from "../project-layout.js";
 import { COMMAND_SKILLS, findInstalledSkill, type InstalledSkill } from "../skills.js";
 import { cliRangeResult } from "../version-guard.js";
+import { isAheadOfRange } from "../version-range.js";
 
 interface DoctorLine {
   level: "ok" | "warn" | "error";
@@ -89,7 +88,7 @@ function inspectConfig(
     level: result.satisfied ? "ok" : "error",
     text: `${result.satisfied ? "satisfies" : "does not satisfy"} ${result.range}`,
   });
-  if (semver.gtr(ctx.version, result.range))
+  if (isAheadOfRange(ctx.version, result.range))
     lines.push({ level: "warn", text: `${ctx.version} is ahead of ${result.range}` });
   return lines;
 }
@@ -203,11 +202,17 @@ function describeCommandSkill({ name, installed }: CommandSkill): DoctorLine {
 
 function describeInstalledSkill(name: string, installed: InstalledSkill): DoctorLine {
   const version = installed.version ?? "unknown";
-  const parsed = semver.parse(installed.version);
-  if (parsed === null || parsed.major < 4)
+  const major = majorOf(installed.version);
+  if (major === undefined || major < 4)
     return {
       level: "warn",
       text: `${name} ${version} predates v4; update: npx -y skills update --global --yes`,
     };
   return { level: "ok", text: `${name} ${version} (${installed.root})` };
+}
+
+function majorOf(version: string | undefined): number | undefined {
+  if (version === undefined) return;
+  const match = /^(\d+)\./.exec(version);
+  return match === null ? undefined : Number(match[1]);
 }

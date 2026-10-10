@@ -96,7 +96,7 @@ Bring the dev server up, probe the URL it prints, bring it down, then inspect th
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- down'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status <repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
 ```
 
 ## Remove
