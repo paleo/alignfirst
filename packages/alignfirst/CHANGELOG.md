@@ -1,5 +1,12 @@
 # alignfirst
 
+## 0.9.0
+
+### Minor Changes
+
+- de96381: Registry keys now match a project's main worktree only: replace a parent-directory key with one entry per project (`alignfirst doctor` warns about keys that match nothing). Renamed `alignfirst companion add` to `companion register`: it creates the companion directory only with `--create-dir`, and refuses a project whose companion directory another key uses. Added `alignfirst companion unregister`, which removes the directory with `--remove-dir` (`--force` when not empty).
+- de96381: Replaced `.alignfirst.md` with `.alignfirst-instructions/context.md`: move the file there.
+
 ## 0.8.0
 
 ### Minor Changes

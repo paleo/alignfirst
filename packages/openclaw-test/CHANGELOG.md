@@ -1,5 +1,11 @@
 # @alignfirst/openclaw-test
 
+## 0.23.2
+
+### Patch Changes
+
+- de96381: Renamed the AlignFirst Dev Kit to AlignDev; its OpenClaw deployment is AlignDev for OpenClaw. The product page moved to <https://alignfirst.paroi.tech/aligndev>.
+
 ## 0.23.1
 
 ### Patch Changes

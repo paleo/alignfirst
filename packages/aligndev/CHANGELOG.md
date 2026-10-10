@@ -1,5 +1,15 @@
 # aligndev
 
+## 0.22.0
+
+### Minor Changes
+
+- de96381: `aligndev project status` resolves a relative path against the working directory, so `status .` works from a project. Renamed the `.alignfirst.md` companion item to `.alignfirst-instructions`. The playbook unregisters a project's companion before removing the project, and deletes the companion directory when the user chooses to.
+
+### Patch Changes
+
+- de96381: Renamed the AlignFirst Dev Kit to AlignDev; its OpenClaw deployment is AlignDev for OpenClaw. The product page moved to <https://alignfirst.paroi.tech/aligndev>.
+
 ## 0.21.0
 
 ### Minor Changes
