@@ -2,7 +2,9 @@
 
 Autonomous software development. You say what you want; the assistant drives the coding agents and brings you the decisions.
 
-You talk to an **assistant**, the way you would to a developer on your team. It never touches the code itself. It isolates each task in its own workspace, then hands the investigation and the coding to an AI coding agent, **the agent**, which follows the [AlignFirst](https://alignfirst.paroi.tech/) protocols: specify, plan, implement, review. The assistant reads the agent's work, tests it, asks you what only you can decide, and opens the pull request.
+See the [product page](https://alignfirst.paroi.tech/aligndev) for an overview.
+
+You talk to an **assistant**, the way you would to a developer on your team. It never touches the code itself. It isolates each task in its own workspace, then hands the investigation and the coding to an AI coding agent, **the agent**, which follows the AlignFirst protocols: specify, plan, implement. The assistant reads the agent's work, tests it, asks you what only you can decide, and opens the pull request.
 
 `aligndev` is the assistant's CLI. It gives the assistant its playbook, launches and tracks the agent, and keeps the inventory of your projects. You never run it yourself: the assistant does.
 
@@ -85,7 +87,7 @@ Unknown keys and invalid values are errors.
 
 ## Start as an OpenClaw Bot
 
-AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a dedicated service account running the assistant under its own name and channel identity. The communication surface, the agent and the assistant's model provider are independent choices. Each task moves from a channel into its own thread, then into an isolated project workspace. See the [product page](https://alignfirst.paroi.tech/openclaw-dev-kit) for an overview.
+AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a dedicated service account running the assistant under its own name and channel identity. The communication surface, the agent and the assistant's model provider are independent choices. Each task moves from a channel into its own thread, then into an isolated project workspace.
 
 ```mermaid
 flowchart TD
