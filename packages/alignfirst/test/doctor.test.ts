@@ -78,6 +78,16 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Companion: key ~/app\n");
   });
 
+  it("warns about registry keys that share a companion directory", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    writeRegistry(home, { paths: { "~/app": {}, "~/a_b/c": {}, "~/a/b_c": {} } });
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    expect(result.stdout).toContain(
+      `[warn] Companion: keys ~/a_b/c, ~/a/b_c share the companion directory ${join(home, ".alignfirst", "companions", "a_b_c")}\n`,
+    );
+  });
+
   it("reports an invalid registry in every section that needs the layout", async () => {
     const cwd = temp();
     writeRegistry(cwd, {});

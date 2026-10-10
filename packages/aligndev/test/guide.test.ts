@@ -243,7 +243,7 @@ describe("aligndev guide playbook", () => {
     expect(lifecycle.stdout).toContain(
       'its procedure "Set up a project through its companion" for an assistant',
     );
-    expect(lifecycle.stdout).toContain("Run `alignfirst companion add` from PROJECT_PATH.");
+    expect(lifecycle.stdout).toContain("Run `alignfirst companion register` from PROJECT_PATH.");
   });
 
   it("requires a configured or detected agent for the code topic only", async () => {

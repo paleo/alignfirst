@@ -46,7 +46,7 @@ A project is identified by its **main worktree path**: the parent of `git rev-pa
 
 A key matches when it equals the main worktree path. Keys are compared by real path when they exist, after `resolve` otherwise. An item the entry does not set is `"auto"`. A key that names no git main worktree, such as a parent directory or a deleted repository, matches nothing; `doctor` warns about it.
 
-The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion and the registry elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `aligndev project doctor` reports the collision on both projects.
+The companion is `<companions>/<name>`, where `<companions>` is the real path of `~/.alignfirst/companions`, so a symlink there moves every companion and the registry elsewhere. The name is the main worktree path relative to the real home directory, or the absolute path without its leading `/` outside it (the home directory itself included), with every `/` replaced by `_`. Two projects collide only through a `_` in a directory name. `companion register` refuses a project whose companion directory another key uses, `alignfirst doctor` warns about keys that share one, and `aligndev project doctor` reports the collision on both projects.
 
 ## Resolution
 
@@ -94,9 +94,9 @@ Paths are absolute. `key` is the registry key as written; `aligndev` ignores `ke
 - **`docmap`**: adds `--root <companion docs>` when `docs` resolves in the companion and the arguments carry no `--root`.
 - **`context`**: prints the conventions, then `context.md` from the resolved `.alignfirst-instructions` under `# Project Instructions`, then the docmap section when `docs` exists, then the protocols. The conventions give a companion `.plans` by absolute path and exclude `.plans` from searches only when it resolves in the project.
 - **`config`**: the report above; the text form adds a `Companion:` line and one line per item.
-- **`companion add`**: registers the main worktree path, as a `~/` key inside the home directory and an absolute one outside it, with `{}`. A registered project leaves the registry unchanged. The command creates the registry and the companion directory when missing, and marks a new directory `(created)`. Flags are edited by hand.
-- **`companion unregister`**: removes the project's key and keeps the companion directory, reported as orphaned. A project without a key is an error.
-- **`doctor`**: a `Companion` section with the registry state, the project's key, the directory and each item. A key that names no git main worktree, and an item flagged `true` with a missing companion copy, are warnings.
+- **`companion register`**: registers the main worktree path, as a `~/` key inside the home directory and an absolute one outside it, with `{}`. A registered project leaves the registry unchanged. The command creates the registry when missing. `--create-dir` creates a missing companion directory, marked `(created)`; without it, a missing one is marked `(missing)`. Flags are edited by hand.
+- **`companion unregister`**: removes the project's key and keeps the companion directory, reported as orphaned. A project without a key is an error. `--remove-dir` also removes the directory when it is empty or missing; a non-empty one requires `--force`. A directory another key uses is never removed. A refusal changes nothing. Symlinks inside are removed as links.
+- **`doctor`**: a `Companion` section with the registry state, the project's key, the directory and each item. A key that names no git main worktree, keys that share a companion directory, and an item flagged `true` with a missing companion copy are warnings.
 
 ### `aligndev code`
 
@@ -128,7 +128,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 ## Rejected alternatives
 
 - **Matching by git remote**, from the earlier overlay design: forks, mirrors and renamed remotes break it, and a wrong match silently serves another project's conventions.
-- **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, `companion add` created a directory per project, and no project could be unregistered alone. They existed while AlignDev for OpenClaw locked the registry; `companion add` replaced them.
+- **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, and no project could be unregistered alone. They existed while AlignDev for OpenClaw locked the registry; `companion register` replaced them.
 - **A per-file project-then-companion fallback without flags**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
 - **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.

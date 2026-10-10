@@ -81,7 +81,7 @@ Usage:
   ${ctx.form} docmap [<arguments>]
   ${ctx.form} conventions
   ${ctx.form} context
-  ${ctx.form} companion add | unregister
+  ${ctx.form} companion register | unregister
   ${ctx.form} config [--json]
   ${ctx.form} doctor
   ${ctx.form} --help

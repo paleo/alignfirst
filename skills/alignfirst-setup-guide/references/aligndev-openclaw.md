@@ -18,7 +18,7 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and admin CLI packages.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
-- `~/.alignfirst/` — locked by `06`. It holds `aligndev.config.json`, the `aligndev` config (platform, projects root, coding agent), installed by the seed. Its `companions/` stays service-owned: the assistant registers a project in the companion registry there with `alignfirst companion add`, which also creates the project's companion.
+- `~/.alignfirst/` — locked by `06`. It holds `aligndev.config.json`, the `aligndev` config (platform, projects root, coding agent), installed by the seed. Its `companions/` stays service-owned: the assistant registers a project in the companion registry there with `alignfirst companion register`.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 

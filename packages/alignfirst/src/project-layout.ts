@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -268,24 +269,39 @@ export interface CompanionRegistration {
   added: boolean;
   /** Absolute. */
   dir: string;
+  exists: boolean;
   created: boolean;
 }
 
 /**
- * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered, and
- * creates its companion directory when missing. Creates the registry when it is missing.
+ * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered.
+ * Creates the registry when it is missing, and the companion directory with `createDir`.
  */
-export function addCompanion(cwd: string, home: string): CompanionRegistration {
+export function registerCompanion(
+  cwd: string,
+  home: string,
+  { createDir }: { createDir: boolean },
+): CompanionRegistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const registry = readRegistry(home) ?? { path: registryPath(home), paths: {} };
   const entry = findEntry(registry, mainWorktree, realHome);
   const key = entry?.key ?? userPathOf(mainWorktree, realHome);
-  if (entry === undefined) writeRegistry(registry.path, { ...registry.paths, [key]: {} });
   const dir = companionDir(mainWorktree, realHome);
-  const created = !existsSync(dir);
+  if (entry === undefined) {
+    assertOwnCompanionDir(registry, key, dir, realHome);
+    writeRegistry(registry.path, { ...registry.paths, [key]: {} });
+  }
+  const created = createDir && !pathExists(dir);
   if (created) mkdirSync(dir, { recursive: true });
-  return { registry: registry.path, key, added: entry === undefined, dir, created };
+  return {
+    registry: registry.path,
+    key,
+    added: entry === undefined,
+    dir,
+    exists: pathExists(dir),
+    created,
+  };
 }
 
 function requireMainWorktree(cwd: string): string {
@@ -298,6 +314,27 @@ function requireMainWorktree(cwd: string): string {
 function userPathOf(path: string, realHome: string): string {
   if (path === realHome) return "~";
   return isSameOrInside(path, realHome) ? `~/${relative(realHome, path)}` : path;
+}
+
+/** Two keys collide when their names differ only by a `_` in place of a `/`. */
+function assertOwnCompanionDir(
+  registry: Registry,
+  key: string,
+  dir: string,
+  realHome: string,
+): void {
+  const others = (keysByCompanionDir(registry, realHome).get(dir) ?? []).filter((k) => k !== key);
+  if (others.length === 0) return;
+  throw new CliError(`The companion directory ${dir} is already used by ${others.join(", ")}.`);
+}
+
+function keysByCompanionDir(registry: Registry, realHome: string): Map<string, string[]> {
+  const keysByDir = new Map<string, string[]>();
+  for (const key of Object.keys(registry.paths)) {
+    const dir = companionDir(normalizePath(key, realHome), realHome);
+    keysByDir.set(dir, [...(keysByDir.get(dir) ?? []), key]);
+  }
+  return keysByDir;
 }
 
 function writeRegistry(path: string, paths: Registry["paths"]): void {
@@ -314,10 +351,18 @@ export interface CompanionUnregistration {
   dir: string;
   /** `undefined` when the directory is missing. */
   empty?: boolean;
+  removed: boolean;
 }
 
-/** Removes the registry key of the main worktree of `cwd`. Keeps the companion directory. */
-export function unregisterCompanion(cwd: string, home: string): CompanionUnregistration {
+/**
+ * Removes the registry key of the main worktree of `cwd`. With `removeDir`, also removes its
+ * companion directory: a non-empty one requires `force`. Fails before any change.
+ */
+export function unregisterCompanion(
+  cwd: string,
+  home: string,
+  { removeDir, force }: { removeDir: boolean; force: boolean },
+): CompanionUnregistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const path = registryPath(home);
@@ -325,15 +370,30 @@ export function unregisterCompanion(cwd: string, home: string): CompanionUnregis
   const entry = registry && findEntry(registry, mainWorktree, realHome);
   if (!registry || entry === undefined)
     throw new CliError(`${mainWorktree} is not registered in ${path}.`);
+  const dir = companionDir(mainWorktree, realHome);
+  const entries = pathExists(dir) ? readdirSync(dir) : undefined;
+  if (removeDir) assertRemovableDir(registry, entry.key, dir, entries, force, realHome);
   const { [entry.key]: _removed, ...paths } = registry.paths;
   writeRegistry(path, paths);
-  const dir = companionDir(mainWorktree, realHome);
-  return { registry: path, key: entry.key, dir, empty: isEmptyDirectory(dir) };
+  const removed = removeDir && entries !== undefined;
+  if (removed) rmSync(dir, { recursive: true, force: true });
+  return { registry: path, key: entry.key, dir, empty: entries && entries.length === 0, removed };
 }
 
-function isEmptyDirectory(path: string): boolean | undefined {
-  if (!existsSync(path)) return;
-  return readdirSync(path).length === 0;
+function assertRemovableDir(
+  registry: Registry,
+  key: string,
+  dir: string,
+  entries: string[] | undefined,
+  force: boolean,
+  realHome: string,
+): void {
+  assertOwnCompanionDir(registry, key, dir, realHome);
+  if (force || entries === undefined || entries.length === 0) return;
+  throw new CliError(
+    `The companion directory ${dir} is not empty: ${entries.sort().join(", ")}. ` +
+      "Add --force to delete it.",
+  );
 }
 
 /** The registry keys that name no git main worktree: they match nothing. */
@@ -345,4 +405,13 @@ export function strayRegistryKeys(home: string): string[] {
     const path = normalizePath(key, realHome);
     return !existsSync(path) || findMainWorktree(path) !== path;
   });
+}
+
+/** The companion directories shared by several registry keys, with those keys. */
+export function sharedCompanionDirs(home: string): { dir: string; keys: string[] }[] {
+  const registry = readRegistry(home);
+  if (registry === undefined) return [];
+  return [...keysByCompanionDir(registry, realOrResolved(home))]
+    .filter(([, keys]) => keys.length > 1)
+    .map(([dir, keys]) => ({ dir, keys }));
 }

@@ -21,11 +21,11 @@ The global CLI is required: the agent bootstrap line runs the bare `alignfirst`.
 From the repository, register the project and read the layout:
 
 ```sh
-alignfirst companion add
+alignfirst companion register
 alignfirst config --json
 ```
 
-`companion add` adds the project's main worktree to the registry, unless it is registered, and creates the companion directory when missing. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
+`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
 
 `companion.dir` is the companion directory, and `locations` gives each item's path.
 
@@ -69,7 +69,7 @@ The doctor must pass, and `git status` in the repository must show no change.
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
 - **CLI and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI, and `aligndev code` puts the context into the launched agent's prompt.
-- **Companion (step 2):** on an AlignDev OpenClaw host, the assistant runs `alignfirst companion add` itself before it delegates the preparation.
+- **Companion (step 2):** on an AlignDev OpenClaw host, the assistant runs `alignfirst companion register` itself before it delegates the preparation.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
 - **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.

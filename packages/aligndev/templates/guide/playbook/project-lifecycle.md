@@ -79,7 +79,7 @@ When the user reports the merge, or you observe it while checking the PR:
 
 The preparation targets the project's companion directory. It writes nothing in the repository and creates no branch, commit or pull request.
 
-1. Run `{{ALIGNFIRST}} companion add` from PROJECT_PATH. It registers the project in the companion registry unless it is registered, and creates the companion directory.
+1. Run `{{ALIGNFIRST}} companion register` from PROJECT_PATH. It registers the project in the companion registry unless it is registered.
 2. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
 3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
 4. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
@@ -92,10 +92,10 @@ Removal requires the listed PROJECT_PATH selected before the thread opened or su
 
 1. Run and read `{{ALIGNDEV}} guide project`, then refresh `{{ALIGNDEV}} project list --json` and resolve the listed project at PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, and its companion directory when it reports one. Read DEVELOPERS_PATH, then run and read the project workspace guide it names, if any.
 2. A project in main-worktree mode (DEVELOPERS_PATH missing or without a workspaces section) has no linked workspace to enumerate: its list holds PROJECT_PATH alone. Otherwise, use the project workspace tooling to enumerate every registered linked workspace and its exact absolute path. Include the exact PROJECT_PATH for the main worktree.
-3. Show the user the complete linked-worktree path list and the main-worktree path. Wait for explicit confirmation of those exact paths.
+3. Show the user the complete linked-worktree path list and the main-worktree path. When the project status reports a companion directory, show it too and ask whether to keep or delete it. Wait for explicit confirmation of those exact paths, and for the answer about the companion directory.
 4. Remove each confirmed linked workspace through the project workspace tooling. Stop immediately if any removal fails; keep the main worktree intact.
-5. When the project status reports a companion, run `{{ALIGNFIRST}} companion unregister` from PROJECT_PATH. It removes the registry entry and keeps the companion directory.
-6. Remove only the confirmed main-worktree directory at PROJECT_PATH. Leave every additional directory reported by the inventory untouched, the companion directory included.
-7. Refresh `{{ALIGNDEV}} project list --json`: the path must be absent from `projects`. Report any remaining workspace or filesystem discrepancy, and name the companion directory left in place.
+5. When the project status reports a companion, run `{{ALIGNFIRST}} companion unregister` from PROJECT_PATH. It removes the registry entry and keeps the companion directory. Add `--remove-dir --force` when the user chose to delete the companion directory.
+6. Remove only the confirmed main-worktree directory at PROJECT_PATH. Leave every additional directory reported by the inventory untouched.
+7. Refresh `{{ALIGNDEV}} project list --json`: the path must be absent from `projects`. Report any remaining workspace or filesystem discrepancy, and name the companion directory when it was kept.
 
 Apply the host-specific and project-specific constraints read earlier throughout the sequence.
