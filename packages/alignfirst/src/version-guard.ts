@@ -1,7 +1,6 @@
-import semver from "semver";
-
 import { CliError } from "./cli-error.js";
 import type { ProjectConfig } from "./project-config.js";
+import { satisfiesRange } from "./version-range.js";
 
 export interface CliRangeResult {
   range: string;
@@ -29,5 +28,5 @@ export function cliRangeResult(
 ): CliRangeResult | undefined {
   const range = config?.cli;
   if (range === undefined) return;
-  return { range, satisfied: semver.satisfies(installedVersion, range) };
+  return { range, satisfied: satisfiesRange(installedVersion, range) };
 }

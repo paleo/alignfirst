@@ -40,7 +40,7 @@ describe("project config", () => {
 
   it.each([
     [{ schemaVersion: 1, extra: true }, "extra"],
-    [{ schemaVersion: 1, cli: "not a range" }, "semver"],
+    [{ schemaVersion: 1, cli: "not a range" }, "supported version range"],
     [{ schemaVersion: 1, ticketIdPattern: "[" }, "regular expression"],
     [{ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" }, "one anchored expression"],
     [{ schemaVersion: 1, portRange: { first: 2, last: 1 } }, "must not exceed"],

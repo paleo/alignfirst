@@ -117,7 +117,7 @@ Write `.alignfirst.json` with the agreed fields:
 }
 ```
 
-Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only the other applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a semver range; the version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only the other applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a range of full `x.y.z` versions, each with an optional `^`, `~`, `>=`, `>`, `<=`, `<` or `=`. Spaces join versions that must all hold; `||` joins alternatives. The version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
 
 ### Local installation
 
@@ -125,7 +125,7 @@ By default a project declares no `alignfirst` dependency. Add one only when the 
 
 Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
 
-The CLI brings `@alignfirst/docmap`, `arktype` and `semver` into the project's dependency graph. A repository with such gates must allow the transitive `@alignfirst/docmap` too, since the CLI tracks its releases closely. Where `arktype` is an optional peer of an existing dependency, expect the lockfile to record it as one.
+The CLI's only dependency is `@alignfirst/docmap`. A repository with such gates must allow it too, since the CLI tracks its releases closely.
 
 Continue with [plans-setup.md](plans-setup.md) when the team has a work-files repository. Finish with:
 

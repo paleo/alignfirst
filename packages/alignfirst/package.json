@@ -42,13 +42,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@alignfirst/docmap": "~0.11.1",
-    "arktype": "^2.2.3",
-    "semver": "^7.8.5"
+    "@alignfirst/docmap": "~0.11.1"
   },
   "devDependencies": {
     "@types/node": "~24.13.3",
-    "@types/semver": "~7.8.0",
     "rimraf": "~6.1.3",
     "typescript": "~7.0.2",
     "vitest": "~5.0.1"

@@ -11,12 +11,11 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { type } from "arktype";
-
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
 import { gitOutputOrUndefined } from "./git.js";
+import { object, optional, parseShape, record, shapeError } from "./json-shape.js";
 
 export const ITEM_NAMES = [
   ".alignfirst.json",
@@ -30,20 +29,15 @@ export const ITEM_NAMES = [
 const COMPANIONS_ROOT = "~/.alignfirst/companions";
 const REGISTRY_FILE = "registry.json";
 
-const FLAG = "boolean | 'auto'";
-const flagsSchema = type({
-  "+": "reject",
-  ".alignfirst.json?": FLAG,
-  ".alignfirst-instructions?": FLAG,
-  "DEVELOPERS.md?": FLAG,
-  "docs?": FLAG,
-  ".plans?": FLAG,
-  "_aligndev?": FLAG,
+const flagsShape = object<Partial<Record<ItemName, Flag>>>({
+  ".alignfirst.json": optional(flag),
+  ".alignfirst-instructions": optional(flag),
+  "DEVELOPERS.md": optional(flag),
+  docs: optional(flag),
+  ".plans": optional(flag),
+  _aligndev: optional(flag),
 });
-const registrySchema = type({
-  "+": "reject",
-  paths: type.Record("string", flagsSchema),
-});
+const registryFileShape = object<RegistryFile>({ paths: record(flagsShape) });
 
 export type ItemName = (typeof ITEM_NAMES)[number];
 export type Flag = boolean | "auto";
@@ -72,9 +66,12 @@ export interface ItemLocation {
 
 type FileItemName = Exclude<ItemName, "_aligndev">;
 
-interface Registry {
-  path: string;
+interface RegistryFile {
   paths: Record<string, Partial<Record<ItemName, Flag>>>;
+}
+
+interface Registry extends RegistryFile {
+  path: string;
 }
 
 interface RegistryEntry {
@@ -115,8 +112,7 @@ function readRegistry(home: string): Registry | undefined {
   } catch (error) {
     throw invalidRegistry(path, errorMessage(error));
   }
-  const file = registrySchema(value);
-  if (file instanceof type.errors) throw invalidRegistry(path, file.summary.split("\n", 1)[0]);
+  const file = parseShape(registryFileShape, value, (detail) => invalidRegistry(path, detail));
   const badKey = Object.keys(file.paths).find((key) => !isUserPath(key));
   if (badKey !== undefined)
     throw invalidRegistry(path, `paths key must be an absolute path or start with ~/: ${badKey}`);
@@ -129,6 +125,12 @@ export function registryPath(home: string): string {
 
 function invalidRegistry(path: string, detail: string): CliError {
   return new CliError(`Invalid ${path}: ${detail}`);
+}
+
+function flag(value: unknown, path: string): Flag {
+  if (typeof value !== "boolean" && value !== "auto")
+    throw shapeError(path, 'be a boolean or "auto"');
+  return value;
 }
 
 function isUserPath(value: string): boolean {

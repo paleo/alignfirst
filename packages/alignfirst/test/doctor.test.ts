@@ -112,6 +112,19 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[error] .alignfirst.json: does not satisfy >=1.0.0");
   });
 
+  it("warns when the CLI is ahead of the range", async () => {
+    const cwd = temp();
+    writeFileSync(
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, cli: "<0.1.0" }),
+    );
+    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
+    expect(result.stdout).toContain("[error] .alignfirst.json: does not satisfy <0.1.0");
+    expect(result.stdout).toMatch(
+      /\[warn\] \.alignfirst\.json: \d+\.\d+\.\d+ is ahead of <0\.1\.0/,
+    );
+  });
+
   it("continues after an invalid project config", async () => {
     const cwd = temp();
     writeFileSync(join(cwd, ".alignfirst.json"), "{");
