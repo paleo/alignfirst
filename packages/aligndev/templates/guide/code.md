@@ -159,17 +159,17 @@ Run the chain end to end. The plan is a step of the implementation, not a checkp
 
 ### Where the plan runs
 
-Planning in the spec's own session is cheaper: the agent already holds the investigation. That advantage ends once the session fills up, because the spec discussion competes with the planning work for the same context window. `contextTokens` in the `{{ALIGNDEV}} code status` output is the measure; the threshold is **150k**.
+Planning in the spec's own session is cheaper: the agent already holds the investigation. That advantage ends once the session fills up, because the spec discussion competes with the planning work for the same context window. `contextTokens` in the `{{ALIGNDEV}} code status` output is the measure; the threshold is **160k**.
 
 Read `contextCompacted` first. When it is `true`, the agent compacted the conversation: the investigation now survives only as a summary, so the advantage of staying is already gone. Plan in a fresh session whatever `contextTokens` says. Treat an empty `contextTokens` the same way — `contextTokensError` says why the figure is missing, and an unknown occupancy is not a reason to gamble on staying.
 
-**Below 150k — plan in the spec session.** Send the protocol with no message:
+**Below 160k — plan in the spec session.** Send the protocol with no message:
 
 ```bash
 {{ALIGNDEV}} code resume <sessionId> --protocol plan
 ```
 
-**At or above 150k — make the spec stand alone, then plan in a fresh session.** The next session reads the spec file and nothing else, so the spec must carry every decision the discussion settled. Ask for that first, in the session that holds the discussion:
+**At or above 160k — make the spec stand alone, then plan in a fresh session.** The next session reads the spec file and nothing else, so the spec must carry every decision the discussion settled. Ask for that first, in the session that holds the discussion:
 
 ```bash
 {{ALIGNDEV}} code resume <sessionId> --message "Ensure this spec is self-sufficient: another session will write the plans from it."
