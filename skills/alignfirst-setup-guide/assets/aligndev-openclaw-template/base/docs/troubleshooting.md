@@ -46,7 +46,7 @@ The session file under the project's `.plans/<ticket>/_aligndev/` carries the ex
 
 Run the smoke test of [07-channel.md](installations/07-channel.md). Check the allowlisted channel, the session binding and the thread destination before touching the playbook.
 
-An off-topic answer, or `The tool run finished, but no final summary was produced.`, is usually not a model failure: the assistant chose silence on a turn that required a reply, and OpenClaw finalized the turn without its context. The journal names each case:
+An off-topic answer, or `The tool run finished, but no final summary was produced. I did not repeat any completed actions.`, is usually not a model failure: the assistant chose silence on a turn that required a reply, and OpenClaw finalized the turn without its context. The journal names each case:
 
 ```sh
 sudo journalctl _SYSTEMD_USER_UNIT=openclaw-gateway.service --since today --no-pager \

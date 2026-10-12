@@ -68,31 +68,35 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 # gateway startup. Install the exact official artifacts instead of copying the
 # local package directory, which omits its runtime dependencies. Z.AI backs the
 # configured GLM model; Perplexity is auto-selected when OpenRouter is present.
-RUN npm ci --include=dev && \
-    OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-      npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/codex@2026.9.9 && \
-    OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-      npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/zai-provider@2026.9.9 && \
-    OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-      npx openclaw plugins install --force --accept-capabilities \
-        npm:@openclaw/perplexity-plugin@2026.9.9 && \
-    OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-      npx openclaw plugins registry --refresh && \
-    npm cache clean --force
-
+#
 # Since 2026.9.6, OpenClaw defers plugin state migration until its update records
 # are released. Finalize the update first, then settle the deferred state in a new
 # process. Retry Doctor because a just-released SQLite lease can race once.
-RUN OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-      npx openclaw update repair --yes
-RUN for attempt in 1 2 3; do \
-      OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json \
-        npx openclaw doctor --fix --yes && break; \
+#
+# Since 2026.10, loading a plugin with native binaries (codex) hardlinks its files
+# into a capture directory and checks the link's inode against the opened file.
+# Overlayfs gives a new inode to a lower-layer file that already has several links
+# when the link copies it up, and the load fails ("Native plugin artifact changed
+# during admission"). Keep the installs, the repair and Doctor in one layer, then
+# drop the captures they left so the image ships each plugin file with one link.
+RUN npm ci --include=dev && \
+    export OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json && \
+    npx openclaw plugins install --force --accept-capabilities \
+      npm:@openclaw/codex@2026.10.2 && \
+    npx openclaw plugins install --force --accept-capabilities \
+      npm:@openclaw/zai-provider@2026.10.2 && \
+    npx openclaw plugins install --force --accept-capabilities \
+      npm:@openclaw/perplexity-plugin@2026.10.2 && \
+    npx openclaw plugins registry --refresh && \
+    npx openclaw update repair --yes && \
+    for attempt in 1 2 3; do \
+      npx openclaw doctor --fix --yes && break; \
       if [ "$attempt" -eq 3 ]; then exit 1; fi; \
       sleep 2; \
-    done
+    done && \
+    rm -rf /home/assistant/.openclaw/tmp/plugin-captures \
+      /home/assistant/.openclaw.update-captures && \
+    npm cache clean --force
 
 # The build's OpenClaw commands wrote the rolling file log. Drop it so each cell's
 # archived `gateway.log` starts with the gateway's own lines.

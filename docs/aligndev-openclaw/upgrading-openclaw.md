@@ -96,9 +96,10 @@ Two findings are expected noise, because no gateway ever runs in this container:
 npm run env:up
 docker exec aligndev-openclaw-tests-w1-gateway-1 openclaw cron list --all
 docker exec aligndev-openclaw-tests-w1-gateway-1 openclaw plugins list
+docker logs aligndev-openclaw-tests-w1-gateway-1 2>&1 | grep 'failed during load'
 ```
 
-Expected: `heartbeat:main` as the only enabled job (the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff.
+Expected: `heartbeat:main` as the only enabled job (the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff. The log check must print nothing: a gateway reports healthy even when a plugin failed to load, and `plugins list` still shows that plugin as enabled. 2026.10.2 failed Codex this way inside the image; see [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration).
 
 ## Run the regression scenarios
 
