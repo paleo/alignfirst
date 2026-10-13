@@ -19,7 +19,7 @@ export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 
 const codeShape = object<CodeConfigFile>({
   agent: optional(literal(...CODING_AGENTS)),
-  model: optional(nonEmptyString),
+  defaultModel: optional(nonEmptyString),
   models: optional(arrayOf(string)),
   skipPermissions: optional(boolean),
   unset: optional(arrayOf(string)),
@@ -51,7 +51,7 @@ export interface ProjectsRoot {
 
 export interface LoadedCodeConfig {
   agent?: CodingAgent;
-  model?: string;
+  defaultModel?: string;
   models?: string[];
   skipPermissions: boolean;
   unset: string[];
@@ -70,7 +70,7 @@ interface ConfigFile {
 interface CodeConfigFile {
   agent?: CodingAgent;
   // Model used when `--model` is omitted on a new session.
-  model?: string;
+  defaultModel?: string;
   models?: string[];
   skipPermissions?: boolean;
   unset?: string[];
@@ -90,7 +90,7 @@ export function loadConfig(home: string): LoadedConfig {
       : { projectsRoot: resolveProjectsRoot(value.projectsRoot, home, path) }),
     code: {
       ...(code.agent === undefined ? {} : { agent: code.agent }),
-      ...(code.model === undefined ? {} : { model: code.model }),
+      ...(code.defaultModel === undefined ? {} : { defaultModel: code.defaultModel }),
       ...(code.models === undefined ? {} : { models: code.models }),
       skipPermissions: code.skipPermissions ?? false,
       unset: code.unset ?? [],
@@ -148,10 +148,10 @@ function resolveAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent
 }
 
 function checkDefaultModel(code: CodeConfig, path: string): void {
-  if (code.model === undefined) return;
+  if (code.defaultModel === undefined) return;
   const models = resolveModels(code.agent, code.models);
-  if (models.includes(code.model)) return;
-  throw new Error(`Error: code.model must be one of: ${models.join(", ")}, in ${path}.`);
+  if (models.includes(code.defaultModel)) return;
+  throw new Error(`Error: code.defaultModel must be one of: ${models.join(", ")}, in ${path}.`);
 }
 
 export function requireProjectsRoot(config: LoadedConfig): ProjectsRoot {

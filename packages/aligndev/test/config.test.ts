@@ -98,7 +98,7 @@ describe("loadConfig", () => {
       platform: "openclaw",
       code: {
         agent: "claude",
-        model: "opus",
+        defaultModel: "opus",
         models: ["opus"],
         skipPermissions: true,
         unset: ["TOKEN"],
@@ -106,7 +106,7 @@ describe("loadConfig", () => {
     });
     expect(loadConfig(home).code).toEqual({
       agent: "claude",
-      model: "opus",
+      defaultModel: "opus",
       models: ["opus"],
       skipPermissions: true,
       unset: ["TOKEN"],
@@ -168,7 +168,7 @@ describe("loadConfig", () => {
       { platform: "openclaw", code: { agent: "claude", effort: "high" } },
       "effort",
     ],
-    ["an empty default model", { ...EXPLICIT, code: { model: "" } }, "code.model"],
+    ["an empty default model", { ...EXPLICIT, code: { defaultModel: "" } }, "code.defaultModel"],
     ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
     ["an invalid platform", { ...EXPLICIT, platform: "slack" }, "platform"],
   ])("rejects %s", (_name, config, problem) => {
@@ -210,15 +210,15 @@ describe("resolveCodeConfig", () => {
 
   it("accepts a default model from the configured list", () => {
     const home = makeHome();
-    writeConfig(home, { code: { agent: "claude", model: "opus-4", models: ["opus-4"] } });
-    expect(resolveCodeConfig(loadConfig(home), {}).model).toBe("opus-4");
+    writeConfig(home, { code: { agent: "claude", defaultModel: "opus-4", models: ["opus-4"] } });
+    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("opus-4");
   });
 
   it("rejects a default model outside the agent's list", () => {
     const home = makeHome();
-    writeConfig(home, { code: { agent: "codex", model: "opus" } });
+    writeConfig(home, { code: { agent: "codex", defaultModel: "opus" } });
     expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(
-      `Error: code.model must be one of: astra, sol, terra, luna, in ${configPathOf(home)}.`,
+      `Error: code.defaultModel must be one of: astra, sol, terra, luna, in ${configPathOf(home)}.`,
     );
   });
 

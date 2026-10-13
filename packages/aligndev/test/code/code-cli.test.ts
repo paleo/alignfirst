@@ -959,7 +959,10 @@ describe("model selection", () => {
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { platform: "codingAgent", code: { agent: "claude", model: "sonnet" } });
+    writeConfig(home, {
+      platform: "codingAgent",
+      code: { agent: "claude", defaultModel: "sonnet" },
+    });
     fake = installFakeClaude(base);
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
@@ -988,7 +991,7 @@ describe("model selection", () => {
       .frontmatter;
   }
 
-  it("starts a new session with code.model and records it", async () => {
+  it("starts a new session with code.defaultModel and records it", async () => {
     expect(await launch(["new", "-m", "go"])).toBe("sonnet");
     expect(newestFrontmatter()).toMatchObject({
       model: "sonnet",
@@ -996,12 +999,12 @@ describe("model selection", () => {
     });
   });
 
-  it("lets --model override code.model", async () => {
+  it("lets --model override code.defaultModel", async () => {
     expect(await launch(["new", "-m", "go", "--model", "haiku"])).toBe("haiku");
     expect(newestFrontmatter().model).toBe("haiku");
   });
 
-  it("resumes with the model of the session's latest run, not code.model", async () => {
+  it("resumes with the model of the session's latest run, not code.defaultModel", async () => {
     writeInitialSessionFile(
       join(plans, "_aligndev", "old.md"),
       statusFrontmatter({ sessionId: "abc", model: "opus", startedAt: "2026-08-29T10:00:00.000Z" }),

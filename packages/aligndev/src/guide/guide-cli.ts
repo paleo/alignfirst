@@ -85,7 +85,7 @@ function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerC
 function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): string {
   const code = resolveCodeConfig(config, ctx.env);
   const models = resolveModels(code.agent, code.models);
-  return renderCodeGuide(config.platform, code.agent, models, code.model, ctx.forms);
+  return renderCodeGuide(config.platform, code.agent, models, code.defaultModel, ctx.forms);
 }
 
 function renderPlaybookTopic(

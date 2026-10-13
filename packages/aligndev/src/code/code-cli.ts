@@ -621,15 +621,16 @@ function inferTicketFromMessage(message: string): string | undefined {
   return [...candidates][0];
 }
 
-// `--model` wins. Otherwise a new session takes `code.model`, and a resume keeps the model of its
-// latest run, unchecked against the current allowlist. `undefined` leaves the agent's default.
+// `--model` wins. Otherwise a new session takes `code.defaultModel`, and a resume keeps the model
+// of its latest run, unchecked against the current allowlist. `undefined` leaves the agent's
+// default.
 function selectModel(
   args: SessionArgs,
   code: CodeConfig,
   records: SessionRecord[],
 ): string | undefined {
   if (args.model !== undefined) return args.model;
-  if (args.resume === undefined) return code.model;
+  if (args.resume === undefined) return code.defaultModel;
   const runs = records.filter((r) => r.frontmatter.sessionId === args.resume);
   return latestRecord(runs).frontmatter.model ?? undefined;
 }
@@ -782,8 +783,9 @@ Options (new, resume):
   --catchup             Load the ticket history before the message. new only.
   -m, --message "..."   Message to send. Required for spec/aad, or without protocol/catchup.
   --message-file <path> Read the message from a UTF-8 file, or stdin with -. Exclusive with -m.
-  --model <model>       One of ${models.join(", ")}. A new session defaults to code.model, else
-                        to the coding agent's default. A resume keeps the session's model.
+  --model <model>       One of ${models.join(", ")}. A new session defaults to
+                        code.defaultModel, else to the coding agent's default. A resume keeps the
+                        session's model.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
                         (\`meta:\`). aligndev never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
@@ -793,7 +795,7 @@ ${requires}
 Config (~/.alignfirst/settings.json):
   code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
                         agent that runs aligndev.
-  code.model            Default model of a new session, one of the models accepted by --model.
+  code.defaultModel     Default model of a new session, one of the models accepted by --model.
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.
   code.unset            Env vars to strip from the coding agent child.
