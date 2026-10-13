@@ -52,8 +52,8 @@ Without a usable link, `workspace setup` aborts on `alignfirst plans check`.
 
 ## Claim ports
 
-A portless project needs no claim. For a wrapper with ports, calculate
-`size = perWorkspace × maxWorkspaces`, then reserve the complete project block:
+A portless project needs no claim. For a dev-server with ports, calculate
+`size = port names × expected concurrent workspaces`, then reserve the complete project block:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
@@ -61,7 +61,7 @@ aligndev project free-ports --size <size>
 '
 ```
 
-When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone. The workspace kernel checks the claim against its port scheme on every command.
+When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone, and as `first` and `last` of the `ports` group in the dev-server config. The dev-server checks the claim on every command.
 
 ## Check the inventory
 
@@ -80,12 +80,8 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm install && npm
 ```
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
-A project reachable through the gateway uses the `remote` profile instead. It reads
-`REMOTE_DEV_DOMAIN` from `environment.d/common.conf`:
-
-```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- setup --profile remote'
-```
+The plain `workspace setup` above is enough for a project reachable through the gateway: its
+run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf` at each dev start.
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 
 ## Smoke test

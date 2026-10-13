@@ -67,7 +67,7 @@ Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. Set
 }
 ```
 
-Add `portRange` when the workspace wrapper declares a port scheme. Update the README guidance and
+Add `portRange` when the dev-server config declares a `ports` range. Update the README guidance and
 install the stubs.
 
 ## Replace Every Legacy Command

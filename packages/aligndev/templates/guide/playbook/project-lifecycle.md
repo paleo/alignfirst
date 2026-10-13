@@ -20,7 +20,7 @@ Creation has a hard user-input gate. Before any filesystem, Git, port-allocation
 
 1. Settle the stack, allowed parent directory, project name, and port requirements with the user. Use the `{{ALIGNDEV}} guide project` output to constrain the choices.
 2. Create the main-worktree directory under the selected allowed parent. Initialize its Git repository on `main`.
-3. Once the directory contains its `.git` directory, retain the canonical path as PROJECT_PATH. When the project declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <perWorkspace × maxWorkspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`. The selected parent's marker owns its port range. Report that `.alignfirst.json` was written and name the block.
+3. Once the directory contains its `.git` directory, retain the canonical path as PROJECT_PATH. When the project declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <port names × concurrent workspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`. The selected parent's marker owns its port range. Report that `.alignfirst.json` was written and name the block.
 4. Create `.plans/`, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from the starter and every later human message that supplied the gate's values. Record the project name, selected parent, stack, port requirements, and requested stopping point; never copy only the starter's task line. Then run `{{ALIGNFIRST}} sync`. The bot chooses the identifier and writes the request; the agent does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
 5. Before delegating the bootstrap, run `{{ALIGNDEV}} guide code`. On a takeover turn, apply the pre-delegation race checkpoint in the playbook (`{{ALIGNDEV}} guide`) immediately before `{{ALIGNDEV}} code new`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Include `.local/` as a gitignored shared directory in the workspace mechanism. Follow the selected stack and the host-specific guide.
 6. Verify the project through the setup guide, run `{{ALIGNFIRST}} sync`, and make its initial commit on `main` in PROJECT_PATH. Do not ask for confirmation before committing.
@@ -39,7 +39,7 @@ Before any discussion:
 
 1. Select a parent directory allowed by `{{ALIGNDEV}} guide project`. Ask the user when several qualify.
 2. Clone the repository into that parent. PROJECT is the clone's directory name; PROJECT_PATH is its canonical path.
-3. Retain the canonical path as PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. When the project's workspace wrapper declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <perWorkspace × maxWorkspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`.
+3. Retain the canonical path as PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. When the project's workspace wrapper declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <port names × concurrent workspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`.
 4. Install dependencies and build, following the repository's own README.
 
 ### Step 2 — Check the AlignDev contract
@@ -72,7 +72,7 @@ When the user reports the merge, or you observe it while checking the PR:
 2. Install dependencies and build.
 3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there (the projects guide names the repository), then run `{{ALIGNFIRST}} plans setup {{PROJECTS_ROOT}}/<clone>` from PROJECT_PATH. Otherwise, run `mkdir .plans`.
 4. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
-5. Run the project's `workspace setup` on the main worktree. Add `--profile remote` when the deployment sets `REMOTE_DEV_DOMAIN`.
+5. Run the project's `workspace setup` on the main worktree.
 6. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`.
 
 ### Prepare through the companion

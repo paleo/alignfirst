@@ -93,4 +93,4 @@ A projects directory carries a `.alignfirst-projects.json` marker, with an optio
 
 ### Port Claims
 
-`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's workspace scheme: `perWorkspace × maxWorkspaces`. A range without a code is the default; `--range <code>` selects a coded one. The setup guide writes the block as `portRange` in the project's `.alignfirst.json`.
+`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. The setup guide writes the block as `portRange` in the project's `.alignfirst.json`.

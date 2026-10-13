@@ -33,7 +33,7 @@ The human performs every interactive authentication and secret entry. Credential
 - **Surface**: `slack` or `discord`.
 - **Coding agent**: `claude-code` or `codex`.
 - **Work-files repository**: yes or no. Yes when the team has one (see [plans-setup.md](plans-setup.md)).
-- **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and `workspace setup --profile remote` is unusable in the managed projects.
+- **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and the managed projects' public URLs fall back to localhost.
 
 Choose the model provider and model separately; the template favors no provider.
 

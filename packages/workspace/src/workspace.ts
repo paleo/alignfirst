@@ -859,7 +859,8 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
  * Stop a gone worktree's dev-server the only way left: its dir (and `dev-server.mjs`) is deleted, so
  * we can't shell out to `dev down` to run callback stop() — we kill the recorded spawn PIDs directly
  * and drop the dev-server entry. Returns the count of live PIDs stopped. The caller separately runs
- * `purgeInfrastructure` (by name, from the entry's `purgeData`) to tear down callback-managed infra.
+ * `purgeInfrastructure` (by workspace name; a legacy entry also passes its `purgeData`) to tear down
+ * callback-managed infra.
  */
 async function stopOrphanedDevServer(
   mainWorktree: string,

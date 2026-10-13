@@ -24,9 +24,9 @@ inventory issues.
 
 ## Port claims
 
-Run `{{ALIGNDEV}} project free-ports --size <n>` with the block size required by the project's workspace scheme: `perWorkspace × maxWorkspaces`. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
+Run `{{ALIGNDEV}} project free-ports --size <n>` with the size of the project's port range: port names × expected concurrent workspaces. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
 
-The project config is its registration. Deleting the project removes it from the listing. The workspace kernel refuses a `workspace` command when the project's `portRange` disagrees with its port scheme.
+The project config is its registration. Deleting the project removes it from the listing. The workspace dev-server refuses a command when the project's `portRange` disagrees with the `ports` range of its config.
 
 ## Reported issues
 
