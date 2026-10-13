@@ -61,13 +61,16 @@ function registerMain(overrides: Partial<RegisterWorkspaceInput> = {}) {
   return register(mainWorktree, { isMainWorktree: true, ...overrides });
 }
 
-/** Writes `workspaces.json` as is, bypassing the conversion of `writeWorkspaces`. */
-function writeStored(workspaces: Record<string, unknown>): void {
+/** Writes `workspaces.json` as is. Without `version`, as 0.36 or older wrote it. */
+function writeStored(workspaces: Record<string, unknown>, version?: number): void {
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-  writeFileSync(workspacesFilePath(mainWorktree, registryDir), JSON.stringify({ workspaces }));
+  writeFileSync(
+    workspacesFilePath(mainWorktree, registryDir),
+    JSON.stringify({ version, workspaces }),
+  );
 }
 
-function readStored(): { workspaces: Record<string, WorkspaceEntry> } {
+function readStored(): { version?: number; workspaces: Record<string, WorkspaceEntry> } {
   return JSON.parse(readFileSync(workspacesFilePath(mainWorktree, registryDir), "utf-8"));
 }
 
@@ -106,8 +109,7 @@ describe("registerWorkspace", () => {
     );
   });
 
-  it("keeps createdAt, purgeData, the dev fields and a ready status across a re-register", async () => {
-    const devSetupFailure = { at: CREATED_AT, message: "boom" };
+  it("keeps createdAt, purgeData, ports, devSetupAt and a ready status across a re-register", async () => {
     writeWorkspaces(mainWorktree, registryDir, {
       workspaces: {
         "wt-a": {
@@ -115,7 +117,7 @@ describe("registerWorkspace", () => {
           purgeData: { container: "db-wt-a" },
           ports: { web: 8200 },
           devSetupAt: CREATED_AT,
-          devSetupFailure,
+          devSetupFailure: { at: CREATED_AT, message: "boom" },
         },
       },
     });
@@ -126,7 +128,15 @@ describe("registerWorkspace", () => {
     expect(stored.purgeData).toEqual({ container: "db-wt-a" });
     expect(stored.ports).toEqual({ web: 8200 });
     expect(stored.devSetupAt).toBe(CREATED_AT);
-    expect(stored.devSetupFailure).toEqual(devSetupFailure);
+    expect(stored.devSetupFailure).toBeUndefined();
+  });
+
+  it("finalizes a main entry that `dev setup` created", async () => {
+    writeWorkspaces(mainWorktree, registryDir, {
+      workspaces: { main: { ...entry(mainWorktree), main: true, neverFinalized: true } },
+    });
+    expect((await registerMain()).status).toBe("pending");
+    expect(readEntries().main).not.toHaveProperty("neverFinalized");
   });
 
   it("resets a ready workspace to pending with `force`", async () => {
@@ -150,26 +160,22 @@ describe("registerWorkspace", () => {
     expect(readEntries().main.worktree).toBe(movedMain);
   });
 
-  it("registers a main worktree whose legacy entry holds the old absolute path", async () => {
-    writeStored({ main: { ...entry("/old/place/main"), main: true } });
+  it("registers a main worktree whose entry holds its old path", async () => {
+    writeStored({ main: { ...entry("/old/place/main"), main: true } }, 2);
     const registered = await registerMain();
     expect(registered.status).toBe("ready");
-    expect(readStored().workspaces.main.worktree).toBe(".");
+    expect(readStored().workspaces.main.worktree).toBe(mainWorktree);
   });
 });
 
 describe("stored form", () => {
-  it("stores a linked worktree relative to the main worktree, and the main entry as `.`", async () => {
+  it("stores absolute paths and the format version", async () => {
     await registerMain();
     await register(join(root, "wt-a"));
-    const { workspaces } = readStored();
-    expect(workspaces.main.worktree).toBe(".");
-    expect(workspaces["wt-a"].worktree).toBe("../wt-a");
-  });
-
-  it("hands absolute paths to readers", async () => {
-    await register(join(root, "wt-a"));
-    expect(readEntries()["wt-a"].worktree).toBe(join(root, "wt-a"));
+    const { version, workspaces } = readStored();
+    expect(version).toBe(2);
+    expect(workspaces.main.worktree).toBe(mainWorktree);
+    expect(workspaces["wt-a"].worktree).toBe(join(root, "wt-a"));
   });
 
   it("replaces the file through a rename, leaving no temporary file", async () => {
@@ -180,49 +186,47 @@ describe("stored form", () => {
 });
 
 describe("readWorkspaces repair", () => {
-  it("points a legacy main entry at the main worktree", () => {
+  it("points the main entry at the main worktree", () => {
     writeStored({ main: { ...entry("/old/place/main"), main: true } });
     expect(readEntries().main.worktree).toBe(mainWorktree);
   });
 
-  it("keeps a legacy path that exists", () => {
+  it("keeps a path that exists, so the main worktree moves alone", () => {
     const worktree = join(root, "elsewhere", "wt-a");
     mkdirSync(worktree, { recursive: true });
     writeStored({ "wt-a": entry(worktree) });
     expect(readEntries()["wt-a"].worktree).toBe(worktree);
   });
 
-  it("points a missing legacy path at the sibling of the main worktree with the same name", () => {
+  it("points a missing path at the sibling of the main worktree with the same name", () => {
     mkdirSync(join(root, "wt-a"));
     writeStored({ "wt-a": entry("/old/place/wt-a") });
     expect(readEntries()["wt-a"].worktree).toBe(join(root, "wt-a"));
   });
 
-  it("keeps a missing legacy path without a sibling, as an orphan", () => {
+  it("keeps a missing path without a sibling, as an orphan", () => {
     writeStored({ "wt-a": entry("/old/place/wt-a") });
     expect(readEntries()["wt-a"].worktree).toBe("/old/place/wt-a");
   });
 
-  it("sets devSetupAt to createdAt on a ready legacy entry only", () => {
+  it("sets devSetupAt to createdAt on the ready entries of a registry without version", () => {
     writeStored({
       "wt-ready": entry("/old/wt-ready"),
       "wt-pending": entry("/old/wt-pending", "pending"),
-      "wt-relative": entry("../wt-relative"),
     });
     const workspaces = readEntries();
     expect(workspaces["wt-ready"].devSetupAt).toBe(CREATED_AT);
     expect(workspaces["wt-pending"].devSetupAt).toBeUndefined();
-    expect(workspaces["wt-relative"].devSetupAt).toBeUndefined();
   });
 
-  it("drops a legacy portIndex from every entry", () => {
-    writeStored({
-      "wt-legacy": { ...entry("/old/wt-legacy"), portIndex: 2 },
-      "wt-relative": { ...entry("../wt-relative"), portIndex: 3 },
-    });
-    const workspaces = readEntries();
-    expect(workspaces["wt-legacy"]).not.toHaveProperty("portIndex");
-    expect(workspaces["wt-relative"]).not.toHaveProperty("portIndex");
+  it("leaves devSetupAt unset on a ready entry of a versioned registry", () => {
+    writeStored({ "wt-ready": entry("/old/wt-ready") }, 2);
+    expect(readEntries()["wt-ready"].devSetupAt).toBeUndefined();
+  });
+
+  it("drops a legacy portIndex", () => {
+    writeStored({ "wt-legacy": { ...entry("/old/wt-legacy"), portIndex: 2 } });
+    expect(readEntries()["wt-legacy"]).not.toHaveProperty("portIndex");
   });
 
   it("keeps the main entry keyed by the current name among duplicates", () => {
@@ -241,13 +245,13 @@ describe("readWorkspaces repair", () => {
     expect(Object.keys(readEntries())).toEqual(["name-b"]);
   });
 
-  it("persists the repair on the next write, in the relative form", () => {
+  it("persists the repair on the next write", () => {
     mkdirSync(join(root, "wt-a"));
     writeStored({ "wt-a": entry("/old/place/wt-a") });
     writeWorkspaces(mainWorktree, registryDir, readWorkspaces(mainWorktree, registryDir));
-    expect(readStored().workspaces["wt-a"]).toEqual({
-      ...entry("../wt-a"),
-      devSetupAt: CREATED_AT,
+    expect(readStored()).toEqual({
+      version: 2,
+      workspaces: { "wt-a": { ...entry(join(root, "wt-a")), devSetupAt: CREATED_AT } },
     });
   });
 });

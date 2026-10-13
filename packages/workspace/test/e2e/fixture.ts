@@ -18,12 +18,14 @@ export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
 /**
  * A real dev-server with no server: `dev setup` alone exercises it. Its run file `ports.env` carries
  * the ports; its `setup` hook appends one line per run to `setup-runs.log`, and throws with
- * `E2E_DEV_SETUP_FAIL=1`.
+ * `E2E_DEV_SETUP_FAIL=1`. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording anything.
  */
 const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { helpers, runDevServer } from "${distIndexUrl}";
+
+if (process.env.E2E_DEV_EXIT === "1") process.exit(3);
 
 await runDevServer({
   runtimeDir: ".wt",
@@ -68,17 +70,20 @@ export interface FixtureOptions {
    * With `E2E_SEED_FAIL=1`, a second entry follows whose required source is missing.
    */
   fallbackSeeding?: boolean;
+  /** Declares the `ports` key that 0.37.0 removed from the workspace config. */
+  oldConfig?: boolean;
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   const portless = options.portless ?? false;
   const fallbackSeeding = options.fallbackSeeding ?? false;
+  const oldConfig = options.oldConfig ?? false;
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
   const repo = join(root, "fixrepo");
   mkdirSync(join(repo, "scripts"), { recursive: true });
   writeFileSync(
     join(repo, "scripts", "workspace.mjs"),
-    workspaceMjsSource(portless, fallbackSeeding),
+    workspaceMjsSource(portless, fallbackSeeding, oldConfig),
   );
   if (fallbackSeeding) {
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
@@ -93,11 +98,16 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   return { root, repo };
 }
 
-function workspaceMjsSource(portless: boolean, fallbackSeeding: boolean): string {
+function workspaceMjsSource(
+  portless: boolean,
+  fallbackSeeding: boolean,
+  oldConfig: boolean,
+): string {
   const devSetup = portless
     ? ""
     : `  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
 `;
+  const oldPorts = oldConfig ? `  ports: { base: 47100, names: ["web"] },\n` : "";
   const gitignoredFiles = fallbackSeeding
     ? `[
     {
@@ -124,7 +134,7 @@ import { runWorkspace } from "${distIndexUrl}";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-${devSetup}  sharedDirs: [],
+${devSetup}${oldPorts}  sharedDirs: [],
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
   formatSummary: () => "Workspace ready.",
@@ -167,7 +177,7 @@ export function runDev(
   });
 }
 
-/** The registry as stored: `worktree` paths are relative to the main worktree. */
+/** The registry as stored. */
 export function readWorkspaces(repo: string): WorkspacesRegistry {
   return JSON.parse(readFileSync(registryPath(repo), "utf-8")) as WorkspacesRegistry;
 }

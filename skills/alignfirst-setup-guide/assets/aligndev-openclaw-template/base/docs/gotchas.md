@@ -44,7 +44,7 @@ The setup guide and `sharp-writing` install once under `~/.agents/skills/`. Open
 
 ## Moving a project
 
-`@alignfirst/workspace` stores worktree paths relative to the main worktree, in `.local-wt/workspace-registry/workspaces.json`, and repairs the absolute paths an older version wrote. Moving the main worktree alone needs nothing while its directory keeps its name. Renaming the directory renames the workspace: its infrastructure is provisioned again under the new name, and a warning names the old one. Rename the directory back to recover the old resources, or remove them by hand. Linked worktrees need git's own repair (`git worktree repair`), outside the workspace system. `aligndev project` reads the repaired git worktrees directly.
+`@alignfirst/workspace` stores absolute worktree paths in `.local-wt/workspace-registry/workspaces.json`, and repairs them at each read. The registry follows the main worktree moved alone, or the whole project moved with its sibling worktrees, while the main directory keeps its name. Renaming the directory renames the workspace: its infrastructure is provisioned again under the new name, and a warning names the old one. Rename the directory back to recover the old resources, or remove them by hand. Moved linked worktrees need git's own repair (`git worktree repair`), outside the workspace system. `aligndev project` reads the repaired git worktrees directly.
 
 ## Heartbeat cost is a main-session problem
 

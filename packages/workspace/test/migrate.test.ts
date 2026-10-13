@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -132,20 +132,21 @@ describe("runMigrate", () => {
     expect(output).toContain("Deleted slots.json.");
   });
 
-  it("writes relative paths, and devSetupAt on ready entries", async () => {
+  it("writes the versioned registry, with devSetupAt on ready entries", async () => {
     writeOldRegistry({
       "8100": oldEntry(mainWorktree, { main: true }),
       "8110": oldEntry("/repo/wt-a"),
       "8120": oldEntry("/repo/wt-b", { status: "failed" }),
     });
     await migrate();
-    const { workspaces } = JSON.parse(
+    const { version, workspaces } = JSON.parse(
       readFileSync(workspacesFilePath(mainWorktree, registryDir), "utf-8"),
     );
+    expect(version).toBe(2);
     const main = workspaces[basename(mainWorktree)];
-    expect(main.worktree).toBe(".");
+    expect(main.worktree).toBe(mainWorktree);
     expect(main.devSetupAt).toBe("2026-05-10T00:00:00.000Z");
-    expect(workspaces["wt-a"].worktree).toBe(relative(mainWorktree, "/repo/wt-a"));
+    expect(workspaces["wt-a"].worktree).toBe("/repo/wt-a");
     expect(workspaces["wt-a"].devSetupAt).toBe("2026-05-10T00:00:00.000Z");
     expect(workspaces["wt-b"].devSetupAt).toBeUndefined();
   });

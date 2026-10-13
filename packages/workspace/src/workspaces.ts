@@ -1,28 +1,32 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
 import { withRegistryLock } from "./registry-lock.js";
-import { getWorktreeBranch } from "./worktree.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
 
 const WORKSPACES_FILENAME = "workspaces.json";
+/** The registry format with on-demand ports. A file without `version` was written by 0.36 or older. */
+const REGISTRY_VERSION = 2;
 
 /** The registry: one entry per workspace, keyed by its worktree directory basename. */
 export interface WorkspacesRegistry {
   workspaces: Record<string, WorkspaceEntry>;
 }
 
-/** The fields an entry stores as they are, on disk and in memory. */
-export interface WorkspaceEntryFields {
+export interface WorkspaceEntry {
+  /** Absolute path of the worktree. */
+  worktree: string;
   createdAt: string;
   status: WorkspaceStatus;
   failure?: { at: string; message: string };
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;
+  /** `true` on a main entry that `dev setup` created before any `workspace setup` finalized it. */
+  neverFinalized?: boolean;
   /** One port per declared name, allocated by `dev setup`. */
   ports?: Record<string, number>;
   /** ISO date of the last successful `DevServerConfig.setup`. */
@@ -33,25 +37,16 @@ export interface WorkspaceEntryFields {
   purgeData?: unknown;
 }
 
-/** An entry in memory, as every reader receives it. */
-export interface WorkspaceEntry extends WorkspaceEntryFields {
-  /** Absolute path of the worktree. */
-  worktree: string;
-}
-
 export type WorkspaceStatus = "pending" | "ready" | "failed";
 
 /** The registry as `workspaces.json` holds it. */
 interface StoredRegistry {
+  /** Absent on a registry written by 0.36 or older. */
+  version?: number;
   workspaces: Record<string, StoredWorkspaceEntry>;
 }
 
-interface StoredWorkspaceEntry extends WorkspaceEntryFields {
-  /**
-   * Relative to the main worktree, with POSIX separators; `"."` for the main worktree. Absolute on
-   * a legacy entry, written before relative paths.
-   */
-  worktree: string;
+interface StoredWorkspaceEntry extends WorkspaceEntry {
   /** Legacy: the port block index of the old port scheme. Dropped at read time. */
   portIndex?: number;
 }
@@ -73,17 +68,19 @@ export function workspacesFilePath(mainWorktree: string, registryDir: string): s
 }
 
 /**
- * Reads the registry with absolute `worktree` paths. Legacy entries are repaired in memory only;
- * the next {@link writeWorkspaces} persists the repair. A legacy `portIndex` is dropped: those
- * workspaces get new ports at their next `dev setup`.
+ * Reads the registry, repairing each `worktree` in memory: the main entry points to the current
+ * main worktree, and a missing linked worktree to its sibling of the same name. The next
+ * {@link writeWorkspaces} persists the repair. A legacy `portIndex` is dropped: those workspaces get
+ * new ports at their next `dev setup`.
  */
 export function readWorkspaces(mainWorktree: string, registryDir: string): WorkspacesRegistry {
   const filePath = workspacesFilePath(mainWorktree, registryDir);
   if (!existsSync(filePath)) return { workspaces: {} };
   const stored = JSON.parse(readFileSync(filePath, "utf-8")) as StoredRegistry;
+  const legacy = stored.version === undefined;
   const workspaces: Record<string, WorkspaceEntry> = {};
   for (const [name, entry] of Object.entries(stored.workspaces)) {
-    workspaces[name] = loadEntry(name, entry, mainWorktree);
+    workspaces[name] = loadEntry(name, entry, mainWorktree, legacy);
   }
   dropDuplicateMainEntries(workspaces, mainWorktree);
   return { workspaces };
@@ -93,25 +90,16 @@ function loadEntry(
   name: string,
   stored: StoredWorkspaceEntry,
   mainWorktree: string,
+  legacy: boolean,
 ): WorkspaceEntry {
   const { portIndex, ...fields } = stored;
-  if (!isAbsolute(stored.worktree)) {
-    return { ...fields, worktree: resolve(mainWorktree, stored.worktree) };
-  }
-  const entry: WorkspaceEntry = {
-    ...fields,
-    worktree: repairLegacyWorktree(name, stored, mainWorktree),
-  };
+  const entry: WorkspaceEntry = { ...fields, worktree: repairWorktree(name, stored, mainWorktree) };
   // The old `finalizeWorkspace` of a ready legacy entry already provisioned its infrastructure.
-  if (entry.status === "ready") entry.devSetupAt ??= entry.createdAt;
+  if (legacy && entry.status === "ready") entry.devSetupAt ??= entry.createdAt;
   return entry;
 }
 
-function repairLegacyWorktree(
-  name: string,
-  stored: StoredWorkspaceEntry,
-  mainWorktree: string,
-): string {
+function repairWorktree(name: string, stored: StoredWorkspaceEntry, mainWorktree: string): string {
   if (stored.main === true) return mainWorktree;
   if (existsSync(stored.worktree)) return stored.worktree;
   // A project moved together with its worktrees.
@@ -148,25 +136,12 @@ export function writeWorkspaces(
   registryDir: string,
   registry: WorkspacesRegistry,
 ): void {
-  const stored: StoredRegistry = { workspaces: {} };
-  for (const [name, entry] of Object.entries(registry.workspaces)) {
-    stored.workspaces[name] = {
-      ...entry,
-      worktree: toStoredWorktree(mainWorktree, entry.worktree),
-    };
-  }
+  const stored: StoredRegistry = { version: REGISTRY_VERSION, workspaces: registry.workspaces };
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
   const filePath = workspacesFilePath(mainWorktree, registryDir);
   const tempPath = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   writeFileSync(tempPath, `${JSON.stringify(stored, undefined, 2)}\n`);
   renameSync(tempPath, filePath);
-}
-
-/** The stored form of an absolute worktree path: relative to the main worktree, POSIX separators. */
-export function toStoredWorktree(mainWorktree: string, worktree: string): string {
-  const rel = relative(mainWorktree, worktree);
-  if (rel === "") return ".";
-  return rel.split(sep).join(posix.sep);
 }
 
 /** Reads, mutates and writes the registry under the registry lock. */
@@ -181,16 +156,6 @@ export async function updateWorkspaces<T>(
     writeWorkspaces(mainWorktree, registryDir, registry);
     return result;
   });
-}
-
-/** Reads the registry under the registry lock, so a concurrent write is never read half-done. */
-export async function readWorkspacesLocked(
-  mainWorktree: string,
-  registryDir: string,
-): Promise<WorkspacesRegistry> {
-  return withRegistryLock(mainWorktree, registryDir, () =>
-    readWorkspaces(mainWorktree, registryDir),
-  );
 }
 
 export interface RegisterWorkspaceInput {
@@ -223,16 +188,20 @@ export async function registerWorkspace(
       // Re-runs of `workspace setup` keep a previously finalized workspace ready, unless `--force`
       // is set — then we reset to pending so `workspace wait` blocks and `dev` refuses during the
       // re-finalize.
-      status: existing?.status === "ready" && input.force !== true ? "ready" : "pending",
+      status: isFinalized(existing) && input.force !== true ? "ready" : "pending",
       ports: existing?.ports,
       devSetupAt: existing?.devSetupAt,
-      devSetupFailure: existing?.devSetupFailure,
+      // A `devSetupFailure` is dropped: `workspace wait` reports only this setup's dev failure.
       purgeData: existing?.purgeData,
     };
     if (input.isMainWorktree) entry.main = true;
     registry.workspaces[name] = entry;
     return { name, status: entry.status };
   });
+}
+
+function isFinalized(entry: WorkspaceEntry | undefined): boolean {
+  return entry?.status === "ready" && entry.neverFinalized !== true;
 }
 
 /**
@@ -269,10 +238,9 @@ function refuseNameCollision(
   currentWorktree: string,
 ): void {
   if (!existing || resolve(existing.worktree) === resolve(currentWorktree)) return;
-  const branch = getWorktreeBranch(existing.worktree) ?? "(detached)";
   throw new WorkspaceError(
-    `The workspace name "${name}" is already taken by ${existing.worktree} ` +
-      `(branch: ${branch}). Worktree directory names must be unique.`,
+    `The workspace name "${name}" is already taken by ${existing.worktree}. ` +
+      "Worktree directory names must be unique.",
   );
 }
 

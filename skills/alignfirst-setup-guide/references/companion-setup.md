@@ -21,7 +21,7 @@ npx -y alignfirst companion register [--dir <path>]
 npx -y alignfirst config --json
 ```
 
-`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path.
+`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path. The command refuses a directory that is or contains the home directory or `~/.alignfirst/companions`, or that overlaps the project or another companion.
 
 The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To force an item's location, add it to the entry's `items` as `"companion"` or `"project"`, then read the layout again.
 

@@ -33,8 +33,9 @@ function runRegister(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} companion register [--dir <path>] [--create-dir]
 
 Registers the current project in ~/.alignfirst/companions/registry.json as { "dir": <path> },
-with every item on "auto". A registered project keeps its registration. Fails when another key
-uses the same companion directory.
+with every item on "auto". A registered project keeps its registration. Fails when the companion
+directory is or contains ~/.alignfirst/companions or the home directory, or when it is, contains
+or is inside the project or the companion directory of another key.
 
 Options:
   --dir <path>  The companion directory, written as given: absolute, ~/..., or relative to
@@ -78,8 +79,9 @@ Removes the current project from ~/.alignfirst/companions/registry.json. Keeps i
 directory, unless --remove-dir.
 
 Options:
-  --remove-dir  Also remove the companion directory. Fails, with no change, when it is not
-                empty or another key uses it.
+  --remove-dir  Also remove the companion directory when it is inside ~/.alignfirst/companions;
+                keep it otherwise. Fails, with no change, when it is not empty, is or contains
+                ~/.alignfirst/companions, or overlaps the project or another key's directory.
   --force       With --remove-dir, delete a non-empty companion directory.
 `;
   const { values } = parseCommandArgs(usage, () =>
@@ -103,6 +105,8 @@ Options:
     ctx.stdout.write(
       `Orphaned companion directory: ${removal.dir}${removal.empty ? " (empty)" : ""}\n`,
     );
+  if (removal.keptOutsideRoot)
+    ctx.stdout.write("Kept: it is outside ~/.alignfirst/companions. Remove it by hand.\n");
   return 0;
 }
 

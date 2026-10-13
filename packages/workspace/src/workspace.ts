@@ -29,7 +29,7 @@ import {
   readDevServers,
   removeDevServerEntryByWorktree,
 } from "./dev-servers-registry.js";
-import { ConfigError, WorkspaceError } from "./errors.js";
+import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
   type GitignoredFileEntry,
   type PatchContext,
@@ -48,7 +48,6 @@ import {
   markWorkspaceFailed,
   markWorkspaceReady,
   readWorkspaces,
-  readWorkspacesLocked,
   REGISTRY_SUBDIR,
   registerWorkspace,
   registryDirFor,
@@ -69,6 +68,10 @@ import {
   type WorktreeContext,
   type WorktreeDirNameFn,
 } from "./worktree.js";
+
+const UPGRADE_POINTER =
+  'Follow "Move Workspace Ports to the Dev-Server" in the alignfirst-upgrade reference of the ' +
+  "alignfirst-setup-guide skill.";
 
 /** Configuration accepted by {@link runWorkspace}. */
 export interface WorkspaceConfig {
@@ -240,6 +243,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 
   try {
+    refuseOldConfig(config);
     const ctx = detectWorktree();
 
     if (command.kind === "migrate") {
@@ -303,6 +307,16 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     }
     throw err;
   }
+}
+
+/** `ports` and `setupProfiles` moved to the dev-server config in 0.37.0. */
+function refuseOldConfig(config: WorkspaceConfig): void {
+  const removed = ["ports", "setupProfiles"].filter((key) => key in config);
+  if (removed.length === 0) return;
+  throw new ConfigError(
+    `The workspace config declares ${removed.map((key) => `\`${key}\``).join(" and ")}, ` +
+      `removed in 0.37.0. ${UPGRADE_POINTER}`,
+  );
 }
 
 /** `setup --full` on an already finalized workspace: the dev step runs in this process. */
@@ -448,10 +462,6 @@ async function runSetup(
   return { name, worktree: setupCtx.currentWorktree, status };
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 interface SetupLog {
   fd: number;
   path: string;
@@ -575,7 +585,13 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
   };
 
   try {
-    await config.finalizeWorkspace(setupContext);
+    const result: unknown = await config.finalizeWorkspace(setupContext);
+    if (result !== undefined) {
+      throw new ConfigError(
+        "`finalizeWorkspace` returned a value: purge data is no longer stored. Provision " +
+          `infrastructure in the dev-server's \`setup\` and tear it down by name. ${UPGRADE_POINTER}`,
+      );
+    }
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
@@ -821,7 +837,7 @@ function hintLiveOrphans(liveOrphans: string[]): void {
 async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   const { config, registryDir } = kernel;
   const ctx = detectWorktree();
-  const registry = await readWorkspacesLocked(ctx.mainWorktree, registryDir);
+  const registry = readWorkspaces(ctx.mainWorktree, registryDir);
   const orphanNames = findOrphanNames(registry);
 
   let stoppedProcesses = 0;
@@ -1071,7 +1087,7 @@ async function handleRemove(
 ): Promise<void> {
   const { config, registryDir } = kernel;
   const verboseLog = makeVerboseLog(run.verbose);
-  const registry = await readWorkspacesLocked(ctx.mainWorktree, registryDir);
+  const registry = readWorkspaces(ctx.mainWorktree, registryDir);
   const target = resolveTarget(command.selector, ctx, registryDir);
   const name = target.name;
   const worktree = target.worktree;

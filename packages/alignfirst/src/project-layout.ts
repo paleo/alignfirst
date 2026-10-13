@@ -223,7 +223,11 @@ function findEntry(
 /** A relative `dir` joins the real companions directory, so a symlink there moves it too. */
 function companionDir(dir: string, realHome: string): string {
   if (dir.startsWith("~/") || isAbsolute(dir)) return normalizePath(dir, realHome);
-  return realOrResolved(join(normalizePath(COMPANIONS_ROOT, realHome), dir));
+  return realOrResolved(join(companionsRoot(realHome), dir));
+}
+
+function companionsRoot(realHome: string): string {
+  return normalizePath(COMPANIONS_ROOT, realHome);
 }
 
 function effectiveItems({ items = {} }: RegistryProject): ItemSettings {
@@ -383,7 +387,7 @@ function addEntry(
       dirOption === undefined ? companionName(mainWorktree, realHome) : checkDirOption(dirOption),
   };
   const dir = companionDir(project.dir, realHome);
-  assertOwnCompanionDir(registry, key, dir, realHome);
+  assertCompanionDirBounds(registry, { key, project, dir }, mainWorktree, realHome);
   writeRegistry(registry.path, { ...registry.projects, [key]: project });
   return { key, project, dir };
 }
@@ -406,16 +410,40 @@ function companionName(mainWorktree: string, realHome: string): string {
   return name.replaceAll("/", "_");
 }
 
-/** Two keys share a directory only when their `dir` values resolve to the same path. */
-function assertOwnCompanionDir(
+/**
+ * Fails when deleting the companion directory could delete the companions root, the home
+ * directory, the project, or another key's companion directory.
+ */
+function assertCompanionDirBounds(
   registry: Registry,
-  key: string,
-  dir: string,
+  { key, dir }: RegistryEntry,
+  mainWorktree: string,
   realHome: string,
 ): void {
-  const others = (keysByCompanionDir(registry, realHome).get(dir) ?? []).filter((k) => k !== key);
-  if (others.length === 0) return;
-  throw new CliError(`The companion directory ${dir} is already used by ${others.join(", ")}.`);
+  assertNotAncestor(dir, companionsRoot(realHome), "the companions root");
+  assertNotAncestor(dir, realHome, "the home directory");
+  assertDisjoint(dir, mainWorktree, "the project");
+  for (const [otherDir, keys] of keysByCompanionDir(registry, realHome)) {
+    const others = keys.filter((k) => k !== key).join(", ");
+    if (others === "") continue;
+    if (otherDir === dir)
+      throw new CliError(`The companion directory ${dir} is already used by ${others}.`);
+    assertDisjoint(dir, otherDir, `the companion directory of ${others}`);
+  }
+}
+
+function assertDisjoint(dir: string, other: string, label: string): void {
+  assertNotAncestor(dir, other, label);
+  if (isSameOrInside(dir, other)) throw boundsError(dir, "is inside", other, label);
+}
+
+function assertNotAncestor(dir: string, other: string, label: string): void {
+  if (isSameOrInside(other, dir))
+    throw boundsError(dir, dir === other ? "is" : "contains", other, label);
+}
+
+function boundsError(dir: string, relation: string, other: string, label: string): CliError {
+  return new CliError(`The companion directory ${dir} ${relation} ${other}, ${label}.`);
 }
 
 function keysByCompanionDir(registry: Registry, realHome: string): Map<string, string[]> {
@@ -443,11 +471,14 @@ export interface CompanionUnregistration {
   /** `undefined` when the directory is missing. */
   empty?: boolean;
   removed: boolean;
+  /** `removeDir` kept the directory: it is outside the companions root. */
+  keptOutsideRoot: boolean;
 }
 
 /**
  * Removes the registry key of the main worktree of `cwd`. With `removeDir`, also removes its
- * companion directory: a non-empty one requires `force`. Fails before any change.
+ * companion directory when it is inside the companions root: a non-empty one requires `force`.
+ * Fails before any change.
  */
 export function unregisterCompanion(
   cwd: string,
@@ -463,23 +494,32 @@ export function unregisterCompanion(
     throw new CliError(`${mainWorktree} is not registered in ${path}.`);
   const { dir } = entry;
   const entries = pathExists(dir) ? readdirSync(dir) : undefined;
-  if (removeDir) assertRemovableDir(registry, entry.key, dir, entries, force, realHome);
+  const root = companionsRoot(realHome);
+  if (removeDir) assertNotAncestor(dir, root, "the companions root");
+  const deletable = removeDir && isSameOrInside(dir, root);
+  if (deletable) assertRemovableDir(registry, entry, entries, { force, mainWorktree, realHome });
   const { [entry.key]: _removed, ...projects } = registry.projects;
   writeRegistry(path, projects);
-  const removed = removeDir && entries !== undefined;
+  const removed = deletable && entries !== undefined;
   if (removed) rmSync(dir, { recursive: true, force: true });
-  return { registry: path, key: entry.key, dir, empty: entries && entries.length === 0, removed };
+  return {
+    registry: path,
+    key: entry.key,
+    dir,
+    empty: entries && entries.length === 0,
+    removed,
+    keptOutsideRoot: removeDir && !deletable && entries !== undefined,
+  };
 }
 
 function assertRemovableDir(
   registry: Registry,
-  key: string,
-  dir: string,
+  entry: RegistryEntry,
   entries: string[] | undefined,
-  force: boolean,
-  realHome: string,
+  { force, mainWorktree, realHome }: { force: boolean; mainWorktree: string; realHome: string },
 ): void {
-  assertOwnCompanionDir(registry, key, dir, realHome);
+  assertCompanionDirBounds(registry, entry, mainWorktree, realHome);
+  const { dir } = entry;
   if (force || entries === undefined || entries.length === 0) return;
   throw new CliError(
     `The companion directory ${dir} is not empty: ${entries.sort().join(", ")}. ` +
@@ -505,4 +545,23 @@ export function sharedCompanionDirs(home: string): { dir: string; keys: string[]
   return [...keysByCompanionDir(registry, realOrResolved(home))]
     .filter(([, keys]) => keys.length > 1)
     .map(([dir, keys]) => ({ dir, keys }));
+}
+
+export interface NestedCompanionDir {
+  dir: string;
+  keys: string[];
+  outerDir: string;
+  outerKeys: string[];
+}
+
+/** The companion directories inside another companion directory of the registry. */
+export function nestedCompanionDirs(home: string): NestedCompanionDir[] {
+  const registry = readRegistry(home);
+  if (registry === undefined) return [];
+  const dirs = [...keysByCompanionDir(registry, realOrResolved(home))];
+  return dirs.flatMap(([dir, keys]) =>
+    dirs
+      .filter(([outerDir]) => outerDir !== dir && isSameOrInside(dir, outerDir))
+      .map(([outerDir, outerKeys]) => ({ dir, keys, outerDir, outerKeys })),
+  );
 }

@@ -84,9 +84,10 @@ Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-regi
 
 ```json
 {
+  "version": 2,
   "workspaces": {
     "myproject-feat-214": {
-      "worktree": "../myproject-feat-214",
+      "worktree": "/home/me/projects/myproject-feat-214",
       "createdAt": "2026-01-01T00:00:00.000Z",
       "status": "ready",
       "ports": { "server": 8103, "frontend": 8104, "db": 8105 },
@@ -96,7 +97,7 @@ Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-regi
 }
 ```
 
-`worktree` is relative to the main worktree. `ports` and `devSetupAt` arrive with the first `dev setup`.
+`ports` and `devSetupAt` arrive with the first `dev setup`.
 
 ### Setup modes
 

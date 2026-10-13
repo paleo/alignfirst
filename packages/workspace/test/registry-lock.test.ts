@@ -45,12 +45,19 @@ function deadPid(): number {
 }
 
 describe("withRegistryLock", () => {
-  it("holds the lock with its PID while running, and releases it", async () => {
+  it("holds the lock with its PID and a token while running, and releases it", async () => {
     const result = await withRegistryLock(mainWorktree, registryDir, () =>
       readFileSync(lockPath, "utf-8"),
     );
-    expect(result).toBe(String(process.pid));
+    expect(result).toMatch(new RegExp(`^${process.pid}:[0-9a-f]{16}$`));
     expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("leaves in place a lock that another holder took over", async () => {
+    await withRegistryLock(mainWorktree, registryDir, () => {
+      writeFileSync(lockPath, `${process.pid}:other`);
+    });
+    expect(readFileSync(lockPath, "utf-8")).toBe(`${process.pid}:other`);
   });
 
   it("releases the lock when the function throws", async () => {

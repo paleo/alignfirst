@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 
 import { findOwnEntry } from "./dev-servers-registry.js";
-import { ConfigError, WorkspaceError } from "./errors.js";
+import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
   type RunFileContext,
   type RunFileEntry,
@@ -117,6 +117,7 @@ async function ensureMainEntry(mainWorktree: string, registryDir: string): Promi
       createdAt: new Date().toISOString(),
       status: "ready",
       main: true,
+      neverFinalized: true,
     };
   });
 }
@@ -144,20 +145,19 @@ export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
 
 /**
  * Pure builder for the worktree-readiness gate of `dev setup`. Returns `ok` when the workspace is
- * `ready` or absent (synthesized main), or `pending` with `acceptPending`; otherwise returns the
- * user-facing error message.
+ * `ready`, or `pending` with `acceptPending`; otherwise returns the user-facing error message.
  */
 export function buildWorktreeReadyMessage(input: {
   name: string;
   worktreePath: string;
   runtimeDir: string;
-  entry: WorkspaceEntry | undefined;
+  entry: WorkspaceEntry;
   now: number;
   pm: PackageManagerCommands;
   acceptPending?: boolean;
 }): WorktreeReadyCheck {
   const { name, worktreePath, runtimeDir, entry, now, pm } = input;
-  if (!entry || entry.status === "ready") return { ok: true };
+  if (entry.status === "ready") return { ok: true };
   if (entry.status === "pending" && input.acceptPending === true) return { ok: true };
   const ws = pm.workspace.withArgs;
   const logPath = setupLogPath(worktreePath, runtimeDir);
@@ -271,10 +271,6 @@ async function recordDevSetupFailure(
     const entry = registry.workspaces[name];
     if (entry) entry.devSetupFailure = { at: new Date().toISOString(), message };
   });
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /** A hook's own error becomes a `WorkspaceError`, so the CLI reports it without a stack trace. */

@@ -35,7 +35,7 @@ After `finalizeWorkspace` succeeds, the finalize child reports the progress labe
 
 The child then marks the workspace `ready` whatever the outcome. `ready` means the workspace's own setup succeeded; the dev side is tracked by `devSetupAt` and `devSetupFailure`, and the next `dev setup` or start retries it. The dev-server records its own failures. When it exits non-zero without a record newer than the step's start (it could not run, or stopped at its readiness check or earlier), the child records `dev setup exited with code <n>`.
 
-The blocking `setup --full` and the standalone `wait` report a `ready` entry with a `devSetupFailure` as ``Workspace ready; dev setup failed: <message>. Run `dev setup` to retry.``, and exit 1.
+The blocking `setup --full` and the standalone `wait` report a `ready` entry with a `devSetupFailure` as ``Workspace ready; dev setup failed: <message>. Run `dev setup` to retry.``, and exit 1. `registerWorkspace` drops the `devSetupFailure` of an earlier run, so `wait` reports only the current setup's dev failure.
 
 On a workspace already `ready`, the finalize child skips, so no dev step runs there. The calling process runs it after the wait instead, in the foreground with inherited stdio and without `--from-finalize`, and records a failure the same way.
 
@@ -103,7 +103,7 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 
 ## Port allocation
 
-`dev setup` ([`dev-setup.ts`](../packages/workspace/src/dev-setup.ts)) runs explicitly, and implicitly before `up`, `restart` and the foreground start. It resolves the workspace, requires the `ready` status, reconciles the ports, writes the run files, then runs `DevServerConfig.setup` when `devSetupAt` is unset or `--force` is given. In the main worktree, it first re-keys a renamed main entry, or creates a `ready` main entry when there is none. A failure after the readiness check is recorded as `devSetupFailure`; a successful run clears it.
+`dev setup` ([`dev-setup.ts`](../packages/workspace/src/dev-setup.ts)) runs explicitly, and implicitly before `up`, `restart` and the foreground start. It resolves the workspace, requires the `ready` status, reconciles the ports, writes the run files, then runs `DevServerConfig.setup` when `devSetupAt` is unset or `--force` is given. In the main worktree, it first re-keys a renamed main entry, or creates a `ready` main entry when there is none. That entry carries `neverFinalized: true`, so a later `workspace setup` still finalizes the main worktree. A failure after the readiness check is recorded as `devSetupFailure`; a successful run clears it.
 
 ### Reconciliation
 
@@ -145,18 +145,20 @@ Every dev-server command runs `checkPortClaim` ([`port-claim.ts`](../packages/wo
 
 ## Registry paths and repair
 
-`workspaces.json` stores each `worktree` relative to the main worktree, with POSIX separators. The main entry holds `"."`. The conversion happens at the I/O boundary: `readWorkspaces` resolves every path against the main worktree, and `writeWorkspaces` makes it relative again. Every entry handed to code carries an absolute path, and so do the callback contexts (`PurgeContext.worktree`, `ResolvedWorkspace.worktree`). `dev-servers.json` keeps absolute paths: PID liveness prunes its stale entries.
+`workspaces.json` stores each `worktree` as an absolute path, like `dev-servers.json`. All worktrees share the file through the registry symlink while each branch runs its own package version, and every version reads absolute paths alike.
+
+The file carries `"version": 2`. A file without it was written by 0.36 or older. Older versions keep the top-level key when they rewrite the file.
 
 ### Read-time repair
 
-An absolute `worktree` marks a legacy entry, written before relative paths. `readWorkspaces` repairs it in memory, and the next write persists the repair:
+`readWorkspaces` repairs every entry in memory, and the next write persists the repair:
 
-- A `main: true` entry points at the main worktree.
-- An existing path is kept.
+- A `main: true` entry points at the main worktree, so the main worktree can move alone.
+- An existing path is kept. Linked worktrees therefore survive a move of the main worktree.
 - A missing path whose sibling `join(dirname(mainWorktree), <key>)` exists points at that sibling: the project moved together with its worktrees.
 - Any other missing path is kept. The entry stays an orphan.
 
-A `ready` legacy entry without `devSetupAt` gets its `createdAt`: its old `finalizeWorkspace` already provisioned the infrastructure.
+In a file without `version`, a `ready` entry without `devSetupAt` gets its `createdAt`: its old `finalizeWorkspace` already provisioned the infrastructure.
 
 An old bug left one main entry per name the main directory ever had. `readWorkspaces` keeps the one keyed `basename(mainWorktree)`, otherwise the newest by `createdAt`, and drops the others.
 
@@ -168,8 +170,8 @@ The main entry is found by `main: true`, not by its key. A key that differs from
 
 Every read-modify-write of `workspaces.json` goes through `updateWorkspaces`, which holds `<registryDir>/workspaces.lock` ([`registry-lock.ts`](../packages/workspace/src/registry-lock.ts)). The writers are `registerWorkspace`, the `markWorkspace*` functions, the dev-failure record of `setup --full`, `remove`, `prune`, the `list` auto-prune and `migrate-registry-0.30`. The dev-server writes through it too: `dev setup` creates the main entry, stores the ports, `devSetupAt` and `devSetupFailure`.
 
-- The lock file is created with `O_EXCL`, holds the holder's PID, and is removed in a `finally`.
-- A lock is stale when its PID is dead or the file is older than 30 seconds. A file without a PID yet is judged by its age only. A waiter renames a stale lock to a unique name before deleting it, so only one waiter replaces it; a rename that caught a fresh lock puts it back.
+- The lock file is created with `O_EXCL` and holds `<pid>:<token>`, a token unique to the holder. The `finally` deletes it only while it still holds that token.
+- A lock is stale when its PID is dead or the file is older than 30 seconds. A file without a PID yet is judged by its age only. A waiter renames a stale lock to a unique name before deleting it, so only one waiter replaces it. A rename that caught a fresh lock, told apart by its content, puts it back. A third process that creates a lock during that window overlaps the restored holder; closing it would need OS-level locks.
 - A waiter retries every 50 ms and fails after 10 seconds, with an error naming the lock file.
 
 The lock covers only reading, changing and writing the JSON, plus the listen probes of the allocation. It never spans a callback, git, Docker or a shell-out. `remove` and `prune` therefore take it twice: once to read the entry, then to delete it after the teardown, on a fresh read. `prune` deletes only the names still orphaned at that read. The `list` auto-prune first looks for orphans without the lock, so a `list` with no orphan writes nothing. Read-only paths (`wait`, `status`, the dev-server's lookups) read without the lock. `writeWorkspaces` writes a temporary file next to `workspaces.json` and renames it over the registry, so they never see a half-written file.
@@ -184,7 +186,7 @@ Conversion rules:
 - Linked entries are keyed by `basename(worktree)`; same-path duplicates keep the newest entry. An entry whose directory is missing migrates as-is — it is an orphan, and the healing machinery reaches it by name.
 - Migrated entries carry no ports. Each workspace gets its ports and run files at its next start.
 - `dev-servers.json` entries are rekeyed from `slot` to the workspace name; running PIDs stay valid.
-- The converted registry is written under the registry lock, in the relative form. Its `ready` entries get `devSetupAt`, as in the read-time repair.
+- The converted registry is written under the registry lock, with `version`. Its `ready` entries get `devSetupAt`, as in the read-time repair.
 
 The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be removed manually.
 

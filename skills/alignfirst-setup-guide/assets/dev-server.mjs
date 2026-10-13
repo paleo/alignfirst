@@ -17,7 +17,7 @@
 // =============================================================================
 
 import { execSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { helpers, runDevServer } from "@alignfirst/workspace";
 
@@ -124,8 +124,16 @@ await runDevServer({
     // so record it in a file named after the workspace as soon as the tunnel
     // exists. Build the path from `mainWorktree`: a linked worktree's own
     // `.local-wt` goes away with it. `purgeInfrastructure` reads the same path.
-    const tunnelId = openDevTunnel({ name: `${name}-dev`, port: ports.frontend });
+    // A rerun closes the recorded tunnel first: its port may have moved.
     const tunnelFile = join(mainWorktree, ".local-wt", "tunnels", name);
+    if (existsSync(tunnelFile)) {
+      try {
+        closeDevTunnel(readFileSync(tunnelFile, "utf8"));
+      } catch {
+        // tunnel may already be closed
+      }
+    }
+    const tunnelId = openDevTunnel({ name: `${name}-dev`, port: ports.frontend });
     mkdirSync(dirname(tunnelFile), { recursive: true });
     writeFileSync(tunnelFile, tunnelId);
 

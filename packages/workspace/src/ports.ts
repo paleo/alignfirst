@@ -12,6 +12,8 @@ export const BAD_PORTS: ReadonlySet<number> = new Set([
   6669, 6679, 6697, 10080,
 ]);
 
+const PROBE_HOSTS = ["127.0.0.1", "::1"];
+
 /** The project's port range and the names allocated in it. */
 export interface DevPortsConfig {
   /** Must equal `portRange` in `.alignfirst.json`, when that file declares one. */
@@ -199,8 +201,6 @@ function exhaustedRangeError(config: ResolvedDevPorts, name: string): WorkspaceE
       `held by other workspaces, or busy on this machine. Free some with \`${wsCmd("remove")}\`.`,
   );
 }
-
-const PROBE_HOSTS = ["127.0.0.1", "::1"];
 
 /** Probes the loopback interfaces with an exclusive listen. A host without IPv6 is skipped. */
 export async function isPortFree(port: number): Promise<boolean> {

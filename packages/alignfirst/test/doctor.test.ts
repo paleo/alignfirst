@@ -101,6 +101,19 @@ describe("doctor command", () => {
     );
   });
 
+  it("warns about a companion directory inside another key's companion directory", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    writeRegistry(home, {
+      projects: { "~/app": { dir: "app" }, "~/one": { dir: "team" }, "~/two": { dir: "team/two" } },
+    });
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    const team = join(home, ".alignfirst", "companions", "team");
+    expect(result.stdout).toContain(
+      `[warn] Companion: companion directory ${join(team, "two")} (~/two) is inside ${team} (~/one)\n`,
+    );
+  });
+
   it("reports an invalid registry in every section that needs the layout", async () => {
     const cwd = temp();
     writeRegistry(cwd, {});

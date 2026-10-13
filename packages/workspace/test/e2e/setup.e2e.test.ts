@@ -179,6 +179,17 @@ describe("workspace setup (e2e)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "refuses a workspace config that still declares `ports`",
+    () => {
+      const { repo } = fixture({ oldConfig: true });
+      const result = runCli(repo, ["setup"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("The workspace config declares `ports`, removed in 0.37.0.");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe("portless workspace (e2e)", () => {
@@ -319,6 +330,22 @@ describe("dev setup (e2e)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "finalizes the main worktree in a `workspace setup` after a first `dev setup`",
+    () => {
+      const { repo } = fixture();
+      expect(runDev(repo, ["setup"]).status).toBe(0);
+      expect(entryFor(repo, "fixrepo").neverFinalized).toBe(true);
+      expect(runCli(repo, ["setup"]).status).toBe(0);
+      expect(existsSync(join(repo, "finalized.txt"))).toBe(true);
+      const entry = entryFor(repo, "fixrepo");
+      expect(entry.status).toBe("ready");
+      expect(entry.neverFinalized).toBeUndefined();
+      expect(entry.ports).toBeDefined();
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe("workspace setup --full (e2e)", () => {
@@ -370,6 +397,32 @@ describe("workspace setup --full (e2e)", () => {
       expect(retried.devSetupFailure).toBeUndefined();
       expect(retried.devSetupAt).toBeDefined();
       expect(runCli(repo, ["wait", "fixrepo-feat-fail"]).status).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "records the exit code when the dev setup exits without recording its failure",
+    () => {
+      const { repo } = fixture();
+      const result = runCli(repo, ["setup", "-c", "feat-exit", "--full"], { E2E_DEV_EXIT: "1" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("dev setup failed: dev setup exited with code 3");
+      const entry = entryFor(repo, "fixrepo-feat-exit");
+      expect(entry.status).toBe("ready");
+      expect(entry.devSetupFailure?.message).toBe("dev setup exited with code 3");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "forgets the dev failure of an earlier setup in a standalone wait",
+    () => {
+      const { repo } = fixture();
+      expect(runCli(repo, ["setup", "--full"], { E2E_DEV_SETUP_FAIL: "1" }).status).toBe(1);
+      expect(runCli(repo, ["setup", "--force", "-d"]).status).toBe(0);
+      expect(runCli(repo, ["wait"]).status).toBe(0);
+      expect(entryFor(repo, "fixrepo").devSetupFailure).toBeUndefined();
     },
     TEST_TIMEOUT_MS,
   );

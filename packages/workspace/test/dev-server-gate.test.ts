@@ -11,7 +11,7 @@ const PM: PackageManagerCommands = {
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
-function input(entry: WorkspaceEntry | undefined): Parameters<typeof buildWorktreeReadyMessage>[0] {
+function input(entry: WorkspaceEntry): Parameters<typeof buildWorktreeReadyMessage>[0] {
   return {
     name: "repo-feat-a",
     worktreePath: "/tmp/wt",
@@ -23,10 +23,6 @@ function input(entry: WorkspaceEntry | undefined): Parameters<typeof buildWorktr
 }
 
 describe("buildWorktreeReadyMessage", () => {
-  it("returns ok when entry is absent (synthesized main)", () => {
-    expect(buildWorktreeReadyMessage(input(undefined))).toEqual({ ok: true });
-  });
-
   it("returns ok when status is ready", () => {
     const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
