@@ -500,9 +500,11 @@ describe("project classification and companions", () => {
     const companionsRoot = join(fixture.home, ".alignfirst", "companions");
     mkdirSync(companionsRoot, { recursive: true });
     writeRegistry(fixture.home, {
-      paths: { [project]: { ".plans": true, "DEVELOPERS.md": true } },
+      projects: {
+        [project]: { dir: "app", items: { ".plans": "companion", "DEVELOPERS.md": "companion" } },
+      },
     });
-    const companion = join(realpathSync(companionsRoot), project.slice(1).replaceAll("/", "_"));
+    const companion = join(realpathSync(companionsRoot), "app");
     mkdirSync(join(companion, ".plans"), { recursive: true });
 
     const list = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
@@ -533,23 +535,20 @@ describe("project classification and companions", () => {
 
   it("reports two projects sharing a companion directory on both", async () => {
     const fixture = makeFixture({});
-    const flat = makeRepository(fixture.root, "a_b");
-    const nested = makeRepository(makeProjectsDirectory(fixture.root, "a", {}), "b");
-    writeRegistry(fixture.home, { paths: { [flat]: {}, [nested]: {} } });
+    const one = makeRepository(fixture.root, "one");
+    const two = makeRepository(fixture.root, "two");
+    writeRegistry(fixture.home, {
+      projects: { [one]: { dir: "shared" }, [two]: { dir: "shared" } },
+    });
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);
-    const companion = join(
-      fixture.home,
-      ".alignfirst",
-      "companions",
-      flat.slice(1).replaceAll("/", "_"),
-    );
+    const companion = join(fixture.home, ".alignfirst", "companions", "shared");
     expect(result.stdout.trim().split("\n")).toEqual([
-      `[error] Project inventory: ${JSON.stringify(flat)}: shares companion directory ` +
-        `${companion} with ${nested}`,
-      `[error] Project inventory: ${JSON.stringify(nested)}: shares companion directory ` +
-        `${companion} with ${flat}`,
+      `[error] Project inventory: ${JSON.stringify(one)}: shares companion directory ` +
+        `${companion} with ${two}`,
+      `[error] Project inventory: ${JSON.stringify(two)}: shares companion directory ` +
+        `${companion} with ${one}`,
     ]);
   });
 });

@@ -1063,7 +1063,7 @@ describe("companion projects", () => {
   }
 
   it("gates on the companion .plans and writes the session file there", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     const plans = join(project.companion, ".plans");
 
     const gated = await run(project, ["new", "-m", "go"]);
@@ -1081,7 +1081,7 @@ describe("companion projects", () => {
   });
 
   it("writes a separate _aligndev tree and opens the ticket in both trees", async () => {
-    const project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
     const plans = join(project.project, ".plans");
     const sessions = join(project.companion, ".plans");
     mkdirSync(join(plans, "_archives", "29"), { recursive: true });
@@ -1099,7 +1099,7 @@ describe("companion projects", () => {
   });
 
   it("reserves a side ticket in the companion .plans", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     const plans = join(project.companion, ".plans");
     mkdirSync(join(plans, "side-1"), { recursive: true });
 
@@ -1112,7 +1112,7 @@ describe("companion projects", () => {
     let ticketFile: string;
     let noTicketFile: string;
     beforeEach(() => {
-      project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+      project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
       mkdirSync(join(project.project, ".plans", "29"), { recursive: true });
       const sessions = join(project.companion, ".plans");
       ticketFile = join(sessions, "29", "_aligndev", "20260829-115529.md");
@@ -1151,7 +1151,7 @@ describe("companion projects", () => {
   });
 
   it("adds the companion directory and the project context for the agent", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);
 
@@ -1189,7 +1189,7 @@ describe("companion projects", () => {
   });
 
   it("adds the companion without the project context when it holds only sessions", async () => {
-    const project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
     mkdirSync(join(project.project, ".plans"), { recursive: true });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);
@@ -1211,7 +1211,7 @@ describe("companion projects", () => {
   });
 
   it("creates a missing companion directory before adding it", async () => {
-    const project = makeCompanionProject(home, { ".plans": false });
+    const project = makeCompanionProject(home, { ".plans": "project" });
     mkdirSync(join(project.project, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);
 

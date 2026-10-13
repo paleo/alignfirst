@@ -85,13 +85,23 @@ function renderConfigReport(report: ConfigReport): string {
       `CLI range: ${report.cli.range}, ${report.cli.satisfied ? "satisfied" : "not satisfied"} by ${report.cli.installed}`,
     );
   else lines.push("CLI range: none");
-  lines.push(renderCompanionLine(report.companion));
+  lines.push(...renderCompanionLines(report.companion));
   for (const name of ITEM_NAMES) lines.push(renderItemLocation(name, report.locations[name]));
   if (report.config) lines.push("Config:", JSON.stringify(report.config, undefined, 2));
   return `${lines.join("\n")}\n`;
 }
 
-function renderCompanionLine(companion: CompanionLayout | null): string {
-  if (companion === null) return "Companion: none";
-  return `Companion: ${companion.dir}${companion.exists ? "" : " (missing)"}`;
+function renderCompanionLines(companion: CompanionLayout | null): string[] {
+  if (companion === null) return ["Companion: none"];
+  return [
+    `Companion: ${companion.dir}${companion.exists ? "" : " (missing)"}`,
+    `Companion items: ${renderItemSettings(companion)}`,
+  ];
+}
+
+/** The settings other than `"auto"`. */
+function renderItemSettings({ items }: CompanionLayout): string {
+  const set = ITEM_NAMES.filter((name) => items[name] !== "auto");
+  if (set.length === 0) return "all auto";
+  return set.map((name) => `${JSON.stringify(name)}: ${JSON.stringify(items[name])}`).join(", ");
 }

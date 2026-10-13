@@ -541,7 +541,9 @@ describe("plans commands with a separate session tree", () => {
 /** Project `.plans`, session tree in `<root>/.alignfirst/companions/product/.plans`. */
 function useSessionTree(fixture: Fixture): string {
   writeRegistry(fixture.root, {
-    paths: { "~/product": { ".plans": false, _aligndev: true } },
+    projects: {
+      "~/product": { dir: "product", items: { ".plans": "project", _aligndev: "companion" } },
+    },
   });
   const companion = join(fixture.root, ".alignfirst", "companions", "product");
   mkdirSync(join(companion, ".plans", "_aligndev"), { recursive: true });
@@ -552,7 +554,7 @@ function useSessionTree(fixture: Fixture): string {
 /** The home directory is the fixture root; the companion is `<root>/.alignfirst/companions/product`. */
 function useCompanion(fixture: Fixture): string {
   writeRegistry(fixture.root, {
-    paths: { "~/product": { ".plans": true } },
+    projects: { "~/product": { dir: "product", items: { ".plans": "companion" } } },
   });
   return join(fixture.root, ".alignfirst", "companions", "product");
 }

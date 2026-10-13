@@ -4,7 +4,7 @@ A projects directory groups projects and optional nested projects directories. I
 
 A project is a git main worktree, direct child of a projects directory. Its linked worktrees are listed as its workspaces. Other child directories, those that are not git repositories, appear under `others`.
 
-A project's AlignFirst files may live in its companion directory, declared in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location.
+A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location.
 
 ## Commands
 
@@ -30,4 +30,4 @@ The project config is its registration. Deleting the project removes it from the
 
 ## Reported issues
 
-The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects sharing one companion directory.
+The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects whose registry entries resolve to the same companion directory.

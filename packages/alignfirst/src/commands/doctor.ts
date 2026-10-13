@@ -129,8 +129,12 @@ function describeItem(
   companion: CompanionLayout,
 ): DoctorLine {
   const location = layout.locations[name];
-  const missingCopy = companion.flags[name] === true && !location.exists;
-  return { level: missingCopy ? "warn" : "ok", text: renderItemLocation(name, location) };
+  const setting = companion.items[name];
+  const missingCopy = setting === "companion" && !location.exists;
+  return {
+    level: missingCopy ? "warn" : "ok",
+    text: renderItemLocation(name, location, setting),
+  };
 }
 
 function inspectGit(

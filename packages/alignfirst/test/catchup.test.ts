@@ -49,7 +49,7 @@ describe("ticket --catchup", () => {
   });
 
   it("heads each file with its absolute path in a companion .plans", async () => {
-    const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+    const { root, home, project, companion } = makeCompanionProject({ ".plans": "companion" });
     dirs.push(root);
     const directory = join(companion, ".plans", "78");
     mkdirSync(directory, { recursive: true });

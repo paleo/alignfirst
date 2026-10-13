@@ -1,6 +1,6 @@
 # Set Up a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
+Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one, and where. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
 The `alignfirst` package README documents the registry: its schema, how an entry matches a project, and how each item resolves.
 
@@ -17,11 +17,13 @@ The commands below run the CLI through `npx`, with no installation. Install the 
 From the repository, register the project and read the layout:
 
 ```sh
-npx -y alignfirst companion register
+npx -y alignfirst companion register [--dir <path>]
 npx -y alignfirst config --json
 ```
 
-`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
+`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path.
+
+The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To force an item's location, add it to the entry's `items` as `"companion"` or `"project"`, then read the layout again.
 
 `companion.dir` is the companion directory, and `locations` gives each item's path.
 
@@ -73,4 +75,4 @@ The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives i
 
 ## Keep Only aligndev's Session Files Out
 
-A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry sets `{ ".plans": false, "_aligndev": true }`. This procedure does not apply.
+A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry's `items` is `{ ".plans": "project", "_aligndev": "companion" }`. This procedure does not apply.

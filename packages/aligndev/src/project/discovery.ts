@@ -337,7 +337,7 @@ function findEnclosingRange(
   return ranges?.find((range) => containsRange(range, claim));
 }
 
-// Two projects can share a companion only through a `_` in a directory name.
+// Two projects share a companion only when their registry `dir` values resolve to the same path.
 function reportSharedCompanions(projects: DiscoveredProject[], issues: InventoryIssue[]): void {
   const projectsByCompanion = new Map<string, DiscoveredProject[]>();
   for (const project of projects) {

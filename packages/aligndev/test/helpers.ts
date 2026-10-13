@@ -48,12 +48,12 @@ export interface CompanionProject {
 // are real.
 export function makeCompanionProject(
   home: string,
-  flags: Record<string, boolean | "auto">,
+  items: Record<string, "companion" | "project" | "auto">,
 ): CompanionProject {
   const project = join(home, "app");
   mkdirSync(project, { recursive: true });
   execFileSync("git", ["init", "--quiet", project]);
-  writeRegistry(home, { paths: { "~/app": flags } });
+  writeRegistry(home, { projects: { "~/app": { dir: "app", items } } });
   const realHome = realpathSync(home);
   return {
     home,
