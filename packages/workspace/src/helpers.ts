@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
-import { wsCmd } from "./package-manager.js";
+import { devCmd, wsCmd } from "./package-manager.js";
 
 export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
   return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.log");
@@ -54,7 +54,7 @@ export function lastLines(content: string, count: number): string {
  */
 export function readPortFromEnvFile(file: string, varName: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run \`${wsCmd("setup")}\` first.`);
+    console.error(`Error: ${file} not found. Run \`${devCmd("setup")}\` first.`);
     process.exit(1);
   }
   const content = readFileSync(file, "utf-8");
@@ -72,7 +72,7 @@ export function readPortFromEnvFile(file: string, varName: string): number {
  */
 export function readPortFromJsonFile(file: string, jsonPath: string): number {
   if (!existsSync(file)) {
-    console.error(`Error: ${file} not found. Run \`${wsCmd("setup")}\` first.`);
+    console.error(`Error: ${file} not found. Run \`${devCmd("setup")}\` first.`);
     process.exit(1);
   }
   const data = JSON.parse(readFileSync(file, "utf-8"));

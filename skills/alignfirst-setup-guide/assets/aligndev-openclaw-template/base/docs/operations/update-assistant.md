@@ -79,7 +79,7 @@ The login hook must remain after the environment bridge and any PATH assignments
 
 Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aligndev` replaces both and prints the playbook through `aligndev guide`, so OpenClaw's managed playbook copy goes away.
 
-1. Bring the admin repository to the current template: the variant's `infra/openclaw/aligndev.config.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aligndev.config.json`, and its `config` scope covers the aligndev config.
+1. Bring the admin repository to the current template: the variant's `infra/openclaw/settings.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `settings.json`, and its `config` scope covers the aligndev settings.
 2. Swap the packages:
 
    ```sh
@@ -109,7 +109,7 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
      rm -rf /home/{{SERVICE_USER}}/.openclaw/skills/alignfirst-openclaw-playbook
    ```
 
-5. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aligndev config and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
+5. Re-seed through [configure-assistant.md](configure-assistant.md). The seed installs the aligndev settings and the skill allowlist without the playbook. When step 1 deleted `coding-agent.conf`, also remove its installed copy: the seed only installs files, and that copy still carries the `ALIGNFIRST_CODE_*` lines. Then apply the new workspace `AGENTS.md` ([update-workspace.md](update-workspace.md)) and rebuild the user manager's environment:
 
    ```sh
    # only when step 1 deleted coding-agent.conf

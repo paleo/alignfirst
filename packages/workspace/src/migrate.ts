@@ -8,7 +8,7 @@ import {
 } from "./dev-servers-registry.js";
 import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
-import type { ResolvedPortsConfig } from "./ports.js";
+import { withRegistryLock } from "./registry-lock.js";
 import { getWorktreeBranch, type WorktreeContext } from "./worktree.js";
 import {
   type WorkspaceEntry,
@@ -36,14 +36,12 @@ export interface OldSlotEntry {
 
 export interface MigrateInput {
   registryDir: string;
-  /** Resolved port scheme. Omit in portless mode: entries carry no port index. */
-  ports?: ResolvedPortsConfig;
   /** Gates the slot-named-infrastructure warning: a consumer tearing down by name is the one
    * whose resource names were derived from the slot. */
   hasPurgeInfrastructure: boolean;
 }
 
-export function runMigrate(ctx: WorktreeContext, input: MigrateInput): void {
+export async function runMigrate(ctx: WorktreeContext, input: MigrateInput): Promise<void> {
   if (!ctx.isMainWorktree) {
     throw new WorkspaceError(
       `\`workspace migrate-registry-0.30\` must run from the main worktree: ${ctx.mainWorktree}`,
@@ -62,46 +60,31 @@ export function runMigrate(ctx: WorktreeContext, input: MigrateInput): void {
     );
   }
   const old = JSON.parse(readFileSync(slotsPath, "utf-8")) as OldSlotsRegistry;
-  const conversion = convertSlotsRegistry({
-    old,
-    mainWorktree: ctx.mainWorktree,
-    ports: input.ports,
-  });
-  writeWorkspaces(ctx.mainWorktree, input.registryDir, conversion.registry);
+  const registry = convertSlotsRegistry({ old, mainWorktree: ctx.mainWorktree });
+  await withRegistryLock(ctx.mainWorktree, input.registryDir, () =>
+    writeWorkspaces(ctx.mainWorktree, input.registryDir, registry),
+  );
   const translatedDevServers = translateDevServers(ctx.mainWorktree, input.registryDir);
   rmSync(slotsPath);
-  printMigrationReport(conversion, translatedDevServers, input.hasPurgeInfrastructure);
+  printMigrationReport(registry, translatedDevServers, input.hasPurgeInfrastructure);
 }
 
 export interface ConvertInput {
   old: OldSlotsRegistry;
   mainWorktree: string;
-  ports?: ResolvedPortsConfig;
 }
 
-export interface Conversion {
-  registry: WorkspacesRegistry;
-  /** Linked entries migrated without a port index: their slot does not fit the `ports` scheme. */
-  stale: string[];
-}
-
-export function convertSlotsRegistry({ old, mainWorktree, ports }: ConvertInput): Conversion {
+/** Migrated entries carry no ports: they get them at their next `dev setup`. */
+export function convertSlotsRegistry({ old, mainWorktree }: ConvertInput): WorkspacesRegistry {
   const workspaces: Record<string, WorkspaceEntry> = {};
   const mainEntry = collapseMainEntries(old, mainWorktree);
   if (mainEntry) workspaces[basename(mainWorktree)] = mainEntry;
-  const stale: string[] = [];
-  for (const [slot, entry] of newestLinkedEntries(old, mainWorktree)) {
+  for (const entry of newestLinkedEntries(old, mainWorktree)) {
     const name = basename(entry.worktree);
     refuseDuplicateName(name, workspaces[name], entry.worktree);
-    const migrated = migratedEntry(entry);
-    if (ports) {
-      const index = deriveIndex(Number(slot), ports);
-      if (index === undefined) stale.push(name);
-      else migrated.portIndex = index;
-    }
-    workspaces[name] = migrated;
+    workspaces[name] = migratedEntry(entry);
   }
-  return { registry: { workspaces }, stale };
+  return { workspaces };
 }
 
 /**
@@ -127,20 +110,15 @@ function isMainSlot(entry: OldSlotEntry, mainWorktree: string): boolean {
 }
 
 /**
- * Linked entries, one per worktree path with its slot key. A worktree registered again after a
- * port-scheme change leaves a same-path duplicate under another slot; the newest entry wins.
+ * Linked entries, one per worktree path. A worktree registered again after a port-scheme change
+ * leaves a same-path duplicate under another slot; the newest entry wins.
  */
-function newestLinkedEntries(
-  old: OldSlotsRegistry,
-  mainWorktree: string,
-): [string, OldSlotEntry][] {
-  const byPath = new Map<string, [string, OldSlotEntry]>();
-  for (const [slot, entry] of Object.entries(old.slots)) {
+function newestLinkedEntries(old: OldSlotsRegistry, mainWorktree: string): OldSlotEntry[] {
+  const byPath = new Map<string, OldSlotEntry>();
+  for (const entry of Object.values(old.slots)) {
     if (isMainSlot(entry, mainWorktree)) continue;
     const kept = byPath.get(resolve(entry.worktree));
-    if (!kept || entry.createdAt > kept[1].createdAt) {
-      byPath.set(resolve(entry.worktree), [slot, entry]);
-    }
+    if (!kept || entry.createdAt > kept.createdAt) byPath.set(resolve(entry.worktree), entry);
   }
   return [...byPath.values()];
 }
@@ -166,15 +144,9 @@ function migratedEntry(old: OldSlotEntry): WorkspaceEntry {
   };
   if (old.failure) entry.failure = old.failure;
   if (old.extra !== undefined) entry.purgeData = old.extra;
+  // The old `finalizeWorkspace` of a ready entry already provisioned its infrastructure.
+  if (old.status === "ready") entry.devSetupAt = old.createdAt;
   return entry;
-}
-
-/** The block index the old slot maps to, when the `ports` scheme still fits: `base + perWorkspace × index`. */
-function deriveIndex(slotPort: number, ports: ResolvedPortsConfig): number | undefined {
-  const offset = slotPort - ports.base;
-  if (!Number.isInteger(offset) || offset <= 0 || offset % ports.perWorkspace !== 0) return;
-  const index = offset / ports.perWorkspace;
-  return index < ports.maxWorkspaces ? index : undefined;
 }
 
 interface OldDevServerEntry {
@@ -206,11 +178,11 @@ function translateDevServers(mainWorktree: string, registryDir: string): number 
 }
 
 function printMigrationReport(
-  conversion: Conversion,
+  registry: WorkspacesRegistry,
   translatedDevServers: number,
   hasPurgeInfrastructure: boolean,
 ): void {
-  const entries = Object.entries(conversion.registry.workspaces);
+  const entries = Object.entries(registry.workspaces);
   console.log(`Migrated ${entries.length} workspace(s) to workspaces.json:`);
   for (const [name, entry] of entries) {
     console.log(`  ${name}${entry.main ? " (main)" : ""}  ${entry.worktree}`);
@@ -219,27 +191,17 @@ function printMigrationReport(
     console.log(`Translated ${translatedDevServers} dev-server entry(ies).`);
   }
   console.log("Deleted slots.json.");
-  printStaleNote(conversion.stale);
   const linked = entries.filter(([, entry]) => entry.main !== true);
   printInfrastructureWarning(hasPurgeInfrastructure, linked.length);
   printBranchesToUpdate(linked);
-}
-
-function printStaleNote(stale: string[]): void {
-  if (stale.length === 0) return;
-  console.log(
-    `\nNo port index could be derived for: ${stale.join(", ")} (the old slot does not fit the ` +
-      `\`ports\` scheme). Run \`${wsCmd("setup --force")}\` in each of these worktrees.`,
-  );
 }
 
 function printInfrastructureWarning(hasPurgeInfrastructure: boolean, linkedCount: number): void {
   if (!hasPurgeInfrastructure || linkedCount === 0) return;
   console.log(
     "\nWarning: infrastructure names (containers, volumes) previously derived from the slot can " +
-      "no longer be derived. Remove the old-named resources manually, or they will leak. Each " +
-      "surviving worktree's gitignored config still carries those names, and merging the base " +
-      `branch does not regenerate it: run \`${wsCmd("setup --force")}\` in each one.`,
+      "no longer be derived. Remove the old-named resources manually, or they will leak. Nothing " +
+      "else needs a rerun: each workspace gets its ports and run files at its next dev start.",
   );
 }
 

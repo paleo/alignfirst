@@ -1,6 +1,6 @@
 # Set Up a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
+Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one, and where. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
 The `alignfirst` package README documents the registry: its schema, how an entry matches a project, and how each item resolves.
 
@@ -17,11 +17,13 @@ The commands below run the CLI through `npx`, with no installation. Install the 
 From the repository, register the project and read the layout:
 
 ```sh
-npx -y alignfirst companion register
+npx -y alignfirst companion register [--dir <path>]
 npx -y alignfirst config --json
 ```
 
-`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To set a flag, edit the entry in the registry, then read the layout again.
+`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path. The command refuses a directory that is or contains the home directory or `~/.alignfirst/companions`, or that overlaps the project or another companion.
+
+The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To force an item's location, add it to the entry's `items` as `"companion"` or `"project"`, then read the layout again.
 
 `companion.dir` is the companion directory, and `locations` gives each item's path.
 
@@ -51,7 +53,16 @@ mkdir -p <companion>/.plans
 
 An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) to the agent's global instruction file, after the user confirms. Skip it when the file already has it.
 
-## 8. Check
+## 8. Write access
+
+An interactive coding agent asks before it writes outside the repository, and the companion lies outside it. With the user's consent, add the companions root to the agent's writable directories, or the companion directory itself when its `dir` lies outside that root:
+
+- Claude Code: `permissions.additionalDirectories` in `~/.claude/settings.json`;
+- Codex: `sandbox_workspace_write.writable_roots` in `~/.codex/config.toml`.
+
+Write real paths: when `~/.alignfirst/companions` is a symlink, add its target. `companion.dir` from step 2 is already a real path. Skip a path the setting already covers.
+
+## 9. Check
 
 ```sh
 npx -y alignfirst doctor
@@ -64,13 +75,13 @@ The doctor must pass, and `git status` in the repository must show no change.
 
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
-- **Skills and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI globally, and `aligndev code` puts the context into the launched agent's prompt.
+- **Skills, bootstrap and write access (steps 1, 7 and 8):** skip them. The deployment installs the CLI globally, and `aligndev code` puts the context into the launched agent's prompt and passes `--add-dir <companion>`.
 - **Companion (step 2):** on an AlignDev OpenClaw host, the assistant runs `alignfirst companion register` itself before it delegates the preparation.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
 - **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.
-- **Check (step 8):** `aligndev project doctor --root <projects-directory>` must pass too.
+- **Check (step 9):** `aligndev project doctor --root <projects-directory>` must pass too.
 
 ## Keep Only aligndev's Session Files Out
 
-A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry sets `{ ".plans": false, "_aligndev": true }`. This procedure does not apply.
+A project whose team uses AlignFirst keeps its files in the repository. When only `aligndev`'s session files must live elsewhere, the entry's `items` is `{ ".plans": "project", "_aligndev": "companion" }`. This procedure does not apply.

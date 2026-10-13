@@ -26,14 +26,14 @@ channel message ({{ASSISTANT_NAME}} on the selected surface)
   → project workspace under ~/projects
 ```
 
-The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent selected by `code.agent` in the aligndev config.
+The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent selected by `code.agent` in the aligndev settings.
 
 ## Ownership
 
 - This repository, in the admin account, describes the deployment. The service account never reads it; it works from the snapshot `~{{SERVICE_USER}}/seed/`, refreshed by the operator with `rsync` ([04 § 2](installations/04-openclaw.md#2-snapshot)).
 - `~{{SERVICE_USER}}/.openclaw/`: `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from the snapshot), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the plugin's durable handoff state).
 - The gateway unit is written by `openclaw gateway install`; the environment comes from `~/.config/environment.d/`, installed by the seed.
-- `~{{SERVICE_USER}}/.alignfirst/aligndev.config.json` is the `aligndev` config, installed by the seed. The seed also creates `companions/`, where the projects' companion directories and their registry live. The assistant registers a project there with `alignfirst companion register`.
+- `~{{SERVICE_USER}}/.alignfirst/settings.json` holds the aligndev settings, installed by the seed. The seed also creates `companions/`, where the projects' companion directories and their registry live. The assistant registers a project there with `alignfirst companion register`.
 - `/opt/{{SERVICE_USER}}/` is root-owned; the gateway's persistent PATH and shell drop-in is service-owned.
 - Configuration, workspace files, skills, the coding agent's instructions and the npm prefix are immutable once [06](installations/06-security-hardening.md) has run.
 

@@ -33,6 +33,10 @@ function guideRun(home: string) {
 }
 
 function configPathOf(home: string): string {
+  return join(home, ".alignfirst", "settings.json");
+}
+
+function oldConfigPathOf(home: string): string {
   return join(home, ".alignfirst", "aligndev.config.json");
 }
 
@@ -92,10 +96,17 @@ describe("loadConfig", () => {
     const home = makeHome();
     writeConfig(home, {
       platform: "openclaw",
-      code: { agent: "claude", models: ["opus"], skipPermissions: true, unset: ["TOKEN"] },
+      code: {
+        agent: "claude",
+        defaultModel: "opus",
+        models: ["opus"],
+        skipPermissions: true,
+        unset: ["TOKEN"],
+      },
     });
     expect(loadConfig(home).code).toEqual({
       agent: "claude",
+      defaultModel: "opus",
       models: ["opus"],
       skipPermissions: true,
       unset: ["TOKEN"],
@@ -113,6 +124,26 @@ describe("loadConfig", () => {
     expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "work"),
       written: "../work",
+    });
+  });
+
+  it("rejects the old file name when the new file is absent", () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".alignfirst"), { recursive: true });
+    writeFileSync(oldConfigPathOf(home), JSON.stringify(EXPLICIT));
+    expect(() => loadConfig(home)).toThrow(
+      "Error: ~/.alignfirst/aligndev.config.json was renamed: move it to ~/.alignfirst/settings.json",
+    );
+  });
+
+  it("reads only the new file when both exist", () => {
+    const home = makeHome();
+    const path = writeConfig(home, { code: { agent: "codex" } });
+    writeFileSync(oldConfigPathOf(home), "not json");
+    expect(loadConfig(home)).toEqual({
+      path,
+      platform: "codingAgent",
+      code: { agent: "codex", skipPermissions: false, unset: [] },
     });
   });
 
@@ -134,9 +165,10 @@ describe("loadConfig", () => {
     ["an unknown top-level key", { ...EXPLICIT, platfrom: "openclaw" }, "platfrom"],
     [
       "an unknown code key",
-      { platform: "openclaw", code: { agent: "claude", model: "opus" } },
-      "model",
+      { platform: "openclaw", code: { agent: "claude", effort: "high" } },
+      "effort",
     ],
+    ["an empty default model", { ...EXPLICIT, code: { defaultModel: "" } }, "code.defaultModel"],
     ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
     ["an invalid platform", { ...EXPLICIT, platform: "slack" }, "platform"],
   ])("rejects %s", (_name, config, problem) => {
@@ -173,6 +205,20 @@ describe("resolveCodeConfig", () => {
     expect(() => resolveCodeConfig(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
       "Error: no coding agent detected: run aligndev from Claude Code or Codex, or set " +
         `"code.agent" (claude or codex) in ${configPathOf(home)}.`,
+    );
+  });
+
+  it("accepts a default model from the configured list", () => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent: "claude", defaultModel: "opus-4", models: ["opus-4"] } });
+    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("opus-4");
+  });
+
+  it("rejects a default model outside the agent's list", () => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent: "codex", defaultModel: "opus" } });
+    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(
+      `Error: code.defaultModel must be one of: astra, sol, terra, luna, in ${configPathOf(home)}.`,
     );
   });
 

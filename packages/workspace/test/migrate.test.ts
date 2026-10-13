@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -13,17 +13,10 @@ import {
   refuseOldRegistry,
   runMigrate,
 } from "../src/migrate.js";
-import { resolvePortsConfig } from "../src/ports.js";
 import type { WorktreeContext } from "../src/worktree.js";
-import { readWorkspaces, registryDirFor } from "../src/workspaces.js";
+import { readWorkspaces, registryDirFor, workspacesFilePath } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
-const ports = resolvePortsConfig({
-  base: 8100,
-  perWorkspace: 10,
-  maxWorkspaces: 20,
-  names: ["web"],
-});
 
 let mainWorktree: string;
 
@@ -39,30 +32,28 @@ function oldEntry(worktree: string, overrides: Partial<OldSlotEntry> = {}): OldS
   return { worktree, createdAt: "2026-05-10T00:00:00.000Z", status: "ready", ...overrides };
 }
 
-function convert(slots: Record<string, OldSlotEntry>, withPorts = true) {
+function convert(slots: Record<string, OldSlotEntry>) {
   const old: OldSlotsRegistry = { slots };
-  return convertSlotsRegistry({ old, mainWorktree, ports: withPorts ? ports : undefined });
+  return convertSlotsRegistry({ old, mainWorktree });
 }
 
 describe("convertSlotsRegistry", () => {
-  it("keys linked entries by the worktree basename and copies their fields", () => {
+  it("keys linked entries by the worktree basename and copies their fields, without ports", () => {
     const failure = { at: "2026-05-11T00:00:00.000Z", message: "boom" };
-    const { registry, stale } = convert({
+    const registry = convert({
       "8110": oldEntry("/repo/wt-a", { status: "failed", failure, extra: { container: "db-a" } }),
     });
-    expect(stale).toEqual([]);
     expect(registry.workspaces["wt-a"]).toEqual({
       worktree: "/repo/wt-a",
       createdAt: "2026-05-10T00:00:00.000Z",
       status: "failed",
       failure,
       purgeData: { container: "db-a" },
-      portIndex: 1,
     });
   });
 
   it("collapses every main entry into one, keyed by the real main worktree", () => {
-    const { registry } = convert({
+    const registry = convert({
       "8100": oldEntry("/moved/old-path", { main: true }),
       "28400": oldEntry("/moved/old-path", {
         main: true,
@@ -76,40 +67,21 @@ describe("convertSlotsRegistry", () => {
     expect(entry.worktree).toBe(mainWorktree);
     expect(entry.createdAt).toBe("2026-08-01T00:00:00.000Z");
     expect(entry.purgeData).toEqual({ volume: "v1" });
-    expect(entry.portIndex).toBeUndefined();
+    expect(entry.ports).toBeUndefined();
   });
 
   it("treats an unflagged entry pointing at the main worktree as main", () => {
-    const { registry } = convert({ "8100": oldEntry(mainWorktree) });
+    const registry = convert({ "8100": oldEntry(mainWorktree) });
     expect(registry.workspaces[basename(mainWorktree)].main).toBe(true);
   });
 
-  it("dedupes same-path linked duplicates, keeping the newest entry and its slot", () => {
-    const { registry } = convert({
+  it("dedupes same-path linked duplicates, keeping the newest entry", () => {
+    const registry = convert({
       "8110": oldEntry("/repo/wt-a"),
       "8130": oldEntry("/repo/wt-a", { createdAt: "2026-06-01T00:00:00.000Z" }),
     });
     expect(Object.keys(registry.workspaces)).toEqual(["wt-a"]);
     expect(registry.workspaces["wt-a"].createdAt).toBe("2026-06-01T00:00:00.000Z");
-    expect(registry.workspaces["wt-a"].portIndex).toBe(3);
-  });
-
-  it("marks entries whose slot does not fit the ports scheme as stale, without an index", () => {
-    const { registry, stale } = convert({
-      "8115": oldEntry("/repo/wt-odd"),
-      "8100": oldEntry("/repo/wt-base"),
-      "8400": oldEntry("/repo/wt-far"),
-    });
-    expect(stale.sort()).toEqual(["wt-base", "wt-far", "wt-odd"]);
-    for (const name of stale) {
-      expect(registry.workspaces[name].portIndex).toBeUndefined();
-    }
-  });
-
-  it("allocates no index in portless mode and reports nothing stale", () => {
-    const { registry, stale } = convert({ "8110": oldEntry("/repo/wt-a") }, false);
-    expect(stale).toEqual([]);
-    expect(registry.workspaces["wt-a"].portIndex).toBeUndefined();
   });
 
   it("throws when two distinct worktrees share a directory name", () => {
@@ -134,10 +106,10 @@ function writeOldRegistry(slots: Record<string, OldSlotEntry>): string {
   return slotsPath;
 }
 
-function migrate(hasPurgeInfrastructure = false): string {
+async function migrate(hasPurgeInfrastructure = false): Promise<string> {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    runMigrate(mainCtx(), { registryDir, ports, hasPurgeInfrastructure });
+    await runMigrate(mainCtx(), { registryDir, hasPurgeInfrastructure });
     return log.mock.calls.map((args) => args.join(" ")).join("\n");
   } finally {
     log.mockRestore();
@@ -145,12 +117,12 @@ function migrate(hasPurgeInfrastructure = false): string {
 }
 
 describe("runMigrate", () => {
-  it("converts slots.json to workspaces.json and deletes the old file", () => {
+  it("converts slots.json to workspaces.json and deletes the old file", async () => {
     const slotsPath = writeOldRegistry({
       "8100": oldEntry(mainWorktree, { main: true }),
       "8110": oldEntry("/repo/wt-a"),
     });
-    const output = migrate();
+    const output = await migrate();
     expect(existsSync(slotsPath)).toBe(false);
     const registry = readWorkspaces(mainWorktree, registryDir);
     expect(Object.keys(registry.workspaces).sort()).toEqual(
@@ -160,7 +132,26 @@ describe("runMigrate", () => {
     expect(output).toContain("Deleted slots.json.");
   });
 
-  it("rekeys dev-servers.json entries from slot to name", () => {
+  it("writes the versioned registry, with devSetupAt on ready entries", async () => {
+    writeOldRegistry({
+      "8100": oldEntry(mainWorktree, { main: true }),
+      "8110": oldEntry("/repo/wt-a"),
+      "8120": oldEntry("/repo/wt-b", { status: "failed" }),
+    });
+    await migrate();
+    const { version, workspaces } = JSON.parse(
+      readFileSync(workspacesFilePath(mainWorktree, registryDir), "utf-8"),
+    );
+    expect(version).toBe(2);
+    const main = workspaces[basename(mainWorktree)];
+    expect(main.worktree).toBe(mainWorktree);
+    expect(main.devSetupAt).toBe("2026-05-10T00:00:00.000Z");
+    expect(workspaces["wt-a"].worktree).toBe("/repo/wt-a");
+    expect(workspaces["wt-a"].devSetupAt).toBe("2026-05-10T00:00:00.000Z");
+    expect(workspaces["wt-b"].devSetupAt).toBeUndefined();
+  });
+
+  it("rekeys dev-servers.json entries from slot to name", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
     writeFileSync(
       join(mainWorktree, registryDir, "dev-servers.json"),
@@ -175,7 +166,7 @@ describe("runMigrate", () => {
         ],
       }),
     );
-    migrate();
+    await migrate();
     const { servers } = readDevServers(mainWorktree, registryDir);
     expect(servers).toEqual([
       {
@@ -187,44 +178,43 @@ describe("runMigrate", () => {
     ]);
   });
 
-  it("warns about slot-named infrastructure only when purgeInfrastructure is declared", () => {
+  it("warns about slot-named infrastructure only when purgeInfrastructure is declared", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    const output = migrate(true);
+    const output = await migrate(true);
     expect(output).toContain("no longer be derived");
-    // Merging the base branch leaves the old names in the worktree's gitignored config.
-    expect(output).toContain("setup --force");
+    expect(output).toContain("next dev start");
+    expect(output).not.toContain("setup --force");
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
     rmSync(join(mainWorktree, registryDir, "workspaces.json"));
-    expect(migrate(false)).not.toContain("no longer be derived");
+    expect(await migrate(false)).not.toContain("no longer be derived");
   });
 
-  it("reports stale entries and orphans", () => {
+  it("reports orphans", async () => {
     writeOldRegistry({ "8115": oldEntry("/gone/wt-odd") });
-    const output = migrate();
-    expect(output).toContain("No port index could be derived for: wt-odd");
+    const output = await migrate();
     expect(output).toContain("Orphaned entries kept");
   });
 
-  it("does nothing when there is no slots.json", () => {
-    expect(migrate()).toContain("Nothing to migrate");
+  it("does nothing when there is no slots.json", async () => {
+    expect(await migrate()).toContain("Nothing to migrate");
     expect(existsSync(join(mainWorktree, registryDir, "workspaces.json"))).toBe(false);
   });
 
-  it("refuses when workspaces.json already exists alongside slots.json", () => {
+  it("refuses when workspaces.json already exists alongside slots.json", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    migrate();
+    await migrate();
     const slotsPath = writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    expect(() => migrate()).toThrow(/already migrated/);
+    await expect(migrate()).rejects.toThrow(/already migrated/);
     expect(existsSync(slotsPath)).toBe(true);
   });
 
-  it("refuses to run from a linked worktree", () => {
+  it("refuses to run from a linked worktree", async () => {
     const ctx: WorktreeContext = {
       currentWorktree: "/repo/wt-a",
       mainWorktree,
       isMainWorktree: false,
     };
-    expect(() => runMigrate(ctx, { registryDir, ports, hasPurgeInfrastructure: false })).toThrow(
+    await expect(runMigrate(ctx, { registryDir, hasPurgeInfrastructure: false })).rejects.toThrow(
       /main worktree/,
     );
   });

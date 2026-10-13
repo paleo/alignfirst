@@ -7,6 +7,7 @@ export function renderCodeGuide(
   platform: Platform,
   agent: CodingAgent,
   models: readonly string[],
+  defaultModel: string | undefined,
   forms: CommandForms,
 ): string {
   return renderGuideTemplate("code.md", { platform }, forms, {
@@ -14,9 +15,11 @@ export function renderCodeGuide(
     AUTH_COMMAND: agent === "claude" ? "`claude`, then `/login`" : "`codex login`",
     PERMISSIONS:
       agent === "claude"
-        ? "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aligndev config selects `--dangerously-skip-permissions`"
-        : "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` when the project's AlignFirst files live in its companion directory. `code.skipPermissions: true` in the aligndev config selects `--dangerously-bypass-approvals-and-sandbox`",
+        ? "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` for a project with a companion directory. `code.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`"
+        : "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` for a project with a companion directory. `code.skipPermissions: true` in the aligndev settings selects `--dangerously-bypass-approvals-and-sandbox`",
     MODELS: models.map((model) => `\`${model}\``).join(", "),
+    DEFAULT_MODEL:
+      defaultModel === undefined ? "the coding agent's default" : `\`${defaultModel}\``,
     ALIGNFIRST_SETUP: forms.viaNpx
       ? "The project must be prepared for AlignFirst. `npx -y aligndev` runs the `alignfirst` CLI through `npx`."
       : "The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).",

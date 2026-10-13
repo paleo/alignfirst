@@ -115,7 +115,7 @@ function codexAliasError(alias: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   return (
     `Unable to resolve Codex model alias ${JSON.stringify(alias)}: ${detail}. ` +
-    "Update the Codex CLI, or set `code.models` in the aligndev config to an explicit full model " +
+    "Update the Codex CLI, or set `code.models` in the aligndev settings to an explicit full model " +
     "slug and select that value."
   );
 }

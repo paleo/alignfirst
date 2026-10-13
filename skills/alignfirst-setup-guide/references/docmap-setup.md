@@ -48,7 +48,7 @@ For Docmap without AlignFirst skills or protocols, read the existing `AGENTS.md`
 ```markdown
 ## Docmap - Seek Documentation
 
-*Before* any investigation or code exploration, run `npm run docmap`, then read the relevant documentation. Mandatory for every task.
+At the start of the session, before any investigation or code exploration, run `npm run docmap`. Then read the documentation relevant to the task.
 ```
 
 Replace `npm run docmap` with the installed command:

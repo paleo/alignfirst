@@ -42,9 +42,9 @@ For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/
 
 The setup guide and `sharp-writing` install once under `~/.agents/skills/`. OpenClaw loads only its `agents.defaults.skills` allowlist, including `alignfirst-setup-guide` for project creation. The coding agent receives the shared skills through its own tier. `skills remove` deletes a shared skill for both.
 
-## Moving a project breaks its workspace registry
+## Moving a project
 
-`@alignfirst/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `aligndev project` reads the repaired git worktrees directly.
+`@alignfirst/workspace` stores absolute worktree paths in `.local-wt/workspace-registry/workspaces.json`, and repairs them at each read. The registry follows the main worktree moved alone, or the whole project moved with its sibling worktrees, while the main directory keeps its name. Renaming the directory renames the workspace: its infrastructure is provisioned again under the new name, and a warning names the old one. Rename the directory back to recover the old resources, or remove them by hand. Moved linked worktrees need git's own repair (`git worktree repair`), outside the workspace system. `aligndev project` reads the repaired git worktrees directly.
 
 ## Heartbeat cost is a main-session problem
 
@@ -85,7 +85,7 @@ Every `openclaw` command that rewrites the config (`config set`, `plugins instal
 
 ## When the bot may stay silent
 
-OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default has been `"disallow"` since 2026.9.6, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced.`, posts to the channel.
+OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default has been `"disallow"` since 2026.9.6, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced. I did not repeat any completed actions.`, posts to the channel.
 
 Implicit mentions count as mentions. The kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in, which is the normal state of a work thread. The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on.
 

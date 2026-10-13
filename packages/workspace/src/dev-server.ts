@@ -3,12 +3,18 @@ import { closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
-import { devCmd, type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
+import {
+  type DevSetupContext,
+  type DevSetupInput,
+  type DevSetupOptions,
+  runDevSetup,
+} from "./dev-setup.js";
 import {
   type DevServerEntry,
   evictOldest,
   findOwnEntry,
   listDevServers,
+  type PortsLookup,
   printActiveServers,
   pruneAndPersist,
   registerDevServer,
@@ -16,8 +22,9 @@ import {
   stopAllRegistered,
   unregisterDevServer,
 } from "./dev-servers-registry.js";
-import { ConfigError, StartupError } from "./errors.js";
-import { detectCommonJsError, formatDuration, setupLogPath } from "./helpers.js";
+import { ConfigError, StartupError, WorkspaceError } from "./errors.js";
+import type { RunFileEntry } from "./file-entries.js";
+import { detectCommonJsError } from "./helpers.js";
 import { refuseOldRegistry } from "./migrate.js";
 import {
   awaitAllReady,
@@ -27,28 +34,32 @@ import {
   type PollableServer,
   replayTail,
 } from "./log-polling.js";
+import { devCmd } from "./package-manager.js";
+import { checkPortClaim } from "./port-claim.js";
 import {
   canonicalCwd,
   detectPortConflicts,
   type PortConflict,
+  type PortHolder,
   sweepStalePorts,
   waitForPortsFree,
 } from "./port-holder.js";
+import { type DevPortsConfig, type ResolvedDevPorts, resolveDevPortsConfig } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import type {
   CallbackServer,
+  ResolvedServerDescriptor,
   ServerContext,
   ServerDescriptor,
   SpawnServer,
 } from "./server-descriptor.js";
 import {
-  readWorkspaces,
   registryDirFor,
   resolveCurrentWorkspace,
   type ResolvedWorkspace,
-  type WorkspaceEntry,
+  storedPortsOf,
 } from "./workspaces.js";
-import { detectWorktree, getWorktreeBranch } from "./worktree.js";
+import { detectWorktree, getWorktreeBranch, type WorktreeContext } from "./worktree.js";
 
 export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
@@ -58,6 +69,19 @@ export interface DevServerConfig {
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
   maxConcurrentDevServers?: number;
+  /** The project's port range and the names allocated in it. Omit for a portless dev-server. */
+  ports?: DevPortsConfig;
+  /**
+   * Gitignored files that carry ports or are needed only to run. Created and patched by every
+   * `dev setup`, so before every start.
+   */
+  runFiles?: RunFileEntry[];
+  /**
+   * Workspace infrastructure: database, seed. Runs once per workspace, at its first `dev setup`,
+   * and again with `dev setup --force`. MUST be idempotent. Names every resource it creates after
+   * the workspace, so `WorkspaceConfig.purgeInfrastructure` finds it by name.
+   */
+  setup?: (ctx: DevSetupContext) => Promise<void> | void;
   /** One entry per server to start. Started in array order; stopped in reverse order. */
   servers: ServerDescriptor[];
   /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
@@ -95,55 +119,147 @@ export async function runDevServer(config: DevServerConfig): Promise<void> {
     return;
   }
 
-  const registryDir = registryDirFor(config.runtimeDir);
+  try {
+    const kernel = createKernel(config);
+    refuseOldRegistry(kernel.worktree.mainWorktree, kernel.registryDir);
+    await dispatch(command, kernel);
+  } catch (err) {
+    if (err instanceof WorkspaceError || err instanceof ConfigError) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+}
 
-  const { mainWorktree } = detectWorktree();
-  refuseOldRegistry(mainWorktree, registryDir);
+/** Per-invocation state shared by every dev-server command. */
+interface DevKernel {
+  config: DevServerConfig;
+  /** The validated `ports` group. `undefined` for a portless dev-server. */
+  ports?: ResolvedDevPorts;
+  worktree: WorktreeContext;
+  /** The registry directory, relative to a worktree root. */
+  registryDir: string;
+}
 
+function createKernel(config: DevServerConfig): DevKernel {
+  const ports = config.ports === undefined ? undefined : resolveDevPortsConfig(config.ports);
+  checkSpawnPortNames(config.servers, ports);
+  const worktree = detectWorktree();
+  checkPortClaim(worktree.currentWorktree, ports);
+  return { config, ports, worktree, registryDir: registryDirFor(config.runtimeDir) };
+}
+
+function checkSpawnPortNames(
+  servers: ServerDescriptor[],
+  ports: ResolvedDevPorts | undefined,
+): void {
+  for (const server of servers) {
+    if (server.kind !== "spawn" || typeof server.port !== "string") continue;
+    if (ports === undefined) {
+      throw new ConfigError(
+        `Config error: server "${server.name}" names the port "${server.port}", but the ` +
+          "dev-server config declares no `ports`.",
+      );
+    }
+    if (!ports.names.includes(server.port)) {
+      throw new ConfigError(
+        `Config error: server "${server.name}" names the port "${server.port}", absent from ` +
+          "`ports.names`.",
+      );
+    }
+  }
+}
+
+async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
+  const { worktree, registryDir } = kernel;
   switch (command.kind) {
     case "list":
-      listDevServers(mainWorktree, registryDir);
+      listDevServers(worktree.mainWorktree, registryDir);
       return;
     case "down":
       if (command.all) {
         await stopAllRegistered({
-          mainWorktree,
+          mainWorktree: worktree.mainWorktree,
           registryDir,
-          callbackServers: callbackServersOf(config),
+          callbackServers: callbackServersOf(kernel.config),
+          portsOf: portsLookup(kernel),
         });
       } else {
-        await stopLocal(config, mainWorktree, registryDir);
+        await stopLocal(kernel);
       }
       return;
     case "up":
-      await start(config, mainWorktree, registryDir, {
-        evict: command.evict,
-        restart: command.restart,
-      });
+      await start(kernel, { evict: command.evict, restart: command.restart });
       return;
     case "restart":
-      await start(config, mainWorktree, registryDir, { evict: command.evict, restart: true });
+      await start(kernel, { evict: command.evict, restart: true });
       return;
     case "status":
-      printStatus(config, mainWorktree, registryDir);
+      printStatus(kernel);
       return;
     case "foreground":
-      await runForeground(config, mainWorktree, registryDir, {
-        evict: command.evict,
-        restart: command.restart,
-      });
+      await runForeground(kernel, { evict: command.evict, restart: command.restart });
+      return;
+    case "setup":
+      await runDevSetup(devSetupInput(kernel, command));
+      console.log("Dev setup done.");
       return;
   }
 }
 
-function printStatus(config: DevServerConfig, mainWorktree: string, registryDir: string): void {
-  const entry = findOwnEntry(mainWorktree, registryDir, process.cwd());
+function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInput {
+  return {
+    worktree: kernel.worktree,
+    registryDir: kernel.registryDir,
+    runtimeDir: kernel.config.runtimeDir,
+    ports: kernel.ports,
+    runFiles: kernel.config.runFiles ?? [],
+    setup: kernel.config.setup,
+    options: {
+      force: options.force,
+      resetPorts: options.resetPorts,
+      fromFinalize: options.fromFinalize,
+    },
+  };
+}
+
+/** The ports of a worktree, read from its registry entry. */
+function portsLookup(kernel: DevKernel): PortsLookup {
+  return (worktree) => storedPortsOf(kernel.worktree.mainWorktree, kernel.registryDir, worktree);
+}
+
+function printStatus(kernel: DevKernel): void {
+  const { worktree, registryDir } = kernel;
+  const cwd = process.cwd();
+  const entry = findOwnEntry(worktree.mainWorktree, registryDir, cwd);
   if (!entry || !Object.values(entry.pids).some(isProcessAlive)) {
     console.log("Dev-server status: DOWN.");
     return;
   }
   console.log("Dev-server status: UP.");
-  printStartSummary(config, resolveCurrentWorkspace(registryDir), entry.pids);
+  printStartSummary(
+    kernel.config,
+    resolveCurrentWorkspace(worktree.mainWorktree, registryDir),
+    resolveSpawnPorts(kernel.config.servers, portsLookup(kernel)(cwd)),
+    entry.pids,
+  );
+}
+
+/**
+ * Maps each spawn server's `port` to a number: a port name resolves through the workspace's
+ * ports. A name the workspace has no port for yet leaves the server without a port.
+ */
+function resolveSpawnPorts(
+  servers: ServerDescriptor[],
+  ports: Record<string, number>,
+): ResolvedServerDescriptor[] {
+  return servers.map((server): ResolvedServerDescriptor => {
+    if (server.kind !== "spawn") return server;
+    const { port, ...rest } = server;
+    if (typeof port !== "string") return { ...rest, port };
+    return { ...rest, port: ports[port], portName: port };
+  });
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
@@ -160,20 +276,17 @@ interface StartOptions {
   restart: boolean;
 }
 
-async function start(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-  options: StartOptions,
-): Promise<void> {
-  const ctx: ServerContext = { cwd: process.cwd() };
-  if (await runStartChecks(config, mainWorktree, registryDir, ctx, options)) return;
+async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
+  const { config, worktree, registryDir } = kernel;
+  const ctx: ServerContext = { cwd: process.cwd(), ports: {} };
+  const servers = await runStartChecks(kernel, ctx, options);
+  if (!servers) return;
 
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   await spawnWithRollback(config, ctx, state);
 
-  const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
-  printStartSummary(config, workspace, state.spawnPids);
+  const workspace = registerStartedServer(worktree.mainWorktree, registryDir, state.spawnPids);
+  printStartSummary(config, workspace, servers, state.spawnPids);
 }
 
 /**
@@ -181,13 +294,10 @@ async function start(
  * handlers are installed before starting so an interrupt during startup rolls back; after a
  * successful start they switch to the local stop sequence.
  */
-async function runForeground(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-  options: StartOptions,
-): Promise<void> {
-  const ctx: ServerContext = { cwd: process.cwd() };
+async function runForeground(kernel: DevKernel, options: StartOptions): Promise<void> {
+  const { config, worktree, registryDir } = kernel;
+  const { mainWorktree } = worktree;
+  const ctx: ServerContext = { cwd: process.cwd(), ports: {} };
   if (!options.restart) {
     const running = findOwnLiveEntry(mainWorktree, registryDir, ctx.cwd);
     if (running) return attachForeground(config, running);
@@ -201,7 +311,7 @@ async function runForeground(
     if (shuttingDown) return;
     shuttingDown = true;
     if (started) {
-      void shutdownForeground(config, mainWorktree, registryDir);
+      void shutdownForeground(kernel);
     } else {
       void rollbackStart(state.spawnPids, state.startedCallbacks, ctx).then(() =>
         process.exit(130),
@@ -211,7 +321,8 @@ async function runForeground(
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
-  if (await runStartChecks(config, mainWorktree, registryDir, ctx, options)) process.exit(0);
+  const servers = await runStartChecks(kernel, ctx, options);
+  if (!servers) process.exit(0);
 
   // Stream logs from the first byte so the whole startup (e.g. a slow build) is visible live.
   const streamLogs = (): void => tailLogs(config, state.spawnPids, { fromStart: true });
@@ -223,7 +334,7 @@ async function runForeground(
 
   const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
   started = true;
-  printStartSummary(config, workspace, state.spawnPids);
+  printStartSummary(config, workspace, servers, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -276,30 +387,34 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
   await new Promise<never>(() => {});
 }
 
-async function shutdownForeground(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-): Promise<void> {
+async function shutdownForeground(kernel: DevKernel): Promise<void> {
   console.log("\nStopping dev servers...");
-  await stopLocal(config, mainWorktree, registryDir);
+  await stopLocal(kernel);
   console.log("Stopped.");
   process.exit(0);
 }
 
+/**
+ * Runs the implicit `dev setup` and the start checks, and sets `ctx.ports`. Returns the servers with
+ * their ports resolved, or `undefined` when a dev-server already runs here and the start must stop.
+ */
 async function runStartChecks(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
+  kernel: DevKernel,
   ctx: ServerContext,
   { evict, restart }: StartOptions,
-): Promise<boolean> {
-  checkWorktreeReady(config, mainWorktree, registryDir, ctx.cwd);
-  if (await handleAlreadyRunning(config, mainWorktree, registryDir, ctx, restart)) return true;
-  await enforceCap(config, mainWorktree, registryDir, evict);
-  checkNoLocalRegistryConflict(mainWorktree, registryDir, ctx.cwd);
-  await checkPortsFree(config.servers, ctx.cwd);
-  return false;
+): Promise<ResolvedServerDescriptor[] | undefined> {
+  const { mainWorktree } = kernel.worktree;
+  if (await handleAlreadyRunning(kernel, ctx.cwd, restart)) return;
+  const { workspace, ports } = await runDevSetup(
+    devSetupInput(kernel, { force: false, resetPorts: false, fromFinalize: false }),
+  );
+  ctx.ports = ports;
+  await enforceCap(kernel, evict);
+  checkNoLocalRegistryConflict(mainWorktree, kernel.registryDir, ctx.cwd);
+  const servers = resolveSpawnPorts(kernel.config.servers, ports);
+  const pins = workspace.main === true ? (kernel.ports?.mainWorktree ?? {}) : {};
+  await checkPortsFree(servers, ctx.cwd, pins);
+  return servers;
 }
 
 /**
@@ -375,7 +490,7 @@ function registerStartedServer(
   registryDir: string,
   spawnPids: Record<string, number>,
 ): ResolvedWorkspace {
-  const workspace = resolveCurrentWorkspace(registryDir);
+  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
   const devEntry: DevServerEntry = {
     name: workspace.name,
     worktree: workspace.worktree,
@@ -390,9 +505,10 @@ function registerStartedServer(
 function printStartSummary(
   config: DevServerConfig,
   workspace: ResolvedWorkspace,
+  servers: ResolvedServerDescriptor[],
   spawnPids: Record<string, number>,
 ): void {
-  const summaryServers = config.servers.map((server) => {
+  const summaryServers = servers.map((server) => {
     if (server.kind === "spawn") {
       return { server, port: server.port, pid: spawnPids[server.name] };
     }
@@ -469,87 +585,24 @@ async function rollbackStart(
   }
 }
 
-export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
-
-/**
- * Pure builder for the `dev` worktree-readiness gate. Returns `ok` when the workspace is `ready`
- * or absent (synthesized main); otherwise returns the user-facing error message.
- */
-export function buildWorktreeReadyMessage(input: {
-  name: string;
-  worktreePath: string;
-  runtimeDir: string;
-  entry: WorkspaceEntry | undefined;
-  now: number;
-  pm: PackageManagerCommands;
-}): WorktreeReadyCheck {
-  const { name, worktreePath, runtimeDir, entry, now, pm } = input;
-  if (!entry || entry.status === "ready") return { ok: true };
-  const ws = pm.workspace.withArgs;
-  const logPath = setupLogPath(worktreePath, runtimeDir);
-  if (entry.status === "pending") {
-    const elapsed = formatDuration(now - Date.parse(entry.createdAt));
-    return {
-      ok: false,
-      message:
-        `Error: Worktree setup is still in progress (workspace ${name}, started ${elapsed} ago).\n` +
-        `Tail: ${logPath}\n` +
-        `Run \`${ws} wait\` to block until it finishes, or retry \`${pm.dev.base}\` once ready.`,
-    };
-  }
-  const failureAt = entry.failure?.at ?? entry.createdAt;
-  const elapsed = formatDuration(now - Date.parse(failureAt));
-  const reason = entry.failure?.message ?? "(no message)";
-  return {
-    ok: false,
-    message:
-      `Error: Worktree setup failed (workspace ${name}, ${elapsed} ago): ${reason}\n` +
-      `Tail: ${logPath}\n` +
-      `Re-run \`${ws} setup\` to retry the finalize.`,
-  };
-}
-
-function checkWorktreeReady(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-  cwd: string,
-): void {
-  const workspace = resolveCurrentWorkspace(registryDir);
-  const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
-  const result = buildWorktreeReadyMessage({
-    name: workspace.name,
-    worktreePath: cwd,
-    runtimeDir: config.runtimeDir,
-    entry,
-    now: Date.now(),
-    pm: packageManagerCommands(),
-  });
-  if (result.ok) return;
-  console.error(result.message);
-  process.exit(1);
-}
-
 /**
  * If a dev-server is already running in this worktree, either stop it (when `restart`) so the
  * normal start path can proceed, or print a friendly notice and return `true` to short-circuit.
  * Returns `true` when the caller should exit cleanly without starting.
  */
 async function handleAlreadyRunning(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-  ctx: ServerContext,
+  kernel: DevKernel,
+  cwd: string,
   restart: boolean,
 ): Promise<boolean> {
-  const entry = findOwnEntry(mainWorktree, registryDir, ctx.cwd);
+  const entry = findOwnEntry(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
   if (!entry) return false;
   const livePids = Object.entries(entry.pids).filter(([, pid]) => isProcessAlive(pid));
   if (livePids.length === 0) return false;
 
   if (restart) {
     console.log("Restarting dev-server in this worktree...");
-    await stopLocal(config, mainWorktree, registryDir);
+    await stopLocal(kernel);
     return false;
   }
 
@@ -564,12 +617,9 @@ async function handleAlreadyRunning(
 // TOCTOU: the cap check and the subsequent register are not atomic. Two concurrent `dev up --evict`
 // from different worktrees can both pass the cap check and both register, exceeding the limit by
 // one. Accepted: the race window is narrow and the consequence is bounded (one extra dev-server).
-async function enforceCap(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-  evict: boolean,
-): Promise<void> {
+async function enforceCap(kernel: DevKernel, evict: boolean): Promise<void> {
+  const { config, registryDir } = kernel;
+  const { mainWorktree } = kernel.worktree;
   const limit = config.maxConcurrentDevServers;
   if (limit === undefined) return;
   const active = pruneAndPersist(mainWorktree, registryDir).servers;
@@ -589,6 +639,7 @@ async function enforceCap(
     mainWorktree,
     registryDir,
     callbackServers: callbackServersOf(config),
+    portsOf: portsLookup(kernel),
     count: toEvict,
   });
   for (const entry of evicted) {
@@ -599,18 +650,18 @@ async function enforceCap(
   }
 }
 
-async function checkPortsFree(servers: ServerDescriptor[], cwd: string): Promise<void> {
+/** `pins`: the main worktree's pinned ports, by name; empty in a linked workspace. */
+async function checkPortsFree(
+  servers: ResolvedServerDescriptor[],
+  cwd: string,
+  pins: Record<string, number>,
+): Promise<void> {
   const conflicts = await detectPortConflicts(servers, canonicalCwd(cwd));
   const foreign = conflicts.filter(
     (c): c is Extract<PortConflict, { kind: "foreign" }> => c.kind === "foreign",
   );
   if (foreign.length > 0) {
-    for (const c of foreign) {
-      const info = c.holder
-        ? ` (PID ${c.holder.pid}: ${c.holder.cmd}${c.holder.cwd ? `, cwd ${c.holder.cwd}` : ""})`
-        : "";
-      console.error(`Error: Port ${c.server.port} (${c.server.name}) is already in use${info}.`);
-    }
+    for (const c of foreign) console.error(foreignHolderMessage(c, pins));
     process.exit(1);
   }
   const ours = conflicts.filter(
@@ -642,6 +693,31 @@ async function checkPortsFree(servers: ServerDescriptor[], cwd: string): Promise
   }
 }
 
+function foreignHolderMessage(
+  conflict: Extract<PortConflict, { kind: "foreign" }>,
+  pins: Record<string, number>,
+): string {
+  const { server, holder } = conflict;
+  const label = `Port ${server.port} (${server.name})`;
+  if (server.portName !== undefined && pins[server.portName] === server.port) {
+    return (
+      `Error: ${label} is pinned by ports.mainWorktree and held by ${describeHolder(holder)}. ` +
+      "Free it, or change ports.mainWorktree."
+    );
+  }
+  const info = holder ? ` (${describeHolder(holder)})` : "";
+  const hint =
+    server.portName === undefined
+      ? ""
+      : ` Free it, or move this workspace's ports with \`${devCmd("setup --reset-ports")}\`.`;
+  return `Error: ${label} is already in use${info}.${hint}`;
+}
+
+function describeHolder(holder: PortHolder | undefined): string {
+  if (!holder) return "another process";
+  return `PID ${holder.pid}: ${holder.cmd}${holder.cwd ? `, cwd ${holder.cwd}` : ""}`;
+}
+
 function checkNoLocalRegistryConflict(
   mainWorktree: string,
   registryDir: string,
@@ -659,16 +735,16 @@ function checkNoLocalRegistryConflict(
   removeDevServerEntryByWorktree(mainWorktree, registryDir, cwd);
 }
 
-async function stopLocal(
-  config: DevServerConfig,
-  mainWorktree: string,
-  registryDir: string,
-): Promise<void> {
-  const ctx: ServerContext = { cwd: process.cwd() };
+async function stopLocal(kernel: DevKernel): Promise<void> {
+  const { config, registryDir } = kernel;
+  const { mainWorktree } = kernel.worktree;
+  const cwd = process.cwd();
+  const ctx: ServerContext = { cwd, ports: portsLookup(kernel)(cwd) };
+  const servers = resolveSpawnPorts(config.servers, ctx.ports);
   const entry = findOwnEntry(mainWorktree, registryDir, ctx.cwd);
   if (!entry) {
     console.log("No dev-server running in this worktree.");
-    await sweepStalePorts(config.servers, ctx.cwd);
+    await sweepStalePorts(servers, ctx.cwd);
     return;
   }
   for (const [name, pid] of Object.entries(entry.pids)) {
@@ -686,7 +762,7 @@ async function stopLocal(
     }
   }
   unregisterDevServer(mainWorktree, registryDir, ctx.cwd);
-  await sweepStalePorts(config.servers, ctx.cwd);
+  await sweepStalePorts(servers, ctx.cwd);
 }
 
 function defaultPrintSummary(

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -44,15 +44,6 @@ const SESSION_OPTIONS = {
   meta: { type: "string" },
   help: { type: "boolean", short: "h", default: false },
 } as const;
-
-// Items whose companion copy the agent may edit: the companion becomes a writable directory.
-const WRITABLE_COMPANION_ITEMS: readonly ItemName[] = [
-  ".alignfirst.json",
-  ".alignfirst-instructions",
-  "DEVELOPERS.md",
-  "docs",
-  ".plans",
-];
 
 // Items the agent would not find in the repository: a new session gets `alignfirst context`.
 const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
@@ -471,13 +462,17 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     args.resume === undefined && companionInUse(report, CONTEXT_COMPANION_ITEMS)
       ? loadContext(alignfirstCommand, cwd, env)
       : undefined;
+  const model = selectModel(args, code, records);
   const sessionFilePath = resolveSessionFilePath(tree.sessionsDir, ticket, now);
-  writeInitialSessionFile(sessionFilePath, buildFrontmatter(args, agent, now, tree.cwd, ticket));
+  writeInitialSessionFile(
+    sessionFilePath,
+    buildFrontmatter({ args, agent, model, now, realCwd: tree.cwd, ticket }),
+  );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, args.model, {
+    executableModel = await modelResolver(agent, model, {
       cwd,
       env: buildAgentEnv(env, code.unset),
     });
@@ -494,23 +489,21 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     return 1;
   }
 
-  const result = await runAgent(
-    buildRunConfig({
-      args,
-      code,
-      report,
-      ticket,
-      cwd,
-      sessionFilePath,
-      env,
-      executableModel,
-      catchupContent,
-      contextContent,
-      alignfirst: forms.alignfirst,
-    }),
-    createAgentAdapter(agent),
-    stdout,
-  );
+  const runConfig = buildRunConfig({
+    args,
+    code,
+    report,
+    ticket,
+    cwd,
+    sessionFilePath,
+    env,
+    executableModel,
+    catchupContent,
+    contextContent,
+    alignfirst: forms.alignfirst,
+  });
+  createMissingCompanion(report, runConfig.additionalDirectories);
+  const result = await runAgent(runConfig, createAgentAdapter(agent), stdout);
 
   if (args.resume === undefined && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
@@ -545,9 +538,7 @@ export function checkLaunchGuards(
         "wait for it to finish or kill it."
       );
     }
-    const latest = [...matches].sort((a, b) =>
-      b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt),
-    )[0];
+    const latest = latestRecord(matches);
     if (latest.frontmatter.agent === null) {
       return (
         `Error: session ${args.resume} predates agent-aware sessions and cannot be resumed; ` +
@@ -574,6 +565,13 @@ export function checkLaunchGuards(
     }
   }
   return;
+}
+
+// The newest record of a non-empty list: a resumed session has one record per run.
+function latestRecord(records: SessionRecord[]): SessionRecord {
+  return [...records].sort((a, b) =>
+    b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt),
+  )[0];
 }
 
 function unknownResumeError(resume: string, records: SessionRecord[]): string {
@@ -623,25 +621,44 @@ function inferTicketFromMessage(message: string): string | undefined {
   return [...candidates][0];
 }
 
-function buildFrontmatter(
+// `--model` wins. Otherwise a new session takes `code.defaultModel`, and a resume keeps the model
+// of its latest run, unchecked against the current allowlist. `undefined` leaves the agent's
+// default.
+function selectModel(
   args: SessionArgs,
-  agent: CodingAgent,
-  now: Date,
-  realCwd: string,
-  ticket: string | undefined,
-): SessionFrontmatter {
+  code: CodeConfig,
+  records: SessionRecord[],
+): string | undefined {
+  if (args.model !== undefined) return args.model;
+  if (args.resume === undefined) return code.defaultModel;
+  const runs = records.filter((r) => r.frontmatter.sessionId === args.resume);
+  return latestRecord(runs).frontmatter.model ?? undefined;
+}
+
+interface FrontmatterInput {
+  args: SessionArgs;
+  agent: CodingAgent;
+  // The model name chosen by `selectModel`, before alias resolution.
+  model: string | undefined;
+  now: Date;
+  realCwd: string;
+  ticket: string | undefined;
+}
+
+function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
+  const { args, now, ticket } = input;
   return {
     status: "running",
-    agent,
+    agent: input.agent,
     protocol: args.protocol ?? null,
     ticket: ticket ?? null,
-    model: args.model ?? null,
+    model: input.model ?? null,
     sessionId: null,
     command: formatCommand(args),
     meta: args.meta ?? null,
     pid: process.pid,
     pidStartTime: readPidStartTime(process.pid),
-    cwd: realCwd,
+    cwd: input.realCwd,
     startedAt: now.toISOString(),
     endedAt: null,
     exitReason: null,
@@ -703,14 +720,19 @@ export function buildRunConfig(input: RunInput): RunConfig {
     executableModel: input.executableModel,
     skipPermissions: code.skipPermissions,
     additionalDirectories:
-      !code.skipPermissions &&
-      report.companion !== null &&
-      companionInUse(report, WRITABLE_COMPANION_ITEMS)
-        ? [report.companion.dir]
-        : [],
+      !code.skipPermissions && report.companion !== null ? [report.companion.dir] : [],
     unset: code.unset,
     env: input.env,
   };
+}
+
+// A registered companion becomes writable before its directory exists: create it for the agent.
+function createMissingCompanion(report: ProjectReport, additionalDirectories: readonly string[]) {
+  const { companion } = report;
+  if (companion === null || companion.exists || !additionalDirectories.includes(companion.dir)) {
+    return;
+  }
+  mkdirSync(companion.dir, { recursive: true });
 }
 
 function renderHelp(agent: CodingAgent, models: readonly string[], forms: CommandForms): string {
@@ -761,23 +783,25 @@ Options (new, resume):
   --catchup             Load the ticket history before the message. new only.
   -m, --message "..."   Message to send. Required for spec/aad, or without protocol/catchup.
   --message-file <path> Read the message from a UTF-8 file, or stdin with -. Exclusive with -m.
-  --model <model>       Model for a new session: one of ${models.join(", ")}. Omit to use the
-                        default model.
+  --model <model>       One of ${models.join(", ")}. A new session defaults to
+                        code.defaultModel, else to the coding agent's default. A resume keeps the
+                        session's model.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
                         (\`meta:\`). aligndev never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
 
 ${requires}
 
-Config (~/.alignfirst/aligndev.config.json):
+Config (~/.alignfirst/settings.json):
   code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
                         agent that runs aligndev.
+  code.defaultModel     Default model of a new session, one of the models accepted by --model.
   code.models           List replacing the models accepted by --model.
   code.skipPermissions  true to run the coding agent with permission prompts disabled.
   code.unset            Env vars to strip from the coding agent child.
 
 Selected-agent permissions: ${permissionMode}
-The normal mode also makes the project's companion directory writable when it is in use.
+The normal mode also makes the project's companion directory writable.
 ${modelBehavior}
 
 ${aligndev} code runs a coding agent in the foreground and blocks until it finishes, streaming the

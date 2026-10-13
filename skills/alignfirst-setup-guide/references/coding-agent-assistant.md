@@ -8,11 +8,11 @@ Supported systems: Linux and macOS, and Windows through WSL.
 
 The project needs a `.plans` directory, in its repository or in its companion directory. Follow [AlignFirst setup](alignfirst-skills-setup.md#configure-the-project), with [plans-setup.md](plans-setup.md) for a work-files repository, or [companion-setup.md](companion-setup.md) for a repository that must stay untouched.
 
-The assistant reads the project's `DEVELOPERS.md` when it exists, else the `README.md` at the repository root. [Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) describes its content.
+[Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) applies: skip the command skills and the global bootstrap line. It also describes the content of `DEVELOPERS.md`, which the assistant reads when it exists, else the `README.md` at the repository root.
 
 ## 2. Configure `aligndev` (recommended)
 
-Without a config, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. A config makes the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/aligndev.config.json`:
+Without settings, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. Settings make the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/settings.json`:
 
 ```json
 {

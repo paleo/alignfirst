@@ -15,7 +15,7 @@ Browser ──HTTPS/443──> Caddy ──forward_auth──> Authelia (127.0.0
                          └──reverse_proxy──> localhost:{{PORT_RANGE_FIRST}}..{{PORT_RANGE_LAST}}
 ```
 
-Projects derive their URLs from `REMOTE_DEV_DOMAIN={{DEV_DOMAIN}}`, already in `environment.d/common.conf`, through `npm run workspace -- setup --profile remote` ([add-project.md](../operations/add-project.md)).
+Projects derive their URLs from `REMOTE_DEV_DOMAIN={{DEV_DOMAIN}}`, already in `environment.d/common.conf`, in their run-file patches at each dev start ([add-project.md](../operations/add-project.md)).
 
 > **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 

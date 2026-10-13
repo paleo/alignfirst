@@ -12,6 +12,48 @@ export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url
 // The fixture's `workspace.mjs` is a plain `node` subprocess, so it imports the *built* package.
 const distIndexUrl = pathToFileURL(join(packageRoot, "dist", "index.js")).href;
 
+/** The fixture dev-server's port range, and the port it excludes. */
+export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
+
+/**
+ * A real dev-server with no server: `dev setup` alone exercises it. Its run file `ports.env` carries
+ * the ports; its `setup` hook appends one line per run to `setup-runs.log`, and throws with
+ * `E2E_DEV_SETUP_FAIL=1`. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording anything.
+ */
+const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { helpers, runDevServer } from "${distIndexUrl}";
+
+if (process.env.E2E_DEV_EXIT === "1") process.exit(3);
+
+await runDevServer({
+  runtimeDir: ".wt",
+  ports: {
+    first: ${DEV_PORTS.first},
+    last: ${DEV_PORTS.last},
+    exclude: [${DEV_PORTS.excluded}],
+    names: ["web", "api"],
+  },
+  runFiles: [
+    {
+      path: "ports.env",
+      source: { kind: "content", content: "# ports\\n" },
+      patch: (content, ctx) =>
+        helpers.patchEnvFile(content, {
+          WEB_PORT: String(ctx.ports.web),
+          API_PORT: String(ctx.ports.api),
+        }),
+    },
+  ],
+  setup: (ctx) => {
+    if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom");
+    appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
+  },
+  servers: [],
+});
+`;
+
 export interface FixtureRepo {
   /** The `mkdtemp` root; delete it to clean up. */
   root: string;
@@ -20,45 +62,34 @@ export interface FixtureRepo {
 }
 
 export interface FixtureOptions {
-  /** Setup-only variant: no `ports` group, no dev-server script. */
+  /** Setup-only variant: no dev-server script. */
   portless?: boolean;
-  /** Arranges the ports by name (`layout: "serviceMajor"`) instead of by workspace block. */
-  serviceMajor?: boolean;
   /**
    * Seeds a gitignored file from a committed fallback or the customized main file. Its patch
    * owns the `worktree=` line and leaves the rest alone, so re-running `setup` can re-apply it.
    * With `E2E_SEED_FAIL=1`, a second entry follows whose required source is missing.
    */
   fallbackSeeding?: boolean;
-  /**
-   * Declares one setup profile, `assistant`, whose `apply` throws with `E2E_PROFILE_FAIL=1` and otherwise
-   * writes `profile-applied.txt`: `ctx.ports` and the seeded file's content as JSON.
-   */
-  profiles?: boolean;
+  /** Declares the `ports` key that 0.37.0 removed from the workspace config. */
+  oldConfig?: boolean;
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   const portless = options.portless ?? false;
-  const serviceMajor = options.serviceMajor ?? false;
   const fallbackSeeding = options.fallbackSeeding ?? false;
-  const profiles = options.profiles ?? false;
+  const oldConfig = options.oldConfig ?? false;
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
   const repo = join(root, "fixrepo");
   mkdirSync(join(repo, "scripts"), { recursive: true });
   writeFileSync(
     join(repo, "scripts", "workspace.mjs"),
-    workspaceMjsSource(portless, serviceMajor, fallbackSeeding, profiles),
+    workspaceMjsSource(portless, fallbackSeeding, oldConfig),
   );
   if (fallbackSeeding) {
-    writeFileSync(join(repo, ".gitignore"), "workspace.local\n");
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
   }
-  if (!portless) {
-    writeFileSync(
-      join(repo, "scripts", "dev-server.mjs"),
-      "// stub: only its existence is required\n",
-    );
-  }
+  writeFileSync(join(repo, ".gitignore"), "workspace.local\nports.env\nsetup-runs.log\n");
+  if (!portless) writeFileSync(join(repo, "scripts", "dev-server.mjs"), DEV_SERVER_MJS_SOURCE);
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.email", "e2e@example.com"]);
   git(repo, ["config", "user.name", "E2E"]);
@@ -69,31 +100,14 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
 
 function workspaceMjsSource(
   portless: boolean,
-  serviceMajor: boolean,
   fallbackSeeding: boolean,
-  profiles: boolean,
+  oldConfig: boolean,
 ): string {
-  const setupProfiles = profiles
-    ? `  setupProfiles: {
-    assistant: {
-      description: "e2e gateway environment",
-      apply: (ctx) => {
-        if (process.env.E2E_PROFILE_FAIL === "1") throw new Error("e2e profile boom");
-        const seededPath = join(ctx.currentWorktree, "workspace.local");
-        const seeded = existsSync(seededPath) ? readFileSync(seededPath, "utf-8") : "(none)";
-        const marker = { ports: ctx.ports, seeded };
-        writeFileSync(join(ctx.currentWorktree, "profile-applied.txt"), JSON.stringify(marker));
-        ctx.log("Applied profile assistant.");
-      },
-    },
-  },
-`
-    : "";
   const devSetup = portless
     ? ""
     : `  devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
-  ports: { base: 8100, maxWorkspaces: 20, ${serviceMajor ? 'names: ["web", "db"], layout: "serviceMajor"' : 'names: ["web"]'} },
 `;
+  const oldPorts = oldConfig ? `  ports: { base: 47100, names: ["web"] },\n` : "";
   const gitignoredFiles = fallbackSeeding
     ? `[
     {
@@ -112,7 +126,7 @@ function workspaceMjsSource(
       : []),
   ]`
     : "[]";
-  return `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+  return `import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -120,15 +134,14 @@ import { runWorkspace } from "${distIndexUrl}";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-${devSetup}  sharedDirs: [],
+${devSetup}${oldPorts}  sharedDirs: [],
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
-${setupProfiles}  formatSummary: () => "Workspace ready.",
+  formatSummary: () => "Workspace ready.",
   finalizeWorkspace: (ctx) => {
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");
     writeFileSync(join(ctx.currentWorktree, "finalized.txt"), "finalized\\n");
-    writeFileSync(join(ctx.currentWorktree, "ports.json"), JSON.stringify(ctx.ports));
   },
 });
 `;
@@ -149,9 +162,32 @@ export function runCli(
   });
 }
 
+/** Runs the fixture's `dev-server.mjs` in `worktree`. */
+export function runDev(
+  worktree: string,
+  args: string[],
+  env?: Record<string, string>,
+): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, [join("scripts", "dev-server.mjs"), ...args], {
+    cwd: worktree,
+    encoding: "utf-8",
+    env: { ...process.env, ...env },
+    stdio: "pipe",
+    timeout: 60_000,
+  });
+}
+
+/** The registry as stored. */
 export function readWorkspaces(repo: string): WorkspacesRegistry {
-  const path = join(repo, ".wt", "workspace-registry", "workspaces.json");
-  return JSON.parse(readFileSync(path, "utf-8")) as WorkspacesRegistry;
+  return JSON.parse(readFileSync(registryPath(repo), "utf-8")) as WorkspacesRegistry;
+}
+
+export function writeWorkspaces(repo: string, registry: WorkspacesRegistry): void {
+  writeFileSync(registryPath(repo), JSON.stringify(registry, undefined, 2));
+}
+
+function registryPath(repo: string): string {
+  return join(repo, ".wt", "workspace-registry", "workspaces.json");
 }
 
 function git(repo: string, args: string[]): void {

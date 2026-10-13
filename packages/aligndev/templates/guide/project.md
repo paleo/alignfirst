@@ -4,7 +4,7 @@ A projects directory groups projects and optional nested projects directories. I
 
 A project is a git main worktree, direct child of a projects directory. Its linked worktrees are listed as its workspaces. Other child directories, those that are not git repositories, appear under `others`.
 
-A project's AlignFirst files may live in its companion directory, declared in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location.
+A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location.
 
 ## Commands
 
@@ -17,17 +17,17 @@ A project's AlignFirst files may live in its companion directory, declared in th
 {{ALIGNDEV}} guide project [--root <path>]
 ```
 
-`--root` selects the projects directory. It defaults to `projectsRoot` in the aligndev config, then to the working directory.
+`--root` selects the projects directory. It defaults to `projectsRoot` in the aligndev settings, then to the working directory.
 
 `doctor` is a read-only health gate. It exits successfully only when discovery completes with no
 inventory issues.
 
 ## Port claims
 
-Run `{{ALIGNDEV}} project free-ports --size <n>` with the block size required by the project's workspace scheme: `perWorkspace × maxWorkspaces`. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
+Run `{{ALIGNDEV}} project free-ports --size <n>` with the size of the project's port range: port names × expected concurrent workspaces. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
 
-The project config is its registration. Deleting the project removes it from the listing. The workspace kernel refuses a `workspace` command when the project's `portRange` disagrees with its port scheme.
+The project config is its registration. Deleting the project removes it from the listing. The workspace dev-server refuses a command when the project's `portRange` disagrees with the `ports` range of its config.
 
 ## Reported issues
 
-The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects sharing one companion directory.
+The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects whose registry entries resolve to the same companion directory.

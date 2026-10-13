@@ -38,10 +38,10 @@ describe("doctor command", () => {
     expect(result.stdout).not.toContain("Skills: aligndev");
   });
 
-  it("reports the companion and warns about a missing item flagged true", async () => {
+  it("reports the companion and warns about a missing item set to companion", async () => {
     const { root, home, project, companion } = makeCompanionProject({
-      docs: true,
-      ".plans": false,
+      docs: "companion",
+      ".plans": "project",
     });
     dirs.push(root);
     mkdirSync(join(project, ".plans"));
@@ -52,12 +52,12 @@ describe("doctor command", () => {
         `[ok] Companion: registry valid (${join(home, ".alignfirst", "companions", "registry.json")})`,
         "[ok] Companion: key ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
-        `[ok] Companion: .alignfirst.json: ${join(companion, ".alignfirst.json")} (companion, missing)`,
-        `[ok] Companion: .alignfirst-instructions: ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
-        `[ok] Companion: DEVELOPERS.md: ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
-        `[warn] Companion: docs: ${join(companion, "docs")} (companion, missing)`,
-        `[ok] Companion: .plans: ${join(project, ".plans")} (project)`,
-        `[ok] Companion: _aligndev: ${join(project, ".plans")} (project)`,
+        `[ok] Companion: .alignfirst.json (auto): ${join(companion, ".alignfirst.json")} (companion, missing)`,
+        `[ok] Companion: .alignfirst-instructions (auto): ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
+        `[ok] Companion: DEVELOPERS.md (auto): ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
+        `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
+        `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,
+        `[ok] Companion: _aligndev (auto): ${join(project, ".plans")} (project)`,
         "[warn] Git:",
       ].join("\n"),
     );
@@ -68,7 +68,14 @@ describe("doctor command", () => {
     const { root, home, project } = makeCompanionProject({});
     dirs.push(root);
     mkdirSync(join(project, "src"));
-    writeRegistry(home, { paths: { "~": {}, "~/app": {}, "~/app/src": {}, "~/gone": {} } });
+    writeRegistry(home, {
+      projects: {
+        "~": { dir: "home" },
+        "~/app": { dir: "app" },
+        "~/app/src": { dir: "app_src" },
+        "~/gone": { dir: "gone" },
+      },
+    });
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
     expect(result.code).toBe(0);
     for (const key of ["~", "~/app/src", "~/gone"])
@@ -81,10 +88,29 @@ describe("doctor command", () => {
   it("warns about registry keys that share a companion directory", async () => {
     const { root, home, project } = makeCompanionProject({});
     dirs.push(root);
-    writeRegistry(home, { paths: { "~/app": {}, "~/a_b/c": {}, "~/a/b_c": {} } });
+    writeRegistry(home, {
+      projects: {
+        "~/app": { dir: "app" },
+        "~/one": { dir: "shared" },
+        "~/two": { dir: "~/.alignfirst/companions/shared" },
+      },
+    });
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
     expect(result.stdout).toContain(
-      `[warn] Companion: keys ~/a_b/c, ~/a/b_c share the companion directory ${join(home, ".alignfirst", "companions", "a_b_c")}\n`,
+      `[warn] Companion: keys ~/one, ~/two share the companion directory ${join(home, ".alignfirst", "companions", "shared")}\n`,
+    );
+  });
+
+  it("warns about a companion directory inside another key's companion directory", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    writeRegistry(home, {
+      projects: { "~/app": { dir: "app" }, "~/one": { dir: "team" }, "~/two": { dir: "team/two" } },
+    });
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    const team = join(home, ".alignfirst", "companions", "team");
+    expect(result.stdout).toContain(
+      `[warn] Companion: companion directory ${join(team, "two")} (~/two) is inside ${team} (~/one)\n`,
     );
   });
 
@@ -95,7 +121,7 @@ describe("doctor command", () => {
     expect(result.code).toBe(0);
     for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])
       expect(result.stdout).toContain(
-        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions/registry.json: paths`,
+        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions/registry.json: projects`,
       );
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });

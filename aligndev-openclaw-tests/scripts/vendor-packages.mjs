@@ -73,7 +73,9 @@ function buildPackages() {
 
 function packPackage({ name, tarball }) {
   const out = run("npm", ["pack", "--workspace", name, "--pack-destination", VENDOR_DIR, "--json"]);
-  const [{ filename }] = JSON.parse(out);
+  // npm 11 reports an array, or an object keyed by workspace name when run inside `npm run`.
+  const report = JSON.parse(out);
+  const [{ filename }] = Array.isArray(report) ? report : Object.values(report);
   renameSync(resolve(VENDOR_DIR, filename), resolve(VENDOR_DIR, tarball));
 }
 

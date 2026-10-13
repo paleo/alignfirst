@@ -17,11 +17,9 @@ const LAYOUT: GuideLayout = {
   runtimeDir: ".local-wt",
   sharedDirs: [".local", ".plans"],
   hasDevServer: true,
-  hasPorts: true,
-  profiles: { assistant: "HTTPS gateway environment" },
 };
 
-const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false, hasPorts: false, profiles: {} };
+const SETUP_ONLY: GuideLayout = { ...LAYOUT, hasDevServer: false };
 
 describe("renderGuide", () => {
   it("renders npm commands with the `--` separator for forwarded args", () => {
@@ -63,12 +61,18 @@ describe("renderGuide", () => {
     expect(new Set(commentColumns).size).toBe(1);
   });
 
-  it("documents ports and the dev server when both are configured", () => {
+  it("documents ports, `dev setup` and `setup --full` with a dev server", () => {
     const guide = renderGuide(NPM, LAYOUT);
     expect(guide).toContain("dedicated ports");
+    expect(guide).toContain("Ports and infrastructure arrive with the first `npm run dev`");
     expect(guide).toContain("## Dev server");
     expect(guide).toContain("**Concurrent cap.**");
     expect(guide).toContain("Driving the dev server in another worktree");
+    expect(guide).toMatch(/^npm run dev -- setup {2,}#/m);
+    expect(guide).toContain("npm run dev -- setup --force");
+    expect(guide).toContain("npm run dev -- setup --reset-ports");
+    expect(guide).toContain("npm run workspace -- setup -c my-branch --full");
+    expect(guide).toContain("allocated at its first dev start, stay fixed");
   });
 
   it("drops the port and dev-server material in setup-only mode", () => {
@@ -77,18 +81,14 @@ describe("renderGuide", () => {
     expect(guide).not.toContain("## Dev server");
     expect(guide).not.toContain("**Concurrent cap.**");
     expect(guide).not.toContain("npm run dev");
+    expect(guide).not.toContain("--full");
     expect(guide).toContain("`setup` creates the worktree (branch, symlinks, config files)");
   });
 
-  it("lists the declared setup profiles, and nothing about profiles when none is declared", () => {
-    const withProfiles = renderGuide(NPM, LAYOUT);
-    expect(withProfiles).toContain("npm run workspace -- setup --profile <name>");
-    expect(withProfiles).toContain("**Setup profiles:**");
-    expect(withProfiles).toContain("- `assistant` — HTTPS gateway environment");
-    const withoutProfiles = renderGuide(NPM, { ...LAYOUT, profiles: {} });
-    expect(withoutProfiles).not.toContain("--profile");
-    expect(withoutProfiles).not.toContain("Setup profiles");
-    expect(withoutProfiles).not.toContain("assistant");
+  it("says nothing of setup profiles", () => {
+    const guide = renderGuide(NPM, LAYOUT);
+    expect(guide).not.toContain("--profile");
+    expect(guide).not.toContain("Setup profiles");
   });
 
   it("leaves no template marker and no blank-line gap in either mode", () => {

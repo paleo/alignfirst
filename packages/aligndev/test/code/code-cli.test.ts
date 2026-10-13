@@ -125,7 +125,7 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stdout }),
     ).toBe(0);
-    expect(stdout.text()).toContain("one of sonnet, haiku.");
+    expect(stdout.text()).toContain("One of sonnet, haiku.");
   });
 });
 
@@ -661,23 +661,16 @@ describe("buildRunConfig", () => {
     expect(config.skipPermissions).toBe(false);
   });
 
-  it("adds the companion as a writable directory when it holds project files", () => {
-    const items: ItemName[] = [
-      ".alignfirst.json",
-      ".alignfirst-instructions",
-      "DEVELOPERS.md",
-      "docs",
-      ".plans",
-    ];
-    for (const item of items) {
-      const report = reportWithCompanion([item]);
+  it("adds the companion as a writable directory, whatever it holds", () => {
+    for (const items of [[], ["_aligndev"], [".plans"]] satisfies ItemName[][]) {
+      const report = reportWithCompanion(items);
       expect(build({ report }).additionalDirectories).toEqual(["/companions/proj"]);
     }
   });
 
-  it("adds no directory without companion files, or with skipPermissions", () => {
-    expect(build({ report: reportWithCompanion([]) }).additionalDirectories).toEqual([]);
-    expect(build({ report: reportWithCompanion(["_aligndev"]) }).additionalDirectories).toEqual([]);
+  it("adds no directory without a companion, or with skipPermissions", () => {
+    const report = { ...reportWithCompanion([]), companion: null };
+    expect(build({ report }).additionalDirectories).toEqual([]);
     const skipped = build({
       code: { ...CODE, skipPermissions: true },
       report: reportWithCompanion([".plans"]),
@@ -954,6 +947,86 @@ describe("launch guards", () => {
   });
 });
 
+describe("model selection", () => {
+  let base: string;
+  let home: string;
+  let project: string;
+  let plans: string;
+  let fake: FakeClaude;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "aligndev-model-"));
+    home = join(base, "home");
+    project = join(base, "project");
+    plans = join(project, ".plans");
+    mkdirSync(plans, { recursive: true });
+    writeConfig(home, {
+      platform: "codingAgent",
+      code: { agent: "claude", defaultModel: "sonnet" },
+    });
+    fake = installFakeClaude(base);
+  });
+  afterEach(() => rmSync(base, { recursive: true, force: true }));
+
+  // Runs `aligndev code` and returns the `--model` value the agent received, if any.
+  async function launch(tokens: string[]): Promise<string | undefined> {
+    const code = await main({
+      argv: ["node", "aligndev", "code", ...tokens],
+      cwd: project,
+      env: { PATH: fake.path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelResolver: async (_agent, model) => model,
+    });
+    expect(code).toBe(0);
+    const { args } = fake.received();
+    const index = args.indexOf("--model");
+    return index === -1 ? undefined : args[index + 1];
+  }
+
+  function newestFrontmatter(): SessionFrontmatter {
+    const records = listSessionRecords(plans);
+    return records.reduce((a, b) => (a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b))
+      .frontmatter;
+  }
+
+  it("starts a new session with code.defaultModel and records it", async () => {
+    expect(await launch(["new", "-m", "go"])).toBe("sonnet");
+    expect(newestFrontmatter()).toMatchObject({
+      model: "sonnet",
+      command: 'aligndev code new --message "go"',
+    });
+  });
+
+  it("lets --model override code.defaultModel", async () => {
+    expect(await launch(["new", "-m", "go", "--model", "haiku"])).toBe("haiku");
+    expect(newestFrontmatter().model).toBe("haiku");
+  });
+
+  it("resumes with the model of the session's latest run, not code.defaultModel", async () => {
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "old.md"),
+      statusFrontmatter({ sessionId: "abc", model: "opus", startedAt: "2026-08-29T10:00:00.000Z" }),
+    );
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "latest.md"),
+      statusFrontmatter({ sessionId: "abc", model: "haiku" }),
+    );
+    expect(await launch(["resume", "abc", "-m", "more"])).toBe("haiku");
+    expect(newestFrontmatter().model).toBe("haiku");
+  });
+
+  it("resumes without a model flag when the latest run recorded none", async () => {
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "latest.md"),
+      statusFrontmatter({ sessionId: "abc", model: null }),
+    );
+    expect(await launch(["resume", "abc", "-m", "more"])).toBeUndefined();
+    expect(newestFrontmatter().model).toBeNull();
+  });
+});
+
 describe("companion projects", () => {
   let base: string;
   let home: string;
@@ -993,7 +1066,7 @@ describe("companion projects", () => {
   }
 
   it("gates on the companion .plans and writes the session file there", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     const plans = join(project.companion, ".plans");
 
     const gated = await run(project, ["new", "-m", "go"]);
@@ -1011,7 +1084,7 @@ describe("companion projects", () => {
   });
 
   it("writes a separate _aligndev tree and opens the ticket in both trees", async () => {
-    const project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
     const plans = join(project.project, ".plans");
     const sessions = join(project.companion, ".plans");
     mkdirSync(join(plans, "_archives", "29"), { recursive: true });
@@ -1029,7 +1102,7 @@ describe("companion projects", () => {
   });
 
   it("reserves a side ticket in the companion .plans", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     const plans = join(project.companion, ".plans");
     mkdirSync(join(plans, "side-1"), { recursive: true });
 
@@ -1042,7 +1115,7 @@ describe("companion projects", () => {
     let ticketFile: string;
     let noTicketFile: string;
     beforeEach(() => {
-      project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+      project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
       mkdirSync(join(project.project, ".plans", "29"), { recursive: true });
       const sessions = join(project.companion, ".plans");
       ticketFile = join(sessions, "29", "_aligndev", "20260829-115529.md");
@@ -1081,7 +1154,7 @@ describe("companion projects", () => {
   });
 
   it("adds the companion directory and the project context for the agent", async () => {
-    const project = makeCompanionProject(home, { ".plans": true });
+    const project = makeCompanionProject(home, { ".plans": "companion" });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);
 
@@ -1118,8 +1191,8 @@ describe("companion projects", () => {
     expect(second.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
   });
 
-  it("skips the companion and the project context when nothing exists in the companion", async () => {
-    const project = makeCompanionProject(home, { ".plans": false, _aligndev: true });
+  it("adds the companion without the project context when it holds only sessions", async () => {
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
     mkdirSync(join(project.project, ".plans"), { recursive: true });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
     const { path, received } = installFakeClaude(base);
@@ -1137,7 +1210,27 @@ describe("companion projects", () => {
     expect(started).toBe(0);
     const { prompt, args } = received();
     expect(prompt).toBe("go");
-    expect(args).not.toContain("--add-dir");
+    expect(args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
+  });
+
+  it("creates a missing companion directory before adding it", async () => {
+    const project = makeCompanionProject(home, { ".plans": "project" });
+    mkdirSync(join(project.project, ".plans"), { recursive: true });
+    const { path, received } = installFakeClaude(base);
+
+    const started = await main({
+      argv: ["node", "aligndev", "code", "new", "-m", "go"],
+      cwd: project.project,
+      env: { PATH: path, HOME: home },
+      home,
+      alignfirstCommand: ALIGNFIRST,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelResolver: async () => undefined,
+    });
+    expect(started).toBe(0);
+    expect(existsSync(project.companion)).toBe(true);
+    expect(received().args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
   });
 });
 

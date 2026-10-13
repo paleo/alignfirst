@@ -12,22 +12,22 @@ export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   WorkspaceConfig,
-  SetupContextBase,
   PreSetupContext,
-  SetupProfile,
-  ApplyProfileContext,
   FinalizeContext,
-  FinalizeResult,
   SummaryContext,
+  PurgeContext,
+} from "./workspace.js";
+export type {
+  SetupContextBase,
   PatchContext,
   GitignoredFileEntry,
   GitignoredFileSource,
   MainWorktreeSource,
   CommittedSource,
   ContentSource,
-  PurgeContext,
-} from "./workspace.js";
-export type { PortsConfig, PortsLayout, PortComputeContext } from "./ports.js";
+  RunFileEntry,
+  RunFileContext,
+} from "./file-entries.js";
 
 export { runDevServer } from "./dev-server.js";
 export type {
@@ -38,6 +38,8 @@ export type {
   SpawnServer,
   CallbackServer,
 } from "./dev-server.js";
+export type { DevSetupContext } from "./dev-setup.js";
+export type { DevPortsConfig, PortRange } from "./ports.js";
 
 export type { ResolvedWorkspace } from "./workspaces.js";
 

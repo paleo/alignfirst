@@ -28,7 +28,7 @@ describe("docmap command", () => {
   });
 
   it("passes the companion docs as --root unless one is given", async () => {
-    const { root, home, project, companion } = makeCompanionProject({ docs: true });
+    const { root, home, project, companion } = makeCompanionProject({ docs: "companion" });
     dirs.push(root);
     mkdirSync(join(companion, "docs"), { recursive: true });
     writeFileSync(join(companion, "docs", "topic.md"), "---\ntitle: Topic\n---\n\n# Topic\n");

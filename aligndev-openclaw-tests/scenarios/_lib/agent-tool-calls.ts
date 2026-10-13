@@ -22,20 +22,24 @@ export function readsFile(call: AgentToolCall, fileName: string): boolean {
     return input.path.includes(fileName);
   }
   if (call.toolName === "exec" && typeof input.command === "string") {
-    return READ_VIA_EXEC.test(input.command) && namesFile(input.command, fileName);
+    const workdir = typeof input.workdir === "string" ? input.workdir : undefined;
+    return READ_VIA_EXEC.test(input.command) && namesFile(input.command, workdir, fileName);
   }
   return false;
 }
 
-// The command names the file by its full path, or `cd`s into its directory and names it bare
-// (`cd /proj && cat DEVELOPERS.md`).
-function namesFile(command: string, fileName: string): boolean {
+// The command names the file by its full path, or runs in its directory and names it bare: through
+// `cd` (`cd /proj && cat DEVELOPERS.md`) or the exec `workdir` parameter.
+function namesFile(command: string, workdir: string | undefined, fileName: string): boolean {
   if (command.includes(fileName)) return true;
   const slash = fileName.lastIndexOf("/");
   if (slash <= 0) return false;
   const dir = fileName.slice(0, slash);
   const base = fileName.slice(slash + 1);
-  return new RegExp(`\\bcd\\s+${escapeRe(dir)}\\b`).test(command) && command.includes(base);
+  const inDir =
+    workdir?.replace(/\/+$/, "") === dir ||
+    new RegExp(`\\bcd\\s+${escapeRe(dir)}\\b`).test(command);
+  return inDir && command.includes(base);
 }
 
 /** True when the call is an `exec` whose command matches `pattern`. */

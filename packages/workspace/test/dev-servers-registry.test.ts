@@ -12,7 +12,7 @@ import {
   writeDevServers,
   type DevServerEntry,
 } from "../src/dev-servers-registry.js";
-import type { CallbackServer } from "../src/server-descriptor.js";
+import type { CallbackServer, ServerContext } from "../src/server-descriptor.js";
 
 function entry(
   name: string,
@@ -85,6 +85,7 @@ describe("evictOldest", () => {
   const isAlive = () => true;
   const stop = async () => {};
   const callbackServers: never[] = [];
+  const portsOf = () => ({});
 
   beforeEach(() => {
     mainWorktree = mkdtempSync(join(tmpdir(), "wt-env-test-"));
@@ -107,6 +108,7 @@ describe("evictOldest", () => {
       registryDir,
       count: 1,
       callbackServers,
+      portsOf,
       isAlive,
       stop,
     });
@@ -121,7 +123,15 @@ describe("evictOldest", () => {
         entry("a", { main: 4 }, "2026-05-10T00:00:00.000Z"),
       ],
     });
-    await evictOldest({ mainWorktree, registryDir, count: 1, callbackServers, isAlive, stop });
+    await evictOldest({
+      mainWorktree,
+      registryDir,
+      count: 1,
+      callbackServers,
+      portsOf,
+      isAlive,
+      stop,
+    });
     const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.name);
     expect(remaining).toEqual(["b"]);
   });
@@ -139,6 +149,7 @@ describe("evictOldest", () => {
       registryDir,
       count: 2,
       callbackServers,
+      portsOf,
       isAlive,
       stop,
     });
@@ -147,17 +158,17 @@ describe("evictOldest", () => {
     expect(remaining).toEqual(["b"]);
   });
 
-  it("invokes callback stop() with the victim's worktree", async () => {
+  it("invokes callback stop() with the victim's worktree and ports", async () => {
     writeDevServers(mainWorktree, registryDir, {
       servers: [entry("a", { main: 4 }, "2026-05-10T00:00:00.000Z")],
     });
-    const seen: string[] = [];
+    const seen: ServerContext[] = [];
     const docker: CallbackServer = {
       kind: "callback",
       name: "docker",
       start: async () => {},
       stop: async (ctx) => {
-        seen.push(ctx.cwd);
+        seen.push(ctx);
       },
     };
     await evictOldest({
@@ -165,9 +176,10 @@ describe("evictOldest", () => {
       registryDir,
       count: 1,
       callbackServers: [docker],
+      portsOf: (worktree): Record<string, number> => (worktree === "/tmp/wt-a" ? { db: 8101 } : {}),
       isAlive,
       stop,
     });
-    expect(seen).toEqual(["/tmp/wt-a"]);
+    expect(seen).toEqual([{ cwd: "/tmp/wt-a", ports: { db: 8101 } }]);
   });
 });

@@ -67,7 +67,7 @@ Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. Set
 }
 ```
 
-Add `portRange` when the workspace wrapper declares a port scheme. Update the README guidance and
+Add `portRange` when the dev-server config declares a `ports` range. Update the README guidance and
 install the stubs.
 
 ## Replace Every Legacy Command
@@ -116,8 +116,7 @@ Replace the v3 protocol content with the v4 stubs:
 npx -y skills update --global --yes
 ```
 
-Use `--project` instead of `--global` for a project-local installation. Finish by checking the
-effective project and the work-files link:
+Finish by checking the effective project and the work-files link:
 
 ```sh
 npx alignfirst config

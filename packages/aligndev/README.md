@@ -68,17 +68,18 @@ Then ask your session to work with aligndev.
 
 ## Configuration
 
-`~/.alignfirst/aligndev.config.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant:
+`~/.alignfirst/settings.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant, with `sol` as the default model:
 
 ```json
 {
-  "code": { "agent": "codex" }
+  "code": { "agent": "codex", "defaultModel": "sol" }
 }
 ```
 
 - `platform` — `codingAgent` (default) for a coding-agent assistant, `openclaw` for an OpenClaw bot.
 - `projectsRoot` — the projects directory of an OpenClaw host. Required by `openclaw`. `~/` expands to the home directory; a relative path resolves against `~/.alignfirst/`.
 - `code.agent` — the agent: `claude` or `codex`. Default: the coding agent that runs the assistant, detected from its environment. Set it to launch the other one, or when both are detected, as with Codex in a VS Code terminal where the Claude Code extension is installed.
+- `code.defaultModel` — the model of a new session started without `--model`, one of `code.models`. Default: the agent's own default. A resumed session keeps its model.
 - `code.models` — the models the assistant may choose from. Default: Claude's `fable`, `opus`, `sonnet`, `haiku`, or Codex's `astra`, `sol`, `terra`, `luna`.
 - `code.skipPermissions` — `true` runs Claude Code with `--dangerously-skip-permissions` instead of `--permission-mode auto`, and Codex with `--dangerously-bypass-approvals-and-sandbox` instead of `--sandbox workspace-write`. Default: `false`.
 - `code.unset` — environment variables to hide from the agent, such as an API key meant for another tool on the host.
@@ -102,7 +103,7 @@ Install the setup skill where your agent will assemble the deployment's private 
 npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 
 ## Under the Hood
 

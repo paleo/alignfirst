@@ -49,7 +49,13 @@ useProjectFixtures();
 
 describe("renderCodeGuide", () => {
   it("renders the OpenClaw variant with its run and wake instructions", () => {
-    const guide = renderCodeGuide("openclaw", "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
+    const guide = renderCodeGuide(
+      "openclaw",
+      "claude",
+      CLAUDE_DEFAULT_MODELS,
+      undefined,
+      GLOBAL_FORMS,
+    );
     const openclawInstructions = guide.slice(0, guide.indexOf("## CLI reference"));
     expect(guide).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(openclawInstructions).toContain("`background: true` and `timeoutSeconds: 0`");
@@ -73,7 +79,13 @@ describe("renderCodeGuide", () => {
 
   it("shares the introduction and the CLI reference across variants", () => {
     for (const platform of ["codingAgent", "openclaw"] as const) {
-      const guide = renderCodeGuide(platform, "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
+      const guide = renderCodeGuide(
+        platform,
+        "claude",
+        CLAUDE_DEFAULT_MODELS,
+        undefined,
+        GLOBAL_FORMS,
+      );
       expect(guide).toContain("Never implement, investigate, or modify the codebase yourself");
       expect(guide).toContain("Your role is to delegate and guide the agent.");
       expect(guide).toContain("The coding agent `aligndev code` launches is **the agent**.");
@@ -83,10 +95,15 @@ describe("renderCodeGuide", () => {
       );
       expect(guide).toContain("aligndev code quota");
       expect(guide).toContain("alignfirst");
-      expect(guide).toContain("`code.models` in the aligndev config");
-      expect(guide).toContain("`code.skipPermissions: true` in the aligndev config");
+      expect(guide).toContain("`code.models` in the aligndev settings");
+      expect(guide).toContain("`code.skipPermissions: true` in the aligndev settings");
       expect(guide).toContain("in the repository or in its companion directory");
-      expect(guide).toContain("plus `--add-dir <companion>`");
+      expect(guide).toContain(
+        "plus `--add-dir <companion>` for a project with a companion directory.",
+      );
+      expect(guide).toContain(
+        "A new session defaults to the coding agent's default; a resume keeps the session's model.",
+      );
       expect(guide).not.toContain("reserve-side-ticket");
       expect(guide).toContain("account limits and reset times");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
@@ -100,20 +117,49 @@ describe("renderCodeGuide", () => {
 
   it("requires stale-run reconciliation before completion reporting", () => {
     for (const platform of ["codingAgent", "openclaw"] as const) {
-      const guide = renderCodeGuide(platform, "claude", CLAUDE_DEFAULT_MODELS, GLOBAL_FORMS);
+      const guide = renderCodeGuide(
+        platform,
+        "claude",
+        CLAUDE_DEFAULT_MODELS,
+        undefined,
+        GLOBAL_FORMS,
+      );
       expect(guide).toContain("`aligndev code status` checks that a `running` process");
     }
   });
 
   it("renders the host's model list when one is configured", () => {
-    const guide = renderCodeGuide("codingAgent", "claude", ["sonnet", "haiku"], GLOBAL_FORMS);
+    const guide = renderCodeGuide(
+      "codingAgent",
+      "claude",
+      ["sonnet", "haiku"],
+      undefined,
+      GLOBAL_FORMS,
+    );
     expect(guide).toContain("`sonnet`, `haiku`");
     expect(guide).not.toContain("`fable`");
   });
 
+  it("renders the configured default model", () => {
+    const guide = renderCodeGuide(
+      "codingAgent",
+      "claude",
+      CLAUDE_DEFAULT_MODELS,
+      "opus",
+      GLOBAL_FORMS,
+    );
+    expect(guide).toContain("A new session defaults to `opus`;");
+  });
+
   it("resolves every tag and keeps selected-agent defaults isolated", () => {
     for (const platform of ["codingAgent", "openclaw"] as const) {
-      const guide = renderCodeGuide(platform, "codex", CODEX_DEFAULT_MODELS, GLOBAL_FORMS);
+      const guide = renderCodeGuide(
+        platform,
+        "codex",
+        CODEX_DEFAULT_MODELS,
+        undefined,
+        GLOBAL_FORMS,
+      );
       expect(guide).not.toContain("{{");
       expect(guide).toContain("`astra`, `sol`, `terra`, `luna`");
       expect(guide).not.toContain("`fable`");
@@ -250,9 +296,7 @@ describe("aligndev guide playbook", () => {
     const fixture = makeFixture();
     const code = await runGuide(fixture, ["code"]);
     expect(code.code).toBe(1);
-    expect(code.stderr).toContain(
-      `in ${join(fixture.home, ".alignfirst", "aligndev.config.json")}.`,
-    );
+    expect(code.stderr).toContain(`in ${join(fixture.home, ".alignfirst", "settings.json")}.`);
     for (const args of [[], ["working-session"], ["--help"]]) {
       expect((await runGuide(fixture, args)).code).toBe(0);
     }

@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.47.2"
+  version: "0.48.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -40,12 +40,12 @@ When the user names a tool, inspect the repository and proceed directly to that 
 upgrade only what they requested.
 
 - **AlignFirst CLI, protocols, or skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Install only the requested components; skills invoke the CLI through `npx` without a separate installation.
-  For an existing v1, v2, or v3 installation, or a machine with `~/.config/alignfirst/`, start with
-  [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
+  For an existing v1, v2, or v3 installation, a machine with `~/.config/alignfirst/`, or a companion
+  registry with `paths`, start with [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
-- **docmap**: [docmap-setup.md](references/docmap-setup.md).
-- **workspace**: [workspace-setup.md](references/workspace-setup.md).
-- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code or Codex). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally.
+- **docmap**: [docmap-setup.md](references/docmap-setup.md). An instruction file with the old docmap body ("Mandatory for every task") needs [Update the Docmap Snippet](references/alignfirst-upgrade.md#update-the-docmap-snippet).
+- **workspace**: [workspace-setup.md](references/workspace-setup.md). A `ports` group or `setupProfiles` in `workspace.mjs` needs [Move Workspace Ports to the Dev-Server](references/alignfirst-upgrade.md#move-workspace-ports-to-the-dev-server).
+- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code or Codex). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally. An old `~/.alignfirst/aligndev.config.json` needs [Rename the AlignDev Settings](references/alignfirst-upgrade.md#rename-the-aligndev-settings).
 
 Do not present the tooling menu or add unrelated tools on this route.
 
@@ -106,6 +106,8 @@ Inspect the repository before changing it. A prepared project has all of these:
 
 When the user says the repository must stay untouched, follow [companion-setup.md](references/companion-setup.md) with its section [For an Assistant](references/companion-setup.md#for-an-assistant) instead.
 
+Every procedure that prepares a project for an assistant, [a coding agent as the assistant](#a-coding-agent-as-the-assistant) included, skips the AlignFirst command skills and the [global bootstrap line](references/alignfirst-skills-setup.md#repositories-without-alignfirst-instructions). The bootstrap section of item 1 stays. An assistant's service account keeps its global installation of this guide for its delegated coding agent.
+
 Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
 directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
 repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`, naming the Node version declaration.
@@ -146,15 +148,3 @@ Detect existing footprints before proposing changes:
 
 Require a clean working tree immediately before project mutations. Read-only discovery and
 recommendations do not require one.
-
-## Temporary Local Installation
-
-When this guide was installed only for the current project, remove it through the skills CLI after
-setup:
-
-```sh
-npx -y skills remove alignfirst-setup-guide --yes </dev/null
-```
-
-The CLI owns `skills-lock.json`. Leave global installations in place for other repositories. A
-assistant service account must retain a global installation for its delegated coding agent.

@@ -65,7 +65,7 @@ describe("Codex executable model resolution", () => {
     const resolve = createExecutableModelResolver(runner);
     await expect(resolve("codex", "terra", CONTEXT)).rejects.toThrow(/Update the Codex CLI/);
     await expect(resolve("codex", "terra", CONTEXT)).rejects.toThrow(
-      /`code.models` in the aligndev config/,
+      /`code.models` in the aligndev settings/,
     );
   });
 

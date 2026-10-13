@@ -350,8 +350,10 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
 async function assertPreparedProjectContract(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "setupProfiles:", `${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs`],
-    "remote setup profile",
+    // Recursive: the bootstrap template pins a published package whose workspace.mjs still
+    // reads the variable; a project on the current package reads it in dev-server.mjs.
+    ["grep", "-rF", "REMOTE_DEV_DOMAIN", `${NOVA_PROJECT_PATH}/scripts/workspace`],
+    "public URLs from the environment",
   );
   await assertGatewayCommand(
     ctx,

@@ -68,7 +68,12 @@ describe("config command", () => {
     mkdirSync(companion, { recursive: true });
     writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
     writeRegistry(home, {
-      paths: { "~/projects/app": { ".plans": false, _aligndev: true } },
+      projects: {
+        "~/projects/app": {
+          dir: "projects_app",
+          items: { ".plans": "project", _aligndev: "companion" },
+        },
+      },
     });
 
     const json = JSON.parse((await runMain(["config", "--json"], { cwd: project, home })).stdout);
@@ -80,13 +85,13 @@ describe("config command", () => {
         dir: companion,
         exists: true,
         key: "~/projects/app",
-        flags: {
+        items: {
           ".alignfirst.json": "auto",
           ".alignfirst-instructions": "auto",
           "DEVELOPERS.md": "auto",
           docs: "auto",
-          ".plans": false,
-          _aligndev: true,
+          ".plans": "project",
+          _aligndev: "companion",
         },
       },
       locations: {
@@ -108,15 +113,19 @@ describe("config command", () => {
     });
 
     const text = (await runMain(["config"], { cwd: project, home })).stdout;
-    expect(text).toContain(`Source: companion\nCLI range: none\nCompanion: ${companion}\n`);
+    expect(text).toContain(
+      `Source: companion\nCLI range: none\nCompanion: ${companion}\n` +
+        'Companion items: ".plans": "project", "_aligndev": "companion"\n',
+    );
     expect(text).toContain(
       `.alignfirst.json: ${join(companion, ".alignfirst.json")} (companion)\n`,
     );
     expect(text).toContain(`.plans: ${join(project, ".plans")} (project, missing)\n`);
 
     rmSync(companion, { recursive: true });
+    writeRegistry(home, { projects: { "~/projects/app": { dir: "projects_app" } } });
     expect((await runMain(["config"], { cwd: project, home })).stdout).toContain(
-      `Companion: ${companion} (missing)\n`,
+      `Companion: ${companion} (missing)\nCompanion items: all auto\n`,
     );
   });
 
@@ -130,7 +139,7 @@ describe("config command", () => {
 
   it("reports an invalid registry as a CLI error", async () => {
     const home = temp();
-    writeRegistry(home, { root: "~/c", paths: {} });
+    writeRegistry(home, { root: "~/c", projects: {} });
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(

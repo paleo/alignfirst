@@ -18,7 +18,7 @@ read_when:
 | Path | Responsibility |
 | --- | --- |
 | `src/cli.ts` | Entry point: dispatches the command, loads the config, resolves the coding agent. |
-| `src/config.ts` | `~/.alignfirst/aligndev.config.json`: schema, defaults, agent detection. |
+| `src/config.ts` | `~/.alignfirst/settings.json`: schema, defaults, agent detection. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation. |
@@ -46,7 +46,7 @@ The session file is the durable handoff of a run. Its frontmatter holds `agent`,
 
 Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree.
 
-When some of the project's AlignFirst files live in its companion, the normal permission modes make the companion writable (`--add-dir`), and a new session's prompt starts with the `alignfirst context` output. See [Companion Directories](companion-directories.md).
+When the project has a companion directory, the normal permission modes make it writable (`--add-dir`), creating it first when missing. When some of the project's AlignFirst files live there, a new session's prompt starts with the `alignfirst context` output. See [Companion Directories](companion-directories.md).
 
 ### Termination and Status
 
@@ -67,7 +67,7 @@ A new protocol session needs a ticket. `--no-ticket` reserves the next side tick
 An adapter (`claude-agent.ts`, `codex-agent.ts`) builds each CLI's arguments, parses its stream, and recognizes its authentication errors.
 
 - **Permissions:** normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `code.skipPermissions` selects each CLI's bypass flag.
-- **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves to the newest matching slug of `codex debug models --bundled`. `code.models` replaces the list.
+- **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves to the newest matching slug of `codex debug models --bundled`. `code.models` replaces the list. Without `--model`, a new session takes `code.defaultModel`, and a resume takes the `model` recorded by the session's latest run, unchecked against the current list. The session file records the chosen name, or `null` for the agent's own default.
 - **Resume:** session files record `agent`, and a session resumes only with the same agent. Agentless legacy sessions stay readable but need a new session.
 - **Detection:** without `code.agent`, the agent is the one that runs `aligndev`: Claude Code sets `CLAUDECODE=1` (documented), Codex sets `CODEX_THREAD_ID` (from its source). Neither or both is an error, raised only by the commands that need the agent: `guide code`, `code --help`, `code quota`, and `code new` or `resume`.
 
@@ -93,4 +93,4 @@ A projects directory carries a `.alignfirst-projects.json` marker, with an optio
 
 ### Port Claims
 
-`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's workspace scheme: `perWorkspace × maxWorkspaces`. A range without a code is the default; `--range <code>` selects a coded one. The setup guide writes the block as `portRange` in the project's `.alignfirst.json`.
+`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. The setup guide writes the block as `portRange` in the project's `.alignfirst.json`.

@@ -1,235 +1,219 @@
-import { describe, expect, it, vi } from "vitest";
+import { createServer, type Server } from "node:net";
 
-import { ConfigError } from "../src/errors.js";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { ConfigError, WorkspaceError } from "../src/errors.js";
 import {
-  firstPortOf,
-  type PortComputeContext,
-  portAt,
-  type PortsConfig,
-  portsForIndex,
-  resolvePortsConfig,
+  BAD_PORTS,
+  type DevPortsConfig,
+  isPortFree,
+  type ReconcileInput,
+  reconcilePorts,
+  resolveDevPortsConfig,
 } from "../src/ports.js";
 
-describe("resolvePortsConfig", () => {
-  it("defaults `perWorkspace` to the number of names", () => {
-    const resolved = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web", "db"] });
-    expect(resolved.perWorkspace).toBe(2);
-  });
+const BASE: DevPortsConfig = { first: 47100, last: 47109, names: ["web", "api"] };
 
-  it("keeps explicit values", () => {
-    const resolved = resolvePortsConfig({
-      base: 9000,
-      perWorkspace: 5,
-      maxWorkspaces: 3,
-      names: ["web"],
+describe("resolveDevPortsConfig", () => {
+  it("expands single and range exclusions, and defaults the pins to none", () => {
+    const resolved = resolveDevPortsConfig({
+      ...BASE,
+      exclude: [47101, { first: 47104, last: 47105 }],
     });
-    expect(resolved).toMatchObject({ base: 9000, perWorkspace: 5, maxWorkspaces: 3 });
+    expect([...resolved.excluded].sort()).toEqual([47101, 47104, 47105]);
+    expect(resolved.mainWorktree).toEqual({});
   });
 
-  it("rejects a config with neither `names` nor `compute`", () => {
-    expect(() => resolvePortsConfig({ base: 8100, maxWorkspaces: 20 })).toThrow(ConfigError);
-    expect(() => resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: [] })).toThrow(
-      ConfigError,
-    );
+  it.each([
+    ["a non-integer first port", { ...BASE, first: 47100.5 }, /ports\.first/],
+    ["a port above 65535", { ...BASE, last: 70000 }, /ports\.last/],
+    ["a port 0", { ...BASE, first: 0 }, /ports\.first/],
+    ["first greater than last", { ...BASE, first: 47110 }, /greater than/],
+    ["an exclusion outside the range", { ...BASE, exclude: [47200] }, /ports\.exclude/],
+    [
+      "an inverted exclusion range",
+      { ...BASE, exclude: [{ first: 47105, last: 47104 }] },
+      /ports\.exclude/,
+    ],
+    ["an empty name", { ...BASE, names: ["web", ""] }, /non-empty strings/],
+    ["a duplicate name", { ...BASE, names: ["web", "web"] }, /"web" twice/],
+    ["a pin of an undeclared name", { ...BASE, mainWorktree: { db: 47100 } }, /absent from/],
+    ["a pin outside the range", { ...BASE, mainWorktree: { web: 47200 } }, /must be inside/],
+    [
+      "an excluded pin",
+      { ...BASE, exclude: [47100], mainWorktree: { web: 47100 } },
+      /must be inside/,
+    ],
+    ["a duplicate pin", { ...BASE, mainWorktree: { web: 47100, api: 47100 } }, /twice/],
+  ])("rejects %s", (_, config, message) => {
+    expect(() => resolveDevPortsConfig(config)).toThrow(ConfigError);
+    expect(() => resolveDevPortsConfig(config)).toThrow(message);
   });
 
-  it("rejects a config with both `names` and `compute`", () => {
+  it("rejects a pin on a bad port", () => {
     expect(() =>
-      resolvePortsConfig({
-        base: 8100,
-        maxWorkspaces: 20,
-        names: ["web"],
-        compute: () => ({ web: 1 }),
+      resolveDevPortsConfig({
+        first: 5990,
+        last: 6010,
+        names: ["x11"],
+        mainWorktree: { x11: 6000 },
       }),
-    ).toThrow(ConfigError);
-  });
-
-  it("requires `base`", () => {
-    // Plain-JS consumers bypass the type, so the guard is a runtime check.
-    expect(() => resolvePortsConfig({ maxWorkspaces: 20, names: ["web"] } as PortsConfig)).toThrow(
-      /base/,
-    );
-  });
-
-  it("requires `maxWorkspaces`", () => {
-    expect(() => resolvePortsConfig({ base: 8100, names: ["web"] } as PortsConfig)).toThrow(
-      /maxWorkspaces/,
-    );
-  });
-
-  it("requires `perWorkspace` with `compute`", () => {
-    expect(() =>
-      resolvePortsConfig({ base: 8100, maxWorkspaces: 20, compute: () => ({ web: 8100 }) }),
-    ).toThrow(/perWorkspace/);
-  });
-
-  it("defaults `layout` to workspaceMajor", () => {
-    const resolved = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web"] });
-    expect(resolved.layout).toBe("workspaceMajor");
-  });
-
-  it("rejects an unknown `layout`", () => {
-    expect(() =>
-      resolvePortsConfig({
-        base: 8100,
-        maxWorkspaces: 20,
-        names: ["web"],
-        layout: "diagonal" as PortsConfig["layout"],
-      }),
-    ).toThrow(/layout/);
-  });
-
-  it("rejects more names than `perWorkspace`", () => {
-    expect(() =>
-      resolvePortsConfig({
-        base: 8100,
-        perWorkspace: 2,
-        maxWorkspaces: 20,
-        names: ["a", "b", "c"],
-      }),
-    ).toThrow(/more than/);
+    ).toThrow(/bad port/);
   });
 });
 
-describe("portsForIndex", () => {
-  const named = resolvePortsConfig({
-    base: 8100,
-    perWorkspace: 10,
-    maxWorkspaces: 20,
-    names: ["server", "frontend", "db"],
-  });
-
-  it("maps names to consecutive ports from the block's first port", () => {
-    expect(portsForIndex(named, 0)).toEqual({ server: 8100, frontend: 8101, db: 8102 });
-    expect(portsForIndex(named, 2)).toEqual({ server: 8120, frontend: 8121, db: 8122 });
-  });
-
-  it("spaces blocks by `perWorkspace`", () => {
-    const spaced = resolvePortsConfig({
-      base: 9000,
-      perWorkspace: 5,
-      maxWorkspaces: 20,
-      names: ["web"],
-    });
-    expect(portsForIndex(spaced, 3)).toEqual({ web: 9015 });
-  });
-
-  it("hands the index, first port and step to `compute`", () => {
-    const compute = vi.fn(({ index, firstPort }: PortComputeContext) => ({
-      web: firstPort,
-      debug: firstPort + 5 + (index % 2),
-    }));
-    const computed = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      compute,
-    });
-    expect(portsForIndex(computed, 2)).toEqual({ web: 8120, debug: 8125 });
-    expect(compute).toHaveBeenCalledWith({ index: 2, firstPort: 8120, step: 1 });
-  });
-
-  it("rejects a computed port outside the workspace's block", () => {
-    const escaping = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      compute: ({ index, firstPort }) => ({ web: firstPort, debug: 9000 + index }),
-    });
-    expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's block/);
+describe("BAD_PORTS", () => {
+  it("holds the Fetch Standard's bad ports", () => {
+    expect(BAD_PORTS.has(6000)).toBe(true);
+    expect(BAD_PORTS.has(10080)).toBe(true);
+    expect(BAD_PORTS.has(8100)).toBe(false);
   });
 });
 
-describe("portsForIndex (serviceMajor)", () => {
-  const serviceMajor = resolvePortsConfig({
-    base: 8100,
-    perWorkspace: 10,
-    maxWorkspaces: 20,
-    layout: "serviceMajor",
-    names: ["server", "frontend", "db"],
-  });
+describe("reconcilePorts", () => {
+  const allFree = async (): Promise<boolean> => true;
 
-  it("gives each name a range of `maxWorkspaces` ports and the workspace its index in each", () => {
-    expect(portsForIndex(serviceMajor, 0)).toEqual({ server: 8100, frontend: 8120, db: 8140 });
-    expect(portsForIndex(serviceMajor, 2)).toEqual({ server: 8102, frontend: 8122, db: 8142 });
-  });
-
-  it("keeps every existing port when a name is appended", () => {
-    const extended = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      layout: "serviceMajor",
-      names: ["server", "frontend", "db", "mail"],
+  function reconcile(
+    overrides: Partial<Omit<ReconcileInput, "config">> & { config?: DevPortsConfig } = {},
+  ): Promise<Record<string, number>> {
+    return reconcilePorts({
+      isMainWorktree: false,
+      stored: {},
+      others: [],
+      isFree: allFree,
+      ...overrides,
+      config: resolveDevPortsConfig(overrides.config ?? BASE),
     });
-    expect(portsForIndex(extended, 3)).toEqual({
-      ...portsForIndex(serviceMajor, 3),
-      mail: 8163,
+  }
+
+  it("allocates the lowest allowed ports in names order", async () => {
+    expect(await reconcile()).toEqual({ web: 47100, api: 47101 });
+  });
+
+  it("keeps valid stored ports", async () => {
+    expect(await reconcile({ stored: { web: 47108, api: 47103 } })).toEqual({
+      web: 47108,
+      api: 47103,
     });
   });
 
-  it("hands `compute` the index, the port of offset 0 and the step", () => {
-    const compute = vi.fn(({ index, firstPort, step }: PortComputeContext) => ({
-      web: firstPort,
-      debug: firstPort + step * (5 + (index % 2)),
-    }));
-    const computed = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      layout: "serviceMajor",
-      compute,
+  it("drops an undeclared name and allocates a new one", async () => {
+    const config = { ...BASE, names: ["web", "db"] };
+    expect(await reconcile({ config, stored: { web: 47105, api: 47106 } })).toEqual({
+      web: 47105,
+      db: 47100,
     });
-    expect(portsForIndex(computed, 2)).toEqual({ web: 8102, debug: 8202 });
-    expect(compute).toHaveBeenCalledWith({ index: 2, firstPort: 8102, step: 20 });
   });
 
-  it("rejects a computed port that belongs to another workspace", () => {
-    const escaping = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      layout: "serviceMajor",
-      compute: ({ firstPort }) => ({ web: firstPort, debug: firstPort + 1 }),
-    });
-    expect(() => portsForIndex(escaping, 0)).toThrow(/outside the workspace's ports/);
-  });
-});
-
-describe("portsForIndex (both layouts)", () => {
-  it("accepts one `compute` written with `firstPort + step × offset` in each layout", () => {
-    const config: PortsConfig = {
-      base: 8100,
-      perWorkspace: 3,
-      maxWorkspaces: 20,
-      compute: ({ firstPort, step }) => ({ web: firstPort, db: firstPort + step * 2 }),
+  it("re-allocates a stored port outside the range, excluded, or bad", async () => {
+    const config: DevPortsConfig = {
+      first: 5998,
+      last: 6004,
+      names: ["a", "b", "c"],
+      exclude: [5999],
     };
-    const workspaceMajor = resolvePortsConfig(config);
-    const serviceMajor = resolvePortsConfig({ ...config, layout: "serviceMajor" });
-    expect(portsForIndex(workspaceMajor, 2)).toEqual({ web: 8106, db: 8108 });
-    expect(portsForIndex(serviceMajor, 2)).toEqual({ web: 8102, db: 8142 });
+    const ports = await reconcile({ config, stored: { a: 7000, b: 5999, c: 6000 } });
+    expect(ports).toEqual({ a: 5998, b: 6001, c: 6002 });
   });
-});
 
-describe("portAt", () => {
-  it("ends both layouts on the same last port", () => {
-    const config: PortsConfig = { base: 8100, perWorkspace: 10, maxWorkspaces: 20, names: ["web"] };
-    const workspaceMajor = resolvePortsConfig(config);
-    const serviceMajor = resolvePortsConfig({ ...config, layout: "serviceMajor" });
-    expect(portAt(workspaceMajor, 19, 9)).toBe(8299);
-    expect(portAt(serviceMajor, 19, 9)).toBe(8299);
+  it("skips excluded and bad ports when allocating", async () => {
+    const config: DevPortsConfig = { first: 5999, last: 6003, names: ["a", "b"], exclude: [6001] };
+    expect(await reconcile({ config })).toEqual({ a: 5999, b: 6002 });
   });
-});
 
-describe("firstPortOf", () => {
-  it("returns the base port for the main worktree's block", () => {
-    const resolved = resolvePortsConfig({
-      base: 8100,
-      perWorkspace: 10,
-      maxWorkspaces: 20,
-      names: ["web"],
+  it("skips the ports stored on other entries", async () => {
+    expect(await reconcile({ others: [47100, 47102] })).toEqual({ web: 47101, api: 47103 });
+  });
+
+  it("drops a linked workspace's stored port that another entry holds", async () => {
+    expect(await reconcile({ stored: { web: 47105, api: 47106 }, others: [47105] })).toEqual({
+      web: 47100,
+      api: 47106,
     });
-    expect(firstPortOf(resolved, 0)).toBe(8100);
-    expect(firstPortOf(resolved, 4)).toBe(8140);
+  });
+
+  it("keeps the main worktree's stored port that another entry holds", async () => {
+    const ports = await reconcile({
+      isMainWorktree: true,
+      stored: { web: 47105, api: 47106 },
+      others: [47105],
+    });
+    expect(ports).toEqual({ web: 47105, api: 47106 });
+  });
+
+  it("assigns the pins in the main worktree, whatever is stored", async () => {
+    const config = { ...BASE, mainWorktree: { api: 47109 } };
+    const ports = await reconcile({ config, isMainWorktree: true, stored: { api: 47103 } });
+    expect(ports).toEqual({ web: 47100, api: 47109 });
+  });
+
+  it("drops a main stored port that another name pins", async () => {
+    const config = { ...BASE, mainWorktree: { api: 47105 } };
+    const ports = await reconcile({ config, isMainWorktree: true, stored: { web: 47105 } });
+    expect(ports).toEqual({ web: 47100, api: 47105 });
+  });
+
+  it("never gives a pinned port to a linked workspace", async () => {
+    const config = { ...BASE, mainWorktree: { web: 47100 } };
+    expect(await reconcile({ config, stored: { web: 47100 } })).toEqual({
+      web: 47101,
+      api: 47102,
+    });
+  });
+
+  it("keeps the pins with empty stored ports, as `--reset-ports` passes", async () => {
+    const config = { ...BASE, mainWorktree: { web: 47107 } };
+    expect(await reconcile({ config, isMainWorktree: true, stored: {} })).toEqual({
+      web: 47107,
+      api: 47100,
+    });
+  });
+
+  it("skips the ports the probe finds busy", async () => {
+    const busy = new Set([47100, 47101]);
+    const isFree = async (port: number): Promise<boolean> => !busy.has(port);
+    expect(await reconcile({ isFree })).toEqual({ web: 47102, api: 47103 });
+  });
+
+  it("does not probe a kept stored port", async () => {
+    const probed: number[] = [];
+    const isFree = async (port: number): Promise<boolean> => {
+      probed.push(port);
+      return true;
+    };
+    await reconcile({ stored: { web: 47105 }, isFree });
+    expect(probed).toEqual([47100]);
+  });
+
+  it("fails on an exhausted range, naming it and pointing at `workspace remove`", async () => {
+    const config: DevPortsConfig = { first: 47100, last: 47101, names: ["web", "api"] };
+    const attempt = reconcile({ config, others: [47101] });
+    await expect(attempt).rejects.toThrow(WorkspaceError);
+    await expect(reconcile({ config, others: [47101] })).rejects.toThrow(
+      /47100\.\.47101 for "api".*remove/,
+    );
+  });
+});
+
+describe("isPortFree", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    const held = server;
+    server = undefined;
+    if (held) await new Promise((resolve) => held.close(resolve));
+  });
+
+  it("reports a port held on the loopback as busy, and free once released", async () => {
+    server = createServer();
+    const held = server;
+    await new Promise<void>((resolve) => held.listen({ port: 0, host: "127.0.0.1" }, resolve));
+    const address = held.address();
+    if (address === null || typeof address === "string") throw new Error("no TCP address");
+    expect(await isPortFree(address.port)).toBe(false);
+
+    await new Promise((resolve) => held.close(resolve));
+    server = undefined;
+    expect(await isPortFree(address.port)).toBe(true);
   });
 });

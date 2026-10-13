@@ -520,8 +520,8 @@ describe("ticket command with a companion .plans", () => {
 describe("ticket command with a separate session tree", () => {
   it("restores the ticket's archived session directory", async () => {
     const { root, home, project, companion } = makeCompanionProject({
-      ".plans": false,
-      _aligndev: true,
+      ".plans": "project",
+      _aligndev: "companion",
     });
     dirs.push(root);
     const sessions = join(companion, ".plans");
@@ -539,8 +539,8 @@ describe("ticket command with a separate session tree", () => {
 
   it("leaves the session tree alone on a dry run", async () => {
     const { root, home, project, companion } = makeCompanionProject({
-      ".plans": false,
-      _aligndev: true,
+      ".plans": "project",
+      _aligndev: "companion",
     });
     dirs.push(root);
     const archived = join(companion, ".plans", "_archives", "78");
@@ -560,7 +560,7 @@ interface CompanionPlans {
 }
 
 function companionPlans(): CompanionPlans {
-  const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+  const { root, home, project, companion } = makeCompanionProject({ ".plans": "companion" });
   dirs.push(root);
   const plans = join(companion, ".plans");
   mkdirSync(plans, { recursive: true });

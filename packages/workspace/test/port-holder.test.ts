@@ -14,10 +14,10 @@ import {
   sweepStalePorts,
   waitForPortsFree,
 } from "../src/port-holder.js";
-import type { SpawnServer } from "../src/server-descriptor.js";
+import type { ResolvedSpawnServer } from "../src/server-descriptor.js";
 
-function spawnServer(name: string, port?: number): SpawnServer {
-  const server: SpawnServer = {
+function spawnServer(name: string, port?: number): ResolvedSpawnServer {
+  const server: ResolvedSpawnServer = {
     kind: "spawn",
     name,
     exec: { command: "noop", args: [] },

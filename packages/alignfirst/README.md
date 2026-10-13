@@ -12,8 +12,8 @@ Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub 
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global \
-  --skill al --skill alplan --skill alspec --skill aldescription \
-  --skill alreview --skill alcatchup --skill almerge \
+  --skill alspec --skill alplan --skill al --skill almerge \
+  --skill alreview --skill aldescription --skill alcatchup \
   --skill alcatchupaad --skill alcatchupspec
 ```
 
@@ -73,6 +73,45 @@ To leave the repository untouched, the guide keeps the project's AlignFirst file
 Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
 ```
 
+## Set up a project manually
+
+1. Install the nine command skills globally. For Claude Code:
+
+   ```sh
+   npx skills add https://github.com/paleo/alignfirst --global --agent claude-code \
+     --skill alspec --skill alplan --skill al --skill almerge \
+     --skill alreview --skill aldescription --skill alcatchup \
+     --skill alcatchupaad --skill alcatchupspec
+   ```
+
+   For Codex:
+
+   ```sh
+   npx skills add https://github.com/paleo/alignfirst --global --agent codex \
+     --skill alspec --skill alplan --skill al --skill almerge \
+     --skill alreview --skill aldescription --skill alcatchup \
+     --skill alcatchupaad --skill alcatchupspec
+   ```
+
+2. Load the project context. Either add this section to the project's `AGENTS.md`, as its first `##` section:
+
+   ```markdown
+   ## Start every session with the project context
+
+   Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+   ```
+
+   Or add the [agent bootstrap](#agent-bootstrap) line to your global agent instructions.
+
+3. Create `.plans/` and ignore it:
+
+   ```sh
+   mkdir .plans
+   printf '%s\n' .plans >> .gitignore
+   ```
+
+   `.alignfirst.json` is optional. See [its schema](../../skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson).
+
 ## CLI commands
 
 - `guide` — Print an AlignFirst protocol.
@@ -82,7 +121,7 @@ Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print the conventions, the project instructions from `.alignfirst-instructions/context.md`, the documentation map when `docs/` exists, and the protocol aliases.
-- `companion register` — Register the current project in the companion registry. `--create-dir` also creates its companion directory.
+- `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it.
 - `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
 - `doctor` — Diagnose an AlignFirst setup.
@@ -99,36 +138,41 @@ A companion directory holds a project's AlignFirst files outside its repository,
 
 ```json
 {
-  "paths": {
-    "~/projects/team-app": { ".plans": false, "_aligndev": true },
-    "~/projects/client-api": {}
+  "projects": {
+    "~/projects/team-app": {
+      "dir": "projects_team-app",
+      "items": { ".plans": "project", "_aligndev": "companion" }
+    },
+    "~/projects/client-api": { "dir": "~/work/client-api-companion" }
   }
 }
 ```
 
-- `paths` — the projects, by absolute or `~/` path. Each value sets flags for the items a companion can hold: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A flag is `true`, `false` or `"auto"`.
+- `projects` — the projects, by absolute or `~/` path.
+- `dir` — the companion directory: relative to `~/.alignfirst/companions`, `~/`, or absolute.
+- `items` — optional settings for the items a companion can hold: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A setting is `"companion"`, `"project"` or `"auto"`; `_aligndev` takes `"companion"` or `"auto"`.
 
-An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues.
+An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues. A registry from before `dir` has a `paths` key instead of `projects`: the `alignfirst-setup-guide` skill's upgrade procedure converts it.
 
-Run `alignfirst companion register` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless it is registered. The companion directory is created on the first write, or at once with `--create-dir`. Set the flags by editing the registry.
+Run `alignfirst companion register` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless it is registered. `--dir <path>` sets `dir`, written as given; on a registered project, it must resolve to the registered directory. The companion directory is created on the first write, or at once with `--create-dir`. Set the items by editing the registry.
 
 `alignfirst companion unregister` removes the entry and keeps the directory. With `--remove-dir`, it also removes an empty directory; a non-empty one requires `--force`.
 
 ### Matching
 
-A key matches a project when it names the project's main worktree, so every worktree of a project shares one companion. A key that names another directory matches nothing, and `alignfirst doctor` warns about it. An unset flag is `"auto"`. A bare repository or a directory outside git has no companion.
+A key matches a project when it names the project's main worktree, so every worktree of a project shares one companion. A key that names another directory matches nothing, and `alignfirst doctor` warns about it. An unset item is `"auto"`. A bare repository or a directory outside git has no companion.
 
-The companion directory is `~/.alignfirst/companions/<name>`. The name is the main worktree path relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `~/.alignfirst/companions/projects_client-api/`. Two keys can only share a directory through a `_` in a directory name: `companion register` refuses such a project, and `doctor` warns about it. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink.
+Without `--dir`, `companion register` derives `dir` from the main worktree path: relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `projects_client-api`, so `~/.alignfirst/companions/projects_client-api/`. Two keys whose `dir` values resolve to the same directory share it: `companion register` refuses such a `dir`, and `doctor` warns about it. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink: relative `dir` values follow it.
 
 ### Resolution
 
-| Flag | Location |
+| Setting | Location |
 | --- | --- |
-| `true` | The companion copy, present or not. |
-| `false` | The project copy, present or not. |
+| `"companion"` | The companion copy, present or not. |
+| `"project"` | The project copy, present or not. |
 | `"auto"` | The companion copy when it exists, otherwise the project copy when it exists, otherwise the companion copy, where the item gets created. |
 
-`_aligndev` is the directory under which `aligndev` writes its session files: `<companion>/.plans` when `true`, the resolved `.plans` otherwise. `"_aligndev": true` requires `.plans` set to `true` or `false`. When the two differ, archiving and `ticket <id>` apply to both trees, each with its own `_archives/`.
+`_aligndev` is the directory under which `aligndev` writes its session files: `<companion>/.plans` with `"companion"`, the resolved `.plans` with `"auto"`. `"_aligndev": "companion"` requires `.plans` set to `"companion"` or `"project"`. When the two differ, archiving and `ticket <id>` apply to both trees, each with its own `_archives/`.
 
 `alignfirst config` reports the companion and the location of every item. `alignfirst doctor` checks them.
 

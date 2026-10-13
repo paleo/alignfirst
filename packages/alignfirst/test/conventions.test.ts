@@ -44,7 +44,7 @@ describe("conventions command", () => {
   });
 
   it("gives the absolute path of a companion .plans and leaves it out of the searches", async () => {
-    const { root, home, project, companion } = makeCompanionProject({ ".plans": true });
+    const { root, home, project, companion } = makeCompanionProject({ ".plans": "companion" });
     dirs.push(root);
     mkdirSync(join(companion, ".plans"), { recursive: true });
     mkdirSync(join(project, ".plans"));

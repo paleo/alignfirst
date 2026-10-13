@@ -15,7 +15,15 @@ import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
 import { gitOutputOrUndefined } from "./git.js";
-import { object, optional, parseShape, record, shapeError } from "./json-shape.js";
+import {
+  literal,
+  nonEmptyString,
+  object,
+  optional,
+  parseShape,
+  record,
+  shapeError,
+} from "./json-shape.js";
 
 export const ITEM_NAMES = [
   ".alignfirst.json",
@@ -28,19 +36,30 @@ export const ITEM_NAMES = [
 // The directory holding the companions and their registry. A symlink there moves them elsewhere.
 const COMPANIONS_ROOT = "~/.alignfirst/companions";
 const REGISTRY_FILE = "registry.json";
+const OLD_SHAPE_DETAIL =
+  'the companion registry now uses "projects" entries with a "dir". Convert it as the ' +
+  "alignfirst-upgrade reference of the alignfirst-setup-guide skill describes.";
 
-const flagsShape = object<Partial<Record<ItemName, Flag>>>({
-  ".alignfirst.json": optional(flag),
-  ".alignfirst-instructions": optional(flag),
-  "DEVELOPERS.md": optional(flag),
-  docs: optional(flag),
-  ".plans": optional(flag),
-  _aligndev: optional(flag),
+const itemSetting = literal("companion", "project", "auto");
+const registryFileShape = object<RegistryFile>({
+  projects: record(
+    object<RegistryProject>({
+      dir: dirValue,
+      items: optional(
+        object<RegistryItems>({
+          ".alignfirst.json": optional(itemSetting),
+          ".alignfirst-instructions": optional(itemSetting),
+          "DEVELOPERS.md": optional(itemSetting),
+          docs: optional(itemSetting),
+          ".plans": optional(itemSetting),
+          _aligndev: optional(literal("companion", "auto")),
+        }),
+      ),
+    }),
+  ),
 });
-const registryFileShape = object<RegistryFile>({ paths: record(flagsShape) });
 
 export type ItemName = (typeof ITEM_NAMES)[number];
-export type Flag = boolean | "auto";
 
 export interface ProjectLayout {
   companion: CompanionLayout | null;
@@ -53,9 +72,13 @@ export interface CompanionLayout {
   exists: boolean;
   /** The registry key, as written. */
   key: string;
-  /** Effective flags. */
-  flags: Record<ItemName, Flag>;
+  /** Effective settings: an item the entry does not set is `"auto"`. */
+  items: ItemSettings;
 }
+
+export type ItemSettings = Record<ItemName, ItemSetting | AligndevSetting>;
+export type ItemSetting = "companion" | "project" | "auto";
+export type AligndevSetting = "companion" | "auto";
 
 export interface ItemLocation {
   /** Absolute. */
@@ -67,7 +90,22 @@ export interface ItemLocation {
 type FileItemName = Exclude<ItemName, "_aligndev">;
 
 interface RegistryFile {
-  paths: Record<string, Partial<Record<ItemName, Flag>>>;
+  projects: Record<string, RegistryProject>;
+}
+
+interface RegistryProject {
+  /** Relative to the real companions directory, or `~/…`, or absolute. */
+  dir: string;
+  items?: RegistryItems;
+}
+
+interface RegistryItems {
+  ".alignfirst.json"?: ItemSetting;
+  ".alignfirst-instructions"?: ItemSetting;
+  "DEVELOPERS.md"?: ItemSetting;
+  docs?: ItemSetting;
+  ".plans"?: ItemSetting;
+  _aligndev?: AligndevSetting;
 }
 
 interface Registry extends RegistryFile {
@@ -76,7 +114,9 @@ interface Registry extends RegistryFile {
 
 interface RegistryEntry {
   key: string;
-  flags: Partial<Record<ItemName, Flag>>;
+  project: RegistryProject;
+  /** The resolved `dir`. */
+  dir: string;
 }
 
 export function layoutOf(ctx: CommandContext): ProjectLayout {
@@ -97,10 +137,9 @@ function resolveCompanion(cwd: string, home: string): CompanionLayout | null {
   const realHome = realOrResolved(home);
   const entry = findEntry(registry, mainWorktree, realHome);
   if (entry === undefined) return null;
-  const flags = effectiveFlags(entry);
-  assertValidFlags(registry, flags, entry);
-  const dir = companionDir(mainWorktree, realHome);
-  return { dir, exists: pathExists(dir), key: entry.key, flags };
+  const items = effectiveItems(entry.project);
+  assertValidItems(registry, items, entry);
+  return { dir: entry.dir, exists: pathExists(entry.dir), key: entry.key, items };
 }
 
 function readRegistry(home: string): Registry | undefined {
@@ -112,11 +151,20 @@ function readRegistry(home: string): Registry | undefined {
   } catch (error) {
     throw invalidRegistry(path, errorMessage(error));
   }
+  if (hasOldShape(value)) throw invalidRegistry(path, OLD_SHAPE_DETAIL);
   const file = parseShape(registryFileShape, value, (detail) => invalidRegistry(path, detail));
-  const badKey = Object.keys(file.paths).find((key) => !isUserPath(key));
+  const badKey = Object.keys(file.projects).find((key) => !isUserPath(key));
   if (badKey !== undefined)
-    throw invalidRegistry(path, `paths key must be an absolute path or start with ~/: ${badKey}`);
-  return { path, paths: file.paths };
+    throw invalidRegistry(
+      path,
+      `projects key must be an absolute path or start with ~/: ${badKey}`,
+    );
+  return { path, projects: file.projects };
+}
+
+/** The shape before explicit directories: `{ "paths": { "<key>": { "<item>": true } } }`. */
+function hasOldShape(value: unknown): boolean {
+  return typeof value === "object" && value !== null && Object.hasOwn(value, "paths");
 }
 
 export function registryPath(home: string): string {
@@ -127,10 +175,11 @@ function invalidRegistry(path: string, detail: string): CliError {
   return new CliError(`Invalid ${path}: ${detail}`);
 }
 
-function flag(value: unknown, path: string): Flag {
-  if (typeof value !== "boolean" && value !== "auto")
-    throw shapeError(path, 'be a boolean or "auto"');
-  return value;
+function dirValue(value: unknown, path: string): string {
+  const dir = nonEmptyString(value, path);
+  if (dir.startsWith("~") && !dir.startsWith("~/"))
+    throw shapeError(path, "be a relative path, an absolute path or start with ~/");
+  return dir;
 }
 
 function isUserPath(value: string): boolean {
@@ -163,50 +212,41 @@ function findEntry(
   mainWorktree: string,
   realHome: string,
 ): RegistryEntry | undefined {
-  const key = Object.keys(registry.paths).find(
+  const key = Object.keys(registry.projects).find(
     (candidate) => normalizePath(candidate, realHome) === mainWorktree,
   );
-  return key === undefined ? undefined : { key, flags: registry.paths[key] };
+  if (key === undefined) return;
+  const project = registry.projects[key];
+  return { key, project, dir: companionDir(project.dir, realHome) };
 }
 
-function isSameOrInside(path: string, ancestor: string): boolean {
-  return path === ancestor || path.startsWith(ancestor.endsWith(sep) ? ancestor : ancestor + sep);
+/** A relative `dir` joins the real companions directory, so a symlink there moves it too. */
+function companionDir(dir: string, realHome: string): string {
+  if (dir.startsWith("~/") || isAbsolute(dir)) return normalizePath(dir, realHome);
+  return realOrResolved(join(companionsRoot(realHome), dir));
 }
 
-function effectiveFlags(entry: RegistryEntry): Record<ItemName, Flag> {
-  const flagOf = (item: ItemName): Flag => entry.flags[item] ?? "auto";
+function companionsRoot(realHome: string): string {
+  return normalizePath(COMPANIONS_ROOT, realHome);
+}
+
+function effectiveItems({ items = {} }: RegistryProject): ItemSettings {
   return {
-    ".alignfirst.json": flagOf(".alignfirst.json"),
-    ".alignfirst-instructions": flagOf(".alignfirst-instructions"),
-    "DEVELOPERS.md": flagOf("DEVELOPERS.md"),
-    docs: flagOf("docs"),
-    ".plans": flagOf(".plans"),
-    _aligndev: flagOf("_aligndev"),
+    ".alignfirst.json": items[".alignfirst.json"] ?? "auto",
+    ".alignfirst-instructions": items[".alignfirst-instructions"] ?? "auto",
+    "DEVELOPERS.md": items["DEVELOPERS.md"] ?? "auto",
+    docs: items.docs ?? "auto",
+    ".plans": items[".plans"] ?? "auto",
+    _aligndev: items._aligndev ?? "auto",
   };
 }
 
-function assertValidFlags(
-  registry: Registry,
-  flags: Record<ItemName, Flag>,
-  entry: RegistryEntry,
-): void {
-  if (flags._aligndev !== true || flags[".plans"] !== "auto") return;
+function assertValidItems(registry: Registry, items: ItemSettings, entry: RegistryEntry): void {
+  if (items._aligndev !== "companion" || items[".plans"] !== "auto") return;
   throw invalidRegistry(
     registry.path,
-    `"_aligndev": true requires ".plans" set to true or false (key: ${entry.key})`,
+    `"_aligndev": "companion" requires ".plans" set to "companion" or "project" (key: ${entry.key})`,
   );
-}
-
-function companionDir(mainWorktree: string, realHome: string): string {
-  return join(normalizePath(COMPANIONS_ROOT, realHome), companionName(mainWorktree, realHome));
-}
-
-function companionName(mainWorktree: string, realHome: string): string {
-  const name =
-    mainWorktree !== realHome && isSameOrInside(mainWorktree, realHome)
-      ? relative(realHome, mainWorktree)
-      : mainWorktree.slice(1);
-  return name.replaceAll("/", "_");
 }
 
 function resolveLocations(
@@ -221,7 +261,8 @@ function resolveLocations(
     "DEVELOPERS.md": locate("DEVELOPERS.md"),
     docs: locate("docs"),
     ".plans": plans,
-    _aligndev: companion?.flags._aligndev === true ? companionCopy(companion, ".plans") : plans,
+    _aligndev:
+      companion?.items._aligndev === "companion" ? companionCopy(companion, ".plans") : plans,
   };
 }
 
@@ -231,9 +272,9 @@ function locateItem(
   name: FileItemName,
 ): ItemLocation {
   const project = projectCopy(cwd, name);
-  if (companion === null || companion.flags[name] === false) return project;
+  if (companion === null || companion.items[name] === "project") return project;
   const copy = companionCopy(companion, name);
-  if (companion.flags[name] === true || copy.exists || !project.exists) return copy;
+  if (companion.items[name] === "companion" || copy.exists || !project.exists) return copy;
   return project;
 }
 
@@ -252,9 +293,14 @@ function pathExists(path: string): boolean {
   return lstatSync(path, { throwIfNoEntry: false }) !== undefined;
 }
 
-/** One line: `<name>: <path> (<in>)`, with `, missing` when absent. */
-export function renderItemLocation(name: ItemName, location: ItemLocation): string {
-  return `${name}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
+/** One line: `<name>: <path> (<in>)`, with `, missing` when absent and the setting after the name. */
+export function renderItemLocation(
+  name: ItemName,
+  location: ItemLocation,
+  setting?: ItemSetting | AligndevSetting,
+): string {
+  const label = setting === undefined ? name : `${name} (${setting})`;
+  return `${label}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 
 /** The `_aligndev` tree when it is not the resolved `.plans` and exists. */
@@ -275,6 +321,12 @@ export interface CompanionRegistration {
   created: boolean;
 }
 
+export interface CompanionRegistrationOptions {
+  /** The `dir` of a new entry, as written; defaults to the companion name. */
+  dir?: string;
+  createDir: boolean;
+}
+
 /**
  * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered.
  * Creates the registry when it is missing, and the companion directory with `createDir`.
@@ -282,26 +334,23 @@ export interface CompanionRegistration {
 export function registerCompanion(
   cwd: string,
   home: string,
-  { createDir }: { createDir: boolean },
+  options: CompanionRegistrationOptions,
 ): CompanionRegistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
-  const registry = readRegistry(home) ?? { path: registryPath(home), paths: {} };
-  const entry = findEntry(registry, mainWorktree, realHome);
-  const key = entry?.key ?? userPathOf(mainWorktree, realHome);
-  const dir = companionDir(mainWorktree, realHome);
-  if (entry === undefined) {
-    assertOwnCompanionDir(registry, key, dir, realHome);
-    writeRegistry(registry.path, { ...registry.paths, [key]: {} });
-  }
-  const created = createDir && !pathExists(dir);
-  if (created) mkdirSync(dir, { recursive: true });
+  const registry = readRegistry(home) ?? { path: registryPath(home), projects: {} };
+  const registered = findEntry(registry, mainWorktree, realHome);
+  if (registered !== undefined && options.dir !== undefined)
+    assertRegisteredDir(registered, options.dir, realHome);
+  const entry = registered ?? addEntry(registry, mainWorktree, realHome, options.dir);
+  const created = options.createDir && !pathExists(entry.dir);
+  if (created) mkdirSync(entry.dir, { recursive: true });
   return {
     registry: registry.path,
-    key,
-    added: entry === undefined,
-    dir,
-    exists: pathExists(dir),
+    key: entry.key,
+    added: registered === undefined,
+    dir: entry.dir,
+    exists: pathExists(entry.dir),
     created,
   };
 }
@@ -313,36 +362,104 @@ function requireMainWorktree(cwd: string): string {
   return mainWorktree;
 }
 
+function assertRegisteredDir(entry: RegistryEntry, dirOption: string, realHome: string): void {
+  const dir = companionDir(checkDirOption(dirOption), realHome);
+  if (dir === entry.dir) return;
+  throw new CliError(
+    `--dir resolves to ${dir}, but ${entry.key} is registered with the companion directory ` +
+      `${entry.dir}.`,
+  );
+}
+
+function checkDirOption(dirOption: string): string {
+  return parseShape(dirValue, dirOption, (detail) => new CliError(`Invalid --dir: ${detail}`));
+}
+
+function addEntry(
+  registry: Registry,
+  mainWorktree: string,
+  realHome: string,
+  dirOption: string | undefined,
+): RegistryEntry {
+  const key = userPathOf(mainWorktree, realHome);
+  const project: RegistryProject = {
+    dir:
+      dirOption === undefined ? companionName(mainWorktree, realHome) : checkDirOption(dirOption),
+  };
+  const dir = companionDir(project.dir, realHome);
+  assertCompanionDirBounds(registry, { key, project, dir }, mainWorktree, realHome);
+  writeRegistry(registry.path, { ...registry.projects, [key]: project });
+  return { key, project, dir };
+}
+
 function userPathOf(path: string, realHome: string): string {
   if (path === realHome) return "~";
   return isSameOrInside(path, realHome) ? `~/${relative(realHome, path)}` : path;
 }
 
-/** Two keys collide when their names differ only by a `_` in place of a `/`. */
-function assertOwnCompanionDir(
+function isSameOrInside(path: string, ancestor: string): boolean {
+  return path === ancestor || path.startsWith(ancestor.endsWith(sep) ? ancestor : ancestor + sep);
+}
+
+/** The default `dir` of `companion register`. */
+function companionName(mainWorktree: string, realHome: string): string {
+  const name =
+    mainWorktree !== realHome && isSameOrInside(mainWorktree, realHome)
+      ? relative(realHome, mainWorktree)
+      : mainWorktree.slice(1);
+  return name.replaceAll("/", "_");
+}
+
+/**
+ * Fails when deleting the companion directory could delete the companions root, the home
+ * directory, the project, or another key's companion directory.
+ */
+function assertCompanionDirBounds(
   registry: Registry,
-  key: string,
-  dir: string,
+  { key, dir }: RegistryEntry,
+  mainWorktree: string,
   realHome: string,
 ): void {
-  const others = (keysByCompanionDir(registry, realHome).get(dir) ?? []).filter((k) => k !== key);
-  if (others.length === 0) return;
-  throw new CliError(`The companion directory ${dir} is already used by ${others.join(", ")}.`);
+  assertNotAncestor(dir, companionsRoot(realHome), "the companions root");
+  assertNotAncestor(dir, realHome, "the home directory");
+  assertDisjoint(dir, mainWorktree, "the project");
+  for (const [otherDir, keys] of keysByCompanionDir(registry, realHome)) {
+    const others = keys.filter((k) => k !== key).join(", ");
+    if (others === "") continue;
+    if (otherDir === dir)
+      throw new CliError(`The companion directory ${dir} is already used by ${others}.`);
+    assertDisjoint(dir, otherDir, `the companion directory of ${others}`);
+  }
+}
+
+function assertDisjoint(dir: string, other: string, label: string): void {
+  assertNotAncestor(dir, other, label);
+  if (isSameOrInside(dir, other)) throw boundsError(dir, "is inside", other, label);
+}
+
+function assertNotAncestor(dir: string, other: string, label: string): void {
+  if (isSameOrInside(other, dir))
+    throw boundsError(dir, dir === other ? "is" : "contains", other, label);
+}
+
+function boundsError(dir: string, relation: string, other: string, label: string): CliError {
+  return new CliError(`The companion directory ${dir} ${relation} ${other}, ${label}.`);
 }
 
 function keysByCompanionDir(registry: Registry, realHome: string): Map<string, string[]> {
   const keysByDir = new Map<string, string[]>();
-  for (const key of Object.keys(registry.paths)) {
-    const dir = companionDir(normalizePath(key, realHome), realHome);
+  for (const [key, project] of Object.entries(registry.projects)) {
+    const dir = companionDir(project.dir, realHome);
     keysByDir.set(dir, [...(keysByDir.get(dir) ?? []), key]);
   }
   return keysByDir;
 }
 
-function writeRegistry(path: string, paths: Registry["paths"]): void {
+function writeRegistry(path: string, projects: Record<string, RegistryProject>): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmpPath = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmpPath, `${JSON.stringify({ paths }, undefined, 2)}\n`);
+  const file: RegistryFile = { projects };
+  writeFileSync(tmpPath, `${JSON.stringify(file, undefined, 2)}\n`);
   renameSync(tmpPath, path);
 }
 
@@ -354,11 +471,14 @@ export interface CompanionUnregistration {
   /** `undefined` when the directory is missing. */
   empty?: boolean;
   removed: boolean;
+  /** `removeDir` kept the directory: it is outside the companions root. */
+  keptOutsideRoot: boolean;
 }
 
 /**
  * Removes the registry key of the main worktree of `cwd`. With `removeDir`, also removes its
- * companion directory: a non-empty one requires `force`. Fails before any change.
+ * companion directory when it is inside the companions root: a non-empty one requires `force`.
+ * Fails before any change.
  */
 export function unregisterCompanion(
   cwd: string,
@@ -372,25 +492,34 @@ export function unregisterCompanion(
   const entry = registry && findEntry(registry, mainWorktree, realHome);
   if (!registry || entry === undefined)
     throw new CliError(`${mainWorktree} is not registered in ${path}.`);
-  const dir = companionDir(mainWorktree, realHome);
+  const { dir } = entry;
   const entries = pathExists(dir) ? readdirSync(dir) : undefined;
-  if (removeDir) assertRemovableDir(registry, entry.key, dir, entries, force, realHome);
-  const { [entry.key]: _removed, ...paths } = registry.paths;
-  writeRegistry(path, paths);
-  const removed = removeDir && entries !== undefined;
+  const root = companionsRoot(realHome);
+  if (removeDir) assertNotAncestor(dir, root, "the companions root");
+  const deletable = removeDir && isSameOrInside(dir, root);
+  if (deletable) assertRemovableDir(registry, entry, entries, { force, mainWorktree, realHome });
+  const { [entry.key]: _removed, ...projects } = registry.projects;
+  writeRegistry(path, projects);
+  const removed = deletable && entries !== undefined;
   if (removed) rmSync(dir, { recursive: true, force: true });
-  return { registry: path, key: entry.key, dir, empty: entries && entries.length === 0, removed };
+  return {
+    registry: path,
+    key: entry.key,
+    dir,
+    empty: entries && entries.length === 0,
+    removed,
+    keptOutsideRoot: removeDir && !deletable && entries !== undefined,
+  };
 }
 
 function assertRemovableDir(
   registry: Registry,
-  key: string,
-  dir: string,
+  entry: RegistryEntry,
   entries: string[] | undefined,
-  force: boolean,
-  realHome: string,
+  { force, mainWorktree, realHome }: { force: boolean; mainWorktree: string; realHome: string },
 ): void {
-  assertOwnCompanionDir(registry, key, dir, realHome);
+  assertCompanionDirBounds(registry, entry, mainWorktree, realHome);
+  const { dir } = entry;
   if (force || entries === undefined || entries.length === 0) return;
   throw new CliError(
     `The companion directory ${dir} is not empty: ${entries.sort().join(", ")}. ` +
@@ -403,7 +532,7 @@ export function strayRegistryKeys(home: string): string[] {
   const registry = readRegistry(home);
   if (registry === undefined) return [];
   const realHome = realOrResolved(home);
-  return Object.keys(registry.paths).filter((key) => {
+  return Object.keys(registry.projects).filter((key) => {
     const path = normalizePath(key, realHome);
     return !existsSync(path) || findMainWorktree(path) !== path;
   });
@@ -416,4 +545,23 @@ export function sharedCompanionDirs(home: string): { dir: string; keys: string[]
   return [...keysByCompanionDir(registry, realOrResolved(home))]
     .filter(([, keys]) => keys.length > 1)
     .map(([dir, keys]) => ({ dir, keys }));
+}
+
+export interface NestedCompanionDir {
+  dir: string;
+  keys: string[];
+  outerDir: string;
+  outerKeys: string[];
+}
+
+/** The companion directories inside another companion directory of the registry. */
+export function nestedCompanionDirs(home: string): NestedCompanionDir[] {
+  const registry = readRegistry(home);
+  if (registry === undefined) return [];
+  const dirs = [...keysByCompanionDir(registry, realOrResolved(home))];
+  return dirs.flatMap(([dir, keys]) =>
+    dirs
+      .filter(([outerDir]) => outerDir !== dir && isSameOrInside(dir, outerDir))
+      .map(([outerDir, outerKeys]) => ({ dir, keys, outerDir, outerKeys })),
+  );
 }

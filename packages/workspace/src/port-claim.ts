@@ -2,38 +2,34 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ConfigError } from "./errors.js";
-import type { ResolvedPortsConfig } from "./ports.js";
+import { formatRange, type PortRange } from "./ports.js";
 
-interface PortRange {
-  first: number;
-  last: number;
-}
-
-export function checkPortClaim(
-  currentWorktree: string,
-  ports: ResolvedPortsConfig | undefined,
-): void {
+/**
+ * Compares the `ports` range of the dev-server config with `portRange` in the worktree's
+ * `.alignfirst.json`. A missing file skips the check.
+ */
+export function checkPortClaim(currentWorktree: string, range: PortRange | undefined): void {
   const path = join(currentWorktree, ".alignfirst.json");
   if (!existsSync(path)) return;
-  const range = readPortRange(path);
-  if (ports === undefined) {
-    if (range !== undefined)
+  const claimed = readPortRange(path);
+  if (range === undefined) {
+    if (claimed !== undefined)
       throw new ConfigError(
-        `Config error: .alignfirst.json declares \`portRange\` ${formatRange(range)} but ` +
-          "workspace.mjs declares no `ports`. Remove `portRange` or declare the port scheme.",
+        `Config error: .alignfirst.json declares \`portRange\` ${formatRange(claimed)} but ` +
+          "dev-server.mjs declares no `ports`. Remove `portRange` or declare the `ports` group.",
       );
     return;
   }
-  const expected = expectedPortRange(ports);
-  if (range === undefined)
+  if (claimed === undefined)
     throw new ConfigError(
-      "Config error: .alignfirst.json declares no `portRange`; the port scheme of workspace.mjs " +
-        `claims ${formatRange(expected)}. Write ${formatJsonRange(expected)}.`,
+      "Config error: .alignfirst.json declares no `portRange`; the `ports` group of " +
+        `dev-server.mjs claims ${formatRange(range)}. Write ${formatJsonRange(range)}.`,
     );
-  if (range.first === expected.first && range.last === expected.last) return;
+  if (claimed.first === range.first && claimed.last === range.last) return;
   throw new ConfigError(
-    `Config error: \`portRange\` in .alignfirst.json is ${formatRange(range)}; the port scheme of ` +
-      `workspace.mjs claims ${formatRange(expected)}. Write ${formatJsonRange(expected)} or fix the scheme.`,
+    `Config error: \`portRange\` in .alignfirst.json is ${formatRange(claimed)}; the \`ports\` ` +
+      `group of dev-server.mjs claims ${formatRange(range)}. Write ${formatJsonRange(range)} or ` +
+      "fix the `ports` group.",
   );
 }
 
@@ -54,21 +50,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPortRange(value: unknown): value is PortRange {
   return isRecord(value) && Number.isInteger(value.first) && Number.isInteger(value.last);
-}
-
-/**
- * Both layouts tile the same `perWorkspace × maxWorkspaces` ports from `base`, so the claim is
- * layout-independent.
- */
-function expectedPortRange(ports: ResolvedPortsConfig): PortRange {
-  return {
-    first: ports.base,
-    last: ports.base + ports.perWorkspace * ports.maxWorkspaces - 1,
-  };
-}
-
-function formatRange(range: PortRange): string {
-  return `${range.first}..${range.last}`;
 }
 
 function formatJsonRange(range: PortRange): string {

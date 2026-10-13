@@ -4,7 +4,7 @@ import { createConnection } from "node:net";
 import { platform } from "node:os";
 
 import { stopProcessGroup } from "./process-control.js";
-import type { ServerDescriptor, SpawnServer } from "./server-descriptor.js";
+import type { ResolvedServerDescriptor, ResolvedSpawnServer } from "./server-descriptor.js";
 
 export interface PortHolder {
   pid: number;
@@ -19,7 +19,7 @@ export type PortConflict =
   | { kind: "foreign"; server: ListeningSpawnServer; holder?: PortHolder };
 
 /** A spawn server that declares a port — the only kind port checks apply to. */
-export interface ListeningSpawnServer extends SpawnServer {
+export interface ListeningSpawnServer extends ResolvedSpawnServer {
   port: number;
 }
 
@@ -66,7 +66,7 @@ export function isPortBusy(port: number): Promise<boolean> {
 }
 
 export async function detectPortConflicts(
-  servers: ServerDescriptor[],
+  servers: ResolvedServerDescriptor[],
   ourCanonicalCwd: string,
 ): Promise<PortConflict[]> {
   const conflicts: PortConflict[] = [];
@@ -96,7 +96,10 @@ export async function waitForPortsFree(ports: number[], timeoutMs: number): Prom
   return pending;
 }
 
-export async function sweepStalePorts(servers: ServerDescriptor[], cwd: string): Promise<void> {
+export async function sweepStalePorts(
+  servers: ResolvedServerDescriptor[],
+  cwd: string,
+): Promise<void> {
   if (platform() === "win32") return;
   const ourCwd = canonicalCwd(cwd);
   for (const server of spawnServersOf(servers)) {
@@ -104,7 +107,7 @@ export async function sweepStalePorts(servers: ServerDescriptor[], cwd: string):
   }
 }
 
-function spawnServersOf(servers: ServerDescriptor[]): ListeningSpawnServer[] {
+function spawnServersOf(servers: ResolvedServerDescriptor[]): ListeningSpawnServer[] {
   return servers.filter(
     (s): s is ListeningSpawnServer => s.kind === "spawn" && s.port !== undefined,
   );

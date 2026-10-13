@@ -15,6 +15,8 @@ import {
 } from "../project-config.js";
 import {
   type CompanionLayout,
+  type NestedCompanionDir,
+  nestedCompanionDirs,
   registryPath,
   sharedCompanionDirs,
   strayRegistryKeys,
@@ -104,6 +106,7 @@ function inspectCompanion(ctx: CommandContext): DoctorLine[] {
     file,
     ...strayRegistryKeys(ctx.home).map(describeStrayKey),
     ...sharedCompanionDirs(ctx.home).map(describeSharedDir),
+    ...nestedCompanionDirs(ctx.home).map(describeNestedDir),
   ];
   if (layout.companion === null) return [...registryLines, { level: "ok", text: "none" }];
   const { companion } = layout;
@@ -123,14 +126,27 @@ function describeSharedDir({ dir, keys }: { dir: string; keys: string[] }): Doct
   return { level: "warn", text: `keys ${keys.join(", ")} share the companion directory ${dir}` };
 }
 
+function describeNestedDir({ dir, keys, outerDir, outerKeys }: NestedCompanionDir): DoctorLine {
+  return {
+    level: "warn",
+    text:
+      `companion directory ${dir} (${keys.join(", ")}) is inside ` +
+      `${outerDir} (${outerKeys.join(", ")})`,
+  };
+}
+
 function describeItem(
   name: ItemName,
   layout: ProjectLayout,
   companion: CompanionLayout,
 ): DoctorLine {
   const location = layout.locations[name];
-  const missingCopy = companion.flags[name] === true && !location.exists;
-  return { level: missingCopy ? "warn" : "ok", text: renderItemLocation(name, location) };
+  const setting = companion.items[name];
+  const missingCopy = setting === "companion" && !location.exists;
+  return {
+    level: missingCopy ? "warn" : "ok",
+    text: renderItemLocation(name, location, setting),
+  };
 }
 
 function inspectGit(

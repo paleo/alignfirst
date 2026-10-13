@@ -97,13 +97,13 @@ export interface CompanionProject {
 }
 
 /** A repository at `~/app` whose companion is `~/.alignfirst/companions/app`; the caller removes the returned `root` temp directory. */
-export function makeCompanionProject(flags: Record<string, unknown>): CompanionProject {
+export function makeCompanionProject(items: Record<string, unknown>): CompanionProject {
   const root = makeTempDir("alignfirst-companion-");
   configureGit(root);
   const home = join(root, "home");
   const project = join(home, "app");
   initRepository(project);
-  writeRegistry(home, { paths: { "~/app": flags } });
+  writeRegistry(home, { projects: { "~/app": { dir: "app", items } } });
   return { root, home, project, companion: join(home, ".alignfirst", "companions", "app") };
 }
 

@@ -22,6 +22,10 @@ Offer this in the README as a convenience and use the bare command when describi
 
 The optional `alignfirst` skill lets the agent recognize a protocol named in prose. Add `--skill alignfirst` when the user wants that recognition in repositories without an `alignfirst context` instruction.
 
+The AlignFirst skills are installed globally only. When a global installation fails for lack of write access, report it once and continue without the skills. Never fall back to another location. On an AlignDev OpenClaw host, the service account's skill directories are admin-owned and locked, by design.
+
+When preparing a project for an assistant, skip the skills and the [global bootstrap line](#repositories-without-alignfirst-instructions), as [Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) states.
+
 Discover the package without installing it:
 
 ```sh
@@ -58,10 +62,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --skill alcatchupaad --skill alcatchupspec </dev/null
 ```
 
-Restart the target agent after installation. Use `npx -y skills update --global --yes` to update
-global skills, or `npx -y skills update --project --yes` for project skills. Remove an installation
-with `npx -y skills remove [--global] <skill-name> --yes`. Let the skills CLI manage
-`skills-lock.json`.
+Restart the target agent after installation. Update the skills with `npx -y skills update --global --yes`, and remove one with `npx -y skills remove --global <skill-name> --yes`.
 
 ## Configure the Project
 

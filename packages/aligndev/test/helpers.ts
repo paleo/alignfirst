@@ -12,11 +12,11 @@ export interface Sink {
   text(): string;
 }
 
-// Writes `<home>/.alignfirst/aligndev.config.json` and returns its path. Every `main` call in
+// Writes `<home>/.alignfirst/settings.json` and returns its path. Every `main` call in
 // the suites injects a temporary `home`, and sets `HOME` to it for alignfirst, so no test reads the
 // developer's real config.
 export function writeConfig(home: string, config: object): string {
-  const path = join(home, ".alignfirst", "aligndev.config.json");
+  const path = join(home, ".alignfirst", "settings.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(config, undefined, 2)}\n`);
   return path;
@@ -48,12 +48,12 @@ export interface CompanionProject {
 // are real.
 export function makeCompanionProject(
   home: string,
-  flags: Record<string, boolean | "auto">,
+  items: Record<string, "companion" | "project" | "auto">,
 ): CompanionProject {
   const project = join(home, "app");
   mkdirSync(project, { recursive: true });
   execFileSync("git", ["init", "--quiet", project]);
-  writeRegistry(home, { paths: { "~/app": flags } });
+  writeRegistry(home, { projects: { "~/app": { dir: "app", items } } });
   const realHome = realpathSync(home);
   return {
     home,
