@@ -1,12 +1,18 @@
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resolvePortsConfig } from "../src/ports.js";
 import {
-  indexOfEntry,
   markWorkspaceReady,
   readWorkspaces,
   registerWorkspace,
@@ -14,13 +20,13 @@ import {
   type RegisterWorkspaceInput,
   rekeyMainEntry,
   resolveCurrentWorkspace,
+  storedPortsOf,
   type WorkspaceEntry,
   workspacesFilePath,
   writeWorkspaces,
 } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
-const ports = resolvePortsConfig({ base: 8100, maxWorkspaces: 20, names: ["web"] });
 const CREATED_AT = "2026-05-10T00:00:00.000Z";
 
 /** Holds the main worktree, `<root>/main`, and its sibling worktrees. */
@@ -85,10 +91,9 @@ describe("registerWorkspace", () => {
     expect(workspaces["myrepo-feat-a"].worktree).toBe("/repo/myrepo-feat-a");
   });
 
-  it("flags the main worktree and stores no port index", async () => {
-    const { name, portIndex } = await registerMain({ ports });
+  it("flags the main worktree", async () => {
+    const { name } = await registerMain();
     expect(name).toBe("main");
-    expect(portIndex).toBeUndefined();
     expect(readEntries()[name].main).toBe(true);
   });
 
@@ -129,33 +134,9 @@ describe("registerWorkspace", () => {
     expect((await register("/repo/wt-a", { force: true })).status).toBe("pending");
   });
 
-  it("allocates the lowest free port index, main worktree excluded", async () => {
-    expect((await register("/repo/wt-a", { ports })).portIndex).toBe(1);
-    expect((await register("/repo/wt-b", { ports })).portIndex).toBe(2);
-    const registry = readWorkspaces(mainWorktree, registryDir);
-    delete registry.workspaces["wt-a"];
-    writeWorkspaces(mainWorktree, registryDir, registry);
-    expect((await register("/repo/wt-c", { ports })).portIndex).toBe(1);
-  });
-
-  it("reuses the port index of an already registered worktree", async () => {
-    await register("/repo/wt-a", { ports });
-    const second = await register("/repo/wt-b", { ports });
-    expect((await register("/repo/wt-b", { ports, force: true })).portIndex).toBe(second.portIndex);
-  });
-
-  it("allocates no port index in portless mode", async () => {
-    expect((await register("/repo/wt-a")).portIndex).toBeUndefined();
-    expect(readEntries()["wt-a"].portIndex).toBeUndefined();
-  });
-
-  it("fails when every port index is taken", async () => {
-    const capped = resolvePortsConfig({ base: 8100, maxWorkspaces: 3, names: ["web"] });
-    await register("/repo/wt-a", { ports: capped });
-    await register("/repo/wt-b", { ports: capped });
-    await expect(register("/repo/wt-c", { ports: capped })).rejects.toThrow(
-      "All 3 workspace indexes are taken",
-    );
+  it("allocates no port", async () => {
+    await register("/repo/wt-a");
+    expect(readEntries()["wt-a"].ports).toBeUndefined();
   });
 
   it("registers a moved main worktree again without a name collision", async () => {
@@ -189,6 +170,12 @@ describe("stored form", () => {
   it("hands absolute paths to readers", async () => {
     await register(join(root, "wt-a"));
     expect(readEntries()["wt-a"].worktree).toBe(join(root, "wt-a"));
+  });
+
+  it("replaces the file through a rename, leaving no temporary file", async () => {
+    await registerMain();
+    await register(join(root, "wt-a"));
+    expect(readdirSync(join(mainWorktree, registryDir))).toEqual(["workspaces.json"]);
   });
 });
 
@@ -226,6 +213,16 @@ describe("readWorkspaces repair", () => {
     expect(workspaces["wt-ready"].devSetupAt).toBe(CREATED_AT);
     expect(workspaces["wt-pending"].devSetupAt).toBeUndefined();
     expect(workspaces["wt-relative"].devSetupAt).toBeUndefined();
+  });
+
+  it("drops a legacy portIndex from every entry", () => {
+    writeStored({
+      "wt-legacy": { ...entry("/old/wt-legacy"), portIndex: 2 },
+      "wt-relative": { ...entry("../wt-relative"), portIndex: 3 },
+    });
+    const workspaces = readEntries();
+    expect(workspaces["wt-legacy"]).not.toHaveProperty("portIndex");
+    expect(workspaces["wt-relative"]).not.toHaveProperty("portIndex");
   });
 
   it("keeps the main entry keyed by the current name among duplicates", () => {
@@ -269,7 +266,7 @@ describe("main-entry re-key", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const registered = await registerMain();
-      expect(registered).toEqual({ name: "main", status: "ready", portIndex: undefined });
+      expect(registered).toEqual({ name: "main", status: "ready" });
       expect(error.mock.calls.join("\n")).toContain('renamed from "old-name" to "main"');
     } finally {
       error.mockRestore();
@@ -294,17 +291,19 @@ describe("main-entry re-key", () => {
 });
 
 describe("markWorkspaceReady", () => {
-  it("marks the entry ready and persists the purgeData blob", async () => {
+  it("marks the entry ready and clears its failure", async () => {
     writeWorkspaces(mainWorktree, registryDir, {
-      workspaces: { "wt-a": entry("/repo/wt-a", "pending") },
+      workspaces: {
+        "wt-a": { ...entry("/repo/wt-a", "failed"), failure: { at: CREATED_AT, message: "boom" } },
+      },
     });
-    await markWorkspaceReady(mainWorktree, registryDir, "wt-a", { container: "db-wt-a" });
+    await markWorkspaceReady(mainWorktree, registryDir, "wt-a");
     const stored = readEntries()["wt-a"];
     expect(stored.status).toBe("ready");
-    expect(stored.purgeData).toEqual({ container: "db-wt-a" });
+    expect(stored.failure).toBeUndefined();
   });
 
-  it("leaves a pre-existing purgeData untouched when none is passed", async () => {
+  it("leaves a legacy purgeData untouched", async () => {
     writeWorkspaces(mainWorktree, registryDir, {
       workspaces: { "wt-a": { ...entry("/repo/wt-a", "pending"), purgeData: { volume: "v1" } } },
     });
@@ -313,17 +312,17 @@ describe("markWorkspaceReady", () => {
   });
 });
 
-describe("indexOfEntry", () => {
-  it("reports index 0 for the main worktree", () => {
-    expect(indexOfEntry({ ...entry("/repo/main"), main: true })).toBe(0);
-  });
-
-  it("reports the stored index of a linked workspace", () => {
-    expect(indexOfEntry({ ...entry("/repo/wt-a"), portIndex: 3 })).toBe(3);
-  });
-
-  it("reports undefined for an entry registered without ports", () => {
-    expect(indexOfEntry(entry("/repo/wt-a"))).toBeUndefined();
+describe("storedPortsOf", () => {
+  it("returns the ports of the entry whose worktree matches, or none", () => {
+    writeWorkspaces(mainWorktree, registryDir, {
+      workspaces: {
+        "wt-a": { ...entry(join(root, "wt-a")), ports: { web: 8100 } },
+        "wt-b": entry(join(root, "wt-b")),
+      },
+    });
+    expect(storedPortsOf(mainWorktree, registryDir, join(root, "wt-a"))).toEqual({ web: 8100 });
+    expect(storedPortsOf(mainWorktree, registryDir, join(root, "wt-b"))).toEqual({});
+    expect(storedPortsOf(mainWorktree, registryDir, join(root, "wt-z"))).toEqual({});
   });
 });
 

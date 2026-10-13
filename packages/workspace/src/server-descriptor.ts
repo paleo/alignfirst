@@ -7,6 +7,11 @@ export interface ServerContext {
    * (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve relative paths against it.
    */
   cwd: string;
+  /**
+   * Ports of the worktree in `cwd`, as its `dev setup` allocated them, from the registry. Empty when
+   * the dev-server declares no `ports` group, or before the worktree's first `dev setup`.
+   */
+  ports: Record<string, number>;
 }
 
 /** One process spawned and tracked by the runner. */
@@ -17,11 +22,11 @@ export interface SpawnServer {
   /** Command and arguments passed to `child_process.spawn`. */
   exec: { command: string; args: string[] };
   /**
-   * Port the process will listen on. Use `helpers.readPortFromEnvFile` / `readPortFromJsonFile`.
-   * Omit it when the process listens on no port: conflict detection, port sweeping and the summary
-   * URL are then skipped for this server.
+   * Port the process will listen on. A string names an entry of `ports.names`, resolved from the
+   * workspace's allocation. A number is used as is. Omit it when the process listens on no port:
+   * conflict detection, port sweeping and the summary URL are then skipped for this server.
    */
-  port?: number;
+  port?: number | string;
   /** Returns `true` once the log content indicates the server is ready. */
   detectReady: (logContent: string) => boolean;
   /**
@@ -47,3 +52,12 @@ export interface CallbackServer {
 }
 
 export type ServerDescriptor = SpawnServer | CallbackServer;
+
+/** A {@link SpawnServer} whose `port` is resolved to a number. */
+export interface ResolvedSpawnServer extends Omit<SpawnServer, "port"> {
+  port?: number;
+  /** The `ports.names` entry the port was resolved from. */
+  portName?: string;
+}
+
+export type ResolvedServerDescriptor = ResolvedSpawnServer | CallbackServer;

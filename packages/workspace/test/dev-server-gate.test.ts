@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorktreeReadyMessage } from "../src/dev-server.js";
+import { buildWorktreeReadyMessage } from "../src/dev-setup.js";
 import type { PackageManagerCommands } from "../src/package-manager.js";
 import type { WorkspaceEntry } from "../src/workspaces.js";
 
@@ -49,6 +49,26 @@ describe("buildWorktreeReadyMessage", () => {
     expect(result.message).toContain("workspace repo-feat-a");
     expect(result.message).toContain("1h");
     expect(result.message).toContain("/tmp/wt/.local-wt/logs/workspace-setup.log");
+  });
+
+  it("accepts a pending workspace with `acceptPending` (the finalize child of `setup --full`)", () => {
+    const entry: WorkspaceEntry = {
+      worktree: "/tmp/wt",
+      createdAt: "2026-05-16T23:00:00.000Z",
+      status: "pending",
+    };
+    expect(buildWorktreeReadyMessage({ ...input(entry), acceptPending: true })).toEqual({
+      ok: true,
+    });
+  });
+
+  it("still refuses a failed workspace with `acceptPending`", () => {
+    const entry: WorkspaceEntry = {
+      worktree: "/tmp/wt",
+      createdAt: "2026-05-16T22:00:00.000Z",
+      status: "failed",
+    };
+    expect(buildWorktreeReadyMessage({ ...input(entry), acceptPending: true }).ok).toBe(false);
   });
 
   it("reports a failed message with failure reason and elapsed", () => {

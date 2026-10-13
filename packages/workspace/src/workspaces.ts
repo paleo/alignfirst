@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
-import type { ResolvedPortsConfig } from "./ports.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { getWorktreeBranch } from "./worktree.js";
 
@@ -23,8 +23,6 @@ export interface WorkspaceEntryFields {
   failure?: { at: string; message: string };
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;
-  /** Port block index, stored only for linked workspaces when the config declares `ports`. */
-  portIndex?: number;
   /** One port per declared name, allocated by `dev setup`. */
   ports?: Record<string, number>;
   /** ISO date of the last successful `DevServerConfig.setup`. */
@@ -54,6 +52,8 @@ interface StoredWorkspaceEntry extends WorkspaceEntryFields {
    * a legacy entry, written before relative paths.
    */
   worktree: string;
+  /** Legacy: the port block index of the old port scheme. Dropped at read time. */
+  portIndex?: number;
 }
 
 /** The workspace a command acts on, resolved from the cwd. */
@@ -74,7 +74,8 @@ export function workspacesFilePath(mainWorktree: string, registryDir: string): s
 
 /**
  * Reads the registry with absolute `worktree` paths. Legacy entries are repaired in memory only;
- * the next {@link writeWorkspaces} persists the repair.
+ * the next {@link writeWorkspaces} persists the repair. A legacy `portIndex` is dropped: those
+ * workspaces get new ports at their next `dev setup`.
  */
 export function readWorkspaces(mainWorktree: string, registryDir: string): WorkspacesRegistry {
   const filePath = workspacesFilePath(mainWorktree, registryDir);
@@ -93,11 +94,12 @@ function loadEntry(
   stored: StoredWorkspaceEntry,
   mainWorktree: string,
 ): WorkspaceEntry {
+  const { portIndex, ...fields } = stored;
   if (!isAbsolute(stored.worktree)) {
-    return { ...stored, worktree: resolve(mainWorktree, stored.worktree) };
+    return { ...fields, worktree: resolve(mainWorktree, stored.worktree) };
   }
   const entry: WorkspaceEntry = {
-    ...stored,
+    ...fields,
     worktree: repairLegacyWorktree(name, stored, mainWorktree),
   };
   // The old `finalizeWorkspace` of a ready legacy entry already provisioned its infrastructure.
@@ -137,6 +139,10 @@ function dropDuplicateMainEntries(
   }
 }
 
+/**
+ * Writes a temporary file next to `workspaces.json`, then renames it over the registry, so a reader
+ * that does not take the lock never sees a half-written file.
+ */
 export function writeWorkspaces(
   mainWorktree: string,
   registryDir: string,
@@ -150,10 +156,10 @@ export function writeWorkspaces(
     };
   }
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-  writeFileSync(
-    workspacesFilePath(mainWorktree, registryDir),
-    `${JSON.stringify(stored, undefined, 2)}\n`,
-  );
+  const filePath = workspacesFilePath(mainWorktree, registryDir);
+  const tempPath = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(stored, undefined, 2)}\n`);
+  renameSync(tempPath, filePath);
 }
 
 /** The stored form of an absolute worktree path: relative to the main worktree, POSIX separators. */
@@ -192,8 +198,6 @@ export interface RegisterWorkspaceInput {
   mainWorktree: string;
   registryDir: string;
   isMainWorktree: boolean;
-  /** Resolved port scheme. Omit in portless mode: no port index is allocated. */
-  ports?: ResolvedPortsConfig;
   /** When `true`, an existing `ready` workspace is reset to `pending` so the re-finalize is observable. */
   force?: boolean;
 }
@@ -201,8 +205,6 @@ export interface RegisterWorkspaceInput {
 export interface RegisteredWorkspace {
   name: string;
   status: WorkspaceStatus;
-  /** Present only when `ports` was passed. `undefined` for the main worktree, whose index is 0. */
-  portIndex?: number;
 }
 
 export async function registerWorkspace(
@@ -228,11 +230,8 @@ export async function registerWorkspace(
       purgeData: existing?.purgeData,
     };
     if (input.isMainWorktree) entry.main = true;
-    if (input.ports && !input.isMainWorktree) {
-      entry.portIndex = existing?.portIndex ?? lowestFreePortIndex(registry, input.ports);
-    }
     registry.workspaces[name] = entry;
-    return { name, status: entry.status, portIndex: entry.portIndex };
+    return { name, status: entry.status };
   });
 }
 
@@ -277,33 +276,16 @@ function refuseNameCollision(
   );
 }
 
-function lowestFreePortIndex(registry: WorkspacesRegistry, ports: ResolvedPortsConfig): number {
-  const taken = new Set(
-    Object.values(registry.workspaces)
-      .map((entry) => entry.portIndex)
-      .filter((index) => index !== undefined),
-  );
-  for (let index = 1; index < ports.maxWorkspaces; ++index) {
-    if (!taken.has(index)) return index;
-  }
-  throw new WorkspaceError(
-    `All ${ports.maxWorkspaces} workspace indexes are taken. ` +
-      `Remove a workspace with \`${wsCmd("remove")}\` first.`,
-  );
-}
-
 export async function markWorkspaceReady(
   mainWorktree: string,
   registryDir: string,
   name: string,
-  purgeData?: unknown,
 ): Promise<void> {
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const entry = registry.workspaces[name];
     if (!entry) return;
     entry.status = "ready";
     delete entry.failure;
-    if (purgeData !== undefined) entry.purgeData = purgeData;
   });
 }
 
@@ -321,19 +303,17 @@ export async function markWorkspaceFailed(
   });
 }
 
-/**
- * The entry's port block index: `0` for the main worktree. `undefined` marks a **stale** entry —
- * registered while the config was portless, so no index was ever allocated.
- */
-export function indexOfEntry(entry: WorkspaceEntry): number | undefined {
-  return entry.main === true ? 0 : entry.portIndex;
-}
-
-export function staleWorkspaceMessage(name: string, worktree: string): string {
-  return (
-    `Workspace "${name}" was registered without ports. ` +
-    `Run \`${wsCmd("setup --force")}\` in ${worktree} to allocate its ports.`
+/** The ports stored on the entry of `worktree`; `{}` when it has none, or no entry. */
+export function storedPortsOf(
+  mainWorktree: string,
+  registryDir: string,
+  worktree: string,
+): Record<string, number> {
+  const target = resolve(worktree);
+  const entry = Object.values(readWorkspaces(mainWorktree, registryDir).workspaces).find(
+    (candidate) => resolve(candidate.worktree) === target,
   );
+  return entry?.ports ?? {};
 }
 
 export function resolveCurrentWorkspace(

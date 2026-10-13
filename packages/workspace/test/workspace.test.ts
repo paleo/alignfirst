@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { matchWorktreeByDir, type PatchContext, resolveFileSource } from "../src/workspace.js";
+import { type PatchContext, resolveFileSource } from "../src/file-entries.js";
+import { matchWorktreeByDir } from "../src/workspace.js";
 import type { WorkspacesRegistry } from "../src/workspaces.js";
 
 describe("resolveFileSource", () => {
@@ -19,7 +20,6 @@ describe("resolveFileSource", () => {
     mkdirSync(currentWorktree);
     ctx = {
       name: "repo-feat",
-      ports: { server: 8110 },
       mainWorktree,
       currentWorktree,
       isMainWorktree: false,

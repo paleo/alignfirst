@@ -12,8 +12,8 @@ export type WorkspaceCommand =
       enter: boolean;
       dedupe: boolean;
       detached: boolean;
-      /** The `--profile <name>` selection; applies to the current main worktree only. */
-      profile?: string;
+      /** Also runs the dev setup once the workspace is finalized. */
+      full: boolean;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
   | { kind: "list" }
@@ -21,7 +21,7 @@ export type WorkspaceCommand =
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
   | { kind: "migrate" }
-  | { kind: "finalize"; force: boolean }
+  | { kind: "finalize"; force: boolean; full: boolean }
   | { kind: "guide" }
   | { kind: "help" }
   | { kind: "version" };
@@ -90,7 +90,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       enter: { type: "boolean" },
       dedupe: { type: "boolean" },
       detached: { type: "boolean", short: "d" },
-      profile: { type: "string" },
+      full: { type: "boolean" },
       verbose: { type: "boolean" },
     },
     allowPositionals: true,
@@ -102,11 +102,6 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
   const dedupe = values.dedupe ?? false;
   if (newBranch && branch === undefined) {
     throw new ConfigError("`workspace setup -c <branch>` requires a branch name.");
-  }
-  if (values.profile !== undefined && branch !== undefined) {
-    throw new ConfigError(
-      "`--profile` applies only to the current main worktree; it cannot be combined with a branch.",
-    );
   }
   if (values.from !== undefined && !newBranch) {
     throw new ConfigError("`--from` requires `-c`/`--new-branch`.");
@@ -127,7 +122,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
       enter,
       dedupe,
       detached: values.detached ?? false,
-      profile: values.profile,
+      full: values.full ?? false,
     },
     verbose: values.verbose ?? false,
   };
@@ -218,12 +213,15 @@ function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { force: { type: "boolean" } },
+    options: { force: { type: "boolean" }, full: { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   rejectPositionals(positionals, "__finalize");
-  return { command: { kind: "finalize", force: values.force ?? false }, verbose: false };
+  return {
+    command: { kind: "finalize", force: values.force ?? false, full: values.full ?? false },
+    verbose: false,
+  };
 }
 
 function takeOptionalPositional(positionals: string[], command: string): string | undefined {
@@ -239,14 +237,11 @@ function rejectPositionals(positionals: string[], command: string): void {
   }
 }
 
-/** `profiles`: the declared setup profiles, name → description; empty when the config declares none. */
-export function printWorkspaceHelp(profiles: Record<string, string>): void {
-  console.log(renderWorkspaceHelp(profiles));
+export function printWorkspaceHelp(): void {
+  console.log(renderWorkspaceHelp());
 }
 
-export function renderWorkspaceHelp(profiles: Record<string, string>): string {
-  const hasProfiles = Object.keys(profiles).length > 0;
-  const profileSynopsis = hasProfiles ? " [--profile <name>]" : "";
+export function renderWorkspaceHelp(): string {
   return [
     "Usage: workspace <command> [options]",
     "",
@@ -254,7 +249,7 @@ export function renderWorkspaceHelp(profiles: Record<string, string>): string {
     "ports, database, dev server).",
     "",
     "Commands:",
-    `  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter]${profileSynopsis}`,
+    "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter] [--full]",
     "      Set up the workspace. With <branch>, create a sibling worktree for it",
     "      (add -c to create the branch first). Without, set up the current worktree",
     "      (idempotent; bootstrap and retry path).",
@@ -266,7 +261,8 @@ export function renderWorkspaceHelp(profiles: Record<string, string>): string {
     "      join it with `wait`.",
     "      With --enter, drop into an interactive shell in the new worktree (exit to return);",
     "      entered once READY, or immediately with -d. Requires a branch and $SHELL.",
-    ...(hasProfiles ? profileHelpLines(profiles) : []),
+    "      --full: also run the dev setup (ports, run files, infrastructure); a dev failure leaves",
+    "      the workspace ready.",
     "  remove [<dir>] [--force]",
     "      Remove a workspace, selected by directory (path or basename);",
     "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
@@ -276,7 +272,7 @@ export function renderWorkspaceHelp(profiles: Record<string, string>): string {
     "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
     "      and drop their registry entries, then run `git worktree prune`.",
     "  status [<dir>]",
-    "      Print a workspace summary (branch, readiness, ports, dev-server).",
+    "      Print a workspace summary (branch, readiness, allocated ports, dev-server).",
     "      Selected by directory (path or basename); the current worktree when omitted.",
     "  wait [<dir>]",
     "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
@@ -290,15 +286,6 @@ export function renderWorkspaceHelp(profiles: Record<string, string>): string {
     "  -h, --help          Show this help message.",
     "  -v, --version       Print the workspace version.",
   ].join("\n");
-}
-
-function profileHelpLines(profiles: Record<string, string>): string[] {
-  const entries = Object.entries(profiles);
-  const width = Math.max(...entries.map(([name]) => name.length));
-  return [
-    "      --profile <name>: apply a setup profile to the current main worktree. Profiles:",
-    ...entries.map(([name, description]) => `        ${name.padEnd(width)}  ${description}`),
-  ];
 }
 
 export function printWorkspaceVersion(): void {
@@ -316,6 +303,7 @@ export type DevCommand =
   | { kind: "down"; all: boolean }
   | { kind: "list" }
   | { kind: "status" }
+  | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
@@ -342,6 +330,8 @@ function parseDevSubcommand(subcommand: string, tokens: string[]): DevCommand {
       return parseDevList(tokens);
     case "status":
       return parseDevStatus(tokens);
+    case "setup":
+      return parseDevSetup(tokens);
     default:
       throw new ConfigError(`Unknown command "${subcommand}". Run \`dev --help\`.`);
   }
@@ -415,6 +405,27 @@ function parseDevStatus(tokens: string[]): DevCommand {
   return { kind: "status" };
 }
 
+/** `--from-finalize` is internal: only the finalize child of `workspace setup --full` passes it. */
+function parseDevSetup(tokens: string[]): DevCommand {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: {
+      force: { type: "boolean" },
+      "reset-ports": { type: "boolean" },
+      "from-finalize": { type: "boolean" },
+    },
+    allowPositionals: true,
+    strict: true,
+  });
+  rejectDevPositionals(positionals, "dev setup");
+  return {
+    kind: "setup",
+    force: values.force ?? false,
+    resetPorts: values["reset-ports"] ?? false,
+    fromFinalize: values["from-finalize"] ?? false,
+  };
+}
+
 function rejectDevPositionals(positionals: string[], command: string): void {
   if (positionals.length > 0) {
     throw new ConfigError(`\`${command}\` takes no positional arguments.`);
@@ -422,26 +433,34 @@ function rejectDevPositionals(positionals: string[], command: string): void {
 }
 
 export function printDevHelp(): void {
-  console.log(
-    [
-      "Usage: dev [command] [options]",
-      "",
-      "Start, stop, or list dev-server processes for worktree-based environments.",
-      "",
-      "Commands:",
-      "  dev               Start in the foreground, streaming logs from startup; CTRL+C stops it.",
-      "                    If one is already running here, attach to its logs instead.",
-      "  dev up            Start in the background and return once ready.",
-      "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
-      "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
-      "  dev list          List active dev-servers across all worktrees.",
-      "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
-      "  dev --help        Show this help message (alias: -h).",
-      "",
-      "Options (dev, dev up, dev restart):",
-      "  --evict     Evict the oldest dev-server when the cap is reached.",
-      "Options (dev, dev up):",
-      "  --restart   If a dev-server is already running here, stop it first, then start.",
-    ].join("\n"),
-  );
+  console.log(renderDevHelp());
+}
+
+export function renderDevHelp(): string {
+  return [
+    "Usage: dev [command] [options]",
+    "",
+    "Start, stop, or list dev-server processes for worktree-based environments.",
+    "",
+    "Commands:",
+    "  dev               Start in the foreground, streaming logs from startup; CTRL+C stops it.",
+    "                    If one is already running here, attach to its logs instead.",
+    "  dev up            Start in the background and return once ready.",
+    "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
+    "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
+    "  dev list          List active dev-servers across all worktrees.",
+    "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
+    "  dev setup [--force] [--reset-ports]",
+    "                    Allocate this workspace's ports, write its run files, and provision its",
+    "                    infrastructure once. Also runs before every start.",
+    "  dev --help        Show this help message (alias: -h).",
+    "",
+    "Options (dev, dev up, dev restart):",
+    "  --evict     Evict the oldest dev-server when the cap is reached.",
+    "Options (dev, dev up):",
+    "  --restart   If a dev-server is already running here, stop it first, then start.",
+    "Options (dev setup):",
+    "  --force        Provision the infrastructure again (the setup hook must be idempotent).",
+    "  --reset-ports  Allocate this workspace's ports again. Refused while its dev-server runs.",
+  ].join("\n");
 }

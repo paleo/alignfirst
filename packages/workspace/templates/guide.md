@@ -6,14 +6,14 @@
 # Workspace — Guide
 
 {{/DEV}}
-{{#PORTS}}
-A **workspace** is a git worktree (with its branch) plus its own dev setup: dedicated ports, config files, a database, and a dev server you can bring up or down. Workspaces are isolated, so you can run several branches in parallel.
+{{#DEV}}
+A **workspace** is a git worktree (with its branch) plus its own dev setup: dedicated ports, config files, infrastructure such as a database, and a dev server you can bring up or down. Ports and infrastructure arrive with the first `{{DEV_BASE}}` or `{{DEV}} setup`. Workspaces are isolated, so you can run several branches in parallel.
 
-{{/PORTS}}
-{{^PORTS}}
+{{/DEV}}
+{{^DEV}}
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel.
 
-{{/PORTS}}
+{{/DEV}}
 ## Setting up a workspace
 
 ```sh
@@ -22,24 +22,16 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. New branches have no upstream; set one when you first push. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
-{{#PORTS}}
-`setup` creates the worktree (branch, ports, symlinks, config files), then runs the project's finalize step: install dependencies, build, provision the database.
+`setup` creates the worktree (branch, symlinks, config files), then runs the project's finalize step: install dependencies and build.
 
-{{/PORTS}}
-{{^PORTS}}
-`setup` creates the worktree (branch, symlinks, config files), then runs the project's finalize step: typically install dependencies and build.
-
-{{/PORTS}}
 It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
 
 **Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
 
-{{#PROFILES}}
-**Setup profiles:** `setup --profile <name>` rewrites the main worktree's ignored configuration for that environment. Linked worktrees set up afterwards inherit the resulting files.
+{{#DEV}}
+`setup --full` also runs the dev setup once the workspace is ready: ports, run files and infrastructure. A dev failure leaves the workspace ready and makes the command exit 1; `{{DEV}} setup` retries it.
 
-{{LIST:profiles}}
-
-{{/PROFILES}}
+{{/DEV}}
 ### Recovery from a failed setup
 
 If setup fails (check the setup log), do **not** delete the worktree. From inside it, `setup` is idempotent. Fix the issues and repeat until the log ends with `READY:`:
@@ -101,6 +93,8 @@ When you only want a bare worktree (no symlinks, no config files, no finalize st
 ```sh
 {{COMMANDS:dev}}
 ```
+
+A workspace's ports are allocated at its first dev start, stay fixed, and are listed by `{{WS}} list` / `status`.
 
 **Concurrent cap.** `dev` / `dev up` cap simultaneously running dev-servers. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
 

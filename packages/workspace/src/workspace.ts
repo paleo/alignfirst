@@ -30,30 +30,21 @@ import {
   removeDevServerEntryByWorktree,
 } from "./dev-servers-registry.js";
 import { ConfigError, WorkspaceError } from "./errors.js";
-import { printGuide } from "./guide.js";
 import {
-  type CopyAndPatchOutcome,
-  copyAndPatchFile,
-  formatDuration,
-  type ResolvedFileSource,
-  setupLogPath,
-  setupProgressPath,
-} from "./helpers.js";
+  type GitignoredFileEntry,
+  type PatchContext,
+  type SetupContextBase,
+  seedFiles,
+} from "./file-entries.js";
+import { printGuide } from "./guide.js";
+import { formatDuration, setupLogPath, setupProgressPath } from "./helpers.js";
 import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { refuseOldRegistry, runMigrate } from "./migrate.js";
 import { findOrphanNames } from "./orphans.js";
-import { wsCmd } from "./package-manager.js";
-import { checkPortClaim } from "./port-claim.js";
-import {
-  firstPortOf,
-  type PortsConfig,
-  portsForIndex,
-  type ResolvedPortsConfig,
-  resolvePortsConfig,
-} from "./ports.js";
+import { devCmd, wsCmd } from "./package-manager.js";
+import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
-  indexOfEntry,
   markWorkspaceFailed,
   markWorkspaceReady,
   readWorkspaces,
@@ -62,7 +53,6 @@ import {
   registerWorkspace,
   registryDirFor,
   resolveCurrentWorkspace,
-  staleWorkspaceMessage,
   updateWorkspaces,
   type WorkspaceEntry,
   type WorkspacesRegistry,
@@ -91,13 +81,11 @@ export interface WorkspaceConfig {
   /**
    * Absolute path to your dev-server script (the file that calls `runDevServer`). On
    * `workspace remove`, the kernel shells out to `node <devServerScript> down` with
-   * `cwd: <target worktree>`. Typically
+   * `cwd: <target worktree>`; `setup --full` runs `node <devServerScript> setup`. Typically
    * `fileURLToPath(new URL('./dev-server.mjs', import.meta.url))` from your `workspace.mjs`.
    * Omit it when the project has no dev-server script.
    */
   devServerScript?: string;
-  /** Port scheme. Omit for portless mode: no port allocation, `ctx.ports` is empty. */
-  ports?: PortsConfig;
   /** Directories symlinked from the main worktree. */
   sharedDirs: string[];
   /**
@@ -105,7 +93,11 @@ export interface WorkspaceConfig {
    * Holds the setup log and dev-server logs.
    */
   runtimeDir: string;
-  /** Gitignored files seeded from main, a committed fallback/template, or content and patched per workspace. */
+  /**
+   * Gitignored files seeded from main, a committed fallback/template, or content and patched per
+   * workspace: the files install, build or tests need. A file that carries ports belongs in
+   * `DevServerConfig.runFiles`.
+   */
   gitignoredFiles: GitignoredFileEntry[];
   /**
    * Runs before `gitignoredFiles` are copied. Use this for setup work outside file-source
@@ -114,34 +106,24 @@ export interface WorkspaceConfig {
    */
   preSetup?: (ctx: PreSetupContext) => Promise<void> | void;
   /**
-   * Setup profiles selectable with `setup --profile <name>`; the key is the name. The kernel checks
-   * the name and lists the profiles in `--help` and `--guide`. The selection is never stored: linked
-   * worktrees inherit the rewritten main files through their `mainWorktree` sources.
-   */
-  setupProfiles?: Record<string, SetupProfile>;
-  /**
+   * Installs and builds the workspace. Infrastructure (database, seed) belongs in
+   * `DevServerConfig.setup`.
+   *
    * MUST be idempotent. After a failure, the user re-runs `workspace setup` from inside
    * the worktree — this callback will be invoked again with the same context. Re-runs must not
-   * error on pre-existing state (created directories, started containers, ran migrations,
-   * installed deps, etc.).
+   * error on pre-existing state (created directories, installed deps, etc.).
    *
    * Runs in a detached child whose stdout/stderr are already redirected to
    * `<runtimeDir>/logs/workspace-setup.log`. `console.log` and child-process `stdio: "inherit"` land there.
-   *
-   * May return `{ purgeData }` — an opaque blob persisted on the registry entry and handed back to
-   * {@link purgeInfrastructure}, so an orphaned worktree can still be torn down after its config is gone.
-   * Store only teardown identifiers you cannot re-derive at purge time (e.g. a random external resource
-   * id). Deterministic names — containers, volumes — derive from `name` + paths, so they don't belong here.
    */
-  finalizeWorkspace: (
-    ctx: FinalizeContext,
-  ) => Promise<FinalizeResult | undefined> | FinalizeResult | undefined;
+  finalizeWorkspace: (ctx: FinalizeContext) => Promise<void> | void;
   /**
    * Destructive infrastructure teardown (e.g. `docker compose down -v` to wipe volumes). Runs after
    * the dev-server stop on `workspace remove`, and on `workspace prune` / removing an orphaned
-   * worktree. MUST be idempotent and tolerate already-absent infrastructure: it may run when the
-   * worktree directory is gone (`ctx.purgeData` carries the recorded teardown identifiers; `ctx.worktree`
-   * no longer exists), so branch on the worktree's presence and tear down by name in that case.
+   * worktree, whether or not a `dev setup` ever succeeded. Tears down by the workspace name
+   * (`ctx.name`): every resource `DevServerConfig.setup` creates is named after it. MUST be
+   * idempotent and tolerate already-absent or partial infrastructure: it may run when the worktree
+   * directory is gone (`ctx.worktree` no longer exists), so never depend on the worktree's files.
    * Best-effort; errors should be swallowed.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
@@ -156,55 +138,12 @@ export interface WorkspaceConfig {
   worktreeDirName?: WorktreeDirNameFn;
 }
 
-/** Shared core of the setup-side callback contexts. */
-export interface SetupContextBase {
-  /** Workspace name: the worktree directory basename. */
-  name: string;
-  currentWorktree: string;
-  mainWorktree: string;
-  /** `true` when operating on the main worktree (i.e. `workspace setup` from the main checkout). */
-  isMainWorktree: boolean;
-}
-
 /** Context passed to {@link WorkspaceConfig.preSetup}. */
 export interface PreSetupContext extends SetupContextBase {
   /** Mirrors `--force`. Hooks may use it to overwrite previously bootstrapped files. */
   force: boolean;
-  /**
-   * The `--profile <name>` selection, set only during `setup --profile`. This is where a profile
-   * checks its external requirements (an environment variable, a reachable host): seeding has not
-   * written any file yet.
-   */
-  profile?: string;
   /** Writes to stdout and the setup log. */
   log: (msg: string) => void;
-}
-
-/** One entry of {@link WorkspaceConfig.setupProfiles}. */
-export interface SetupProfile {
-  /** One line, shown in `--help` and `--guide`. */
-  description: string;
-  /**
-   * Rewrites the main worktree's ignored files for this environment. Runs only on the main worktree,
-   * after `gitignoredFiles` are seeded; never forwarded to the finalize child.
-   *
-   * Contract: check every computed change before the first write; be idempotent — reapplying the
-   * same profile produces the same files; leave unrelated files untouched.
-   */
-  apply: (ctx: ApplyProfileContext) => Promise<void> | void;
-}
-
-/** Context passed to {@link SetupProfile.apply}. */
-export interface ApplyProfileContext extends SetupContextBase {
-  /** Empty in portless mode. */
-  ports: Record<string, number>;
-  /** Writes to stdout and the setup log. */
-  log: (msg: string) => void;
-}
-
-/** Return value of {@link WorkspaceConfig.finalizeWorkspace}. */
-export interface FinalizeResult {
-  purgeData: unknown;
 }
 
 /**
@@ -214,8 +153,6 @@ export interface FinalizeResult {
 export interface FinalizeContext extends SetupContextBase {
   /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
   branch: string;
-  /** Empty in portless mode. */
-  ports: Record<string, number>;
   force: boolean;
   verbose: boolean;
   /**
@@ -233,72 +170,23 @@ export interface FinalizeContext extends SetupContextBase {
 export interface SummaryContext extends SetupContextBase {
   /** Live-resolved branch of `currentWorktree`. `"(detached)"` for detached HEAD. */
   branch: string;
-  /** Empty in portless mode. */
-  ports: Record<string, number>;
   /** Finalize status. `"pending"` until `finalizeWorkspace` succeeds, then `"ready"`. */
   status: WorkspaceStatus;
 }
 
 /** Context passed to {@link WorkspaceConfig.purgeInfrastructure}. */
 export interface PurgeContext {
-  /** The target worktree. May no longer exist on disk when purging an orphan — check before
-   * running cwd-bound commands; tear down by name (from {@link purgeData}) in that case. */
+  /** The target worktree. May no longer exist on disk when purging an orphan: tear down by name. */
   worktree: string;
   mainWorktree: string;
   /** Workspace name: the registry key, which outlives the deleted worktree directory. */
   name: string;
-  /** The blob the consumer returned from `finalizeWorkspace`, if any. */
+  /**
+   * Legacy: the blob an old `finalizeWorkspace` returned, still carried by entries created before
+   * teardown by name. New workspaces never have one. Removed in a later version.
+   */
   purgeData?: unknown;
   verbose: boolean;
-}
-
-/** One gitignored file seeded from its source and patched per workspace. */
-export interface GitignoredFileEntry {
-  /** Path relative to the worktree root. Written to the current worktree. */
-  path: string;
-  /** Where the initial content comes from. */
-  source: GitignoredFileSource;
-  /**
-   * Rewrites the source content per workspace. Omit to copy the content verbatim. When the file
-   * already exists, `setup` re-applies it to the current content and rewrites the file only when
-   * the result differs. It must leave the lines it does not know untouched; `setup` refuses (throws)
-   * a patch that is not idempotent.
-   */
-  patch?: (content: string, ctx: PatchContext) => string;
-  /**
-   * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
-   * Applies to the selected path for `mainWorktree` and `committed` sources; ignored for `content`.
-   */
-  optional?: boolean;
-}
-
-/** Where a {@link GitignoredFileEntry}'s initial content comes from. */
-export type GitignoredFileSource = MainWorktreeSource | CommittedSource | ContentSource;
-
-/** Copies the entry path from the main worktree, or a committed fallback when it is absent. */
-export interface MainWorktreeSource {
-  kind: "mainWorktree";
-  /** Optional template path relative to the current worktree. */
-  fallback?: string;
-}
-
-/** Copies a committed template from the worktree's own checkout, so it tracks the branch. */
-export interface CommittedSource {
-  kind: "committed";
-  /** Path of the template, relative to the worktree root (e.g. a committed `.example` file). */
-  path: string;
-}
-
-/** Uses the given content verbatim. The function form receives patch context and may be async. */
-export interface ContentSource {
-  kind: "content";
-  content: string | ((ctx: PatchContext) => string | Promise<string>);
-}
-
-/** Context passed to functional content sources and {@link GitignoredFileEntry.patch}. */
-export interface PatchContext extends SetupContextBase {
-  /** Empty in portless mode. */
-  ports: Record<string, number>;
 }
 
 /** Per-invocation state shared by every command flow. */
@@ -306,8 +194,6 @@ interface Kernel {
   config: WorkspaceConfig;
   /** The registry directory, relative to a worktree root. */
   registryDir: string;
-  /** Resolved port scheme. `undefined` in portless mode. */
-  ports?: ResolvedPortsConfig;
 }
 
 export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
@@ -318,14 +204,14 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(`Warning: ${err.message}`);
-      printWorkspaceHelp(profileDescriptions(config));
+      printWorkspaceHelp();
       process.exit(1);
     }
     throw err;
   }
 
   if (command.kind === "help") {
-    printWorkspaceHelp(profileDescriptions(config));
+    printWorkspaceHelp();
     return;
   }
 
@@ -339,17 +225,11 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
       runtimeDir: config.runtimeDir,
       sharedDirs: config.sharedDirs,
       hasDevServer: config.devServerScript !== undefined,
-      hasPorts: config.ports !== undefined,
-      profiles: profileDescriptions(config),
     });
     return;
   }
 
-  const kernel: Kernel = {
-    config,
-    registryDir: registryDirFor(config.runtimeDir),
-    ports: resolveConfigPorts(config),
-  };
+  const kernel: Kernel = { config, registryDir: registryDirFor(config.runtimeDir) };
 
   if (!existsSync(config.workspaceScript)) {
     console.error(
@@ -361,12 +241,10 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
   try {
     const ctx = detectWorktree();
-    checkPortClaim(ctx.currentWorktree, kernel.ports);
 
     if (command.kind === "migrate") {
       await runMigrate(ctx, {
         registryDir: kernel.registryDir,
-        ports: kernel.ports,
         hasPurgeInfrastructure: config.purgeInfrastructure !== undefined,
       });
       return;
@@ -398,20 +276,27 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
         await handleRemove(command, ctx, run, kernel);
         return;
       case "setup": {
-        const { name, worktree } = await runSetup(command, ctx, run, kernel);
+        const { name, worktree, status } = await runSetup(command, ctx, run, kernel);
+        // An already finalized workspace gets no finalize, so no dev step from the finalize child:
+        // this process runs it, after the wait.
+        const devStepHere = command.full && status === "ready";
         // Default: block until the detached finalize settles (READY/FAILED), showing progress.
         // `--detached` skips the wait and returns as soon as the worktree exists — the caller joins
         // later with `wait`.
         if (!command.detached) {
-          await waitForWorkspace(name, kernel, { formatSummary: false, verbose });
+          await waitForWorkspace(name, kernel, {
+            formatSummary: false,
+            verbose,
+            full: command.full && !devStepHere,
+          });
         }
+        if (devStepHere) await runDevStepHere(kernel, ctx.mainWorktree, name, worktree);
         // The worktree exists once `runSetup` returns, so `--enter` can enter in either mode.
         if (command.enter) enterWorktree(worktree);
         return;
       }
     }
   } catch (err) {
-    // `ConfigError` too: `ports.compute` is only validated per index, inside the command flows.
     if (err instanceof WorkspaceError || err instanceof ConfigError) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
@@ -420,28 +305,63 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
   }
 }
 
-/** The declared setup profiles as name → description; empty when the config declares none. */
-function profileDescriptions(config: WorkspaceConfig): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(config.setupProfiles ?? {}).map(([name, profile]) => [
-      name,
-      profile.description,
-    ]),
-  );
+/** `setup --full` on an already finalized workspace: the dev step runs in this process. */
+async function runDevStepHere(
+  kernel: Kernel,
+  mainWorktree: string,
+  name: string,
+  worktree: string,
+): Promise<void> {
+  const failure = await runDevSetupChild({
+    kernel,
+    mainWorktree,
+    name,
+    worktree,
+    fromFinalize: false,
+  });
+  if (failure === undefined) return;
+  console.error(devSetupFailedMessage(failure));
+  process.exit(1);
 }
 
-/** Validates the `ports` group eagerly, on every command, so a broken config fails fast. */
-function resolveConfigPorts(config: WorkspaceConfig): ResolvedPortsConfig | undefined {
-  if (config.ports === undefined) return;
-  try {
-    return resolvePortsConfig(config.ports);
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
-    }
-    throw err;
-  }
+function devSetupFailedMessage(message: string): string {
+  return `Workspace ready; dev setup failed: ${message}. Run \`${devCmd("setup")}\` to retry.`;
+}
+
+interface DevSetupChildInput {
+  kernel: Kernel;
+  mainWorktree: string;
+  name: string;
+  worktree: string;
+  /** Passes `--from-finalize`, so the dev setup accepts the `pending` workspace. */
+  fromFinalize: boolean;
+}
+
+/**
+ * Runs `node <devServerScript> setup` in the worktree, with the caller's stdio. Returns the failure
+ * message, or `undefined` on success. When the dev-server could not record its failure, records
+ * `dev setup exited with code <n>`.
+ */
+async function runDevSetupChild(input: DevSetupChildInput): Promise<string | undefined> {
+  const { kernel, mainWorktree, name, worktree } = input;
+  const { devServerScript } = kernel.config;
+  if (devServerScript === undefined) return;
+  const startedAt = new Date().toISOString();
+  const args = [devServerScript, "setup"];
+  if (input.fromFinalize) args.push("--from-finalize");
+  const result = spawnSync(process.execPath, args, { cwd: worktree, stdio: "inherit" });
+  if (result.status === 0) return;
+  const fallback = result.error
+    ? `dev setup could not run: ${result.error.message}`
+    : `dev setup exited with code ${result.status ?? result.signal}`;
+  return updateWorkspaces(mainWorktree, kernel.registryDir, (registry) => {
+    const entry = registry.workspaces[name];
+    if (!entry) return fallback;
+    const recorded = entry.devSetupFailure;
+    if (recorded !== undefined && recorded.at >= startedAt) return recorded.message;
+    entry.devSetupFailure = { at: new Date().toISOString(), message: fallback };
+    return fallback;
+  });
 }
 
 /**
@@ -474,28 +394,30 @@ async function runSetup(
   ctx: WorktreeContext,
   run: RunCtx,
   kernel: Kernel,
-): Promise<{ name: string; worktree: string }> {
+): Promise<{ name: string; worktree: string; status: WorkspaceStatus }> {
   const { config, registryDir } = kernel;
-  const profile = selectProfile(command, ctx, config);
+  if (command.full && config.devServerScript === undefined) {
+    throw new WorkspaceError(
+      "`--full` runs the dev setup, but the workspace config declares no `devServerScript`.",
+    );
+  }
   const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
   refuseIfFinalizePending(setupCtx, registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
-  const { name, status, portIndex } = await registerWorkspace({
+  const { name, status } = await registerWorkspace({
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
     registryDir,
     isMainWorktree: setupCtx.isMainWorktree,
-    ports: kernel.ports,
     force: command.force,
   });
-  const ports = kernel.ports ? portsForIndex(kernel.ports, portIndex ?? 0) : {};
   const log = openSetupLog(setupCtx.currentWorktree, config.runtimeDir, run.verbose);
 
   // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
   // A `ready` entry stays `ready`: the finalize outcome is unchanged and nothing forces a re-finalize.
   try {
-    await prepareWorktree({ command, setupCtx, kernel, name, ports, profile, log });
-    log.tee(config.formatSummary({ ...setupCtx, name, branch, ports, status }));
+    await prepareWorktree({ command, setupCtx, kernel, name, log });
+    log.tee(config.formatSummary({ ...setupCtx, name, branch, status }));
   } catch (err) {
     const message = errorMessage(err);
     log.append(`FAILED: ${message}`);
@@ -515,6 +437,7 @@ async function runSetup(
 
   const finalizeArgs = [config.workspaceScript, "__finalize"];
   if (command.force) finalizeArgs.push("--force");
+  if (command.full) finalizeArgs.push("--full");
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
     stdio: ["ignore", log.fd, log.fd],
@@ -522,43 +445,11 @@ async function runSetup(
   });
   child.unref();
   closeSync(log.fd);
-  return { name, worktree: setupCtx.currentWorktree };
+  return { name, worktree: setupCtx.currentWorktree, status };
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** The `--profile` selection, checked against the config and the worktree before any write. */
-interface SelectedProfile {
-  name: string;
-  apply: (ctx: ApplyProfileContext) => Promise<void> | void;
-}
-
-function selectProfile(
-  command: SetupCommand,
-  ctx: WorktreeContext,
-  config: WorkspaceConfig,
-): SelectedProfile | undefined {
-  if (command.profile === undefined) return;
-  const profiles = config.setupProfiles ?? {};
-  const names = Object.keys(profiles);
-  if (names.length === 0) {
-    throw new WorkspaceError(
-      "This project declares no setup profile (no `setupProfiles` in the workspace config).",
-    );
-  }
-  if (!Object.hasOwn(profiles, command.profile)) {
-    throw new WorkspaceError(
-      `Unknown profile "${command.profile}". Declared profiles: ${names.join(", ")}.`,
-    );
-  }
-  if (!ctx.isMainWorktree) {
-    throw new WorkspaceError(
-      `\`--profile\` applies only to the main worktree. Run it from ${ctx.mainWorktree}.`,
-    );
-  }
-  return { name: command.profile, apply: profiles[command.profile].apply };
 }
 
 interface SetupLog {
@@ -596,46 +487,25 @@ interface PrepareWorktreeInput {
   setupCtx: WorktreeContext;
   kernel: Kernel;
   name: string;
-  ports: Record<string, number>;
-  profile?: SelectedProfile;
   log: SetupLog;
 }
 
 /** The pre-finalize phase: hooks and file writes between registration and the summary. */
 async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
-  const { command, setupCtx, kernel, name, ports, profile, log } = input;
+  const { command, setupCtx, kernel, name, log } = input;
   const { config } = kernel;
-  if (kernel.ports) {
-    log.verbose(
-      `Using ports (${Object.entries(ports)
-        .map(([portName, port]) => `${portName}: ${port}`)
-        .join(", ")})`,
-    );
-  }
   if (config.preSetup) {
-    await config.preSetup({
-      ...setupCtx,
-      name,
-      force: command.force,
-      profile: command.profile,
-      log: log.tee,
-    });
+    await config.preSetup({ ...setupCtx, name, force: command.force, log: log.tee });
   }
   linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
   linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
-  await seedGitignoredFiles(setupCtx, config.gitignoredFiles, name, ports, command.force, log);
-  if (profile) await applySelectedProfile(profile, { ...setupCtx, name, ports, log: log.tee });
-}
-
-async function applySelectedProfile(
-  selected: SelectedProfile,
-  ctx: ApplyProfileContext,
-): Promise<void> {
-  try {
-    await selected.apply(ctx);
-  } catch (err) {
-    throw new WorkspaceError(`Profile "${selected.name}": ${errorMessage(err)}`, { cause: err });
-  }
+  const patchCtx: PatchContext = {
+    name,
+    mainWorktree: setupCtx.mainWorktree,
+    currentWorktree: setupCtx.currentWorktree,
+    isMainWorktree: setupCtx.isMainWorktree,
+  };
+  await seedFiles({ entries: config.gitignoredFiles, ctx: patchCtx, force: command.force, log });
 }
 
 /**
@@ -691,13 +561,6 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
     return;
   }
 
-  const index = kernel.ports ? indexOfEntry(entry) : undefined;
-  if (kernel.ports && index === undefined) {
-    appendLog(`FAILED: ${staleWorkspaceMessage(name, entry.worktree)}`);
-    process.exit(1);
-  }
-  const ports = kernel.ports && index !== undefined ? portsForIndex(kernel.ports, index) : {};
-
   appendLog(`--- finalizing workspace ${name} at ${new Date().toISOString()} ---`);
 
   const setupContext: FinalizeContext = {
@@ -706,19 +569,13 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
     isMainWorktree: ctx.isMainWorktree,
     name,
     branch,
-    ports,
     force: command.force,
     verbose: false,
     progress,
   };
 
   try {
-    const result = await config.finalizeWorkspace(setupContext);
-    await markWorkspaceReady(ctx.mainWorktree, registryDir, name, result?.purgeData);
-    rmSync(progressPath, { force: true });
-    appendLog("============================================================");
-    appendLog(`READY: branch ${branch} (workspace ${name})`);
-    appendLog("============================================================");
+    await config.finalizeWorkspace(setupContext);
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
@@ -728,6 +585,24 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
     if (stack) appendLog(stack);
     process.exit(1);
   }
+
+  // `ready` means the workspace's own setup succeeded: a dev failure is only recorded.
+  if (command.full) {
+    progress("Dev setup");
+    const failure = await runDevSetupChild({
+      kernel,
+      mainWorktree: ctx.mainWorktree,
+      name,
+      worktree: ctx.currentWorktree,
+      fromFinalize: true,
+    });
+    if (failure !== undefined) appendLog(`DEV SETUP FAILED: ${failure}`);
+  }
+  await markWorkspaceReady(ctx.mainWorktree, registryDir, name);
+  rmSync(progressPath, { force: true });
+  appendLog("============================================================");
+  appendLog(`READY: branch ${branch} (workspace ${name})`);
+  appendLog("============================================================");
 }
 
 /** The single workspace a `status`/`wait`/`remove` selector points at. */
@@ -783,7 +658,6 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
   const ctx = detectWorktree();
   const entry: WorkspaceEntry | undefined = readWorkspaces(ctx.mainWorktree, registryDir)
     .workspaces[target.name];
-  const ports = portsForEntry(kernel, entry, target);
 
   const status: WorkspaceStatus = entry?.status ?? "pending";
   const setupLog = setupLogPath(worktreeForLog, config.runtimeDir);
@@ -795,7 +669,6 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
     config.formatSummary({
       name: target.name,
       branch,
-      ports,
       currentWorktree: targetWorktree,
       mainWorktree: ctx.mainWorktree,
       isMainWorktree,
@@ -811,27 +684,25 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
     console.log(`Pending since ${elapsed} ago (tail ${setupLog})`);
   }
+  if (entry) printDevSetupState(entry, now);
   if (config.devServerScript !== undefined) {
     printDevServerBlock(config, registryDir, ctx.mainWorktree, targetWorktree, now);
   }
 }
 
-/**
- * The workspace's ports, empty in portless mode. A missing entry is the synthesized main worktree
- * (index 0); a registered entry without a port index predates the `ports` config, and is fatal.
- */
-function portsForEntry(
-  kernel: Kernel,
-  entry: WorkspaceEntry | undefined,
-  target: ResolvedTarget,
-): Record<string, number> {
-  if (kernel.ports === undefined) return {};
-  const index = entry === undefined ? 0 : indexOfEntry(entry);
-  if (index === undefined) {
-    console.error(`Error: ${staleWorkspaceMessage(target.name, target.worktree)}`);
-    process.exit(1);
-  }
-  return portsForIndex(kernel.ports, index);
+/** The ports `dev setup` allocated, and its last failure. */
+function printDevSetupState(entry: WorkspaceEntry, now: number): void {
+  if (hasPorts(entry)) console.log(`Ports: ${formatPorts(entry.ports)}`);
+  const failure = entry.devSetupFailure;
+  if (failure === undefined) return;
+  const elapsed = formatDuration(now - Date.parse(failure.at));
+  console.log(`Dev setup failed: ${failure.message} (${elapsed} ago)`);
+}
+
+function hasPorts(
+  entry: WorkspaceEntry,
+): entry is WorkspaceEntry & { ports: Record<string, number> } {
+  return entry.ports !== undefined && Object.keys(entry.ports).length > 0;
 }
 
 function printDevServerBlock(
@@ -878,9 +749,9 @@ async function runList(kernel: Kernel): Promise<void> {
     return;
   }
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
-  const resolvedPorts = kernel.ports;
+  const showPorts = entries.some(([, entry]) => hasPorts(entry));
   const headers = ["NAME", "TYPE", "STATUS", "DEV"];
-  if (resolvedPorts) headers.push("PORTS");
+  if (showPorts) headers.push("PORTS");
   headers.push("BRANCH", "PATH", "CREATED");
   const rows = entries.map(([name, entry]) => {
     const cells = [
@@ -889,7 +760,7 @@ async function runList(kernel: Kernel): Promise<void> {
       entry.status,
       liveSet.has(resolve(entry.worktree)) ? "up" : "-",
     ];
-    if (resolvedPorts) cells.push(firstPortCell(resolvedPorts, entry));
+    if (showPorts) cells.push(hasPorts(entry) ? Object.values(entry.ports).join(",") : "-");
     cells.push(getWorktreeBranch(entry.worktree) ?? "(detached)", entry.worktree, entry.createdAt);
     return cells;
   });
@@ -903,13 +774,6 @@ function sortedEntries(registry: WorkspacesRegistry): [string, WorkspaceEntry][]
     if (a.main !== b.main) return a.main ? -1 : 1;
     return nameA.localeCompare(nameB);
   });
-}
-
-/** The first port of the entry, or `?` when the entry predates the `ports` config. */
-function firstPortCell(resolvedPorts: ResolvedPortsConfig, entry: WorkspaceEntry): string {
-  const index = indexOfEntry(entry);
-  if (index === undefined) return "?";
-  return String(firstPortOf(resolvedPorts, index));
 }
 
 function renderTable(headers: string[], rows: string[][]): string[] {
@@ -1044,13 +908,21 @@ async function runWait(command: WaitCommand, kernel: Kernel, verbose: boolean): 
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
   const ctx = detectWorktree();
   const target = resolveTarget(command.selector, ctx, kernel.registryDir);
-  await waitForWorkspace(target.name, kernel, { verbose, replayLog: true });
+  await waitForWorkspace(target.name, kernel, { verbose, replayLog: true, full: true });
+}
+
+interface WaitOptions {
+  formatSummary?: boolean;
+  verbose?: boolean;
+  replayLog?: boolean;
+  /** A `ready` entry with a `devSetupFailure` is reported as a failure. */
+  full?: boolean;
 }
 
 async function waitForWorkspace(
   name: string,
   kernel: Kernel,
-  options: { formatSummary?: boolean; verbose?: boolean; replayLog?: boolean } = {},
+  options: WaitOptions = {},
 ): Promise<void> {
   const { config, registryDir } = kernel;
   const formatSummary = options.formatSummary ?? true;
@@ -1082,6 +954,10 @@ async function waitForWorkspace(
     }
     if (entry.status === "ready") {
       ticker.stop();
+      if (options.full && entry.devSetupFailure !== undefined) {
+        console.error(devSetupFailedMessage(entry.devSetupFailure.message));
+        process.exit(1);
+      }
       console.log("… ready");
       if (formatSummary) {
         const target: ResolvedTarget = {
@@ -1433,80 +1309,6 @@ function linkWorkspaceRegistry(
   }
   symlinkSync(relative(runtimeRoot, mainDir), link);
   log("Created workspace-registry symlink → main worktree.");
-}
-
-async function seedGitignoredFiles(
-  ctx: WorktreeContext,
-  entries: GitignoredFileEntry[],
-  name: string,
-  ports: Record<string, number>,
-  force: boolean,
-  log: SetupLog,
-): Promise<void> {
-  const patchCtx: PatchContext = {
-    name,
-    ports,
-    mainWorktree: ctx.mainWorktree,
-    currentWorktree: ctx.currentWorktree,
-    isMainWorktree: ctx.isMainWorktree,
-  };
-  const updated: string[] = [];
-  try {
-    for (const entry of entries) {
-      const { patch } = entry;
-      const outcome = await copyAndPatchFile({
-        currentWorktree: ctx.currentWorktree,
-        relPath: entry.path,
-        resolveSource: () => resolveFileSource(entry, patchCtx),
-        patch: patch ? (content: string) => patch(content, patchCtx) : undefined,
-        force,
-        optional: entry.optional ?? false,
-      });
-      if (outcome.kind === "updated") updated.push(entry.path);
-      else log.verbose(outcomeLine(entry.path, outcome));
-    }
-  } finally {
-    // Also on a later entry's failure: the files already rewritten stay reported.
-    if (updated.length > 0) log.tee(`Updated ${updated.join(", ")}.`);
-  }
-}
-
-function outcomeLine(
-  relPath: string,
-  outcome: Exclude<CopyAndPatchOutcome, { kind: "updated" }>,
-): string {
-  switch (outcome.kind) {
-    case "created":
-      return `Created ${relPath}.`;
-    case "overwritten":
-      return `Overwritten ${relPath}.`;
-    case "upToDate":
-      return `Skipped ${relPath} (already up to date).`;
-    case "keptExisting":
-      return `Skipped ${relPath} (already exists; use --force to overwrite).`;
-    case "sourceMissing":
-      return `Warning: source ${outcome.sourcePath} not found, skipping (optional).`;
-  }
-}
-
-export async function resolveFileSource(
-  entry: GitignoredFileEntry,
-  ctx: PatchContext,
-): Promise<ResolvedFileSource> {
-  const { source } = entry;
-  switch (source.kind) {
-    case "mainWorktree": {
-      const mainPath = join(ctx.mainWorktree, entry.path);
-      if (existsSync(mainPath) || source.fallback === undefined) return { path: mainPath };
-      return { path: join(ctx.currentWorktree, source.fallback) };
-    }
-    case "committed":
-      return { path: join(ctx.currentWorktree, source.path) };
-    case "content":
-      return {
-        content: typeof source.content === "function" ? await source.content(ctx) : source.content,
-      };
-  }
 }
 
 /**

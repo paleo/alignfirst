@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
-import type { CallbackServer } from "./server-descriptor.js";
+import type { CallbackServer, ServerContext } from "./server-descriptor.js";
 import { getWorktreeBranch } from "./worktree.js";
 
 const DEV_SERVERS_FILENAME = "dev-servers.json";
@@ -48,7 +48,11 @@ export interface StopAllInput {
   /** Callback-managed servers from the current process's config. Their `stop()` is invoked for each
    *  victim with `ctx.cwd = entry.worktree`. */
   callbackServers: CallbackServer[];
+  /** The ports of a victim worktree, for its `ServerContext`. */
+  portsOf: PortsLookup;
 }
+
+export type PortsLookup = (worktree: string) => Record<string, number>;
 
 export async function stopAllRegistered(input: StopAllInput): Promise<void> {
   const data = pruneAndPersist(input.mainWorktree, input.registryDir);
@@ -64,7 +68,7 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
       console.log(`  ${name} (PID ${pid})`);
       await stopProcessGroup(pid);
     }
-    await stopCallbacksForVictim(input.callbackServers, entry.worktree);
+    await stopCallbacksForVictim(input.callbackServers, victimContext(entry, input.portsOf));
   }
   writeDevServers(input.mainWorktree, input.registryDir, { servers: [] });
   console.log(`Stopped ${data.servers.length} dev-server(s).`);
@@ -75,6 +79,7 @@ export interface EvictInput {
   registryDir: string;
   count: number;
   callbackServers: CallbackServer[];
+  portsOf: PortsLookup;
   isAlive?: IsAliveFn;
   stop?: (pid: number) => Promise<void>;
 }
@@ -89,7 +94,7 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
     for (const pid of Object.values(entry.pids)) {
       if (isAlive(pid)) await stop(pid);
     }
-    await stopCallbacksForVictim(input.callbackServers, entry.worktree);
+    await stopCallbacksForVictim(input.callbackServers, victimContext(entry, input.portsOf));
   }
   const victimNames = new Set(victims.map((v) => v.name));
   const filtered = data.servers.filter((entry) => !victimNames.has(entry.name));
@@ -97,16 +102,20 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
   return victims;
 }
 
+function victimContext(entry: DevServerEntry, portsOf: PortsLookup): ServerContext {
+  return { cwd: entry.worktree, ports: portsOf(entry.worktree) };
+}
+
 async function stopCallbacksForVictim(
   callbackServers: CallbackServer[],
-  worktree: string,
+  ctx: ServerContext,
 ): Promise<void> {
   for (const server of [...callbackServers].reverse()) {
     console.log(`  ${server.name} (callback)`);
     try {
-      await server.stop({ cwd: worktree });
+      await server.stop(ctx);
     } catch (err) {
-      console.error(`  Failed to stop ${server.name} (${worktree}): ${(err as Error).message}`);
+      console.error(`  Failed to stop ${server.name} (${ctx.cwd}): ${(err as Error).message}`);
     }
   }
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDevArgs, parseWorkspaceArgs, renderWorkspaceHelp } from "../src/cli.js";
+import {
+  parseDevArgs,
+  parseWorkspaceArgs,
+  renderDevHelp,
+  renderWorkspaceHelp,
+} from "../src/cli.js";
 import { ConfigError } from "../src/errors.js";
 
 describe("parseWorkspaceArgs", () => {
@@ -36,29 +41,26 @@ describe("parseWorkspaceArgs", () => {
       enter: true,
       dedupe: false,
       detached: false,
-      profile: undefined,
+      full: false,
     });
     expect(verbose).toBe(true);
   });
 
-  it("parses `setup --profile <name>`", () => {
-    expect(parseWorkspaceArgs(["setup", "--profile", "assistant"]).command).toMatchObject({
+  it("parses `setup --full`, alone or with a branch", () => {
+    expect(parseWorkspaceArgs(["setup", "--full"]).command).toMatchObject({
       kind: "setup",
       branch: undefined,
-      profile: "assistant",
+      full: true,
     });
-    expect(
-      parseWorkspaceArgs(["setup", "--profile", "assistant", "--force", "-d"]).command,
-    ).toMatchObject({ profile: "assistant", force: true, detached: true });
+    expect(parseWorkspaceArgs(["setup", "-c", "feat/42", "--full", "-d"]).command).toMatchObject({
+      branch: "feat/42",
+      full: true,
+      detached: true,
+    });
   });
 
-  it("rejects `--profile` combined with a branch, with or without `-c`", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--profile", "assistant"])).toThrow(
-      ConfigError,
-    );
-    expect(() => parseWorkspaceArgs(["setup", "-c", "feat/42", "--profile", "assistant"])).toThrow(
-      ConfigError,
-    );
+  it("rejects the removed `--profile` flag", () => {
+    expect(() => parseWorkspaceArgs(["setup", "--profile", "assistant"])).toThrow(ConfigError);
   });
 
   it("rejects the removed `--slot` flag on setup", () => {
@@ -211,10 +213,15 @@ describe("parseWorkspaceArgs", () => {
   });
 
   it("parses `__finalize` without a positional", () => {
-    expect(parseWorkspaceArgs(["__finalize"]).command).toEqual({ kind: "finalize", force: false });
-    expect(parseWorkspaceArgs(["__finalize", "--force"]).command).toEqual({
+    expect(parseWorkspaceArgs(["__finalize"]).command).toEqual({
+      kind: "finalize",
+      force: false,
+      full: false,
+    });
+    expect(parseWorkspaceArgs(["__finalize", "--force", "--full"]).command).toEqual({
       kind: "finalize",
       force: true,
+      full: true,
     });
   });
 
@@ -251,18 +258,20 @@ describe("parseWorkspaceArgs", () => {
 });
 
 describe("renderWorkspaceHelp", () => {
-  it("lists the declared profiles, and omits `--profile` when none is declared", () => {
-    const withProfiles = renderWorkspaceHelp({
-      assistant: "HTTPS gateway environment",
-      local: "Plain localhost",
-    });
-    expect(withProfiles).toContain("[--profile <name>]");
-    expect(withProfiles).toContain("current main worktree");
-    expect(withProfiles).toContain("        assistant  HTTPS gateway environment");
-    expect(withProfiles).toContain("        local      Plain localhost");
-    const withoutProfiles = renderWorkspaceHelp({});
-    expect(withoutProfiles).not.toContain("--profile");
-    expect(withoutProfiles).not.toContain("assistant");
+  it("documents `setup --full` and no `--profile`", () => {
+    const help = renderWorkspaceHelp();
+    expect(help).toContain("[--enter] [--full]");
+    expect(help).toContain("--full: also run the dev setup");
+    expect(help).not.toContain("--profile");
+  });
+});
+
+describe("renderDevHelp", () => {
+  it("documents `dev setup` and its public options, not the internal one", () => {
+    const help = renderDevHelp();
+    expect(help).toContain("dev setup [--force] [--reset-ports]");
+    expect(help).toContain("--reset-ports");
+    expect(help).not.toContain("--from-finalize");
   });
 });
 
@@ -314,6 +323,26 @@ describe("parseDevArgs", () => {
 
   it("rejects positionals on `status`", () => {
     expect(() => parseDevArgs(["status", "x"])).toThrow(ConfigError);
+  });
+
+  it("parses `setup` and its options", () => {
+    expect(parseDevArgs(["setup"])).toEqual({
+      kind: "setup",
+      force: false,
+      resetPorts: false,
+      fromFinalize: false,
+    });
+    expect(parseDevArgs(["setup", "--force", "--reset-ports", "--from-finalize"])).toEqual({
+      kind: "setup",
+      force: true,
+      resetPorts: true,
+      fromFinalize: true,
+    });
+  });
+
+  it("rejects positionals and unknown flags on `setup`", () => {
+    expect(() => parseDevArgs(["setup", "x"])).toThrow(ConfigError);
+    expect(() => parseDevArgs(["setup", "--evict"])).toThrow(ConfigError);
   });
 
   it("parses `--help` / `-h`", () => {

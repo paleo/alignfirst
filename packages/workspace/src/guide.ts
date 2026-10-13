@@ -11,9 +11,8 @@ import { REGISTRY_SUBDIR } from "./workspaces.js";
 //   {{WS}} / {{DEV}} / {{DEV_BASE}} — inline command prefixes
 //   {{RUNTIME_DIR}} / {{REGISTRY_SUBDIR}} — the per-worktree runtime dir + its registry sub-dir
 //   {{LAYOUT:shared}} — the shared-dirs line, listing the configured `sharedDirs` by name
-//   {{LIST:profiles}} — the declared setup profiles, one `name` — description line each
-//   {{#DEV}}…{{/DEV}} / {{#PORTS}}…{{/PORTS}} / {{#PROFILES}}…{{/PROFILES}} — kept when the feature
-//     is configured, stripped otherwise ({{^…}} for the reverse). Markers own their line.
+//   {{#DEV}}…{{/DEV}} — kept when a dev-server is configured, stripped otherwise ({{^DEV}} for the
+//     reverse). Markers own their line.
 
 export interface GuideLayout {
   /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
@@ -22,10 +21,6 @@ export interface GuideLayout {
   sharedDirs: string[];
   /** `true` when the config declares `devServerScript`. */
   hasDevServer: boolean;
-  /** `true` when the config declares `ports`. */
-  hasPorts: boolean;
-  /** The declared setup profiles, name → description (config `setupProfiles`). Empty when none. */
-  profiles: Record<string, string>;
 }
 
 interface CommandRow {
@@ -77,11 +72,11 @@ function commandBlocks(
         command: `${ws} setup`,
         comment: "set up the current worktree (idempotent; bootstrap + retry path)",
       },
-      ...(hasProfiles(layout)
+      ...(layout.hasDevServer
         ? [
             {
-              command: `${ws} setup --profile <name>`,
-              comment: "apply a setup profile to the current main worktree (names below)",
+              command: `${ws} setup -c my-branch --full`,
+              comment: "also run the dev setup (ports, run files, infrastructure)",
             },
           ]
         : []),
@@ -99,7 +94,9 @@ function commandBlocks(
       },
       {
         command: `${ws} status`,
-        comment: `current worktree summary (branch, readiness${summaryExtras(layout)})`,
+        comment: `current worktree summary (branch, readiness${
+          layout.hasDevServer ? ", ports, dev-server" : ""
+        })`,
       },
       {
         command: `${ws} status ../my-worktree`,
@@ -135,6 +132,16 @@ function commandBlocks(
         command: `${dev} status`,
         comment: "report whether this worktree's dev-server is UP or DOWN",
       },
+      {
+        command: `${dev} setup`,
+        comment:
+          "allocate ports, write run files, provision infrastructure (runs before each start)",
+      },
+      { command: `${dev} setup --force`, comment: "provision the infrastructure again" },
+      {
+        command: `${dev} setup --reset-ports`,
+        comment: "allocate this workspace's ports again (dev-server stopped)",
+      },
       { command: `${dev} down`, comment: "stop the dev-server (this worktree only)" },
       { command: `${dev} list`, comment: "list active dev-servers across all worktrees" },
       { command: `${dev} down --all`, comment: "stop every active dev-server" },
@@ -144,21 +151,6 @@ function commandBlocks(
       },
     ],
   };
-}
-
-function hasProfiles(layout: GuideLayout): boolean {
-  return Object.keys(layout.profiles).length > 0;
-}
-
-function summaryExtras(layout: GuideLayout): string {
-  const extras = [
-    layout.hasPorts ? "ports" : undefined,
-    layout.hasDevServer ? "dev-server" : undefined,
-  ];
-  return extras
-    .filter((extra) => extra !== undefined)
-    .map((extra) => `, ${extra}`)
-    .join("");
 }
 
 function driveDevSnippet(pm: PackageManagerCommands): string {
@@ -179,17 +171,9 @@ function renderSharedLayout(sharedDirs: string[]): string {
   return `- Shared across worktrees, symlinked from the main worktree: ${names}.`;
 }
 
-function renderProfilesList(profiles: Record<string, string>): string {
-  return Object.entries(profiles)
-    .map(([name, description]) => `- \`${name}\` — ${description}`)
-    .join("\n");
-}
-
 export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   let out = applySection(template, "DEV", layout.hasDevServer);
-  out = applySection(out, "PORTS", layout.hasPorts);
-  out = applySection(out, "PROFILES", hasProfiles(layout));
   for (const [name, rows] of Object.entries(commandBlocks(pm, layout))) {
     out = out.replaceAll(`{{COMMANDS:${name}}}`, renderRows(rows));
   }
@@ -201,7 +185,6 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
     .replaceAll("{{RUNTIME_DIR}}", layout.runtimeDir)
     .replaceAll("{{REGISTRY_SUBDIR}}", REGISTRY_SUBDIR)
     .replaceAll("{{LAYOUT:shared}}", renderSharedLayout(layout.sharedDirs))
-    .replaceAll("{{LIST:profiles}}", renderProfilesList(layout.profiles))
     .trimEnd();
 }
 
