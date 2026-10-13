@@ -245,6 +245,32 @@ describe("readWorkspaces repair", () => {
     expect(Object.keys(readEntries())).toEqual(["name-b"]);
   });
 
+  describe("a relative path", () => {
+    const originalCwd = process.cwd();
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+    });
+
+    it("resolves against the main worktree and persists the absolute path", () => {
+      mkdirSync(join(root, "proj-feat"));
+      process.chdir(mainWorktree);
+      writeStored({ "proj-feat": entry("../proj-feat") });
+      writeWorkspaces(mainWorktree, registryDir, readWorkspaces(mainWorktree, registryDir));
+      expect(readStored().version).toBe(2);
+      expect(readStored().workspaces["proj-feat"].worktree).toBe(join(root, "proj-feat"));
+    });
+
+    it("becomes an absolute orphan when it exists only from the cwd", () => {
+      const cwd = join(root, "other", "cwd");
+      mkdirSync(cwd, { recursive: true });
+      mkdirSync(join(root, "other", "proj-feat"));
+      process.chdir(cwd);
+      writeStored({ "proj-feat": entry("../proj-feat") });
+      expect(readEntries()["proj-feat"].worktree).toBe(join(root, "proj-feat"));
+    });
+  });
+
   it("persists the repair on the next write", () => {
     mkdirSync(join(root, "wt-a"));
     writeStored({ "wt-a": entry("/old/place/wt-a") });

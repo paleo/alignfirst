@@ -68,8 +68,9 @@ export function workspacesFilePath(mainWorktree: string, registryDir: string): s
 }
 
 /**
- * Reads the registry, repairing each `worktree` in memory: the main entry points to the current
- * main worktree, and a missing linked worktree to its sibling of the same name. The next
+ * Reads the registry, repairing each `worktree` in memory into an absolute path: the main entry
+ * points to the current main worktree, a relative path is resolved against the main worktree, and
+ * a missing linked worktree points to its sibling of the same name. The next
  * {@link writeWorkspaces} persists the repair. A legacy `portIndex` is dropped: those workspaces get
  * new ports at their next `dev setup`.
  */
@@ -101,10 +102,12 @@ function loadEntry(
 
 function repairWorktree(name: string, stored: StoredWorkspaceEntry, mainWorktree: string): string {
   if (stored.main === true) return mainWorktree;
-  if (existsSync(stored.worktree)) return stored.worktree;
+  // A relative path, as an earlier build wrote it, is relative to the main worktree, not the cwd.
+  const worktree = resolve(mainWorktree, stored.worktree);
+  if (existsSync(worktree)) return worktree;
   // A project moved together with its worktrees.
   const sibling = join(dirname(mainWorktree), name);
-  return existsSync(sibling) ? sibling : stored.worktree;
+  return existsSync(sibling) ? sibling : worktree;
 }
 
 /**

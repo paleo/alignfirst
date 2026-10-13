@@ -154,6 +154,7 @@ The file carries `"version": 2`. A file without it was written by 0.36 or older.
 `readWorkspaces` repairs every entry in memory, and the next write persists the repair:
 
 - A `main: true` entry points at the main worktree, so the main worktree can move alone.
+- A relative path, written by an earlier build, is resolved against the main worktree. The repaired path is always absolute.
 - An existing path is kept. Linked worktrees therefore survive a move of the main worktree.
 - A missing path whose sibling `join(dirname(mainWorktree), <key>)` exists points at that sibling: the project moved together with its worktrees.
 - Any other missing path is kept. The entry stays an orphan.
