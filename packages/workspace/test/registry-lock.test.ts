@@ -1,0 +1,111 @@
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { WorkspaceError } from "../src/errors.js";
+import { withRegistryLock } from "../src/registry-lock.js";
+import { readWorkspaces, registryDirFor, updateWorkspaces } from "../src/workspaces.js";
+
+const registryDir = registryDirFor(".local-wt");
+/** Fails fast instead of waiting 10 seconds when a test leaves the lock held. */
+const FAST = { retryMs: 10, timeoutMs: 500 };
+
+let mainWorktree: string;
+let lockPath: string;
+
+beforeEach(() => {
+  mainWorktree = mkdtempSync(join(tmpdir(), "registry-lock-"));
+  lockPath = join(mainWorktree, registryDir, "workspaces.lock");
+});
+
+afterEach(() => {
+  rmSync(mainWorktree, { recursive: true, force: true });
+});
+
+function writeLock(content: string): void {
+  mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+  writeFileSync(lockPath, content);
+}
+
+function deadPid(): number {
+  const { pid } = spawnSync(process.execPath, ["-e", ""]);
+  if (pid === undefined) throw new Error("Could not spawn a short-lived process");
+  return pid;
+}
+
+describe("withRegistryLock", () => {
+  it("holds the lock with its PID while running, and releases it", async () => {
+    const result = await withRegistryLock(mainWorktree, registryDir, () =>
+      readFileSync(lockPath, "utf-8"),
+    );
+    expect(result).toBe(String(process.pid));
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("releases the lock when the function throws", async () => {
+    await expect(
+      withRegistryLock(mainWorktree, registryDir, () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("replaces a stale lock whose holder is dead", async () => {
+    writeLock(String(deadPid()));
+    await expect(withRegistryLock(mainWorktree, registryDir, () => "ran", FAST)).resolves.toBe(
+      "ran",
+    );
+  });
+
+  it("replaces a stale lock older than 30 seconds", async () => {
+    writeLock(String(process.pid));
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lockPath, old, old);
+    await expect(withRegistryLock(mainWorktree, registryDir, () => "ran", FAST)).resolves.toBe(
+      "ran",
+    );
+  });
+
+  it("times out on a live lock with an error naming the lock file", async () => {
+    writeLock(String(process.pid));
+    const attempt = withRegistryLock(mainWorktree, registryDir, () => "ran", {
+      retryMs: 10,
+      timeoutMs: 100,
+    });
+    await expect(attempt).rejects.toThrow(WorkspaceError);
+    await expect(attempt).rejects.toThrow(lockPath);
+    expect(existsSync(lockPath)).toBe(true);
+  });
+});
+
+describe("updateWorkspaces", () => {
+  it("loses no update across concurrent calls", async () => {
+    const names = Array.from({ length: 8 }, (_, i) => `wt-${i}`);
+    await Promise.all(
+      names.map((name) =>
+        updateWorkspaces(mainWorktree, registryDir, async (registry) => {
+          await new Promise((r) => setTimeout(r, 5));
+          registry.workspaces[name] = {
+            worktree: join(mainWorktree, "..", name),
+            createdAt: "2026-05-10T00:00:00.000Z",
+            status: "ready",
+          };
+        }),
+      ),
+    );
+    expect(Object.keys(readWorkspaces(mainWorktree, registryDir).workspaces).sort()).toEqual(names);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+});

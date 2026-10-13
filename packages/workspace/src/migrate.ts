@@ -9,6 +9,7 @@ import {
 import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
 import type { ResolvedPortsConfig } from "./ports.js";
+import { withRegistryLock } from "./registry-lock.js";
 import { getWorktreeBranch, type WorktreeContext } from "./worktree.js";
 import {
   type WorkspaceEntry,
@@ -43,7 +44,7 @@ export interface MigrateInput {
   hasPurgeInfrastructure: boolean;
 }
 
-export function runMigrate(ctx: WorktreeContext, input: MigrateInput): void {
+export async function runMigrate(ctx: WorktreeContext, input: MigrateInput): Promise<void> {
   if (!ctx.isMainWorktree) {
     throw new WorkspaceError(
       `\`workspace migrate-registry-0.30\` must run from the main worktree: ${ctx.mainWorktree}`,
@@ -67,7 +68,9 @@ export function runMigrate(ctx: WorktreeContext, input: MigrateInput): void {
     mainWorktree: ctx.mainWorktree,
     ports: input.ports,
   });
-  writeWorkspaces(ctx.mainWorktree, input.registryDir, conversion.registry);
+  await withRegistryLock(ctx.mainWorktree, input.registryDir, () =>
+    writeWorkspaces(ctx.mainWorktree, input.registryDir, conversion.registry),
+  );
   const translatedDevServers = translateDevServers(ctx.mainWorktree, input.registryDir);
   rmSync(slotsPath);
   printMigrationReport(conversion, translatedDevServers, input.hasPurgeInfrastructure);
@@ -166,6 +169,8 @@ function migratedEntry(old: OldSlotEntry): WorkspaceEntry {
   };
   if (old.failure) entry.failure = old.failure;
   if (old.extra !== undefined) entry.purgeData = old.extra;
+  // The old `finalizeWorkspace` of a ready entry already provisioned its infrastructure.
+  if (old.status === "ready") entry.devSetupAt = old.createdAt;
   return entry;
 }
 

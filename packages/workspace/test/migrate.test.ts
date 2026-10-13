@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,7 +15,7 @@ import {
 } from "../src/migrate.js";
 import { resolvePortsConfig } from "../src/ports.js";
 import type { WorktreeContext } from "../src/worktree.js";
-import { readWorkspaces, registryDirFor } from "../src/workspaces.js";
+import { readWorkspaces, registryDirFor, workspacesFilePath } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
 const ports = resolvePortsConfig({
@@ -134,10 +134,10 @@ function writeOldRegistry(slots: Record<string, OldSlotEntry>): string {
   return slotsPath;
 }
 
-function migrate(hasPurgeInfrastructure = false): string {
+async function migrate(hasPurgeInfrastructure = false): Promise<string> {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    runMigrate(mainCtx(), { registryDir, ports, hasPurgeInfrastructure });
+    await runMigrate(mainCtx(), { registryDir, ports, hasPurgeInfrastructure });
     return log.mock.calls.map((args) => args.join(" ")).join("\n");
   } finally {
     log.mockRestore();
@@ -145,12 +145,12 @@ function migrate(hasPurgeInfrastructure = false): string {
 }
 
 describe("runMigrate", () => {
-  it("converts slots.json to workspaces.json and deletes the old file", () => {
+  it("converts slots.json to workspaces.json and deletes the old file", async () => {
     const slotsPath = writeOldRegistry({
       "8100": oldEntry(mainWorktree, { main: true }),
       "8110": oldEntry("/repo/wt-a"),
     });
-    const output = migrate();
+    const output = await migrate();
     expect(existsSync(slotsPath)).toBe(false);
     const registry = readWorkspaces(mainWorktree, registryDir);
     expect(Object.keys(registry.workspaces).sort()).toEqual(
@@ -160,7 +160,25 @@ describe("runMigrate", () => {
     expect(output).toContain("Deleted slots.json.");
   });
 
-  it("rekeys dev-servers.json entries from slot to name", () => {
+  it("writes relative paths, and devSetupAt on ready entries", async () => {
+    writeOldRegistry({
+      "8100": oldEntry(mainWorktree, { main: true }),
+      "8110": oldEntry("/repo/wt-a"),
+      "8120": oldEntry("/repo/wt-b", { status: "failed" }),
+    });
+    await migrate();
+    const { workspaces } = JSON.parse(
+      readFileSync(workspacesFilePath(mainWorktree, registryDir), "utf-8"),
+    );
+    const main = workspaces[basename(mainWorktree)];
+    expect(main.worktree).toBe(".");
+    expect(main.devSetupAt).toBe("2026-05-10T00:00:00.000Z");
+    expect(workspaces["wt-a"].worktree).toBe(relative(mainWorktree, "/repo/wt-a"));
+    expect(workspaces["wt-a"].devSetupAt).toBe("2026-05-10T00:00:00.000Z");
+    expect(workspaces["wt-b"].devSetupAt).toBeUndefined();
+  });
+
+  it("rekeys dev-servers.json entries from slot to name", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
     writeFileSync(
       join(mainWorktree, registryDir, "dev-servers.json"),
@@ -175,7 +193,7 @@ describe("runMigrate", () => {
         ],
       }),
     );
-    migrate();
+    await migrate();
     const { servers } = readDevServers(mainWorktree, registryDir);
     expect(servers).toEqual([
       {
@@ -187,46 +205,46 @@ describe("runMigrate", () => {
     ]);
   });
 
-  it("warns about slot-named infrastructure only when purgeInfrastructure is declared", () => {
+  it("warns about slot-named infrastructure only when purgeInfrastructure is declared", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    const output = migrate(true);
+    const output = await migrate(true);
     expect(output).toContain("no longer be derived");
     // Merging the base branch leaves the old names in the worktree's gitignored config.
     expect(output).toContain("setup --force");
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
     rmSync(join(mainWorktree, registryDir, "workspaces.json"));
-    expect(migrate(false)).not.toContain("no longer be derived");
+    expect(await migrate(false)).not.toContain("no longer be derived");
   });
 
-  it("reports stale entries and orphans", () => {
+  it("reports stale entries and orphans", async () => {
     writeOldRegistry({ "8115": oldEntry("/gone/wt-odd") });
-    const output = migrate();
+    const output = await migrate();
     expect(output).toContain("No port index could be derived for: wt-odd");
     expect(output).toContain("Orphaned entries kept");
   });
 
-  it("does nothing when there is no slots.json", () => {
-    expect(migrate()).toContain("Nothing to migrate");
+  it("does nothing when there is no slots.json", async () => {
+    expect(await migrate()).toContain("Nothing to migrate");
     expect(existsSync(join(mainWorktree, registryDir, "workspaces.json"))).toBe(false);
   });
 
-  it("refuses when workspaces.json already exists alongside slots.json", () => {
+  it("refuses when workspaces.json already exists alongside slots.json", async () => {
     writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    migrate();
+    await migrate();
     const slotsPath = writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
-    expect(() => migrate()).toThrow(/already migrated/);
+    await expect(migrate()).rejects.toThrow(/already migrated/);
     expect(existsSync(slotsPath)).toBe(true);
   });
 
-  it("refuses to run from a linked worktree", () => {
+  it("refuses to run from a linked worktree", async () => {
     const ctx: WorktreeContext = {
       currentWorktree: "/repo/wt-a",
       mainWorktree,
       isMainWorktree: false,
     };
-    expect(() => runMigrate(ctx, { registryDir, ports, hasPurgeInfrastructure: false })).toThrow(
-      /main worktree/,
-    );
+    await expect(
+      runMigrate(ctx, { registryDir, ports, hasPurgeInfrastructure: false }),
+    ).rejects.toThrow(/main worktree/);
   });
 });
 

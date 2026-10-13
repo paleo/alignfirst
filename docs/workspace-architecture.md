@@ -1,10 +1,11 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-index allocation, registry liveness, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
+summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port-index allocation, registry liveness, registry paths and lock, and the old-registry migration. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
 read_when:
   - onboarding to the @alignfirst/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
   - debugging an orphaned process, a leaked container, or a registry inconsistency
+  - changing how `workspaces.json` is read or written
   - touching cross-worktree stop or `workspace remove`
 ---
 
@@ -101,6 +102,37 @@ Indexes are allocated only when `ports` is configured. A workspace registered wh
 
 Every workspace command compares `portRange` in the current worktree's `.alignfirst.json` with the whole range reserved by the `ports` scheme — `perWorkspace × maxWorkspaces` ports from `base` in both layouts. A missing project config skips the check. The `alignfirst` CLI owns the file's schema; the workspace kernel reads only the two range integers.
 
+## Registry paths and repair
+
+`workspaces.json` stores each `worktree` relative to the main worktree, with POSIX separators. The main entry holds `"."`. The conversion happens at the I/O boundary: `readWorkspaces` resolves every path against the main worktree, and `writeWorkspaces` makes it relative again. Every entry handed to code carries an absolute path, and so do the callback contexts (`PurgeContext.worktree`, `ResolvedWorkspace.worktree`). `dev-servers.json` keeps absolute paths: PID liveness prunes its stale entries.
+
+### Read-time repair
+
+An absolute `worktree` marks a legacy entry, written before relative paths. `readWorkspaces` repairs it in memory, and the next write persists the repair:
+
+- A `main: true` entry points at the main worktree.
+- An existing path is kept.
+- A missing path whose sibling `join(dirname(mainWorktree), <key>)` exists points at that sibling: the project moved together with its worktrees.
+- Any other missing path is kept. The entry stays an orphan.
+
+A `ready` legacy entry without `devSetupAt` gets its `createdAt`: its old `finalizeWorkspace` already provisioned the infrastructure.
+
+An old bug left one main entry per name the main directory ever had. `readWorkspaces` keeps the one keyed `basename(mainWorktree)`, otherwise the newest by `createdAt`, and drops the others.
+
+### Main-entry re-key
+
+The main entry is found by `main: true`, not by its key. A key that differs from `basename(mainWorktree)` means a renamed directory, and `rekeyMainEntry` moves the entry under the new name. The entry keeps `createdAt`, `status`, `ports` and `purgeData`, and loses `devSetupAt`: infrastructure is named after the workspace, so the next `dev setup` provisions it under the new name. `registerWorkspace` re-keys before its name-collision check, and warns that resources named after the old name are not reused. Renaming the directory back recovers them; otherwise the user removes them by hand. When another entry already holds the new name, the re-key is skipped and the collision check reports it.
+
+### Registry lock
+
+Every read-modify-write of `workspaces.json` goes through `updateWorkspaces`, which holds `<registryDir>/workspaces.lock` ([`registry-lock.ts`](../packages/workspace/src/registry-lock.ts)). The writers are `registerWorkspace`, the `markWorkspace*` functions, `remove`, `prune`, the `list` auto-prune and `migrate-registry-0.30`.
+
+- The lock file is created with `O_EXCL`, holds the holder's PID, and is removed in a `finally`.
+- A lock is stale when its PID is dead or the file is older than 30 seconds. A file without a PID yet is judged by its age only. A waiter renames a stale lock to a unique name before deleting it, so only one waiter replaces it; a rename that caught a fresh lock puts it back.
+- A waiter retries every 50 ms and fails after 10 seconds, with an error naming the lock file.
+
+The lock covers only reading, changing and writing the JSON. It never spans a callback, git, Docker or a shell-out. `remove` and `prune` therefore take it twice: once to read the entry, then to delete it after the teardown, on a fresh read. `prune` deletes only the names still orphaned at that read. The `list` auto-prune first looks for orphans without the lock, so a `list` with no orphan writes nothing. Read-only paths (`wait`, `status`, the dev-server commands) read without the lock.
+
 ## Registry migration
 
 `workspace migrate-registry-0.30` converts a pre-`workspaces.json` registry (`slots.json`, keyed by port) in place, from the main worktree only. Every other command fails fast while `slots.json` exists, so an old registry never reads as "no workspaces". Worktrees, their gitignored content and running dev-servers are untouched.
@@ -111,6 +143,7 @@ Conversion rules:
 - Linked entries are keyed by `basename(worktree)`; same-path duplicates keep the newest entry. An entry whose directory is missing migrates as-is — it is an orphan, and the healing machinery reaches it by name.
 - With `ports` configured, the block index is derived from the old slot (`(slot − base) / perWorkspace`). A slot that does not fit the scheme migrates without an index — the stale-entry state, fixed by `workspace setup --force` in that worktree.
 - `dev-servers.json` entries are rekeyed from `slot` to the workspace name; running PIDs stay valid.
+- The converted registry is written under the registry lock, in the relative form. Its `ready` entries get `devSetupAt`, as in the read-time repair.
 
 The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be removed manually, and that each surviving worktree needs `workspace setup --force`: its gitignored config still names them, and merging the base branch regenerates nothing.
 

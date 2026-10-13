@@ -57,15 +57,16 @@ import {
   markWorkspaceFailed,
   markWorkspaceReady,
   readWorkspaces,
+  readWorkspacesLocked,
   REGISTRY_SUBDIR,
   registerWorkspace,
   registryDirFor,
   resolveCurrentWorkspace,
   staleWorkspaceMessage,
+  updateWorkspaces,
   type WorkspaceEntry,
   type WorkspacesRegistry,
   type WorkspaceStatus,
-  writeWorkspaces,
 } from "./workspaces.js";
 import {
   createBranch,
@@ -363,7 +364,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
     checkPortClaim(ctx.currentWorktree, kernel.ports);
 
     if (command.kind === "migrate") {
-      runMigrate(ctx, {
+      await runMigrate(ctx, {
         registryDir: kernel.registryDir,
         ports: kernel.ports,
         hasPurgeInfrastructure: config.purgeInfrastructure !== undefined,
@@ -383,7 +384,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
         runStatus(command, kernel);
         return;
       case "list":
-        runList(kernel);
+        await runList(kernel);
         return;
       case "prune":
         await runPrune(kernel, verbose);
@@ -479,7 +480,7 @@ async function runSetup(
   const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
   refuseIfFinalizePending(setupCtx, registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
-  const { name, status, portIndex } = registerWorkspace({
+  const { name, status, portIndex } = await registerWorkspace({
     currentWorktree: setupCtx.currentWorktree,
     mainWorktree: setupCtx.mainWorktree,
     registryDir,
@@ -500,7 +501,9 @@ async function runSetup(
     log.append(`FAILED: ${message}`);
     if (err instanceof Error && err.stack !== undefined) log.append(err.stack);
     closeSync(log.fd);
-    if (status !== "ready") markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
+    if (status !== "ready") {
+      await markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
+    }
     throw err;
   }
 
@@ -711,7 +714,7 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
 
   try {
     const result = await config.finalizeWorkspace(setupContext);
-    markWorkspaceReady(ctx.mainWorktree, registryDir, name, result?.purgeData);
+    await markWorkspaceReady(ctx.mainWorktree, registryDir, name, result?.purgeData);
     rmSync(progressPath, { force: true });
     appendLog("============================================================");
     appendLog(`READY: branch ${branch} (workspace ${name})`);
@@ -719,7 +722,7 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
-    markWorkspaceFailed(ctx.mainWorktree, registryDir, name, message);
+    await markWorkspaceFailed(ctx.mainWorktree, registryDir, name, message);
     rmSync(progressPath, { force: true });
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
@@ -743,7 +746,7 @@ function resolveTarget(
   if (dir !== undefined) {
     return targetFromDir(dir, readWorkspaces(ctx.mainWorktree, registryDir));
   }
-  const resolved = resolveCurrentWorkspace(registryDir);
+  const resolved = resolveCurrentWorkspace(ctx.mainWorktree, registryDir);
   return { name: resolved.name, worktree: resolved.worktree, main: resolved.main ?? false };
 }
 
@@ -864,10 +867,10 @@ function runStatus(command: StatusCommand, kernel: Kernel): void {
   printWorktreeInfo(kernel, target, target.worktree);
 }
 
-function runList(kernel: Kernel): void {
+async function runList(kernel: Kernel): Promise<void> {
   const { registryDir } = kernel;
   const ctx = detectWorktree();
-  const liveOrphans = autoPruneSafeOrphans(ctx.mainWorktree, registryDir);
+  const liveOrphans = await autoPruneSafeOrphans(ctx.mainWorktree, registryDir);
   const entries = sortedEntries(readWorkspaces(ctx.mainWorktree, registryDir));
   if (entries.length === 0) {
     console.log("No workspaces registered.");
@@ -924,25 +927,23 @@ function renderTable(headers: string[], rows: string[][]): string[] {
  * still running are left untouched (stopping a live process is the explicit `workspace prune`'s job)
  * and returned so the caller can hint about them.
  */
-function autoPruneSafeOrphans(mainWorktree: string, registryDir: string): string[] {
-  const registry = readWorkspaces(mainWorktree, registryDir);
-  const orphanNames = findOrphanNames(registry);
-  if (orphanNames.length === 0) return [];
-  const live = liveWorktrees(readDevServers(mainWorktree, registryDir));
-  const liveOrphans: string[] = [];
-  let changed = false;
-  for (const name of orphanNames) {
-    const entry = registry.workspaces[name];
-    if (live.has(resolve(entry.worktree))) {
-      liveOrphans.push(name);
-      continue;
+async function autoPruneSafeOrphans(mainWorktree: string, registryDir: string): Promise<string[]> {
+  // Checked without the lock first: a plain `list` with no orphan writes nothing.
+  if (findOrphanNames(readWorkspaces(mainWorktree, registryDir)).length === 0) return [];
+  return updateWorkspaces(mainWorktree, registryDir, (registry) => {
+    const live = liveWorktrees(readDevServers(mainWorktree, registryDir));
+    const liveOrphans: string[] = [];
+    for (const name of findOrphanNames(registry)) {
+      const entry = registry.workspaces[name];
+      if (live.has(resolve(entry.worktree))) {
+        liveOrphans.push(name);
+        continue;
+      }
+      delete registry.workspaces[name];
+      removeDevServerEntryByWorktree(mainWorktree, registryDir, entry.worktree);
     }
-    delete registry.workspaces[name];
-    removeDevServerEntryByWorktree(mainWorktree, registryDir, entry.worktree);
-    changed = true;
-  }
-  if (changed) writeWorkspaces(mainWorktree, registryDir, registry);
-  return liveOrphans;
+    return liveOrphans;
+  });
 }
 
 function hintLiveOrphans(liveOrphans: string[]): void {
@@ -956,7 +957,7 @@ function hintLiveOrphans(liveOrphans: string[]): void {
 async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   const { config, registryDir } = kernel;
   const ctx = detectWorktree();
-  const registry = readWorkspaces(ctx.mainWorktree, registryDir);
+  const registry = await readWorkspacesLocked(ctx.mainWorktree, registryDir);
   const orphanNames = findOrphanNames(registry);
 
   let stoppedProcesses = 0;
@@ -970,11 +971,10 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
       purgeData: entry.purgeData,
       verbose,
     });
-    delete registry.workspaces[name];
     console.log(`Pruned workspace ${name} (${entry.worktree}).`);
   }
 
-  if (orphanNames.length > 0) writeWorkspaces(ctx.mainWorktree, registryDir, registry);
+  if (orphanNames.length > 0) await deleteOrphanEntries(ctx.mainWorktree, registryDir, orphanNames);
   pruneGitWorktrees(ctx.mainWorktree);
 
   if (orphanNames.length === 0) {
@@ -1013,6 +1013,20 @@ async function stopOrphanedDevServer(
   }
   removeDevServerEntryByWorktree(mainWorktree, registryDir, worktree);
   return stopped;
+}
+
+/** Deletes the pruned entries that are still orphans on a fresh read. */
+async function deleteOrphanEntries(
+  mainWorktree: string,
+  registryDir: string,
+  names: string[],
+): Promise<void> {
+  await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+    const orphans = new Set(findOrphanNames(registry));
+    for (const name of names) {
+      if (orphans.has(name)) delete registry.workspaces[name];
+    }
+  });
 }
 
 /** Best-effort: clear git's stale `.git/worktrees/<name>` admin files for deleted worktrees. */
@@ -1180,7 +1194,7 @@ async function handleRemove(
 ): Promise<void> {
   const { config, registryDir } = kernel;
   const verboseLog = makeVerboseLog(run.verbose);
-  const registry = readWorkspaces(ctx.mainWorktree, registryDir);
+  const registry = await readWorkspacesLocked(ctx.mainWorktree, registryDir);
   const target = resolveTarget(command.selector, ctx, registryDir);
   const name = target.name;
   const worktree = target.worktree;
@@ -1211,8 +1225,7 @@ async function handleRemove(
       purgeData: registry.workspaces[name]?.purgeData,
       verbose: run.verbose,
     });
-    delete registry.workspaces[name];
-    writeWorkspaces(ctx.mainWorktree, registryDir, registry);
+    await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, name);
     pruneGitWorktrees(ctx.mainWorktree);
     console.log(`Removed registry entry for workspace ${name} (branch "${branch}").`);
     return;
@@ -1242,8 +1255,7 @@ async function handleRemove(
     verbose: run.verbose,
   });
 
-  delete registry.workspaces[name];
-  writeWorkspaces(ctx.mainWorktree, registryDir, registry);
+  await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, name);
   removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, worktree);
 
   if (removeHere) process.chdir(ctx.mainWorktree);
@@ -1256,6 +1268,17 @@ async function handleRemove(
 
 async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext): Promise<void> {
   if (config.purgeInfrastructure) await config.purgeInfrastructure(ctx);
+}
+
+/** Runs after the teardown, on a fresh read: the lock never spans a callback, git or Docker. */
+async function deleteWorkspaceEntry(
+  mainWorktree: string,
+  registryDir: string,
+  name: string,
+): Promise<void> {
+  await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+    delete registry.workspaces[name];
+  });
 }
 
 function ensureWorktree(
@@ -1378,9 +1401,10 @@ function writeSharedExcludes(excludePath: string, inheritedFiles: string[], dirs
 }
 
 /**
- * Symlinks the linked worktree's `${runtimeDir}/workspace-registry` to the main worktree's, so the
- * cwd-relative registry read in `resolveCurrentWorkspace` reaches main. `runtimeDir` is per-worktree
- * and not in `sharedDirs`, so this is distinct from {@link linkSharedDirectories}.
+ * Symlinks the linked worktree's `${runtimeDir}/workspace-registry` to the main worktree's, so a
+ * linked worktree's `runtimeDir` has the same layout as main's. The kernel reads the registry from
+ * the main worktree. `runtimeDir` is per-worktree and not in `sharedDirs`, so this is distinct from
+ * {@link linkSharedDirectories}.
  */
 function linkWorkspaceRegistry(
   ctx: WorktreeContext,

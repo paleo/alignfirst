@@ -143,7 +143,7 @@ function printStatus(config: DevServerConfig, mainWorktree: string, registryDir:
     return;
   }
   console.log("Dev-server status: UP.");
-  printStartSummary(config, resolveCurrentWorkspace(registryDir), entry.pids);
+  printStartSummary(config, resolveCurrentWorkspace(mainWorktree, registryDir), entry.pids);
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
@@ -375,7 +375,7 @@ function registerStartedServer(
   registryDir: string,
   spawnPids: Record<string, number>,
 ): ResolvedWorkspace {
-  const workspace = resolveCurrentWorkspace(registryDir);
+  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
   const devEntry: DevServerEntry = {
     name: workspace.name,
     worktree: workspace.worktree,
@@ -515,7 +515,7 @@ function checkWorktreeReady(
   registryDir: string,
   cwd: string,
 ): void {
-  const workspace = resolveCurrentWorkspace(registryDir);
+  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
   const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   const result = buildWorktreeReadyMessage({
     name: workspace.name,

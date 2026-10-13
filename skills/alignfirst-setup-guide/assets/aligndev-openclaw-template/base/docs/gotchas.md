@@ -42,9 +42,9 @@ For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/
 
 The setup guide and `sharp-writing` install once under `~/.agents/skills/`. OpenClaw loads only its `agents.defaults.skills` allowlist, including `alignfirst-setup-guide` for project creation. The coding agent receives the shared skills through its own tier. `skills remove` deletes a shared skill for both.
 
-## Moving a project breaks its workspace registry
+## Moving a project
 
-`@alignfirst/workspace` stores each worktree as an absolute path in `.local-wt/workspace-registry/workspaces.json`. After a `mv`, every command fails with `The workspace name "<name>" is already taken by <old-path>`, and no command repairs it: `prune` skips main worktrees, `remove` is destructive. Rewrite the `worktree` string in place, keeping the name key, `createdAt`, `status` and `portIndex` (`portIndex` pins the linked worktrees' ports). `git worktree repair` is still needed for linked worktrees. `aligndev project` reads the repaired git worktrees directly.
+`@alignfirst/workspace` stores worktree paths relative to the main worktree, in `.local-wt/workspace-registry/workspaces.json`, and repairs the absolute paths an older version wrote. Moving the main worktree alone needs nothing while its directory keeps its name. Renaming the directory renames the workspace: its infrastructure is provisioned again under the new name, and a warning names the old one. Rename the directory back to recover the old resources, or remove them by hand. Linked worktrees need git's own repair (`git worktree repair`), outside the workspace system. `aligndev project` reads the repaired git worktrees directly.
 
 ## Heartbeat cost is a main-session problem
 
