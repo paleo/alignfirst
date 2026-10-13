@@ -12,7 +12,7 @@ The assistant reads the project's `DEVELOPERS.md` when it exists, else the `READ
 
 ## 2. Configure `aligndev` (recommended)
 
-Without a config, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. A config makes the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/aligndev.config.json`:
+Without settings, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. Settings make the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/settings.json`:
 
 ```json
 {

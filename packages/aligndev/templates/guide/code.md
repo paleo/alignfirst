@@ -120,10 +120,10 @@ Keep session files in place; they are the durable audit trail.
 | `--message "..."` | Message to send, written in English. `-m` is the short form. Required for `spec`, `aad`, and when neither `--protocol` nor `--catchup` is given. A message file also satisfies this requirement. |
 | `--message-file <path>` | Read a UTF-8 message file; `-` reads stdin. Mutually exclusive with `--message`. |
 | `--catchup` | Load the ticket history before the protocol and message. `new` only, requires a ticket. Alone, it returns a short synthesis. |
-| `--model <model>` | One of {{MODELS}}. Prefer the default model (omit the flag). |
+| `--model <model>` | One of {{MODELS}}. A new session defaults to {{DEFAULT_MODEL}}; a resume keeps the session's model. Prefer the default (omit the flag). |
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `{{ALIGNDEV}} code` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 
-The current coding agent is `{{AGENT}}`. `code.models` in the aligndev config replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`. `code.models` in the aligndev settings replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
 `{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
 

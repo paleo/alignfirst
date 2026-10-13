@@ -20,7 +20,7 @@ SECRETS_FILE="$OPENCLAW_HOME/secrets/secrets.json"
 GATEWAY_ENV_FILE="$OPENCLAW_HOME/.env"
 ENVIRONMENT_DIR="$HOME/.config/environment.d"
 ALIGNFIRST_HOME="$HOME/.alignfirst"
-ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.config.json"
+ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/settings.json"
 COMPANIONS_DIR="$ALIGNFIRST_HOME/companions"
 
 main() {
@@ -145,12 +145,12 @@ install_environment_files() {
 }
 
 install_aligndev_config() {
-  echo "[seed] aligndev config — $ALIGNDEV_CONFIG_FILE"
+  echo "[seed] aligndev settings — $ALIGNDEV_CONFIG_FILE"
   # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
   # its directory immutable.
   if [ ! -d "$ALIGNFIRST_HOME" ]; then install -d -m 755 "$ALIGNFIRST_HOME"; fi
-  if ! cmp -s "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"; then
-    install -m 644 "$DIR/aligndev.config.json" "$ALIGNDEV_CONFIG_FILE"
+  if ! cmp -s "$DIR/settings.json" "$ALIGNDEV_CONFIG_FILE"; then
+    install -m 644 "$DIR/settings.json" "$ALIGNDEV_CONFIG_FILE"
   fi
   # Fails on an invalid file or a missing code.agent.
   aligndev guide code >/dev/null

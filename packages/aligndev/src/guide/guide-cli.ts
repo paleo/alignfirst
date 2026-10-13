@@ -63,11 +63,11 @@ function renderUsage(forms: CommandForms): string {
   ${forms.aligndev} guide [<topic>] [--root <path>]
   ${forms.aligndev} guide --help
 
-Without a topic, prints the playbook of the platform set in the aligndev config.
+Without a topic, prints the playbook of the platform set in the aligndev settings.
 
 Topics:
   code        The delegation guide for \`${forms.aligndev} code\`.
-  project     The projects guide, openclaw only. --root overrides projectsRoot in the aligndev config.
+  project     The projects guide, openclaw only. --root overrides projectsRoot in the aligndev settings.
 
 Playbook topics, by platform:
 ${playbookTopics.join("\n")}
@@ -85,7 +85,7 @@ function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerC
 function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): string {
   const code = resolveCodeConfig(config, ctx.env);
   const models = resolveModels(code.agent, code.models);
-  return renderCodeGuide(config.platform, code.agent, models, ctx.forms);
+  return renderCodeGuide(config.platform, code.agent, models, code.model, ctx.forms);
 }
 
 function renderPlaybookTopic(

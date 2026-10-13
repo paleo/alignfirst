@@ -106,7 +106,7 @@ function renderUsage(aligndev: string): string {
   ${aligndev} project free-ports --size <n> [--range <code>] [--json] [--root <path>]
   ${aligndev} project --help
 
---root defaults to projectsRoot in the aligndev config, then to the working directory.
+--root defaults to projectsRoot in the aligndev settings, then to the working directory.
 A relative status <path> starts from the working directory.
 `;
 }

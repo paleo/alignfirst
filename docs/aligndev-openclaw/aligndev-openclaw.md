@@ -57,7 +57,7 @@ A managed project can keep its AlignFirst files in a companion directory, outsid
 
 ## A coding agent as the assistant
 
-The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the `aligndev` config, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
+The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the aligndev settings, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
 
 ## Reading order for maintainers
 

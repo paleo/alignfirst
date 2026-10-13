@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { CODING_AGENTS, type CodingAgent, detectCodingAgents } from "./code/coding-agent.js";
+import { resolveModels } from "./code/models.js";
 import { errorMessage } from "./errors.js";
 import {
   arrayOf,
@@ -18,6 +19,7 @@ export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 
 const codeShape = object<CodeConfigFile>({
   agent: optional(literal(...CODING_AGENTS)),
+  model: optional(nonEmptyString),
   models: optional(arrayOf(string)),
   skipPermissions: optional(boolean),
   unset: optional(arrayOf(string)),
@@ -49,6 +51,7 @@ export interface ProjectsRoot {
 
 export interface LoadedCodeConfig {
   agent?: CodingAgent;
+  model?: string;
   models?: string[];
   skipPermissions: boolean;
   unset: string[];
@@ -66,15 +69,18 @@ interface ConfigFile {
 
 interface CodeConfigFile {
   agent?: CodingAgent;
+  // Model used when `--model` is omitted on a new session.
+  model?: string;
   models?: string[];
   skipPermissions?: boolean;
   unset?: string[];
 }
 
-// An absent file is a normal state: every key takes its default.
+// An absent file is a normal state: every key takes its default. A leftover file under the old
+// name is an error, so a missed rename never silently drops the user's settings.
 export function loadConfig(home: string): LoadedConfig {
-  const path = join(home, ".alignfirst", "aligndev.config.json");
-  const value = existsSync(path) ? parseConfigFile(path) : {};
+  const path = join(home, ".alignfirst", "settings.json");
+  const value = existsSync(path) ? parseConfigFile(path) : absentConfig(home);
   const code = value.code ?? {};
   return {
     path,
@@ -84,11 +90,21 @@ export function loadConfig(home: string): LoadedConfig {
       : { projectsRoot: resolveProjectsRoot(value.projectsRoot, home, path) }),
     code: {
       ...(code.agent === undefined ? {} : { agent: code.agent }),
+      ...(code.model === undefined ? {} : { model: code.model }),
       ...(code.models === undefined ? {} : { models: code.models }),
       skipPermissions: code.skipPermissions ?? false,
       unset: code.unset ?? [],
     },
   };
+}
+
+function absentConfig(home: string): ConfigFile {
+  if (existsSync(join(home, ".alignfirst", "aligndev.config.json"))) {
+    throw new Error(
+      "Error: ~/.alignfirst/aligndev.config.json was renamed: move it to ~/.alignfirst/settings.json",
+    );
+  }
+  return {};
 }
 
 function parseConfigFile(path: string): ConfigFile {
@@ -110,12 +126,18 @@ function resolveProjectsRoot(written: string, home: string, path: string): Proje
   return { path: isAbsolute(written) ? written : resolve(dirname(path), written), written };
 }
 
-// The configured `code.agent` wins; otherwise, the coding agent that runs aligndev.
 export function resolveCodeConfig(config: LoadedConfig, env: NodeJS.ProcessEnv): CodeConfig {
+  const code = { ...config.code, agent: resolveAgent(config, env) };
+  checkDefaultModel(code, config.path);
+  return code;
+}
+
+// The configured `code.agent` wins; otherwise, the coding agent that runs aligndev.
+function resolveAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent {
   const { agent } = config.code;
-  if (agent !== undefined) return { ...config.code, agent };
+  if (agent !== undefined) return agent;
   const detected = detectCodingAgents(env);
-  if (detected.length === 1) return { ...config.code, agent: detected[0] };
+  if (detected.length === 1) return detected[0];
   const problem =
     detected.length === 0
       ? "no coding agent detected: run aligndev from Claude Code or Codex, or set"
@@ -123,6 +145,13 @@ export function resolveCodeConfig(config: LoadedConfig, env: NodeJS.ProcessEnv):
   throw new Error(
     `Error: ${problem} "code.agent" (${CODING_AGENTS.join(" or ")}) in ${config.path}.`,
   );
+}
+
+function checkDefaultModel(code: CodeConfig, path: string): void {
+  if (code.model === undefined) return;
+  const models = resolveModels(code.agent, code.models);
+  if (models.includes(code.model)) return;
+  throw new Error(`Error: code.model must be one of: ${models.join(", ")}, in ${path}.`);
 }
 
 export function requireProjectsRoot(config: LoadedConfig): ProjectsRoot {

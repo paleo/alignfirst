@@ -159,4 +159,4 @@ sudo -i -u {{SERVICE_USER}} -- podman info --format '{{.Host.Security.Rootless}}
 # Expected: true
 ```
 
-`aligndev project` needs the aligndev config and the projects marker, both installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).
+`aligndev project` needs the aligndev settings and the projects marker, both installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).

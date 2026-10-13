@@ -57,12 +57,12 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So is the aligndev config, with its directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own config in a new directory of that name.
+So are the aligndev settings (`~/.alignfirst/settings.json`), with their directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own settings in a new directory of that name.
 
 ```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.config.json
+sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/settings.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/settings.json
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/settings.json
 sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst
 sudo chmod 755 /home/{{SERVICE_USER}}/.alignfirst
 sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst
@@ -138,7 +138,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json` and the aligndev config with its directory `~/.alignfirst/`. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json` and the aligndev settings with their directory `~/.alignfirst/`. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -160,7 +160,7 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/aligndev.config.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/settings.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst ~/.alignfirst-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst/companions ~/.alignfirst/companions-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'

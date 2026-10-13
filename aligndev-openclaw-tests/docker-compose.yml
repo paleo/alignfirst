@@ -19,14 +19,14 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
-      # The entrypoint writes both into the aligndev config.
+      # The entrypoint writes both into the aligndev settings.
       CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
       CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
       # `codex` is the mock shim here (symlinked in the image, first on PATH), so no real Codex
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
       # can write the thread rollout `aligndev code` reads the context occupancy from.
       CODEX_HOME: /var/run/openclaw-test-ipc/codex-home
-    # Import the mounted Codex credential and write the aligndev config, then hand off
+    # Import the mounted Codex credential and write the aligndev settings, then hand off
     # to the base stack's gateway command, which stays the single owner of the start line.
     entrypoint: ["/usr/local/bin/gateway-entrypoint"]
     volumes:

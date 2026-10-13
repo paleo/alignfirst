@@ -25,7 +25,7 @@ Two cases drive the feature:
 
 ## The registry
 
-The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed path, with no environment variable. It sits in the companions directory, beside the companions. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.config.json`. An absent registry means no project has a companion.
+The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed path, with no environment variable. It sits in the companions directory, beside the companions. `~/.alignfirst/` is the home of both CLIs: it also holds `settings.json`, the `aligndev` settings. An absent registry means no project has a companion.
 
 ```json
 {
@@ -102,7 +102,7 @@ Paths are absolute. `key` is the registry key as written; `aligndev` ignores `ke
 
 - **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`, and the launch gate requires `locations[".plans"].exists`.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
-- **Write access**: when any item but `_aligndev` exists in the companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
+- **Write access**: when the project has a companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`, and a missing companion directory is created first. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst-instructions`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 
 ### `aligndev guide`

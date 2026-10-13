@@ -17,7 +17,7 @@ A project's AlignFirst files may live in its companion directory, declared in th
 {{ALIGNDEV}} guide project [--root <path>]
 ```
 
-`--root` selects the projects directory. It defaults to `projectsRoot` in the aligndev config, then to the working directory.
+`--root` selects the projects directory. It defaults to `projectsRoot` in the aligndev settings, then to the working directory.
 
 `doctor` is a read-only health gate. It exits successfully only when discovery completes with no
 inventory issues.

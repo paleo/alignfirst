@@ -12,11 +12,11 @@ export interface Sink {
   text(): string;
 }
 
-// Writes `<home>/.alignfirst/aligndev.config.json` and returns its path. Every `main` call in
+// Writes `<home>/.alignfirst/settings.json` and returns its path. Every `main` call in
 // the suites injects a temporary `home`, and sets `HOME` to it for alignfirst, so no test reads the
 // developer's real config.
 export function writeConfig(home: string, config: object): string {
-  const path = join(home, ".alignfirst", "aligndev.config.json");
+  const path = join(home, ".alignfirst", "settings.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(config, undefined, 2)}\n`);
   return path;

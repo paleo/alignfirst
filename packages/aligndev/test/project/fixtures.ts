@@ -17,7 +17,7 @@ export interface Fixture {
   base: string;
   // A projects directory, also the default working directory.
   root: string;
-  // The injected home, also `HOME` for alignfirst, without an aligndev config unless a test writes one.
+  // The injected home, also `HOME` for alignfirst, without aligndev settings unless a test writes them.
   home: string;
 }
 

@@ -8,8 +8,8 @@
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #
 # Scopes: config, workspace, packages, skills, projects, instructions, agent-skills. The config
-# scope covers openclaw.json and the aligndev config with its directory ~/.alignfirst. The
-# companions directory, with its registry, stays service-owned.
+# scope covers openclaw.json and the aligndev settings (~/.alignfirst/settings.json) with their
+# directory ~/.alignfirst. The companions directory, with its registry, stays service-owned.
 
 set -Eeuo pipefail
 
@@ -19,7 +19,7 @@ ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
 ALIGNFIRST_HOME="$SERVICE_HOME/.alignfirst"
-ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.config.json"
+ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/settings.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 declare -a SCOPES=()
 declare -a COMMAND=()
@@ -83,7 +83,7 @@ parse_arguments() {
 }
 
 resolve_paths() {
-  local config="$ADMIN_REPOSITORY/infra/openclaw/aligndev.config.json"
+  local config="$ADMIN_REPOSITORY/infra/openclaw/settings.json"
   if [ -r "$config" ]; then
     CODING_AGENT=$(jq -r '.code.agent' "$config" 2>/dev/null) || CODING_AGENT=
   fi

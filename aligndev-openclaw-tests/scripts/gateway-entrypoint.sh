@@ -31,7 +31,7 @@ if [ -f "$CODEX_AUTH" ]; then
   trap - EXIT
 fi
 
-# Fatal, unlike the import: every delegation reads its coding agent from this config.
+# Fatal, unlike the import: every delegation reads its coding agent from these settings.
 node -e '
   const { mkdirSync, writeFileSync } = require("node:fs");
   const { dirname } = require("node:path");
@@ -53,6 +53,6 @@ node -e '
   };
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
-' "$HOME/.alignfirst/aligndev.config.json" || exit 1
+' "$HOME/.alignfirst/settings.json" || exit 1
 
 exec "$@"
