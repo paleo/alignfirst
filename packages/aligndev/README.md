@@ -103,7 +103,7 @@ Install the setup skill where your agent will assemble the deployment's private 
 npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the AlignFirst bootstrap line, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 
 ## Under the Hood
 

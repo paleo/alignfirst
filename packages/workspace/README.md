@@ -19,7 +19,7 @@ Several workspaces run at once without colliding, so you can develop, test, or h
 
 ## Setup
 
-The `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill (globally or locally):
+The `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill globally:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide

@@ -21,8 +21,8 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 ```
 
 Prepare the clone through the setup skill's **Prepare a Project for an Assistant** route.
-It installs the CLI prerequisite and skills, writes `.alignfirst.json`, and configures docmap,
-workspace, and `DEVELOPERS.md`.
+It writes the bootstrap section and `.alignfirst.json`, and configures docmap, workspace, and
+`DEVELOPERS.md`. It installs no AlignFirst skill.
 
 <!-- TEAM_PLANS_SECTION -->
 ## Work-files repository

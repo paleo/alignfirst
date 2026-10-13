@@ -44,7 +44,7 @@ Before any discussion:
 
 ### Step 2 — Check the AlignDev contract
 
-The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Project for an Assistant": AlignFirst skills configuration, docmap, the workspace system, and a `DEVELOPERS.md` with a workspaces section. The workspace system and its section belong to the contract only for a project that installs them; a project without them runs in main-worktree mode. When DEVELOPERS_PATH exists, the project is prepared: continue with the normal working-session flow for the user's request. Otherwise, continue to Step 3.
+The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Project for an Assistant": the `alignfirst context` bootstrap section, docmap, the workspace system, and a `DEVELOPERS.md` with a workspaces section. The workspace system and its section belong to the contract only for a project that installs them; a project without them runs in main-worktree mode. When DEVELOPERS_PATH exists, the project is prepared: continue with the normal working-session flow for the user's request. Otherwise, continue to Step 3.
 
 ### Step 3 — Warn and ask
 

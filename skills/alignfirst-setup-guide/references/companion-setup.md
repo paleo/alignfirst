@@ -53,7 +53,16 @@ mkdir -p <companion>/.plans
 
 An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) to the agent's global instruction file, after the user confirms. Skip it when the file already has it.
 
-## 8. Check
+## 8. Write access
+
+An interactive coding agent asks before it writes outside the repository, and the companion lies outside it. With the user's consent, add the companions root to the agent's writable directories, or the companion directory itself when its `dir` lies outside that root:
+
+- Claude Code: `permissions.additionalDirectories` in `~/.claude/settings.json`;
+- Codex: `sandbox_workspace_write.writable_roots` in `~/.codex/config.toml`.
+
+Write real paths: when `~/.alignfirst/companions` is a symlink, add its target. `companion.dir` from step 2 is already a real path. Skip a path the setting already covers.
+
+## 9. Check
 
 ```sh
 npx -y alignfirst doctor
@@ -66,12 +75,12 @@ The doctor must pass, and `git status` in the repository must show no change.
 
 The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except the workspace system and the Node version file. It changes these steps:
 
-- **Skills and bootstrap (steps 1 and 7):** skip them. The deployment installs the CLI globally, and `aligndev code` puts the context into the launched agent's prompt.
+- **Skills, bootstrap and write access (steps 1, 7 and 8):** skip them. The deployment installs the CLI globally, and `aligndev code` puts the context into the launched agent's prompt and passes `--add-dir <companion>`.
 - **Companion (step 2):** on an AlignDev OpenClaw host, the assistant runs `alignfirst companion register` itself before it delegates the preparation.
 - **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
 - **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.
-- **Check (step 8):** `aligndev project doctor --root <projects-directory>` must pass too.
+- **Check (step 9):** `aligndev project doctor --root <projects-directory>` must pass too.
 
 ## Keep Only aligndev's Session Files Out
 

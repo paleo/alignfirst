@@ -38,7 +38,7 @@ AlignDev for OpenClaw deploys the assistant as an OpenClaw bot. One deployment i
 
 ## Setup with your agent
 
-Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill (globally or locally):
+Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill globally:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide

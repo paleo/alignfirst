@@ -12,8 +12,8 @@ Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub 
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global \
-  --skill al --skill alplan --skill alspec --skill aldescription \
-  --skill alreview --skill alcatchup --skill almerge \
+  --skill alspec --skill alplan --skill al --skill almerge \
+  --skill alreview --skill aldescription --skill alcatchup \
   --skill alcatchupaad --skill alcatchupspec
 ```
 
@@ -72,6 +72,45 @@ To leave the repository untouched, the guide keeps the project's AlignFirst file
 ```text
 Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
 ```
+
+## Set up a project manually
+
+1. Install the nine command skills globally. For Claude Code:
+
+   ```sh
+   npx skills add https://github.com/paleo/alignfirst --global --agent claude-code \
+     --skill alspec --skill alplan --skill al --skill almerge \
+     --skill alreview --skill aldescription --skill alcatchup \
+     --skill alcatchupaad --skill alcatchupspec
+   ```
+
+   For Codex:
+
+   ```sh
+   npx skills add https://github.com/paleo/alignfirst --global --agent codex \
+     --skill alspec --skill alplan --skill al --skill almerge \
+     --skill alreview --skill aldescription --skill alcatchup \
+     --skill alcatchupaad --skill alcatchupspec
+   ```
+
+2. Load the project context. Either add this section to the project's `AGENTS.md`, as its first `##` section:
+
+   ```markdown
+   ## Start every session with the project context
+
+   Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+   ```
+
+   Or add the [agent bootstrap](#agent-bootstrap) line to your global agent instructions.
+
+3. Create `.plans/` and ignore it:
+
+   ```sh
+   mkdir .plans
+   printf '%s\n' .plans >> .gitignore
+   ```
+
+   `.alignfirst.json` is optional. See [its schema](../../skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson).
 
 ## CLI commands
 

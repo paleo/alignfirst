@@ -116,8 +116,7 @@ Replace the v3 protocol content with the v4 stubs:
 npx -y skills update --global --yes
 ```
 
-Use `--project` instead of `--global` for a project-local installation. Finish by checking the
-effective project and the work-files link:
+Finish by checking the effective project and the work-files link:
 
 ```sh
 npx alignfirst config

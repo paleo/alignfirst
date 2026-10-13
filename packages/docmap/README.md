@@ -15,7 +15,7 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 ```md
 ## Docmap - Seek Documentation
 
-*Before* any investigation or code exploration, run `npx -y alignfirst docmap`, then read the relevant documentation. Mandatory for every task.
+At the start of the session, before any investigation or code exploration, run `npx -y alignfirst docmap`. Then read the documentation relevant to the task.
 ```
 
 ### Bootstrapping a docs/ directory (optional)
