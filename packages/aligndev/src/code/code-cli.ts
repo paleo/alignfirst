@@ -792,7 +792,7 @@ Options (new, resume):
 
 ${requires}
 
-Config (~/.alignfirst/settings.json):
+Config (~/.alignfirst/aligndev.settings.json):
   code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
                         agent that runs aligndev.
   code.defaultModel     Default model of a new session, one of the models accepted by --model.

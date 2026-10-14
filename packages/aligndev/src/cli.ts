@@ -82,7 +82,7 @@ ${usage}
 
 Run \`${aligndev} <command> --help\` for the usage of a command.
 
-Config (optional): ~/.alignfirst/settings.json. "platform" (${PLATFORMS.join(" or ")})
+Config (optional): ~/.alignfirst/aligndev.settings.json. "platform" (${PLATFORMS.join(" or ")})
 defaults to codingAgent. "code.agent" (${CODING_AGENTS.join(" or ")}) defaults to the coding agent that
 runs aligndev, detected from its environment.
 `;

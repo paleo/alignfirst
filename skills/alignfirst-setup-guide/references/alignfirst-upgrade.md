@@ -56,14 +56,14 @@ On an AlignDev OpenClaw host, `~/.alignfirst/` and its files are immutable. The 
 
 ## Rename the AlignDev Settings
 
-`aligndev` 0.23.0 reads its settings from `~/.alignfirst/settings.json` only, and fails when only the old file exists. When `~/.alignfirst/aligndev.config.json` exists on the machine, migrate once:
+`aligndev` 0.23.0 reads its settings from `~/.alignfirst/aligndev.settings.json` only, and fails when only the old file exists. When `~/.alignfirst/aligndev.config.json` exists on the machine, migrate once:
 
-1. Move it to `~/.alignfirst/settings.json`. The schema is unchanged.
+1. Move it to `~/.alignfirst/aligndev.settings.json`. The schema is unchanged.
 2. Run `aligndev guide code`, version 0.23.0 or later. It fails on an invalid file.
 
-On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and immutable (`06-security-hardening.md`). The new maintenance wrapper unlocks the directory and `settings.json`, never the old file, and reads the coding agent from the admin repository's `infra/openclaw/settings.json`. The operator migrates during `update-assistant.md`, in this order:
+On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and immutable (`06-security-hardening.md`). The new maintenance wrapper unlocks the directory and `aligndev.settings.json`, never the old file, and reads the coding agent from the admin repository's `infra/openclaw/aligndev.settings.json`. The operator migrates during `update-assistant.md`, in this order:
 
-1. In the admin repository, rename `infra/openclaw/aligndev.config.json` to `infra/openclaw/settings.json`, and bring `seed.sh`, `bin/assistant-maintenance.sh`, `bin/backup.sh` and the docs to the current template. Commit, pull on the host, and reinstall the maintenance controls, as the first section of `update-assistant.md` does.
+1. In the admin repository, rename `infra/openclaw/aligndev.config.json` to `infra/openclaw/aligndev.settings.json`, and bring `seed.sh`, `bin/assistant-maintenance.sh`, `bin/backup.sh` and the docs to the current template. Commit, pull on the host, and reinstall the maintenance controls, as the first section of `update-assistant.md` does.
 2. Install `aligndev` 0.23.0 through the npm packages section of `update-assistant.md`.
 3. Remove the immutable flag from the old file, as root:
 
@@ -71,17 +71,17 @@ On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and i
    sudo chattr -i /home/<service-user>/.alignfirst/aligndev.config.json
    ```
 
-4. Remove the old file and re-seed in one `config` window. The seed installs `settings.json` from the admin repository and validates it:
+4. Remove the old file and re-seed in one `config` window. The seed installs `aligndev.settings.json` from the admin repository and validates it:
 
    ```sh
    sudo /usr/local/sbin/alignfirst-assistant-maintenance config -- \
      bash -c 'rm ~/.alignfirst/aligndev.config.json && ~/seed/seed.sh'
    ```
 
-5. Check the lock. The wrapper restores it on exit: `settings.json` and `~/.alignfirst/` are root-owned and immutable again.
+5. Check the lock. The wrapper restores it on exit: `aligndev.settings.json` and `~/.alignfirst/` are root-owned and immutable again.
 
    ```sh
-   sudo lsattr -d /home/<service-user>/.alignfirst /home/<service-user>/.alignfirst/settings.json
+   sudo lsattr -d /home/<service-user>/.alignfirst /home/<service-user>/.alignfirst/aligndev.settings.json
    ```
 
 ## Convert the Companion Registry

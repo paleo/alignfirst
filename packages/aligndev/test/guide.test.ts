@@ -296,7 +296,9 @@ describe("aligndev guide playbook", () => {
     const fixture = makeFixture();
     const code = await runGuide(fixture, ["code"]);
     expect(code.code).toBe(1);
-    expect(code.stderr).toContain(`in ${join(fixture.home, ".alignfirst", "settings.json")}.`);
+    expect(code.stderr).toContain(
+      `in ${join(fixture.home, ".alignfirst", "aligndev.settings.json")}.`,
+    );
     for (const args of [[], ["working-session"], ["--help"]]) {
       expect((await runGuide(fixture, args)).code).toBe(0);
     }

@@ -23,7 +23,7 @@ main() {
   copy_file "$HOME/.openclaw/.env" openclaw.env
   copy_workspace
   copy_environment
-  copy_file "$HOME/.alignfirst/settings.json" settings.json
+  copy_file "$HOME/.alignfirst/aligndev.settings.json" aligndev.settings.json
   copy_companions
   create_openclaw_archive
   copy_thread_handoff_state
