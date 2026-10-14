@@ -68,7 +68,7 @@ Then ask your session to work with aligndev.
 
 ## Configuration
 
-`~/.alignfirst/settings.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant, with `sol` as the default model:
+`~/.alignfirst/aligndev.settings.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant, with `sol` as the default model:
 
 ```json
 {

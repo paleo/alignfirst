@@ -23,7 +23,7 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 - `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel.
 - `infra/openclaw/seed/coding-agent.sh` — the delegated coding agent's global instructions (merged into its instruction file).
 - `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`; `runtime.conf` is generated).
-- `infra/openclaw/settings.json` — the aligndev settings: platform, projects root and coding agent. The seed installs it at `~/.alignfirst/settings.json`, the fixed path `aligndev` reads. `code.skipPermissions` passes the agent CLI's permission-bypass flag, since backgrounded runs have no approval loop. `code.unset` strips the listed variables from the agent's environment, so the agent uses its own login, never a stray API key.
+- `infra/openclaw/aligndev.settings.json` — the aligndev settings: platform, projects root and coding agent. The seed installs it at `~/.alignfirst/aligndev.settings.json`, the fixed path `aligndev` reads. `code.skipPermissions` passes the agent CLI's permission-bypass flag, since backgrounded runs have no approval loop. `code.unset` strips the listed variables from the agent's environment, so the agent uses its own login, never a stray API key.
 - `infra/openclaw/workspace/` — the workspace files, applied by `apply-workspace.sh`.
 - `infra/openclaw/heartbeat-scratch.md` — the heartbeat job's checklist, pushed by `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)).
 - `infra/openclaw/projects/.alignfirst-projects.json` — the project parent, policy, and port range used by `aligndev project`.

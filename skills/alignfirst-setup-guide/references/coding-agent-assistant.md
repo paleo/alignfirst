@@ -12,7 +12,7 @@ The project needs a `.plans` directory, in its repository or in its companion di
 
 ## 2. Configure `aligndev` (recommended)
 
-Without settings, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. Settings make the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/settings.json`:
+Without settings, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. Settings make the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/aligndev.settings.json`:
 
 ```json
 {

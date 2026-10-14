@@ -33,7 +33,7 @@ function guideRun(home: string) {
 }
 
 function configPathOf(home: string): string {
-  return join(home, ".alignfirst", "settings.json");
+  return join(home, ".alignfirst", "aligndev.settings.json");
 }
 
 function oldConfigPathOf(home: string): string {
@@ -132,7 +132,8 @@ describe("loadConfig", () => {
     mkdirSync(join(home, ".alignfirst"), { recursive: true });
     writeFileSync(oldConfigPathOf(home), JSON.stringify(EXPLICIT));
     expect(() => loadConfig(home)).toThrow(
-      "Error: ~/.alignfirst/aligndev.config.json was renamed: move it to ~/.alignfirst/settings.json",
+      "Error: ~/.alignfirst/aligndev.config.json was renamed: " +
+        "move it to ~/.alignfirst/aligndev.settings.json",
     );
   });
 

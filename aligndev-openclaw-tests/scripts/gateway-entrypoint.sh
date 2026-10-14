@@ -53,6 +53,6 @@ node -e '
   };
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
-' "$HOME/.alignfirst/settings.json" || exit 1
+' "$HOME/.alignfirst/aligndev.settings.json" || exit 1
 
 exec "$@"

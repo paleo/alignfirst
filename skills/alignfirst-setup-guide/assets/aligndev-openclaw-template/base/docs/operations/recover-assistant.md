@@ -46,7 +46,7 @@ A backup at `~/backups/deployment/<stamp>/` is flat. Each file goes back to one 
 | `openclaw.env` | `~/.openclaw/.env` | — |
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
-| `settings.json` | `~/.alignfirst/settings.json` | `config` |
+| `aligndev.settings.json` | `~/.alignfirst/aligndev.settings.json` | `config` |
 | `companions/` (with `registry.json`) | `~/.alignfirst/companions/` | — |
 | `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 

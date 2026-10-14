@@ -18,7 +18,7 @@ read_when:
 | Path | Responsibility |
 | --- | --- |
 | `src/cli.ts` | Entry point: dispatches the command, loads the config, resolves the coding agent. |
-| `src/config.ts` | `~/.alignfirst/settings.json`: schema, defaults, agent detection. |
+| `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: schema, defaults, agent detection. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation. |

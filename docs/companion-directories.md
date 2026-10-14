@@ -25,7 +25,7 @@ Two cases drive the feature:
 
 ## The registry
 
-The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed path, with no environment variable. It sits in the companions directory, beside the companions. `~/.alignfirst/` is the home of both CLIs: it also holds `settings.json`, the `aligndev` settings. An absent registry means no project has a companion.
+The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed path, with no environment variable. It sits in the companions directory, beside the companions. `~/.alignfirst/` is the home of both CLIs: it also holds `aligndev.settings.json`, the `aligndev` settings. An absent registry means no project has a companion.
 
 ```json
 {

@@ -79,7 +79,7 @@ interface CodeConfigFile {
 // An absent file is a normal state: every key takes its default. A leftover file under the old
 // name is an error, so a missed rename never silently drops the user's settings.
 export function loadConfig(home: string): LoadedConfig {
-  const path = join(home, ".alignfirst", "settings.json");
+  const path = join(home, ".alignfirst", "aligndev.settings.json");
   const value = existsSync(path) ? parseConfigFile(path) : absentConfig(home);
   const code = value.code ?? {};
   return {
@@ -101,7 +101,8 @@ export function loadConfig(home: string): LoadedConfig {
 function absentConfig(home: string): ConfigFile {
   if (existsSync(join(home, ".alignfirst", "aligndev.config.json"))) {
     throw new Error(
-      "Error: ~/.alignfirst/aligndev.config.json was renamed: move it to ~/.alignfirst/settings.json",
+      "Error: ~/.alignfirst/aligndev.config.json was renamed: " +
+        "move it to ~/.alignfirst/aligndev.settings.json",
     );
   }
   return {};

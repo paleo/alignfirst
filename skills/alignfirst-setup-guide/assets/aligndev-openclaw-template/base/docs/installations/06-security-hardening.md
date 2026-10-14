@@ -57,12 +57,12 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So are the aligndev settings (`~/.alignfirst/settings.json`), with their directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own settings in a new directory of that name.
+So are the aligndev settings (`~/.alignfirst/aligndev.settings.json`), with their directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own settings in a new directory of that name.
 
 ```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/settings.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/settings.json
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/settings.json
+sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
 sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst
 sudo chmod 755 /home/{{SERVICE_USER}}/.alignfirst
 sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst
@@ -160,7 +160,7 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/settings.json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/aligndev.settings.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst ~/.alignfirst-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst/companions ~/.alignfirst/companions-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
