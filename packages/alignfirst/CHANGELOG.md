@@ -1,5 +1,16 @@
 # alignfirst
 
+## 0.11.0
+
+### Minor Changes
+
+- 9835d7e: Breaking: the companion registry now lists `projects`, each with an explicit companion `dir` and optional `items` settings (`"companion"`, `"project"` or `"auto"`). `companion register --dir <path>` places a new companion anywhere; `companion unregister --remove-dir` deletes only a directory inside `~/.alignfirst/companions`. An existing registry with `paths` must be converted, as the setup guide's upgrade reference describes.
+
+### Patch Changes
+
+- Updated dependencies [9835d7e]
+  - @alignfirst/docmap@0.11.2
+
 ## 0.10.0
 
 ### Minor Changes

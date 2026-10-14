@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.5.2
+
+### Patch Changes
+
+- 9835d7e: Supports OpenClaw 2026.10.x.
+
 ## 0.5.1
 
 ### Patch Changes
