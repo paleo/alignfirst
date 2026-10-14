@@ -1,5 +1,11 @@
 # @alignfirst/docmap
 
+## 0.11.2
+
+### Patch Changes
+
+- 9835d7e: Improved documentation about the agent snippet.
+
 ## 0.11.1
 
 ### Patch Changes

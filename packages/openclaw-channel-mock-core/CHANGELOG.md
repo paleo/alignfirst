@@ -1,5 +1,11 @@
 # @alignfirst/openclaw-channel-mock-core
 
+## 0.11.1
+
+### Patch Changes
+
+- 9835d7e: Supports OpenClaw 2026.10.x.
+
 ## 0.11.0
 
 ### Minor Changes
