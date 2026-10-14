@@ -27,11 +27,17 @@ function packWorkspace(directory) {
   const packageRoot = join(repositoryRoot, "packages", directory);
   const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
   const output = runNpm(["pack", "--json", "--pack-destination", installRoot], packageRoot);
-  const filename = JSON.parse(output)[0]?.filename;
+  const filename = readPackedFilename(JSON.parse(output));
   if (typeof manifest.version !== "string" || typeof filename !== "string") {
     throw new Error(`Could not pack packages/${directory}.`);
   }
   return { tarball: join(installRoot, filename), version: manifest.version };
+}
+
+function readPackedFilename(packed) {
+  // npm 11 prints an array of packed packages; npm 12 prints an object keyed by package name.
+  const [first] = Array.isArray(packed) ? packed : Object.values(packed ?? {});
+  return first?.filename;
 }
 
 function verifyCliVersion(args, expected) {
