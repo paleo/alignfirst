@@ -92,6 +92,22 @@ describe("shared runner helpers", () => {
     });
   });
 
+  it("lets a Claude run wait for its background work without a time cap", async () => {
+    const { config } = makeRun();
+    config.env = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "600000" };
+    const script = `
+      const result = String(process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS);
+      process.stdout.write(JSON.stringify({ type: "result", result, is_error: false }));
+    `;
+    const result = await runAgent(
+      config,
+      createClaudeAdapter(),
+      { write() {} },
+      nodeFixture(script),
+    );
+    expect(result).toMatchObject({ status: "succeeded", result: "0" });
+  });
+
   it.each([createClaudeAdapter(), createCodexAdapter()])(
     "pipes a large literal prompt to $executable without putting it in argv",
     async (adapter) => {
