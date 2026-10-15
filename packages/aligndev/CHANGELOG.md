@@ -1,5 +1,12 @@
 # aligndev
 
+## 0.23.1
+
+### Patch Changes
+
+- 24dd745: A run without a protocol no longer blocks a protocol run, and two protocol runs can no longer share a ticket from different worktrees.
+- 24dd745: Coding agents now wait for their subagents and background commands before ending a run.
+
 ## 0.23.0
 
 ### Minor Changes
