@@ -37,8 +37,8 @@ Run from the repository root on the feature branch. Commit the changes to test f
 
 ```bash
 git status --short
-fnm exec --using=.nvmrc npm view alignfirst dist-tags --json
-fnm exec --using=.nvmrc npm pkg get version dependencies --workspace alignfirst
+npm view alignfirst dist-tags --json
+npm pkg get version dependencies --workspace alignfirst
 ```
 
 Check that the branch contains the intended stable baseline and feature changes. If it needs updating, merge or rebase it before testing. Choose the baseline from the code being published, not just the newest registry version.
@@ -46,7 +46,7 @@ Check that the branch contains the intended stable baseline and feature changes.
 Every runtime dependency must already be available on npm at a version satisfying the package's declared range. Check internal dependencies explicitly, for example:
 
 ```bash
-fnm exec --using=.nvmrc npm view '@alignfirst/docmap@~0.11.2' version
+npm view '@alignfirst/docmap@~0.11.2' version
 ```
 
 If a dependency also needs unreleased changes, stop: publishing that dependency and wiring its preview version requires a coordinated release. The procedure below publishes one package only.
@@ -54,8 +54,8 @@ If a dependency also needs unreleased changes, stop: publishing that dependency 
 Authenticate as an npm owner with publishing rights and 2FA. Run `npm login` if `whoami` fails or shows the wrong account:
 
 ```bash
-fnm exec --using=.nvmrc npm whoami
-fnm exec --using=.nvmrc npm login
+npm whoami
+npm login
 ```
 
 ## Build and publish
@@ -79,28 +79,27 @@ Set the four values at the top for the selected package. Run this Bash block fro
     *) echo "Use preview or preview-<topic>."; exit 1 ;;
   esac
 
-  LATEST_BEFORE=$(fnm exec --using=.nvmrc npm view "$PACKAGE@latest" version)
-  fnm exec --using=.nvmrc npm view "$PACKAGE" dist-tags --json
+  LATEST_BEFORE=$(npm view "$PACKAGE@latest" version)
+  npm view "$PACKAGE" dist-tags --json
 
-  fnm exec --using=.nvmrc npm ci
-  fnm exec --using=.nvmrc npm run clear
-  fnm exec --using=.nvmrc npm run build
-  fnm exec --using=.nvmrc npm run lint
-  fnm exec --using=.nvmrc npm test
+  npm ci
+  npm run clear
+  npm run build
+  npm run lint
+  npm test
 
   trap 'git restore -- "$MANIFEST" package-lock.json' EXIT
-  fnm exec --using=.nvmrc npm version "$VERSION" \
-    --no-git-tag-version --ignore-scripts --workspace "$PACKAGE"
-  fnm exec --using=.nvmrc npm pkg delete scripts --workspace "$PACKAGE"
-  fnm exec --using=.nvmrc npm run release:smoke
-  fnm exec --using=.nvmrc npm publish --workspace "$PACKAGE" --tag "$TAG" --dry-run
+  npm version "$VERSION" --no-git-tag-version --ignore-scripts --workspace "$PACKAGE"
+  npm pkg delete scripts --workspace "$PACKAGE"
+  npm run release:smoke
+  npm publish --workspace "$PACKAGE" --tag "$TAG" --dry-run
 
   # Inspect the package contents above. Publishing may open a browser for 2FA.
   read -r -p "Publish $PACKAGE@$VERSION under $TAG? Type yes: " CONFIRM
   test "$CONFIRM" = yes
-  fnm exec --using=.nvmrc npm publish --workspace "$PACKAGE" --tag "$TAG"
+  npm publish --workspace "$PACKAGE" --tag "$TAG"
 
-  fnm exec --using=.nvmrc npm view "$PACKAGE" dist-tags --json
+  npm view "$PACKAGE" dist-tags --json
   echo "latest before publish: $LATEST_BEFORE"
 )
 git status --short
