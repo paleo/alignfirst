@@ -38,7 +38,7 @@ The condition names the project's guide file for the assistant. Under `codingAge
 - Under OpenClaw, the assistant runs it through `exec` with `background: true` and `timeoutSeconds: 0`, and chains `openclaw system event --mode now --session-key <key>` onto the command.
 - A coding-agent assistant uses its own background execution, with no time limit and outside its sandbox. Claude Code wakes the session when the command exits. Otherwise, the assistant checks its pending runs at the start of the next user turn.
 
-The prompt reaches the agent through stdin. The agent inherits the caller's environment, minus the assistant session's identity variables (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …) and the configured `code.unset`.
+The prompt reaches the agent through stdin. A new session's prompt opens with a run context. It tells the agent that ending its turn kills its subagents and background commands, so it must wait for them first. The agent inherits the caller's environment, minus the assistant session's identity variables (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …) and the configured `code.unset`.
 
 ### Session File
 
@@ -68,6 +68,7 @@ An adapter (`claude-agent.ts`, `codex-agent.ts`) builds each CLI's arguments, pa
 
 - **Permissions:** normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `code.skipPermissions` selects each CLI's bypass flag.
 - **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves to the newest matching slug of `codex debug models --bundled`. `code.models` replaces the list. Without `--model`, a new session takes `code.defaultModel`, and a resume takes the `model` recorded by the session's latest run, unchecked against the current list. The session file records the chosen name, or `null` for the agent's own default.
+- **Background work:** after the agent's turn, `claude -p` waits for its background subagents and commands, then wakes it for another turn. By default, it kills that work after 10 minutes of idle waiting; Claude runs set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` to wait until it ends. Each turn closes with its own `result` event, and the session file keeps the last non-empty one.
 - **Resume:** session files record `agent`, and a session resumes only with the same agent. Agentless legacy sessions stay readable but need a new session.
 - **Detection:** without `code.agent`, the agent is the one that runs `aligndev`: Claude Code sets `CLAUDECODE=1` (documented), Codex sets `CODEX_THREAD_ID` (from its source). Neither or both is an error, raised only by the commands that need the agent: `guide code`, `code --help`, `code quota`, and `code new` or `resume`.
 

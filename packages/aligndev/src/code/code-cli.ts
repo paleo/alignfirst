@@ -710,6 +710,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
       protocol: args.protocol,
       ticket: input.ticket,
       message: args.message,
+      newSession: args.resume === undefined,
       catchupContent: input.catchupContent,
       contextContent: input.contextContent,
       alignfirst: input.alignfirst,

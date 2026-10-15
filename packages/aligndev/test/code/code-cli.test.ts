@@ -1171,7 +1171,9 @@ describe("companion projects", () => {
     });
     expect(started).toBe(0);
     const first = received();
-    expect(first.prompt).toMatch(/^## Project context\n\n# Project Conventions\n/);
+    expect(first.prompt).toMatch(
+      /^## Run context\n\n.+\n\n## Project context\n\n# Project Conventions\n/,
+    );
     expect(first.prompt).toMatch(/\n\n## Current instruction\n\ngo$/);
     expect(first.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
 
@@ -1209,7 +1211,8 @@ describe("companion projects", () => {
     });
     expect(started).toBe(0);
     const { prompt, args } = received();
-    expect(prompt).toBe("go");
+    expect(prompt).not.toContain("## Project context");
+    expect(prompt).toMatch(/\n\n## Current instruction\n\ngo$/);
     expect(args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
   });
 
