@@ -1,9 +1,14 @@
 import { isCompacted } from "./run-agent.js";
 import type { AgentAdapter, AgentProtocolState, RunConfig } from "./run-agent.js";
 
+// After the agent's turn, `claude -p` waits for its background work, but stops it after 10 minutes
+// of idle waiting by default. `0` waits until the work ends.
+const CLAUDE_ENV = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" };
+
 export function createClaudeAdapter(): AgentAdapter {
   return {
     executable: "claude",
+    env: CLAUDE_ENV,
     buildArgs: buildClaudeArgs,
     createState: createClaudeState,
     interpretLine: interpretClaudeLine,
@@ -51,8 +56,7 @@ export function interpretClaudeLine(line: string, state: AgentProtocolState): st
     case "result":
       state.protocolComplete = true;
       state.protocolFailed = event.is_error === true;
-      state.result = asString(event.result);
-      if (state.protocolFailed) state.failure = state.result;
+      captureResult(asString(event.result), state);
       return;
     case "unparsed":
       return asString(event.raw);
@@ -71,6 +75,14 @@ export function assessClaudeState(state: AgentProtocolState) {
     contextTokens: state.contextTokens,
     contextCompacted: isCompacted(state),
   };
+}
+
+// Background work wakes the agent for more turns, each closed by its own `result` event. A turn
+// with nothing to report closes with an empty one, which must not erase the previous result.
+function captureResult(result: string | undefined, state: AgentProtocolState): void {
+  if (state.protocolFailed) state.failure = result;
+  if (result === "" && state.result !== undefined) return;
+  state.result = result;
 }
 
 // What the newest assistant response holds in the context window. Claude reports cache reads and

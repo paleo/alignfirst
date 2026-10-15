@@ -28,8 +28,9 @@ export interface SessionFrontmatter {
   // Linux `/proc/<pid>/stat` start time. Distinguishes the original process from a later process
   // that reused its pid; null on platforms without `/proc` and in legacy records.
   pidStartTime: string | null;
-  // Realpath aligndev ran from. Scopes the single-protocol-run guard to the worktree (several
-  // worktrees share one session tree, through a `.plans/` symlink or the companion directory).
+  // Realpath aligndev ran from. Scopes the single-protocol-run guard to the worktree, alongside the
+  // ticket (several worktrees share one session tree, through a `.plans/` symlink or the companion
+  // directory).
   cwd: string | null;
   startedAt: string;
   endedAt: string | null;

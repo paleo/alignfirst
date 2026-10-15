@@ -75,6 +75,8 @@ export interface AgentAssessment {
 
 export interface AgentAdapter {
   executable: string;
+  // Set for every run, over the caller's environment.
+  env?: Readonly<Record<string, string>>;
   buildArgs(config: RunConfig): string[];
   createState(): AgentProtocolState;
   interpretLine(line: string, state: AgentProtocolState): string | undefined;
@@ -174,7 +176,7 @@ function spawnAgent(
 ): Promise<ProcessOutcome> {
   const child = spawnProcess(adapter.executable, adapter.buildArgs(config), {
     cwd: config.cwd,
-    env: buildAgentEnv(config.env, config.unset),
+    env: { ...buildAgentEnv(config.env, config.unset), ...adapter.env },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const detachChildGuards = guardChildLifecycle(child, config.sessionFilePath, state);
