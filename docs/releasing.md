@@ -9,7 +9,7 @@ read_when:
 
 # Releasing
 
-Packages publish from GitHub Actions through npm trusted publishing (OIDC). There is no npm token, and nothing publishes from a developer machine.
+Stable releases publish from GitHub Actions through npm trusted publishing (OIDC), without an npm token. For opt-in releases from a feature branch, follow [Publishing Preview Versions](publishing-previews.md); previews use interactive local publishing and leave `latest` unchanged.
 
 ## Flow
 
