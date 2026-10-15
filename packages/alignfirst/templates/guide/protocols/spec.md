@@ -28,7 +28,7 @@ Nothing is written in TICKET_DIR before the user agrees.
 
 The user is a developer who carries the global vision of the project and decides the choices that matter. You carry the details of the code you just read. The discussion keeps the user aware of what you found and hands them every decision worth taking.
 
-Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per topic that needs the user's judgement. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
+Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per question that needs the user's judgement. Each question opens its own topic. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
 
 A block presents a topic and a recommendation:
 
@@ -40,7 +40,7 @@ A block presents a topic and a recommendation:
 
 Look for edge cases and impacts on the rest of the system; raise those needing a decision in the relevant topic.
 
-Keep topic numbers stable across rounds (T1, T2, etc.). Number additional questions within a topic T1.1, T1.2, etc. The simpler the topic, the shorter its block.
+Keep topic numbers stable across rounds (T1, T2, etc.). Add new topics as new questions arise. Number follow-up questions within an existing topic T1.1, T1.2, etc. The simpler the topic, the shorter its block.
 
 Settle on your own what the code can answer; routine choices belong in the opening approach. Ask the user what needs their judgement: product behavior, scope, priorities, constraints the code does not show. Leave out the investigation narrative and the list of files you read.
 

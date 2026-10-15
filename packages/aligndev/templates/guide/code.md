@@ -236,16 +236,16 @@ Prefer `--message-file` for long or multi-line messages. A quoted heredoc delimi
 
 ## Answering the agent's questions
 
-During spec and AAD sessions the agent asks numbered questions, `Q1`, `Q2`…, each with a ➡️ recommendation. Resume **without a protocol** to answer. Compose the answers in English, all in one message, numbered to match:
+During spec and AAD sessions each question opens a topic, `T1`, `T2`…, with a ➡️ recommendation. Resume **without a protocol** to answer. Compose the answers in English, all in one message, numbered to match:
 
 ```bash
 {{ALIGNDEV}} code resume <sessionId> --message \
-  "Q1 - Explore the codebase and give me your opinion.
-Q2 - Is that a good design? We need the cleanest code possible.
-Q3 - Yes, it should be optional."
+  "T1 - Explore the codebase and give me your opinion.
+T2 - Is that a good design? We need the cleanest code possible.
+T3 - Yes, it should be optional."
 ```
 
-A question your reply skips stays open. Accept a whole round only once your user has settled every decision that is theirs: "All recommendations accepted, except Q3: <what to do instead>."
+A question your reply skips or answers partially stays open under its topic. Accept a whole round only once your user has settled every decision that is theirs: "All recommendations accepted, except T3: <what to do instead>."
 
 **Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the elegant, proper, simple yet robust solution?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
 

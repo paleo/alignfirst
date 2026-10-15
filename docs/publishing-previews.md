@@ -11,7 +11,7 @@ read_when:
 
 Publish previews interactively from a feature worktree with npm 2FA and an explicit non-`latest` tag. Stable releases continue through [the CI release workflow](releasing.md).
 
-This is the procedure used for the earlier protocol preview. Local previews carry no provenance attestation; publishing one leaves the stable versions and their attestations unchanged. The package policy permits interactive 2FA publishing even though it disallows token-based publishing.
+Local previews carry no provenance attestation; publishing one leaves the stable versions and their attestations unchanged. The package policy permits interactive 2FA publishing even though it disallows token-based publishing. `npm audit signatures` can pass without an attestation; it does not certify CI provenance for this publish.
 
 ## Version and tag
 
@@ -26,7 +26,7 @@ SemVer sorts this version below `0.11.0`. It is an opt-in variant, not the next 
 
 The npm tag is a separate, movable pointer:
 
-- `preview` — the shared preview channel, matching the previous procedure.
+- `preview` — the shared preview channel.
 - `preview-topics` — a topic-specific channel when several previews need to coexist.
 
 Publishing with `--tag preview` moves only `preview`. Always pass the tag explicitly; never use `latest` for this procedure.
@@ -109,10 +109,11 @@ The current `release:smoke` checks the alignfirst and docmap tarballs together, 
 
 Confirm that the selected tag points to the new version and `latest` is unchanged. Registry metadata can lag for several minutes; retry the lookup before treating a missing version as a failed publish. If another stable release ran concurrently, compare with that release rather than reverting its tag.
 
-If interrupted before cleanup, restore only the temporary files from the initially clean checkout:
+If interrupted before cleanup, restore only the temporary files from the initially clean checkout. Set `MANIFEST` again to the selected package's path; the publishing subshell does not preserve it:
 
 ```bash
-git restore -- packages/alignfirst/package.json package-lock.json
+MANIFEST=packages/alignfirst/package.json # Use the path selected for publishing.
+git restore -- "$MANIFEST" package-lock.json
 ```
 
 Do not run `changeset version`, `changeset pre`, or `changeset publish` for this procedure. The preview version is never committed, so the normal release workflow continues to compare the stable manifests on `main` with npm.
@@ -136,8 +137,6 @@ alignfirst --version
 Install under the Node version used by the coding agent; fnm and nvm have separate global installs per Node version. A project-local dependency can take precedence over a global install when using `npx`. Check `npx -y alignfirst --version` in the actual test project rather than assuming it uses the preview.
 
 **AlignFirst configuration guard:** a configured `cli` range rejects every prerelease version. The current parser accepts only stable versions in ranges, so setting `cli` to the preview version does not work either. Test in a project without `cli`, or temporarily remove that field from the resolved project config and restore it after testing. `alignfirst config --json` reports the resolved configuration even when the guard fails.
-
-Local previews have no provenance attestation. `npm audit signatures` can pass without one; it does not certify CI provenance for this publish.
 
 ## End the test
 
