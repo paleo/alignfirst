@@ -60,7 +60,7 @@ When the agent's login on the host is missing or expired, `aligndev code` detect
 
 ### Tickets
 
-A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side`. `--catchup` loads the ticket's history through `alignfirst ticket --catchup` before the protocol and message.
+A new protocol session needs a ticket. `--no-ticket` reserves the next side ticket through `alignfirst ticket --side`. `--catchup` loads the ticket's history through `alignfirst ticket --catchup` before the protocol and message. A protocol run is refused while another protocol run is active in the same worktree or on the same ticket, since `alignfirst ticket --next` reserves no work-file prefix. Runs without a protocol neither block nor are blocked.
 
 ## Coding Agents
 

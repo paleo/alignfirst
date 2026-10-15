@@ -800,7 +800,7 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: null }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, legacy)).toContain(
+    expect(checkLaunchGuards(parsed, "claude", realCwd, undefined, legacy)).toContain(
       "predates agent-aware sessions",
     );
 
@@ -810,7 +810,7 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: "codex" }),
       },
     ];
-    const mismatch = checkLaunchGuards(parsed, "claude", realCwd, codex);
+    const mismatch = checkLaunchGuards(parsed, "claude", realCwd, undefined, codex);
     expect(mismatch).toContain("belongs to agent codex");
     expect(mismatch).toContain("selected agent is claude");
   });
@@ -912,7 +912,7 @@ describe("launch guards", () => {
     seedRecord("running.md", { sessionId: "abc" });
     const { code, stderr } = await run(["new", "--protocol", "plan", "--ticket", "31"]);
     expect(code).toBe(1);
-    expect(stderr).toContain("a protocol run is already active in this worktree");
+    expect(stderr).toContain("a spec protocol run is already active in this worktree");
     expect(stderr).toContain(`pid ${process.pid}`);
   });
 
@@ -924,7 +924,55 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toBeUndefined();
+  });
+
+  it("lets a protocol run start while a plain run is active in the same worktree", () => {
+    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
+    const records = [
+      { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
+    ];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toBeUndefined();
+  });
+
+  it("rejects a protocol run on a ticket with an active protocol run in another worktree", () => {
+    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
+    const records = [
+      {
+        path: "/elsewhere/.plans/31/_aligndev/r.md",
+        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere", ticket: "31" }),
+      },
+    ];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toContain(
+      "a spec protocol run is already active on ticket 31",
+    );
+  });
+
+  it("rejects a protocol run on another ticket while a protocol run holds the worktree", () => {
+    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
+    const records = [{ path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc" }) }];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toContain(
+      "a spec protocol run is already active in this worktree",
+    );
+  });
+
+  it("lets a protocol run start while a resume without protocol runs on its ticket", () => {
+    const parsed = parse(["new", "--protocol", "plan", "--ticket", "30"]);
+    const records = [
+      { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
+    ];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, "30", records)).toBeUndefined();
+  });
+
+  it("checks only the worktree for a --no-ticket protocol run", () => {
+    const parsed = parse(["new", "--protocol", "aad", "--no-ticket", "--message", "go"]);
+    const records = [
+      {
+        path: "/elsewhere/.plans/30/_aligndev/r.md",
+        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
+      },
+    ];
+    expect(checkLaunchGuards(parsed, "claude", realCwd, undefined, records)).toBeUndefined();
   });
 
   it("exempts no-protocol invocations from the busy-worktree guard", () => {
@@ -940,10 +988,10 @@ describe("launch guards", () => {
       },
     ];
     const answer = parse(["resume", "abc2", "--message", "answer"]);
-    expect(checkLaunchGuards(answer, "claude", realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(answer, "claude", realCwd, undefined, records)).toBeUndefined();
 
     const execute = parse(["new", "--message", "Execute the plan"]);
-    expect(checkLaunchGuards(execute, "claude", realCwd, records)).toBeUndefined();
+    expect(checkLaunchGuards(execute, "claude", realCwd, undefined, records)).toBeUndefined();
   });
 });
 

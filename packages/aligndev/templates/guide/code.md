@@ -37,7 +37,7 @@ As soon as the run is backgrounded, tell the user — in the user's language —
 
 Each ticketed run writes `.plans/<ticket>/_aligndev/<stamp>.md`. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `{{ALIGNDEV}} code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
 
-**One protocol run at a time per workspace** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
+**One protocol run at a time per workspace and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
 ## After a background run completes
 
@@ -74,7 +74,7 @@ Coding runs can be long (several hours is fine), and a foreground command is sub
 
 Run `{{ALIGNDEV}} code` outside your sandbox: the agent needs network access, and it writes outside the project, to its own session storage and possibly to the companion directory. In Codex, request escalated permissions for the command. In Claude Code with sandboxing enabled, run it with the sandbox disabled.
 
-**One protocol run at a time per worktree** — protocol runs share the working tree. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
+**One protocol run at a time per worktree and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
 ## Background runs and reporting
 

@@ -438,16 +438,15 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
   }
 
   const records = listSessionRecords(tree.sessionsDir);
-  const guardError = checkLaunchGuards(args, agent, tree.cwd, records);
+  const resolvedTicket = args.noTicket ? undefined : resolveTicket(args, records);
+  const guardError = checkLaunchGuards(args, agent, tree.cwd, resolvedTicket, records);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
   }
 
   const now = new Date();
-  const ticket = args.noTicket
-    ? reserveSideTicket(alignfirstCommand, cwd, env)
-    : resolveTicket(args, records);
+  const ticket = args.noTicket ? reserveSideTicket(alignfirstCommand, cwd, env) : resolvedTicket;
   if (ticket !== undefined && !args.noTicket && args.resume === undefined) {
     openTicket(alignfirstCommand, cwd, ticket, env);
   }
@@ -524,6 +523,7 @@ export function checkLaunchGuards(
   args: SessionArgs,
   agent: CodingAgent,
   realCwd: string,
+  ticket: string | undefined,
   records: SessionRecord[],
 ): string | undefined {
   if (args.resume !== undefined) {
@@ -552,19 +552,27 @@ export function checkLaunchGuards(
       );
     }
   }
-  // Protocol runs only: plain messages (answers, questions, plan executions) may run at any time.
+  // Protocol runs only, against other protocol runs: they share the working tree, and
+  // `alignfirst ticket --next` reserves no work-file prefix within a ticket.
   if (args.protocol !== undefined) {
-    const busy = records.find(
-      (r) => r.frontmatter.status === "running" && r.frontmatter.cwd === realCwd,
+    const active = records.filter(
+      (r) => r.frontmatter.status === "running" && r.frontmatter.protocol !== null,
     );
-    if (busy) {
-      return (
-        `Error: a protocol run is already active in this worktree (${busy.path}, ` +
-        `pid ${busy.frontmatter.pid}); one protocol run at a time per worktree.`
-      );
-    }
+    const sameWorktree = active.find((r) => r.frontmatter.cwd === realCwd);
+    if (sameWorktree) return busyProtocolError(sameWorktree, "in this worktree");
+    const sameTicket =
+      ticket === undefined ? undefined : active.find((r) => r.frontmatter.ticket === ticket);
+    if (sameTicket) return busyProtocolError(sameTicket, `on ticket ${ticket}`);
   }
   return;
+}
+
+function busyProtocolError(record: SessionRecord, scope: string): string {
+  return (
+    `Error: a ${record.frontmatter.protocol} protocol run is already active ${scope} ` +
+    `(${record.path}, pid ${record.frontmatter.pid}); one protocol run at a time per worktree ` +
+    "and per ticket."
+  );
 }
 
 // The newest record of a non-empty list: a resumed session has one record per run.
