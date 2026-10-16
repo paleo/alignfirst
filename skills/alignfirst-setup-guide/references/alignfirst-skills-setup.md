@@ -74,34 +74,25 @@ mkdir .plans
 printf '%s\n' .plans >> .gitignore
 ```
 
+Detect the conventions first. Take the ticket format from branches and tickets: `^\d+$` for issue numbers, `^[A-Z]+-\d+$` for Jira-like keys, or none without a convention. The pattern is one anchored expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Take the branch-name template from existing branches, and the commit style from `git log --oneline -20`. Resolve the default branch with `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user when several non-`origin` remotes exist. Omit any convention that repository evidence cannot establish.
+
 ### Without `.alignfirst.json`
 
-Detect the commit-message convention, default branch, and ticket format. Preserve project-specific
-instructions and add or update this section in `AGENTS.md` or `CLAUDE.md`:
+Add a `### Conventions` sub-section at the end of the bootstrap section from **Project Instructions**, in the format `alignfirst context` prints:
 
 ```markdown
-## AlignFirst
+### Conventions
 
-_Commit message convention:_ `{DETECTED_CONVENTION}`
-
-_Default branch:_ `{DETECTED_DEFAULT_BRANCH}`
-
-_Ticket ID format:_ `{DETECTED_TICKET_FORMAT}`
+- Ticket IDs: `{DETECTED_TICKET_PATTERN}`.
+- Branch names: `{DETECTED_BRANCH_TEMPLATE}`.
+- Commits: `{DETECTED_COMMIT_FORMAT}`.
 ```
 
-Omit any convention that repository evidence cannot establish. When the project uses a work-files
-repository, add: After every change in `.plans/`, run `npx alignfirst sync`.
+Add `- Default branch: {DEFAULT_BRANCH}.` only when `git symbolic-ref refs/remotes/<remote>/HEAD` fails; otherwise the CLI reads it from git. When an existing section states these conventions, move them here.
 
 ### With `.alignfirst.json`
 
-Detect the ticket format from branches and tickets: `^\d+$` for issue numbers,
-`^[A-Z]+-\d+$` for Jira-like keys, or no field without a convention. The pattern is one anchored
-expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Detect the commit style with
-`git log --oneline -20`. Resolve the default branch with
-`git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user
-when several non-`origin` remotes exist.
-
-Write `.alignfirst.json` with the agreed fields:
+Write `.alignfirst.json` with the detected fields:
 
 ```json
 {
@@ -149,10 +140,12 @@ Replace any `Docmap - Seek Documentation` section and redundant protocol instruc
 
 ### Repositories Without AlignFirst Instructions
 
-A developer who works in repositories without this section, such as companion-backed ones ([companion-setup.md](companion-setup.md)), adds one line to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent):
+A developer who works in a repository without this section, such as a companion-backed one ([companion-setup.md](companion-setup.md)), adds this section to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent), with the project's path:
 
 ```markdown
-In a git repository, run `npx -y alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
+## AlignFirst - Start every session with the project context
+
+When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
 ```
 
-The line uses no agent-specific mechanism. `alignfirst context` works in any repository, with or without AlignFirst files.
+Add one line per such project to the same section. The section uses no agent-specific mechanism.

@@ -61,33 +61,33 @@ The guide installs the selected components and configures the repository. You ca
 
 ## Set up a project manually
 
-1. Load the project context. Either add this section to the project's `AGENTS.md`, as its first `##` section:
+1. Create `.plans/` and ignore it:
+
+   ```sh
+   mkdir .plans
+   echo .plans >> .gitignore
+   ```
+
+2. Load the project context. Add this section to the project's `AGENTS.md`, as its first `##` section:
 
    ```markdown
    ## Start every session with the project context
 
    Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+
+   ### Conventions
+
+   - Ticket IDs: `^[A-Z]+-\d+$`, such as `ABC-123`.
+   - Branch names: `{TICKET_ID}/{slug-1-3-words}`.
+   - Commits: `type: [TICKET_ID] summary`.
    ```
 
-   Or add this line to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
-
-   ```text
-   In a git repository, run `npx -y alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
-   ```
-
-2. Create `.plans/` and ignore it:
-
-   ```sh
-   mkdir .plans
-   printf '%s\n' .plans >> .gitignore
-   ```
-
-   `.alignfirst.json` is optional. See [its schema](../../skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson).
+   `.alignfirst.json` is optional ([schema](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson)). With it, `alignfirst context` prints the conventions, so omit the `### Conventions` sub-section.
 
 ## CLI commands
 
 - `guide` — Print an AlignFirst protocol.
-- `ticket` — Resolve a ticket directory, load its history, or get its next file.
+- `ticket` — Resolve a ticket directory, load its history (`--catchup`, plans excluded), or get its next file.
 - `sync` — Synchronize the work files with the work-files repository.
 - `plans` — Link `.plans` to the work-files repository, check the link, archive tickets.
 - `docmap` — Browse project documentation.
@@ -100,18 +100,24 @@ The guide installs the selected components and configures the repository. You ca
 
 Run `alignfirst --help` for command usage or `alignfirst guide` to choose a protocol. `alignfirst guide <protocol>` prints the selected protocol followed by the ticket directory and work file rules. Add `--protocol-only` when those rules are already in context.
 
-### Catchup output
-
-`alignfirst ticket [<id>] --catchup` prints the ticket's Markdown files, plans excluded.
-
 ## Companion directories
 
 A companion directory holds a project's AlignFirst files (`.alignfirst.json`, `.plans`, `docs`, project instructions) outside its repository, so the repository stays untouched. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
 
-The setup-guide skill, installed as in [Set up a project (with your agent)](#set-up-a-project-with-your-agent), sets it up:
+Ensure the alignfirst-setup-guide skill is installed, then ask your agent:
 
 ```text
 Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
+```
+
+### Loading the AlignFirst context
+
+If you can't edit the project's `AGENTS.md` file, add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent), with the project's path:
+
+```markdown
+## AlignFirst - Start every session with the project context
+
+When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
 ```
 
 ## Upgrade from v1, v2, or v3

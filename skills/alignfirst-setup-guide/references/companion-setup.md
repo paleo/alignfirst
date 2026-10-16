@@ -49,7 +49,7 @@ mkdir -p <companion>/.plans
 
 ## 7. Agent bootstrap
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) to the agent's global instruction file, after the user confirms. Skip it when the file already has it.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) for this project to the agent's global instruction file, after the user confirms. When the file already has the section, add the project's line to it.
 
 ## 8. Write access
 
