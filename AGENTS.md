@@ -20,7 +20,7 @@ Run `npx -y alignfirst context` from the repository root as your first command, 
 not provisioned; their providers stay in the test config as examples. The judge runs Haiku through
 OpenRouter.
 
-**Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Publishing runs from CI through npm trusted publishing — see `docs/releasing.md`.
+**Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Stable releases publish from CI through npm trusted publishing — see `docs/releasing.md`. For local opt-in previews, see `docs/publishing-previews.md`.
 
 **Workspace scripts** (root): `build`, `test`, `clear`, `lint`, `lint:fix` — all fan out to packages via `npm run <name> --workspaces --if-present`.
 

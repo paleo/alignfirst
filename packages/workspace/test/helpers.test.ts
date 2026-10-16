@@ -191,7 +191,7 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ path: src }),
       patch: (c) => c.replace("1", "2"),
-      force: false,
+      existing: "patch",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "created" });
@@ -205,14 +205,14 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ content: "A=1\nB=1\n" }),
       patch: (c) => c.replace(/^B=.*$/m, "B=2"),
-      force: false,
+      existing: "patch",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "created" });
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("A=1\nB=2\n");
   });
 
-  it("keeps an existing target without force when the entry has no patch", async () => {
+  it("keeps an existing target when the entry has no patch", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "orig\n");
     const resolveSource = noSource();
@@ -220,7 +220,7 @@ describe("copyAndPatchFile", () => {
       currentWorktree: cur,
       relPath: "out.txt",
       resolveSource,
-      force: false,
+      existing: "patch",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "keptExisting" });
@@ -228,7 +228,7 @@ describe("copyAndPatchFile", () => {
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("orig\n");
   });
 
-  it("re-applies the patch to an existing target without force, keeping the rest", async () => {
+  it("re-applies the patch to an existing target, keeping the rest", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "PORT=1\nCUSTOM=kept\n");
     const resolveSource = noSource();
@@ -237,12 +237,27 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource,
       patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      force: false,
+      existing: "patch",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "updated" });
     expect(resolveSource).not.toHaveBeenCalled();
     expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\nCUSTOM=kept\n");
+  });
+
+  it("keeps an existing target with the keep policy, without patching it", async () => {
+    const cur = tmp();
+    writeFileSync(join(cur, "out.txt"), "PORT=1\n");
+    const outcome = await copyAndPatchFile({
+      currentWorktree: cur,
+      relPath: "out.txt",
+      resolveSource: noSource(),
+      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
+      existing: "keep",
+      optional: false,
+    });
+    expect(outcome).toEqual({ kind: "keptExisting" });
+    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=1\n");
   });
 
   it("leaves an existing target alone when the patch changes nothing", async () => {
@@ -256,7 +271,7 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: noSource(),
       patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      force: false,
+      existing: "patch",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "upToDate" });
@@ -274,7 +289,7 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: noSource(),
       patch: (c) => `${c}x\n`,
-      force: false,
+      existing: "patch",
       optional: false,
     });
     await expect(run).rejects.toThrow(WorkspaceError);
@@ -290,14 +305,14 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ content: "PORT=2\n" }),
       patch: (c) => `${c}x\n`,
-      force: false,
+      existing: "patch",
       optional: false,
     });
     await expect(run).rejects.toThrow(/not idempotent/);
     expect(existsSync(join(cur, "out.txt"))).toBe(false);
   });
 
-  it("refuses a patch that is not idempotent with force, leaving the target untouched", async () => {
+  it("refuses a patch that is not idempotent on reseed, leaving the target untouched", async () => {
     const cur = tmp();
     const target = join(cur, "out.txt");
     writeFileSync(target, "orig\n");
@@ -306,14 +321,14 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ content: "PORT=2\n" }),
       patch: (c) => `${c}x\n`,
-      force: true,
+      existing: "reseed",
       optional: false,
     });
     await expect(run).rejects.toThrow(/not idempotent/);
     expect(readFileSync(target, "utf-8")).toBe("orig\n");
   });
 
-  it("overwrites the target with force", async () => {
+  it("reseeds an existing target from its source", async () => {
     const cur = tmp();
     writeFileSync(join(cur, "out.txt"), "orig\n");
     const outcome = await copyAndPatchFile({
@@ -321,7 +336,7 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ content: "new\n" }),
       patch: (c) => c,
-      force: true,
+      existing: "reseed",
       optional: false,
     });
     expect(outcome).toEqual({ kind: "overwritten" });
@@ -336,7 +351,7 @@ describe("copyAndPatchFile", () => {
       relPath: "out.txt",
       resolveSource: source({ path: sourcePath }),
       patch: (c) => c,
-      force: false,
+      existing: "patch",
       optional: true,
     });
     expect(outcome).toEqual({ kind: "sourceMissing", sourcePath });
@@ -351,7 +366,7 @@ describe("copyAndPatchFile", () => {
         relPath: "out.txt",
         resolveSource: source({ path: join(cur, "nope.txt") }),
         patch: (c) => c,
-        force: false,
+        existing: "patch",
         optional: false,
       }),
     ).rejects.toThrow(WorkspaceError);

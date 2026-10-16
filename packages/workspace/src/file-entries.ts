@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { type CopyAndPatchOutcome, copyAndPatchFile, type ResolvedFileSource } from "./helpers.js";
+import {
+  type CopyAndPatchOutcome,
+  copyAndPatchFile,
+  type ExistingFilePolicy,
+  type ResolvedFileSource,
+} from "./helpers.js";
 
 /** Shared core of the setup-side callback contexts. */
 export interface SetupContextBase {
@@ -98,10 +103,10 @@ export interface SeedLog {
 }
 
 export interface SeedFilesInput<C extends SetupContextBase> {
-  entries: SeededFile<C>[];
+  entries: Iterable<SeededFile<C>> | AsyncIterable<SeededFile<C>>;
   ctx: C;
-  /** Reseeds an existing file from its source. */
-  force: boolean;
+  /** What happens to an existing file. */
+  existing: ExistingFilePolicy;
   log: SeedLog;
 }
 
@@ -115,14 +120,14 @@ export async function seedFiles<C extends SetupContextBase>(
   const { ctx, log } = input;
   const updated: string[] = [];
   try {
-    for (const entry of input.entries) {
+    for await (const entry of input.entries) {
       const { patch } = entry;
       const outcome = await copyAndPatchFile({
         currentWorktree: ctx.currentWorktree,
         relPath: entry.path,
         resolveSource: () => resolveFileSource(entry, ctx),
         patch: patch ? (content: string) => patch(content, ctx) : undefined,
-        force: input.force,
+        existing: input.existing,
         optional: entry.optional ?? false,
       });
       if (outcome.kind === "updated") updated.push(entry.path);

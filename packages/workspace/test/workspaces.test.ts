@@ -283,7 +283,7 @@ describe("readWorkspaces repair", () => {
 });
 
 describe("main-entry re-key", () => {
-  it("moves the main entry under the new name, keeps its fields and clears devSetupAt", async () => {
+  it("moves the main entry and clears infrastructure and run-file setup state", async () => {
     writeStored({
       "old-name": {
         ...entry("."),
@@ -291,6 +291,7 @@ describe("main-entry re-key", () => {
         ports: { web: 8200 },
         purgeData: { volume: "v1" },
         devSetupAt: CREATED_AT,
+        runFilesWrittenWith: { ports: { web: 8200 }, inputs: {} },
       },
     });
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

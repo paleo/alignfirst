@@ -29,6 +29,8 @@ export interface WorkspaceEntry {
   neverFinalized?: boolean;
   /** One port per declared name, allocated by `dev setup`. */
   ports?: Record<string, number>;
+  /** What the run files were last written with. A start rewrites them when it changed. */
+  runFilesWrittenWith?: RunFilesBasis;
   /** ISO date of the last successful `DevServerConfig.setup`. */
   devSetupAt?: string;
   /** The last `dev setup` failure. Cleared by a successful `dev setup`. */
@@ -38,6 +40,12 @@ export interface WorkspaceEntry {
 }
 
 export type WorkspaceStatus = "pending" | "ready" | "failed";
+
+export interface RunFilesBasis {
+  ports: Record<string, number>;
+  /** The defined values of `DevServerConfig.runFilesInputs`. */
+  inputs: Record<string, string>;
+}
 
 /** The registry as `workspaces.json` holds it. */
 interface StoredRegistry {
@@ -193,6 +201,7 @@ export async function registerWorkspace(
       // re-finalize.
       status: isFinalized(existing) && input.force !== true ? "ready" : "pending",
       ports: existing?.ports,
+      runFilesWrittenWith: existing?.runFilesWrittenWith,
       devSetupAt: existing?.devSetupAt,
       // A `devSetupFailure` is dropped: `workspace wait` reports only this setup's dev failure.
       purgeData: existing?.purgeData,
@@ -209,8 +218,8 @@ function isFinalized(entry: WorkspaceEntry | undefined): boolean {
 
 /**
  * Moves the main entry (`main: true`) under `basename(mainWorktree)` when the main directory was
- * renamed, and returns the old name. The entry keeps its fields except `devSetupAt`: infrastructure
- * is named after the workspace, so the next `dev setup` provisions it under the new name. Leaves
+ * renamed, and returns the old name. Clears `devSetupAt` and `runFilesWrittenWith` so the next
+ * `dev setup` updates run files and provisions infrastructure under the new name. Leaves
  * the registry untouched when another entry already holds the new name.
  */
 export function rekeyMainEntry(
@@ -223,6 +232,7 @@ export function rekeyMainEntry(
   const [oldName, entry] = found;
   delete registry.workspaces[oldName];
   delete entry.devSetupAt;
+  delete entry.runFilesWrittenWith;
   registry.workspaces[newName] = entry;
   return oldName;
 }

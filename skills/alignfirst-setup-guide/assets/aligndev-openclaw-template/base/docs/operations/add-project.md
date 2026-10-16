@@ -81,7 +81,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm install && npm
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 The plain `workspace setup` above is enough for a project reachable through the gateway: its
-run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf` at each dev start.
+run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf`.
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 
 ## Smoke test

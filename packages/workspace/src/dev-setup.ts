@@ -17,6 +17,7 @@ import {
   rekeyMainEntry,
   resolveCurrentWorkspace,
   type ResolvedWorkspace,
+  type RunFilesBasis,
   updateWorkspaces,
   warnMainRenamed,
   type WorkspaceEntry,
@@ -39,6 +40,7 @@ export interface DevSetupInput {
   /** Omit for a portless dev-server. */
   ports?: ResolvedDevPorts;
   runFiles: RunFileEntry[];
+  runFilesInputs?: () => Record<string, string | undefined>;
   setup?: (ctx: DevSetupContext) => Promise<void> | void;
   options: DevSetupOptions;
 }
@@ -50,6 +52,8 @@ export interface DevSetupOptions {
   resetPorts: boolean;
   /** Set only by the finalize child of `workspace setup --full`: a `pending` workspace passes. */
   fromFinalize: boolean;
+  /** Set by the implicit `dev setup` of a start: existing run files follow a changed basis only. */
+  beforeStart: boolean;
 }
 
 export interface DevSetupResult {
@@ -59,8 +63,8 @@ export interface DevSetupResult {
 
 /**
  * `dev setup`, explicit or implicit before each start: resolves the workspace, reconciles its
- * ports, writes the run files, and runs the `setup` hook once per workspace. A failure after the
- * ready check is recorded as the entry's `devSetupFailure`.
+ * ports, writes the run files ({@link writeRunFiles}), and runs the `setup` hook once per
+ * workspace. A failure after the ready check is recorded as the entry's `devSetupFailure`.
  */
 export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult> {
   const { worktree, registryDir, options } = input;
@@ -80,7 +84,7 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
       mainWorktree,
       isMainWorktree: workspace.main === true,
     };
-    await writeRunFiles(input.runFiles, { ...base, ports });
+    await writeRunFiles(input, { ...base, ports }, entry.runFilesWrittenWith);
     await runSetupHook(input, { ...base, ports, force: options.force, log: console.log }, entry);
     return { workspace, ports };
   } catch (err) {
@@ -210,7 +214,7 @@ async function reconcileWorkspacePorts(
         isFree: isPortFree,
       });
       current.ports = next;
-      return { ports: next, changed: !samePorts(previous, next) };
+      return { ports: next, changed: !sameValues(previous, next) };
     },
   );
   if (changed) console.log(`Ports: ${formatPorts(ports)}`);
@@ -223,18 +227,102 @@ function portsOfOtherEntries(registry: WorkspacesRegistry, name: string): number
     .flatMap(([, entry]) => Object.values(entry.ports ?? {}));
 }
 
-function samePorts(a: Record<string, number>, b: Record<string, number>): boolean {
-  const names = Object.keys(a);
-  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
+function sameValues<T>(a: Record<string, T>, b: Record<string, T>): boolean {
+  return changedKeys(a, b).length === 0;
 }
 
-/** Run files are never reseeded: a deleted one is recreated from its source. */
-async function writeRunFiles(runFiles: RunFileEntry[], ctx: RunFileContext): Promise<void> {
+function changedKeys<T>(a: Record<string, T>, b: Record<string, T>): string[] {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].filter((key) => a[key] !== b[key]);
+}
+
+/**
+ * Creates the missing run files. An explicit `dev setup` rewrites the existing ones; a start does
+ * only when the ports or the run-file inputs changed since the last write, and warns, so a hand
+ * edit survives a restart. A generated run file — a `content` source without `patch` — is
+ * regenerated whenever it is rewritten. Run files are never reseeded from a path source.
+ */
+async function writeRunFiles(
+  input: DevSetupInput,
+  ctx: RunFileContext,
+  written: RunFilesBasis | undefined,
+): Promise<void> {
+  const { beforeStart } = input.options;
+  const basis: RunFilesBasis = { ports: ctx.ports, inputs: definedValues(input.runFilesInputs) };
+  const changed =
+    written === undefined ||
+    !sameValues(written.ports, basis.ports) ||
+    !sameValues(written.inputs, basis.inputs);
+  const rewrite = !beforeStart || changed;
+  const entries = rewrite ? regeneratedRunFiles(input.runFiles, ctx) : input.runFiles;
+  const tee = beforeStart
+    ? (msg: string) => console.warn(rewriteWarning(written, basis, msg))
+    : console.log;
+  await storeRunFilesBasis(input, ctx.name, undefined);
   await seedFiles({
-    entries: runFiles,
+    entries,
     ctx,
-    force: false,
-    log: { tee: console.log, verbose: noop },
+    existing: rewrite ? "patch" : "keep",
+    log: { tee, verbose: noop },
+  });
+  await storeRunFilesBasis(input, ctx.name, basis);
+}
+
+/** The inputs without their `undefined` values, as the registry stores them. */
+function definedValues(runFilesInputs: DevSetupInput["runFilesInputs"]): Record<string, string> {
+  const inputs: Record<string, string> = {};
+  for (const [key, value] of Object.entries(runFilesInputs?.() ?? {})) {
+    if (value !== undefined) inputs[key] = value;
+  }
+  return inputs;
+}
+
+/** Resolves each generated source after the preceding entry has been written. */
+async function* regeneratedRunFiles(
+  entries: RunFileEntry[],
+  ctx: RunFileContext,
+): AsyncGenerator<RunFileEntry> {
+  for (const entry of entries) {
+    const { source } = entry;
+    if (source.kind !== "content" || entry.patch !== undefined) {
+      yield entry;
+      continue;
+    }
+    const content =
+      typeof source.content === "function" ? await source.content(ctx) : source.content;
+    yield { ...entry, source: { kind: "content", content }, patch: () => content };
+  }
+}
+
+/** Names the changes; the values of the inputs stay out, as they may be private. */
+function rewriteWarning(
+  written: RunFilesBasis | undefined,
+  basis: RunFilesBasis,
+  updatedLine: string,
+): string {
+  if (written === undefined) {
+    return `Warning: the run files had no recorded ports or inputs. ${updatedLine}`;
+  }
+  const changes: string[] = [];
+  const moves = changedKeys(written.ports, basis.ports).map(
+    (name) => `${name} ${written.ports[name] ?? "none"} → ${basis.ports[name] ?? "none"}`,
+  );
+  if (moves.length > 0) changes.push(`the ports moved (${moves.join(", ")})`);
+  const inputs = changedKeys(written.inputs, basis.inputs);
+  if (inputs.length > 0) changes.push(`the run-file inputs changed (${inputs.join(", ")})`);
+  return `Warning: ${changes.join("; ")}. ${updatedLine}`;
+}
+
+async function storeRunFilesBasis(
+  input: DevSetupInput,
+  name: string,
+  basis: RunFilesBasis | undefined,
+): Promise<void> {
+  await updateWorkspaces(input.worktree.mainWorktree, input.registryDir, (registry) => {
+    const current = registry.workspaces[name];
+    if (!current) return;
+    if (basis === undefined) delete current.runFilesWrittenWith;
+    else current.runFilesWrittenWith = basis;
   });
 }
 

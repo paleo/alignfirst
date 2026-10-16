@@ -55,10 +55,11 @@ await runDevServer({
 
   // ADAPT: the gitignored files that carry ports, or are needed only to run.
   // A file carrying ports is a run file: it belongs here, not in
-  // `gitignoredFiles` (workspace.mjs). `dev setup` writes them before every
-  // start: a missing file is created from its `source`, an existing one is
-  // re-patched. Sources and `patch` work as in `gitignoredFiles`; the context
-  // adds `ports`.
+  // `gitignoredFiles` (workspace.mjs). `dev setup` writes them: a missing file
+  // is created from its `source`, an existing one is re-patched. Before a
+  // start, an existing one is re-patched only when the ports or the
+  // `runFilesInputs` changed, with a warning. Sources and `patch` work as in
+  // `gitignoredFiles`; the context adds `ports`.
   runFiles: [
     {
       path: ".env",
@@ -99,6 +100,14 @@ await runDevServer({
     //     // no leftover container
     //   }
   ],
+
+  // ADAPT: the values the run files depend on besides the ports, such as the
+  // environment variables their patches read. A start rewrites the run files
+  // when one changes. Drop it when the patches read only `ports`.
+  runFilesInputs: () => ({
+    REMOTE_DEV_DOMAIN: process.env.REMOTE_DEV_DOMAIN,
+    REMOTE_DEV_HOST: process.env.REMOTE_DEV_HOST,
+  }),
 
   // ADAPT: the workspace's infrastructure. Runs at its first `dev setup`, and
   // again with `dev setup --force`. MUST BE IDEMPOTENT. Name every resource
@@ -245,8 +254,8 @@ await runDevServer({
   // },
 });
 
-// ADAPT (managed project): the URL a browser reaches `port` at, computed at
-// each `dev setup` from the environment. REMOTE_DEV_DOMAIN: the HTTPS gateway
+// ADAPT (managed project): the URL a browser reaches `port` at, computed from
+// the environment when `dev setup` writes the run files. REMOTE_DEV_DOMAIN: the HTTPS gateway
 // serves each port at `p<port>.<domain>`. REMOTE_DEV_HOST: the browser reaches
 // the machine directly, so the servers must listen on every interface.
 function publicUrl(port) {

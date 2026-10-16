@@ -515,7 +515,12 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
     currentWorktree: setupCtx.currentWorktree,
     isMainWorktree: setupCtx.isMainWorktree,
   };
-  await seedFiles({ entries: config.gitignoredFiles, ctx: patchCtx, force: command.force, log });
+  await seedFiles({
+    entries: config.gitignoredFiles,
+    ctx: patchCtx,
+    existing: command.force ? "reseed" : "patch",
+    log,
+  });
 }
 
 /**

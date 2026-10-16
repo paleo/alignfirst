@@ -289,6 +289,7 @@ describe("dev setup (e2e)", () => {
       expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(
         portsEnv(entryFor(repo, "fixrepo")),
       );
+      expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe("web=localhost:47108\n");
 
       const reset = runDev(repo, ["setup", "--reset-ports"]);
       expect(reset.status).toBe(0);
@@ -300,6 +301,80 @@ describe("dev setup (e2e)", () => {
         portsEnv(entryFor(repo, "fixrepo")),
       );
       expect(setupRuns(repo)).toHaveLength(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps a hand-edited run file at a start, and reverts it at an explicit dev setup",
+    () => {
+      const { repo } = fixture();
+      expect(runDev(repo, ["setup"]).status).toBe(0);
+      const edited = portsEnv(entryFor(repo, "fixrepo")).replace(/^WEB_PORT=.*$/m, "WEB_PORT=1");
+      writeFileSync(join(repo, "ports.env"), edited);
+
+      const started = runDev(repo, ["up"]);
+      expect(started.status).toBe(0);
+      expect(started.stderr).not.toContain("Warning");
+      expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(edited);
+      expect(runDev(repo, ["down"]).status).toBe(0);
+
+      const synced = runDev(repo, ["setup"]);
+      expect(synced.stdout).toContain("Updated ports.env.");
+      expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(
+        portsEnv(entryFor(repo, "fixrepo")),
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rewrites the run files at a start after the ports moved, with a warning",
+    () => {
+      const { repo } = fixture();
+      expect(runDev(repo, ["setup"]).status).toBe(0);
+      const before = entryFor(repo, "fixrepo").ports ?? {};
+      const registry = readWorkspaces(repo);
+      registry.workspaces.fixrepo.ports = { web: 47108, api: before.api };
+      writeWorkspaces(repo, registry);
+
+      const started = runDev(repo, ["up"]);
+      expect(started.status).toBe(0);
+      expect(started.stderr).toContain(
+        `Warning: the ports moved (web ${before.web} → 47108). Updated ports.env, ports.txt.`,
+      );
+      expect(runDev(repo, ["down"]).status).toBe(0);
+      const entry = entryFor(repo, "fixrepo");
+      expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(portsEnv(entry));
+      expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe("web=localhost:47108\n");
+      expect(entry.runFilesWrittenWith).toEqual({ ports: entry.ports, inputs: {} });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rewrites the run files at a start after a run-file input changed, with a warning",
+    () => {
+      const { repo } = fixture();
+      expect(runDev(repo, ["setup"]).status).toBe(0);
+      const web = entryFor(repo, "fixrepo").ports?.web;
+
+      const remote = runDev(repo, ["up"], { E2E_HOST: "example.test" });
+      expect(remote.status).toBe(0);
+      expect(remote.stderr).toContain(
+        "Warning: the run-file inputs changed (E2E_HOST). Updated ports.txt.",
+      );
+      expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe(`web=example.test:${web}\n`);
+      expect(runDev(repo, ["down"]).status).toBe(0);
+
+      const local = runDev(repo, ["up"]);
+      expect(local.stderr).toContain("Warning: the run-file inputs changed (E2E_HOST).");
+      expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe(`web=localhost:${web}\n`);
+      expect(runDev(repo, ["down"]).status).toBe(0);
+
+      const again = runDev(repo, ["up"]);
+      expect(again.stderr).not.toContain("Warning");
+      expect(runDev(repo, ["down"]).status).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );
