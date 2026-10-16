@@ -2,8 +2,6 @@
 
 Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one, and where. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
 
-The `alignfirst` package README documents the registry: its schema, how an entry matches a project, and how each item resolves.
-
 This mode supports the AlignFirst protocols, the skills, the work files and docmap through the `alignfirst` CLI. It excludes the workspace system, the standalone `@alignfirst/docmap` package, a local `alignfirst` dependency, and any instruction-file section.
 
 For a project prepared for an assistant, apply [For an Assistant](#for-an-assistant) to the steps below.
@@ -51,7 +49,7 @@ mkdir -p <companion>/.plans
 
 ## 7. Agent bootstrap
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) to the agent's global instruction file, after the user confirms. Skip it when the file already has it.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) for this project to the agent's global instruction file, after the user confirms. When the file already has the section, add the project's line to it.
 
 ## 8. Write access
 

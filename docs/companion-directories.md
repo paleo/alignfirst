@@ -12,7 +12,7 @@ read_when:
 
 A **companion directory** holds a project's AlignFirst files outside its repository, and reproduces the project's layout for those files only. User-facing references:
 
-- [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the registry, matching, resolution and the agent bootstrap line.
+- [`alignfirst` README](../packages/alignfirst/README.md#companion-directories) — the feature summary and the agent prompt.
 - [aligndev Architecture](aligndev-architecture.md) — session files, `--add-dir` and the project inventory.
 - [`companion-setup.md`](../skills/alignfirst-setup-guide/references/companion-setup.md) — preparing a project through its companion.
 
@@ -92,7 +92,7 @@ interface ConfigReport {
 }
 ```
 
-Paths are absolute. `key` is the registry key as written; `aligndev` ignores `key` and `items`.
+Paths are absolute. `config` is the validated config, with the deprecated `plans.folder` reported as `plans.repositoryFolder`. `aligndev` still reads `plans.folder` from an `alignfirst` older than 0.12.0. `key` is the registry key as written; `aligndev` ignores `key` and `items`.
 
 ## Consumers
 
@@ -133,7 +133,7 @@ A coding-agent assistant has no main-worktree mode: it works in the session's di
 
 ## Bootstrap
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the launched agent's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#agent-bootstrap), so their agent runs `alignfirst context` in any git repository.
+An agent reads a repository's `AGENTS.md` on its own, never a companion. `aligndev code` puts the context into the launched agent's prompt. A human developer adds one line to their global agent instructions, given in the [`alignfirst` README](../packages/alignfirst/README.md#set-up-a-project-manually), so their agent runs `alignfirst context` in any git repository.
 
 ## Rejected alternatives
 

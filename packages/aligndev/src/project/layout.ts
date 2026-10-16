@@ -32,7 +32,7 @@ export interface ProjectCliReport {
 
 export interface ProjectConfigView {
   ticketIdPattern?: string;
-  plans?: { folder?: string };
+  plans?: { repositoryFolder?: string };
   portRange?: PortRange;
 }
 
@@ -134,11 +134,14 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
   };
 }
 
-function parsePlans(value: unknown, path: string): { folder?: string } | undefined {
+function parsePlans(value: unknown, path: string): { repositoryFolder?: string } | undefined {
   if (value === undefined) return;
   if (!isRecord(value)) throw invalidReport(path);
-  if (value.folder !== undefined && typeof value.folder !== "string") throw invalidReport(path);
-  return value.folder === undefined ? {} : { folder: value.folder };
+  // Before alignfirst 0.12.0, the report named this key `folder`.
+  const repositoryFolder = value.repositoryFolder ?? value.folder;
+  if (repositoryFolder !== undefined && typeof repositoryFolder !== "string")
+    throw invalidReport(path);
+  return repositoryFolder === undefined ? {} : { repositoryFolder };
 }
 
 // The report's other companion fields (`key`, `items`) are alignfirst's concern.

@@ -69,7 +69,7 @@ export interface DevServerConfig {
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
   maxConcurrentDevServers?: number;
-  /** The project's port range and the names allocated in it. Omit for a portless dev-server. */
+  /** The project's port range and the ports declared in it. Omit for a portless dev-server. */
   ports?: DevPortsConfig;
   /**
    * Gitignored files that carry ports or are needed only to run. Created and patched by every
@@ -165,7 +165,7 @@ function checkSpawnPortNames(
     if (!ports.names.includes(server.port)) {
       throw new ConfigError(
         `Config error: server "${server.name}" names the port "${server.port}", absent from ` +
-          "`ports.names`.",
+          "`ports.declare`.",
       );
     }
   }
@@ -701,8 +701,8 @@ function foreignHolderMessage(
   const label = `Port ${server.port} (${server.name})`;
   if (server.portName !== undefined && pins[server.portName] === server.port) {
     return (
-      `Error: ${label} is pinned by ports.mainWorktree and held by ${describeHolder(holder)}. ` +
-      "Free it, or change ports.mainWorktree."
+      `Error: ${label} is pinned by the \`mainWorktree\` of "${server.portName}" in ` +
+      `\`ports.declare\` and held by ${describeHolder(holder)}. Free it, or change that pin.`
     );
   }
   const info = holder ? ` (${describeHolder(holder)})` : "";

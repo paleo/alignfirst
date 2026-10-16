@@ -18,7 +18,7 @@ describe("project config", () => {
       schemaVersion: 1,
       cli: ">=0.1.0 <0.2.0",
       ticketIdPattern: "^\\d+$",
-      plans: { folder: "project", autoArchive: true },
+      plans: { repositoryFolder: "project", autoArchive: true },
       portRange: { first: 8100, last: 8199 },
       git: {
         defaultBranch: "main",
@@ -52,6 +52,24 @@ describe("project config", () => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
   });
 
+  it("reads the deprecated plans.folder as plans.repositoryFolder", () => {
+    expect(
+      validateProjectConfig(
+        { schemaVersion: 1, plans: { folder: "x", autoArchive: true } },
+        "config",
+      ),
+    ).toEqual({ schemaVersion: 1, plans: { repositoryFolder: "x", autoArchive: true } });
+  });
+
+  it("rejects plans.folder alongside plans.repositoryFolder", () => {
+    expect(() =>
+      validateProjectConfig(
+        { schemaVersion: 1, plans: { folder: "x", repositoryFolder: "x" } },
+        "config",
+      ),
+    ).toThrow("remove plans.folder");
+  });
+
   it.each(["^(ABC|XYZ)-\\d+$", "^[^/]+$", "^\\$\\d+$", "\\d+"])(
     "accepts ticketIdPattern %s",
     (ticketIdPattern) => {
@@ -67,9 +85,27 @@ describe("project config", () => {
     dirs.push(dir);
     const path = join(dir, ".alignfirst.json");
     writeFileSync(path, '{"schemaVersion":1}');
-    expect(readProjectConfig(path)).toEqual({ schemaVersion: 1 });
+    expect(readProjectConfig(path)).toEqual({ config: { schemaVersion: 1 }, deprecations: [] });
     writeFileSync(path, "{");
     expect(() => readProjectConfig(path)).toThrow(`Invalid ${path}`);
+  });
+
+  it("reports plans.folder as a deprecation, only on a valid config", () => {
+    const dir = makeTempDir();
+    dirs.push(dir);
+    const path = join(dir, ".alignfirst.json");
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }));
+    const { deprecations } = readProjectConfig(path);
+    expect(deprecations).toEqual([
+      expect.stringContaining(
+        `${path}: plans.folder is deprecated; rename it to plans.repositoryFolder`,
+      ),
+    ]);
+    writeFileSync(
+      path,
+      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "[", plans: { folder: "x" } }),
+    );
+    expect(() => readProjectConfig(path)).toThrow("regular expression");
   });
 
   it("rejects a directory in place of the config file", () => {

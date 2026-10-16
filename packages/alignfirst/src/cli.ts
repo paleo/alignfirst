@@ -14,7 +14,7 @@ import { runPlans } from "./commands/plans.js";
 import { runSync } from "./commands/sync.js";
 import { runTicket } from "./commands/ticket.js";
 import type { CommandContext, Output } from "./context.js";
-import { resolveProjectConfig } from "./project-config.js";
+import { resolveProjectConfig, writeDeprecationWarnings } from "./project-config.js";
 import { layoutOf } from "./project-layout.js";
 import { checkCliRange } from "./version-guard.js";
 
@@ -52,6 +52,7 @@ export async function main(options?: MainOptions): Promise<number> {
     if (command !== "config" && command !== "doctor") {
       ctx.projectConfig = resolveProjectConfig(layoutOf(ctx));
       checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args]);
+      writeDeprecationWarnings(ctx.stderr, ctx.projectConfig);
     }
     const code = await dispatch(ctx, command, args);
     return code;

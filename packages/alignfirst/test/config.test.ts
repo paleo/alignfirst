@@ -59,6 +59,21 @@ describe("config command", () => {
     });
   });
 
+  it("reports a deprecated plans.folder as plans.repositoryFolder, warning on stderr", async () => {
+    const cwd = temp();
+    writeFileSync(
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, plans: { folder: "project" } }),
+    );
+    const result = await runMain(["config", "--json"], { cwd });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).config).toEqual({
+      schemaVersion: 1,
+      plans: { repositoryFolder: "project" },
+    });
+    expect(result.stderr).toMatch(/^Warning: .*plans\.folder is deprecated.*\n$/);
+  });
+
   it("reports the companion, its config and every location", async () => {
     const home = temp();
     configureGit(home);

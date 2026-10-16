@@ -39,7 +39,7 @@ export type {
   CallbackServer,
 } from "./dev-server.js";
 export type { DevSetupContext } from "./dev-setup.js";
-export type { DevPortsConfig, PortRange } from "./ports.js";
+export type { DeclaredPort, DevPortsConfig, PortRange } from "./ports.js";
 
 export type { ResolvedWorkspace } from "./workspaces.js";
 

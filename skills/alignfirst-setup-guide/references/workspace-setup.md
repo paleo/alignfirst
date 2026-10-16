@@ -61,7 +61,7 @@ The main worktree's `.plans` may itself be a symlink — into a clone of the wor
 
 Most projects scatter ports (server 3000, db 5432, frontend 5173). The system needs **all dev ports configurable**: each workspace runs its servers on its own ports.
 
-The project claims one range, `first`–`last` in the `ports` group of `dev-server.mjs`, and names its ports in `names`. Each workspace gets one port per name at its first `dev setup`, stored on its registry entry:
+The project claims one range, `first`–`last` in the `ports` group of `dev-server.mjs`, and declares its ports in `declare`. Each workspace gets one port per declared name at its first `dev setup`, stored on its registry entry:
 
 - Allocation takes the lowest port of the range that is not excluded (`exclude`), not on the browsers' bad-port list (6000, 6665–6669, 10080…), not held by another workspace, and not busy on the machine.
 - A port stays fixed afterwards. Every start reconciles the names with the stored ports: a new name gets a port, an undeclared name frees its port, and a port the config no longer allows is allocated again.
@@ -70,7 +70,10 @@ The project claims one range, `first`–`last` in the `ports` group of `dev-serv
 
 **Size the range** as names × expected concurrent workspaces. 8100–8199 is a safe default. Steer a user away from 8000 — it collides with common HTTP alternates on some systems.
 
-**Allocated ports are unpredictable.** When something outside the repository depends on a fixed port (a bookmark, an OAuth callback URL), pin it in `ports.mainWorktree`: the main worktree always gets that port, and no other workspace does.
+**Allocated ports are unpredictable.** An entry of `declare` is a name, or `{ name, range?, mainWorktree? }` to control where its port lands:
+
+- `mainWorktree` pins the main worktree's port: the main worktree always gets it, and no other workspace does. Use it when something outside the repository depends on one fixed port, such as a bookmark.
+- `range` dedicates a block of the range to the name: the name gets ports only there, and the other names never do. Use it when something outside the repository enumerates a port for every workspace, such as an OAuth callback URL in a provider's allowlist. Size the block for the expected concurrent workspaces, and list it in the allowlist. A pin of that name lies inside the block.
 
 Docker services can remap the host port without touching the container's internal port.
 
@@ -159,7 +162,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 
 Builds a `DevServerConfig` and calls `runDevServer`. Key fields:
 
-- `ports` — optional: `{ first, last, exclude?, names, mainWorktree? }` ([Port range](#port-range)). Omit it for a portless dev-server.
+- `ports` — optional: `{ first, last, exclude?, declare }`, each entry of `declare` a name or `{ name, range?, mainWorktree? }` ([Port range](#port-range)). Omit it for a portless dev-server.
 - `runFiles: Array<{ path, source, patch?, optional? }>` — the files that carry ports, or are needed only to run ([Gitignored files](#gitignored-files-two-lists)). The context of `content(ctx)` and `patch(content, ctx)` adds `ports`, the workspace's ports by name.
 - `setup(ctx)` — optional; the workspace's infrastructure: start the database, wait for it, migrate, seed. Runs at the first `dev setup`, and again with `dev setup --force`. **MUST be idempotent**. Names every resource it creates after the workspace (`ctx.name`), so `purgeInfrastructure` finds it by name. `ctx` carries `name`, `ports`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force` and `log`. A failure aborts the start; the next `dev setup` or start runs it again.
 - `servers: ServerDescriptor[]` — one entry per server, conceptually one dev server. Described below.
@@ -167,7 +170,7 @@ Builds a `DevServerConfig` and calls `runDevServer`. Key fields:
 
 A server is discriminated on `kind`:
 
-- `kind: "spawn"` — `{ name, exec, port?, detectReady, detectError? }`. The runner spawns the process, logs to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID. `port` is a name from `ports.names`, resolved to the workspace's port, or a fixed number. Omit `port` for a process that listens on nothing; conflict detection, port sweeping and the summary URL then skip that server. `detectError` (optional) fails fast on a known fatal log pattern.
+- `kind: "spawn"` — `{ name, exec, port?, detectReady, detectError? }`. The runner spawns the process, logs to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID. `port` is a name from `ports.declare`, resolved to the workspace's port, or a fixed number. Omit `port` for a process that listens on nothing; conflict detection, port sweeping and the summary URL then skip that server. `detectError` (optional) fails fast on a known fatal log pattern.
 - `kind: "callback"` — `{ name, start(ctx), stop(ctx) }`. You own the lifecycle of a resource that runs with the dev server, such as a Docker stack, typically first. Servers start in array order, stop in reverse. `ctx` carries `cwd` and `ports`, the ports of the worktree in `cwd`.
 
 `kind: "callback"` rules (not type-enforced — read carefully):
@@ -313,7 +316,7 @@ Pick the form from the deployment that will run the project: the gateway form wh
 Items marked *(ports)* drop out without ports, items marked *(dev server)* without a dev server — see [portless mode](#portless-mode).
 
 - [ ] **Make all dev ports configurable.** *(ports)* Prerequisite.
-- [ ] **Claim the port range.** *(ports)* Size it as names × expected concurrent workspaces; 8100–8199 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to `first` and `last` of the `ports` group in `dev-server.mjs`: the dev-server compares them on every command and refuses a mismatch. Standalone workspace setup does not require this file. Pin in `ports.mainWorktree` the ports something outside the repository depends on.
+- [ ] **Claim the port range.** *(ports)* Size it as names × expected concurrent workspaces; 8100–8199 unless you have a reason. When `.alignfirst.json` exists, set its `portRange` to `first` and `last` of the `ports` group in `dev-server.mjs`: the dev-server compares them on every command and refuses a mismatch. Standalone workspace setup does not require this file. Pin the ports something outside the repository depends on with the `mainWorktree` of their `declare` entry. A dedicated `range` takes its share of the sizing and holds its entry's pin.
 - [ ] **Identify your gitignored files and split them into the two lists.** Every gitignored file a worktree needs: the files carrying ports go in `runFiles`, the others in `gitignoredFiles` when install, build or tests need them — verbatim ones included (editor settings, secondary `.env`, private-registry tokens). Do they have `.example` versions?
 - [ ] **Classify gitignored directories.** Shared (symlinked) vs per-worktree. Suggest a shared `.local/` by default.
 - [ ] **Decide database provisioning** in the dev-server's `setup`. File copy (SQLite) or Docker + migrate + seed. With Docker, follow the repo's compose pattern, committed by default ([Docker Compose](#docker-compose)).

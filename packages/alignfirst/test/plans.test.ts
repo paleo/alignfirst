@@ -36,7 +36,7 @@ describe("plans commands", () => {
     const fixture = makeFixture();
     writeFileSync(
       join(fixture.product, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { folder: "product-plans" } }),
+      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
     );
     const result = await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product });
     expect(result.code).toBe(0);
@@ -47,11 +47,11 @@ describe("plans commands", () => {
     expect(result.stdout).toContain("Publish with: alignfirst sync");
   });
 
-  it("accepts --folder when it matches plans.folder", async () => {
+  it("accepts --folder when it matches plans.repositoryFolder", async () => {
     const fixture = makeFixture();
     writeFileSync(
       join(fixture.product, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { folder: "product-plans" } }),
+      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
     );
     expect(
       (
@@ -268,7 +268,7 @@ describe("plans commands", () => {
     const fixture = makeFixture();
     writeFileSync(
       join(fixture.product, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { folder: "configured" } }),
+      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "configured" } }),
     );
     expect(
       (
@@ -276,7 +276,7 @@ describe("plans commands", () => {
           cwd: fixture.product,
         })
       ).stderr,
-    ).toContain('--folder "argument" differs from plans.folder "configured"');
+    ).toContain('--folder "argument" differs from plans.repositoryFolder "configured"');
     rmSync(join(fixture.product, ".alignfirst.json"));
     expect(
       (await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).stderr,
@@ -387,7 +387,7 @@ describe("plans commands", () => {
       join(fixture.product, ".alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        plans: { folder: "product-plans", autoArchive: true },
+        plans: { repositoryFolder: "product-plans", autoArchive: true },
       }),
     );
     await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product });

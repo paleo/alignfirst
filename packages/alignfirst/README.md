@@ -23,14 +23,6 @@ Install the `alignfirst` skill when a project's `AGENTS.md` does not run `npx al
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst
 ```
 
-The skills run the CLI through `npx`, so installing it is optional.
-
-### Update the agent skills
-
-```sh
-npx skills update --global
-```
-
 ## Workflows
 
 These examples use the `/` form. Replace it with `$` in Codex.
@@ -53,7 +45,7 @@ AlignFirst stores the work files of a ticket, such as specifications, plans and 
 
 ## Set up a project (with your agent)
 
-Temporarily install the setup-guide skill:
+Install the alignfirst-setup-guide skill:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
@@ -67,55 +59,35 @@ Use your alignfirst-setup-guide skill. What AlignFirst tooling could we add in t
 
 The guide installs the selected components and configures the repository. You can remove the setup-guide skill once setup is complete.
 
-To leave the repository untouched, the guide keeps the project's AlignFirst files in a [companion directory](#companion-directories):
-
-```text
-Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
-```
-
 ## Set up a project manually
 
-1. Install the nine command skills globally. For Claude Code:
+1. Create `.plans/` and ignore it:
 
    ```sh
-   npx skills add https://github.com/paleo/alignfirst --global --agent claude-code \
-     --skill alspec --skill alplan --skill al --skill almerge \
-     --skill alreview --skill aldescription --skill alcatchup \
-     --skill alcatchupaad --skill alcatchupspec
+   mkdir .plans
+   echo .plans >> .gitignore
    ```
 
-   For Codex:
-
-   ```sh
-   npx skills add https://github.com/paleo/alignfirst --global --agent codex \
-     --skill alspec --skill alplan --skill al --skill almerge \
-     --skill alreview --skill aldescription --skill alcatchup \
-     --skill alcatchupaad --skill alcatchupspec
-   ```
-
-2. Load the project context. Either add this section to the project's `AGENTS.md`, as its first `##` section:
+2. Load the project context. Add this section to the project's `AGENTS.md`, as its first `##` section:
 
    ```markdown
    ## Start every session with the project context
 
    Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+
+   ### Conventions
+
+   - Ticket IDs: `^[A-Z]+-\d+$`, such as `ABC-123`.
+   - Branch names: `{TICKET_ID}/{slug-1-3-words}`.
+   - Commits: `type: [TICKET_ID] summary`.
    ```
 
-   Or add the [agent bootstrap](#agent-bootstrap) line to your global agent instructions.
-
-3. Create `.plans/` and ignore it:
-
-   ```sh
-   mkdir .plans
-   printf '%s\n' .plans >> .gitignore
-   ```
-
-   `.alignfirst.json` is optional. See [its schema](../../skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson).
+   `.alignfirst.json` is optional ([schema](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson)). With it, `alignfirst context` prints the conventions, so omit the `### Conventions` sub-section.
 
 ## CLI commands
 
 - `guide` — Print an AlignFirst protocol.
-- `ticket` — Resolve a ticket directory, load its history, or get its next file.
+- `ticket` — Resolve a ticket directory, load its history (`--catchup`, plans excluded), or get its next file.
 - `sync` — Synchronize the work files with the work-files repository.
 - `plans` — Link `.plans` to the work-files repository, check the link, archive tickets.
 - `docmap` — Browse project documentation.
@@ -128,64 +100,24 @@ Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without
 
 Run `alignfirst --help` for command usage or `alignfirst guide` to choose a protocol. `alignfirst guide <protocol>` prints the selected protocol followed by the ticket directory and work file rules. Add `--protocol-only` when those rules are already in context.
 
-### Catchup output
-
-`alignfirst ticket [<id>] --catchup` prints the ticket's Markdown files, plans excluded.
-
 ## Companion directories
 
-A companion directory holds a project's AlignFirst files outside its repository, so the repository stays untouched. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one:
+A companion directory holds a project's AlignFirst files (`.alignfirst.json`, `.plans`, `docs`, project instructions) outside its repository, so the repository stays untouched. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
 
-```json
-{
-  "projects": {
-    "~/projects/team-app": {
-      "dir": "projects_team-app",
-      "items": { ".plans": "project", "_aligndev": "companion" }
-    },
-    "~/projects/client-api": { "dir": "~/work/client-api-companion" }
-  }
-}
-```
-
-- `projects` — the projects, by absolute or `~/` path.
-- `dir` — the companion directory: relative to `~/.alignfirst/companions`, `~/`, or absolute.
-- `items` — optional settings for the items a companion can hold: `.alignfirst.json`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. A setting is `"companion"`, `"project"` or `"auto"`; `_aligndev` takes `"companion"` or `"auto"`.
-
-An absent registry means no project has a companion. An invalid registry makes every command fail; `doctor` reports it and continues. A registry from before `dir` has a `paths` key instead of `projects`: the `alignfirst-setup-guide` skill's upgrade procedure converts it.
-
-Run `alignfirst companion register` in a project to register it. It adds the project's main worktree path with every item on `"auto"`, unless it is registered. `--dir <path>` sets `dir`, written as given; on a registered project, it must resolve to the registered directory. The companion directory is created on the first write, or at once with `--create-dir`. Set the items by editing the registry.
-
-`alignfirst companion unregister` removes the entry and keeps the directory. With `--remove-dir`, it also removes an empty directory; a non-empty one requires `--force`.
-
-### Matching
-
-A key matches a project when it names the project's main worktree, so every worktree of a project shares one companion. A key that names another directory matches nothing, and `alignfirst doctor` warns about it. An unset item is `"auto"`. A bare repository or a directory outside git has no companion.
-
-Without `--dir`, `companion register` derives `dir` from the main worktree path: relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`. For example, `~/projects/client-api` gets `projects_client-api`, so `~/.alignfirst/companions/projects_client-api/`. Two keys whose `dir` values resolve to the same directory share it: `companion register` refuses such a `dir`, and `doctor` warns about it. To keep the companions and their registry elsewhere, make `~/.alignfirst/companions` a symlink: relative `dir` values follow it.
-
-### Resolution
-
-| Setting | Location |
-| --- | --- |
-| `"companion"` | The companion copy, present or not. |
-| `"project"` | The project copy, present or not. |
-| `"auto"` | The companion copy when it exists, otherwise the project copy when it exists, otherwise the companion copy, where the item gets created. |
-
-`_aligndev` is the directory under which `aligndev` writes its session files: `<companion>/.plans` with `"companion"`, the resolved `.plans` with `"auto"`. `"_aligndev": "companion"` requires `.plans` set to `"companion"` or `"project"`. When the two differ, archiving and `ticket <id>` apply to both trees, each with its own `_archives/`.
-
-`alignfirst config` reports the companion and the location of every item. `alignfirst doctor` checks them.
-
-### Project instructions
-
-`.alignfirst-instructions/` holds Markdown instructions for the coding agent, one file per moment they apply. `context.md` holds the project instructions a prepared project keeps in its `AGENTS.md`, and `alignfirst context` prints it under `# Project Instructions`. The directory resolves like the other items, so a project copy works too.
-
-### Agent bootstrap
-
-An agent reads a repository's `AGENTS.md` on its own, but never a companion. When your repositories carry no AlignFirst instructions, add this line to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent):
+Ensure the alignfirst-setup-guide skill is installed, then ask your agent:
 
 ```text
-In a git repository, run `npx -y alignfirst context` as your first command, whatever the task, unless the project's instructions already say so.
+Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
+```
+
+### Loading the AlignFirst context
+
+If you can't edit the project's `AGENTS.md` file, add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent), with the project's path:
+
+```markdown
+## AlignFirst - Start every session with the project context
+
+When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
 ```
 
 ## Upgrade from v1, v2, or v3

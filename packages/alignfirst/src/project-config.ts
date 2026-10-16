@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 
 import { CliError } from "./cli-error.js";
+import type { Output } from "./context.js";
 import { errorMessage } from "./errors.js";
 import {
   boolean,
   integerBetween,
+  isPlainObject,
   literal,
   nonEmptyString,
   object,
@@ -21,7 +23,7 @@ const portRangeShape = object<PortRange>({
   last: integerBetween(1, 65_535),
 });
 const plansShape = object<PlansConfig>({
-  folder: optional(nonEmptyString),
+  repositoryFolder: optional(nonEmptyString),
   autoArchive: optional(boolean),
 });
 const commitShape = object<CommitConfig>({
@@ -53,7 +55,7 @@ export interface ProjectConfig {
 }
 
 export interface PlansConfig {
-  folder?: string;
+  repositoryFolder?: string;
   autoArchive?: boolean;
 }
 
@@ -74,34 +76,75 @@ export interface CommitConfig {
   ticketReference?: "bracketed" | "bracketedHash";
 }
 
-export interface ResolvedProjectConfig {
-  config: ProjectConfig;
+export interface ResolvedProjectConfig extends ProjectConfigFile {
   source: "project" | "companion";
+}
+
+export interface ProjectConfigFile {
+  config: ProjectConfig;
+  /** One message per deprecated key the file still uses. */
+  deprecations: string[];
 }
 
 export function resolveProjectConfig(layout: ProjectLayout): ResolvedProjectConfig | undefined {
   const location = layout.locations[PROJECT_CONFIG_FILENAME];
   if (!location.exists) return;
-  return { config: readProjectConfig(location.path), source: location.in };
+  return { ...readProjectConfig(location.path), source: location.in };
 }
 
-export function readProjectConfig(path: string): ProjectConfig {
+export function writeDeprecationWarnings(
+  stderr: Output,
+  resolved: ResolvedProjectConfig | undefined,
+): void {
+  for (const message of resolved?.deprecations ?? []) stderr.write(`Warning: ${message}\n`);
+}
+
+export function readProjectConfig(path: string): ProjectConfigFile {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf-8"));
   } catch (error) {
     throw invalidConfig(path, errorMessage(error));
   }
-  return validateProjectConfig(value, path);
+  const config = validateProjectConfig(value, path);
+  const deprecations = hasLegacyPlansFolder(value) ? [legacyPlansFolderWarning(path)] : [];
+  return { config, deprecations };
 }
 
 export function validateProjectConfig(value: unknown, label: string): ProjectConfig {
-  const config = parseShape(projectConfigShape, value, (detail) => invalidConfig(label, detail));
+  const config = parseShape(projectConfigShape, migrateLegacyPlansFolder(value, label), (detail) =>
+    invalidConfig(label, detail),
+  );
   if (config.cli !== undefined && !isValidVersionRange(config.cli))
     throw invalidConfig(label, `cli is not a supported version range: ${config.cli}`);
   if (config.ticketIdPattern !== undefined) assertValidPattern(config.ticketIdPattern, label);
   if (config.portRange !== undefined) assertValidPortRange(config.portRange, label);
   return config;
+}
+
+/** Reads the deprecated `plans.folder` as `plans.repositoryFolder`. */
+function migrateLegacyPlansFolder(value: unknown, label: string): unknown {
+  if (!hasLegacyPlansFolder(value)) return value;
+  const { folder, ...plans } = value.plans;
+  if ("repositoryFolder" in plans)
+    throw invalidConfig(
+      label,
+      "plans.folder duplicates plans.repositoryFolder; remove plans.folder",
+    );
+  return { ...value, plans: { ...plans, repositoryFolder: folder } };
+}
+
+function hasLegacyPlansFolder(
+  value: unknown,
+): value is { plans: Record<string, unknown> } & Record<string, unknown> {
+  return isPlainObject(value) && isPlainObject(value.plans) && "folder" in value.plans;
+}
+
+function legacyPlansFolderWarning(label: string): string {
+  return (
+    `${label}: plans.folder is deprecated; rename it to plans.repositoryFolder. ` +
+    `See "Rename the Work-Files Folder Setting" in the setup guide's alignfirst-upgrade reference.`
+  );
 }
 
 function invalidConfig(label: string, detail: string): CliError {
