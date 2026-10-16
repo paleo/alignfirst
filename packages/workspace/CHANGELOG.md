@@ -1,5 +1,16 @@
 # @alignfirst/workspace
 
+## 0.38.0
+
+### Minor Changes
+
+- c2fc7c6: Breaking: `ports.names` became `ports.declare`, whose entries are names or `{ name, range?, mainWorktree? }`, and the `ports.mainWorktree` pins moved into these entries. A `range` dedicates a block of the port range to one name, so an outside allowlist, such as OAuth callback URLs, can list its ports. Follow "Declare Workspace Ports" in the alignfirst-upgrade reference.
+
+### Patch Changes
+
+- c2fc7c6: Fixed a double period in the dev setup failure message when the error already ended with one.
+- c2fc7c6: Fixed `workspace remove` leaving the dev server running when `dev down` failed, for example on a config the package refuses. It now kills the recorded processes and warns that the callback `stop()` did not run.
+
 ## 0.37.0
 
 ### Minor Changes
