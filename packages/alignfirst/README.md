@@ -23,14 +23,6 @@ Install the `alignfirst` skill when a project's `AGENTS.md` does not run `npx al
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst
 ```
 
-The skills run the CLI through `npx`, so installing it is optional.
-
-### Update the agent skills
-
-```sh
-npx skills update --global
-```
-
 ## Workflows
 
 These examples use the `/` form. Replace it with `$` in Codex.
@@ -53,7 +45,7 @@ AlignFirst stores the work files of a ticket, such as specifications, plans and 
 
 ## Set up a project (with your agent)
 
-Temporarily install the setup-guide skill:
+Install the alignfirst-setup-guide skill:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
