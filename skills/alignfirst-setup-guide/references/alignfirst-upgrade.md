@@ -150,6 +150,10 @@ ports: { first: 8100, last: 8199, names: ["server", "frontend"], mainWorktree: {
 ports: { first: 8100, last: 8199, declare: ["server", { name: "frontend", mainWorktree: 8100 }] },
 ```
 
+## Declare the Run-File Inputs
+
+`@alignfirst/workspace` 0.39.0 rewrites an existing run file at a start only when the ports or the run-file inputs changed since its last write. An explicit `dev setup` still rewrites them all. Migrate once when a run-file patch or `content` function reads a value besides `ports`, such as `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST`. Return those values from `runFilesInputs` in `dev-server.mjs`, as the [dev-server.mjs](../assets/dev-server.mjs) asset does. Without it, a start keeps the values of the last write.
+
 ## Update the Docmap Snippet
 
 Version 0.48.0 of this guide asks for docmap once per session. When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section whose body says "Mandatory for every task", replace that body with the one in [Agent Instructions](docmap-setup.md#agent-instructions). Keep the heading and the project's docmap command.

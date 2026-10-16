@@ -72,10 +72,16 @@ export interface DevServerConfig {
   /** The project's port range and the ports declared in it. Omit for a portless dev-server. */
   ports?: DevPortsConfig;
   /**
-   * Gitignored files that carry ports or are needed only to run. Created and patched by every
-   * `dev setup`, so before every start.
+   * Gitignored files that carry ports or are needed only to run. `dev setup` writes them. Before a
+   * start, it creates the missing ones, and rewrites the others only when the ports or the
+   * `runFilesInputs` changed since the last write.
    */
   runFiles?: RunFileEntry[];
+  /**
+   * The values the run files depend on besides the ports, such as the environment variables their
+   * patches read. A start rewrites the run files when one changes. `undefined` values are ignored.
+   */
+  runFilesInputs?: () => Record<string, string | undefined>;
   /**
    * Workspace infrastructure: database, seed. Runs once per workspace, at its first `dev setup`,
    * and again with `dev setup --force`. MUST be idempotent. Names every resource it creates after
@@ -202,7 +208,7 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
       await runForeground(kernel, { evict: command.evict, restart: command.restart });
       return;
     case "setup":
-      await runDevSetup(devSetupInput(kernel, command));
+      await runDevSetup(devSetupInput(kernel, { ...command, beforeStart: false }));
       console.log("Dev setup done.");
       return;
   }
@@ -215,11 +221,13 @@ function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInp
     runtimeDir: kernel.config.runtimeDir,
     ports: kernel.ports,
     runFiles: kernel.config.runFiles ?? [],
+    runFilesInputs: kernel.config.runFilesInputs,
     setup: kernel.config.setup,
     options: {
       force: options.force,
       resetPorts: options.resetPorts,
       fromFinalize: options.fromFinalize,
+      beforeStart: options.beforeStart,
     },
   };
 }
@@ -406,7 +414,12 @@ async function runStartChecks(
   const { mainWorktree } = kernel.worktree;
   if (await handleAlreadyRunning(kernel, ctx.cwd, restart)) return;
   const { workspace, ports } = await runDevSetup(
-    devSetupInput(kernel, { force: false, resetPorts: false, fromFinalize: false }),
+    devSetupInput(kernel, {
+      force: false,
+      resetPorts: false,
+      fromFinalize: false,
+      beforeStart: true,
+    }),
   );
   ctx.ports = ports;
   await enforceCap(kernel, evict);

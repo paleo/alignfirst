@@ -101,9 +101,15 @@ export interface CopyAndPatchOptions {
   /** Called only when the target is (re)seeded from its source. */
   resolveSource: () => Promise<ResolvedFileSource>;
   patch?: (content: string) => string;
-  force: boolean;
+  existing: ExistingFilePolicy;
   optional: boolean;
 }
+
+/**
+ * What happens to a target that already exists: `reseed` writes it again from its source, `patch`
+ * re-applies its `patch` (an entry without `patch` is kept), `keep` leaves it untouched.
+ */
+export type ExistingFilePolicy = "reseed" | "patch" | "keep";
 
 export type CopyAndPatchOutcome =
   | { kind: "updated" }
@@ -115,8 +121,8 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
   const targetPath = join(options.currentWorktree, relPath);
   const alreadyExists = existsSync(targetPath);
 
-  if (alreadyExists && !options.force) {
-    if (patch === undefined) return { kind: "keptExisting" };
+  if (alreadyExists && options.existing !== "reseed") {
+    if (options.existing === "keep" || patch === undefined) return { kind: "keptExisting" };
     return reconcileExistingFile(targetPath, relPath, patch);
   }
 

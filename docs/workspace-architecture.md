@@ -137,7 +137,13 @@ Adding a dedicated range moves no port of another workspace from the outside. Ea
 
 ### Run files
 
-`seedFiles` ([`file-entries.ts`](../packages/workspace/src/file-entries.ts)) writes both file lists through `copyAndPatchFile`: `workspace setup` the `gitignoredFiles` with a `PatchContext`, `dev setup` the `runFiles` with a `RunFileContext`, which adds `ports`. An existing file gets its `patch` re-applied and is rewritten only when the result differs. `copyAndPatchFile` refuses a patch that is not idempotent, on a seed as on a re-apply, before writing. The rewritten files are reported in one `Updated <paths>` line, printed even when a later entry fails. `workspace setup --force` reseeds a `gitignoredFiles` entry from its source. No flag reseeds a run file: a deleted one is created again at the next `dev setup`.
+`seedFiles` ([`file-entries.ts`](../packages/workspace/src/file-entries.ts)) writes both file lists through `copyAndPatchFile`: `workspace setup` the `gitignoredFiles` with a `PatchContext`, `dev setup` the `runFiles` with a `RunFileContext`, which adds `ports`. Its `existing` policy decides the fate of an existing file. `reseed` writes it again from its source. `patch` re-applies its `patch` and rewrites it only when the result differs. `keep` leaves it. `copyAndPatchFile` refuses a patch that is not idempotent, on a seed as on a re-apply, before writing. The rewritten files are reported in one `Updated <paths>` line, printed even when a later entry fails.
+
+`workspace setup` uses `patch`, and `reseed` with `--force`. `dev setup` never reseeds a run file: a deleted one is created again. An explicit `dev setup` uses `patch`.
+
+Before a start, `dev setup` uses `keep`, so a hand edit survives a restart. It switches to `patch` when the basis of the run files changed: the ports, and the defined values of `DevServerConfig.runFilesInputs`. The entry stores that basis as `runFilesWrittenWith` after each write; an entry without one counts as changed. The `Updated` line then becomes a warning naming the moved ports and the changed input keys, without the input values.
+
+A generated run file, a `content` source without `patch`, would never follow a port move. `writeRunFiles` turns its generated content into its `patch`, so each rewrite regenerates it.
 
 ### Legacy entries
 

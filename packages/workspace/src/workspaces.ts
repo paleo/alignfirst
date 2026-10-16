@@ -29,6 +29,8 @@ export interface WorkspaceEntry {
   neverFinalized?: boolean;
   /** One port per declared name, allocated by `dev setup`. */
   ports?: Record<string, number>;
+  /** What the run files were last written with. A start rewrites them when it changed. */
+  runFilesWrittenWith?: RunFilesBasis;
   /** ISO date of the last successful `DevServerConfig.setup`. */
   devSetupAt?: string;
   /** The last `dev setup` failure. Cleared by a successful `dev setup`. */
@@ -38,6 +40,12 @@ export interface WorkspaceEntry {
 }
 
 export type WorkspaceStatus = "pending" | "ready" | "failed";
+
+export interface RunFilesBasis {
+  ports: Record<string, number>;
+  /** The defined values of `DevServerConfig.runFilesInputs`. */
+  inputs: Record<string, string>;
+}
 
 /** The registry as `workspaces.json` holds it. */
 interface StoredRegistry {
@@ -193,6 +201,7 @@ export async function registerWorkspace(
       // re-finalize.
       status: isFinalized(existing) && input.force !== true ? "ready" : "pending",
       ports: existing?.ports,
+      runFilesWrittenWith: existing?.runFilesWrittenWith,
       devSetupAt: existing?.devSetupAt,
       // A `devSetupFailure` is dropped: `workspace wait` reports only this setup's dev failure.
       purgeData: existing?.purgeData,

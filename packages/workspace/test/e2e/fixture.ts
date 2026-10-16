@@ -17,8 +17,11 @@ export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
 
 /**
  * A real dev-server with no server: `dev setup` alone exercises it. Its run file `ports.env` carries
- * the ports; its `setup` hook appends one line per run to `setup-runs.log`, and throws with
- * `E2E_DEV_SETUP_FAIL=1`, with a message that ends with a period. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording anything.
+ * the ports through a patch. `ports.txt` is generated without a patch, from the web port and the
+ * `E2E_HOST` input (default `localhost`). Its `setup`
+ * hook appends one line per run to `setup-runs.log`, and throws with `E2E_DEV_SETUP_FAIL=1`, with a
+ * message that ends with a period. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording
+ * anything.
  */
 const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,7 +48,16 @@ await runDevServer({
           API_PORT: String(ctx.ports.api),
         }),
     },
+    {
+      path: "ports.txt",
+      source: {
+        kind: "content",
+        content: (ctx) =>
+          "web=" + (process.env.E2E_HOST ?? "localhost") + ":" + ctx.ports.web + "\\n",
+      },
+    },
   ],
+  runFilesInputs: () => ({ E2E_HOST: process.env.E2E_HOST }),
   setup: (ctx) => {
     if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
     appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
@@ -88,7 +100,10 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   if (fallbackSeeding) {
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
   }
-  writeFileSync(join(repo, ".gitignore"), "workspace.local\nports.env\nsetup-runs.log\n");
+  writeFileSync(
+    join(repo, ".gitignore"),
+    "workspace.local\nports.env\nports.txt\nsetup-runs.log\n",
+  );
   if (!portless) writeFileSync(join(repo, "scripts", "dev-server.mjs"), DEV_SERVER_MJS_SOURCE);
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.email", "e2e@example.com"]);
