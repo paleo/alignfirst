@@ -218,8 +218,8 @@ function isFinalized(entry: WorkspaceEntry | undefined): boolean {
 
 /**
  * Moves the main entry (`main: true`) under `basename(mainWorktree)` when the main directory was
- * renamed, and returns the old name. The entry keeps its fields except `devSetupAt`: infrastructure
- * is named after the workspace, so the next `dev setup` provisions it under the new name. Leaves
+ * renamed, and returns the old name. Clears `devSetupAt` and `runFilesWrittenWith` so the next
+ * `dev setup` updates run files and provisions infrastructure under the new name. Leaves
  * the registry untouched when another entry already holds the new name.
  */
 export function rekeyMainEntry(
@@ -232,6 +232,7 @@ export function rekeyMainEntry(
   const [oldName, entry] = found;
   delete registry.workspaces[oldName];
   delete entry.devSetupAt;
+  delete entry.runFilesWrittenWith;
   registry.workspaces[newName] = entry;
   return oldName;
 }

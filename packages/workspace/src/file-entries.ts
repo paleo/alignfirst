@@ -103,7 +103,7 @@ export interface SeedLog {
 }
 
 export interface SeedFilesInput<C extends SetupContextBase> {
-  entries: SeededFile<C>[];
+  entries: Iterable<SeededFile<C>> | AsyncIterable<SeededFile<C>>;
   ctx: C;
   /** What happens to an existing file. */
   existing: ExistingFilePolicy;
@@ -120,7 +120,7 @@ export async function seedFiles<C extends SetupContextBase>(
   const { ctx, log } = input;
   const updated: string[] = [];
   try {
-    for (const entry of input.entries) {
+    for await (const entry of input.entries) {
       const { patch } = entry;
       const outcome = await copyAndPatchFile({
         currentWorktree: ctx.currentWorktree,

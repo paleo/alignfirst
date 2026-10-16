@@ -254,19 +254,18 @@ async function writeRunFiles(
     !sameValues(written.ports, basis.ports) ||
     !sameValues(written.inputs, basis.inputs);
   const rewrite = !beforeStart || changed;
-  const entries = rewrite
-    ? await Promise.all(input.runFiles.map((entry) => regeneratedAsPatch(entry, ctx)))
-    : input.runFiles;
+  const entries = rewrite ? regeneratedRunFiles(input.runFiles, ctx) : input.runFiles;
   const tee = beforeStart
     ? (msg: string) => console.warn(rewriteWarning(written, basis, msg))
     : console.log;
+  await storeRunFilesBasis(input, ctx.name, undefined);
   await seedFiles({
     entries,
     ctx,
     existing: rewrite ? "patch" : "keep",
     log: { tee, verbose: noop },
   });
-  if (changed) await storeRunFilesBasis(input, ctx.name, basis);
+  await storeRunFilesBasis(input, ctx.name, basis);
 }
 
 /** The inputs without their `undefined` values, as the registry stores them. */
@@ -278,12 +277,21 @@ function definedValues(runFilesInputs: DevSetupInput["runFilesInputs"]): Record<
   return inputs;
 }
 
-/** The generated content becomes the patch: an existing file is rewritten when it differs. */
-async function regeneratedAsPatch(entry: RunFileEntry, ctx: RunFileContext): Promise<RunFileEntry> {
-  const { source } = entry;
-  if (source.kind !== "content" || entry.patch !== undefined) return entry;
-  const content = typeof source.content === "function" ? await source.content(ctx) : source.content;
-  return { ...entry, source: { kind: "content", content }, patch: () => content };
+/** Resolves each generated source after the preceding entry has been written. */
+async function* regeneratedRunFiles(
+  entries: RunFileEntry[],
+  ctx: RunFileContext,
+): AsyncGenerator<RunFileEntry> {
+  for (const entry of entries) {
+    const { source } = entry;
+    if (source.kind !== "content" || entry.patch !== undefined) {
+      yield entry;
+      continue;
+    }
+    const content =
+      typeof source.content === "function" ? await source.content(ctx) : source.content;
+    yield { ...entry, source: { kind: "content", content }, patch: () => content };
+  }
 }
 
 /** Names the changes; the values of the inputs stay out, as they may be private. */
@@ -308,11 +316,13 @@ function rewriteWarning(
 async function storeRunFilesBasis(
   input: DevSetupInput,
   name: string,
-  basis: RunFilesBasis,
+  basis: RunFilesBasis | undefined,
 ): Promise<void> {
   await updateWorkspaces(input.worktree.mainWorktree, input.registryDir, (registry) => {
     const current = registry.workspaces[name];
-    if (current) current.runFilesWrittenWith = basis;
+    if (!current) return;
+    if (basis === undefined) delete current.runFilesWrittenWith;
+    else current.runFilesWrittenWith = basis;
   });
 }
 
