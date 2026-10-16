@@ -18,7 +18,7 @@ export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
 /**
  * A real dev-server with no server: `dev setup` alone exercises it. Its run file `ports.env` carries
  * the ports; its `setup` hook appends one line per run to `setup-runs.log`, and throws with
- * `E2E_DEV_SETUP_FAIL=1`. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording anything.
+ * `E2E_DEV_SETUP_FAIL=1`, with a message that ends with a period. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording anything.
  */
 const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -47,7 +47,7 @@ await runDevServer({
     },
   ],
   setup: (ctx) => {
-    if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom");
+    if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
     appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
   },
   servers: [],

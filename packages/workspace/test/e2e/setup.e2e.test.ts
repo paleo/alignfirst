@@ -381,7 +381,7 @@ describe("workspace setup --full (e2e)", () => {
       );
       const entry = entryFor(repo, "fixrepo-feat-fail");
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toBe("e2e dev boom");
+      expect(entry.devSetupFailure?.message).toBe("e2e dev boom.");
       expect(entry.devSetupAt).toBeUndefined();
       expect(setupLog(repo, "fixrepo-feat-fail")).toContain("DEV SETUP FAILED: e2e dev boom");
 
@@ -443,6 +443,51 @@ describe("workspace setup --full (e2e)", () => {
   );
 });
 
+describe("workspace remove (e2e)", () => {
+  it(
+    "kills the recorded dev-server processes when `dev down` fails",
+    () => {
+      const { repo } = fixture();
+      expect(runCli(repo, ["setup", "-c", "feat-rm"]).status).toBe(0);
+      const linked = sibling(repo, "fixrepo-feat-rm");
+      const pid = startOrphanableSleeper();
+      try {
+        writeFileSync(
+          join(repo, ".wt", "workspace-registry", "dev-servers.json"),
+          JSON.stringify({
+            servers: [
+              {
+                name: "fixrepo-feat-rm",
+                worktree: linked,
+                pids: { app: pid },
+                startedAt: new Date().toISOString(),
+              },
+            ],
+          }),
+        );
+
+        // `E2E_DEV_EXIT=1` makes `dev down` exit 3 before stopping anything, like a refused config.
+        const removed = runCli(repo, ["remove", "fixrepo-feat-rm", "--force"], {
+          E2E_DEV_EXIT: "1",
+        });
+        expect(removed.status).toBe(0);
+        expect(removed.stderr).toContain("dev down exited with code 3");
+        expect(removed.stderr).toContain("Killed 1 dev-server process(es) left running");
+        expect(isAlive(pid)).toBe(false);
+        const devServers = readFileSync(
+          join(repo, ".wt", "workspace-registry", "dev-servers.json"),
+          "utf-8",
+        );
+        expect(JSON.parse(devServers)).toEqual({ servers: [] });
+        expect(existsSync(linked)).toBe(false);
+      } finally {
+        if (isAlive(pid)) process.kill(pid, "SIGKILL");
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
 describe("list and status (e2e)", () => {
   it(
     "show the ports, `-` for a workspace without",
@@ -494,6 +539,27 @@ function setupRuns(worktree: string): string[] {
   const path = join(worktree, "setup-runs.log");
   if (!existsSync(path)) return [];
   return readFileSync(path, "utf-8").trim().split("\n");
+}
+
+/**
+ * Starts a sleeping process whose parent shell exits at once: init reaps it once killed, while this
+ * test process is blocked in `spawnSync`.
+ */
+function startOrphanableSleeper(): number {
+  const sleeper = `"${process.execPath}" -e "setInterval(() => {}, 1000)"`;
+  const out = execFileSync("sh", ["-c", `${sleeper} >/dev/null 2>&1 & echo $!`], {
+    encoding: "utf-8",
+  });
+  return Number(out.trim());
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function registryFile(repo: string): string {
