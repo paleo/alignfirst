@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ticketIdPattern": "^\\d+$",
   "plans": {
-    "repositoryFolder": "alignfirst",
+    "folder": "alignfirst",
     "autoArchive": true
   },
   "git": {

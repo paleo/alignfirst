@@ -118,7 +118,7 @@ On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as th
 
 ## Rename the Work-Files Folder Setting
 
-`alignfirst` 0.12.0 reads the project's folder in the work-files repository from `plans.repositoryFolder` in `.alignfirst.json`, and fails on `plans.folder` with an error pointing here. Rename the key; the value stays. On an AlignDev OpenClaw host, the file lives in the admin repository: rename it there and re-seed.
+`alignfirst` 0.12.0 reads the project's folder in the work-files repository from `plans.repositoryFolder` in `.alignfirst.json`. It still reads the deprecated `plans.folder`, with a warning pointing here, and fails when both keys are present. Rename the key; the value stays. An older `alignfirst` rejects `plans.repositoryFolder`: rename it once every copy that reads the file runs 0.12.0. On an AlignDev OpenClaw host, the file lives in the admin repository: rename it there and re-seed.
 
 ## Move Workspace Ports to the Dev-Server
 

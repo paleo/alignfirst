@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   configureGit,
@@ -57,6 +57,26 @@ describe("config command", () => {
       cli: { installed: packageVersion, range: ">=1.0.0", satisfied: false },
       config: { schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" },
     });
+  });
+
+  it("reports a deprecated plans.folder as plans.repositoryFolder, warning on stderr", async () => {
+    const cwd = temp();
+    writeFileSync(
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, plans: { folder: "project" } }),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await runMain(["config", "--json"], { cwd });
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.stdout).config).toEqual({
+        schemaVersion: 1,
+        plans: { repositoryFolder: "project" },
+      });
+      expect(warn).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("reports the companion, its config and every location", async () => {

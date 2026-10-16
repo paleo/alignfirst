@@ -96,8 +96,9 @@ export function readProjectConfig(path: string): ProjectConfig {
 }
 
 export function validateProjectConfig(value: unknown, label: string): ProjectConfig {
-  assertNoLegacyPlansFolder(value, label);
-  const config = parseShape(projectConfigShape, value, (detail) => invalidConfig(label, detail));
+  const config = parseShape(projectConfigShape, migrateLegacyPlansFolder(value, label), (detail) =>
+    invalidConfig(label, detail),
+  );
   if (config.cli !== undefined && !isValidVersionRange(config.cli))
     throw invalidConfig(label, `cli is not a supported version range: ${config.cli}`);
   if (config.ticketIdPattern !== undefined) assertValidPattern(config.ticketIdPattern, label);
@@ -105,13 +106,20 @@ export function validateProjectConfig(value: unknown, label: string): ProjectCon
   return config;
 }
 
-/** The shape would report the generic "must be removed" for the renamed key. */
-function assertNoLegacyPlansFolder(value: unknown, label: string): void {
-  if (!isObject(value) || !isObject(value.plans) || !("folder" in value.plans)) return;
-  throw invalidConfig(
-    label,
-    "plans.folder is now plans.repositoryFolder. See the setup guide's upgrade reference.",
+/** Reads the deprecated `plans.folder` as `plans.repositoryFolder`. */
+function migrateLegacyPlansFolder(value: unknown, label: string): unknown {
+  if (!isObject(value) || !isObject(value.plans) || !("folder" in value.plans)) return value;
+  const { folder, ...plans } = value.plans;
+  if ("repositoryFolder" in plans)
+    throw invalidConfig(
+      label,
+      "plans.folder duplicates plans.repositoryFolder; remove plans.folder",
+    );
+  console.warn(
+    `Warning: ${label}: plans.folder is deprecated; rename it to plans.repositoryFolder. ` +
+      `See "Rename the Work-Files Folder Setting" in the setup guide's alignfirst-upgrade reference.`,
   );
+  return { ...value, plans: { ...plans, repositoryFolder: folder } };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

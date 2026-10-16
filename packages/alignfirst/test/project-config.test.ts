@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readProjectConfig, validateProjectConfig } from "../src/project-config.js";
 import { makeTempDir } from "./helpers.js";
@@ -52,10 +52,31 @@ describe("project config", () => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
   });
 
-  it("points plans.folder to plans.repositoryFolder", () => {
+  it("reads the deprecated plans.folder as plans.repositoryFolder, with a warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(
+        validateProjectConfig(
+          { schemaVersion: 1, plans: { folder: "x", autoArchive: true } },
+          "config",
+        ),
+      ).toEqual({ schemaVersion: 1, plans: { repositoryFolder: "x", autoArchive: true } });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0][0]).toContain(
+        "config: plans.folder is deprecated; rename it to plans.repositoryFolder",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("rejects plans.folder alongside plans.repositoryFolder", () => {
     expect(() =>
-      validateProjectConfig({ schemaVersion: 1, plans: { folder: "x" } }, "config"),
-    ).toThrow("plans.folder is now plans.repositoryFolder");
+      validateProjectConfig(
+        { schemaVersion: 1, plans: { folder: "x", repositoryFolder: "x" } },
+        "config",
+      ),
+    ).toThrow("remove plans.folder");
   });
 
   it.each(["^(ABC|XYZ)-\\d+$", "^[^/]+$", "^\\$\\d+$", "\\d+"])(
