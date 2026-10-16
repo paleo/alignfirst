@@ -109,17 +109,17 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 
 `reconcilePorts` ([`ports.ts`](../packages/workspace/src/ports.ts)) is pure. It takes the resolved config, the workspace's stored ports, the ports stored on every other entry, and a probe. Then, in `names` order:
 
-1. In the main worktree, each name of `ports.mainWorktree` takes its pinned port.
-2. A stored port is kept when the config still allows it (inside the range, not excluded, not a bad port) and nothing reserves it. A port is reserved when it is pinned, already assigned to another name of the workspace, or, in a linked workspace, stored on another entry.
-3. Each missing name gets the lowest port that is allowed, neither pinned nor assigned, stored on no other entry, and free according to the probe.
+1. In the main worktree, each `declare` entry with a `mainWorktree` takes its pinned port.
+2. A stored port is kept when the config still allows it for its name and nothing reserves it. An allowed port is inside the range, not excluded, not a bad port, and inside the name's dedicated range, or outside every dedicated range for a name without one. A port is reserved when it is pinned, already assigned to another name of the workspace, or, in a linked workspace, stored on another entry.
+3. Each missing name gets the lowest port of its scope that is allowed for it, neither pinned nor assigned, stored on no other entry, and free according to the probe. The scope is the name's dedicated range, or the project range. Each scope keeps its own cursor, so a rejected port is never probed twice.
 
-An undeclared name is not carried over, so its port is freed. An exhausted range is a `WorkspaceError` that names the range and points at `workspace remove`. `--reset-ports` passes no stored port, so every port is allocated again, pins excepted. It refuses first while the worktree's dev-server runs. When the ports change, they are printed as one `Ports: …` line.
+An undeclared name is not carried over, so its port is freed. An exhausted scope is a `WorkspaceError` that names the range and points at `workspace remove`. For a dedicated range, it adds that ports held there under other names are freed at those workspaces' next `dev setup`. `--reset-ports` passes no stored port, so every port is allocated again, pins excepted. It refuses first while the worktree's dev-server runs. When the ports change, they are printed as one `Ports: …` line.
 
 ### Lock and probe
 
 The reconciliation runs inside `updateWorkspaces` ([Registry lock](#registry-lock)), listen probes included, so two worktrees never allocate the same port. `isPortFree` listens exclusively on `127.0.0.1`, then `::1`. `EADDRINUSE` or `EACCES` means busy; a host without IPv6 skips the second probe.
 
-The probe is a snapshot. A process that binds the port later is caught at start by `checkPortsFree`, whose error points at `dev setup --reset-ports`. For a pinned port in the main worktree, it says to free the port or change `ports.mainWorktree` instead.
+The probe is a snapshot. A process that binds the port later is caught at start by `checkPortsFree`, whose error points at `dev setup --reset-ports`. For a pinned port in the main worktree, it says to free the port or change the entry's `mainWorktree` instead.
 
 ### Bad ports
 
@@ -130,6 +130,10 @@ The probe is a snapshot. A process that binds the port later is caught at start 
 Each worktree reads its own branch's dev-server config, so a linked branch older than a pin knows nothing of it. The registry closes that gap: allocation skips every port stored on any entry, and a linked workspace drops a stored port that another entry also holds, the main entry winning.
 
 One window remains. Before the main worktree's first `dev setup` after the pin, an older branch may allocate the pinned port. The main worktree then takes it anyway, and the start-time check reports the collision until the linked workspace's next start moves it.
+
+### Dedicated ranges and older branches
+
+Adding a dedicated range moves no port of another workspace from the outside. Each workspace frees the ports it holds in the range under other names at its next `dev setup`, also run before every start. Until then, the range offers fewer ports. A linked branch whose config predates the range can also take a port there for another name. Both are accepted: the dedicated-range exhaustion message covers them.
 
 ### Run files
 

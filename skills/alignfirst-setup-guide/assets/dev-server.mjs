@@ -26,8 +26,9 @@ await runDevServer({
   maxConcurrentDevServers: 5,    // ADAPT — cap on concurrent dev-servers across worktrees; omit for no limit.
 
   // ADAPT (optional): the project's port range. Each workspace gets one port
-  // per name at its first `dev setup`, the lowest free one, and keeps it. Omit
-  // the group for a portless dev-server: `ctx.ports` is then empty everywhere.
+  // per declared name at its first `dev setup`, the lowest free one, and keeps
+  // it. Omit the group for a portless dev-server: `ctx.ports` is then empty
+  // everywhere.
   ports: {
     // ADAPT: size the range as names × expected concurrent workspaces. Must
     // equal `portRange` in `.alignfirst.json` when that file exists.
@@ -35,10 +36,21 @@ await runDevServer({
     last: 8199,
     // ADAPT (optional): ports never allocated, single or inclusive ranges.
     // exclude: [8125, { first: 8180, last: 8189 }],
-    names: ["server", "frontend", "db"],
-    // ADAPT (optional): fixed ports for the main worktree, when something
-    // outside the repository depends on them (a bookmark, an OAuth callback URL).
-    // mainWorktree: { server: 8100, frontend: 8101 },
+    declare: [
+      "server",
+      {
+        name: "frontend",
+        // ADAPT (optional): the main worktree's fixed port, when something
+        // outside the repository depends on it (a bookmark).
+        // mainWorktree: 8100,
+        // ADAPT (optional): a block dedicated to this name, when something
+        // outside the repository enumerates its port for every workspace (an
+        // OAuth callback URL in a provider's allowlist). The name gets ports
+        // only there, the other names never do. Holds the pin, if any.
+        // range: { first: 8100, last: 8109 },
+      },
+      "db",
+    ],
   },
 
   // ADAPT: the gitignored files that carry ports, or are needed only to run.
@@ -178,7 +190,7 @@ await runDevServer({
       kind: "spawn",                                        // ADAPT
       name: "dev",                                          // ADAPT
       exec: { command: "npm", args: ["run", "dev:app"] },   // ADAPT — must not be `dev` (recurses into this wrapper)
-      // ADAPT: a name from `ports.names`, resolved to the workspace's port.
+      // ADAPT: a name from `ports.declare`, resolved to the workspace's port.
       // Optional: omit `port` for a process that listens on nothing; port-conflict
       // checks, port sweeping and the summary URL then skip this server.
       port: "frontend",

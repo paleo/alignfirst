@@ -120,16 +120,31 @@ On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as th
 
 `@alignfirst/workspace` 0.37.0 allocates the ports in the dev-server, at each workspace's first `dev setup`, and provisions infrastructure there. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The [workspace blueprint](workspace-setup.md) and the [workspace.mjs](../assets/workspace.mjs) and [dev-server.mjs](../assets/dev-server.mjs) assets show the target shape.
 
-1. Move `ports` to `dev-server.mjs` as a range. `first` is the old `base`, and `last` the old range end, `base + maxWorkspaces × perWorkspace − 1`, so `portRange` in `.alignfirst.json` stays valid. `perWorkspace` defaulted to the number of names. Keep `names`; a `compute` function becomes the names it returned.
+1. Move `ports` to `dev-server.mjs` as a range. `first` is the old `base`, and `last` the old range end, `base + maxWorkspaces × perWorkspace − 1`, so `portRange` in `.alignfirst.json` stays valid. `perWorkspace` defaulted to the number of names. Rename `names` to `declare`; a `compute` function becomes the names it returned.
 2. Move the files that carry ports from `gitignoredFiles` to `runFiles` in `dev-server.mjs`. Their `patch` receives `ports` as before.
 3. Move the infrastructure from `finalizeWorkspace` to the dev-server's `setup`, and keep it idempotent: `dev setup --force` runs it again. Name every resource after the workspace. `finalizeWorkspace` keeps install and build, and returns nothing.
 4. Remove `setupProfiles`, the profile checks in `preSetup`, and every `--profile remote` command. The run-file patches build the public URLs from `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST` ([Public URLs](workspace-setup.md#public-urls)). A deployment that used the public-IP profile sets `REMOTE_DEV_HOST`.
 5. Give each spawn server the name of its port, such as `port: "frontend"`.
-6. Offer `ports.mainWorktree` with the main worktree's current ports, read from its run files, to keep them. Linked workspaces get new ports at their next start. Their infrastructure, already provisioned, follows a moved port only when a callback `start` recreates it, as `docker compose up -d` does; otherwise run `dev setup --force` in the workspace.
+6. Offer to pin the main worktree's current ports, read from its run files, to keep them: each becomes the `mainWorktree` of its `declare` entry, as `{ name, mainWorktree }`. Linked workspaces get new ports at their next start. Their infrastructure, already provisioned, follows a moved port only when a callback `start` recreates it, as `docker compose up -d` does; otherwise run `dev setup --force` in the workspace.
 7. Make `purgeInfrastructure` tear down by the workspace name ([Teardown by name](workspace-setup.md#teardown-by-name)). Keep reading `purgeData` while existing workspaces carry one: the old `finalizeWorkspace` returned it, and their entries still pass it.
 8. In the workspaces section of `AGENTS.md` and `DEVELOPERS.md`, say that ports and infrastructure arrive with the first `dev` or `dev setup` ([Agent Instructions](workspace-setup.md#agent-instructions)).
 
 On an AlignDev OpenClaw host with the dev-server gateway, `REMOTE_DEV_DOMAIN` already comes from `environment.d/common.conf`. A project needs no remote setup step anymore.
+
+## Declare Workspace Ports
+
+`@alignfirst/workspace` 0.38.0 refuses `ports.names` and `ports.mainWorktree` in `dev-server.mjs`. Migrate the `ports` group once:
+
+1. Rename `names` to `declare`.
+2. Turn each pin of `mainWorktree` into an entry `{ name, mainWorktree }` in `declare`, then remove the `mainWorktree` map.
+3. Optionally, give an entry a `range` when something outside the repository enumerates its port for every workspace, such as an OAuth callback URL in a provider's allowlist ([Port range](workspace-setup.md#port-range)).
+
+```js
+// Before
+ports: { first: 8100, last: 8199, names: ["server", "frontend"], mainWorktree: { frontend: 8100 } },
+// After
+ports: { first: 8100, last: 8199, declare: ["server", { name: "frontend", mainWorktree: 8100 }] },
+```
 
 ## Update the Docmap Snippet
 
