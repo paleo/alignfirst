@@ -18,8 +18,8 @@ myteam-plans/
 
 Each developer clones this repository once per machine with their own credentials, anywhere they
 choose, typically beside the code repositories. In a configured project, `.plans` is a symlink to
-the folder named by `plans.folder` in `.alignfirst.json`. Linked worktrees continue through the main
-worktree's symlink.
+the folder named by `plans.repositoryFolder` in `.alignfirst.json`. Linked worktrees continue
+through the main worktree's symlink.
 
 A contributor without access to the work-files repository uses a plain `.plans` directory. The CLI
 accepts both modes. Run `npx alignfirst plans check` to report the current mode.
@@ -35,11 +35,11 @@ Write the project folder into `.alignfirst.json`:
 ```json
 {
   "schemaVersion": 1,
-  "plans": { "folder": "project-a", "autoArchive": true }
+  "plans": { "repositoryFolder": "project-a", "autoArchive": true }
 }
 ```
 
-When `.alignfirst.json` already exists without `plans.folder`, supply the folder once while linking:
+When `.alignfirst.json` already exists without `plans.repositoryFolder`, supply the folder once while linking:
 
 ```sh
 npx alignfirst plans setup <plans-clone-path> --folder project-a

@@ -116,6 +116,10 @@ An older `alignfirst` fails on the new shape: update every copy that reads the r
 
 On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as the service account, once `update-assistant.md` has installed `alignfirst` 0.11.0.
 
+## Rename the Work-Files Folder Setting
+
+`alignfirst` 0.12.0 reads the project's folder in the work-files repository from `plans.repositoryFolder` in `.alignfirst.json`, and fails on `plans.folder` with an error pointing here. Rename the key; the value stays. On an AlignDev OpenClaw host, the file lives in the admin repository: rename it there and re-seed.
+
 ## Move Workspace Ports to the Dev-Server
 
 `@alignfirst/workspace` 0.37.0 allocates the ports in the dev-server, at each workspace's first `dev setup`, and provisions infrastructure there. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The [workspace blueprint](workspace-setup.md) and the [workspace.mjs](../assets/workspace.mjs) and [dev-server.mjs](../assets/dev-server.mjs) assets show the target shape.

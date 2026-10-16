@@ -107,7 +107,7 @@ Write `.alignfirst.json` with the agreed fields:
 {
   "schemaVersion": 1,
   "ticketIdPattern": "^\\d+$",
-  "plans": { "folder": "acme-web", "autoArchive": true },
+  "plans": { "repositoryFolder": "acme-web", "autoArchive": true },
   "portRange": { "first": 8100, "last": 8299 },
   "git": {
     "defaultBranch": "main",

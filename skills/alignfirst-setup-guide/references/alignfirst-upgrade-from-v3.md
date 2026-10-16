@@ -32,10 +32,11 @@ for:
 Include documentation, CI, package scripts, shell scripts, hooks, deployment files, and automation.
 Record the work-files folder.
 
-Recover the work-files folder from the static `--folder` value in the old setup script or another setup
-call. If that value is absent or dynamic and `.plans` is a symlink, resolve its target and use the
-target directory's basename after verifying that its parent is the work-files repository clone. Use an
-existing `plans.folder` when it agrees. Ask the user when these sources are missing or conflict.
+Recover the work-files folder from the static `--folder` value in the old setup script or another
+setup call. If that value is absent or dynamic and `.plans` is a symlink, resolve its target and use
+the target directory's basename after verifying that its parent is the work-files repository clone.
+Use an existing `plans.repositoryFolder` when it agrees. Ask the user when these sources are missing
+or conflict.
 
 Keep `.plans` unchanged; an existing symlink remains valid.
 
@@ -62,7 +63,7 @@ Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. Set
 {
   "schemaVersion": 1,
   "ticketIdPattern": "<regex>",
-  "plans": { "folder": "<recovered-folder>", "autoArchive": true },
+  "plans": { "repositoryFolder": "<recovered-folder>", "autoArchive": true },
   "git": { "defaultBranch": "<detected-default-branch>" }
 }
 ```
@@ -76,7 +77,7 @@ Use these replacements throughout the repository:
 
 | Legacy command or setting | Replacement |
 | --- | --- |
-| `plans-share setup <clone> --folder <folder>` | Set `plans.folder`, then run `npx alignfirst plans setup <clone>` |
+| `plans-share setup <clone> --folder <folder>` | Set `plans.repositoryFolder`, then run `npx alignfirst plans setup <clone>` |
 | `plans-share sync` | `npx alignfirst sync` |
 | `plans-share sync --auto-archive` | Set `plans.autoArchive: true`, then run `npx alignfirst sync` |
 | `plans-share check` | `npx alignfirst plans check` |
