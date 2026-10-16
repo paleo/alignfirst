@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 
 import { ConfigError, WorkspaceError } from "./errors.js";
-import { wsCmd } from "./package-manager.js";
+import { devCmd, wsCmd } from "./package-manager.js";
 
 /** The Fetch Standard's bad ports: browsers refuse to load them. Never allocated. */
 export const BAD_PORTS: ReadonlySet<number> = new Set([
@@ -14,20 +14,35 @@ export const BAD_PORTS: ReadonlySet<number> = new Set([
 
 const PROBE_HOSTS = ["127.0.0.1", "::1"];
 
-/** The project's port range and the names allocated in it. */
+const ENTRY_KEYS: ReadonlySet<string> = new Set(["name", "range", "mainWorktree"]);
+
+const UPGRADE_POINTER =
+  'Follow "Declare Workspace Ports" in the alignfirst-upgrade reference of the ' +
+  "alignfirst-setup-guide skill.";
+
+/** The project's port range and the ports declared in it. */
 export interface DevPortsConfig {
   /** Must equal `portRange` in `.alignfirst.json`, when that file declares one. */
   first: number;
   last: number;
   /** Ports never allocated: single ports or inclusive ranges, inside `first`–`last`. */
   exclude?: (number | PortRange)[];
-  /** One port per name, allocated in this order. */
-  names: string[];
+  /** One port per entry, allocated in this order. A string is a name without settings. */
+  declare: (string | DeclaredPort)[];
+}
+
+export interface DeclaredPort {
+  name: string;
   /**
-   * Fixed ports of the main worktree, by name. Reserved: never allocated to another workspace, and
-   * kept by `--reset-ports`. A name absent here is allocated as usual.
+   * A block of `first`–`last` dedicated to this name: it is allocated only there, and no other name
+   * is. Two ranges never overlap.
    */
-  mainWorktree?: Record<string, number>;
+  range?: PortRange;
+  /**
+   * The main worktree's fixed port. Reserved: never allocated to another workspace, and kept by
+   * `--reset-ports`. Inside `range` when declared, outside every range otherwise.
+   */
+  mainWorktree?: number;
 }
 
 export interface PortRange {
@@ -39,13 +54,17 @@ export interface PortRange {
 export interface ResolvedDevPorts {
   first: number;
   last: number;
+  /** The declared names, in allocation order. */
   names: string[];
   excluded: ReadonlySet<number>;
+  /** The dedicated ranges, by name. */
+  ranges: Record<string, PortRange>;
   /** The main worktree's pins, by name. */
   mainWorktree: Record<string, number>;
 }
 
 export function resolveDevPortsConfig(config: DevPortsConfig): ResolvedDevPorts {
+  refuseOldKeys(config);
   checkPort(config.first, "ports.first");
   checkPort(config.last, "ports.last");
   if (config.first > config.last) {
@@ -54,16 +73,32 @@ export function resolveDevPortsConfig(config: DevPortsConfig): ResolvedDevPorts 
     );
   }
   const excluded = expandExclusions(config);
-  checkNames(config.names);
+  const entries = readEntries(config.declare);
   const resolved: ResolvedDevPorts = {
     first: config.first,
     last: config.last,
-    names: config.names,
+    names: entries.map((entry) => entry.name),
     excluded,
-    mainWorktree: config.mainWorktree ?? {},
+    ranges: Object.fromEntries(
+      entries.flatMap(({ name, range }) => (range ? [[name, range]] : [])),
+    ),
+    mainWorktree: Object.fromEntries(
+      entries.flatMap(({ name, mainWorktree }) =>
+        mainWorktree === undefined ? [] : [[name, mainWorktree]],
+      ),
+    ),
   };
+  checkRanges(resolved);
   checkPins(resolved);
   return resolved;
+}
+
+function refuseOldKeys(config: DevPortsConfig): void {
+  if (!("names" in config) && !("mainWorktree" in config)) return;
+  throw new ConfigError(
+    "Config error: `ports.names` became `ports.declare`, and the `ports.mainWorktree` pins moved " +
+      `into its entries, as \`{ name, mainWorktree }\`. ${UPGRADE_POINTER}`,
+  );
 }
 
 function checkPort(value: unknown, label: string): void {
@@ -92,41 +127,139 @@ function expandExclusions(config: DevPortsConfig): Set<number> {
   return excluded;
 }
 
-function checkNames(names: unknown): void {
-  if (!Array.isArray(names)) {
-    throw new ConfigError("Config error: `ports.names` must be an array of port names.");
+function readEntries(declare: unknown): DeclaredPort[] {
+  if (!Array.isArray(declare)) {
+    throw new ConfigError("Config error: `ports.declare` must be an array of declared ports.");
   }
   const seen = new Set<string>();
-  for (const name of names) {
-    if (typeof name !== "string" || name === "") {
-      throw new ConfigError("Config error: `ports.names` must hold non-empty strings.");
+  return declare.map((item: unknown, index) => {
+    const entry = readEntry(item, index);
+    if (seen.has(entry.name)) {
+      throw new ConfigError(`Config error: \`ports.declare\` declares "${entry.name}" twice.`);
     }
-    if (seen.has(name)) {
-      throw new ConfigError(`Config error: \`ports.names\` declares "${name}" twice.`);
-    }
-    seen.add(name);
+    seen.add(entry.name);
+    return entry;
+  });
+}
+
+function readEntry(item: unknown, index: number): DeclaredPort {
+  if (typeof item === "string" && item !== "") return { name: item };
+  if (
+    typeof item !== "object" ||
+    item === null ||
+    !("name" in item) ||
+    typeof item.name !== "string" ||
+    item.name === ""
+  ) {
+    throw new ConfigError(
+      `Config error: \`ports.declare[${index}]\` must be a non-empty name, or an object with a ` +
+        "non-empty string `name`.",
+    );
   }
+  const name = item.name;
+  const unknownKey = Object.keys(item).find((key) => !ENTRY_KEYS.has(key));
+  if (unknownKey !== undefined) {
+    throw new ConfigError(
+      `Config error: ${entryLabel(name)}: unknown key \`${unknownKey}\`. The keys are \`name\`, ` +
+        "`range` and `mainWorktree`.",
+    );
+  }
+  return {
+    name,
+    range: readRange("range" in item ? item.range : undefined, name),
+    mainWorktree: readPin("mainWorktree" in item ? item.mainWorktree : undefined, name),
+  };
+}
+
+function readRange(value: unknown, name: string): PortRange | undefined {
+  if (value === undefined) return;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("first" in value) ||
+    !("last" in value) ||
+    !isPortNumber(value.first) ||
+    !isPortNumber(value.last)
+  ) {
+    throw new ConfigError(
+      `Config error: ${entryLabel(name)}: \`range\` must be \`{ first, last }\`, with integer ports ` +
+        "(1–65535).",
+    );
+  }
+  return { first: value.first, last: value.last };
+}
+
+function readPin(value: unknown, name: string): number | undefined {
+  if (value === undefined) return;
+  if (isPortNumber(value)) return value;
+  throw new ConfigError(
+    `Config error: ${entryLabel(name)}: \`mainWorktree\` must be an integer port (1–65535).`,
+  );
+}
+
+/** `` `ports.declare` "name" ``, the way a message designates an entry. */
+function entryLabel(name: string): string {
+  return `\`ports.declare\` "${name}"`;
+}
+
+function checkRanges(resolved: ResolvedDevPorts): void {
+  const checked: [string, PortRange][] = [];
+  for (const [name, range] of Object.entries(resolved.ranges)) {
+    const label = `Config error: ${entryLabel(name)}: \`range\` ${formatRange(range)}`;
+    if (range.first > range.last) {
+      throw new ConfigError(`${label} has its first port greater than its last.`);
+    }
+    if (range.first < resolved.first || range.last > resolved.last) {
+      throw new ConfigError(`${label} must be inside ${formatRange(resolved)}.`);
+    }
+    const overlapped = checked.find(
+      ([, other]) => isInRange(other, range.first) || isInRange(range, other.first),
+    );
+    if (overlapped) {
+      const [otherName, other] = overlapped;
+      throw new ConfigError(`${label} overlaps the range ${formatRange(other)} of "${otherName}".`);
+    }
+    if (!holdsAllowedPort(resolved, range)) {
+      throw new ConfigError(`${label} holds no allowed port: each is excluded or a bad port.`);
+    }
+    checked.push([name, range]);
+  }
+}
+
+function holdsAllowedPort(resolved: ResolvedDevPorts, range: PortRange): boolean {
+  for (let port = range.first; port <= range.last; ++port) {
+    if (isAllowed(resolved, port)) return true;
+  }
+  return false;
 }
 
 function checkPins(resolved: ResolvedDevPorts): void {
   const pinnedPorts = new Set<number>();
   for (const [name, port] of Object.entries(resolved.mainWorktree)) {
-    const label = `ports.mainWorktree.${name}`;
-    if (!resolved.names.includes(name)) {
-      throw new ConfigError(`Config error: \`${label}\` pins a name absent from \`ports.names\`.`);
-    }
-    checkPort(port, label);
-    if (!isAllowed(resolved, port)) {
-      throw new ConfigError(
-        `Config error: \`${label}\` (${port}) must be inside ${formatRange(resolved)}, ` +
-          "neither excluded nor a bad port.",
-      );
+    if (!isAllowedFor(resolved, name, port)) {
+      throw new ConfigError(disallowedPinMessage(resolved, name, port));
     }
     if (pinnedPorts.has(port)) {
-      throw new ConfigError(`Config error: \`ports.mainWorktree\` pins port ${port} twice.`);
+      throw new ConfigError(
+        `Config error: \`ports.declare\` pins port ${port} twice with \`mainWorktree\`.`,
+      );
     }
     pinnedPorts.add(port);
   }
+}
+
+function disallowedPinMessage(resolved: ResolvedDevPorts, name: string, port: number): string {
+  const label = `Config error: ${entryLabel(name)}: \`mainWorktree\` (${port})`;
+  if (isAllowed(resolved, port)) {
+    const range = resolved.ranges[name];
+    if (range) return `${label} must be inside its range ${formatRange(range)}.`;
+    const holder = rangeHolding(resolved, port);
+    if (holder) {
+      const [owner, ownerRange] = holder;
+      return `${label} lies in the range ${formatRange(ownerRange)} dedicated to "${owner}".`;
+    }
+  }
+  return `${label} must be inside ${formatRange(resolved)}, neither excluded nor a bad port.`;
 }
 
 /** In the range, not excluded, not a bad port. */
@@ -138,6 +271,22 @@ function isAllowed(resolved: ResolvedDevPorts, port: number): boolean {
     !resolved.excluded.has(port) &&
     !BAD_PORTS.has(port)
   );
+}
+
+/** Allowed in the project, and inside the name's range, or outside every range for a name without one. */
+function isAllowedFor(resolved: ResolvedDevPorts, name: string, port: number): boolean {
+  if (!isAllowed(resolved, port)) return false;
+  const range = resolved.ranges[name];
+  return range ? isInRange(range, port) : rangeHolding(resolved, port) === undefined;
+}
+
+/** The dedicated range holding the port, with its name. */
+function rangeHolding(resolved: ResolvedDevPorts, port: number): [string, PortRange] | undefined {
+  return Object.entries(resolved.ranges).find(([, range]) => isInRange(range, port));
+}
+
+function isInRange(range: PortRange, port: number): boolean {
+  return port >= range.first && port <= range.last;
 }
 
 export interface ReconcileInput {
@@ -173,18 +322,22 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
     const port = input.stored[name];
     if (assigned.has(name) || port === undefined) continue;
     const reserved = pinned.has(port) || used.has(port) || (!isMainWorktree && others.has(port));
-    if (isAllowed(config, port) && !reserved) assign(name, port);
+    if (isAllowedFor(config, name, port) && !reserved) assign(name, port);
   }
 
-  let candidate = config.first;
+  const cursors = new Map<PortRange, number>();
   for (const name of config.names) {
     if (assigned.has(name)) continue;
-    for (; candidate <= config.last; ++candidate) {
-      if (!isAllowed(config, candidate) || pinned.has(candidate) || used.has(candidate)) continue;
-      if (others.has(candidate) || !(await input.isFree(candidate))) continue;
+    const scope = config.ranges[name] ?? config;
+    let candidate = cursors.get(scope) ?? scope.first;
+    for (; candidate <= scope.last; ++candidate) {
+      if (!isAllowedFor(config, name, candidate)) continue;
+      if (pinned.has(candidate) || used.has(candidate) || others.has(candidate)) continue;
+      if (!(await input.isFree(candidate))) continue;
       assign(name, candidate);
       break;
     }
+    cursors.set(scope, candidate);
     if (!assigned.has(name)) throw exhaustedRangeError(config, name);
   }
   const ports: Record<string, number> = {};
@@ -196,6 +349,15 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
 }
 
 function exhaustedRangeError(config: ResolvedDevPorts, name: string): WorkspaceError {
+  const range = config.ranges[name];
+  if (range) {
+    return new WorkspaceError(
+      `No port left in the range ${formatRange(range)} dedicated to "${name}": the other ports ` +
+        "are excluded, held by other workspaces, or busy on this machine. Ports held there under " +
+        `other names are freed at those workspaces' next \`${devCmd("setup")}\`. Free some with ` +
+        `\`${wsCmd("remove")}\`.`,
+    );
+  }
   return new WorkspaceError(
     `No port left in ${formatRange(config)} for "${name}": the other ports are excluded, ` +
       `held by other workspaces, or busy on this machine. Free some with \`${wsCmd("remove")}\`.`,

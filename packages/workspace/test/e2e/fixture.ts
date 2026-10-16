@@ -33,7 +33,7 @@ await runDevServer({
     first: ${DEV_PORTS.first},
     last: ${DEV_PORTS.last},
     exclude: [${DEV_PORTS.excluded}],
-    names: ["web", "api"],
+    declare: ["web", "api"],
   },
   runFiles: [
     {

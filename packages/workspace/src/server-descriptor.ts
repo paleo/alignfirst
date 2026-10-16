@@ -22,7 +22,7 @@ export interface SpawnServer {
   /** Command and arguments passed to `child_process.spawn`. */
   exec: { command: string; args: string[] };
   /**
-   * Port the process will listen on. A string names an entry of `ports.names`, resolved from the
+   * Port the process will listen on. A string names an entry of `ports.declare`, resolved from the
    * workspace's allocation. A number is used as is. Omit it when the process listens on no port:
    * conflict detection, port sweeping and the summary URL are then skipped for this server.
    */
@@ -56,7 +56,7 @@ export type ServerDescriptor = SpawnServer | CallbackServer;
 /** A {@link SpawnServer} whose `port` is resolved to a number. */
 export interface ResolvedSpawnServer extends Omit<SpawnServer, "port"> {
   port?: number;
-  /** The `ports.names` entry the port was resolved from. */
+  /** The `ports.declare` entry the port was resolved from. */
   portName?: string;
 }
 
