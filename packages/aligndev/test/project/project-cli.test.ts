@@ -560,7 +560,7 @@ describe("project status", () => {
     });
     const project = makeRepository(fixture.root, "project", {
       ticketIdPattern: "^P-\\d+$",
-      plans: { folder: "project-plans" },
+      plans: { repositoryFolder: "project-plans" },
       portRange: range(8000, 8099),
     });
     execGit(project, "remote", "add", "backup", "https://gitlab.com/team/project.git");

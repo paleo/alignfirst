@@ -60,7 +60,7 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     remoteHost: readRemoteHost(project.path),
     portRange: project.portRange ?? null,
     portRangeCode: project.portRangeCode ?? null,
-    plansFolder: project.description.config?.plans?.folder ?? null,
+    plansFolder: project.description.config?.plans?.repositoryFolder ?? null,
     ticketIdPattern: project.description.config?.ticketIdPattern ?? null,
     configSource: project.description.source,
     companion: project.description.companion,

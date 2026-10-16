@@ -96,7 +96,7 @@ On the operator's machine, from the installed skill directory:
    grep -rlE "$re" . | while read -r f; do awk -v re="$re" '$0 ~ re { skip = !skip; next } !skip' "$f" | cat -s > "$f.tmp" && cat "$f.tmp" > "$f" && rm "$f.tmp"; done
    ```
 
-6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `.alignfirst.json` writes `plans.folder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
+6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `.alignfirst.json` writes `plans.repositoryFolder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
 7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Dotfiles (`.env.example`, `.alignfirst.json`, `.alignfirst-projects.json`) are part of the sweep.
 8. `npm install`.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.

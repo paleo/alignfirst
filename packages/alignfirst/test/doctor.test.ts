@@ -151,6 +151,19 @@ describe("doctor command", () => {
     );
   });
 
+  it("warns about a deprecated key", async () => {
+    const cwd = temp();
+    writeFileSync(
+      join(cwd, ".alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }),
+    );
+    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(
+      `[warn] .alignfirst.json: ${join(cwd, ".alignfirst.json")}: plans.folder is deprecated`,
+    );
+  });
+
   it("continues after an invalid project config", async () => {
     const cwd = temp();
     writeFileSync(join(cwd, ".alignfirst.json"), "{");

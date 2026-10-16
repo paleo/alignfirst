@@ -339,7 +339,7 @@ async function runDevStepHere(
 }
 
 function devSetupFailedMessage(message: string): string {
-  return `Workspace ready; dev setup failed: ${message}. Run \`${devCmd("setup")}\` to retry.`;
+  return `Workspace ready; dev setup failed: ${message.replace(/\.$/, "")}. Run \`${devCmd("setup")}\` to retry.`;
 }
 
 interface DevSetupChildInput {
@@ -843,7 +843,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   let stoppedProcesses = 0;
   for (const name of orphanNames) {
     const entry = registry.workspaces[name];
-    stoppedProcesses += await stopOrphanedDevServer(ctx.mainWorktree, registryDir, entry.worktree);
+    stoppedProcesses += await killRecordedDevServer(ctx.mainWorktree, registryDir, entry.worktree);
     await runPurgeInfrastructure(config, {
       worktree: entry.worktree,
       mainWorktree: ctx.mainWorktree,
@@ -872,13 +872,13 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
 }
 
 /**
- * Stop a gone worktree's dev-server the only way left: its dir (and `dev-server.mjs`) is deleted, so
- * we can't shell out to `dev down` to run callback stop() — we kill the recorded spawn PIDs directly
- * and drop the dev-server entry. Returns the count of live PIDs stopped. The caller separately runs
+ * Stop a dev-server without its `dev down`: the worktree (and `dev-server.mjs`) is deleted, or its
+ * `dev down` failed. Kills the recorded spawn PIDs directly and drops the dev-server entry; callback
+ * stop() does not run. Returns the count of live PIDs stopped. The caller separately runs
  * `purgeInfrastructure` (by workspace name; a legacy entry also passes its `purgeData`) to tear down
  * callback-managed infra.
  */
-async function stopOrphanedDevServer(
+async function killRecordedDevServer(
   mainWorktree: string,
   registryDir: string,
   worktree: string,
@@ -1110,7 +1110,7 @@ async function handleRemove(
 
   if (!existsSync(worktree)) {
     console.warn(`Warning: Worktree directory ${worktree} not found. Cleaning up registry only.`);
-    await stopOrphanedDevServer(ctx.mainWorktree, registryDir, worktree);
+    await killRecordedDevServer(ctx.mainWorktree, registryDir, worktree);
     await runPurgeInfrastructure(config, {
       worktree,
       mainWorktree: ctx.mainWorktree,
@@ -1136,6 +1136,14 @@ async function handleRemove(
     verboseLog("No dev-server script configured; skipping stop.");
   } else if (findOwnEntry(ctx.mainWorktree, registryDir, worktree)) {
     stopTargetDevServer(devServerScript, worktree, verboseLog);
+    // A failed `dev down` (refused config, timeout) leaves the entry and its servers behind.
+    const leftover = await killRecordedDevServer(ctx.mainWorktree, registryDir, worktree);
+    if (leftover > 0) {
+      console.warn(
+        `Warning: Killed ${leftover} dev-server process(es) left running; the branch's callback ` +
+          "`stop()` did not run.",
+      );
+    }
   } else {
     verboseLog(`No dev-server running in ${worktree}; skipping stop.`);
   }
@@ -1149,7 +1157,6 @@ async function handleRemove(
   });
 
   await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, name);
-  removeDevServerEntryByWorktree(ctx.mainWorktree, registryDir, worktree);
 
   if (removeHere) process.chdir(ctx.mainWorktree);
 

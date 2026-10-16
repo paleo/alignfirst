@@ -66,7 +66,7 @@ function renderPlans(ctx: CommandContext): string | undefined {
   if (!plans.exists) return;
   try {
     const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
-    const folder = ctx.projectConfig?.config.plans?.folder;
+    const folder = ctx.projectConfig?.config.plans?.repositoryFolder;
     const sharedFolder =
       folder === undefined ? "" : ` (folder \`${folder}\` in the work-files repository)`;
     const path = displayPath(ctx.cwd, plans.path);

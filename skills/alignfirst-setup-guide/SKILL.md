@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.48.1"
+  version: "0.48.4"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -143,7 +143,7 @@ Detect existing footprints before proposing changes:
 - AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
   `npx alignfirst context`, an AlignFirst instruction section, a canonical skill installation, or a
   companion reported by `npx alignfirst config`.
-- work-files repository: a `.plans` symlink or `plans.folder` in `.alignfirst.json`.
+- work-files repository: a `.plans` symlink or `plans.repositoryFolder` in `.alignfirst.json`.
 - Assistant preparation: the complete seven-part contract above.
 
 Require a clean working tree immediately before project mutations. Read-only discovery and
