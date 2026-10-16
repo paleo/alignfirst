@@ -137,7 +137,8 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
 function parsePlans(value: unknown, path: string): { repositoryFolder?: string } | undefined {
   if (value === undefined) return;
   if (!isRecord(value)) throw invalidReport(path);
-  const { repositoryFolder } = value;
+  // Before alignfirst 0.12.0, the report named this key `folder`.
+  const repositoryFolder = value.repositoryFolder ?? value.folder;
   if (repositoryFolder !== undefined && typeof repositoryFolder !== "string")
     throw invalidReport(path);
   return repositoryFolder === undefined ? {} : { repositoryFolder };

@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { readProjectConfig, validateProjectConfig } from "../src/project-config.js";
 import { makeTempDir } from "./helpers.js";
@@ -52,22 +52,13 @@ describe("project config", () => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
   });
 
-  it("reads the deprecated plans.folder as plans.repositoryFolder, with a warning", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      expect(
-        validateProjectConfig(
-          { schemaVersion: 1, plans: { folder: "x", autoArchive: true } },
-          "config",
-        ),
-      ).toEqual({ schemaVersion: 1, plans: { repositoryFolder: "x", autoArchive: true } });
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0][0]).toContain(
-        "config: plans.folder is deprecated; rename it to plans.repositoryFolder",
-      );
-    } finally {
-      warn.mockRestore();
-    }
+  it("reads the deprecated plans.folder as plans.repositoryFolder", () => {
+    expect(
+      validateProjectConfig(
+        { schemaVersion: 1, plans: { folder: "x", autoArchive: true } },
+        "config",
+      ),
+    ).toEqual({ schemaVersion: 1, plans: { repositoryFolder: "x", autoArchive: true } });
   });
 
   it("rejects plans.folder alongside plans.repositoryFolder", () => {
@@ -94,9 +85,27 @@ describe("project config", () => {
     dirs.push(dir);
     const path = join(dir, ".alignfirst.json");
     writeFileSync(path, '{"schemaVersion":1}');
-    expect(readProjectConfig(path)).toEqual({ schemaVersion: 1 });
+    expect(readProjectConfig(path)).toEqual({ config: { schemaVersion: 1 }, deprecations: [] });
     writeFileSync(path, "{");
     expect(() => readProjectConfig(path)).toThrow(`Invalid ${path}`);
+  });
+
+  it("reports plans.folder as a deprecation, only on a valid config", () => {
+    const dir = makeTempDir();
+    dirs.push(dir);
+    const path = join(dir, ".alignfirst.json");
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }));
+    const { deprecations } = readProjectConfig(path);
+    expect(deprecations).toEqual([
+      expect.stringContaining(
+        `${path}: plans.folder is deprecated; rename it to plans.repositoryFolder`,
+      ),
+    ]);
+    writeFileSync(
+      path,
+      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "[", plans: { folder: "x" } }),
+    );
+    expect(() => readProjectConfig(path)).toThrow("regular expression");
   });
 
   it("rejects a directory in place of the config file", () => {

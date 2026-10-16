@@ -51,6 +51,22 @@ describe("alignfirst CLI", () => {
     expect((await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd })).code).toBe(0);
   });
 
+  it("warns about a deprecated key once the config passes every check", async () => {
+    const cwd = temp();
+    const path = join(cwd, ".alignfirst.json");
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }));
+    const warned = await runMain(["conventions"], { cwd });
+    expect(warned.code).toBe(0);
+    expect(warned.stderr).toMatch(/^Warning: .*plans\.folder is deprecated.*\n$/);
+    writeFileSync(
+      path,
+      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0", plans: { folder: "x" } }),
+    );
+    const guarded = await runMain(["conventions"], { cwd });
+    expect(guarded.code).toBe(1);
+    expect(guarded.stderr).not.toContain("deprecated");
+  });
+
   it("lets doctor report an invalid config", async () => {
     const cwd = temp();
     writeFileSync(join(cwd, ".alignfirst.json"), "{");

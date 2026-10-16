@@ -6,6 +6,7 @@ import {
   type ProjectConfig,
   resolveProjectConfig,
   type ResolvedProjectConfig,
+  writeDeprecationWarnings,
 } from "../project-config.js";
 import {
   type CompanionLayout,
@@ -37,7 +38,9 @@ export function runConfig(ctx: CommandContext, args: string[]): number {
   const json = parseConfigArgs(ctx, args, usage);
   if (json === undefined) return 0;
   const layout = layoutOf(ctx);
-  const report = buildConfigReport(ctx, layout, resolveProjectConfig(layout));
+  const resolved = resolveProjectConfig(layout);
+  writeDeprecationWarnings(ctx.stderr, resolved);
+  const report = buildConfigReport(ctx, layout, resolved);
   ctx.stdout.write(json ? `${JSON.stringify(report, undefined, 2)}\n` : renderConfigReport(report));
   return 0;
 }

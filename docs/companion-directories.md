@@ -92,7 +92,7 @@ interface ConfigReport {
 }
 ```
 
-Paths are absolute. `config` is the validated config, with the deprecated `plans.folder` reported as `plans.repositoryFolder`. `key` is the registry key as written; `aligndev` ignores `key` and `items`.
+Paths are absolute. `config` is the validated config, with the deprecated `plans.folder` reported as `plans.repositoryFolder`. `aligndev` still reads `plans.folder` from an `alignfirst` older than 0.12.0. `key` is the registry key as written; `aligndev` ignores `key` and `items`.
 
 ## Consumers
 

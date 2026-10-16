@@ -80,7 +80,10 @@ function inspectConfig(
   ctx: CommandContext,
   resolved: ResolvedProjectConfig | undefined,
 ): DoctorLine[] {
-  const lines: DoctorLine[] = [{ level: "ok", text: resolved === undefined ? "none" : "present" }];
+  const lines: DoctorLine[] = [
+    { level: "ok", text: resolved === undefined ? "none" : "present" },
+    ...(resolved?.deprecations ?? []).map((text): DoctorLine => ({ level: "warn", text })),
+  ];
   const result = cliRangeResult(resolved?.config, ctx.version);
   if (result === undefined) {
     lines.push({ level: "ok", text: "no cli range" });

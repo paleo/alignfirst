@@ -24,6 +24,27 @@ describe("readProjectReport", () => {
     });
     expect(readProjectReport(command, cwd, process.env)).toEqual({ error: tooOld });
   });
+
+  it("reads plans.folder from an alignfirst older than 0.12.0", () => {
+    const location = { path: cwd, in: "project", exists: false };
+    const names = [
+      ".alignfirst.json",
+      ".alignfirst-instructions",
+      "DEVELOPERS.md",
+      "docs",
+      ".plans",
+    ];
+    const command = reportCommand({
+      source: "project",
+      cli: null,
+      config: { schemaVersion: 1, plans: { folder: "project-plans" } },
+      companion: null,
+      locations: Object.fromEntries([...names, "_aligndev"].map((name) => [name, location])),
+    });
+    expect(readProjectReport(command, cwd, process.env)).toMatchObject({
+      config: { plans: { repositoryFolder: "project-plans" } },
+    });
+  });
 });
 
 function reportCommand(report: object): string[] {

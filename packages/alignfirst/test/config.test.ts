@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   configureGit,
@@ -65,18 +65,13 @@ describe("config command", () => {
       join(cwd, ".alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, plans: { folder: "project" } }),
     );
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const result = await runMain(["config", "--json"], { cwd });
-      expect(result.code).toBe(0);
-      expect(JSON.parse(result.stdout).config).toEqual({
-        schemaVersion: 1,
-        plans: { repositoryFolder: "project" },
-      });
-      expect(warn).toHaveBeenCalledOnce();
-    } finally {
-      warn.mockRestore();
-    }
+    const result = await runMain(["config", "--json"], { cwd });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).config).toEqual({
+      schemaVersion: 1,
+      plans: { repositoryFolder: "project" },
+    });
+    expect(result.stderr).toMatch(/^Warning: .*plans\.folder is deprecated.*\n$/);
   });
 
   it("reports the companion, its config and every location", async () => {
