@@ -3,7 +3,7 @@
   "ticketIdPattern": "^\\d+$",
   "plans": {
     // TEAM_PLANS_SECTION
-    "folder": "{{ADMIN_REPOSITORY_NAME}}",
+    "repositoryFolder": "{{ADMIN_REPOSITORY_NAME}}",
     // TEAM_PLANS_SECTION
     "autoArchive": true
   },

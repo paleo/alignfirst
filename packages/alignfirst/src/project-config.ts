@@ -21,7 +21,7 @@ const portRangeShape = object<PortRange>({
   last: integerBetween(1, 65_535),
 });
 const plansShape = object<PlansConfig>({
-  folder: optional(nonEmptyString),
+  repositoryFolder: optional(nonEmptyString),
   autoArchive: optional(boolean),
 });
 const commitShape = object<CommitConfig>({
@@ -53,7 +53,7 @@ export interface ProjectConfig {
 }
 
 export interface PlansConfig {
-  folder?: string;
+  repositoryFolder?: string;
   autoArchive?: boolean;
 }
 
@@ -96,12 +96,26 @@ export function readProjectConfig(path: string): ProjectConfig {
 }
 
 export function validateProjectConfig(value: unknown, label: string): ProjectConfig {
+  assertNoLegacyPlansFolder(value, label);
   const config = parseShape(projectConfigShape, value, (detail) => invalidConfig(label, detail));
   if (config.cli !== undefined && !isValidVersionRange(config.cli))
     throw invalidConfig(label, `cli is not a supported version range: ${config.cli}`);
   if (config.ticketIdPattern !== undefined) assertValidPattern(config.ticketIdPattern, label);
   if (config.portRange !== undefined) assertValidPortRange(config.portRange, label);
   return config;
+}
+
+/** The shape would report the generic "must be removed" for the renamed key. */
+function assertNoLegacyPlansFolder(value: unknown, label: string): void {
+  if (!isObject(value) || !isObject(value.plans) || !("folder" in value.plans)) return;
+  throw invalidConfig(
+    label,
+    "plans.folder is now plans.repositoryFolder. See the setup guide's upgrade reference.",
+  );
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function invalidConfig(label: string, detail: string): CliError {

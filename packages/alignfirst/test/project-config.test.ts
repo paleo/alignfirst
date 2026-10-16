@@ -18,7 +18,7 @@ describe("project config", () => {
       schemaVersion: 1,
       cli: ">=0.1.0 <0.2.0",
       ticketIdPattern: "^\\d+$",
-      plans: { folder: "project", autoArchive: true },
+      plans: { repositoryFolder: "project", autoArchive: true },
       portRange: { first: 8100, last: 8199 },
       git: {
         defaultBranch: "main",
@@ -50,6 +50,12 @@ describe("project config", () => {
     [{ schemaVersion: 1, git: { commit: {} } }, "style"],
   ])("rejects invalid config %#", (value, message) => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
+  });
+
+  it("points plans.folder to plans.repositoryFolder", () => {
+    expect(() =>
+      validateProjectConfig({ schemaVersion: 1, plans: { folder: "x" } }, "config"),
+    ).toThrow("plans.folder is now plans.repositoryFolder");
   });
 
   it.each(["^(ABC|XYZ)-\\d+$", "^[^/]+$", "^\\$\\d+$", "\\d+"])(

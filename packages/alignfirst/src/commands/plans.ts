@@ -105,14 +105,14 @@ function parseSetupArgs(
     return;
   }
   if (positionals.length !== 1) throw new CliError(usage.trimEnd());
-  const configFolder = ctx.projectConfig?.config.plans?.folder;
+  const configFolder = ctx.projectConfig?.config.plans?.repositoryFolder;
   if (values.folder !== undefined && configFolder !== undefined && values.folder !== configFolder)
     throw new CliError(
-      `--folder "${values.folder}" differs from plans.folder "${configFolder}" in .alignfirst.json.`,
+      `--folder "${values.folder}" differs from plans.repositoryFolder "${configFolder}" in .alignfirst.json.`,
     );
   const folder = values.folder ?? configFolder;
   if (folder === undefined)
-    throw new CliError("Pass --folder <name> or set plans.folder in .alignfirst.json.");
+    throw new CliError("Pass --folder <name> or set plans.repositoryFolder in .alignfirst.json.");
   return { dir: positionals[0], folder };
 }
 
