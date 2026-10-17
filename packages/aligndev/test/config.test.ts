@@ -197,6 +197,9 @@ describe("resolveCodeConfig", () => {
   it.each([
     ["claude", { CLAUDECODE: "1" }],
     ["codex", { CODEX_THREAD_ID: "019a" }],
+    ["pi", { PI_CODING_AGENT: "true" }],
+    ["pi", { AI_AGENT: "pi" }],
+    ["pi", { PI_CODING_AGENT: "true", AI_AGENT: "pi" }],
   ])("detects %s from its environment", (agent, env) => {
     expect(resolveCodeConfig(loadConfig(makeHome()), env).agent).toBe(agent);
   });
@@ -204,8 +207,8 @@ describe("resolveCodeConfig", () => {
   it("fails when no coding agent is detected, naming the key and the path", () => {
     const home = makeHome();
     expect(() => resolveCodeConfig(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
-      "Error: no coding agent detected: run aligndev from Claude Code or Codex, or set " +
-        `"code.agent" (claude or codex) in ${configPathOf(home)}.`,
+      "Error: no coding agent detected (claude, codex, pi): run from a supported agent, or set " +
+        `"code.agent" (claude or codex or pi) in ${configPathOf(home)}.`,
     );
   });
 
@@ -227,8 +230,70 @@ describe("resolveCodeConfig", () => {
     const home = makeHome();
     const env = { CLAUDECODE: "1", CODEX_THREAD_ID: "019a" };
     expect(() => resolveCodeConfig(loadConfig(home), env)).toThrow(
-      `Error: both Claude Code and Codex detected: set "code.agent" (claude or codex) in ${configPathOf(home)}.`,
+      `Error: multiple coding agents detected (claude, codex): set "code.agent" (claude or codex or pi) in ${configPathOf(home)}.`,
     );
+  });
+});
+
+describe("pi configuration", () => {
+  it.each(["claude", "codex", "pi"])("keeps explicit %s despite all host markers", (agent) => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent } });
+    expect(
+      resolveCodeConfig(loadConfig(home), {
+        CLAUDECODE: "1",
+        CODEX_THREAD_ID: "thread",
+        AI_AGENT: "pi",
+        PI_CODING_AGENT: "true",
+      }).agent,
+    ).toBe(agent);
+  });
+
+  it.each([
+    { CLAUDECODE: "1", AI_AGENT: "pi" },
+    { CODEX_THREAD_ID: "thread", PI_CODING_AGENT: "true" },
+  ])("names the actual mixed-agent ambiguity %j", (env) => {
+    expect(() => resolveCodeConfig(loadConfig(makeHome()), env)).toThrow(
+      /multiple coding agents detected.*pi/,
+    );
+  });
+
+  it.each([undefined, []])("accepts native defaults without a finite allowlist %j", (models) => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent: "pi", models, defaultModel: " provider/model:high " } });
+    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe(" provider/model:high ");
+  });
+
+  it("enforces nonblank defaults and exact configured membership", () => {
+    const home = makeHome();
+    writeConfig(home, { code: { agent: "pi", defaultModel: " \t " } });
+    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(/nonblank/);
+    writeConfig(home, { code: { agent: "pi", defaultModel: "terra", models: ["provider/terra"] } });
+    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(/one of: provider\/terra/);
+    writeConfig(home, {
+      code: { agent: "pi", defaultModel: "provider/terra", models: ["provider/terra"] },
+    });
+    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("provider/terra");
+  });
+
+  it("keeps status/version agent resolution lazy in mixed environments", async () => {
+    const home = makeHome();
+    const env = { HOME: home, CLAUDECODE: "1", AI_AGENT: "pi" };
+    const stdout = makeSink();
+    expect(
+      await main({ ...guideRun(home), env, argv: ["node", "aligndev", "--version"], stdout }),
+    ).toBe(0);
+    const stderr = makeSink();
+    expect(
+      await main({
+        ...guideRun(home),
+        env,
+        argv: ["node", "aligndev", "code", "status", "--no-ticket"],
+        stderr,
+      }),
+    ).toBe(1);
+    expect(stderr.text()).toContain("no session file");
+    expect(stderr.text()).not.toContain("multiple coding agents");
   });
 });
 

@@ -9,6 +9,26 @@ import {
   type QuotaProcessAdapter,
 } from "../../src/code/quota.js";
 
+describe("pi quota", () => {
+  it("rejects the unsupported capability without executing either process adapter", async () => {
+    const execute = vi.fn(async () => {
+      throw new Error("must not execute");
+    });
+    const spawn = vi.fn(() => {
+      throw new Error("must not spawn");
+    });
+    await expect(
+      createQuotaReader({ execute, spawn })("pi", {
+        cwd: "/project",
+        env: {},
+        unset: [],
+      }),
+    ).rejects.toThrow(/Pi account quota is unsupported.*provider/);
+    expect(execute).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
 describe("Claude quota", () => {
   it("calls the native usage command with a filtered environment", async () => {
     const execute = vi.fn(async () => ({

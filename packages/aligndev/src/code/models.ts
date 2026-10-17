@@ -15,9 +15,16 @@ const CODEX_CATALOG_TIMEOUT_MS = 30_000;
 export function resolveModels(
   agent: CodingAgent,
   override: readonly string[] | undefined,
-): readonly string[] {
+): readonly string[] | undefined {
   if (override !== undefined && override.length > 0) return override;
-  return agent === "claude" ? CLAUDE_DEFAULT_MODELS : CODEX_DEFAULT_MODELS;
+  switch (agent) {
+    case "claude":
+      return CLAUDE_DEFAULT_MODELS;
+    case "codex":
+      return CODEX_DEFAULT_MODELS;
+    case "pi":
+      return;
+  }
 }
 
 export interface ModelDiscoveryContext {
@@ -39,7 +46,7 @@ export function createExecutableModelResolver(
   let cachedSlugs: readonly string[] | undefined;
   return async (agent, selectedModel, context) => {
     if (selectedModel === undefined) return;
-    if (agent === "claude" || !CODEX_ALIASES.has(selectedModel)) return selectedModel;
+    if (agent !== "codex" || !CODEX_ALIASES.has(selectedModel)) return selectedModel;
     try {
       cachedSlugs ??= parseBundledModelSlugs(await runCatalog(context));
       const slug = selectNewestCodexModel(cachedSlugs, selectedModel);

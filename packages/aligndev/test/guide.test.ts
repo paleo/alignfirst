@@ -48,6 +48,26 @@ const PLAYBOOK_TITLES: Record<string, string> = {
 useProjectFixtures();
 
 describe("renderCodeGuide", () => {
+  it("renders pi native model policy, authentication and OS access metadata", () => {
+    const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, GLOBAL_FORMS);
+    expect(guide).not.toContain("{{");
+    expect(guide).toContain("Any nonblank pi-native selector");
+    expect(guide).toContain("provider/model");
+    expect(guide).toContain("/login <provider>");
+    expect(guide).not.toContain("codex login");
+    expect(guide).toContain("Pi uses ordinary OS permissions");
+    expect(guide).toContain("Saved project trust is honored");
+    const configured = renderCodeGuide(
+      "codingAgent",
+      "pi",
+      ["custom/model:high"],
+      "custom/model:high",
+      GLOBAL_FORMS,
+    );
+    expect(configured).toContain("One of `custom/model:high`");
+    expect(configured).toContain("A new session defaults to `custom/model:high`");
+  });
+
   it("renders the OpenClaw variant with its run and wake instructions", () => {
     const guide = renderCodeGuide(
       "openclaw",

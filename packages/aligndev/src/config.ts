@@ -141,8 +141,8 @@ function resolveAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent
   if (detected.length === 1) return detected[0];
   const problem =
     detected.length === 0
-      ? "no coding agent detected: run aligndev from Claude Code or Codex, or set"
-      : "both Claude Code and Codex detected: set";
+      ? `no coding agent detected (${CODING_AGENTS.join(", ")}): run from a supported agent, or set`
+      : `multiple coding agents detected (${detected.join(", ")}): set`;
   throw new Error(
     `Error: ${problem} "code.agent" (${CODING_AGENTS.join(" or ")}) in ${config.path}.`,
   );
@@ -151,7 +151,10 @@ function resolveAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent
 function checkDefaultModel(code: CodeConfig, path: string): void {
   if (code.defaultModel === undefined) return;
   const models = resolveModels(code.agent, code.models);
-  if (models.includes(code.defaultModel)) return;
+  if (code.defaultModel.trim() === "") {
+    throw new Error(`Error: code.defaultModel must be nonblank, in ${path}.`);
+  }
+  if (models === undefined || models.includes(code.defaultModel)) return;
   throw new Error(`Error: code.defaultModel must be one of: ${models.join(", ")}, in ${path}.`);
 }
 

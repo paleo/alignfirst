@@ -318,7 +318,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
 }
 
 function parseAgent(raw: string | null | undefined): CodingAgent | null {
-  return raw === "claude" || raw === "codex" ? raw : null;
+  return raw === "claude" || raw === "codex" || raw === "pi" ? raw : null;
 }
 
 function parsePid(raw: string | null | undefined): number | null {

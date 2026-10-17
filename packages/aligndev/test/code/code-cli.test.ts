@@ -25,6 +25,9 @@ import {
 } from "../../src/code/code-cli.js";
 import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
 import {
+  appendTranscript,
+  applyCompletion,
+  RESULT_MARKER,
   type SessionFrontmatter,
   type SessionRecord,
   listSessionRecords,
@@ -111,6 +114,9 @@ describe("coding-agent selection", () => {
     expect(stdout.text()).toContain("(selected: codex)");
     expect(stdout.text()).toContain("astra, sol, terra, luna");
     expect(stdout.text()).toContain("aligndev guide code");
+    expect(stdout.text()).toContain("--quiet");
+    expect(stdout.text()).toContain("--result");
+    expect(stdout.text()).toContain("host owns background execution and completion delivery");
     expect(stdout.text()).not.toContain("Env:");
     expect(stdout.text()).not.toContain("reserve-side-ticket");
     expect(stdout.text()).not.toContain("fable");
@@ -136,14 +142,17 @@ describe("parseCodeArgs", () => {
     expect(parseCodeArgs(["status", ".plans/1/_aligndev/run.md"], "aligndev")).toEqual({
       kind: "status",
       target: { kind: "file", sessionFile: ".plans/1/_aligndev/run.md" },
+      includeResult: false,
     });
     expect(parseCodeArgs(["status", "--ticket", "AB-1"], "aligndev")).toEqual({
       kind: "status",
       target: { kind: "ticket", ticket: "AB-1" },
+      includeResult: false,
     });
     expect(parseCodeArgs(["status", "--no-ticket"], "aligndev")).toEqual({
       kind: "status",
       target: { kind: "noTicket" },
+      includeResult: false,
     });
     expect(parseCodeArgs(["quota"], "aligndev")).toEqual({ kind: "quota" });
   });
@@ -167,6 +176,40 @@ describe("parseCodeArgs", () => {
     const args = parse(["resume", "abc", "--protocol", "plan"]);
     expect(args.resume).toBe("abc");
     expect(args.protocol).toBe("plan");
+  });
+
+  it.each([["new"], ["resume", "abc"]])("reads --quiet on %j", (...command) => {
+    expect(parse([...command, "-m", "go", "--quiet"]).quiet).toBe(true);
+    expect(parse([...command, "-m", "go"]).quiet).toBeUndefined();
+    expect(parseCodeArgs([...command, "--quiet", "--help"], "aligndev")).toEqual({ kind: "help" });
+  });
+
+  it.each([["run.md"], ["--ticket", "AB-1"], ["--no-ticket"], ["--meta", "unique-run"]])(
+    "reads --result independently of the status target %j",
+    (...target) => {
+      const metadata = parseCodeArgs(["status", ...target], "aligndev");
+      const withResult = parseCodeArgs(["status", "--result", ...target], "aligndev");
+      expect(withResult).toEqual({ ...metadata, includeResult: true });
+    },
+  );
+
+  it.each([
+    [],
+    ["a.md", "b.md"],
+    ["a.md", "--meta", "k"],
+    ["--ticket", "1", "--no-ticket"],
+    ["--ticket", "1", "--meta", "k"],
+    ["--no-ticket", "--meta", "k"],
+  ])("keeps exactly one status target with --result %j", (...target) => {
+    expect(() => parseCodeArgs(["status", "--result", ...target], "aligndev")).toThrow(
+      "exactly one",
+    );
+  });
+
+  it("keeps quiet and result scoped to their commands", () => {
+    expect(() => parseCodeArgs(["status", "run.md", "--quiet"], "aligndev")).toThrow();
+    expect(() => parse(["new", "-m", "go", "--result"])).toThrow();
+    expect(() => parse(["resume", "abc", "-m", "go", "--result"])).toThrow();
   });
 
   it("accepts -m as the short form of --message", () => {
@@ -352,6 +395,79 @@ describe("status", () => {
       contextTokensError: null,
     });
   }
+
+  async function status(tokens: string[]): Promise<string> {
+    const stdout = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", "status", ...tokens],
+      cwd: dir,
+      env: { HOME: dir },
+      home: dir,
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr: makeSink(),
+    });
+    expect(code).toBe(0);
+    return stdout.text();
+  }
+
+  it.each(["succeeded", "failed"] as const)(
+    "returns only metadata and the authoritative %s result for every selector",
+    async (terminalStatus) => {
+      const path = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
+      const unticketed = join(dir, ".plans", "_aligndev", "20260829-115529.md");
+      for (const file of [path, unticketed]) {
+        writeInitialSessionFile(
+          file,
+          statusFrontmatter({ status: "running", pid: process.pid, meta: "run-key" }),
+        );
+        appendTranscript(file, `internal transcript${RESULT_MARKER}\nechoed earlier result\n`);
+        applyCompletion(file, {
+          status: terminalStatus,
+          exitReason: terminalStatus === "succeeded" ? "completed" : "error",
+          endedAt: "2026-08-29T11:56:29.000Z",
+          sessionId: "sess-42",
+          result: "final answer",
+        });
+      }
+      for (const target of [[path], ["--ticket", "1"], ["--no-ticket"], ["--meta", "run-key"]]) {
+        const metadata = await status(target);
+        const result = await status([...target, "--result"]);
+        expect(metadata).not.toContain(RESULT_MARKER);
+        expect(result).toBe(`${metadata}${RESULT_MARKER}\nfinal answer\n`);
+        expect(result).not.toContain("internal transcript");
+        expect(result).not.toContain("echoed earlier result");
+      }
+    },
+  );
+
+  it("omits an echoed Result marker while running and leaves the file untouched", async () => {
+    writeStatusRecord(process.pid);
+    appendTranscript(sessionFilePath, `internal transcript${RESULT_MARKER}\nnot final\n`);
+    const before = readFileSync(sessionFilePath, "utf8");
+    expect(readCompletion(sessionFilePath).result).toBe("not final");
+    const output = await status([sessionFilePath, "--result"]);
+    expect(output).toContain("status: running\n");
+    expect(output).not.toContain(RESULT_MARKER);
+    expect(output).not.toContain("not final");
+    expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
+  });
+
+  it("returns the reconciled result instead of a stale running echoed marker", async () => {
+    writeInitialSessionFile(sessionFilePath, statusFrontmatter({ status: "running", pid: null }));
+    appendTranscript(sessionFilePath, `${RESULT_MARKER}\nnot final\n`);
+    const output = await status([sessionFilePath, "--result"]);
+    expect(output).toContain("status: failed\n");
+    expect(output).toContain("exitReason: terminated\n");
+    expect(output).toContain(`${RESULT_MARKER}\nSealed as interrupted:`);
+    expect(output).not.toContain("not final");
+    expect(readCompletion(sessionFilePath).result).toContain("is gone");
+  });
+
+  it("keeps terminal files without a Result block metadata-only", async () => {
+    writeInitialSessionFile(sessionFilePath, statusFrontmatter({}));
+    expect(await status([sessionFilePath, "--result"])).not.toContain(RESULT_MARKER);
+  });
 
   it("reconciles and reports a dead run without a coding agent", async () => {
     const child = spawnSync("node", ["-e", ""]);
@@ -650,6 +766,13 @@ describe("buildRunConfig", () => {
     expect(config.skipPermissions).toBe(true);
     expect(config.unset).toEqual(["X", "Y"]);
     expect(config.resume).toBeUndefined();
+  });
+
+  it("carries quiet to the runner without changing the prompt", () => {
+    const ordinary = build({});
+    const quiet = build({ args: parse(["new", "-m", "go", "--quiet"]) });
+    expect(ordinary.quiet).toBeUndefined();
+    expect(quiet).toEqual({ ...ordinary, quiet: true });
   });
 
   it("puts the effective ticket, not the flag, in the prompt", () => {
@@ -1170,6 +1293,16 @@ describe("companion projects", () => {
       noTicketFile = join(sessions, "_aligndev", "20260829-115530.md");
       writeInitialSessionFile(ticketFile, statusFrontmatter({ ticket: "29", meta: "thread-1" }));
       writeInitialSessionFile(noTicketFile, statusFrontmatter({ ticket: null }));
+      for (const file of [ticketFile, noTicketFile]) {
+        appendTranscript(file, "internal companion transcript\n");
+        applyCompletion(file, {
+          status: "succeeded",
+          exitReason: "completed",
+          endedAt: "2026-08-29T11:56:29Z",
+          sessionId: "sess-42",
+          result: "companion answer",
+        });
+      }
     });
 
     it("finds a run by path, ticket, no-ticket and meta, and prints absolute paths", async () => {
@@ -1181,9 +1314,16 @@ describe("companion projects", () => {
         [["status", "--meta", "thread-1"], ticketFile],
       ];
       for (const [tokens, expected] of cases) {
-        const result = await run(project, tokens);
-        expect(result.stderr).toBe("");
-        expect(result.stdout).toContain(`sessionFile: ${expected}\n`);
+        for (const includeResult of [false, true]) {
+          const result = await run(project, [...tokens, ...(includeResult ? ["--result"] : [])]);
+          expect(result.code).toBe(0);
+          expect(result.stderr).toBe("");
+          expect(result.stdout).toContain(`sessionFile: ${expected}\n`);
+          expect(result.stdout.includes(`${RESULT_MARKER}\ncompanion answer\n`)).toBe(
+            includeResult,
+          );
+          expect(result.stdout).not.toContain("internal companion transcript");
+        }
       }
     });
 
@@ -1199,6 +1339,76 @@ describe("companion projects", () => {
           `${sessions}/<ticket>/_aligndev/.\n`,
       );
     });
+  });
+
+  it("status does not create a missing companion", async () => {
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
+    mkdirSync(join(project.project, ".plans"));
+    const result = await run(project, ["status", "--meta", "missing", "--result"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("no session file");
+    expect(existsSync(project.companion)).toBe(false);
+  });
+
+  it("keeps distinct meta results in a shared companion across worktrees", async () => {
+    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
+    const worktree = join(home, "other-worktree");
+    spawnSync("git", [
+      "-C",
+      project.project,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "initial",
+    ]);
+    const added = spawnSync("git", [
+      "-C",
+      project.project,
+      "worktree",
+      "add",
+      "-b",
+      "other",
+      worktree,
+    ]);
+    expect(added.status).toBe(0);
+    const sessions = join(project.companion, ".plans");
+    for (const [index, meta] of ["run-first", "run-second"].entries()) {
+      const file = join(sessions, "_aligndev", `20260829-11553${index}.md`);
+      writeInitialSessionFile(
+        file,
+        statusFrontmatter({
+          meta,
+          cwd: index === 0 ? project.project : worktree,
+          startedAt: `2026-08-29T11:55:3${index}.000Z`,
+        }),
+      );
+      applyCompletion(file, {
+        status: "succeeded",
+        exitReason: "completed",
+        endedAt: "2026-08-29T11:56:00Z",
+        sessionId: meta,
+        result: `answer ${meta}`,
+      });
+    }
+    for (const cwd of [project.project, worktree]) {
+      for (const meta of ["run-first", "run-second"]) {
+        const result = await run({ ...project, project: cwd }, [
+          "status",
+          "--meta",
+          meta,
+          "--result",
+        ]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain(`${RESULT_MARKER}\nanswer ${meta}\n`);
+        expect(result.stdout).not.toContain(
+          `answer ${meta === "run-first" ? "run-second" : "run-first"}`,
+        );
+      }
+    }
   });
 
   it("adds the companion directory and the project context for the agent", async () => {
@@ -1285,13 +1495,424 @@ describe("companion projects", () => {
   });
 });
 
+describe("quiet execution", () => {
+  let base: string;
+  let home: string;
+  let project: string;
+  let plans: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "aligndev-quiet-"));
+    home = join(base, "home");
+    project = join(base, "project");
+    plans = join(project, ".plans");
+    mkdirSync(plans, { recursive: true });
+    writeConfig(home, { code: { agent: "claude" } });
+  });
+  afterEach(() => rmSync(base, { recursive: true, force: true }));
+
+  async function launch(tokens: string[], path: string) {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", ...tokens],
+      cwd: project,
+      home,
+      env: { HOME: home, PATH: path },
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr,
+      modelResolver: async (_agent, model) => model,
+    });
+    const records = listSessionRecords(plans);
+    const latest = records.reduce((a, b) =>
+      a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
+    );
+    return {
+      code,
+      stdout: stdout.text(),
+      stderr: stderr.text(),
+      file: latest.path,
+      completion: readCompletion(latest.path),
+    };
+  }
+
+  it("retains control lines on quiet new/resume and records the flag", async () => {
+    const fake = installFakeClaude(
+      base,
+      `
+      process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "private transcript" }] } }) + "\\n");
+      process.stdout.write(JSON.stringify({ type: "result", session_id: "session-1", result: "final answer" }));
+    `,
+    );
+    const started = await launch(["new", "-m", "go", "--quiet"], fake.path);
+    expect(started.code).toBe(0);
+    expect(started.stdout).toBe(
+      `Session file: ${relative(project, started.file)}\n\n\nSession ID: session-1\n`,
+    );
+    expect(started.stderr).toBe("");
+    expect(started.completion.result).toBe("final answer");
+    expect(started.completion.frontmatter.command).toContain("--quiet");
+    expect(readFileSync(started.file, "utf8")).toContain("private transcript");
+    const resumed = await launch(["resume", "session-1", "-m", "more", "--quiet"], fake.path);
+    expect(resumed.code).toBe(0);
+    expect(resumed.stdout).toBe(`Session file: ${relative(project, resumed.file)}\n\n`);
+    expect(resumed.completion.frontmatter.command).toContain("--quiet");
+  });
+
+  it.each([
+    [
+      "stderr",
+      'process.stderr.write("service unavailable: credential-must-stay-private".repeat(200)); process.exitCode = 7;',
+    ],
+    [
+      "incomplete",
+      'process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "internal-only" }] } }));',
+    ],
+  ])("keeps %s failures durable with bounded quiet diagnostics", async (_name, response) => {
+    const fake = installFakeClaude(base, response);
+    const result = await launch(["new", "-m", "go", "--quiet"], fake.path);
+    expect(result.code).toBe(1);
+    expect(result.completion.frontmatter).toMatchObject({ status: "failed", exitReason: "error" });
+    expect(result.stderr).toContain("claude run failed; inspect the session file");
+    expect(result.stderr).toContain(`Session file: ${relative(project, result.file)}\n`);
+    expect(result.stderr).not.toContain("credential-must-stay-private");
+    expect(result.stdout).not.toContain("internal-only");
+    expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+  });
+
+  it("reports a missing executable and preserves the durable failure", async () => {
+    const result = await launch(["new", "-m", "go", "--quiet"], "");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("claude could not start; check its installation and PATH");
+    expect(result.stderr).toContain("Session file:");
+    expect(result.completion.frontmatter.status).toBe("failed");
+    expect(result.completion.result).toContain("ENOENT");
+  });
+
+  it("reports a prompt-pipe failure without dumping the prompt", async () => {
+    const fake = installFakeClaude(base);
+    writeFileSync(
+      join(base, "bin", "claude"),
+      `#!${process.execPath}\nrequire("node:fs").closeSync(0); setTimeout(() => {}, 10000);\n`,
+    );
+    const result = await launch(["new", "-m", "x".repeat(2_000_000), "--quiet"], fake.path);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Could not send the prompt to claude");
+    expect(result.stderr).toContain("Session file:");
+    expect(result.completion.result).toContain("Could not send prompt:");
+    expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+  });
+
+  it.each([false, true])(
+    "keeps authentication exit 2 and one diagnostic with quiet=%s",
+    async (quiet) => {
+      const fake = installFakeClaude(
+        base,
+        `
+      process.stdout.write(JSON.stringify({ type: "assistant", error: "authentication_failed" }) + "\\n");
+      process.stdout.write(JSON.stringify({ type: "result", is_error: true, result: "credential-must-stay-private".repeat(200) }));
+    `,
+      );
+      const result = await launch(["new", "-m", "go", ...(quiet ? ["--quiet"] : [])], fake.path);
+      expect(result.code).toBe(2);
+      expect(result.completion.frontmatter).toMatchObject({
+        status: "failed",
+        exitReason: "auth_required",
+      });
+      expect(result.stderr.match(/not authenticated/g)).toHaveLength(1);
+      expect(result.stderr).toContain("/login");
+      expect(result.stderr).toContain("Session file:");
+      expect(result.stderr).not.toContain("credential-must-stay-private");
+      expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+    },
+  );
+
+  it("keeps quiet model-resolution details in the file", async () => {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const detail = "catalog unavailable: credential-must-stay-private".repeat(200);
+    const code = await main({
+      argv: ["node", "aligndev", "code", "new", "-m", "go", "--quiet"],
+      cwd: project,
+      home,
+      env: { HOME: home },
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr,
+      modelResolver: async () => {
+        throw new Error(detail);
+      },
+    });
+    expect(code).toBe(1);
+    expect(stderr.text()).toContain("Could not resolve the claude model; check --model");
+    expect(stderr.text()).toContain("Session file:");
+    expect(stderr.text()).not.toContain(detail);
+    expect(stderr.text().length).toBeLessThan(500);
+    const [record] = listSessionRecords(plans);
+    expect(readCompletion(record.path)).toMatchObject({
+      frontmatter: { status: "failed" },
+      result: detail,
+    });
+  });
+});
+
+describe("pi launches", () => {
+  let base: string;
+  let home: string;
+  let project: string;
+  let plans: string;
+  let fake: FakeClaude;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "aligndev-pi-"));
+    tempDirs.push(base);
+    home = join(base, "home");
+    project = join(base, "project");
+    plans = join(project, ".plans");
+    mkdirSync(plans, { recursive: true });
+    writeConfig(home, { code: { agent: "pi" } });
+    fake = installFakePi(base);
+  });
+
+  async function launch(tokens: string[], extraEnv: NodeJS.ProcessEnv = {}, cwd = project) {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", ...tokens],
+      cwd,
+      home,
+      env: { HOME: home, PATH: fake.path, ...extraEnv },
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+      stderr,
+    });
+    return { code, stdout: stdout.text(), stderr: stderr.text() };
+  }
+
+  function newest() {
+    return listSessionRecords(plans).reduce((a, b) =>
+      a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
+    );
+  }
+
+  it("starts quietly with native selectors and resumes the exact session with inherited models", async () => {
+    const selected = "provider/model:high";
+    const first = await launch(["new", "-m", "go", "--model", selected, "--quiet"]);
+    expect(first.code, first.stderr).toBe(0);
+    expect(first.stdout).toContain("Session file:");
+    expect(first.stdout).toContain("Session ID: pi-session");
+    expect(first.stdout).not.toContain("private pi answer");
+    expect(fake.received().args).toEqual(["--mode", "json", "--model", selected]);
+    expect(fake.received().prompt).toMatch(/go$/);
+    const initial = newest();
+    expect(readCompletion(initial.path)).toMatchObject({
+      frontmatter: { agent: "pi", model: selected },
+      result: "private pi answer",
+    });
+    writeConfig(home, {
+      code: { agent: "pi", models: ["other/model"], defaultModel: "other/model" },
+    });
+    const resumed = await launch(["resume", "pi-session", "-m", "more", "--quiet"]);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    expect(fake.received().args).toEqual([
+      "--mode",
+      "json",
+      "--model",
+      selected,
+      "--session",
+      "pi-session",
+    ]);
+    expect(newest().frontmatter.model).toBe(selected);
+  });
+
+  it.each([undefined, "terra", " provider/model:high "])(
+    "preserves native model selection %j",
+    async (model) => {
+      const result = await launch([
+        "new",
+        "-m",
+        "go",
+        ...(model === undefined ? [] : ["--model", model]),
+      ]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(fake.received().args).toEqual([
+        "--mode",
+        "json",
+        ...(model === undefined ? [] : ["--model", model]),
+      ]);
+    },
+  );
+
+  it("validates blank selectors and exact configured allowlists before creating runs", async () => {
+    for (const model of ["", " \t "]) {
+      const result = await launch(["new", "-m", "go", "--model", model]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("nonblank");
+    }
+    writeConfig(home, { code: { agent: "pi", models: ["provider/model"] } });
+    expect((await launch(["new", "-m", "go", "--model", "terra"])).stderr).toContain(
+      "one of: provider/model",
+    );
+    expect(listSessionRecords(plans)).toHaveLength(0);
+  });
+
+  it("rejects another real worktree before writing a run or invoking pi", async () => {
+    const other = join(base, "other-worktree");
+    mkdirSync(other);
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "original.md"),
+      statusFrontmatter({ agent: "pi", sessionId: "pi-session", cwd: other }),
+    );
+    const result = await launch(["resume", "pi-session", "-m", "more"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(`must resume from its recorded directory ${other}`);
+    expect(result.stdout).not.toContain("Session file:");
+    expect(listSessionRecords(plans)).toHaveLength(1);
+    expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
+  });
+
+  it("uses the latest recorded cwd, permits symlink aliases and retains same-agent guards", () => {
+    const alias = join(base, "alias");
+    symlinkSync(project, alias);
+    const old = {
+      path: "old",
+      frontmatter: statusFrontmatter({
+        agent: "pi",
+        sessionId: "pi-session",
+        cwd: base,
+        startedAt: "2020-01-01",
+      }),
+    };
+    const latest = {
+      path: "latest",
+      frontmatter: statusFrontmatter({ agent: "pi", sessionId: "pi-session", cwd: alias }),
+    };
+    const args = parse(["resume", "pi-session", "-m", "go"]);
+    expect(
+      checkLaunchGuards(args, "pi", realpathSync(project), undefined, [old, latest]),
+    ).toBeUndefined();
+    expect(checkLaunchGuards(args, "claude", realpathSync(project), undefined, [latest])).toContain(
+      "belongs to agent pi",
+    );
+    expect(
+      checkLaunchGuards(args, "pi", realpathSync(project), undefined, [
+        { ...latest, frontmatter: { ...latest.frontmatter, agent: "codex" } },
+      ]),
+    ).toContain("selected agent is pi");
+  });
+
+  it("fails a mismatched resumed header without claiming the original conversation resumed", async () => {
+    expect((await launch(["new", "-m", "go"])).code).toBe(0);
+    const result = await launch(["resume", "pi-session", "-m", "more", "--quiet"], {
+      PI_FIXTURE_ID: "forked-session",
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("pi run failed");
+    expect(readCompletion(newest().path)).toMatchObject({
+      frontmatter: { status: "failed", sessionId: null },
+      result: expect.stringContaining("differs from pi-session"),
+    });
+  });
+
+  it.each(["protocol", "startup"])(
+    "keeps %s authentication exit 2 and pi login guidance",
+    async (channel) => {
+      const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_AUTH: channel });
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("/login <provider>");
+      expect(result.stderr).not.toContain("codex login");
+      expect(readCompletion(newest().path).frontmatter.exitReason).toBe("auth_required");
+    },
+  );
+
+  it("reports a missing pi executable with installation guidance", async () => {
+    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: "" });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("pi could not start; check its installation and PATH");
+    expect(readCompletion(newest().path).result).toContain("ENOENT");
+  });
+
+  it("fails a zero-exit incomplete stream with bounded quiet diagnostics", async () => {
+    const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_INCOMPLETE: "true" });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("pi run failed");
+    expect(result.stdout).not.toContain("private pi answer");
+    expect(readCompletion(newest().path).result).toContain("before agent_settled");
+  });
+
+  it("prepares a missing companion independently of permission flags, only on launch", async () => {
+    mkdirSync(home, { recursive: true });
+    const companion = makeCompanionProject(home, { ".plans": "project" });
+    mkdirSync(join(companion.project, ".plans"));
+    project = companion.project;
+    plans = join(project, ".plans");
+    expect((await launch(["status", "--no-ticket"])).code).toBe(1);
+    expect(existsSync(companion.companion)).toBe(false);
+    const result = await launch(["new", "-m", "go"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(existsSync(companion.companion)).toBe(true);
+    expect(fake.received().args).toEqual(["--mode", "json"]);
+  });
+
+  it("reports unsupported quota and unrestricted help without launching pi", async () => {
+    const quota = await launch(["quota"]);
+    expect(quota.code).toBe(1);
+    expect(quota.stderr).toContain("Pi account quota is unsupported");
+    const help = await launch(["--help"]);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("Any nonblank pi-native selector");
+    expect(help.stdout).toContain("Ordinary OS permissions");
+    expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
+  });
+});
+
+function installFakePi(base: string): FakeClaude {
+  const bin = join(base, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    join(bin, "pi"),
+    `#!${process.execPath}
+const { writeFileSync } = require("node:fs");
+let prompt = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", chunk => prompt += chunk);
+process.stdin.on("end", () => {
+  writeFileSync(${JSON.stringify(join(bin, "pi-prompt.txt"))}, prompt);
+  writeFileSync(${JSON.stringify(join(bin, "pi-args.json"))}, JSON.stringify(process.argv.slice(2)));
+  if (process.env.PI_FIXTURE_AUTH === "startup") {
+    process.stderr.write("No API key found for example.");
+    process.exitCode = 1;
+    return;
+  }
+  const auth = process.env.PI_FIXTURE_AUTH === "protocol";
+  const events = [
+    { type: "session", version: 3, id: process.env.PI_FIXTURE_ID ?? "pi-session", cwd: process.cwd(), timestamp: new Date().toISOString() },
+    { type: "message_end", message: { role: "assistant", stopReason: auth ? "error" : "stop", errorMessage: auth ? "No API key found for example." : undefined, content: [{ type: "text", text: "private pi answer" }], usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 } } },
+    ...(process.env.PI_FIXTURE_INCOMPLETE === "true" ? [] : [{ type: "agent_settled", aborted: false }]),
+  ];
+  process.stdout.write(events.map(JSON.stringify).join("\\n"));
+});
+`,
+    { mode: 0o755 },
+  );
+  return {
+    path: `${bin}:${process.env.PATH ?? ""}`,
+    received: () => ({
+      prompt: readFileSync(join(bin, "pi-prompt.txt"), "utf8"),
+      args: JSON.parse(readFileSync(join(bin, "pi-args.json"), "utf8")),
+    }),
+  };
+}
+
 interface FakeClaude {
   path: string;
   received: () => { prompt: string; args: string[] };
 }
 
 // A `claude` on PATH that records its prompt and arguments, then reports session `session-1`.
-function installFakeClaude(base: string): FakeClaude {
+function installFakeClaude(
+  base: string,
+  response = 'process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));',
+): FakeClaude {
   const bin = join(base, "bin");
   mkdirSync(bin);
   writeFileSync(
@@ -1305,7 +1926,7 @@ process.stdin.on("data", (chunk) => (prompt += chunk));
 process.stdin.on("end", () => {
   writeFileSync(join(${JSON.stringify(bin)}, "prompt.txt"), prompt);
   writeFileSync(join(${JSON.stringify(bin)}, "args.json"), JSON.stringify(process.argv.slice(2)));
-  process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));
+  ${response}
 });
 `,
     { mode: 0o755 },

@@ -78,6 +78,8 @@ export async function runAligndev(
     npm_config_user_agent: _userAgent,
     CLAUDECODE: _claude,
     CODEX_THREAD_ID: _codex,
+    PI_CODING_AGENT: _pi,
+    AI_AGENT: _agent,
     ...baseEnv
   } = process.env;
   const env = { ...baseEnv, HOME: home };

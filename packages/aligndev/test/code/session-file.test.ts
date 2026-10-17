@@ -14,6 +14,7 @@ import {
   readPidStartTime,
   reconcileSessionFile,
   resolveSessionFilePath,
+  RESULT_MARKER,
   serializeFrontmatter,
   writeInitialSessionFile,
 } from "../../src/code/session-file.js";
@@ -96,6 +97,11 @@ describe("frontmatter serialization", () => {
     const parsed = parseFrontmatter(block);
     expect(parsed.pid).toBeNull();
     expect(parsed.cwd).toBeNull();
+  });
+
+  it("round-trips pi identity", () => {
+    const block = serializeFrontmatter({ ...frontmatter, agent: "pi" });
+    expect(parseFrontmatter(block).agent).toBe("pi");
   });
 
   it("parses an omitted legacy agent as null", () => {
@@ -200,6 +206,30 @@ describe("session file lifecycle", () => {
     );
 
     expect(reconcileSessionFile(sessionFilePath).frontmatter.status).toBe("failed");
+  });
+
+  it("distinguishes an absent result from an empty result block", () => {
+    writeInitialSessionFile(sessionFilePath, makeFrontmatter());
+    expect(readCompletion(sessionFilePath).result).toBeUndefined();
+    appendTranscript(sessionFilePath, `${RESULT_MARKER}\n`);
+    expect(readCompletion(sessionFilePath).result).toBe("");
+  });
+
+  it("parses the last marker even while running; callers decide terminal visibility", () => {
+    writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: process.pid }));
+    appendTranscript(sessionFilePath, `${RESULT_MARKER}\nearlier${RESULT_MARKER}\nlatest echo\n`);
+    expect(readCompletion(sessionFilePath)).toMatchObject({
+      frontmatter: { status: "running" },
+      result: "latest echo",
+    });
+    applyCompletion(sessionFilePath, {
+      status: "failed",
+      exitReason: "error",
+      endedAt: FIXED_DATE.toISOString(),
+      sessionId: null,
+      result: "authoritative failure",
+    });
+    expect(readCompletion(sessionFilePath).result).toBe("authoritative failure");
   });
 
   it("reads the terminal result even when the transcript echoes the result marker", () => {
