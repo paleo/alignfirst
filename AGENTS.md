@@ -2,7 +2,7 @@
 
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root as your first command in the session. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
 
 ## Tooling
 
