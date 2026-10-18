@@ -22,6 +22,11 @@ const ASSISTANT_SESSION_VARIABLES = [
   "CODEX_THREAD_ID",
   "CODEX_CI",
   "CODEX_SANDBOX_NETWORK_DISABLED",
+  "PI_SESSION_ID",
+  "PI_SESSION_FILE",
+  "PI_PROVIDER",
+  "PI_MODEL",
+  "PI_REASONING_LEVEL",
 ];
 
 export interface RunConfig {
@@ -29,6 +34,7 @@ export interface RunConfig {
   sessionFilePath: string;
   cwd: string;
   resume?: string;
+  quiet?: boolean;
   executableModel: string | undefined;
   skipPermissions: boolean;
   // Writable directories besides the working directory, e.g. the project's companion.
@@ -57,6 +63,9 @@ export interface AgentProtocolState {
   // Highest occupancy seen during the run. Above the final figure, it means the agent compacted
   // the conversation.
   peakContextTokens?: number;
+  // Explicit adapter evidence takes precedence over the legacy peak-decrease heuristic.
+  contextCompacted?: boolean;
+  contextTokensError?: string;
   // Codex only: the cumulative thread total from `turn.completed`, used to pin the rollout file to
   // this run. It is not an occupancy.
   streamTotalTokens?: number;
@@ -78,7 +87,7 @@ export interface AgentAdapter {
   // Set for every run, over the caller's environment.
   env?: Readonly<Record<string, string>>;
   buildArgs(config: RunConfig): string[];
-  createState(): AgentProtocolState;
+  createState(config: RunConfig): AgentProtocolState;
   interpretLine(line: string, state: AgentProtocolState): string | undefined;
   assess(state: AgentProtocolState): AgentAssessment;
   isAuthenticationError(message: string): boolean;
@@ -102,7 +111,7 @@ export async function runAgent(
   out: Output,
   spawnProcess: SpawnAgentProcess = spawnDirectChild,
 ): Promise<RunResult> {
-  const state = adapter.createState();
+  const state = adapter.createState(config);
   const outcome = await spawnAgent(config, adapter, state, out, spawnProcess);
   const assessment = adapter.assess(state);
   const failed = outcome.exitCode !== 0 || !assessment.succeeded;
@@ -229,7 +238,7 @@ function emitLine(
   const rendered = adapter.interpretLine(line, state);
   if (rendered === undefined) return;
   appendTranscript(config.sessionFilePath, `${rendered}\n`);
-  out.write(`${rendered}\n`);
+  if (config.quiet !== true) out.write(`${rendered}\n`);
 }
 
 function drainLines(buffer: string, onLine: (line: string) => void): string {
@@ -247,6 +256,8 @@ export function buildAgentEnv(
 ): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
   for (const name of ASSISTANT_SESSION_VARIABLES) delete env[name];
+  if (env.PI_CODING_AGENT === "true") delete env.PI_CODING_AGENT;
+  if (env.AI_AGENT === "pi") delete env.AI_AGENT;
   for (const name of unset) {
     const trimmed = name.trim();
     if (trimmed !== "") delete env[trimmed];
@@ -322,13 +333,14 @@ export function buildTerminationUpdate(
     result: `Terminated by ${signal} before completion.`,
     contextTokens: state.contextTokens ?? null,
     contextCompacted: isCompacted(state),
-    contextTokensError: null,
+    contextTokensError: state.contextTokensError ?? null,
   };
 }
 
 // Occupancy only falls when the agent compacts the conversation, so a peak above the final figure
 // is the compaction itself.
 export function isCompacted(state: AgentProtocolState): boolean {
+  if (state.contextCompacted !== undefined) return state.contextCompacted;
   const { contextTokens, peakContextTokens } = state;
   if (contextTokens === undefined || peakContextTokens === undefined) return false;
   return peakContextTokens > contextTokens;

@@ -227,7 +227,7 @@ The workspace is ready. Announce what you're about to do in one line and do it. 
 When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `{{ALIGNDEV}} code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 {{/openclaw}}
 {{#codingAgent}}
-When the work is an `{{ALIGNDEV}} code` run, launch it in the background as the delegation guide describes, then end the turn on the acknowledgement.
+When the work is an `{{ALIGNDEV}} code` run, follow the delegation guide's parent-host route, then end the launch turn on the acknowledgement. A Pi parent first requires the available `background` tool and a persistent session; if either is missing, explain the setup problem instead of launching or promising completion.
 {{/codingAgent}}
 
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

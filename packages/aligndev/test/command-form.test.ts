@@ -52,6 +52,20 @@ describe("command forms", () => {
     }
   });
 
+  it("uses the same command form in Pi background commands and result retrieval", async () => {
+    for (const env of [{}, NPX_ENV]) {
+      const result = await run(["guide", "code"], env);
+      const command = env === NPX_ENV ? "npx -y aligndev" : "aligndev";
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toContain(`"command":"${command} code new --message-file`);
+      expect(result.stdout).toContain(
+        `${command} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>`,
+      );
+      expect(result.stdout).toContain(`${command} code status <exact-file> --result`);
+      expect(result.stdout).toContain(`${command} code status --meta <unique-run-key> --result`);
+    }
+  });
+
   it("spawns alignfirst through npx under npx", async () => {
     const home = makeHome();
     const bin = join(home, "bin");

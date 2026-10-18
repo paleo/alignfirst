@@ -112,8 +112,9 @@ Paths are absolute. `config` is the validated config, with the deprecated `plans
 
 - **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`, and the launch gate requires `locations[".plans"].exists`.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
-- **Write access**: when the project has a companion and `code.skipPermissions` is `false`, the agent receives `--add-dir <companion>`, and a missing companion directory is created first. Claude Code takes it after the permission flags. Codex takes it among the `exec` options, before `resume`.
+- **Write access**: `createMissingCompanion` prepares a missing companion before launch, independently of `code.skipPermissions` or the selected child. In normal permission mode, Claude Code receives `--add-dir <companion>` after its permission flags; Codex receives it among the `exec` options, before `resume`. Pi uses ordinary OS access, receives no `--add-dir`, and honors saved project trust without forced approval.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst-instructions`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
+- **Asynchronous Pi callers**: the generic `background` tool only honors the command and cwd. The CLI still resolves companions and session paths. From the original worktree, `code status --meta <unique-run-key> --result` resolves a run; retain its `sessionFile:` path (relative to that worktree when inside it, absolute otherwise) and use that exact path thereafter. The job handle, unique run key and child conversation ID remain separate identities.
 
 ### `aligndev guide`
 

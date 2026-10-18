@@ -25,6 +25,7 @@ import {
   readPidStartTime,
   reconcileSessionFile,
   resolveSessionFilePath,
+  RESULT_MARKER,
   type SessionFrontmatter,
   type SessionRecord,
   writeInitialSessionFile,
@@ -42,6 +43,7 @@ const SESSION_OPTIONS = {
   message: { type: "string", short: "m" },
   model: { type: "string" },
   meta: { type: "string" },
+  quiet: { type: "boolean" },
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
@@ -78,7 +80,7 @@ interface SessionTree {
 
 export type CodeCommand =
   | { kind: "help" }
-  | { kind: "status"; target: StatusTarget }
+  | { kind: "status"; target: StatusTarget; includeResult: boolean }
   | { kind: "quota" }
   | { kind: "session"; args: SessionArgs };
 
@@ -99,6 +101,7 @@ export interface SessionArgs {
   message?: string;
   model?: string;
   meta?: string;
+  quiet?: boolean;
 }
 
 export async function runCode(
@@ -108,7 +111,7 @@ export async function runCode(
 ): Promise<number> {
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
-    if (command.kind === "status") return showStatus(ctx, command.target);
+    if (command.kind === "status") return showStatus(ctx, command.target, command.includeResult);
     const code = resolveCodeConfig(config, ctx.env);
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.agent, code.models);
@@ -129,11 +132,18 @@ export async function runCode(
   }
 }
 
-function showStatus(ctx: CodeContext, target: StatusTarget): number {
+function showStatus(ctx: CodeContext, target: StatusTarget, includeResult: boolean): number {
   const tree = sessionTreeOf(readReport(ctx), ctx.cwd);
   const sessionFilePath = resolveStatusTargetSessionFile(tree, target);
   const completion = reconcileSessionFile(sessionFilePath);
   ctx.stdout.write(renderSessionStatus(tree.cwd, sessionFilePath, completion.frontmatter));
+  if (
+    includeResult &&
+    completion.frontmatter.status !== "running" &&
+    completion.result !== undefined
+  ) {
+    ctx.stdout.write(`${RESULT_MARKER}\n${completion.result}\n`);
+  }
   return 0;
 }
 
@@ -289,6 +299,7 @@ function parseStatusCommand(tokens: string[]): CodeCommand {
       ticket: { type: "string" },
       "no-ticket": { type: "boolean", default: false },
       meta: { type: "string" },
+      result: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -306,14 +317,15 @@ function parseStatusCommand(tokens: string[]): CodeCommand {
         "or --meta <key>.",
     );
   }
+  const includeResult = values.result;
   if (values.meta !== undefined)
-    return { kind: "status", target: { kind: "meta", meta: values.meta } };
+    return { kind: "status", target: { kind: "meta", meta: values.meta }, includeResult };
   if (values.ticket !== undefined) {
     if (!isPathSafeTicket(values.ticket)) throw new Error(TICKET_PATH_ERROR);
-    return { kind: "status", target: { kind: "ticket", ticket: values.ticket } };
+    return { kind: "status", target: { kind: "ticket", ticket: values.ticket }, includeResult };
   }
-  if (values["no-ticket"]) return { kind: "status", target: { kind: "noTicket" } };
-  return { kind: "status", target: { kind: "file", sessionFile: positionals[0] } };
+  if (values["no-ticket"]) return { kind: "status", target: { kind: "noTicket" }, includeResult };
+  return { kind: "status", target: { kind: "file", sessionFile: positionals[0] }, includeResult };
 }
 
 function parseNewCommand(tokens: string[]): CodeCommand {
@@ -328,6 +340,7 @@ function parseNewCommand(tokens: string[]): CodeCommand {
     args: {
       ticket: values.ticket,
       noTicket: values["no-ticket"],
+      quiet: values.quiet,
       protocol: values.protocol,
       catchup: values.catchup,
       messageFile: values["message-file"],
@@ -355,6 +368,7 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
       resume: positionals[0],
       ticket: values.ticket,
       noTicket: false,
+      quiet: values.quiet,
       protocol: values.protocol,
       catchup: values.catchup,
       messageFile: values["message-file"],
@@ -376,15 +390,18 @@ function parseBareCommand(tokens: string[], kind: "quota"): CodeCommand {
 
 export function validateSessionArgs(
   args: SessionArgs,
-  models: readonly string[],
+  models: readonly string[] | undefined,
 ): string | undefined {
   const isNew = args.resume === undefined;
   const hasMessage = args.message !== undefined && args.message.trim() !== "";
   if (args.protocol !== undefined && !(PROTOCOLS as readonly string[]).includes(args.protocol)) {
     return `Error: --protocol must be one of: ${PROTOCOLS.join(", ")}.`;
   }
-  if (args.model !== undefined && !models.includes(args.model)) {
-    return `Error: --model must be one of: ${models.join(", ")}.`;
+  if (args.model !== undefined) {
+    if (args.model.trim() === "") return "Error: --model must be nonblank.";
+    if (models !== undefined && !models.includes(args.model)) {
+      return `Error: --model must be one of: ${models.join(", ")}.`;
+    }
   }
   if (args.protocol === undefined && !hasMessage && args.catchup !== true) {
     return "Error: --message is required when --protocol is not specified.";
@@ -484,7 +501,13 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
       sessionId: null,
       result: message,
     });
-    stderr.write(`${message}\n`);
+    writeFailureDiagnostic(
+      ctx,
+      sessionFilePath,
+      args.quiet === true
+        ? `Could not resolve the ${agent} model; check --model, code.models and the agent installation.`
+        : message,
+    );
     return 1;
   }
 
@@ -501,20 +524,51 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     contextContent,
     alignfirst: forms.alignfirst,
   });
-  createMissingCompanion(report, runConfig.additionalDirectories);
+  createMissingCompanion(report);
   const result = await runAgent(runConfig, createAgentAdapter(agent), stdout);
 
   if (args.resume === undefined && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
   }
   if (result.authRequired) {
-    stderr.write(
-      "aligndev code: coding agent not authenticated — an administrator must re-login on the host " +
-        `${agent === "claude" ? "(`claude`, then `/login`)" : "(`codex login`)"}.\n`,
+    writeFailureDiagnostic(
+      ctx,
+      sessionFilePath,
+      "coding agent not authenticated — an administrator must re-login on the host " +
+        `(${authenticationInstruction(agent)}).`,
     );
     return EXIT_AUTH_REQUIRED;
   }
-  return result.status === "succeeded" ? 0 : 1;
+  if (result.status === "succeeded") return 0;
+  writeFailureDiagnostic(ctx, sessionFilePath, failureDiagnostic(agent, result.result));
+  return 1;
+}
+
+function authenticationInstruction(agent: CodingAgent): string {
+  switch (agent) {
+    case "claude":
+      return "`claude`, then `/login`";
+    case "codex":
+      return "`codex login`";
+    case "pi":
+      return "`pi`, then `/login <provider>`, or configure provider credentials";
+  }
+}
+
+function writeFailureDiagnostic(ctx: CodeContext, sessionFilePath: string, message: string): void {
+  ctx.stderr.write(
+    `aligndev code: ${message}\nSession file: ${displayPath(ctx.cwd, sessionFilePath)}\n`,
+  );
+}
+
+// Keep arbitrary provider output (which may contain credentials) in the durable file.
+function failureDiagnostic(agent: CodingAgent, result: string): string {
+  if (result.includes("ENOENT"))
+    return `${agent} could not start; check its installation and PATH.`;
+  if (result.includes("Could not send prompt:")) {
+    return `Could not send the prompt to ${agent}; inspect the session file before retrying.`;
+  }
+  return `${agent} run failed; inspect the session file for the failure details.`;
 }
 
 // Fail-fast launch guards, run against the (healed) session records before anything is written.
@@ -551,6 +605,12 @@ export function checkLaunchGuards(
         `selected agent is ${agent}.`
       );
     }
+    if (agent === "pi" && !sameRealDirectory(latest.frontmatter.cwd, realCwd)) {
+      return (
+        `Error: pi session ${args.resume} must resume from its recorded directory ` +
+        `${latest.frontmatter.cwd ?? "(missing; start a new session)"}.`
+      );
+    }
   }
   // Protocol runs only, against other protocol runs: they share the working tree, and
   // `alignfirst ticket --next` reserves no work-file prefix within a ticket.
@@ -565,6 +625,15 @@ export function checkLaunchGuards(
     if (sameTicket) return busyProtocolError(sameTicket, `on ticket ${ticket}`);
   }
   return;
+}
+
+function sameRealDirectory(recorded: string | null, realCwd: string): boolean {
+  if (recorded === null) return false;
+  try {
+    return realpathSync(recorded) === realCwd;
+  } catch {
+    return false;
+  }
 }
 
 function busyProtocolError(record: SessionRecord, scope: string): string {
@@ -693,6 +762,7 @@ function formatCommand(args: SessionArgs): string {
     parts.push("--message", JSON.stringify(args.message));
   }
   if (args.meta !== undefined) parts.push("--meta", JSON.stringify(args.meta));
+  if (args.quiet === true) parts.push("--quiet");
   return parts.join(" ");
 }
 
@@ -726,34 +796,43 @@ export function buildRunConfig(input: RunInput): RunConfig {
     sessionFilePath: input.sessionFilePath,
     cwd: input.cwd,
     resume: args.resume,
+    quiet: args.quiet,
     executableModel: input.executableModel,
     skipPermissions: code.skipPermissions,
     additionalDirectories:
-      !code.skipPermissions && report.companion !== null ? [report.companion.dir] : [],
+      code.agent !== "pi" && !code.skipPermissions && report.companion !== null
+        ? [report.companion.dir]
+        : [],
     unset: code.unset,
     env: input.env,
   };
 }
 
 // A registered companion becomes writable before its directory exists: create it for the agent.
-function createMissingCompanion(report: ProjectReport, additionalDirectories: readonly string[]) {
+function createMissingCompanion(report: ProjectReport) {
   const { companion } = report;
-  if (companion === null || companion.exists || !additionalDirectories.includes(companion.dir)) {
-    return;
-  }
+  if (companion === null || companion.exists) return;
   mkdirSync(companion.dir, { recursive: true });
 }
 
-function renderHelp(agent: CodingAgent, models: readonly string[], forms: CommandForms): string {
+function renderHelp(
+  agent: CodingAgent,
+  models: readonly string[] | undefined,
+  forms: CommandForms,
+): string {
   const { aligndev, alignfirst } = forms;
   const permissionMode =
-    agent === "claude"
-      ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
-      : "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
+    agent === "pi"
+      ? "Ordinary OS permissions; code.skipPermissions has no effect. Saved project trust is honored."
+      : agent === "claude"
+        ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
+        : "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
   const modelBehavior =
     agent === "codex"
       ? "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through."
-      : "Claude model values pass through unchanged.";
+      : `${agent === "pi" ? "Pi native selectors (including provider/model:thinking)" : "Claude model values"} pass through unchanged.`;
+  const modelPolicy =
+    models === undefined ? "Any nonblank pi-native selector" : `One of ${models.join(", ")}`;
   const requires = forms.viaNpx
     ? "Requires: the alignfirst CLI, run through npx, for the project layout, side tickets and the\ndelegated protocols."
     : "Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side\ntickets and the delegated protocols.";
@@ -764,7 +843,7 @@ Usage:
   ${aligndev} code new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
   ${aligndev} code new --message "..."
   ${aligndev} code resume <sessionId> [--protocol <protocol>] [--message "..."]
-  ${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>)
+  ${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]
   ${aligndev} code quota
   ${aligndev} code -h, --help
 
@@ -775,14 +854,18 @@ Commands:
                         run of the ticket, of no-ticket work, or of the --meta key. Includes
                         contextTokens, the context-window occupancy the run ended on, and
                         contextCompacted. Does not start an agent.
-  quota                 Show the selected coding agent's account limits and reset times.
+  quota                 Show account limits and reset times (unsupported for pi).
 
 Options (status):
   --ticket <id>         Newest run of that ticket.
   --no-ticket           Newest run of no-ticket work.
   --meta <key>          Newest run tagged with \`--meta <key>\`, wherever it sits.
+  --result              Append the terminal run's final Result block, when present, without the
+                        transcript. Running sessions show status only; default is metadata only.
 
 Options (new, resume):
+  --quiet               Suppress the live transcript on stdout; keep all durable session output,
+                        the initial Session file line, new Session ID, and failure diagnostics.
   --protocol <p>        One of: ${PROTOCOLS.join(", ")}.
   --ticket <id>         Ticket ID. \`new --protocol\` requires it or a side ticket through
                         --no-ticket.
@@ -792,7 +875,7 @@ Options (new, resume):
   --catchup             Load the ticket history before the message. new only.
   -m, --message "..."   Message to send. Required for spec/aad, or without protocol/catchup.
   --message-file <path> Read the message from a UTF-8 file, or stdin with -. Exclusive with -m.
-  --model <model>       One of ${models.join(", ")}. A new session defaults to
+  --model <model>       ${modelPolicy}. A new session defaults to
                         code.defaultModel, else to the coding agent's default. A resume keeps the
                         session's model.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
@@ -802,7 +885,7 @@ Options (new, resume):
 ${requires}
 
 Config (~/.alignfirst/aligndev.settings.json):
-  code.agent            Coding agent: claude or codex (selected: ${agent}). Defaults to the coding
+  code.agent            Coding agent: claude, codex or pi (selected: ${agent}). Defaults to the coding
                         agent that runs aligndev.
   code.defaultModel     Default model of a new session, one of the models accepted by --model.
   code.models           List replacing the models accepted by --model.
@@ -810,13 +893,14 @@ Config (~/.alignfirst/aligndev.settings.json):
   code.unset            Env vars to strip from the coding agent child.
 
 Selected-agent permissions: ${permissionMode}
-The normal mode also makes the project's companion directory writable.
+The project's companion directory is prepared before launch; pi uses ordinary OS access.
 ${modelBehavior}
 
-${aligndev} code runs a coding agent in the foreground and blocks until it finishes, streaming the
-transcript to stdout and to a session file under .plans/ or its companion. Coding runs can be
-very long: always run it as a background task. Your platform does the backgrounding; never
-detach it.
+${aligndev} code runs a coding agent in the foreground and blocks until it finishes. The transcript
+is durable in a session file under .plans/ or its companion; stdout also streams it unless --quiet.
+Coding runs can be very long. The host owns background execution and completion delivery;
+verify its capability before launch, use --quiet, and never detach the command. On completion,
+retrieve status --result with the exact session-file path or a unique per-run --meta key.
 
 Run \`${aligndev} guide code\` for the full delegation guide.
 `;

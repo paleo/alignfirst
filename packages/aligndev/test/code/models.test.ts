@@ -15,6 +15,9 @@ describe("resolveModels", () => {
   it("uses agent-specific defaults", () => {
     expect(resolveModels("claude", undefined)).toBe(CLAUDE_DEFAULT_MODELS);
     expect(resolveModels("codex", [])).toBe(CODEX_DEFAULT_MODELS);
+    expect(resolveModels("pi", undefined)).toBeUndefined();
+    expect(resolveModels("pi", [])).toBeUndefined();
+    expect(resolveModels("pi", ["provider/model:high"])).toEqual(["provider/model:high"]);
   });
 
   it("replaces the defaults with the configured list", () => {
@@ -42,6 +45,11 @@ describe("Codex executable model resolution", () => {
     const resolve = createExecutableModelResolver(runner);
     await expect(resolve("codex", undefined, CONTEXT)).resolves.toBeUndefined();
     await expect(resolve("claude", "opus", CONTEXT)).resolves.toBe("opus");
+    await expect(resolve("pi", "terra", CONTEXT)).resolves.toBe("terra");
+    await expect(resolve("pi", " provider/model:high ", CONTEXT)).resolves.toBe(
+      " provider/model:high ",
+    );
+    await expect(resolve("pi", undefined, CONTEXT)).resolves.toBeUndefined();
     await expect(resolve("codex", "gpt-5.6-terra", CONTEXT)).resolves.toBe("gpt-5.6-terra");
     expect(runner).not.toHaveBeenCalled();
   });

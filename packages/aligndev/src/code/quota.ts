@@ -57,6 +57,11 @@ export function createQuotaReader(
   timeoutMs = QUOTA_TIMEOUT_MS,
 ): QuotaReader {
   return async (agent, context) => {
+    if (agent === "pi") {
+      throw new Error(
+        "Pi account quota is unsupported: check the selected provider's account limits directly.",
+      );
+    }
     const env = buildAgentEnv(context.env, context.unset);
     return agent === "claude"
       ? readClaudeQuota({ ...context, env: translateClaudePrivacyOptOut(env) }, adapter, timeoutMs)

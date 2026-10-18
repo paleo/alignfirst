@@ -21,7 +21,7 @@ The **AlignFirst CLI** is the `alignfirst` npm package and bin. It provides `gui
 The **AlignFirst skills** are stubs that run the CLI. The nine command skills `alspec`, `alplan`,
 `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec` keep
 `disable-model-invocation: true`; humans invoke them as `/alspec` in Claude Code, GitHub Copilot,
-Cursor, or `$alspec` in Codex. The optional `alignfirst` skill lets the agent recognize a protocol
+Cursor, `$alspec` in Codex, or `/skill:alspec` in Pi. The optional `alignfirst` skill lets the agent recognize a protocol
 named in prose; a project whose instruction file starts with the canonical `alignfirst context`
 section provides this itself.
 
@@ -45,7 +45,7 @@ upgrade only what they requested.
 - **Work-files repository**: [plans-setup.md](references/plans-setup.md).
 - **docmap**: [docmap-setup.md](references/docmap-setup.md). An instruction file with the old docmap body ("Mandatory for every task") needs [Update the Docmap Snippet](references/alignfirst-upgrade.md#update-the-docmap-snippet).
 - **workspace**: [workspace-setup.md](references/workspace-setup.md). A `ports` group or `setupProfiles` in `workspace.mjs` needs [Move Workspace Ports to the Dev-Server](references/alignfirst-upgrade.md#move-workspace-ports-to-the-dev-server).
-- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code or Codex). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally. An old `~/.alignfirst/aligndev.config.json` needs [Rename the AlignDev Settings](references/alignfirst-upgrade.md#rename-the-aligndev-settings).
+- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code, Codex or Pi). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally. An old `~/.alignfirst/aligndev.config.json` needs [Rename the AlignDev Settings](references/alignfirst-upgrade.md#rename-the-aligndev-settings).
 
 Do not present the tooling menu or add unrelated tools on this route.
 
@@ -120,8 +120,7 @@ tool setup.
 
 ## A Coding Agent as the Assistant
 
-For a coding agent (Claude Code or Codex) acting as the assistant on one project, without OpenClaw,
-read [coding-agent-assistant.md](references/coding-agent-assistant.md).
+For Claude Code, Codex or a persistent Pi session acting as the assistant on one project, without OpenClaw, read [coding-agent-assistant.md](references/coding-agent-assistant.md). Pi uses `/skill:aligndev` and a separately installed generic background tool; a Pi child uses the independent subagent package for plan/review delegation. Installing the skill alone supplies no executable tools.
 
 ## Shared Investigation Rules
 
