@@ -1,5 +1,11 @@
 # aligndev
 
+## 0.24.0
+
+### Minor Changes
+
+- cef29c6: Added Pi coding-agent delegation, quiet execution, result-only status retrieval, and persistent Pi assistant guidance using the separate background extension.
+
 ## 0.23.3
 
 ### Patch Changes
