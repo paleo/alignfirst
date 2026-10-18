@@ -1,5 +1,14 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,13 +23,68 @@ try {
 }
 
 function smokeTestRelease() {
-  const docmap = packWorkspace("docmap");
-  const alignfirst = packWorkspace("alignfirst");
-  writeFileSync(join(installRoot, "package.json"), '{"private":true}\n');
-  runNpm(["install", "--ignore-scripts", "--omit=peer", docmap.tarball, alignfirst.tarball]);
-  verifyCliVersion(["--version"], alignfirst.version);
-  verifyCliVersion(["docmap", "--version"], docmap.version);
-  console.log(`Release smoke test passed for alignfirst@${alignfirst.version}.`);
+  const [docmap, alignfirst, aligndev, subagent, background] = [
+    "docmap",
+    "alignfirst",
+    "aligndev",
+    "pi-subagent",
+    "pi-background",
+  ].map(packWorkspace);
+  const cliRoot = disposableInstall("cli", [docmap, alignfirst, aligndev]);
+  for (const packed of [docmap, alignfirst, aligndev]) {
+    const manifest = installedManifest(cliRoot, packed.name);
+    assert.equal(manifest.pi, undefined, `${packed.name} must remain a CLI`);
+    assert.deepEqual(manifest.peerDependencies ?? {}, {});
+    assert(
+      !Object.keys(manifest.dependencies ?? {}).some((name) =>
+        /pi-|pi-background|pi-subagent/.test(name),
+      ),
+    );
+  }
+  assert(!existsSync(join(cliRoot, "node_modules/@earendil-works")));
+  verifyCliVersion(cliRoot, "alignfirst", ["--version"], alignfirst.version);
+  verifyCliVersion(cliRoot, "alignfirst", ["docmap", "--version"], docmap.version);
+  verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
+  for (const executable of ["alignfirst", "aligndev"]) {
+    assert.match(
+      execFileSync(join(cliRoot, "node_modules/.bin", executable), ["--help"], {
+        cwd: cliRoot,
+        encoding: "utf8",
+        env: isolatedEnvironment(cliRoot),
+      }),
+      /Usage:/i,
+    );
+  }
+  for (const packages of [[subagent], [background], [subagent, background]]) {
+    const root = disposableInstall(
+      packages.map((p) => p.name.split("/").at(-1)).join("-"),
+      packages,
+      true,
+    );
+    for (const packed of packages) inspectExtension(root, packed);
+    assert(!existsSync(join(root, "node_modules/alignfirst")));
+    assert(!existsSync(join(root, "node_modules/aligndev")));
+    for (const script of ["pi-packed-smoke.mjs", "pi-smoke-provider.mjs"]) {
+      copyFileSync(join(repositoryRoot, "scripts", script), join(root, script));
+    }
+    copyFileSync(
+      join(repositoryRoot, "packages/pi-background/test/fixtures/tree.mjs"),
+      join(root, "pi-smoke-tree.mjs"),
+    );
+    execFileSync(
+      process.execPath,
+      [join(root, "pi-packed-smoke.mjs"), ...packages.map((p) => p.name)],
+      {
+        cwd: root,
+        env: isolatedEnvironment(root),
+        stdio: "inherit",
+        timeout: 120000,
+      },
+    );
+  }
+  console.log(
+    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.3.0, both extensions independently/together.`,
+  );
 }
 
 function packWorkspace(directory) {
@@ -31,7 +95,7 @@ function packWorkspace(directory) {
   if (typeof manifest.version !== "string" || typeof filename !== "string") {
     throw new Error(`Could not pack packages/${directory}.`);
   }
-  return { tarball: join(installRoot, filename), version: manifest.version };
+  return { tarball: join(installRoot, filename), version: manifest.version, name: manifest.name };
 }
 
 function readPackedFilename(packed) {
@@ -40,17 +104,104 @@ function readPackedFilename(packed) {
   return first?.filename;
 }
 
-function verifyCliVersion(args, expected) {
+function disposableInstall(name, packages, host = false) {
+  const root = join(installRoot, name);
+  mkdirSync(root);
+  writeFileSync(join(root, "package.json"), '{"private":true,"type":"module"}\n');
+  runNpm(
+    [
+      "install",
+      "--ignore-scripts",
+      "--omit=peer",
+      "--no-audit",
+      "--no-fund",
+      ...packages.map((p) => p.tarball),
+      ...(host ? ["@earendil-works/pi-coding-agent@1.3.0"] : []),
+    ],
+    root,
+  );
+  return root;
+}
+
+function installedManifest(root, name) {
+  return JSON.parse(readFileSync(join(root, "node_modules", name, "package.json"), "utf8"));
+}
+
+function inspectExtension(root, packed) {
+  const directory = join(root, "node_modules", packed.name);
+  const manifest = installedManifest(root, packed.name);
+  assert.equal(manifest.type, "module");
+  assert.equal(manifest.license, "MIT");
+  assert(manifest.keywords.includes("pi-package"));
+  assert.deepEqual(Object.keys(manifest.pi), ["extensions"]);
+  assert.deepEqual(manifest.dependencies ?? {}, {});
+  assert(!existsSync(join(directory, "node_modules")), "No bundled host/sibling copies");
+  for (const resource of ["prompts", "skills", "agents", ".pi", "src"])
+    assert(!existsSync(join(directory, resource)), `Unexpected installed resource ${resource}`);
+  for (const file of ["README.md", "LICENSE", "NOTICE.md", ...manifest.pi.extensions]) {
+    assert(existsSync(join(directory, file)), `Missing packed asset: ${file}`);
+  }
+  const license = readFileSync(join(directory, "LICENSE"), "utf8");
+  for (const phrase of [
+    "Mario Zechner",
+    "Permission is hereby granted",
+    "THE SOFTWARE IS PROVIDED",
+  ])
+    assert(license.includes(phrase));
+  assert.match(readFileSync(join(directory, "NOTICE.md"), "utf8"), /Pi|pi/);
+  for (const entry of manifest.pi.extensions) {
+    assert.match(entry, /^\.\/dist\/.+\.js$/);
+    assert.match(readFileSync(join(directory, entry), "utf8"), /export default/);
+  }
+  for (const [name, range] of Object.entries(manifest.peerDependencies)) {
+    assert(name.startsWith("@earendil-works/pi-") || name === "typebox");
+    assert.equal(range, "*");
+  }
+  if (packed.name.endsWith("pi-subagent"))
+    assert.match(
+      readFileSync(join(directory, "dist/agents.js"), "utf8"),
+      /Follow the delegated assignment/,
+    );
+}
+
+function verifyCliVersion(root, name, args, expected) {
   const executable = join(
-    installRoot,
+    root,
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "alignfirst.cmd" : "alignfirst",
+    process.platform === "win32" ? `${name}.cmd` : name,
   );
-  const actual = execFileSync(executable, args, { cwd: installRoot, encoding: "utf8" }).trim();
-  if (actual !== expected) {
-    throw new Error(`Expected ${expected} from alignfirst ${args.join(" ")}, received ${actual}.`);
+  const actual = execFileSync(executable, args, {
+    cwd: root,
+    encoding: "utf8",
+    env: isolatedEnvironment(root),
+  }).trim();
+  assert.equal(actual, expected, `${name} ${args.join(" ")}`);
+}
+
+function isolatedEnvironment(root) {
+  const env = {
+    ...process.env,
+    HOME: join(root, "home"),
+    PI_CODING_AGENT_DIR: join(root, "home/.pi/agent"),
+    PI_OFFLINE: "1",
+    PI_SKIP_VERSION_CHECK: "1",
+    PI_TELEMETRY: "0",
+  };
+  for (const key of Object.keys(env)) {
+    if (
+      /API_KEY|TOKEN|SECRET|PASSWORD/.test(key) ||
+      [
+        "NODE_PATH",
+        "NODE_OPTIONS",
+        "PI_PACKAGE_DIR",
+        "PI_MANAGED_INSTALL_ROOT",
+        "npm_config_user_agent",
+      ].includes(key)
+    )
+      delete env[key];
   }
+  return env;
 }
 
 function runNpm(args, cwd = installRoot) {

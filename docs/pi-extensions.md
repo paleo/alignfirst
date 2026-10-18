@@ -42,9 +42,11 @@ Once submitted, a message is **Pi-owned**. Native follow-ups can survive interru
 
 ## Supported and tested baseline
 
-Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and start at **0.0.0**. Deterministic package/host tests have run on **Linux**, **Node 26.8.1**, with local scripted providers. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
+Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and start at **0.0.0**. Deterministic package/host tests have run on **Linux**, **Node 26.8.1** and **Node 22.23.3**, with local scripted providers. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
 
-The deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. They establish host mechanics, not live model obedience. Packed installation, live Terra acceptance and AlignDev end-to-end checks are separate gates. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
+The deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. Release smoke additionally installs each packed extension independently and together against Pi 1.3.0. Cross-product tests launch the real AlignDev CLI through a packed background extension, with controlled child streams and companion-backed worktrees.
+
+Live acceptance has exercised **openai/gpt-5.6-terra**, including headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
 
 ## Checks
 
@@ -61,4 +63,22 @@ fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-subagent
 fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-background
 ```
 
-Use disposable Pi settings/session directories and explicitly loaded extensions. Do not modify installed extensions, global trust/settings or expose credentials to test discovery. Follow [Releasing](releasing.md#adding-a-package-name) for the owner's new-name bootstrap and trusted-publisher prerequisites; documentation does not authorize publication.
+`packages/pi-background/test/aligndev-integration.test.ts` builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
+
+After builds, run the packed-distribution gate:
+
+```sh
+fnm exec --using=.nvmrc npm run release:smoke
+```
+
+It installs the CLI tarballs without Pi, then creates three separate disposable Pi 1.3.0 installs. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
+
+Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly after builds:
+
+```sh
+fnm exec --using=.nvmrc node scripts/pi-live-acceptance.mjs --run
+```
+
+The runner packs and installs disposable artifacts, resolves the explicit Terra selector from Pi's catalog and checks existing authentication. `PI_ACCEPTANCE_MODEL` can select another explicit Terra ID; it never chooses a non-Terra fallback. An unavailable model or credential fails the command. It copies only the selected provider's stored credential into a mode-0600 temporary auth file and removes the isolated installation in `finally`. Sanitized evidence is retained in the printed directory. The terminal lifecycle probe requires Linux and Python 3. To repeat one group, set `PI_ACCEPTANCE_CASE` to `subagents`, `ordinaryCompletion`, `aligndev`, `failureCancellation` or `cliLifecycle`.
+
+Use disposable HOME and Pi settings/session directories and explicitly loaded extensions. Do not modify installed extensions, global trust/settings or expose credentials to test discovery. Follow [Releasing](releasing.md#adding-a-package-name) for the owner's new-name bootstrap and trusted-publisher prerequisites; documentation does not authorize publication.

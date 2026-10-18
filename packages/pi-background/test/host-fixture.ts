@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -46,6 +46,9 @@ export interface HostOptions {
 export async function host(options: HostOptions = {}) {
   const cwd = mkdtempSync(join(tmpdir(), "pi-background-host-"));
   const agentDir = join(cwd, "config");
+  const home = join(cwd, "home");
+  mkdirSync(home);
+  vi.stubEnv("HOME", home);
   const requests: TranscriptContext[] = [];
   const extensionErrors: unknown[] = [];
   vi.stubEnv("PI_OFFLINE", "1");

@@ -77,7 +77,8 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    for pkg in alignfirst aligndev @alignfirst/docmap \
               @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock \
               @alignfirst/openclaw-slack-mock @alignfirst/openclaw-test \
-              @alignfirst/service-openclaw-plugin @alignfirst/workspace; do
+              @alignfirst/service-openclaw-plugin @alignfirst/workspace \
+              @alignfirst/pi-subagent @alignfirst/pi-background; do
      npm trust github "$pkg" --repo paleo/alignfirst --file release.yml --env release --allow-publish
      npm access set mfa=publish "$pkg"
    done
@@ -89,6 +90,8 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    ```bash
    npm deprecate @paleo/docmap "Renamed to @alignfirst/docmap"
    ```
+
+`@alignfirst/pi-subagent` and `@alignfirst/pi-background` are new names awaiting the owner's bootstrap and individual trusted-publisher bindings. Their `0.0.0` placeholders are deliberately excluded by `scripts/release-pending.mjs`; the minor changesets prepare their first consumer releases. Follow the steps above for both names before merging them to `main`. No additional publish job or GitHub environment is needed.
 
 Publishing the current versions first preserves the invariant above: `check` reports nothing pending until the **release: version packages** PR lands, and the rename's own release is the first one CI is asked to approve.
 

@@ -4,7 +4,7 @@ Run synchronous Pi subagents with separate contexts. The package registers one t
 
 ## Install
 
-Requires Pi 1.3.0 and Node.js 22.19 or newer. Linux is exercised by this package's subprocess tests. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
+Requires Pi 1.3.0 and Node.js 22.19 or newer. Linux is exercised by this package's subprocess tests on Node 26.8.1 and 22.23.3. The exact Node 22.19.0 floor has not been exercised. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
 
 If an existing local extension already registers `subagent`, disable it explicitly with `pi config` before installing this replacement. This includes a local `~/.pi/agent/extensions/subagent` example or symlink. Keep your profiles; this package does not overwrite them. Do not load both implementations.
 
@@ -99,6 +99,6 @@ fnm exec --using=.nvmrc npm run build --workspace @alignfirst/pi-subagent
 fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-subagent
 ```
 
-Tests include real descendant trees, TERM-ignoring and separately grouped children, natural leader exit with inherited/closed pipes, descendants created during grace, an actual Pi child running bash, a deterministic headless Pi parent invoking parallel subagents, saved-trust/refusal cases, actual SDK reload, and an actual Pi parent shutdown with nested Pi/bash work. They make no external model calls. Live model and packed-install acceptance are separate release gates.
+Tests include real descendant trees, TERM-ignoring and separately grouped children, natural leader exit with inherited/closed pipes, descendants created during grace, an actual Pi child running bash, a deterministic headless Pi parent invoking parallel subagents, saved-trust/refusal cases, actual SDK reload, and an actual Pi parent shutdown with nested Pi/bash work. They make no external model calls. Repository `npm run release:smoke` verifies standalone packed installs, independently and alongside the background package. Opt-in Terra checks, including a headless parent delegating single/parallel assignments, are documented in [Pi Extensions](../../docs/pi-extensions.md#checks).
 
 MIT. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md) for the Pi example attribution.
