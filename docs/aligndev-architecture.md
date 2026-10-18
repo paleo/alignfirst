@@ -33,10 +33,11 @@ The condition names the project's guide file for the assistant. Under `codingAge
 
 ## Running the Agent
 
-`aligndev code` runs the agent as a direct **foreground** child. It streams a live transcript to stdout and to a per-run session file, and blocks until the agent exits. It never backgrounds or detaches itself: coding runs are long, so the caller backgrounds the command, as `aligndev guide code` prescribes.
+`aligndev code` runs the agent as a direct **foreground** child until it exits. It writes the transcript to a durable per-run file and, unless `--quiet` is given, streams it to stdout. Quiet mode keeps the initial `Session file:` line, new child `Session ID:` and failure diagnostics. The CLI never backgrounds or detaches itself.
 
 - Under OpenClaw, the assistant runs it through `exec` with `background: true` and `timeoutSeconds: 0`, and chains `openclaw system event --mode now --session-key <key>` onto the command.
-- A coding-agent assistant uses its own background execution, with no time limit and outside its sandbox. Claude Code wakes the session when the command exits. Otherwise, the assistant checks its pending runs at the start of the next user turn.
+- Claude Code/Codex parents retain their established background facilities and sandbox elevation. Claude Code wakes the parent on exit; where no completion bridge is configured, Codex uses the next-user-turn status fallback. Pi work does not certify or replace these integrations.
+- A persistent Pi parent uses the generic `background` tool to launch an ordinary quoted CLI command with `--quiet` and a unique per-run `--meta`. The guide owns those flags, not the extension. A notice triggers a handle-ownership check, then exact-file or unique-key `status --result` retrieval from the original worktree. Parent host and child adapter are independent. See [Pi Extensions](pi-extensions.md) for package and native delivery boundaries.
 
 The prompt reaches the agent through stdin. A new session's prompt opens with a run context. It tells the agent that ending its turn kills its subagents and background commands, so it must wait for them first. The agent inherits the caller's environment, minus the assistant session's identity variables (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, …) and the configured `code.unset`.
 
@@ -46,13 +47,15 @@ The session file is the durable handoff of a run. Its frontmatter holds `agent`,
 
 Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree.
 
-When the project has a companion directory, the normal permission modes make it writable (`--add-dir`), creating it first when missing. When some of the project's AlignFirst files live there, a new session's prompt starts with the `alignfirst context` output. See [Companion Directories](companion-directories.md).
+The CLI creates a missing companion before launch, independently of permission mode. Claude Code/Codex normal modes add it through `--add-dir`; Pi uses ordinary OS access. When some AlignFirst files live there, a new session's prompt starts with `alignfirst context`. See [Companion Directories](companion-directories.md).
+
+`status` accepts exactly one file, `--ticket`, `--no-ticket`, or `--meta` selector. Scope/key selectors choose the newest matching active run, so asynchronous callers use a unique key per run and retain the resolved exact path. `status --result` adds the terminal Result block when present, without transcript output; running runs show metadata only. It has no numeric final-text cap. `readCompletion` currently reads the whole file into memory. A successful status query exits `0` even when the run failed; launch/run exits are `0` for success, `1` for ordinary failure and `2` for authentication.
 
 ### Termination and Status
 
-If `aligndev code` is terminated, its signal handlers seal the session file (`status: failed`, `exitReason: terminated`), then send `SIGTERM` to the agent and, after a short grace period, `SIGKILL`. No orphan survives.
+On handled termination, the CLI seals the session file (`status: failed`, `exitReason: terminated`), sends `SIGTERM` to its child, and escalates to `SIGKILL` after its two-second grace. The parent host owns attached process-tree supervision; this does not promise crash-proof descendant cleanup.
 
-Only a `SIGKILL` of `aligndev` itself leaves a stale `running` status. `aligndev code status` checks that the recorded pid still runs; on Linux, the recorded process start time also detects pid reuse. A dead run is sealed as `terminated` before the report. The `contextTokens` line reports what the run left in the agent's context window; a resumed session keeps growing.
+Abrupt host loss, a crash or `SIGKILL` can leave a stale `running` status. `aligndev code status` checks that the recorded pid still runs; on Linux, the recorded process start time also detects pid reuse. A dead run is sealed as `terminated` before the report. The `contextTokens` line reports what the run left in the agent's context window; a resumed session keeps growing.
 
 ### Authentication
 
@@ -64,13 +67,13 @@ A new protocol session needs a ticket. `--no-ticket` reserves the next side tick
 
 ## Coding Agents
 
-An adapter (`claude-agent.ts`, `codex-agent.ts`) builds each CLI's arguments, parses its stream, and recognizes its authentication errors.
+Three adapters (`claude-agent.ts`, `codex-agent.ts`, `pi-agent.ts`) build CLI arguments, parse streams and recognize authentication failures. Pi targets 1.3.0's JSON/print settlement contract, preserves its native conversation for resume, and requires that resume use the recorded directory. The synchronous subagent package is optional in that child environment; it is not an adapter dependency.
 
-- **Permissions:** normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `code.skipPermissions` selects each CLI's bypass flag.
-- **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves to the newest matching slug of `codex debug models --bundled`. `code.models` replaces the list. Without `--model`, a new session takes `code.defaultModel`, and a resume takes the `model` recorded by the session's latest run, unchecked against the current list. The session file records the chosen name, or `null` for the agent's own default.
+- **Permissions:** normal runs use Claude's `--permission-mode auto` or Codex's `--sandbox workspace-write`. `code.skipPermissions` selects their bypass flags. Pi uses ordinary OS permissions and saved project trust, without forced approval; that setting has no effect on Pi.
+- **Models:** Claude's defaults are `fable`, `opus`, `sonnet`, `haiku`; Codex's are `astra`, `sol`, `terra`, `luna`. A selected Codex alias resolves through `codex debug models --bundled`. Pi accepts nonblank native selectors unchanged, preferably `provider/model` with optional thinking suffix, without a finite default allowlist. A nonempty `code.models` replaces the accepted list. Without `--model`, new sessions use `code.defaultModel`, else the child's default; resumes keep their latest recorded model unchecked against the current list. The file records the chosen name, or `null` for the child's default. Pi quota is unsupported.
 - **Background work:** after the agent's turn, `claude -p` waits for its background subagents and commands, then wakes it for another turn. By default, it kills that work after 10 minutes of idle waiting; Claude runs set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` to wait until it ends. Each turn closes with its own `result` event, and the session file keeps the last non-empty one.
 - **Resume:** session files record `agent`, and a session resumes only with the same agent. Agentless legacy sessions stay readable but need a new session.
-- **Detection:** without `code.agent`, the agent is the one that runs `aligndev`: Claude Code sets `CLAUDECODE=1` (documented), Codex sets `CODEX_THREAD_ID` (from its source). Neither or both is an error, raised only by the commands that need the agent: `guide code`, `code --help`, `code quota`, and `code new` or `resume`.
+- **Detection:** without `code.agent`, Claude Code is identified by `CLAUDECODE=1`, Codex by `CODEX_THREAD_ID`, and Pi by `PI_CODING_AGENT=true` or `AI_AGENT=pi`. Zero or multiple detected kinds is an error only on agent-dependent commands: `guide code`, `code --help`, `code quota`, and `code new/resume`. Explicit `code.agent` wins over all markers. It selects a child, never a parent launch tool.
 
 ## Project Inventory
 

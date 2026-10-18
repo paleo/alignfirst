@@ -18,7 +18,7 @@ Offer this in the README as a convenience and use the bare command when describi
 
 ## Install the Skills
 
-`alspec`, `alplan`, `al`, `almerge`, `alreview`, and `aldescription` select individual protocols. `alcatchup` loads ticket history; `alcatchupaad` and `alcatchupspec` load history before starting AAD or specification. Skills reuse guides already in context; each named guide includes the ticket directory and work file rules. Humans invoke them with `/` in Claude Code, GitHub Copilot, and Cursor, or `$` in Codex.
+`alspec`, `alplan`, `al`, `almerge`, `alreview`, and `aldescription` select individual protocols. `alcatchup` loads ticket history; `alcatchupaad` and `alcatchupspec` load history before starting AAD or specification. Skills reuse guides already in context; each named guide includes the ticket directory and work file rules. Humans invoke them with `/` in Claude Code, GitHub Copilot, and Cursor, `$` in Codex, or `/skill:name` in Pi (for example `/skill:alspec` or `/skill:alplan`).
 
 The optional `alignfirst` skill lets the agent recognize a protocol named in prose. Add `--skill alignfirst` when the user wants that recognition in repositories without an `alignfirst context` instruction.
 
@@ -52,7 +52,19 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --skill alcatchupaad --skill alcatchupspec </dev/null
 ```
 
-For both agents:
+For Pi (verified with `skills@1.7.2`, target `pi`):
+
+```sh
+npx -y skills add https://github.com/paleo/alignfirst --global --yes \
+  --agent pi \
+  --skill alspec --skill alplan --skill al --skill almerge \
+  --skill alreview --skill aldescription --skill alcatchup \
+  --skill alcatchupaad --skill alcatchupspec </dev/null
+```
+
+Pi discovers global `~/.agents/skills/`; the verified installer writes there. Confirm current help/source when upgrading, since target layouts can change. Invoke `/skill:alspec`, not `/alspec`, in stock Pi.
+
+For Claude Code and Codex together:
 
 ```sh
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
@@ -63,6 +75,12 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
 ```
 
 Restart the target agent after installation. Update the skills with `npx -y skills update --global --yes`, and remove one with `npx -y skills remove --global <skill-name> --yes`.
+
+### Optional Pi subagents
+
+For a direct AlignFirst user who requests isolated plan/review delegation, offer `pi install npm:@alignfirst/pi-subagent` as a separate executable capability. The protocols retain their host-neutral fallback when no subagent tool exists. A skills-only request installs no extensions; the generic background package is unnecessary for synchronous delegation.
+
+Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. The package targets Pi 1.3.0 and requires Node.js 22.19 or later. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
 
 ## Configure the Project
 
@@ -140,7 +158,7 @@ Replace any `Docmap - Seek Documentation` section and redundant protocol instruc
 
 ### Repositories Without AlignFirst Instructions
 
-A developer who works in a repository without this section, such as a companion-backed one ([companion-setup.md](companion-setup.md)), adds this section to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the agent's equivalent), with the project's path:
+A developer who works in a repository without this section, such as a companion-backed one ([companion-setup.md](companion-setup.md)), adds this section to their global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, or the agent's equivalent), with the project's path:
 
 ```markdown
 ## AlignFirst - Start every session with the project context

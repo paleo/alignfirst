@@ -3,7 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { CLAUDE_DEFAULT_MODELS, CODEX_DEFAULT_MODELS } from "../src/code/models.js";
+import type { CodingAgent } from "../src/code/coding-agent.js";
+import { CLAUDE_DEFAULT_MODELS, CODEX_DEFAULT_MODELS, resolveModels } from "../src/code/models.js";
 import { PLATFORMS } from "../src/config.js";
 import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
@@ -33,6 +34,8 @@ const OPENCLAW_CONFIG = {
 const CODING_AGENT_CONFIG = { platform: "codingAgent", code: { agent: "claude" } };
 
 const GLOBAL_FORMS = resolveCommandForms({});
+const NPX_ENV = { npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64" };
+const CHILDREN: readonly CodingAgent[] = ["claude", "codex", "pi"];
 
 const PLAYBOOK_TITLES: Record<string, string> = {
   playbook: "# Operating Instructions for an AlignFirst Assistant",
@@ -111,7 +114,9 @@ describe("renderCodeGuide", () => {
       expect(guide).toContain("The coding agent `aligndev code` launches is **the agent**.");
       expect(guide).toContain("## CLI reference");
       expect(guide).toContain(
-        "aligndev code status (<session-file> | --ticket <id> | --no-ticket)",
+        platform === "openclaw"
+          ? "aligndev code status (<session-file> | --ticket <id> | --no-ticket)"
+          : "aligndev code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]",
       );
       expect(guide).toContain("aligndev code quota");
       expect(guide).toContain("alignfirst");
@@ -183,7 +188,130 @@ describe("renderCodeGuide", () => {
       expect(guide).not.toContain("{{");
       expect(guide).toContain("`astra`, `sol`, `terra`, `luna`");
       expect(guide).not.toContain("`fable`");
-      expect(guide).not.toContain("claude");
+      expect(guide).not.toContain("`claude`, then `/login`");
+      expect(guide).not.toContain("Normal runs use `--permission-mode auto`");
+    }
+  });
+});
+
+describe("Pi parent delegation", () => {
+  it.each(CHILDREN.flatMap((agent) => [false, true].map((viaNpx) => [agent, viaNpx] as const)))(
+    "keeps the Pi parent route for selected child %s (npx=%s)",
+    async (agent, viaNpx) => {
+      const fixture = makeFixture();
+      const cwd = makeRepository(fixture.root, "project");
+      writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
+      const forms = resolveCommandForms(viaNpx ? NPX_ENV : {});
+      const result = await runGuide(fixture, ["code"], {
+        cwd,
+        env: {
+          AI_AGENT: "pi",
+          CLAUDECODE: "1",
+          CODEX_THREAD_ID: "parent",
+          ...(viaNpx ? NPX_ENV : {}),
+        },
+      });
+      expect(result.code, result.stderr).toBe(0);
+      const guide = result.stdout;
+      expect(guide).toContain(`The current coding agent is \`${agent}\`.`);
+      for (const host of ["Pi", "Claude Code", "Codex"]) {
+        expect(guide).toContain(`### ${host} parent`);
+      }
+      expect(guide).toContain("`code.agent` selects the child only");
+      const example = guide.match(/```json\n([^\n]+)\n```/);
+      expect(example).not.toBeNull();
+      const call = JSON.parse(example?.[1] ?? "{}");
+      expect(call).toEqual({
+        action: "start",
+        command: `${forms.aligndev} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'`,
+        cwd: "/srv/projects/example",
+        label: "coding run",
+      });
+      expect(guide).toContain(
+        `${forms.aligndev} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>`,
+      );
+      expect(guide).toContain(`${forms.aligndev} code status <exact-file> --result`);
+      expect(guide).toContain(`${forms.aligndev} code status --meta <unique-run-key> --result`);
+      expect(guide).toContain(
+        'background` with `{"action":"status","id":"<returned-job-id>"}` first',
+      );
+      expect(guide).toContain('background` with `{"action":"stop","id":"<returned-job-id>"}`');
+      expect(guide).toContain("original absolute worktree");
+      expect(guide).toContain("parent conversation's identity");
+      expect(guide).toContain("exact AlignDev session-file path");
+      expect(guide).toContain("child conversation ID (`sessionId`)");
+      expect(guide).toContain("never reused for a successor or resume");
+      expect(guide).toContain("never interpolate raw user text");
+      expect(guide).toContain("**do not wait for the `Session file:` control line**");
+      expect(guide).toContain("event-triggered ownership check is not a waiting or polling loop");
+      expect(guide).toContain("unknown/retired/cleared handle");
+      expect(guide).toContain("Never fall back to the newest workspace or ticket run");
+      expect(guide).toContain("CLI imposes no numeric byte cap on final result text");
+      expect(guide).toContain("only for a specific diagnostic need");
+      expect(guide).toContain("One child turn does not complete the whole request");
+      expect(guide).toContain(
+        "repeated notice cannot duplicate reporting or launch successor work twice",
+      );
+      expect(guide).toContain("Never rerun coding merely to retry reporting");
+      expect(guide).toContain("One protocol run at a time per worktree and per ticket");
+      expect(guide).toContain("Preserve session files");
+      expect(guide).not.toContain("{{");
+      expect(guide).not.toMatch(
+        /aligndev_code|aligndev_code_cancel|background\.start|pi install npm:aligndev|aligndev pi install/,
+      );
+    },
+  );
+
+  it("requires capability and persistence without promising durable native delivery", () => {
+    const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, GLOBAL_FORMS);
+    const pi = guide.slice(guide.indexOf("### Pi parent"), guide.indexOf("### Claude Code parent"));
+    for (const instruction of [
+      "background` tool is available",
+      "one-shot print/JSON process is not a persistent assistant",
+      "Missing capability is an installation problem",
+      "pi install npm:@alignfirst/pi-background",
+      "skill alone supplies no executable tools",
+      "Do not substitute a blocking ordinary bash call, shell `&`",
+      "promise a wake without the facility",
+      "then call no tool and do not poll while waiting",
+      "completion notice is only a wake hint",
+      "standalone manual compaction or cancelled/failed navigation",
+      "Interruption or native queue clearing can lose automatic continuation",
+      "Already-submitted notices can appear after navigation or reload",
+      "Delivery is not exactly once",
+      "crash recovery is not promised",
+      "`/reload` cancel owned work",
+      "`code.skipPermissions` does not elevate Pi",
+    ])
+      expect(pi, instruction).toContain(instruction);
+    expect(pi).not.toContain("Then read the session file");
+    expect(pi).not.toMatch(/setInterval|sleep [0-9]|tail -f|nohup .*code/);
+    expect(guide).toContain("successful `status` query exits `0` even for a failed run");
+  });
+
+  it.each([false, true])("renders configured and unrestricted Pi policy (npx=%s)", (viaNpx) => {
+    const forms = resolveCommandForms(viaNpx ? NPX_ENV : {});
+    for (const configured of [false, true]) {
+      const models = configured ? ["provider/custom:high"] : undefined;
+      const guide = renderCodeGuide(
+        "codingAgent",
+        "pi",
+        resolveModels("pi", models),
+        configured ? models?.[0] : undefined,
+        forms,
+      );
+      expect(guide).toContain(
+        configured ? "One of `provider/custom:high`" : "Any nonblank pi-native selector",
+      );
+      expect(guide).toContain(
+        configured
+          ? "A new session defaults to `provider/custom:high`"
+          : "A new session defaults to the coding agent's default",
+      );
+      expect(guide).toContain("Pi quota is unsupported");
+      expect(guide).toContain("with optional thinking suffix");
+      expect(guide).toContain("Saved project trust is honored; no forced approval is passed");
+      expect(guide).not.toContain("{{");
     }
   });
 });
@@ -383,17 +511,19 @@ describe("every template, every platform", () => {
 
   it.each(PLATFORMS)("renders every %s topic with no placeholder left", async (platform) => {
     const special = platform === "openclaw" ? ["code", "project"] : ["code"];
-    for (const agent of ["claude", "codex"]) {
+    for (const agent of CHILDREN) {
       const fixture = makeFixture();
       writeConfig(fixture.home, {
         platform,
         ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
         code: { agent },
       });
-      for (const args of [[], ...[...PLAYBOOK_TOPICS[platform], ...special].map((t) => [t])]) {
-        const result = await runGuide(fixture, args);
-        expect(result.code, `${platform} ${args}: ${result.stderr}`).toBe(0);
-        expect(result.stdout, `${platform} ${args}`).not.toContain("{{");
+      for (const env of [{}, NPX_ENV]) {
+        for (const args of [[], ...[...PLAYBOOK_TOPICS[platform], ...special].map((t) => [t])]) {
+          const result = await runGuide(fixture, args, { env });
+          expect(result.code, `${platform} ${args}: ${result.stderr}`).toBe(0);
+          expect(result.stdout, `${platform} ${args}`).not.toContain("{{");
+        }
       }
     }
   });
@@ -435,18 +565,24 @@ describe("codingAgent guides", () => {
   const GUIDE_VARIANTS: GuideFileCondition[] = ["developers", "readme", "noGuide"];
 
   it.each(
-    ["claude", "codex"].flatMap((agent) =>
-      GUIDE_VARIANTS.map((variant) => [agent, variant] as const),
+    CHILDREN.flatMap((agent) =>
+      GUIDE_VARIANTS.flatMap((variant) =>
+        [false, true].map((viaNpx) => [agent, variant, viaNpx] as const),
+      ),
     ),
   )(
-    "renders every %s guide for %s with no OpenClaw tool, sentinel or topic",
-    async (agent, variant) => {
+    "renders every %s guide for %s (npx=%s) with no OpenClaw tool, sentinel or topic",
+    async (agent, variant, viaNpx) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
       const cwd = makeGuideVariants(fixture)[variant];
       for (const topic of TOPICS) {
-        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], {
+          cwd,
+          env: viaNpx ? NPX_ENV : {},
+        });
         expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
+        expect(result.stdout, `${agent} ${variant} ${topic}`).not.toContain("{{");
         for (const term of OPENCLAW_TERMS) {
           expect(result.stdout, `${topic} mentions ${term}`).not.toContain(term);
         }
@@ -563,6 +699,32 @@ describe("codingAgent guides", () => {
     expect(stdout).not.toContain("linked-workspace");
   });
 
+  it("aligns Pi acknowledgement, result retrieval and child delegation across runbooks", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, { platform: "codingAgent", code: { agent: "pi" } });
+    const playbook = (await runGuide(fixture, [])).stdout;
+    expect(playbook).toContain("Claude Code, Codex or Pi as the parent assistant");
+    expect(playbook).toContain("never your own subagents, `subagent` tool or tasks");
+    expect(playbook).toContain("A Pi child can use its own `subagent` tool");
+    const working = (await runGuide(fixture, ["working-session"])).stdout;
+    expect(working).toContain(
+      "without them, explain installation instead of promising a later report",
+    );
+    expect(working).toContain(
+      "validate the job handle and retrieve the exact run with `status --result`",
+    );
+    expect(working).toContain(
+      "for Pi without a finite ordered allowlist, use the configured/default model",
+    );
+    const consultation = (await runGuide(fixture, ["consultation"])).stdout;
+    expect(consultation).toContain("child session id, from authoritative completion retrieval");
+    expect(consultation).not.toContain("Retain the printed session id");
+    const setup = (await runGuide(fixture, ["project-workspace-setup"])).stdout;
+    expect(setup).toContain(
+      "if either is missing, explain the setup problem instead of launching or promising completion",
+    );
+  });
+
   it("routes the dispatcher to the working session", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
@@ -579,20 +741,32 @@ describe("codingAgent guides", () => {
     expect(step).toContain("`alignfirst config --json`");
   });
 
-  it("runs the agent in the background and outside the sandbox", async () => {
+  it("keeps Claude/Codex facilities and scopes elevation to those parents", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const { stdout } = await runGuide(fixture, ["code"]);
     expect(stdout).toMatch(/^# AlignFirst Delegation Guide\n/);
-    expect(stdout).toContain("your own background-execution facility, with no time limit");
-    expect(stdout).toContain("subject to your tool timeout (10 minutes in Claude Code)");
-    expect(stdout).toContain("wakes the session as the command exits (Claude Code does)");
+    const claude = stdout.slice(
+      stdout.indexOf("### Claude Code parent"),
+      stdout.indexOf("### Codex parent"),
+    );
+    const pi = stdout.slice(
+      stdout.indexOf("### Pi parent"),
+      stdout.indexOf("### Claude Code parent"),
+    );
+    expect(claude).toContain("background-execution facility with no time limit");
+    expect(claude).toContain("subject to your tool timeout (10 minutes in Claude Code)");
+    expect(claude).toContain("when the harness wakes the session as the command exits");
+    expect(pi).not.toContain("request escalated permissions");
+    expect(pi).not.toContain("sandbox disabled");
+    expect(pi).toContain("ordinary OS permissions and saved project trust");
     expect(stdout).toContain(
       "At the start of each later user turn, before anything else, check every pending run with `aligndev code status",
     );
-    expect(stdout).toContain("Run `aligndev code` outside your sandbox");
+    expect(stdout).toContain("Where no completion bridge is configured");
+    expect(stdout).not.toContain("Codex has no such wake today");
     expect(stdout).toContain("request escalated permissions");
-    expect(stdout).toContain("run it with the sandbox disabled");
+    expect(claude).toContain("with the sandbox disabled");
     expect(stdout).not.toContain("Running under OpenClaw");
     expect(stdout).not.toContain("background: true");
   });

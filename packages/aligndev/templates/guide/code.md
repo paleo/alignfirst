@@ -66,32 +66,66 @@ If the frontmatter's `exitReason` is `auth_required`, the coding agent is not au
 {{#codingAgent}}
 ## How it runs
 
-`{{ALIGNDEV}} code` runs the agent in the **foreground** and blocks until it finishes, streaming the transcript to stdout. It never backgrounds or detaches itself.
+`{{ALIGNDEV}} code` runs the agent in the **foreground** until it exits. It never backgrounds or detaches itself. By default it streams the transcript to stdout; `--quiet` suppresses that stream while preserving the durable session file and control/diagnostic output.
 
-Its first line, `Session file: <path>`, names the run's session file, the durable record of the run; retain that path. The file may live in the project's companion directory. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
+Choose the launch facility from your **parent host**, independently of the selected child `{{AGENT}}`. `code.agent` selects the child only. All three children (Claude Code, Codex, Pi) remain available from any supported parent.
 
-Coding runs can be long (several hours is fine), and a foreground command is subject to your tool timeout (10 minutes in Claude Code). **Always start `{{ALIGNDEV}} code` with your own background-execution facility, with no time limit.** Never detach it with `&` or a detach wrapper.
-
-Run `{{ALIGNDEV}} code` outside your sandbox: the agent needs network access, and it writes outside the project, to its own session storage and possibly to the companion directory. In Codex, request escalated permissions for the command. In Claude Code with sandboxing enabled, run it with the sandbox disabled.
-
-**One protocol run at a time per worktree and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
+**One protocol run at a time per worktree and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or cancel) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
 ## Background runs and reporting
 
-Once the run is started, end the turn telling the user, in their language, that the agent is working. Do not poll the run. A run is pending until you report its outcome.
+### Pi parent
 
-- When your harness wakes the session as the command exits (Claude Code does), follow "After a run completes" on that wake.
-- Otherwise (Codex has no such wake today), the report waits for the user's next message. At the start of each later user turn, before anything else, check every pending run with `{{ALIGNDEV}} code status <session-file>`, and report the ones that finished.
+Before launching, establish that the `background` tool is available and that this parent stays alive after its acknowledgement. A one-shot print/JSON process is not a persistent assistant. Missing capability is an installation problem: explain that the parent needs `pi install npm:@alignfirst/pi-background`. The AlignDev skill alone supplies no executable tools. Do not substitute a blocking ordinary bash call, shell `&`, `nohup`, or a detach wrapper, or promise a wake without the facility.
+
+Retain these distinct values for each run:
+
+- The original absolute worktree and this parent conversation's identity.
+- The returned background job handle (`job.id`), which authorizes job status and cancellation.
+- A fresh unique per-run `--meta` key, never reused for a successor or resume.
+- The exact AlignDev session-file path once resolved, including a companion location when applicable.
+- The child conversation ID (`sessionId`) for resume. It is neither a job handle nor a run-file path.
+
+Prepare the literal delegated prompt in a UTF-8 file, then launch the ordinary quoted shell command through `background` with `action: "start"` and `cwd`. Supply `--quiet --meta <unique-run-key>` yourself; the extension never parses or appends CLI options. This example assumes `/tmp/aligndev-request.txt` already contains the request. Generate a fresh key for every actual launch; the UUID below illustrates one run:
+
+```json
+{"action":"start","command":"{{ALIGNDEV}} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'","cwd":"/srv/projects/example","label":"coding run"}
+```
+
+For resume, use `{{ALIGNDEV}} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>` from the original worktree. A Pi child must resume from its recorded directory. Use safe shell quoting for paths and options; never interpolate raw user text into a command. A quoted heredoc with `--message-file -` is another literal-input route.
+
+Start returns after OS spawn acknowledgement. Retain its handle, key and cwd immediately; **do not wait for the `Session file:` control line**. End the launch turn with an acknowledgement in the user's language, then call no tool and do not poll while waiting. Natural completion requests an idle turn or a follow-up after busy work. A completion notice is only a wake hint.
+
+On a notice:
+
+1. Query `background` with `{"action":"status","id":"<returned-job-id>"}` first. This event-triggered ownership check is not a waiting or polling loop. Disregard an inactive origin or an unknown/retired/cleared handle: it can be a stale native notice after clear, navigation or reload and authorizes no workflow action. A still-running job authorizes no completion report.
+2. For a current-owner terminal job, run `{{ALIGNDEV}} code status <exact-file> --result` from its original worktree. If the path is not yet known, use `{{ALIGNDEV}} code status --meta <unique-run-key> --result` there. Resolve the returned `sessionFile:` relative to that worktree when necessary, retain its exact path, and use that path thereafter. Never fall back to the newest workspace or ticket run when identity is unknown. A launch can fail before creating a run file; report that failure rather than choosing another run.
+3. Read the authoritative status, `exitReason`, child `sessionId` and final Result from this response. `--result` excludes the transcript; the CLI imposes no numeric byte cap on final result text. Background output contains only quiet control/diagnostic output. Inspect it with `action: "output"`, or inspect the durable transcript, only for a specific diagnostic need.
+4. Continue authorized verification and dependent work, or ask genuine user questions and report authentication failures or blockers. One child turn does not complete the whole request. Record which outcome you handled so a repeated notice cannot duplicate reporting or launch successor work twice. Never rerun coding merely to retry reporting.
+
+Cancel through `background` with `{"action":"stop","id":"<returned-job-id>"}`. It gives attached work a five-second graceful window before escalation, allowing the CLI to seal its durable file. Preserve session files; `clear` removes only a terminal generic job record and its retained output.
+
+**Host limits:** standalone manual compaction or cancelled/failed navigation can delay a notice until another ordinary turn. Interruption or native queue clearing can lose automatic continuation. Already-submitted notices can appear after navigation or reload; validate ownership as above. Delivery is not exactly once. Normal shutdown, session replacement, successful tree navigation and `/reload` cancel owned work; crash recovery is not promised.
+
+Pi uses ordinary OS permissions and saved project trust, not an implied sandbox. `code.skipPermissions` does not elevate Pi or force project approval.
+
+### Claude Code parent
+
+Coding runs can be long (several hours is fine), and a foreground command is subject to your tool timeout (10 minutes in Claude Code). Use your own background-execution facility with no time limit. When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: the child needs network and writes outside the project. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling; follow "After a run completes" when the harness wakes the session as the command exits.
+
+### Codex parent
+
+Use your established background-execution facility with no time limit and request escalated permissions for `{{ALIGNDEV}} code`. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Where no completion bridge is configured, the report waits for the user's next message. At the start of each later user turn, before anything else, check every pending run with `{{ALIGNDEV}} code status <session-file>`, and report the ones that finished. This fallback does not assert that Codex lacks native queue capability.
+
+Neither parent detaches with `&` or a wrapper. A run is pending until its outcome is handled.
 
 ## After a run completes
 
-Run `{{ALIGNDEV}} code status <session-file>`. This reconciles a stale `running` record before reporting its status. Then read the session file and report the outcome to the user in this conversation. If the run failed, say so plainly and propose the next step; don't silently retry.
+**Pi parent:** use the ownership and result-only procedure above. **Claude Code or Codex parent:** run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
 
-An `exitReason` of `auth_required` in the frontmatter (`{{ALIGNDEV}} code` also exits `2`) means the coding agent is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry.
+An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the selected child is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
 
-Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. Verifying the result is different: run the verification your operating instructions prescribe before reporting. A failing check is new work, in a new agent run.
-
-Keep session files in place; they are the durable audit trail.
+Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. Run the verification your operating instructions prescribe. A failing check is new work, in a new agent run; do not silently retry. Keep session files as the durable audit trail.
 {{/codingAgent}}
 
 ## CLI reference
@@ -101,7 +135,14 @@ Keep session files in place; they are the durable audit trail.
 {{ALIGNDEV}} code new --catchup --ticket <id> [--protocol <protocol>] [--message-file <path|->]
 {{ALIGNDEV}} code new --message "..."
 {{ALIGNDEV}} code resume <sessionId> [--protocol <protocol>] [--message "..."]
+{{#openclaw}}
 {{ALIGNDEV}} code status (<session-file> | --ticket <id> | --no-ticket)
+{{/openclaw}}
+{{#codingAgent}}
+{{ALIGNDEV}} code new --message-file <path> --quiet --meta <unique-run-key>
+{{ALIGNDEV}} code resume <sessionId> --message-file <path> --quiet --meta <unique-run-key>
+{{ALIGNDEV}} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]
+{{/codingAgent}}
 {{ALIGNDEV}} code quota
 ```
 
@@ -109,8 +150,14 @@ Keep session files in place; they are the durable audit trail.
 |---------|-------------|
 | `new` | Start a new session. |
 | `resume <sessionId>` | Continue an existing session. |
+{{#openclaw}}
 | `status` | Reconcile and show one run's durable status, including `contextTokens`. Give the session file, or `--ticket <id>` / `--no-ticket` to select the newest run of that scope. Does not start the agent. |
 | `quota` | Show the selected coding agent's account limits and reset times. Takes no option. |
+{{/openclaw}}
+{{#codingAgent}}
+| `status` | Reconcile and show one run's durable status, including `contextTokens`. Select exactly one file, `--ticket <id>`, `--no-ticket`, or `--meta <key>`; scope/key selectors choose their newest matching run. Does not start the agent. |
+| `quota` | Show account limits and reset times for Claude Code/Codex. Unsupported for Pi; check the provider directly. Takes no option. |
+{{/codingAgent}}
 
 | Option | Description |
 |--------|-------------|
@@ -121,11 +168,25 @@ Keep session files in place; they are the durable audit trail.
 | `--message-file <path>` | Read a UTF-8 message file; `-` reads stdin. Mutually exclusive with `--message`. |
 | `--catchup` | Load the ticket history before the protocol and message. `new` only, requires a ticket. Alone, it returns a short synthesis. |
 | `--model <model>` | {{MODEL_POLICY}}. A new session defaults to {{DEFAULT_MODEL}}; a resume keeps the session's model. Prefer the default (omit the flag). |
+{{#openclaw}}
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `{{ALIGNDEV}} code` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
+{{/openclaw}}
+{{#codingAgent}}
+| `--meta <key>` | On `new/resume`, store an opaque handoff key verbatim. On `status`, select the newest run with that exact key anywhere in the active session tree. Use a unique key per run for exact asynchronous lookup. |
+| `--quiet` | `new/resume` only. Suppress live transcript stdout, preserving the durable transcript, initial `Session file:` line, new `Session ID:`, and failure diagnostics. |
+| `--result` | `status` only. Append a terminal run's final Result when present, without transcript output. Running runs show metadata only. No numeric final-text byte cap. |
+{{/codingAgent}}
 
+{{#openclaw}}
 The current coding agent is `{{AGENT}}`. `code.models` in the aligndev settings replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
 `{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+{{/openclaw}}
+{{#codingAgent}}
+The current coding agent is `{{AGENT}}`. A nonempty `code.models` in the aligndev settings replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses `code.defaultModel`, else Pi's own default; a resume keeps its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+
+`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session; Pi quota is unsupported.
+{{/codingAgent}}
 
 `contextTokens` is what the run left in the agent's context window, measured from its last model response. It describes the conversation, so resuming a session carries the figure forward and each run reports a larger one.
 
@@ -133,7 +194,12 @@ The current coding agent is `{{AGENT}}`. `code.models` in the aligndev settings 
 
 {{PERMISSIONS}}.
 
+{{#openclaw}}
 For `new` runs, the `Session ID:` is printed to stdout and written with `agent: {{AGENT}}` in the session file frontmatter. Save it to resume the conversation later. Resume requires the same selected agent; agentless legacy sessions require a new session.
+{{/openclaw}}
+{{#codingAgent}}
+For `new` runs, the child `Session ID:` is printed to stdout and recorded as `sessionId` with `agent: {{AGENT}}` in the durable session file. An asynchronous Pi parent retains it from authoritative `status --result` retrieval, without waiting at launch. Save it for resume, which requires the same selected child; agentless legacy sessions require a new session.
+{{/codingAgent}}
 
 **No protocol or catchup:** the message is sent as-is (no AlignFirst command). Use it to answer the agent's questions in an existing session, execute a plan in a new session, or ask a question:
 

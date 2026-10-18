@@ -62,7 +62,12 @@ The message carries the complete question, however detailed, the selected branch
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Use the delegation guide's background launch and completion procedure.
 {{/codingAgent}}
 
+{{#openclaw}}
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
+{{/openclaw}}
+{{#codingAgent}}
+Retain the child session id, from authoritative completion retrieval for an asynchronous Pi launch. Follow the delegation guide instead of waiting for it at launch. Later turns of the same topic resume that session, so the discussion accumulates in one place.
+{{/codingAgent}}
 
 ## Step 4 — Relay
 

@@ -315,7 +315,12 @@ Feel free to do the rest yourself (except coding) when it's more practical.
 
 ### A background run moves the report
 
+{{#openclaw}}
 Launching a background run ends the turn: the closing message is the launch acknowledgement, and the report moves to the run's completion turn. Each further run launched from that turn moves the report again.
+{{/openclaw}}
+{{#codingAgent}}
+Launching a background run ends the turn on its acknowledgement. For a Pi parent, first verify the `background` capability and a persistent parent, as the delegation guide requires; without them, explain installation instead of promising a later report. On a Pi notice, validate the job handle and retrieve the exact run with `status --result`. Continue authorized work or report genuine questions/blockers. A child's completed turn is not completion of the whole request. Further runs use the same launch procedure; repeated notices must not duplicate successor work. Claude Code and Codex retain their host-specific completion/fallback routes in the delegation guide.
+{{/codingAgent}}
 
 ### The plan is not a gate
 
@@ -471,7 +476,12 @@ Either way, the report states the error and your decision.
 
 #### Dev-server log review
 
+{{#openclaw}}
 After using a dev-server, have a separate no-protocol agent run with the smallest available model inspect its logs: give it the log locations and ask for errors or unusual behavior. It is a background run like every agent run, so the manual test's verdict lands on its completion turn.
+{{/openclaw}}
+{{#codingAgent}}
+After using a dev-server, have a separate no-protocol agent run inspect its logs: give it the log locations and ask for errors or unusual behavior. Choose the smallest available model from the child's ordered list; for Pi without a finite ordered allowlist, use the configured/default model instead. Launch and retrieve its result through the delegation guide's parent-host route before reporting the manual test's verdict.
+{{/codingAgent}}
 
 Clean logs are required for the manual test to pass.
 
