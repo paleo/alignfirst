@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -19,7 +19,6 @@ const BASE: RunConfig = {
   executableModel: undefined,
   skipPermissions: false,
   additionalDirectories: [],
-  unset: [],
   env: {},
 };
 
@@ -135,6 +134,7 @@ describe("Codex protocol", () => {
 
   it("ignores auth-looking assistant text when the run recovers", () => {
     const state = createCodexState();
+    event(state, { type: "thread.started", thread_id: "thread-1" });
     event(state, {
       type: "item.completed",
       item: { type: "agent_message", text: "Not logged in, but this is ordinary output" },
@@ -192,26 +192,59 @@ describe("Codex protocol", () => {
   });
 });
 
+describe("Codex selected native context", () => {
+  it.each([undefined, "", "replacement"])(
+    "rejects missing or changed resume identity %j permanently",
+    (id) => {
+      const state = createCodexState({ ...BASE, resume: "expected" });
+      event(state, { type: "thread.started", thread_id: id });
+      event(state, { type: "thread.started", thread_id: "expected" });
+      event(state, {
+        type: "item.completed",
+        item: { type: "agent_message", text: "later success" },
+      });
+      event(state, { type: "turn.completed" });
+      expect(assessCodexState(state)).toMatchObject({
+        succeeded: false,
+        error: expect.stringMatching(/identity/),
+      });
+    },
+  );
+
+  it("reads the same thread independently from two native homes", () => {
+    const original = codexHome;
+    writeRollout("shared-thread", [{ occupancy: 100, total: 1000 }]);
+    const first = completedState("shared-thread", { streamTotal: 1000 });
+    const other = mkdtempSync(join(tmpdir(), "aligndev-other-home-"));
+    try {
+      codexHome = other;
+      writeRollout("shared-thread", [{ occupancy: 700, total: 1000 }]);
+      const second = completedState("shared-thread", { streamTotal: 1000 });
+      expect(assessCodexState(first).contextTokens).toBe(100);
+      expect(assessCodexState(second).contextTokens).toBe(700);
+    } finally {
+      codexHome = original;
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+});
+
 function event(state: ReturnType<typeof createCodexState>, value: unknown): string | undefined {
   return interpretCodexLine(JSON.stringify(value), state);
 }
 
 let codexHome: string | undefined;
-let previousCodexHome: string | undefined;
 
 beforeEach(() => {
-  previousCodexHome = process.env.CODEX_HOME;
   codexHome = mkdtempSync(join(tmpdir(), "aligndev-codex-home-"));
-  process.env.CODEX_HOME = codexHome;
 });
 
 afterEach(() => {
-  if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
-  else process.env.CODEX_HOME = previousCodexHome;
+  if (codexHome !== undefined) rmSync(codexHome, { recursive: true, force: true });
 });
 
 function completedState(threadId: string, options: { streamTotal: number }) {
-  const state = createCodexState();
+  const state = createCodexState({ ...BASE, env: { CODEX_HOME: codexHome } });
   event(state, { type: "thread.started", thread_id: threadId });
   event(state, {
     type: "turn.completed",

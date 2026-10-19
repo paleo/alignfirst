@@ -13,6 +13,7 @@ import type { CodingAgent } from "./coding-agent.js";
 export interface SessionFrontmatter {
   status: "running" | "succeeded" | "failed";
   agent: CodingAgent | null;
+  profile: string | null;
   protocol: string | null;
   ticket: string | null;
   model: string | null;
@@ -299,6 +300,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
   return {
     status: (map.status as SessionFrontmatter["status"]) ?? "running",
     agent: parseAgent(map.agent),
+    profile: map.profile ?? null,
     protocol: map.protocol ?? null,
     ticket: map.ticket ?? null,
     model: map.model ?? null,

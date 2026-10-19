@@ -15,13 +15,14 @@ const CODEX_CATALOG_TIMEOUT_MS = 30_000;
 export function resolveModels(
   agent: CodingAgent,
   override: readonly string[] | undefined,
+  aliases: Readonly<Record<string, string>> = {},
 ): readonly string[] | undefined {
   if (override !== undefined && override.length > 0) return override;
   switch (agent) {
     case "claude":
-      return CLAUDE_DEFAULT_MODELS;
+      return [...new Set([...CLAUDE_DEFAULT_MODELS, ...Object.keys(aliases)])];
     case "codex":
-      return CODEX_DEFAULT_MODELS;
+      return [...new Set([...CODEX_DEFAULT_MODELS, ...Object.keys(aliases)])];
     case "pi":
       return;
   }
@@ -43,13 +44,17 @@ export type ExecutableModelResolver = (
 export function createExecutableModelResolver(
   runCatalog: ModelCatalogRunner = runCodexModelCatalog,
 ): ExecutableModelResolver {
-  let cachedSlugs: readonly string[] | undefined;
+  const catalogs = new WeakMap<NodeJS.ProcessEnv, Promise<readonly string[]>>();
   return async (agent, selectedModel, context) => {
     if (selectedModel === undefined) return;
     if (agent !== "codex" || !CODEX_ALIASES.has(selectedModel)) return selectedModel;
     try {
-      cachedSlugs ??= parseBundledModelSlugs(await runCatalog(context));
-      const slug = selectNewestCodexModel(cachedSlugs, selectedModel);
+      let catalog = catalogs.get(context.env);
+      if (catalog === undefined) {
+        catalog = runCatalog(context).then(parseBundledModelSlugs);
+        catalogs.set(context.env, catalog);
+      }
+      const slug = selectNewestCodexModel(await catalog, selectedModel);
       if (slug !== undefined) return slug;
       throw new Error("the bundled catalog contains no matching model");
     } catch (error) {
@@ -58,7 +63,12 @@ export function createExecutableModelResolver(
   };
 }
 
-export const resolveExecutableModel = createExecutableModelResolver();
+export function expandModelAlias(
+  model: string | undefined,
+  aliases: Readonly<Record<string, string>> = {},
+): string | undefined {
+  return model !== undefined && Object.hasOwn(aliases, model) ? aliases[model] : model;
+}
 
 export function parseBundledModelSlugs(output: string): readonly string[] {
   let value: unknown;
@@ -122,7 +132,7 @@ function codexAliasError(alias: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   return (
     `Unable to resolve Codex model alias ${JSON.stringify(alias)}: ${detail}. ` +
-    "Update the Codex CLI, or set `code.models` in the aligndev settings to an explicit full model " +
+    "Update the Codex CLI, or set `code.profiles.<name>.models` in the aligndev settings to an explicit full model " +
     "slug and select that value."
   );
 }

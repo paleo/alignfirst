@@ -33,10 +33,11 @@ export interface CodexContextReading {
 export function readCodexContext(
   threadId: string | undefined,
   streamTotal: number | undefined,
+  env: NodeJS.ProcessEnv = {},
 ): CodexContextReading {
   if (threadId === undefined || threadId === "") return failed("Codex reported no thread id.");
   if (streamTotal === undefined) return failed("Codex reported no turn.completed usage.");
-  const path = findRolloutPath(threadId);
+  const path = findRolloutPath(threadId, env);
   if (path === undefined) return failed(`No Codex rollout found for thread ${threadId}.`);
   const records = readUsageRecords(path);
   if (records.length === 0) return failed(`No token_count record in ${basename(path)}.`);
@@ -58,8 +59,11 @@ function failed(error: string): CodexContextReading {
   return { contextTokens: null, compacted: false, error };
 }
 
-function findRolloutPath(threadId: string): string | undefined {
-  const root = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), SESSIONS_DIR);
+function findRolloutPath(threadId: string, env: NodeJS.ProcessEnv): string | undefined {
+  const root = join(
+    env.CODEX_HOME ?? join(env.HOME ?? env.USERPROFILE ?? homedir(), ".codex"),
+    SESSIONS_DIR,
+  );
   let entries: string[];
   try {
     entries = readdirSync(root, { recursive: true, encoding: "utf8" });

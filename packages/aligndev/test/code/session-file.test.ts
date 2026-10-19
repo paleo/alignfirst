@@ -25,6 +25,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
   return {
     status: "running",
     agent: "claude",
+    profile: null,
     protocol: "spec",
     ticket: "29",
     model: null,
@@ -104,8 +105,12 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block).agent).toBe("pi");
   });
 
-  it("parses an omitted legacy agent as null", () => {
+  it("reads omitted historical profile/agent fields as null", () => {
     expect(parseFrontmatter("status: succeeded").agent).toBeNull();
+    expect(parseFrontmatter("status: succeeded").profile).toBeNull();
+    expect(
+      parseFrontmatter(serializeFrontmatter({ ...frontmatter, profile: "work account" })).profile,
+    ).toBe("work account");
   });
 
   it("round-trips the context size and rejects a non-numeric one", () => {

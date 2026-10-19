@@ -1,373 +1,390 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import { loadConfig, requireProjectsRoot, resolveCodeConfig } from "../src/config.js";
-import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
-
-const EXPLICIT = { platform: "openclaw", code: { agent: "claude" } };
+import {
+  type CodingProfile,
+  loadConfig,
+  requireProjectsRoot,
+  resolveCodeConfig,
+} from "../src/config.js";
+import { ALIGNFIRST_BIN, makeSink, writeSettings as writeConfig } from "./helpers.js";
 
 const homes: string[] = [];
+// biome-ignore lint/suspicious/noTemplateCurlyInString: Exercises literal environment values.
+const LITERAL_ENV = "$HOME/${KEY} `echo x`";
+const PROFILES = {
+  global: { agent: "claude" },
+  project: { agent: "codex" },
+  recorded: { agent: "pi" },
+  explicit: { agent: "claude" },
+  detected: { agent: "codex" },
+} satisfies Record<string, CodingProfile>;
 
 afterEach(() => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
 
-function makeHome(): string {
+function makeHome(config?: object): string {
   const home = mkdtempSync(join(tmpdir(), "aligndev-config-"));
   homes.push(home);
+  if (config !== undefined) writeConfig(home, config);
   return home;
 }
 
-// `main` options to render the playbook in `home`, with the repository's alignfirst.
-function guideRun(home: string) {
-  return {
+function profileConfig(profile: object): object {
+  return { code: { profile: "test", profiles: { test: profile } } };
+}
+
+function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}) {
+  const stdout = makeSink();
+  const stderr = makeSink();
+  return main({
+    argv: ["node", "aligndev", ...argv],
     cwd: home,
-    env: { HOME: home },
     home,
+    env: { HOME: home, ...env },
     alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
-  };
+    stdout,
+    stderr,
+  }).then((code) => ({ code, stdout: stdout.text(), stderr: stderr.text() }));
 }
 
-function configPathOf(home: string): string {
-  return join(home, ".alignfirst", "aligndev.settings.json");
-}
-
-function oldConfigPathOf(home: string): string {
-  return join(home, ".alignfirst", "aligndev.config.json");
-}
-
-function writeRawConfig(home: string, content: string): string {
-  const path = configPathOf(home);
-  mkdirSync(join(home, ".alignfirst"), { recursive: true });
-  writeFileSync(path, content);
-  return path;
-}
-
-describe("loadConfig", () => {
-  it("applies the defaults when the file is absent", () => {
+describe("settings shape", () => {
+  it("keeps absent settings and file settings distinct from effective defaults", () => {
     const home = makeHome();
-    expect(loadConfig(home)).toEqual({
-      path: configPathOf(home),
+    const config = loadConfig(home);
+    expect(config).toEqual({
+      path: join(home, ".alignfirst/aligndev.settings.json"),
       platform: "codingAgent",
-      code: { skipPermissions: false, unset: [] },
+      code: {},
     });
-  });
-
-  it("applies the defaults to the keys the file omits", () => {
-    const home = makeHome();
-    const path = writeConfig(home, { code: { models: ["opus"] } });
-    expect(loadConfig(home)).toEqual({
-      path,
-      platform: "codingAgent",
-      code: { models: ["opus"], skipPermissions: false, unset: [] },
-    });
-  });
-
-  it("reads every key and applies the code defaults", () => {
-    const home = makeHome();
-    const path = writeConfig(home, {
-      platform: "openclaw",
-      projectsRoot: "/srv/projects",
-      code: { agent: "codex" },
-    });
-    expect(loadConfig(home)).toEqual({
-      path,
-      platform: "openclaw",
-      projectsRoot: { path: "/srv/projects", written: "/srv/projects" },
-      code: { agent: "codex", skipPermissions: false, unset: [] },
-    });
-  });
-
-  it("accepts the codingAgent platform without projectsRoot", () => {
-    const home = makeHome();
-    const path = writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
-    expect(loadConfig(home)).toEqual({
-      path,
-      platform: "codingAgent",
-      code: { agent: "claude", skipPermissions: false, unset: [] },
-    });
-  });
-
-  it("keeps the configured code options", () => {
-    const home = makeHome();
-    writeConfig(home, {
-      platform: "openclaw",
-      code: {
-        agent: "claude",
-        defaultModel: "opus",
-        models: ["opus"],
-        skipPermissions: true,
-        unset: ["TOKEN"],
-      },
-    });
-    expect(loadConfig(home).code).toEqual({
+    expect(resolveCodeConfig(config, { CLAUDECODE: "1" })).toMatchObject({
+      profile: null,
       agent: "claude",
-      defaultModel: "opus",
-      models: ["opus"],
-      skipPermissions: true,
-      unset: ["TOKEN"],
+      skipPermissions: false,
+      unset: [],
+      childEnv: { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" },
     });
+    expect(config.code).toEqual({});
   });
 
-  it("expands ~/ against home and resolves a relative root against the config directory", () => {
-    const home = makeHome();
-    writeConfig(home, { ...EXPLICIT, projectsRoot: "~/projects" });
+  it("retains platform and resolves projectsRoot independently", () => {
+    const home = makeHome({ platform: "openclaw", projectsRoot: "~/projects" });
     expect(loadConfig(home).projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
     });
-    writeConfig(home, { ...EXPLICIT, projectsRoot: "../work" });
-    expect(loadConfig(home).projectsRoot).toEqual({
-      path: join(home, "work"),
-      written: "../work",
-    });
+    writeConfig(home, { projectsRoot: "../work" });
+    expect(requireProjectsRoot(loadConfig(home)).path).toBe(join(home, "work"));
+    expect(() => requireProjectsRoot(loadConfig(makeHome()))).toThrow("projectsRoot");
   });
 
-  it("rejects the old file name when the new file is absent", () => {
+  it("rejects the old filename only when the current file is absent", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".alignfirst"), { recursive: true });
-    writeFileSync(oldConfigPathOf(home), JSON.stringify(EXPLICIT));
-    expect(() => loadConfig(home)).toThrow(
-      "Error: ~/.alignfirst/aligndev.config.json was renamed: " +
-        "move it to ~/.alignfirst/aligndev.settings.json",
-    );
+    mkdirSync(join(home, ".alignfirst"));
+    writeFileSync(join(home, ".alignfirst/aligndev.config.json"), "{}");
+    expect(() => loadConfig(home)).toThrow("was renamed");
+    writeConfig(home, {});
+    expect(loadConfig(home).code).toEqual({});
   });
 
-  it("reads only the new file when both exist", () => {
-    const home = makeHome();
-    const path = writeConfig(home, { code: { agent: "codex" } });
-    writeFileSync(oldConfigPathOf(home), "not json");
-    expect(loadConfig(home)).toEqual({
-      path,
-      platform: "codingAgent",
-      code: { agent: "codex", skipPermissions: false, unset: [] },
-    });
-  });
-
-  it("rejects an unreadable file, naming its path", () => {
-    const home = makeHome();
-    mkdirSync(configPathOf(home), { recursive: true });
-    expect(() => loadConfig(home)).toThrow(
-      `Error: invalid aligndev config ${configPathOf(home)}: `,
-    );
-  });
-
-  it("rejects invalid JSON, naming its path", () => {
-    const home = makeHome();
-    const path = writeRawConfig(home, "{ platform: openclaw }");
-    expect(() => loadConfig(home)).toThrow(`Error: invalid aligndev config ${path}: `);
-  });
+  it.each(["agent", "defaultModel", "models", "skipPermissions", "unset"])(
+    "rejects retired code.%s with conversion instructions",
+    (field) => {
+      const home = makeHome({ code: { [field]: "old" } });
+      expect(() => loadConfig(home)).toThrow(
+        new RegExp(`code.${field}.*code.profiles.*code.profile.*manual`),
+      );
+    },
+  );
 
   it.each([
-    ["an unknown top-level key", { ...EXPLICIT, platfrom: "openclaw" }, "platfrom"],
+    [{ platfrom: "openclaw" }, "platfrom"],
+    [{ platform: "other" }, "platform"],
+    [{ code: { extra: 1 } }, "code.extra"],
+    [{ code: { profile: "  " } }, "code.profile"],
+    [{ code: { defaultProfiles: { other: "a" } } }, "other"],
+    [{ code: { profiles: { " ": { agent: "pi" } } } }, "nonblank"],
+    [profileConfig({ agent: "other" }), "agent"],
+    [profileConfig({ agent: "pi", extra: 1 }), "extra"],
+    [profileConfig({ agent: "pi", models: [" "] }), "models"],
+    [profileConfig({ agent: "pi", defaultModel: " " }), "defaultModel"],
+    [profileConfig({ agent: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
+    [profileConfig({ agent: "pi", modelAliases: { x: " " } }), "modelAliases"],
+    [profileConfig({ agent: "pi", env: { "bad-name": "x" } }), "env"],
+    [profileConfig({ agent: "pi", env: { X: 2 } }), "env"],
+    [profileConfig({ agent: "pi", env: { X: "a\0b" } }), "NUL"],
+    [profileConfig({ agent: "pi", unset: [" X"] }), "unset"],
+    [profileConfig({ agent: "pi", env: { X: "x" }, unset: ["X"] }), "overlaps"],
+    [profileConfig({ agent: "pi", configDir: "\0" }), "configDir"],
+    [profileConfig({ agent: "pi", configDir: " " }), "configDir"],
     [
-      "an unknown code key",
-      { platform: "openclaw", code: { agent: "claude", effort: "high" } },
-      "effort",
+      profileConfig({ agent: "claude", configDir: "x", env: { CLAUDE_CONFIG_DIR: "y" } }),
+      "conflicts",
     ],
-    ["an empty default model", { ...EXPLICIT, code: { defaultModel: "" } }, "code.defaultModel"],
-    ["an invalid agent", { platform: "openclaw", code: { agent: "gemini" } }, "code.agent"],
-    ["an invalid platform", { ...EXPLICIT, platform: "slack" }, "platform"],
-  ])("rejects %s", (_name, config, problem) => {
-    const home = makeHome();
-    const path = writeConfig(home, config);
-    let message = "";
-    try {
-      loadConfig(home);
-    } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
-    }
-    expect(message).toMatch(new RegExp(`^Error: invalid aligndev config ${escapeRegExp(path)}: `));
-    expect(message).toContain(problem);
-    expect(message).not.toContain("\n");
+    [profileConfig({ agent: "codex", configDir: "x", unset: ["CODEX_HOME"] }), "conflicts"],
+    [
+      profileConfig({ agent: "pi", configDir: "x", env: { PI_CODING_AGENT_DIR: "y" } }),
+      "conflicts",
+    ],
+    [profileConfig({ agent: "pi", quota: { source: "pi" } }), "source"],
+    [profileConfig({ agent: "pi", quota: { source: "none", unset: [] } }), "no other options"],
+    [profileConfig({ agent: "pi", quota: { source: "none", env: {} } }), "no other options"],
+    [profileConfig({ agent: "pi", quota: { source: "none", configDir: "x" } }), "no other options"],
+    [
+      profileConfig({
+        agent: "pi",
+        quota: { source: "codex", configDir: "x", unset: ["CODEX_HOME"] },
+      }),
+      "quota.configDir",
+    ],
+    [
+      profileConfig({ agent: "pi", quota: { source: "claude", env: { X: "x" }, unset: ["X"] } }),
+      "quota.unset",
+    ],
+  ])("rejects structural settings errors %j", (settings, field) => {
+    const home = makeHome(settings);
+    expect(() => loadConfig(home)).toThrow(field);
+    expect(() => loadConfig(home)).toThrow(join(home, ".alignfirst/aligndev.settings.json"));
+  });
+
+  it("reports malformed and unreadable JSON without loading native state", () => {
+    const home = makeHome({});
+    const path = join(home, ".alignfirst/aligndev.settings.json");
+    writeFileSync(path, "not json");
+    expect(() => loadConfig(home)).toThrow(path);
+    rmSync(path);
+    mkdirSync(path);
+    expect(() => loadConfig(home)).toThrow(path);
+  });
+
+  it("normalizes coding and quota directories but preserves literal values and typed quota", () => {
+    const home = makeHome(
+      profileConfig({
+        agent: "pi",
+        configDir: "~/pi dir",
+        env: { LITERAL: LITERAL_ENV },
+        quota: {
+          source: "codex",
+          configDir: "../quota",
+          env: { ENDPOINT: "literal" },
+          unset: ["TOKEN"],
+        },
+      }),
+    );
+    const config = loadConfig(home);
+    const code = resolveCodeConfig(config, {});
+    expect(code.configDir).toBe(join(home, "pi dir"));
+    expect(code.childEnv.LITERAL).toBe(LITERAL_ENV);
+    expect(code.quota).toEqual({
+      source: "codex",
+      configDir: join(home, "quota"),
+      env: { ENDPOINT: "literal" },
+      unset: ["TOKEN"],
+    });
+    expect(code.childEnv.ENDPOINT).toBeUndefined();
   });
 });
 
-describe("resolveCodeConfig", () => {
-  it("keeps the configured agent without detection", () => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent: "codex" } });
-    expect(resolveCodeConfig(loadConfig(home), { CLAUDECODE: "1" }).agent).toBe("codex");
+describe("profile resolution", () => {
+  it.each([
+    [{ explicit: "explicit", project: { profile: "project" }, recorded: "recorded" }, "explicit"],
+    [{ project: { profile: "project" }, recorded: "recorded" }, "project"],
+    [{ recorded: "recorded" }, "recorded"],
+    [{ recorded: null }, "global"],
+    [{}, "global"],
+  ])("uses exact precedence %j", (selection, expected) => {
+    const config = loadConfig(makeHome({ code: { profile: "global", profiles: PROFILES } }));
+    expect(resolveCodeConfig(config, {}, selection).profile).toBe(expected);
+    expect(resolveCodeConfig(config, { CLAUDECODE: "1", AI_AGENT: "pi" }, selection).profile).toBe(
+      expected,
+    );
   });
 
   it.each([
     ["claude", { CLAUDECODE: "1" }],
-    ["codex", { CODEX_THREAD_ID: "019a" }],
+    ["codex", { CODEX_THREAD_ID: "t" }],
     ["pi", { PI_CODING_AGENT: "true" }],
     ["pi", { AI_AGENT: "pi" }],
     ["pi", { PI_CODING_AGENT: "true", AI_AGENT: "pi" }],
-  ])("detects %s from its environment", (agent, env) => {
-    expect(resolveCodeConfig(loadConfig(makeHome()), env).agent).toBe(agent);
+  ])("uses %s built-ins or its mapped default", (agent, env) => {
+    const home = makeHome();
+    expect(resolveCodeConfig(loadConfig(home), env)).toMatchObject({ agent, profile: null });
+    writeConfig(home, {
+      code: {
+        profiles: PROFILES,
+        defaultProfiles: {
+          [agent]: agent === "codex" ? "detected" : agent === "pi" ? "recorded" : "global",
+        },
+      },
+    });
+    expect(resolveCodeConfig(loadConfig(home), env).profile).not.toBeNull();
   });
 
-  it("fails when no coding agent is detected, naming the key and the path", () => {
-    const home = makeHome();
-    expect(() => resolveCodeConfig(loadConfig(home), { CLAUDECODE: "0" })).toThrow(
-      "Error: no coding agent detected (claude, codex, pi): run from a supported agent, or set " +
-        `"code.agent" (claude or codex or pi) in ${configPathOf(home)}.`,
-    );
+  it("keeps different model defaults for each detected agent", () => {
+    const home = makeHome({
+      code: {
+        defaultProfiles: { claude: "claude", codex: "codex", pi: "pi" },
+        profiles: {
+          claude: { agent: "claude", defaultModel: "opus" },
+          codex: { agent: "codex", defaultModel: "sol" },
+          pi: { agent: "pi", defaultModel: "openai/sol" },
+        },
+      },
+    });
+    const config = loadConfig(home);
+    expect(resolveCodeConfig(config, { CLAUDECODE: "1" }).defaultModel).toBe("opus");
+    expect(resolveCodeConfig(config, { CODEX_THREAD_ID: "thread" }).defaultModel).toBe("sol");
+    expect(resolveCodeConfig(config, { AI_AGENT: "pi" }).defaultModel).toBe("openai/sol");
   });
 
-  it("accepts a default model from the configured list", () => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent: "claude", defaultModel: "opus-4", models: ["opus-4"] } });
-    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("opus-4");
-  });
-
-  it("rejects a default model outside the agent's list", () => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent: "codex", defaultModel: "opus" } });
-    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(
-      `Error: code.defaultModel must be one of: astra, sol, terra, luna, in ${configPathOf(home)}.`,
-    );
-  });
-
-  it("fails when both coding agents are detected", () => {
-    const home = makeHome();
-    const env = { CLAUDECODE: "1", CODEX_THREAD_ID: "019a" };
-    expect(() => resolveCodeConfig(loadConfig(home), env)).toThrow(
-      `Error: multiple coding agents detected (claude, codex): set "code.agent" (claude or codex or pi) in ${configPathOf(home)}.`,
-    );
-  });
-});
-
-describe("pi configuration", () => {
-  it.each(["claude", "codex", "pi"])("keeps explicit %s despite all host markers", (agent) => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent } });
+  it("detects only when needed and never falls through selected errors", () => {
+    const config = loadConfig(makeHome({ code: { profile: "global", profiles: PROFILES } }));
+    for (const selection of [
+      { explicit: "missing" },
+      { project: { profile: "missing" } },
+      { recorded: "missing" },
+      { explicit: " " },
+    ]) {
+      expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" }, selection)).toThrow(
+        "missing profile",
+      );
+    }
     expect(
-      resolveCodeConfig(loadConfig(home), {
-        CLAUDECODE: "1",
-        CODEX_THREAD_ID: "thread",
-        AI_AGENT: "pi",
-        PI_CODING_AGENT: "true",
-      }).agent,
-    ).toBe(agent);
+      resolveCodeConfig(config, {}, { explicit: "explicit", recorded: "deleted" }).profile,
+    ).toBe("explicit");
+    const absent = loadConfig(makeHome());
+    expect(() => resolveCodeConfig(absent, {})).toThrow("no coding agent detected");
+    expect(() => resolveCodeConfig(absent, { CLAUDECODE: "1", AI_AGENT: "pi" })).toThrow(
+      "multiple coding agents",
+    );
   });
 
   it.each([
-    { CLAUDECODE: "1", AI_AGENT: "pi" },
-    { CODEX_THREAD_ID: "thread", PI_CODING_AGENT: "true" },
-  ])("names the actual mixed-agent ambiguity %j", (env) => {
-    expect(() => resolveCodeConfig(loadConfig(makeHome()), env)).toThrow(
-      /multiple coding agents detected.*pi/,
-    );
+    { profile: "missing" },
+    { defaultProfiles: { claude: "missing" } },
+    { defaultProfiles: { claude: "project" } },
+  ])("validates configured references at launch resolution, not shape loading %j", (settings) => {
+    const config = loadConfig(makeHome({ code: { ...settings, profiles: PROFILES } }));
+    expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow("invalid aligndev config");
   });
 
-  it.each([undefined, []])("accepts native defaults without a finite allowlist %j", (models) => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent: "pi", models, defaultModel: " provider/model:high " } });
+  it("uses own properties for arbitrary profile and alias names", () => {
+    const home = makeHome(
+      JSON.parse(
+        '{"code":{"profile":"__proto__","profiles":{"__proto__":{"agent":"pi","modelAliases":{"constructor":"openai/sol"}}}}}',
+      ),
+    );
+    expect(resolveCodeConfig(loadConfig(home), {}).profile).toBe("__proto__");
+    writeConfig(home, { code: { profile: "constructor", profiles: {} } });
+    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow("missing profile");
+  });
+
+  it("validates defaults with the same accepted-name policy, without alias recursion", () => {
+    const home = makeHome(
+      profileConfig({ agent: "codex", defaultModel: "fast", modelAliases: { fast: "sol" } }),
+    );
+    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("fast");
+    writeConfig(
+      home,
+      profileConfig({
+        agent: "codex",
+        defaultModel: "sol",
+        models: ["fast"],
+        modelAliases: { fast: "sol" },
+      }),
+    );
+    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow("one of: fast");
+    writeConfig(
+      home,
+      profileConfig({ agent: "pi", defaultModel: " provider/model:high ", models: [] }),
+    );
     expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe(" provider/model:high ");
   });
 
-  it("enforces nonblank defaults and exact configured membership", () => {
-    const home = makeHome();
-    writeConfig(home, { code: { agent: "pi", defaultModel: " \t " } });
-    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(/nonblank/);
-    writeConfig(home, { code: { agent: "pi", defaultModel: "terra", models: ["provider/terra"] } });
-    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(/one of: provider\/terra/);
-    writeConfig(home, {
-      code: { agent: "pi", defaultModel: "provider/terra", models: ["provider/terra"] },
+  it("finalizes the child environment once without mutating caller or merging profiles", () => {
+    const home = makeHome({
+      code: {
+        profile: "global",
+        profiles: {
+          global: { agent: "codex", env: { OTHER: "no" }, skipPermissions: true },
+          selected: {
+            agent: "claude",
+            configDir: "../native",
+            unset: ["TOKEN"],
+            env: {
+              KEEP: "profile",
+              CLAUDE_CODE_SESSION_ID: "forbidden",
+              CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "5",
+            },
+          },
+        },
+      },
     });
-    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("provider/terra");
-  });
-
-  it("keeps status/version agent resolution lazy in mixed environments", async () => {
-    const home = makeHome();
-    const env = { HOME: home, CLAUDECODE: "1", AI_AGENT: "pi" };
-    const stdout = makeSink();
-    expect(
-      await main({ ...guideRun(home), env, argv: ["node", "aligndev", "--version"], stdout }),
-    ).toBe(0);
-    const stderr = makeSink();
-    expect(
-      await main({
-        ...guideRun(home),
-        env,
-        argv: ["node", "aligndev", "code", "status", "--no-ticket"],
-        stderr,
-      }),
-    ).toBe(1);
-    expect(stderr.text()).toContain("no session file");
-    expect(stderr.text()).not.toContain("multiple coding agents");
-  });
-});
-
-describe("requireProjectsRoot", () => {
-  it("names the key and the file path", () => {
-    const home = makeHome();
-    writeConfig(home, EXPLICIT);
-    expect(() => requireProjectsRoot(loadConfig(home))).toThrow(
-      `Error: projectsRoot is missing from the aligndev config ${configPathOf(home)}.`,
-    );
+    const env = Object.freeze({
+      TOKEN: "secret",
+      KEEP: "caller",
+      HOME: home,
+      PI_MODEL: "parent",
+      PATH: "/fixture/bin",
+    });
+    const config = loadConfig(home);
+    const before = JSON.stringify(config);
+    const code = resolveCodeConfig(config, env, { explicit: "selected" });
+    expect(code.childEnv).toEqual({
+      KEEP: "profile",
+      HOME: home,
+      PATH: "/fixture/bin",
+      CLAUDE_CONFIG_DIR: join(home, "native"),
+      CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0",
+    });
+    expect(env.TOKEN).toBe("secret");
+    expect(JSON.stringify(config)).toBe(before);
+    expect(code.skipPermissions).toBe(false);
   });
 });
 
-describe("an absent config through main", () => {
-  it("runs guide and code with the detected agent", async () => {
-    const home = makeHome();
-    const env = { CODEX_THREAD_ID: "019a" };
-    const stdout = makeSink();
-    const code = await main({ argv: ["node", "aligndev", "code", "--help"], env, home, stdout });
-    expect(code).toBe(0);
-    expect(stdout.text()).toContain("(selected: codex)");
-    const guide = makeSink();
-    expect(
-      await main({
-        ...guideRun(home),
-        argv: ["node", "aligndev", "guide"],
-        env: { ...env, HOME: home },
-        stdout: guide,
-      }),
-    ).toBe(0);
-    expect(guide.text()).toContain("in a coding-agent session");
+describe("command boundaries outside Git", () => {
+  it.each([
+    ["code", "--help"],
+    ["code", "new", "--help"],
+    ["code", "quota", "--help"],
+    ["guide", "code"],
+  ])("resolves --profile without detection or .plans %j", async (...args) => {
+    const home = makeHome({ code: { profiles: PROFILES } });
+    const result = await run(home, [...args, "--profile", "recorded"]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("recorded");
+    expect(result.stdout).toContain("pi");
+    expect(existsSync(join(home, ".plans"))).toBe(false);
+    expect(existsSync(join(home, ".alignfirst/companions"))).toBe(false);
+    expect(() => requireProjectsRoot(loadConfig(home))).toThrow();
   });
 
-  it("fails only the agent-specific paths without a detected agent", async () => {
-    const home = makeHome();
-    for (const args of [
-      ["guide", "code"],
-      ["code", "--help"],
-    ]) {
-      const stderr = makeSink();
-      const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stderr });
-      expect(code).toBe(1);
-      expect(stderr.text()).toContain("Error: no coding agent detected");
-    }
-    for (const args of [["guide"], ["guide", "--help"], ["project", "--help"]]) {
-      const stdout = makeSink();
-      const code = await main({ ...guideRun(home), argv: ["node", "aligndev", ...args], stdout });
-      expect(code).toBe(0);
-    }
-  });
-});
+  it.each([["guide", "project"], ["guide"], ["code", "status", "--no-ticket"]])(
+    "rejects --profile on unrelated commands %j",
+    async (...args) => {
+      const result = await run(makeHome(), [...args, "--profile", "x"]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("profile");
+    },
+  );
 
-describe("a broken config through main", () => {
-  it("fails the commands that load it and spares --help and --version", async () => {
-    const home = makeHome();
-    const path = writeRawConfig(home, "not json");
-    for (const args of [["code", "status", "--no-ticket"], ["project", "list"], ["guide"]]) {
-      const stderr = makeSink();
-      const code = await main({ argv: ["node", "aligndev", ...args], env: {}, home, stderr });
-      expect(code).toBe(1);
-      expect(stderr.text()).toContain(`Error: invalid aligndev config ${path}: `);
-    }
-    for (const args of [["--help"], ["--version"]]) {
-      const code = await main({
-        argv: ["node", "aligndev", ...args],
-        env: {},
-        home,
-        stdout: makeSink(),
-      });
-      expect(code).toBe(0);
-    }
+  it("keeps durable status independent of launch references and default policy", async () => {
+    const home = makeHome({ code: { profile: "deleted", defaultProfiles: { pi: "missing" } } });
+    const result = await run(home, ["code", "status", "--no-ticket"]);
+    expect(result.stderr).toContain("no session file");
+    expect(result.stderr).not.toContain("missing profile");
+  });
+
+  it("spares top-level help/version but rejects corrupt settings elsewhere", async () => {
+    const home = makeHome({});
+    writeFileSync(join(home, ".alignfirst/aligndev.settings.json"), "bad json");
+    for (const args of [["--help"], ["--version"]]) expect((await run(home, args)).code).toBe(0);
+    for (const args of [["code", "status", "--no-ticket"], ["guide"]])
+      expect((await run(home, args)).stderr).toContain("invalid aligndev config");
   });
 });
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

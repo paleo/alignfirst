@@ -15,7 +15,6 @@ const BASE: RunConfig = {
   executableModel: undefined,
   skipPermissions: false,
   additionalDirectories: [],
-  unset: [],
   env: {},
 };
 
@@ -133,7 +132,10 @@ describe("Claude adapter", () => {
   it("keeps the last non-empty result when background work adds turns", () => {
     const state = createClaudeState();
     for (const result of ["Launched the subagent.", "The subagent finished.", ""]) {
-      interpretClaudeLine(JSON.stringify({ type: "result", result, is_error: false }), state);
+      interpretClaudeLine(
+        JSON.stringify({ type: "result", session_id: "sess-1", result, is_error: false }),
+        state,
+      );
     }
     expect(assessClaudeState(state)).toMatchObject({
       succeeded: true,
@@ -171,6 +173,37 @@ describe("Claude adapter", () => {
     const state = createClaudeState();
     interpretClaudeLine(JSON.stringify({ type: "assistant", message: { content: [] } }), state);
     expect(assessClaudeState(state).contextTokens).toBeUndefined();
+  });
+});
+
+describe("Claude native identity", () => {
+  it.each([undefined, "", "replacement"])(
+    "rejects missing or changed resume identity %j permanently",
+    (id) => {
+      const state = createClaudeState({ ...BASE, resume: "expected" });
+      interpretClaudeLine(
+        JSON.stringify({ type: "system", subtype: "init", session_id: id }),
+        state,
+      );
+      interpretClaudeLine(
+        JSON.stringify({
+          type: "result",
+          session_id: "expected",
+          result: "later success",
+          is_error: false,
+        }),
+        state,
+      );
+      const assessment = assessClaudeState(state);
+      expect(assessment.succeeded).toBe(false);
+      expect(assessment.error).toMatch(/identity/);
+    },
+  );
+
+  it("requires a native ID even on a successful-looking new run", () => {
+    const state = createClaudeState(BASE);
+    interpretClaudeLine(JSON.stringify({ type: "result", result: "done", is_error: false }), state);
+    expect(assessClaudeState(state).succeeded).toBe(false);
   });
 });
 

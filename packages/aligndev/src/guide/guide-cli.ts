@@ -10,6 +10,7 @@ import {
   resolveCodeConfig,
 } from "../config.js";
 import { errorMessage } from "../errors.js";
+import { readProjectReport } from "../project/layout.js";
 import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
 import { resolveGuideFile } from "./guide-file.js";
@@ -19,6 +20,7 @@ import { PLAYBOOK_DISPATCHER, PLAYBOOK_TOPICS } from "./topics.js";
 interface GuideArgs {
   topic?: string;
   root?: string;
+  profile?: string;
   help: boolean;
 }
 
@@ -42,6 +44,7 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
     args: tokens,
     options: {
       root: { type: "string" },
+      profile: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -52,7 +55,10 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
   if (values.root !== undefined && topic !== "project") {
     throw new Error("Error: --root is valid only with `aligndev guide project`.");
   }
-  return { topic, root: values.root, help: values.help };
+  if (values.profile !== undefined && topic !== "code") {
+    throw new Error("Error: --profile is valid only with `aligndev guide code`.");
+  }
+  return { topic, root: values.root, profile: values.profile, help: values.help };
 }
 
 function renderUsage(forms: CommandForms): string {
@@ -60,7 +66,7 @@ function renderUsage(forms: CommandForms): string {
     (platform) => `  ${platform}: ${PLAYBOOK_TOPICS[platform].join(", ")}`,
   );
   return `Usage:
-  ${forms.aligndev} guide [<topic>] [--root <path>]
+  ${forms.aligndev} guide [<topic>] [--root <path>] [--profile <name>]
   ${forms.aligndev} guide --help
 
 Without a topic, prints the playbook of the platform set in the aligndev settings.
@@ -75,17 +81,31 @@ ${playbookTopics.join("\n")}
 }
 
 function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerContext): string {
-  if (args.topic === "code") return renderCodeTopic(config, ctx);
+  if (args.topic === "code") return renderCodeTopic(config, ctx, args.profile);
   if (args.topic === "project" && config.platform === "openclaw") {
     return renderProjectsGuideForRoot({ ...ctx, projectsRoot: config.projectsRoot }, args.root);
   }
   return renderPlaybookTopic(args.topic, config, ctx);
 }
 
-function renderCodeTopic(config: LoadedConfig, ctx: ProjectsCallerContext): string {
-  const code = resolveCodeConfig(config, ctx.env);
-  const models = resolveModels(code.agent, code.models);
-  return renderCodeGuide(config.platform, code.agent, models, code.defaultModel, ctx.forms);
+function renderCodeTopic(
+  config: LoadedConfig,
+  ctx: ProjectsCallerContext,
+  profile?: string,
+): string {
+  const report = readProjectReport(ctx.alignfirstCommand, ctx.cwd, ctx.env);
+  if ("error" in report) throw new Error(report.error);
+  const code = resolveCodeConfig(config, ctx.env, { project: report.aligndev, explicit: profile });
+  const models = resolveModels(code.agent, code.models, code.modelAliases);
+  return renderCodeGuide(
+    config.platform,
+    code.agent,
+    models,
+    code.defaultModel,
+    ctx.forms,
+    code.profile,
+    code.configDir,
+  );
 }
 
 function renderPlaybookTopic(

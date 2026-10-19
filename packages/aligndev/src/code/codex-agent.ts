@@ -1,5 +1,10 @@
 import { readCodexContext } from "./codex-rollout.js";
-import type { AgentAdapter, AgentProtocolState, RunConfig } from "./run-agent.js";
+import {
+  captureNativeSession,
+  type AgentAdapter,
+  type AgentProtocolState,
+  type RunConfig,
+} from "./run-agent.js";
 
 export function createCodexAdapter(): AgentAdapter {
   return {
@@ -30,8 +35,10 @@ export function buildCodexArgs(config: RunConfig): string[] {
   return args;
 }
 
-export function createCodexState(): AgentProtocolState {
+export function createCodexState(config?: RunConfig): AgentProtocolState {
   return {
+    expectedSessionId: config?.resume,
+    nativeEnv: config?.env ?? {},
     protocolComplete: false,
     protocolFailed: false,
     authEvidence: false,
@@ -61,13 +68,24 @@ export function interpretCodexLine(line: string, state: AgentProtocolState): str
 }
 
 export function assessCodexState(state: AgentProtocolState) {
-  const succeeded = state.protocolComplete && !state.protocolFailed && state.result !== undefined;
-  const context = readCodexContext(state.sessionId, state.streamTotalTokens);
+  const succeeded =
+    state.sessionId !== undefined &&
+    state.identityFailure === undefined &&
+    state.protocolComplete &&
+    !state.protocolFailed &&
+    state.result !== undefined;
+  const context = readCodexContext(state.sessionId, state.streamTotalTokens, state.nativeEnv);
   return {
     succeeded,
     sessionId: state.sessionId,
     result: state.result,
-    error: succeeded ? undefined : state.failure,
+    error:
+      state.identityFailure ??
+      (succeeded ? undefined : state.failure) ??
+      (state.sessionId === undefined &&
+      (state.protocolComplete || state.expectedSessionId !== undefined)
+        ? "Codex reported no native session identity in the selected native configuration."
+        : undefined),
     authEvidence: state.authEvidence,
     contextTokens: context.contextTokens ?? undefined,
     contextCompacted: context.compacted,
@@ -95,7 +113,7 @@ function parseCodexLine(line: string): unknown {
 
 function captureThread(event: Record<string, unknown>, state: AgentProtocolState): string {
   const id = asString(event.thread_id);
-  if (id !== undefined && id !== "") state.sessionId = id;
+  captureNativeSession(state, id, "Codex");
   return `[init] session ${id ?? "?"}`;
 }
 
@@ -158,7 +176,7 @@ function missingCodexOutcome(state: AgentProtocolState): string {
 
 function codexAuthenticationMessage(detail?: string): string {
   const base =
-    "Coding agent not authenticated: an administrator must run `codex login` on the host before " +
+    "Coding agent not authenticated: an administrator must run `codex login` in the selected native configuration before " +
     "`aligndev code` can run again.";
   const reason = detail?.trim();
   return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;

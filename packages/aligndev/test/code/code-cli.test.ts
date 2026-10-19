@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { main } from "../../src/cli.js";
+import { main as runMain, type MainOptions } from "../../src/cli.js";
 import {
   buildRunConfig,
   checkLaunchGuards,
@@ -53,6 +53,15 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+function main(options: MainOptions): Promise<number> {
+  return runMain({
+    ...options,
+    cwd: options.cwd ?? options.home,
+    env: { HOME: options.home, ...options.env },
+    alignfirstCommand: options.alignfirstCommand ?? ALIGNFIRST,
+  });
+}
+
 function parse(tokens: string[]): SessionArgs {
   const command = parseCodeArgs(tokens, "aligndev");
   if (command.kind !== "session")
@@ -82,7 +91,7 @@ describe("coding-agent selection", () => {
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
     expect(stderr.text()).toContain("Error: no coding agent detected");
-    expect(stderr.text()).toContain('"code.agent"');
+    expect(stderr.text()).toContain('"code.profile"');
   });
 
   it("rejects an invalid agent in the config", async () => {
@@ -92,7 +101,7 @@ describe("coding-agent selection", () => {
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
     expect(stderr.text()).toContain("invalid aligndev config");
-    expect(stderr.text()).toContain("code.agent");
+    expect(stderr.text()).toContain("agent");
   });
 
   it("renders only the selected agent's models without discovery", async () => {
@@ -110,7 +119,7 @@ describe("coding-agent selection", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain("aligndev code new --protocol <protocol>");
-    expect(stdout.text()).toContain("code.agent            Coding agent");
+    expect(stdout.text()).toContain("code.profile          Global named profile");
     expect(stdout.text()).toContain("(selected: codex)");
     expect(stdout.text()).toContain("astra, sol, terra, luna");
     expect(stdout.text()).toContain("aligndev guide code");
@@ -231,7 +240,7 @@ describe("parseCodeArgs", () => {
   it("renders help after a command", () => {
     expect(parseCodeArgs(["new", "--help"], "aligndev")).toEqual({ kind: "help" });
     expect(parseCodeArgs(["resume", "-h"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({ kind: "help" });
+    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({ kind: "help", status: true });
     expect(parseCodeArgs(["quota", "--help"], "aligndev")).toEqual({ kind: "help" });
   });
 
@@ -378,6 +387,7 @@ describe("status", () => {
     writeInitialSessionFile(path, {
       status: "running",
       agent: "claude",
+      profile: null,
       protocol: "review",
       ticket,
       model: null,
@@ -486,7 +496,7 @@ describe("status", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain(
-      "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nstatus: failed\n",
+      "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nagent: claude\nprofile: \nmodel: \nstatus: failed\n",
     );
     expect(stdout.text()).toContain("exitReason: terminated\n");
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
@@ -637,11 +647,13 @@ describe("quota", () => {
         quotaReader,
       }),
     ).toBe(0);
-    expect(stdout.text()).toBe("Claude Code quota\n\nCurrent session: 25% used\n");
+    expect(stdout.text()).toContain(
+      "Profile: test; native source: claude\nClaude Code quota\n\nCurrent session: 25% used\n",
+    );
     expect(quotaReader).toHaveBeenCalledWith("claude", {
       cwd: tmpdir(),
-      env: { KEEP: "yes" },
-      unset: ["SECRET"],
+      env: expect.objectContaining({ KEEP: "yes", CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" }),
+      unset: [],
     });
     expect(modelResolver).not.toHaveBeenCalled();
   });
@@ -671,6 +683,7 @@ describe("resolveTicket", () => {
       frontmatter: {
         status: "succeeded",
         agent: "claude",
+        profile: null,
         protocol: "spec",
         ticket: "30",
         model: null,
@@ -699,14 +712,14 @@ describe("resolveTicket", () => {
     expect(resolveTicket(withMessage, [])).toBe("9");
   });
 
-  it("resume inherits the latest non-null ticket among the session's records", () => {
+  it("resume inherits the latest run's ticket, including null", () => {
     const records = [
       record({ ticket: "30", startedAt: "2026-07-01T09:00:00.000Z" }),
       record({ ticket: "31", startedAt: "2026-07-01T10:00:00.000Z" }),
       record({ ticket: null, startedAt: "2026-07-01T11:00:00.000Z" }),
       record({ ticket: "99", sessionId: "other", startedAt: "2026-07-01T12:00:00.000Z" }),
     ];
-    expect(resolveTicket(parse(["resume", "abc", "--message", "m"]), records)).toBe("31");
+    expect(resolveTicket(parse(["resume", "abc", "--message", "m"]), records)).toBeUndefined();
   });
 
   it("resume without any ticketed record yields no ticket", () => {
@@ -738,7 +751,13 @@ describe("resolveTicket", () => {
 });
 
 describe("buildRunConfig", () => {
-  const CODE: CodeConfig = { agent: "claude", skipPermissions: false, unset: [] };
+  const CODE: CodeConfig = {
+    agent: "claude",
+    profile: null,
+    childEnv: {},
+    skipPermissions: false,
+    unset: [],
+  };
 
   function build(overrides: Partial<RunInput>): RunConfig {
     return buildRunConfig({
@@ -748,7 +767,6 @@ describe("buildRunConfig", () => {
       ticket: undefined,
       cwd: "/proj",
       sessionFilePath: "/proj/.plans/_aligndev/s.md",
-      env: {},
       executableModel: undefined,
       alignfirst: "alignfirst",
       ...overrides,
@@ -758,13 +776,11 @@ describe("buildRunConfig", () => {
   it("threads the caller env into the config so the child inherits the same source", () => {
     const env = { FOO: "bar" };
     const config = build({
-      code: { agent: "claude", skipPermissions: true, unset: ["X", "Y"] },
-      env,
+      code: { ...CODE, skipPermissions: true, unset: ["X", "Y"], childEnv: env },
     });
     expect(config.env).toBe(env);
     expect(config.executableModel).toBeUndefined();
     expect(config.skipPermissions).toBe(true);
-    expect(config.unset).toEqual(["X", "Y"]);
     expect(config.resume).toBeUndefined();
   });
 
@@ -844,6 +860,7 @@ describe("launch guards", () => {
     return {
       status: "running",
       agent: "claude",
+      profile: null,
       protocol: "spec",
       ticket: "30",
       model: null,
@@ -1163,7 +1180,7 @@ describe("model selection", () => {
       .frontmatter;
   }
 
-  it("starts a new session with code.defaultModel and records it", async () => {
+  it("starts a new session with the profile defaultModel and records it", async () => {
     expect(await launch(["new", "-m", "go"])).toBe("sonnet");
     expect(newestFrontmatter()).toMatchObject({
       model: "sonnet",
@@ -1171,12 +1188,12 @@ describe("model selection", () => {
     });
   });
 
-  it("lets --model override code.defaultModel", async () => {
+  it("lets --model override the profile defaultModel", async () => {
     expect(await launch(["new", "-m", "go", "--model", "haiku"])).toBe("haiku");
     expect(newestFrontmatter().model).toBe("haiku");
   });
 
-  it("resumes with the model of the session's latest run, not code.defaultModel", async () => {
+  it("resumes with the model of the session's latest run, not the profile defaultModel", async () => {
     writeInitialSessionFile(
       join(plans, "_aligndev", "old.md"),
       statusFrontmatter({ sessionId: "abc", model: "opus", startedAt: "2026-08-29T10:00:00.000Z" }),
@@ -1710,7 +1727,7 @@ describe("pi launches", () => {
       result: "private pi answer",
     });
     writeConfig(home, {
-      code: { agent: "pi", models: ["other/model"], defaultModel: "other/model" },
+      code: { agent: "pi", models: [selected, "other/model"], defaultModel: "other/model" },
     });
     const resumed = await launch(["resume", "pi-session", "-m", "more", "--quiet"]);
     expect(resumed.code, resumed.stderr).toBe(0);
@@ -1912,7 +1929,7 @@ interface FakeClaude {
 // A `claude` on PATH that records its prompt and arguments, then reports session `session-1`.
 function installFakeClaude(
   base: string,
-  response = 'process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: "session-1" }));',
+  response = 'process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: process.argv.includes("--resume") ? process.argv[process.argv.indexOf("--resume") + 1] : "session-1" }));',
 ): FakeClaude {
   const bin = join(base, "bin");
   mkdirSync(bin);
@@ -1944,6 +1961,7 @@ function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFront
   return {
     status: "succeeded",
     agent: "claude",
+    profile: null,
     protocol: "review",
     ticket: null,
     model: null,

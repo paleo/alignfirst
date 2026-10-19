@@ -27,7 +27,7 @@ describe("shared runner helpers", () => {
   it("strips the unset names and keeps every other variable", () => {
     const env = buildAgentEnv(
       { PATH: "/bin", SECRET_KEY: "leak", OTHER_SECRET: "leak", KEEP: "yes", HOME: "/home/a" },
-      [" SECRET_KEY", "OTHER_SECRET ", "", "ABSENT"],
+      ["SECRET_KEY", "OTHER_SECRET", "ABSENT"],
     );
     expect(env).toEqual({ PATH: "/bin", KEEP: "yes", HOME: "/home/a" });
   });
@@ -67,8 +67,7 @@ describe("shared runner helpers", () => {
 
   it("drains trailing JSONL, writes completion, and strips the child environment", async () => {
     const { config, sessionFilePath } = makeRun();
-    config.env = { SECRET: "hidden", KEEP: "yes" };
-    config.unset = ["SECRET"];
+    config.env = buildAgentEnv({ SECRET: "hidden", KEEP: "yes" }, ["SECRET"]);
     const script = `
       const lines = [
         { type: "thread.started", thread_id: "thread-1" },
@@ -141,10 +140,15 @@ describe("shared runner helpers", () => {
 
   it("lets a Claude run wait for its background work without a time cap", async () => {
     const { config } = makeRun();
-    config.env = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "600000" };
+    config.env = buildAgentEnv(
+      { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "600000" },
+      [],
+      {},
+      createClaudeAdapter().env,
+    );
     const script = `
       const result = String(process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS);
-      process.stdout.write(JSON.stringify({ type: "result", result, is_error: false }));
+      process.stdout.write(JSON.stringify({ type: "result", session_id: "claude-1", result, is_error: false }));
     `;
     const result = await runAgent(
       config,
@@ -166,8 +170,9 @@ describe("shared runner helpers", () => {
         process.stdin.on("data", chunk => prompt += chunk);
         process.stdin.on("end", () => {
           const lines = process.argv[1] === "claude"
-            ? [{ type: "result", result: prompt, is_error: false }]
+            ? [{ type: "result", session_id: "claude-1", result: prompt, is_error: false }]
             : [
+                { type: "thread.started", thread_id: "codex-1" },
                 { type: "item.completed", item: { type: "agent_message", text: prompt } },
                 { type: "turn.completed" },
               ];
@@ -357,6 +362,7 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
   writeInitialSessionFile(sessionFilePath, {
     status: "running",
     agent: "codex",
+    profile: null,
     protocol: null,
     ticket: null,
     model: null,
@@ -382,7 +388,6 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
       executableModel: undefined,
       skipPermissions: false,
       additionalDirectories: [],
-      unset: [],
       env: {},
     },
   };

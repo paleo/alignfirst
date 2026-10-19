@@ -32,6 +32,7 @@ const ASSISTANT_SESSION_VARIABLES = [
 export interface RunConfig {
   prompt: string;
   sessionFilePath: string;
+  nativeContext?: string;
   cwd: string;
   resume?: string;
   quiet?: boolean;
@@ -39,7 +40,7 @@ export interface RunConfig {
   skipPermissions: boolean;
   // Writable directories besides the working directory, e.g. the project's companion.
   additionalDirectories: readonly string[];
-  unset: readonly string[];
+  // Finalized by profile resolution; discovery, state and spawn share this exact object.
   env: NodeJS.ProcessEnv;
 }
 
@@ -69,6 +70,9 @@ export interface AgentProtocolState {
   // Codex only: the cumulative thread total from `turn.completed`, used to pin the rollout file to
   // this run. It is not an occupancy.
   streamTotalTokens?: number;
+  expectedSessionId?: string;
+  identityFailure?: string;
+  nativeEnv?: NodeJS.ProcessEnv;
 }
 
 export interface AgentAssessment {
@@ -119,7 +123,11 @@ export async function runAgent(
   // a 401, so evidence from a successful run must not produce an auth_required result.
   const authRequired =
     failed && (assessment.authEvidence || adapter.isAuthenticationError(outcome.stderr));
-  const result = selectResult(adapter, state, assessment, outcome, authRequired);
+  const selectedResult = selectResult(adapter, state, assessment, outcome, authRequired);
+  const result =
+    failed && config.nativeContext !== undefined
+      ? `${config.nativeContext}: ${selectedResult}`
+      : selectedResult;
   applyCompletion(config.sessionFilePath, {
     status: failed ? "failed" : "succeeded",
     endedAt: new Date().toISOString(),
@@ -185,7 +193,7 @@ function spawnAgent(
 ): Promise<ProcessOutcome> {
   const child = spawnProcess(adapter.executable, adapter.buildArgs(config), {
     cwd: config.cwd,
-    env: { ...buildAgentEnv(config.env, config.unset), ...adapter.env },
+    env: config.env,
     stdio: ["pipe", "pipe", "pipe"],
   });
   const detachChildGuards = guardChildLifecycle(child, config.sessionFilePath, state);
@@ -250,19 +258,32 @@ function drainLines(buffer: string, onLine: (line: string) => void): string {
   return rest;
 }
 
+export function captureNativeSession(state: AgentProtocolState, id: unknown, agent: string): void {
+  if (typeof id !== "string" || id.trim() === "") {
+    state.identityFailure ??= `${agent} stream reported no native session identity.`;
+    return;
+  }
+  const expected = state.expectedSessionId ?? state.sessionId;
+  if (expected !== undefined && id !== expected) {
+    state.identityFailure ??= `${agent} resumed/native session identity changed; the conversation may be unavailable in the selected native configuration. Start a new session or select the correct profile.`;
+    return;
+  }
+  state.sessionId = id;
+}
+
 export function buildAgentEnv(
   baseEnv: NodeJS.ProcessEnv,
   unset: readonly string[],
+  overrides: Readonly<Record<string, string>> = {},
+  required: Readonly<Record<string, string>> = {},
 ): NodeJS.ProcessEnv {
-  const env = { ...baseEnv };
+  const inherited = { ...baseEnv };
+  for (const name of unset) delete inherited[name];
+  const env = { ...inherited, ...overrides };
   for (const name of ASSISTANT_SESSION_VARIABLES) delete env[name];
   if (env.PI_CODING_AGENT === "true") delete env.PI_CODING_AGENT;
   if (env.AI_AGENT === "pi") delete env.AI_AGENT;
-  for (const name of unset) {
-    const trimmed = name.trim();
-    if (trimmed !== "") delete env[trimmed];
-  }
-  return env;
+  return { ...env, ...required };
 }
 
 function guardChildLifecycle(

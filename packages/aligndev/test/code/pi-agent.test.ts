@@ -10,7 +10,6 @@ const BASE: RunConfig = {
   executableModel: undefined,
   skipPermissions: false,
   additionalDirectories: [],
-  unset: [],
   env: {},
 };
 const HEADER = {

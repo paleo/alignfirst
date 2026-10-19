@@ -252,6 +252,6 @@ function isPiAuthenticationError(message: string): boolean {
 function piAuthenticationMessage(detail?: string): string {
   const base =
     "Coding agent not authenticated: run `pi`, then `/login <provider>`, or configure " +
-    "the provider's credentials before running `aligndev code` again.";
+    "the provider's credentials in the selected native configuration before running `aligndev code` again.";
   return detail === undefined || detail.trim() === "" ? base : `${base}\n\n${detail}`;
 }

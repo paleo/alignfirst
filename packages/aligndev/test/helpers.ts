@@ -12,10 +12,21 @@ export interface Sink {
   text(): string;
 }
 
-// Writes `<home>/.alignfirst/aligndev.settings.json` and returns its path. Every `main` call in
-// the suites injects a temporary `home`, and sets `HOME` to it for alignfirst, so no test reads the
-// developer's real config.
-export function writeConfig(home: string, config: object): string {
+// Single-profile fixture builder: `code` is the profile body, emitted under code.profiles.test.
+// Temporary home/HOME values keep native settings and the companion registry test-local.
+export function writeConfig(
+  home: string,
+  config: { platform?: string; projectsRoot?: string; code?: object },
+): string {
+  const { code, ...settings } = config;
+  return writeSettings(home, {
+    ...settings,
+    ...(code === undefined ? {} : { code: { profile: "test", profiles: { test: code } } }),
+  });
+}
+
+// Writes the actual settings schema, for multi-profile and structural-validation fixtures.
+export function writeSettings(home: string, config: object): string {
   const path = join(home, ".alignfirst", "aligndev.settings.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(config, undefined, 2)}\n`);
