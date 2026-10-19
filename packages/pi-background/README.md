@@ -12,7 +12,7 @@ pi install npm:@alignfirst/pi-background
 
 Requires Node.js 22.19.0 or later. Tested with **Pi 1.3.0**, **Node 26.8.1 / 22.23.3**, and **Linux**. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets but have not been exercised here. Native Windows is refused before process launch. Host peer ranges are `*` under Pi's package rules; they do not certify future Pi versions.
 
-Loading the extension starts no process or timer. Installation and loading do not install profiles, skills, or the other extension.
+The package declares root `index.js` as its sole Pi extension entry. It forwards the default factory from compiled `dist/index.js`, so Pi displays the npm package label without `:dist`. Loading starts no process or timer. Installation and loading do not install profiles, skills, or the other extension.
 
 ## Actions
 

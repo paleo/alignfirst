@@ -19,6 +19,7 @@
     "node": ">=22.19.0"
   },
   "files": [
+    "index.js",
     "dist",
     "README.md",
     "LICENSE",
@@ -29,7 +30,7 @@
   },
   "pi": {
     "extensions": [
-      "./dist/index.js"
+      "./index.js"
     ]
   },
   "scripts": {
