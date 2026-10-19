@@ -36,8 +36,9 @@ install_plugin_once() {
 merge_managed_block() {
   local target_file=$1 source_file=$2 block_name=$3
   local begin_marker="<!-- $block_name:start -->" end_marker="<!-- $block_name:end -->"
-  local remainder="" merged
-  install -d -m 700 "$(dirname -- "$target_file")"
+  local remainder="" merged target_dir
+  target_dir=$(dirname -- "$target_file")
+  if [ ! -d "$target_dir" ]; then install -d -m 700 "$target_dir"; fi
   if [ -f "$target_file" ]; then
     remainder=$(sed "/^$begin_marker\$/,/^$end_marker\$/d" "$target_file")
   fi

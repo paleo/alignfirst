@@ -25,18 +25,57 @@ sudo install -d -m 755 -o root -g root /opt/{{SERVICE_USER}}/libexec
 sudo install -m 644 -o root -g root \
   infra/openclaw/deployment-profiles.mjs infra/openclaw/deployment-policy.mjs \
   /opt/{{SERVICE_USER}}/libexec/
+sudo install -m 755 -o root -g root infra/openclaw/bin/bootstrap-backup.sh \
+  /opt/{{SERVICE_USER}}/libexec/bootstrap-backup.sh
 sudo /usr/local/sbin/alignfirst-assistant-kill
+```
+
+No root operation should execute a helper from a service-writable snapshot. Keep the account contained through backup, conversion and the remaining maintenance steps.
+
+## Bootstrap backup before conversion
+
+Run this schema-independent backup before refreshing `~/seed`, replacing deployed settings or invoking any profile-dependent backup, inventory, seed or maintenance window. It uses only shell utilities and tar, so the original direct `code.agent` settings remain untouched. Containment closes OpenClaw and thread-handoff writers before the copy:
+
+```sh
+sudo -H -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/bootstrap-backup.sh
+```
+
+Record the printed `~/backups/bootstrap/<stamp>/` path in the report, without its contents. Proceed only when the command succeeds and that directory contains `COMPLETE` and `service-home.tar.gz`. A failed attempt retains an incomplete directory; it is not a recovery point. Correct the failure and rerun before changing deployed state.
+
+The private archive preserves the entire service home except `~/backups/`, including the original deployed settings, old seed and `.env`, native credentials, trust, sessions, shared skills, companions and registry, project files, npm/fnm trees, and all OpenClaw and thread-handoff database sidecars. Original modes and symlinks are retained inside the archive; the archive and marker are `0600`, and backup directories are `0700`. Check free space for the complete home. Symlink targets outside the home, external mounts and system-owned files outside the home need a separate reviewed private backup before proceeding. Links are never followed. Transient sockets are not persistent state.
+
+This is a pre-conversion recovery snapshot, distinct from the mapped profile backup in [recover-assistant.md](recover-assistant.md#restore). To inspect or recover it, extract as the service account into a fresh private staging directory while contained. Review original destinations and symlinks before activating individual files. Keep legacy settings as evidence or for a reviewed rollback with the matching old packages and controls; never feed them to the new profile-only helpers or CLI. Do not overlay the archive onto a live home or use it as a `native-recovery` mapping.
+
+Now refresh the contained snapshot:
+
+```sh
 sudo rsync -a --delete infra/openclaw/ /home/{{SERVICE_USER}}/seed/
 sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
 ```
 
-Refresh both protected helpers and the contained snapshot before backup: an old `backup.sh` may omit native stores, credentials, trust or package mode mappings. No root operation should execute a helper from a service-writable snapshot.
+## One-time: convert direct launch settings
+
+Before installing profile-aware AlignDev or opening its first maintenance window, manually convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to the existing service-account store (`~/.claude` or `~/.codex` on a default installation); remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults. Obtain approval for the reviewed settings replacement; no command below converts settings automatically.
+
+Bring `deployment-profiles.mjs`, `deployment-policy.mjs`, `seed.sh`, `seed/coding-agent.sh` and `assistant-maintenance.sh` forward together. After the bootstrap backup and snapshot refresh above, convert the installed settings while contained. The wrapper validates deployed profiles too:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-kill
+sudo chattr -i /home/{{SERVICE_USER}}/.alignfirst \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo install -o root -g root -m 644 infra/openclaw/aligndev.settings.json \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
+  /home/{{SERVICE_USER}}/.alignfirst
+```
+
+Complete the package upgrade before CLI help, delegation or restart. After upgrading, re-seed through `config instructions agent-skills agent-config`, then reapply [06](../installations/06-security-hardening.md). The inventory covers every provisioned coding/quota store, including isolated custom paths beneath the service home. No account files or historical transcripts are migrated.
+
+Existing managed native symlinks need an operator-reviewed conversion before the new wrapper can inventory them. For a former Claude skill alias, contain the account, unlock only its native skills root, verify the entry is a symlink to the intended canonical skill, remove that link (not its target), and copy the reviewed canonical directory into its place. Preserve executable bits with `rsync -a`. Check every profile's store, then apply the shared hardening policy. Do not disable symlink validation or recursively follow an alias during ownership changes.
 
 ## Back up
 
-Before a core bump, stop the gateway so both OpenClaw and the independent thread-handoff database
-close consistently, then keep the state the migrations will rewrite
-([recover-assistant.md](recover-assistant.md#restore)):
+With reviewed profile settings installed and legacy managed links converted, run the strict mapped backup before the package upgrade. The original pre-conversion state remains in the bootstrap snapshot. Refresh the protected helpers and seed first as above; an old `backup.sh` may omit native stores, credentials, trust or package mode mappings ([recover-assistant.md](recover-assistant.md#restore)):
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-kill
@@ -140,26 +179,6 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    ```
 
 Continue with the regular steps below.
-
-## One-time: convert direct launch settings
-
-Before installing profile-aware AlignDev, convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to the existing service-account store (`~/.claude` or `~/.codex` on a default installation); remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults.
-
-Bring `deployment-profiles.mjs`, `deployment-policy.mjs`, `seed.sh`, `seed/coding-agent.sh` and `assistant-maintenance.sh` forward together, then reinstall the maintenance controls. The wrapper validates deployed profiles too, so convert the installed settings while contained before its first window:
-
-```sh
-sudo /usr/local/sbin/alignfirst-assistant-kill
-sudo chattr -i /home/{{SERVICE_USER}}/.alignfirst \
-  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo install -o root -g root -m 644 infra/openclaw/aligndev.settings.json \
-  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
-  /home/{{SERVICE_USER}}/.alignfirst
-```
-
-Do not run profile-dependent commands until the package upgrade is complete. After upgrading, re-seed through `config instructions agent-skills agent-config`, then reapply [06](../installations/06-security-hardening.md) before help, delegation or restart. The inventory covers every provisioned coding/quota store, including isolated custom paths beneath the service home. No account files or historical transcripts are migrated.
-
-Existing managed native symlinks need an operator-reviewed conversion before the new wrapper can inventory them. For a former Claude skill alias, contain the account, unlock only its native skills root, verify the entry is a symlink to the intended canonical skill, remove that link (not its target), and copy the reviewed canonical directory into its place. Preserve executable bits with `rsync -a`. Check every profile's store, then apply the shared hardening policy. Do not disable symlink validation or recursively follow an alias during ownership changes.
 
 ## npm packages
 

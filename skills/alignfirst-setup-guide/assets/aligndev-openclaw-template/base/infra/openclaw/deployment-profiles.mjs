@@ -332,7 +332,10 @@ export function validateInventory({ resources, stores, serviceHome: home }) {
         ".npm-system-global",
         ".cache",
         ".local/share/fnm",
-      ].some((name) => within(resource.path, join(home, name)))
+      ].some(
+        (name) =>
+          within(resource.path, join(home, name)) || within(join(home, name), resource.path),
+      )
     )
       throw new Error("Managed resources overlap deployment runtime state");
     for (const store of stores) {
