@@ -1,5 +1,4 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 // Codex writes one rollout per thread under `$CODEX_HOME/sessions/<year>/<month>/<day>/`. The plain
@@ -37,7 +36,12 @@ export function readCodexContext(
 ): CodexContextReading {
   if (threadId === undefined || threadId === "") return failed("Codex reported no thread id.");
   if (streamTotal === undefined) return failed("Codex reported no turn.completed usage.");
-  const path = findRolloutPath(threadId, env);
+  const home = env.HOME ?? env.USERPROFILE;
+  const nativeHome = env.CODEX_HOME ?? (home === undefined ? undefined : join(home, ".codex"));
+  if (nativeHome === undefined) {
+    return failed("Codex native home is unavailable in the child environment.");
+  }
+  const path = findRolloutPath(threadId, nativeHome);
   if (path === undefined) return failed(`No Codex rollout found for thread ${threadId}.`);
   const records = readUsageRecords(path);
   if (records.length === 0) return failed(`No token_count record in ${basename(path)}.`);
@@ -59,11 +63,8 @@ function failed(error: string): CodexContextReading {
   return { contextTokens: null, compacted: false, error };
 }
 
-function findRolloutPath(threadId: string, env: NodeJS.ProcessEnv): string | undefined {
-  const root = join(
-    env.CODEX_HOME ?? join(env.HOME ?? env.USERPROFILE ?? homedir(), ".codex"),
-    SESSIONS_DIR,
-  );
+function findRolloutPath(threadId: string, nativeHome: string): string | undefined {
+  const root = join(nativeHome, SESSIONS_DIR);
   let entries: string[];
   try {
     entries = readdirSync(root, { recursive: true, encoding: "utf8" });
