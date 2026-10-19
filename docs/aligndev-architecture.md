@@ -85,6 +85,19 @@ Claude uses the native `/usage` print command and extracts limits before local i
 
 Both protocols retain the injectable `QuotaProcessAdapter`. The default process runner caps combined stdout/stderr at 1 MiB and the request at 30 seconds. Completion closes stdin, sends TERM and awaits direct-child/pipe closure. After 250 ms it sends KILL, with a further one-second cleanup bound. Failure to discharge ownership is explicit; exit guards remain until ownership ends. Error output is never echoed into diagnostics. This supervises the attached native child, without importing Pi process-tree packages or promising descendant/crash recovery.
 
+## Manual Offline Profile Smoke
+
+The named **manual** check runs direct CLI integration against built `alignfirst` and `aligndev` entry points. Prerequisites are installed workspace dependencies, fnm with the repository's Node 26 runtime, Git on PATH, and a POSIX host with executable symlink support. From the repository root:
+
+```sh
+fnm exec --using=.nvmrc npm run build
+fnm exec --using=.nvmrc npm run test:coding-profiles
+```
+
+The command runs [`scripts/coding-profiles-smoke.mjs`](../scripts/coding-profiles-smoke.mjs). It checks profile selection, real CLI reports, linked worktrees, companion placement, resume identity and independent quota routing. Disposable homes, projects and native CLI shims keep it offline and isolate settings, synthetic identities and process cleanup. Native agents, credentials and providers are not required.
+
+This is CLI integration, not OpenClaw deployment, Docker, conversation or provider acceptance. Run it deliberately; it is outside root `npm test`, CI, release smoke and all test matrices.
+
 ## Project Inventory
 
 A projects directory carries a `.alignfirst-projects.json` marker, with an optional description and port ranges:

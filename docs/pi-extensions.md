@@ -48,6 +48,12 @@ The deterministic matrices cover public tools, bounded results, ownership races,
 
 Live acceptance has exercised **openai/gpt-5.6-terra**, including headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
 
+## Archived headless feasibility research
+
+B7's five native Pi 1.3.0 settlement characterization checks used a test-only SDK extension, not the shipped background extension. Their exact reproducers from commit `66c87aa`, prerequisites and manual reproduction notes are preserved with the ticket evidence in `.plans/side-25/b7-native-settlement-reproducers/` in the separate work-files repository. They are outside active package tests and published artifacts.
+
+B7 remains blocked and unshipped; production waiting is unchanged. Removing these checks removes no shipped extension behavior coverage, but loses automatic upstream-change detection. Revisiting B7 requires a deliberate fresh feasibility gate, including cancellation and cleanup-failure safety, rather than relying on historical assertions that upstream bugs persist.
+
 ## Checks
 
 From the repository root:
