@@ -29,7 +29,7 @@ A profile's required `agent` selects the child: `claude`, `codex` or `pi`, indep
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion. Without a nonempty profile `models`, Pi accepts any nonblank selector; Claude/Codex accept their built-in names plus configured aliases. A nonempty list replaces accepted names. New sessions use profile `defaultModel`, else the native default.
 
-Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted. The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and independent quota settings. Omitted quota uses a native Claude/Codex profile's effective environment. Pi needs an explicit `quota: { "source": "codex", "configDir": "~/.codex" }` or a Claude equivalent; `source: "none"` disables quota. Explicit quota starts from the original caller environment and applies only its own `unset`, `env` and source-specific `configDir`, with the same path/validation rules and parent-identity stripping. For multiple accounts, supply quota `configDir` explicitly; omission retains the native CLI's inherited/default store. Pair each Pi profile with the intended native account. The report names the profile/source and belongs to that CLI's account; AlignDev has not verified it against Pi's account. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the coding child.
+Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted. The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and independent quota settings. Omitted quota uses a native Claude/Codex profile's effective environment. For Pi, follow [Optional quota setup for Pi](#optional-quota-setup-for-pi). Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the coding child.
 
 Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or `CODEX_API_KEY` (Codex); check the names only, never print the values. The agent runs non-interactively (`claude -p`, `codex exec`), where such a key overrides the subscription login, even when the developer's own session declined it. When the developer wants the agent on their subscription, list the key in the profile's `unset`:
 
@@ -47,6 +47,59 @@ Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or
 ```
 
 For a Pi child, start `pi` under the account/configuration the child will use and run `/login <provider>`, or configure the provider's credentials. Pi uses its native credential precedence; do not assume the Claude/Codex environment-key rules above apply. Inspect only credential-variable names, never values. Saved project trust must cover the execution directory and required project resources; do not force `--approve` to bypass missing trust.
+
+### Optional quota setup for Pi
+
+Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. It is an optional quota helper when `quota.source` is `codex`. The `claude` source analogously requires Claude Code; `none` requires neither CLI. Pi without an explicit quota source has no supported quota reader.
+
+1. **Choose the source deliberately:** `codex`, `claude` or `none`. Never infer the provider or account from a model alias. Native quota reports describe the selected CLI's account limits. Codex's ChatGPT limits and Claude's subscription limits do not measure arbitrary provider/API-key billing, Anthropic Console usage or another provider's allowance. Use `none` when no native account quota is relevant.
+2. **Install the chosen CLI if absent** from the quota environment's PATH. Obtain approval before global installation. Reuse the existing [Codex installer guidance](../assets/aligndev-openclaw-template/variants/coding-agents/codex/docs/installations/08-coding-agent.md#admin-account) or [Claude Code installer guidance](../assets/aligndev-openclaw-template/variants/coding-agents/claude-code/docs/installations/08-coding-agent.md#admin-account). Use only the installer from those deployment runbooks, not their aliases, settings or hardening steps.
+3. **Configure quota in the Pi profile** in `~/.alignfirst/aligndev.settings.json`. For example:
+
+   ```json
+   {
+     "code": {
+       "profile": "pi-quota",
+       "profiles": {
+         "pi-quota": {
+           "agent": "pi",
+           "configDir": "~/.pi/agent",
+           "quota": {
+             "source": "codex",
+             "configDir": "~/.codex-pi-quota",
+             "unset": ["CODEX_API_KEY", "OPENAI_API_KEY"]
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Explicit quota starts from the original caller environment, applies only quota's own `unset`, `env` and source-specific `configDir`, then strips parent-session identities. Pi profile overrides are not copied. The same path and validation rules described above apply. Set `quota.configDir` explicitly, especially with multiple accounts. It sets `CODEX_HOME` for Codex or `CLAUDE_CONFIG_DIR` for Claude. Omission keeps quota's effective inherited/environment-selected store or the native default (`~/.codex` or `~/.claude`); it does not select Pi's store.
+
+   For Claude subscription quota, replace the quota object with `{ "source": "claude", "configDir": "~/.claude-pi-quota", "unset": ["ANTHROPIC_API_KEY"] }`. To disable quota, use only `{ "source": "none" }`, without other quota fields.
+4. **Authenticate the native CLI separately.** The human completes login under the same OS user, cwd and effective environment/configuration directory as the quota query. Reproduce quota's `unset/env/configDir`, including HOME, PATH and any credential routing. Pi's `auth.json` and `/login` credentials are not automatically imported into Codex or Claude Code. Never copy tokens between their stores.
+
+   For the Codex example above, with ordinary HOME/PATH and no additional credential routing:
+
+   ```sh
+   mkdir -p "$HOME/.codex-pi-quota"
+   env -u CODEX_API_KEY -u OPENAI_API_KEY CODEX_HOME="$HOME/.codex-pi-quota" codex login
+   ```
+
+   For the Claude subscription alternative:
+
+   ```sh
+   mkdir -p "$HOME/.claude-pi-quota"
+   env -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR="$HOME/.claude-pi-quota" claude auth login --claudeai
+   ```
+
+   Adapt these commands to the actual quota environment; a bare login in another shell may authenticate another store or route. Inspect credential-variable names only. Keep secrets out of chat, settings examples, shell history and logs; complete browser/device authentication privately.
+5. **Confirm the intended account pairing.** When quota should represent Pi's allowance, compare the identity and organization/workspace selected during the native login with those used for Pi's relevant provider login. A shared email alone may not establish the same allowance. For existing logins, use the provider's account UI or native identity information where available; do not dump credential files. AlignDev does not automatically verify account identity. Successful login or quota retrieval alone does not prove a match.
+
+   Once separately authenticated, `aligndev code quota --profile pi-quota` reads the selected native account's limits. The report labels the profile/source, not a verified Pi account. If pairing cannot be established, treat it only as that CLI's quota or select `none`.
+
+For a future OpenClaw Pi deployment, installation and native authentication must target the service account and its effective service environment, not the operator's login. The hardened Pi child overlay remains unimplemented; this procedure does not enable deployment.
 
 ## 3. Install the skill globally
 
