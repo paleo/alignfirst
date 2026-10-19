@@ -82,7 +82,7 @@ The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives i
 
 ## Select a Profile Without a Companion
 
-The same registry accepts `{ "aligndev": { "profile": "<name>" } }` under the project's main-worktree key. Edit it by hand; AlignDev owns the forthcoming named-profile settings and resolution contract. This entry creates no companion or separate session tree. Linked worktrees share the selection and keep their own project file locations.
+The same registry accepts `{ "aligndev": { "profile": "<name>" } }` under the project's main-worktree key. Edit it by hand; AlignDev validates the selected name against `code.profiles` in its settings. This entry creates no companion or separate session tree. Linked worktrees share the selection and keep their own project file locations.
 
 An entry can contain both `dir` and `aligndev`. `companion unregister` removes `dir/items`, preserving the selection and reporting the remaining profile-only entry. Remove that selection through a separate registry edit. An entry with only `aligndev` has no companion to unregister.
 

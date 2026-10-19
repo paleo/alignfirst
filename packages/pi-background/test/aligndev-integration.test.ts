@@ -169,7 +169,9 @@ async function fixture() {
     vi.stubEnv(key, undefined);
   vi.stubEnv("GIT_CONFIG_GLOBAL", join(h.cwd, "gitconfig"));
   writeFileSync(join(h.cwd, "gitconfig"), "");
-  writeJson(join(home, ".alignfirst/aligndev.settings.json"), { code: { agent: "pi" } });
+  writeJson(join(home, ".alignfirst/aligndev.settings.json"), {
+    code: { profile: "pi-fixture", profiles: { "pi-fixture": { agent: "pi" } } },
+  });
   const project = join(h.cwd, "project");
   const worktree = join(h.cwd, "worktree");
   const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8", stdio: "pipe" });

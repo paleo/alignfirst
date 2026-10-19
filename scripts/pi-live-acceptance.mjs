@@ -99,7 +99,12 @@ function run() {
   mkdirSync(join(root, "home/.alignfirst"));
   writeFileSync(
     join(root, "home/.alignfirst/aligndev.settings.json"),
-    JSON.stringify({ code: { agent: "pi", defaultModel: `${model}:low` } }),
+    JSON.stringify({
+      code: {
+        profile: "pi-fixture",
+        profiles: { "pi-fixture": { agent: "pi", defaultModel: `${model}:low` } },
+      },
+    }),
   );
   const cli = join(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
   const catalog = execFileSync(process.execPath, [cli, "--list-models", "terra"], {
