@@ -11,10 +11,15 @@ import {
   buildAgentEnv,
   buildTerminationUpdate,
   runAgent,
+  type AgentAdapter,
   type RunConfig,
   type SpawnAgentProcess,
 } from "../../src/code/run-agent.js";
-import { readCompletion, writeInitialSessionFile } from "../../src/code/session-file.js";
+import {
+  applyCompletion,
+  readCompletion,
+  writeInitialSessionFile,
+} from "../../src/code/session-file.js";
 import { makeSink } from "../helpers.js";
 
 const dirs: string[] = [];
@@ -226,6 +231,141 @@ describe("shared runner helpers", () => {
   });
 });
 
+describe.each([createClaudeAdapter(), createCodexAdapter(), createPiAdapter()])(
+  "$executable durable resume identity",
+  (adapter) => {
+    it.each([
+      "missingIdentity",
+      "wrongIdentity",
+      "nativeFailure",
+      "authFailure",
+      "startupFailure",
+      "success",
+    ])(
+      "preserves the requested ID after %s without using it as native evidence",
+      async (outcome) => {
+        const { config, sessionFilePath } = makeRun("original-session");
+        const id =
+          outcome === "missingIdentity"
+            ? undefined
+            : outcome === "wrongIdentity"
+              ? "replacement-session"
+              : "original-session";
+        const events =
+          outcome !== "authFailure"
+            ? completionEvents(adapter, id)
+            : adapter.executable === "claude"
+              ? [{ type: "assistant", error: "authentication_failed" }]
+              : [];
+        const script = `
+        process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});
+        ${outcome === "authFailure" ? 'process.stderr.write("Not logged in. Please run /login.\\nNo API key found for openai.");' : ""}
+        process.exitCode = ${outcome === "nativeFailure" || outcome === "authFailure" ? 1 : 0};
+      `;
+        const selected =
+          outcome === "startupFailure"
+            ? { ...adapter, executable: "missing-aligndev-fixture-command" }
+            : adapter;
+        const result = await runAgent(
+          config,
+          selected,
+          makeSink(),
+          outcome === "startupFailure" ? undefined : nodeFixture(script),
+        );
+        const status = outcome === "success" ? "succeeded" : "failed";
+        const exitReason =
+          outcome === "success"
+            ? "completed"
+            : outcome === "authFailure"
+              ? "auth_required"
+              : "error";
+        expect(result).toMatchObject({
+          status,
+          sessionId: "original-session",
+          authRequired: outcome === "authFailure",
+        });
+        expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
+          status,
+          exitReason,
+          sessionId: "original-session",
+        });
+      },
+    );
+
+    it.each([undefined, "original-session", "replacement-session"])(
+      "preserves the requested ID on handled termination after observed ID %s",
+      (id) => {
+        const { config, sessionFilePath } = makeRun("original-session");
+        const state = adapter.createState(config);
+        for (const event of completionEvents(adapter, id)) {
+          adapter.interpretLine(JSON.stringify(event), state);
+        }
+        const update = buildTerminationUpdate("SIGTERM", state, new Date());
+        expect(update).toMatchObject({
+          status: "failed",
+          exitReason: "terminated",
+          sessionId: "original-session",
+        });
+        applyCompletion(sessionFilePath, update);
+        expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
+          status: "failed",
+          exitReason: "terminated",
+          sessionId: "original-session",
+        });
+      },
+    );
+
+    it.each([undefined, "new-session"])(
+      "keeps new-session semantics with observed ID %s",
+      async (id) => {
+        const { config, sessionFilePath } = makeRun();
+        const events = completionEvents(adapter, id);
+        const result = await runAgent(
+          config,
+          adapter,
+          makeSink(),
+          nodeFixture(
+            `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`,
+          ),
+        );
+        expect(result).toMatchObject({
+          status: id === undefined ? "failed" : "succeeded",
+          sessionId: id ?? null,
+        });
+        expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe(id ?? null);
+      },
+    );
+  },
+);
+
+function completionEvents(adapter: AgentAdapter, id: string | undefined): object[] {
+  if (adapter.executable === "claude") {
+    return [
+      ...(id === undefined ? [] : [{ type: "system", subtype: "init", session_id: id }]),
+      { type: "result", result: "done", is_error: false },
+    ];
+  }
+  if (adapter.executable === "codex") {
+    return [
+      ...(id === undefined ? [] : [{ type: "thread.started", thread_id: id }]),
+      { type: "item.completed", item: { type: "agent_message", text: "done" } },
+      { type: "turn.completed" },
+    ];
+  }
+  return [
+    ...(id === undefined
+      ? []
+      : [
+          { type: "session", version: 3, id, cwd: "/fixture", timestamp: new Date().toISOString() },
+        ]),
+    {
+      type: "message_end",
+      message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "done" }] },
+    },
+    { type: "agent_settled", aborted: false },
+  ];
+}
+
 describe("pi through the shared runner", () => {
   it("sanitizes only the child identity and preserves storage, credentials and generic markers", () => {
     const env = {
@@ -355,7 +495,7 @@ describe("pi through the shared runner", () => {
   });
 });
 
-function makeRun(): { config: RunConfig; sessionFilePath: string } {
+function makeRun(resume?: string): { config: RunConfig; sessionFilePath: string } {
   const dir = mkdtempSync(join(tmpdir(), "aligndev-runner-"));
   dirs.push(dir);
   const sessionFilePath = join(dir, "session.md");
@@ -366,8 +506,8 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
     protocol: null,
     ticket: null,
     model: null,
-    sessionId: null,
-    command: "aligndev code new --message go",
+    sessionId: resume ?? null,
+    command: `aligndev code ${resume === undefined ? "new" : `resume ${resume}`} --message go`,
     meta: null,
     pid: process.pid,
     pidStartTime: null,
@@ -385,6 +525,7 @@ function makeRun(): { config: RunConfig; sessionFilePath: string } {
       prompt: "go",
       sessionFilePath,
       cwd: dir,
+      resume,
       executableModel: undefined,
       skipPermissions: false,
       additionalDirectories: [],

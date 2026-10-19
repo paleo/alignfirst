@@ -1825,7 +1825,7 @@ describe("pi launches", () => {
     ).toContain("selected agent is pi");
   });
 
-  it("fails a mismatched resumed header without claiming the original conversation resumed", async () => {
+  it("retains the requested identity while failing a mismatched resumed header", async () => {
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
     const result = await launch(["resume", "pi-session", "-m", "more", "--quiet"], {
       PI_FIXTURE_ID: "forked-session",
@@ -1833,7 +1833,7 @@ describe("pi launches", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("pi run failed");
     expect(readCompletion(newest().path)).toMatchObject({
-      frontmatter: { status: "failed", sessionId: null },
+      frontmatter: { status: "failed", sessionId: "pi-session", exitReason: "error" },
       result: expect.stringContaining("differs from pi-session"),
     });
   });

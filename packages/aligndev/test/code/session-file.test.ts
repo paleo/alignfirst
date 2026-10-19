@@ -212,10 +212,15 @@ describe("session file lifecycle", () => {
   it("reconciles a dead running process without waiting for another run", () => {
     const child = spawnSync("node", ["-e", ""]);
     if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-    writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: child.pid }));
+    writeInitialSessionFile(
+      sessionFilePath,
+      makeFrontmatter({ pid: child.pid, sessionId: "requested-resume-id" }),
+    );
 
     const completion = reconcileSessionFile(sessionFilePath, FIXED_DATE);
 
+    expect(completion.frontmatter.sessionId).toBe("requested-resume-id");
+    expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe("requested-resume-id");
     expect(completion.frontmatter.status).toBe("failed");
     expect(completion.frontmatter.endedAt).toBe(FIXED_DATE.toISOString());
     expect(completion.frontmatter.exitReason).toBe("terminated");

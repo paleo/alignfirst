@@ -128,11 +128,13 @@ export async function runAgent(
     failed && config.nativeContext !== undefined
       ? `${config.nativeContext}: ${selectedResult}`
       : selectedResult;
+  // Durable identity belongs to the requested conversation, even when native validation fails.
+  const sessionId = config.resume ?? assessment.sessionId ?? null;
   applyCompletion(config.sessionFilePath, {
     status: failed ? "failed" : "succeeded",
     endedAt: new Date().toISOString(),
     exitReason: authRequired ? "auth_required" : failed ? "error" : "completed",
-    sessionId: assessment.sessionId ?? null,
+    sessionId,
     result,
     contextTokens: assessment.contextTokens ?? null,
     contextCompacted: assessment.contextCompacted ?? false,
@@ -141,7 +143,7 @@ export async function runAgent(
   return {
     status: failed ? "failed" : "succeeded",
     authRequired,
-    sessionId: assessment.sessionId ?? null,
+    sessionId,
     result,
   };
 }
@@ -350,7 +352,7 @@ export function buildTerminationUpdate(
     status: "failed",
     endedAt: now.toISOString(),
     exitReason: "terminated",
-    sessionId: state.sessionId ?? null,
+    sessionId: state.expectedSessionId ?? state.sessionId ?? null,
     result: `Terminated by ${signal} before completion.`,
     contextTokens: state.contextTokens ?? null,
     contextCompacted: isCompacted(state),

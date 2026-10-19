@@ -569,7 +569,7 @@ async function runSession(
       status: "failed",
       endedAt: new Date().toISOString(),
       exitReason: "error",
-      sessionId: null,
+      sessionId: args.resume ?? null,
       result: message,
     });
     writeFailureDiagnostic(ctx, sessionFilePath, message);
@@ -812,7 +812,7 @@ function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
     protocol: args.protocol ?? null,
     ticket: ticket ?? null,
     model: input.model ?? null,
-    sessionId: null,
+    sessionId: args.resume ?? null,
     command: formatCommand(args),
     meta: args.meta ?? null,
     pid: process.pid,

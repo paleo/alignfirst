@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../../src/cli.js";
 import type { QuotaReader } from "../../src/code/quota.js";
-import { listSessionRecords, readCompletion } from "../../src/code/session-file.js";
+import {
+  listSessionRecords,
+  readCompletion,
+  type SessionFrontmatter,
+} from "../../src/code/session-file.js";
 import { loadConfig, resolveCodeConfig, resolveQuotaConfig } from "../../src/config.js";
 import { ALIGNFIRST_BIN, makeSink, writeRegistry, writeSettings } from "../helpers.js";
 
@@ -425,6 +429,67 @@ process.exitCode = 1;
     });
   });
 
+  it.each([false, true])(
+    "keeps initial identity and model-discovery failure metadata for resume=%s",
+    async (resume) => {
+      expect((await launch(["new", "-m", "go"])).code).toBe(0);
+      const originalFile = newest().path;
+      const original = readFileSync(originalFile, "utf8");
+      const initialMetadata: SessionFrontmatter[] = [];
+      const modelResolver = vi.fn(async () => {
+        initialMetadata.push(newest().frontmatter);
+        throw new Error("fixture model discovery failure");
+      });
+      const failed = await launch(
+        [
+          resume ? "resume" : "new",
+          ...(resume ? ["native-session"] : []),
+          "-m",
+          "go",
+          "--profile",
+          "b",
+        ],
+        modelResolver,
+      );
+      expect(failed.code).toBe(1);
+      expect(modelResolver).toHaveBeenCalledOnce();
+      expect(initialMetadata).toEqual([
+        expect.objectContaining({
+          status: "running",
+          profile: "b",
+          sessionId: resume ? "native-session" : null,
+        }),
+      ]);
+      expect(readCompletion(newest().path).frontmatter).toMatchObject({
+        status: "failed",
+        profile: "b",
+        model: resume ? "choice" : "sonnet",
+        sessionId: resume ? "native-session" : null,
+        exitReason: "error",
+      });
+      const status = await launch(["status", newest().path, "--result"]);
+      expect(status.code).toBe(0);
+      expect(status.stdout).toContain(`sessionId: ${resume ? "native-session" : ""}\n`);
+      expect(status.stdout).toContain("Could not resolve the claude model");
+      expect(existsSync(join(nativeB, "identity"))).toBe(false);
+      expect(readFileSync(originalFile, "utf8")).toBe(original);
+    },
+  );
+
+  it("retains resume identity on authentication failure before a native header", async () => {
+    expect((await launch(["new", "-m", "go"])).code).toBe(0);
+    env.FIXTURE_AUTH_FAILURE = "1";
+    const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
+    expect(failed.code).toBe(2);
+    expect(readCompletion(newest().path).frontmatter).toMatchObject({
+      status: "failed",
+      profile: "b",
+      model: "choice",
+      sessionId: "native-session",
+      exitReason: "auth_required",
+    });
+  });
+
   it("round-trips a multiline profile and model through completion, status and resume", async () => {
     const profile = "work\naccount";
     const model = "chosen\nmodel";
@@ -530,7 +595,16 @@ process.exitCode = 1;
     expect(failed.stderr).toContain('profile "b"');
     expect(failed.stderr).toContain(nativeB);
     expect(failed.stderr).toContain("No account fallback");
-    expect(readCompletion(newest().path).frontmatter.status).toBe("failed");
+    expect(readCompletion(newest().path).frontmatter).toMatchObject({
+      status: "failed",
+      profile: "b",
+      model: "choice",
+      sessionId: "native-session",
+      exitReason: "error",
+    });
+    const status = await launch(["status", newest().path, "--result"]);
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain("sessionId: native-session\n");
     expect(existsSync(join(nativeB, "identity"))).toBe(false);
   });
 
@@ -541,7 +615,16 @@ process.exitCode = 1;
     expect(failed.code).toBe(1);
     const completion = readCompletion(newest().path);
     expect(completion.result).toContain("identity changed");
-    expect(completion.frontmatter.sessionId).not.toBe("replacement-session");
+    expect(completion.frontmatter).toMatchObject({
+      status: "failed",
+      profile: "b",
+      model: "choice",
+      sessionId: "native-session",
+      exitReason: "error",
+    });
+    const status = await launch(["status", newest().path, "--result"]);
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain("sessionId: native-session\n");
   });
 
   it("validates cross-agent and retained-model changes before discovery or writing a run", async () => {
