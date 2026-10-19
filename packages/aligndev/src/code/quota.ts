@@ -1,8 +1,7 @@
-import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
-import type { CodingAgent } from "./coding-agent.js";
-import { buildAgentEnv } from "./run-agent.js";
+import type { QuotaSource } from "../config.js";
+import { runQuotaProcess } from "./quota-process.js";
 
 const QUOTA_TIMEOUT_MS = 30_000;
 const CLAUDE_PRIVACY_OPT_OUTS = [
@@ -12,7 +11,6 @@ const CLAUDE_PRIVACY_OPT_OUTS = [
   "DISABLE_BUG_COMMAND",
   "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
 ] as const;
-const execFileAsync = promisify(execFile);
 const DEFAULT_QUOTA_PROCESS_ADAPTER: QuotaProcessAdapter = {
   execute: executeQuotaProcess,
   spawn: spawnQuotaProcess,
@@ -23,10 +21,9 @@ export const readQuota: QuotaReader = createQuotaReader();
 export interface QuotaContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
-  unset: readonly string[];
 }
 
-export type QuotaReader = (agent: CodingAgent, context: QuotaContext) => Promise<string>;
+export type QuotaReader = (source: QuotaSource, context: QuotaContext) => Promise<string>;
 
 export interface QuotaProcessAdapter {
   execute(
@@ -56,16 +53,22 @@ export function createQuotaReader(
   adapter: QuotaProcessAdapter = DEFAULT_QUOTA_PROCESS_ADAPTER,
   timeoutMs = QUOTA_TIMEOUT_MS,
 ): QuotaReader {
-  return async (agent, context) => {
-    if (agent === "pi") {
+  return async (source, context) => {
+    try {
+      return source === "claude"
+        ? await readClaudeQuota(
+            { ...context, env: translateClaudePrivacyOptOut({ ...context.env }) },
+            adapter,
+            timeoutMs,
+          )
+        : await readCodexQuota(context, adapter, timeoutMs);
+    } catch (error) {
+      if (error instanceof Error && /^(Codex|Claude Code) /.test(error.message)) throw error;
       throw new Error(
-        "Pi account quota is unsupported: check the selected provider's account limits directly.",
+        `${source === "claude" ? "Claude Code" : "Codex"} quota command failed; ` +
+          "check that the native CLI is installed and authenticated in the selected configuration.",
       );
     }
-    const env = buildAgentEnv(context.env, context.unset);
-    return agent === "claude"
-      ? readClaudeQuota({ ...context, env: translateClaudePrivacyOptOut(env) }, adapter, timeoutMs)
-      : readCodexQuota({ ...context, env }, adapter, timeoutMs);
   };
 }
 
@@ -136,53 +139,33 @@ function exchangeCodexMessages(
   child: ChildProcessWithoutNullStreams,
   timeoutMs: number,
 ): Promise<unknown> {
-  const detachGuard = guardChild(child);
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (error: Error | undefined, result?: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      detachGuard();
-      child.kill("SIGTERM");
-      if (error) reject(error);
-      else resolve(result);
-    };
-    const timer = setTimeout(
-      () => finish(new Error("Codex timed out while reading usage limits.")),
-      timeoutMs,
-    );
-    const readStderr = observeCodexOutput(child, finish);
-    observeCodexLifecycle(child, finish, () => settled, readStderr);
-    initializeCodex(child);
-  });
-}
-
-function guardChild(child: ChildProcessWithoutNullStreams): () => void {
-  const kill = () => {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-  };
-  process.on("exit", kill);
-  return () => process.off("exit", kill);
-}
-
-function observeCodexOutput(
-  child: ChildProcessWithoutNullStreams,
-  finish: (error: Error | undefined, result?: unknown) => void,
-): () => string {
   let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => {
-    stdout += chunk;
-    stdout = drainJsonLines(stdout, (message) => handleCodexMessage(child, message, finish));
+  let initialized = false;
+  let response: unknown;
+  return runQuotaProcess<unknown>(child, {
+    source: "Codex",
+    timeoutMs,
+    start: initializeCodex,
+    stdout(chunk, write) {
+      stdout = drainJsonLines(stdout + chunk, (message) => {
+        if (response !== undefined) return;
+        if (message.id === 0 && !initialized) {
+          if (!isRecord(message.result) || message.error !== undefined)
+            throw new Error(
+              "Codex could not initialize quota reading; check native authentication.",
+            );
+          initialized = true;
+          write({ method: "initialized", params: {} });
+          write({ method: "account/rateLimits/read", id: 1 });
+        }
+        if (message.id !== 1) return;
+        if (!initialized || !isRecord(message.result) || message.error !== undefined)
+          throw new Error("Codex could not read usage limits; check native authentication.");
+        response = message.result;
+      });
+      return response;
+    },
   });
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk: string) => {
-    stderr += chunk;
-  });
-  return () => stderr;
 }
 
 function drainJsonLines(
@@ -197,66 +180,16 @@ function drainJsonLines(
     try {
       value = JSON.parse(line);
     } catch {
-      continue;
+      throw new Error("Codex returned malformed quota JSON; check native CLI usage.");
     }
-    if (isRecord(value)) onMessage(value);
+    if (!isRecord(value)) throw new Error("Codex returned an unexpected usage response.");
+    onMessage(value);
   }
   return rest;
 }
 
-function handleCodexMessage(
-  child: ChildProcessWithoutNullStreams,
-  message: Record<string, unknown>,
-  finish: (error: Error | undefined, result?: unknown) => void,
-): void {
-  if (message.id === 0 && message.result !== undefined) {
-    sendCodexMessage(child, { method: "initialized", params: {} });
-    sendCodexMessage(child, { method: "account/rateLimits/read", id: 1 });
-  }
-  if (message.id !== 1) return;
-  if (isRecord(message.error)) {
-    const detail = message.error.message;
-    finish(
-      new Error(
-        typeof detail === "string"
-          ? `Codex could not read usage limits: ${detail}`
-          : "Codex could not read the current usage limits.",
-      ),
-    );
-    return;
-  }
-  finish(undefined, message.result);
-}
-
-function sendCodexMessage(child: ChildProcessWithoutNullStreams, message: unknown): void {
-  child.stdin.write(`${JSON.stringify(message)}\n`);
-}
-
-function observeCodexLifecycle(
-  child: ChildProcessWithoutNullStreams,
-  finish: (error: Error | undefined) => void,
-  isSettled: () => boolean,
-  readStderr: () => string,
-): void {
-  child.stdin.on("error", (error) => {
-    finish(new Error(`Codex could not read usage limits: ${error.message}`));
-  });
-  child.on("error", (error) => finish(error));
-  child.on("close", (code) => {
-    if (isSettled()) return;
-    const detail = readStderr().trim();
-    finish(
-      new Error(
-        detail !== ""
-          ? `Codex could not read usage limits: ${detail}`
-          : `Codex app-server exited with code ${code ?? "unknown"}.`,
-      ),
-    );
-  });
-}
-
-function initializeCodex(child: ChildProcessWithoutNullStreams): void {
-  sendCodexMessage(child, {
+function initializeCodex(write: (message: unknown) => void): void {
+  write({
     method: "initialize",
     id: 0,
     params: {
@@ -274,11 +207,24 @@ async function executeQuotaProcess(
   args: string[],
   options: QuotaProcessOptions & { timeout: number },
 ): Promise<{ stdout: string }> {
-  const { stdout } = await execFileAsync(file, args, {
-    ...options,
-    encoding: "utf8",
+  const child = spawnQuotaProcess(file, args, options);
+  let stdout = "";
+  const result = await runQuotaProcess<string>(child, {
+    source: "Claude Code",
+    timeoutMs: options.timeout,
+    stdout(chunk) {
+      stdout += chunk;
+    },
+    close(code) {
+      if (code !== 0)
+        throw new Error("Claude Code could not read usage limits; check native authentication.");
+      return stdout;
+    },
+    start() {
+      child.stdin.end();
+    },
   });
-  return { stdout };
+  return { stdout: result };
 }
 
 function spawnQuotaProcess(
@@ -286,7 +232,11 @@ function spawnQuotaProcess(
   args: string[],
   options: QuotaProcessOptions,
 ): ChildProcessWithoutNullStreams {
-  return spawn(file, args, { ...options, stdio: ["pipe", "pipe", "pipe"] });
+  return spawn(file, args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 }
 
 export function formatCodexQuota(
@@ -299,9 +249,19 @@ export function formatCodexQuota(
 
 function parseCodexBucket(response: unknown): RateLimitBucket {
   if (!isRecord(response)) throw new Error("Codex returned an unexpected usage response.");
-  const bucket = parseBucket(response.rateLimits);
+  const named = response.rateLimitsByLimitId;
+  const authoritative = isRecord(named) && Object.hasOwn(named, "codex");
+  const value = authoritative ? named.codex : response.rateLimits;
+  if (isRecord(value) && value.limitId != null && value.limitId !== "codex") {
+    throw new Error("Codex returned a different limit bucket; expected the codex bucket.");
+  }
+  const bucket = parseBucket(value);
   if (bucket === undefined) {
-    throw new Error("Codex returned no usage windows for the current account.");
+    throw new Error(
+      authoritative
+        ? "Codex returned a malformed named codex snapshot with no usage windows; check native CLI usage."
+        : "Codex returned no usage windows for the current account; check native CLI usage.",
+    );
   }
   return bucket;
 }
@@ -316,13 +276,21 @@ function parseBucket(value: unknown): RateLimitBucket | undefined {
 }
 
 function parseWindow(value: unknown): RateLimitWindow | undefined {
-  if (!isRecord(value) || typeof value.usedPercent !== "number") return;
+  if (!isRecord(value) || !finiteNumber(value.usedPercent)) return;
+  if (value.usedPercent < 0 || value.usedPercent > 100) return;
+  const duration = value.windowDurationMins;
+  if (duration != null && (!finiteNumber(duration) || duration <= 0)) return;
+  const reset = value.resetsAt;
+  if (reset != null && (!finiteNumber(reset) || reset < 0 || reset > 8_640_000_000_000)) return;
   return {
     usedPercent: value.usedPercent,
-    windowDurationMins:
-      typeof value.windowDurationMins === "number" ? value.windowDurationMins : null,
-    resetsAt: typeof value.resetsAt === "number" ? value.resetsAt : null,
+    windowDurationMins: duration ?? null,
+    resetsAt: reset ?? null,
   };
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function formatBucket(
@@ -356,5 +324,5 @@ function formatLocalTime(timestampSeconds: number): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

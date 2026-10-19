@@ -9,6 +9,7 @@ import {
   CONFIG_DIRECTORY_VARIABLES,
   type LoadedConfig,
   resolveCodeConfig,
+  resolveQuotaConfig,
 } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
@@ -189,13 +190,23 @@ function sessionTreeOf(report: ProjectReport, cwd: string): SessionTree {
 }
 
 async function showQuota(ctx: CodeContext, code: CodeConfig): Promise<number> {
-  const report = await ctx.quotaReader(code.agent, {
-    cwd: ctx.cwd,
-    env: code.childEnv,
-    unset: [],
-  });
+  const label = `profile ${JSON.stringify(code.profile ?? "(built-in)")}`;
+  const quota = resolveQuotaConfig(code, ctx.env);
+  if (quota.source === "none")
+    throw new Error(`Quota is disabled for ${label} (quota.source: none).`);
+  let report: string;
+  try {
+    report = await ctx.quotaReader(quota.source, { cwd: ctx.cwd, env: quota.env });
+  } catch (error) {
+    throw new Error(
+      `Quota source ${quota.source}, ${label}, selected native configuration: ${errorMessage(error)} ` +
+        `Check that ${quota.source} is installed and authenticated under this quota configuration.`,
+    );
+  }
   ctx.stdout.write(
-    `Profile: ${code.profile ?? "(built-in)"}; native source: ${code.agent}\n${report.trimEnd()}\n`,
+    `Profile: ${code.profile ?? "(built-in)"}; native source: ${quota.source}\n` +
+      "Limits belong to this native CLI's account; account pairing with the coding agent is not verified.\n" +
+      `${report.trimEnd()}\n`,
   );
   return 0;
 }
@@ -926,7 +937,7 @@ Commands:
                         run of the ticket, of no-ticket work, or of the --meta key. Includes
                         contextTokens, the context-window occupancy the run ended on, and
                         contextCompacted. Does not start an agent.
-  quota                 Show account limits and reset times (unsupported for pi).
+  quota                 Show native account limits via the profile's quota source.
 
 Options (status):
   --ticket <id>         Newest run of that ticket.

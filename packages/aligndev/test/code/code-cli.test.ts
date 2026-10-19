@@ -648,12 +648,13 @@ describe("quota", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain(
-      "Profile: test; native source: claude\nClaude Code quota\n\nCurrent session: 25% used\n",
+      "Profile: test; native source: claude\n" +
+        "Limits belong to this native CLI's account; account pairing with the coding agent is not verified.\n" +
+        "Claude Code quota\n\nCurrent session: 25% used\n",
     );
     expect(quotaReader).toHaveBeenCalledWith("claude", {
       cwd: tmpdir(),
       env: expect.objectContaining({ KEEP: "yes", CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" }),
-      unset: [],
     });
     expect(modelResolver).not.toHaveBeenCalled();
   });
@@ -672,7 +673,10 @@ describe("quota", () => {
         quotaReader,
       }),
     ).toBe(1);
-    expect(stderr.text()).toBe("limits unavailable\n");
+    expect(stderr.text()).toContain(
+      'Quota source codex, profile "test", selected native configuration: limits unavailable',
+    );
+    expect(stderr.text()).toContain("installed and authenticated under this quota configuration");
   });
 });
 

@@ -227,6 +227,31 @@ function resolvePath(written: string, home: string, path: string): string {
   return isAbsolute(written) ? written : resolve(dirname(path), written);
 }
 
+export type QuotaSource = "claude" | "codex";
+
+export type ResolvedQuota = { source: "none" } | { source: QuotaSource; env: NodeJS.ProcessEnv };
+
+export function resolveQuotaConfig(code: CodeConfig, callerEnv: NodeJS.ProcessEnv): ResolvedQuota {
+  const quota = code.quota;
+  if (quota?.source === "none") return { source: "none" };
+  if (quota === undefined) {
+    if (code.agent === "pi") {
+      throw new Error(
+        "Pi account quota is unsupported without explicit configuration: " +
+          "set quota.source to claude or codex with its native configDir, or none to disable it.",
+      );
+    }
+    return { source: code.agent, env: code.childEnv };
+  }
+  const overrides = { ...quota.env };
+  if (quota.configDir !== undefined)
+    overrides[CONFIG_DIRECTORY_VARIABLES[quota.source]] = quota.configDir;
+  return {
+    source: quota.source,
+    env: buildAgentEnv(callerEnv, quota.unset ?? [], overrides),
+  };
+}
+
 export interface ProfileSelection {
   project?: AligndevProjectSettings | null;
   explicit?: string;

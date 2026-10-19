@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../../src/cli.js";
+import type { QuotaReader } from "../../src/code/quota.js";
 import { listSessionRecords, readCompletion } from "../../src/code/session-file.js";
+import { loadConfig, resolveCodeConfig, resolveQuotaConfig } from "../../src/config.js";
 import { ALIGNFIRST_BIN, makeSink, writeRegistry, writeSettings } from "../helpers.js";
 
 let root: string;
@@ -97,6 +99,7 @@ function settings(extra: object = {}) {
 async function launch(
   tokens: string[],
   modelResolver = vi.fn(async (_agent: string, model: string | undefined) => model),
+  quotaReader?: QuotaReader,
 ) {
   const stdout = makeSink();
   const stderr = makeSink();
@@ -109,6 +112,7 @@ async function launch(
     stdout,
     stderr,
     modelResolver,
+    quotaReader,
   });
   return { code, stdout: stdout.text(), stderr: stderr.text(), modelResolver };
 }
@@ -124,6 +128,167 @@ function newest() {
 function observed() {
   return JSON.parse(readFileSync(join(root, "observed.json"), "utf8"));
 }
+
+describe("independent quota configuration", () => {
+  it("uses each native profile's finalized coding environment when quota is omitted", () => {
+    const config = loadConfig(home);
+    for (const [profile, store] of [
+      ["a", nativeA],
+      ["b", nativeB],
+    ]) {
+      const code = resolveCodeConfig(config, env, { explicit: profile });
+      const quota = resolveQuotaConfig(code, env);
+      expect(quota).toEqual({ source: "claude", env: code.childEnv });
+      if (quota.source === "none") throw new Error("unexpected disabled quota");
+      expect(quota.env.CLAUDE_CONFIG_DIR).toBe(store);
+      expect(quota.env.TOKEN).toBeUndefined();
+      expect(quota.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+    }
+  });
+
+  it.each(["pi", "claude"] as const)(
+    "resolves explicit Codex quota independently of %s overrides",
+    (agent) => {
+      settings({
+        profiles: {
+          a: {
+            agent,
+            configDir: "~/coding",
+            env: { CODING_ONLY: "child", CODEX_HOME: "child-store" },
+            unset: ["TOKEN"],
+            quota: {
+              source: "codex",
+              configDir: "relative-quota",
+              env: { QUOTA_ONLY: "quota", PI_CODING_AGENT: "true" },
+              unset: ["REMOVE_QUOTA"],
+            },
+          },
+        },
+      });
+      const caller = {
+        ...env,
+        REMOVE_QUOTA: "inherited",
+        AI_AGENT: "pi",
+        CODEX_THREAD_ID: "parent",
+      };
+      const original = { ...caller };
+      const code = resolveCodeConfig(loadConfig(home), caller);
+      const quota = resolveQuotaConfig(code, caller);
+      expect(quota.source).toBe("codex");
+      if (quota.source === "none") throw new Error("unexpected disabled quota");
+      expect(quota.env).toMatchObject({
+        CODEX_HOME: join(home, ".alignfirst", "relative-quota"),
+        TOKEN: "fixture-secret",
+        QUOTA_ONLY: "quota",
+      });
+      for (const key of [
+        "CODING_ONLY",
+        "REMOVE_QUOTA",
+        "PI_CODING_AGENT",
+        "AI_AGENT",
+        "CODEX_THREAD_ID",
+        "CLAUDE_CODE_SESSION_ID",
+      ])
+        expect(quota.env[key]).toBeUndefined();
+      expect(code.childEnv.CODING_ONLY).toBe("child");
+      expect(code.childEnv.CODEX_HOME).toBe("child-store");
+      expect(caller).toEqual(original);
+    },
+  );
+
+  it("allows explicit different-account Claude quota and source-specific home expansion", () => {
+    settings({
+      profiles: {
+        a: {
+          agent: "claude",
+          configDir: nativeA,
+          unset: ["TOKEN"],
+          quota: { source: "claude", configDir: "~/quota-claude", env: { MODE: "quota" } },
+        },
+      },
+    });
+    const code = resolveCodeConfig(loadConfig(home), env);
+    const quota = resolveQuotaConfig(code, env);
+    expect(quota).toEqual({
+      source: "claude",
+      env: expect.objectContaining({
+        CLAUDE_CONFIG_DIR: join(home, "quota-claude"),
+        MODE: "quota",
+        TOKEN: "fixture-secret",
+      }),
+    });
+    expect(code.childEnv.CLAUDE_CONFIG_DIR).toBe(nativeA);
+  });
+
+  it("deliberately retains inherited native storage when explicit quota omits configDir", () => {
+    settings({
+      profiles: {
+        a: {
+          agent: "pi",
+          configDir: nativeA,
+          quota: { source: "codex" },
+        },
+      },
+    });
+    const caller = { ...env, CODEX_HOME: nativeB };
+    expect(resolveQuotaConfig(resolveCodeConfig(loadConfig(home), caller), caller)).toEqual({
+      source: "codex",
+      env: expect.objectContaining({ CODEX_HOME: nativeB }),
+    });
+  });
+
+  it("executes the selected quota source, labels its account boundary and leaves the child unchanged", async () => {
+    settings({
+      profiles: {
+        a: {
+          agent: "pi",
+          configDir: nativeA,
+          quota: { source: "codex", configDir: nativeB },
+        },
+      },
+    });
+    const reader = vi.fn(async () => "Codex quota\n5 hours: 15% used");
+    const result = await launch(["quota"], undefined, reader);
+    expect(result.code, result.stderr).toBe(0);
+    expect(reader).toHaveBeenCalledWith("codex", {
+      cwd: project,
+      env: expect.objectContaining({ CODEX_HOME: nativeB }),
+    });
+    expect(reader.mock.calls[0]).toBeDefined();
+    expect(result.stdout).toContain("Profile: a; native source: codex");
+    expect(result.stdout).toContain("account pairing with the coding agent is not verified");
+    expect(result.stdout).not.toContain("fixture-secret");
+    expect(resolveCodeConfig(loadConfig(home), env).childEnv.PI_CODING_AGENT_DIR).toBe(nativeA);
+    expect(records()).toHaveLength(0);
+  });
+
+  it.each([undefined, { source: "none" }])(
+    "spawns nothing for unsupported/disabled quota %j",
+    async (quota) => {
+      settings({ profiles: { a: { agent: "pi", quota } } });
+      const reader = vi.fn(async () => "must not run");
+      const result = await launch(["quota"], undefined, reader);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(
+        quota === undefined ? "set quota.source" : "Quota is disabled",
+      );
+      expect(reader).not.toHaveBeenCalled();
+      expect(result.modelResolver).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses new-session project/explicit precedence rather than a recorded run's profile", async () => {
+    expect((await launch(["new", "-m", "go"])).code).toBe(0);
+    settings({ profile: "b" });
+    const reader = vi.fn(async () => "limits");
+    expect((await launch(["quota"], undefined, reader)).stdout).toContain("Profile: b;");
+    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "a" } } } });
+    expect((await launch(["quota"], undefined, reader)).stdout).toContain("Profile: a;");
+    expect((await launch(["quota", "--profile", "b"], undefined, reader)).stdout).toContain(
+      "Profile: b;",
+    );
+  });
+});
 
 describe("effective profiles through CLI launch and resume", () => {
   it("uses the actual-cwd project selection for guide/help and preserves subcommand help overrides", async () => {

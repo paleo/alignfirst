@@ -130,7 +130,8 @@ describe("renderCodeGuide", () => {
         "A new session defaults to the coding agent's default; a resume keeps the session's model.",
       );
       expect(guide).not.toContain("reserve-side-ticket");
-      expect(guide).toContain("account limits and reset times");
+      expect(guide).toContain("native quota source and account limits");
+      expect(guide).toContain("account pairing with the coding child is not verified");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
       expect(guide).toContain("### Where the plan runs");
       expect(guide).toContain("contextTokens");
@@ -308,7 +309,8 @@ describe("Pi parent delegation", () => {
           ? "A new session defaults to `provider/custom:high`"
           : "A new session defaults to the coding agent's default",
       );
-      expect(guide).toContain("Pi quota is unsupported");
+      expect(guide).toContain('Pi needs explicit `quota.source: "codex"` or `"claude"`');
+      expect(guide).toContain('`"none"` disables quota');
       expect(guide).toContain("with optional thinking suffix");
       expect(guide).toContain("Saved project trust is honored; no forced approval is passed");
       expect(guide).not.toContain("{{");
