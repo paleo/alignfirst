@@ -24,6 +24,7 @@ ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.settings.json"
 COMPANIONS_DIR="$ALIGNFIRST_HOME/companions"
 DEPLOYMENT_PROFILES=
 INSTRUCTION_FILE=
+CODING_AGENT_CONFIG_DIR=
 
 main() {
   load_env
@@ -43,7 +44,7 @@ main() {
   register_secrets_provider
   configure_common
   configure_surface
-  configure_coding_agent
+  configure_deployment_agents
   install_environment_files
   install_aligndev_config
   create_companions_dir
@@ -99,6 +100,20 @@ load_deployment_profiles() {
     exit 1
   fi
   INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$DEPLOYMENT_PROFILES")
+  CODING_AGENT_CONFIG_DIR=$(jq -r '.configDir' <<<"$DEPLOYMENT_PROFILES")
+}
+
+configure_deployment_agents() {
+  # Reserve discovery names without touching credentials, sessions, caches or user subagent profiles.
+  /usr/bin/node "$DIR/deployment-policy.mjs" prepare \
+    "$DIR/aligndev.settings.json" "$HOME" "$ALIGNDEV_CONFIG_FILE"
+  local store
+  while IFS= read -r store; do
+    INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$store")
+    CODING_AGENT_CONFIG_DIR=$(jq -r '.configDir' <<<"$store")
+    configure_coding_agent
+  done < <(jq -c --arg agent "$coding_agent_kind" '.stores[] | select(.agent == $agent)' \
+    <<<"$DEPLOYMENT_PROFILES")
 }
 
 prepare_filesystem() {

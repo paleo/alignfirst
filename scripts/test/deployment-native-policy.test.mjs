@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -22,7 +22,7 @@ const storageProbe = fileURLToPath(
   new URL("./fixtures/deployment-storage-probe.mjs", import.meta.url),
 );
 
-// These tests preserve a blocking observation, not a passing deployment-hardening acceptance.
+// Preserve the accepted auth.json persistence risk; these probes do not certify OS hardening.
 test("deployment audit uses the pinned native package and declared npm entry", () => {
   assert.equal(piManifest.version, "1.3.0", "Re-audit native storage on Pi upgrades");
   assert.equal(piManifest.engines.node, ">=22.19.0");
@@ -32,7 +32,7 @@ test("deployment audit uses the pinned native package and declared npm entry", (
 
 for (const custom of [false, true]) {
   const directoryKind = custom ? "custom" : "default";
-  test(`mutable ${directoryKind} auth is an executable declaration on fresh CLI startup`, () => {
+  test(`approved exception: mutable ${directoryKind} auth persists commands across CLI startups`, () => {
     withFixture(custom, (fixture) => {
       const authPath = join(fixture.agentDir, "auth.json");
       const sentinel = join(fixture.root, "command-ran");
@@ -62,6 +62,76 @@ for (const custom of [false, true]) {
     });
   });
 
+  test(`${directoryKind} no-prompt RPC startup and credential writes coexist with read-only resources`, () => {
+    withFixture(custom, (fixture) => {
+      for (const [name, text] of Object.entries({
+        "settings.json": "{}",
+        "models.json": "{}",
+        "mcp.json": "{}",
+        "trust.json": "{}",
+        "AGENTS.md": "Fixture managed instructions",
+        "SYSTEM.md": "",
+        "APPEND_SYSTEM.md": "",
+      })) {
+        writeFileSync(join(fixture.agentDir, name), text);
+        chmodSync(join(fixture.agentDir, name), 0o444);
+      }
+      mkdirSync(join(fixture.agentDir, "AGENTS.override.md"), { mode: 0o555 });
+      writeFileSync(
+        join(fixture.agentDir, "auth.json"),
+        JSON.stringify({
+          openai: { type: "api_key", key: "fixture-only" },
+        }),
+        { mode: 0o600 },
+      );
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          guard,
+          piCli,
+          "--offline",
+          "--mode",
+          "rpc",
+          "--no-session",
+          "--provider",
+          "openai",
+          "--model",
+          "gpt-4o-mini",
+        ],
+        {
+          cwd: fixture.cwd,
+          env: fixture.env,
+          encoding: "utf8",
+          timeout: 15_000,
+          maxBuffer: 64 * 1024,
+          input: '{"id":"fixture-state","type":"get_state"}\n',
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, "", "Startup must not hide read-only resource failures");
+      const output = result.stdout;
+      const records = output
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      const state = records.find((record) => record.id === "fixture-state");
+      assert.equal(state?.type, "response");
+      assert.equal(state?.success, true);
+      assert.equal(state?.data.isStreaming, false);
+      assert(
+        !records.some((record) => record.type === "message_start"),
+        "No model turn was requested",
+      );
+      assert(!output.includes("fixture-only"));
+      assert.deepEqual(JSON.parse(runNode(fixture, [storageProbe, "mutable"])), {
+        adjacentLockObserved: true,
+        credentialUpdated: true,
+        lockRemoved: true,
+      });
+    });
+  });
+
   test(`native ${directoryKind} credential updates need a writable file and adjacent lock`, () => {
     withFixture(custom, (fixture) => {
       const result = JSON.parse(runNode(fixture, [storageProbe, "mutable"]));
@@ -69,6 +139,21 @@ for (const custom of [false, true]) {
         adjacentLockObserved: true,
         credentialUpdated: true,
         lockRemoved: true,
+      });
+    });
+  });
+
+  test(`${directoryKind} native discovery, empty prompt reservations and saved parent trust`, () => {
+    withFixture(custom, (fixture) => {
+      const probe = fileURLToPath(
+        new URL("./fixtures/deployment-resource-probe.mjs", import.meta.url),
+      );
+      assert.deepEqual(JSON.parse(runNode(fixture, [probe])), {
+        emptyPromptReservationsNeutral: true,
+        alternateInstructionsDiscovered: true,
+        parentTrustInherited: true,
+        closerTrustOverrides: true,
+        nativeSettingsPersisted: true,
       });
     });
   });

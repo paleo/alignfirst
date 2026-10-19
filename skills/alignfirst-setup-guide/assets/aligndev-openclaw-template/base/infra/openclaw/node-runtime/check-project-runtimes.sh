@@ -22,6 +22,9 @@ main() {
   run_check "profile output stays silent" check_silent_profile
   run_check "audited commands resist runtime shadows" check_command_precedence
   run_check "assistant CLIs execute" check_cli_commands
+  if [ "$CODING_AGENT" = pi ]; then
+    run_check "Pi uses system Node and preserves project child runtime" check_pi_runtime
+  fi
   run_check "background Node owns its process" check_background_process
 
   return "$failures"
@@ -36,8 +39,8 @@ validate_environment() {
     fi
   done
   case "$CODING_AGENT" in
-    claude|codex) ;;
-    *) printf 'FAIL environment: CODING_AGENT must be claude or codex\n'; return 1 ;;
+    claude|codex|pi) ;;
+    *) printf 'FAIL environment: CODING_AGENT must be claude, codex or pi\n'; return 1 ;;
   esac
   if [ ! -x "$PROJECT_SHELL" ]; then
     printf 'FAIL environment: PROJECT_SHELL is not executable\n'
@@ -178,6 +181,7 @@ check_silent_profile() {
 check_command_precedence() {
   local expected_agent output
   expected_agent="/home/{{SERVICE_USER}}/.npm-system-global/bin/$CODING_AGENT"
+  if [ "$CODING_AGENT" = pi ]; then expected_agent=/opt/{{SERVICE_USER}}/bin/pi; fi
   output=$(cd "$fixture_root/default" && "$PROJECT_SHELL" -c '
     printf "%s\n" "$FNM_MULTISHELL_PATH/bin" "$(dirname "$(command -v node)")" \
       "$(dirname "$(command -v npm)")" "$(command -v openclaw)" \
@@ -219,6 +223,45 @@ check_cli_commands() {
       alignfirst --version >/dev/null &&
       openclaw --version >/dev/null
   ' >/dev/null 2>&1)
+}
+
+check_pi_runtime() {
+  local extension="$fixture_root/pi-runtime.mjs" record="$fixture_root/pi-runtime.json"
+  local directory expected_child
+  cat > "$extension" <<'PI_RUNTIME'
+import { writeFileSync } from "node:fs";
+export default function (pi) {
+  pi.on("session_start", async () => {
+    const child = await pi.exec("node", ["-p", "process.execPath"]);
+    if (child.code !== 0) throw new Error("Project Node child failed");
+    writeFileSync(process.env.PI_RUNTIME_RECORD, JSON.stringify({
+      runtime: process.execPath, cwd: process.cwd(), child: child.stdout.trim(), path: process.env.PATH,
+    }));
+  });
+  pi.on("input", () => ({ action: "handled" }));
+}
+PI_RUNTIME
+  for directory in "$fixture_root/default" "$fixture_root/pinned/nested"; do
+    expected_child=$(cd "$directory" && "$PROJECT_SHELL" -c \
+      'readlink -f "$(command -v node)"' 2>/dev/null) || return 1
+    rm -f -- "$record"
+    (cd "$directory" && PI_RUNTIME_RECORD="$record" PI_RUNTIME_EXTENSION="$extension" \
+      PI_OFFLINE=1 "$PROJECT_SHELL" -c '
+        pi --offline --no-extensions --extension "$PI_RUNTIME_EXTENSION" \
+          --no-skills --no-prompt-templates --no-themes --no-context-files --no-mcp \
+          --no-session --model openai/gpt-4.1 --print runtime-probe < /dev/null
+      ' >/dev/null 2>&1) || return 1
+    /usr/bin/node --input-type=module - "$record" "$directory" "$expected_child" <<'PI_ASSERT'
+import assert from "node:assert/strict";
+import { readFileSync, realpathSync } from "node:fs";
+const [file, cwd, child] = process.argv.slice(2);
+const record = JSON.parse(readFileSync(file, "utf8"));
+assert.equal(realpathSync(record.runtime), realpathSync("/usr/bin/node"));
+assert.equal(record.cwd, cwd);
+assert.equal(realpathSync(record.child), realpathSync(child));
+PI_ASSERT
+    [ "$?" -eq 0 ] || return 1
+  done
 }
 
 check_background_process() {
