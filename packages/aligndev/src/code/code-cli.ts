@@ -6,7 +6,6 @@ import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alig
 import type { CommandForms } from "../command-form.js";
 import {
   type CodeConfig,
-  CONFIG_DIRECTORY_VARIABLES,
   type LoadedConfig,
   resolveCodeConfig,
   resolveQuotaConfig,
@@ -21,6 +20,7 @@ import {
 } from "../project/layout.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
+import { describeNativeStorage } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
@@ -145,7 +145,7 @@ export async function runCode(
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.agent, code.models, code.modelAliases);
     if (command.kind === "help") {
-      ctx.stdout.write(renderHelp(code.agent, models, ctx.forms, code.profile, code.defaultModel));
+      ctx.stdout.write(renderHelp(code, models, ctx.forms));
       return 0;
     }
     loadMessage(command.args, ctx.cwd);
@@ -558,8 +558,13 @@ async function runSession(
       cwd,
       env: code.childEnv,
     });
-  } catch (error) {
-    const message = errorMessage(error);
+  } catch {
+    const message =
+      `Could not resolve the ${agent} model; check --model, profile.models/modelAliases and the agent installation. ` +
+      `${nativeContext(code)}.` +
+      (agent === "codex"
+        ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
+        : "");
     applyCompletion(sessionFilePath, {
       status: "failed",
       endedAt: new Date().toISOString(),
@@ -567,13 +572,7 @@ async function runSession(
       sessionId: null,
       result: message,
     });
-    writeFailureDiagnostic(
-      ctx,
-      sessionFilePath,
-      args.quiet === true
-        ? `Could not resolve the ${agent} model; check --model, profile.models and the agent installation.`
-        : message,
-    );
+    writeFailureDiagnostic(ctx, sessionFilePath, message);
     return 1;
   }
 
@@ -599,8 +598,10 @@ async function runSession(
     writeFailureDiagnostic(
       ctx,
       sessionFilePath,
-      `${nativeContext(code)} not authenticated — an administrator must re-login in that native configuration ` +
-        `(${authenticationInstruction(agent)}).`,
+      `${nativeContext(code)} not authenticated — an administrator must re-login ` +
+        "with the same effective environment as the child (apply profile unset/env/configDir, " +
+        "including HOME, PATH and credential routing), from the same working directory. " +
+        `Then use ${authenticationInstruction(agent)}. A bare login in another shell may use a different account.`,
     );
     return EXIT_AUTH_REQUIRED;
   }
@@ -614,7 +615,7 @@ async function runSession(
 }
 
 function nativeContext(code: CodeConfig): string {
-  return `${code.agent} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${CONFIG_DIRECTORY_VARIABLES[code.agent]}: ${code.configDir ?? "inherited/default native storage"})`;
+  return `${code.agent} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${describeNativeStorage(code)})`;
 }
 
 function authenticationInstruction(agent: CodingAgent): string {
@@ -897,12 +898,11 @@ function createMissingCompanion(report: ProjectReport) {
 }
 
 function renderHelp(
-  agent: CodingAgent,
+  code: CodeConfig,
   models: readonly string[] | undefined,
   forms: CommandForms,
-  profile: string | null,
-  defaultModel: string | undefined,
 ): string {
+  const { agent, profile, defaultModel } = code;
   const { aligndev, alignfirst } = forms;
   const permissionMode =
     agent === "pi"
@@ -976,6 +976,12 @@ Config (~/.alignfirst/aligndev.settings.json):
                         Precedence: explicit > project > recorded resume > global > detected default.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
                         One configured alias expands before native model handling.
+
+Native configuration: ${describeNativeStorage(code)}.
+Login must use the same effective environment as the child: apply profile unset/env/configDir,
+including HOME, PATH and credential routing, from the same working directory. Then use
+${authenticationInstruction(agent)}. A bare login in another shell may use a different account.
+Environment values are omitted.
 
 Selected-agent permissions: ${permissionMode}
 The project's companion directory is prepared before launch; pi uses ordinary OS access.

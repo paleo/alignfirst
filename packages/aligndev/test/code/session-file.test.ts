@@ -91,6 +91,26 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block)).toEqual(frontmatter);
   });
 
+  it.each(["line\nbreak", "line\r\nbreak", "tab\tinside", "nul\u0000inside", "next\u0085line"])(
+    "round-trips embedded controls in all string metadata: %j",
+    (value) => {
+      const metadata = makeFrontmatter({
+        profile: value,
+        model: value,
+        sessionId: value,
+        command: value,
+        meta: value,
+        cwd: value,
+        contextTokensError: value,
+      });
+      const block = serializeFrontmatter(metadata)
+        .replace(/^---\n/, "")
+        .replace(/\n---\n$/, "");
+      expect(parseFrontmatter(block)).toEqual(metadata);
+      expect(block.split("\n")).toHaveLength(Object.keys(metadata).length);
+    },
+  );
+
   it("round-trips null pid and cwd", () => {
     const block = serializeFrontmatter(makeFrontmatter())
       .replace(/^---\n/, "")

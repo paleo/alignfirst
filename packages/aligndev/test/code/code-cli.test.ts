@@ -984,7 +984,7 @@ describe("launch guards", () => {
     expect(listSessionRecords(plans)).toHaveLength(before);
   });
 
-  it("seals model-discovery failures in the session file", async () => {
+  it("sanitizes injected model-discovery failures on every output surface", async () => {
     const stdout = makeSink();
     const stderr = makeSink();
     const codexHome = makeHome({ platform: "codingAgent", code: { agent: "codex" } });
@@ -997,19 +997,21 @@ describe("launch guards", () => {
       stdout,
       stderr,
       modelResolver: async () => {
-        throw new Error("catalog unavailable");
+        throw new Error("catalog unavailable: injected-resolver-secret");
       },
     });
 
     expect(code).toBe(1);
     expect(stdout.text()).toContain("Session file:");
-    expect(stderr.text()).toContain("catalog unavailable");
+    expect(stderr.text()).toContain("Could not resolve the codex model");
+    expect(stdout.text() + stderr.text()).not.toContain("injected-resolver-secret");
     const records = listSessionRecords(plans);
     expect(records).toHaveLength(1);
     expect(readCompletion(records[0].path)).toMatchObject({
       frontmatter: { status: "failed", exitReason: "error", sessionId: null },
-      result: "catalog unavailable",
+      result: expect.stringContaining("Could not resolve the codex model"),
     });
+    expect(readFileSync(records[0].path, "utf8")).not.toContain("injected-resolver-secret");
   });
 
   it("reserves the next side ticket through alignfirst for --no-ticket", async () => {
@@ -1271,7 +1273,7 @@ describe("companion projects", () => {
 
     mkdirSync(plans, { recursive: true });
     const started = await run(project, ["new", "-m", "go"]);
-    expect(started.stderr).toContain("stop before spawning");
+    expect(started.stderr).toContain("Could not resolve the claude model");
     expect(started.stdout).toContain(`Session file: ${join(plans, "_aligndev")}/`);
     expect(listSessionRecords(plans)).toHaveLength(1);
   });
@@ -1649,7 +1651,7 @@ describe("quiet execution", () => {
     },
   );
 
-  it("keeps quiet model-resolution details in the file", async () => {
+  it("sanitizes quiet model-resolution failures in diagnostics and the file", async () => {
     const stdout = makeSink();
     const stderr = makeSink();
     const detail = "catalog unavailable: credential-must-stay-private".repeat(200);
@@ -1673,8 +1675,9 @@ describe("quiet execution", () => {
     const [record] = listSessionRecords(plans);
     expect(readCompletion(record.path)).toMatchObject({
       frontmatter: { status: "failed" },
-      result: detail,
+      result: expect.stringContaining("Could not resolve the claude model"),
     });
+    expect(readFileSync(record.path, "utf8")).not.toContain("credential-must-stay-private");
   });
 });
 

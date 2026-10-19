@@ -275,7 +275,7 @@ function serializeValue(value: string | number | boolean | null): string {
 }
 
 function needsQuote(value: string): boolean {
-  return value === "" || /[:"#]/.test(value) || value !== value.trim();
+  return value === "" || /[:"#\p{Cc}\p{Zl}\p{Zp}]/u.test(value) || value !== value.trim();
 }
 
 interface SplitSessionFile {

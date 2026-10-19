@@ -90,7 +90,7 @@ When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`,
 
 1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`, including the required `agent`.
 2. Set `code.profile` to that name for a global child selection. Alternatively, omit it and map each detected kind through `code.defaultProfiles` to a profile with the matching agent.
-3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate in the selected store; never copy conversations or credentials between accounts to make resume work.
+3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate with the child's effective environment and cwd, applying profile `unset/env/configDir`, including HOME, PATH and credential routing. Native directory variables in `env` also select storage; a bare login in another shell may use another account. Never copy conversations or credentials between accounts to make resume work.
 4. Review project registry selections and run `aligndev guide code --profile <name>`. Profile selection alone needs no companion or `.plans`. Obtain approval before changing any user's real settings or native account state.
 
 For example, convert:

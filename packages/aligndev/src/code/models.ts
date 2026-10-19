@@ -57,8 +57,8 @@ export function createExecutableModelResolver(
       const slug = selectNewestCodexModel(await catalog, selectedModel);
       if (slug !== undefined) return slug;
       throw new Error("the bundled catalog contains no matching model");
-    } catch (error) {
-      throw new Error(codexAliasError(selectedModel, error));
+    } catch {
+      throw new Error(codexAliasError(selectedModel));
     }
   };
 }
@@ -116,9 +116,9 @@ function runCodexModelCatalog(context: ModelDiscoveryContext): Promise<string> {
         maxBuffer: CODEX_CATALOG_MAX_BUFFER,
         timeout: CODEX_CATALOG_TIMEOUT_MS,
       },
-      (error, stdout, stderr) => {
+      (error, stdout) => {
         if (error) {
-          reject(new Error(stderr.trim() || error.message));
+          reject(new Error("Codex model catalog command failed."));
           return;
         }
         resolve(stdout);
@@ -128,10 +128,9 @@ function runCodexModelCatalog(context: ModelDiscoveryContext): Promise<string> {
   });
 }
 
-function codexAliasError(alias: string, error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
+function codexAliasError(alias: string): string {
   return (
-    `Unable to resolve Codex model alias ${JSON.stringify(alias)}: ${detail}. ` +
+    `Unable to resolve Codex model alias ${JSON.stringify(alias)} from the bundled catalog. ` +
     "Update the Codex CLI, or set `code.profiles.<name>.models` in the aligndev settings to an explicit full model " +
     "slug and select that value."
   );

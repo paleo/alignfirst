@@ -176,7 +176,8 @@ function missingCodexOutcome(state: AgentProtocolState): string {
 
 function codexAuthenticationMessage(detail?: string): string {
   const base =
-    "Coding agent not authenticated: an administrator must run `codex login` in the selected native configuration before " +
+    "Coding agent not authenticated: an administrator must run `codex login` with the same effective environment " +
+    "and cwd as the child (apply profile unset/env/configDir, including HOME, PATH and credential routing) before " +
     "`aligndev code` can run again.";
   const reason = detail?.trim();
   return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;

@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 
 import { resolveModels } from "../code/models.js";
+import { describeNativeStorage } from "../code/native-context.js";
 import type { CommandForms } from "../command-form.js";
 import {
   type LoadedConfig,
@@ -104,7 +105,7 @@ function renderCodeTopic(
     code.defaultModel,
     ctx.forms,
     code.profile,
-    code.configDir,
+    describeNativeStorage(code),
   );
 }
 

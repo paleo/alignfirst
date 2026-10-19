@@ -7,7 +7,7 @@ import {
   assessCodexState,
   buildCodexArgs,
   createCodexAdapter,
-  createCodexState,
+  createCodexState as createNativeCodexState,
   interpretCodexLine,
 } from "../../src/code/codex-agent.js";
 import type { RunConfig } from "../../src/code/run-agent.js";
@@ -229,6 +229,14 @@ describe("Codex selected native context", () => {
   });
 });
 
+function createCodexState(config: RunConfig = BASE) {
+  if (codexHome === undefined) throw new Error("Disposable Codex home is not initialized.");
+  return createNativeCodexState({
+    ...config,
+    env: { HOME: codexHome, CODEX_HOME: codexHome, ...config.env },
+  });
+}
+
 function event(state: ReturnType<typeof createCodexState>, value: unknown): string | undefined {
   return interpretCodexLine(JSON.stringify(value), state);
 }
@@ -260,7 +268,8 @@ interface RolloutUsage {
 }
 
 function writeRollout(threadId: string, usages: RolloutUsage[]): void {
-  const dir = join(codexHome ?? "", "sessions", "2026", "09", "16");
+  if (codexHome === undefined) throw new Error("Disposable Codex home is not initialized.");
+  const dir = join(codexHome, "sessions", "2026", "09", "16");
   mkdirSync(dir, { recursive: true });
   const lines = usages.map((usage) =>
     JSON.stringify({

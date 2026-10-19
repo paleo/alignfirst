@@ -37,6 +37,11 @@ const path = require("node:path");
 const args = process.argv.slice(2);
 const index = args.indexOf("--resume");
 const store = process.env.CLAUDE_CONFIG_DIR;
+if (process.env.FIXTURE_AUTH_FAILURE === "1") {
+  console.log(JSON.stringify({type: "assistant", error: "authentication_failed"}));
+  console.log(JSON.stringify({type: "result", is_error: true, result: "Not logged in. Please run /login."}));
+  process.exit(1);
+}
 const identity = path.join(store, "identity");
 let id = "native-session";
 if (index >= 0) {
@@ -321,6 +326,129 @@ describe("effective profiles through CLI launch and resume", () => {
     expect(stdout.text()).not.toContain("fixture-secret");
     expect(records()).toHaveLength(0);
     expect(existsSync(join(nativeB, "identity"))).toBe(false);
+  });
+
+  it.each([
+    ["claude", "CLAUDE_CONFIG_DIR"],
+    ["codex", "CODEX_HOME"],
+    ["pi", "PI_CODING_AGENT_DIR"],
+  ] as const)(
+    "describes %s profile env storage in help and guide without values",
+    async (agent, variable) => {
+      settings({
+        profiles: {
+          a: { agent, env: { [variable]: "private-store-value", HOME: "private-home-value" } },
+        },
+      });
+      const help = await launch(["--help"]);
+      const stdout = makeSink();
+      const stderr = makeSink();
+      const guideCode = await main({
+        argv: ["node", "aligndev", "guide", "code"],
+        cwd: project,
+        home,
+        env,
+        alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+        stdout,
+        stderr,
+      });
+      expect(help.code, help.stderr).toBe(0);
+      expect(guideCode, stderr.text()).toBe(0);
+      for (const text of [help.stdout, stdout.text()]) {
+        expect(text).toContain(`${variable}: profile env override (value omitted)`);
+        expect(text).toContain("HOME: profile env override (value omitted)");
+        expect(text).toContain("same effective environment as the child");
+        expect(text).toContain("unset/env/configDir");
+        expect(text).not.toContain("private-store-value");
+        expect(text).not.toContain("private-home-value");
+      }
+    },
+  );
+
+  it("distinguishes inherited native storage from profile removal without values", async () => {
+    env.CLAUDE_CONFIG_DIR = "inherited-private-store";
+    settings({ profiles: { a: { agent: "claude" } } });
+    const inherited = await launch(["--help"]);
+    expect(inherited.stdout).toContain("CLAUDE_CONFIG_DIR: inherited environment (value omitted)");
+    expect(inherited.stdout).not.toContain("inherited-private-store");
+    settings({ profiles: { a: { agent: "claude", unset: ["CLAUDE_CONFIG_DIR"] } } });
+    expect((await launch(["--help"])).stdout).toContain(
+      "CLAUDE_CONFIG_DIR: unset by profile; native defaults apply",
+    );
+  });
+
+  it("requires the selected effective environment for login after authentication failure", async () => {
+    settings({
+      profiles: {
+        a: { agent: "claude", env: { CLAUDE_CONFIG_DIR: nativeA, FIXTURE_AUTH_FAILURE: "1" } },
+      },
+    });
+    const failed = await launch(["new", "-m", "go", "--quiet"]);
+    expect(failed.code, failed.stderr).toBe(2);
+    expect(failed.stderr).toContain("CLAUDE_CONFIG_DIR: profile env override (value omitted)");
+    expect(failed.stderr).toContain("same effective environment as the child");
+    expect(failed.stderr).toContain("unset/env/configDir");
+    expect(failed.stderr).not.toContain(nativeA);
+    expect(failed.stderr).not.toContain("fixture-secret");
+  });
+
+  it("sanitizes native model discovery failures before diagnostics and durable completion", async () => {
+    writeFileSync(
+      join(root, "bin", "codex"),
+      `#!${process.execPath}
+process.stdout.write("native-model-secret");
+process.stderr.write("native-model-secret");
+process.exitCode = 1;
+`,
+      { mode: 0o755 },
+    );
+    settings({ profiles: { a: { agent: "codex", defaultModel: "sol", configDir: nativeA } } });
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", "new", "-m", "go"],
+      cwd: project,
+      home,
+      env,
+      alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+      stdout,
+      stderr,
+    });
+    expect(code).toBe(1);
+    expect(stderr.text()).toContain("Could not resolve the codex model");
+    expect(stderr.text()).toContain("update the Codex CLI");
+    expect(stdout.text() + stderr.text()).not.toContain("native-model-secret");
+    expect(readFileSync(newest().path, "utf8")).not.toContain("native-model-secret");
+    expect(readCompletion(newest().path).frontmatter).toMatchObject({
+      status: "failed",
+      exitReason: "error",
+    });
+  });
+
+  it("round-trips a multiline profile and model through completion, status and resume", async () => {
+    const profile = "work\naccount";
+    const model = "chosen\nmodel";
+    settings({
+      profile,
+      profiles: {
+        [profile]: {
+          agent: "claude",
+          configDir: nativeA,
+          defaultModel: model,
+          modelAliases: { [model]: "opus" },
+        },
+      },
+    });
+    const initial = await launch(["new", "-m", "go", "--profile", profile]);
+    expect(initial.code, initial.stderr).toBe(0);
+    expect(newest().frontmatter).toMatchObject({ profile, model, status: "succeeded" });
+    const status = await launch(["status", newest().path, "--result"]);
+    expect(status.code, status.stderr).toBe(0);
+    expect(status.stdout).toContain("done");
+    const resumed = await launch(["resume", "native-session", "-m", "more"]);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    expect(newest().frontmatter).toMatchObject({ profile, model, status: "succeeded" });
+    expect(resumed.modelResolver).toHaveBeenCalledWith("claude", "opus", expect.anything());
   });
 
   it("rejects selected-profile failures before reserving a side ticket or discovering models", async () => {

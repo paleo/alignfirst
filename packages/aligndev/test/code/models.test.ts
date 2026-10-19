@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -122,6 +125,54 @@ describe("Codex executable model resolution", () => {
     await expect(resolve("codex", "terra", CONTEXT)).rejects.toThrow(
       /`code.profiles.<name>.models` in the aligndev settings/,
     );
+  });
+
+  it.each([new Error("injected-catalog-secret"), "injected-catalog-secret"])(
+    "omits arbitrary injected runner failures: %s",
+    async (failure) => {
+      const resolver = createExecutableModelResolver(async () => {
+        throw failure;
+      });
+      await expect(resolver("codex", "sol", CONTEXT)).rejects.toThrow(/Update the Codex CLI/);
+      await expect(resolver("codex", "sol", CONTEXT)).rejects.not.toThrow(
+        "injected-catalog-secret",
+      );
+    },
+  );
+
+  it.each([0, 1])("sanitizes native catalog output and failure (exit %i)", async (exitCode) => {
+    const root = mkdtempSync(join(tmpdir(), "aligndev-catalog-"));
+    try {
+      writeFileSync(
+        join(root, "codex"),
+        `#!${process.execPath}
+process.stdout.write("native-catalog-secret");
+process.stderr.write("native-catalog-secret");
+process.exit(${exitCode});
+`,
+        { mode: 0o755 },
+      );
+      const resolver = createExecutableModelResolver();
+      const context = { cwd: root, env: { HOME: root, CODEX_HOME: root, PATH: root } };
+      await expect(resolver("codex", "sol", context)).rejects.toThrow(/Update the Codex CLI/);
+      await expect(resolver("codex", "sol", context)).rejects.not.toThrow("native-catalog-secret");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("sanitizes native spawn failures", async () => {
+    const root = mkdtempSync(join(tmpdir(), "aligndev-missing-catalog-"));
+    try {
+      await expect(
+        createExecutableModelResolver()("codex", "sol", {
+          cwd: root,
+          env: { HOME: root, CODEX_HOME: root, PATH: root },
+        }),
+      ).rejects.toThrow(/Unable to resolve Codex model alias/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("validates every catalog model shape", () => {

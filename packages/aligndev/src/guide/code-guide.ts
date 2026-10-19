@@ -10,12 +10,12 @@ export function renderCodeGuide(
   defaultModel: string | undefined,
   forms: CommandForms,
   profile: string | null = null,
-  configDir?: string,
+  nativeStorage = `${CONFIG_DIRECTORY_VARIABLES[agent]}: inherited/default native storage`,
 ): string {
   return renderGuideTemplate("code.md", { platform }, forms, {
     AGENT: agent,
     PROFILE: profile ?? "(built-in)",
-    NATIVE_CONFIG: `${CONFIG_DIRECTORY_VARIABLES[agent]}: ${configDir ?? "inherited/default native storage"}`,
+    NATIVE_CONFIG: nativeStorage,
     AUTH_COMMAND:
       agent === "pi"
         ? "`pi`, then `/login <provider>`, or configure provider credentials in the selected native configuration"
