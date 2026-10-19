@@ -69,7 +69,7 @@ describe("real AlignDev CLI through manifest-loaded background in public Pi runt
       expect(secondResult).toContain("FINAL:question");
       expect(secondResult).not.toContain("PRIVATE-INTERNAL");
       writeFileSync(first.gate, "go");
-      await waitJob(h, first.id);
+      expect((await waitJob(h, first.id)).status).toBe("succeeded");
       const firstResult = h.status(first.key, h.project);
       expect(firstResult).toContain("FINAL:slow");
       expect(firstResult).not.toContain("FINAL:question");

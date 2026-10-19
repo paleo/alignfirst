@@ -1,12 +1,23 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import type * as FileSystem from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   appendTranscript,
   applyCompletion,
+  createSessionFile,
   type SessionFrontmatter,
   listSessionRecords,
   parseFrontmatter,
@@ -18,6 +29,11 @@ import {
   serializeFrontmatter,
   writeInitialSessionFile,
 } from "../../src/code/session-file.js";
+
+vi.mock("node:fs", async (original) => {
+  const fs = await original<typeof FileSystem>();
+  return { ...fs, writeFileSync: vi.fn(fs.writeFileSync) };
+});
 
 const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
 
@@ -165,6 +181,89 @@ describe("session file lifecycle", () => {
     sessionFilePath = join(dir, "session.md");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("retries an atomic claim lost after path selection, preserving both runs and results", () => {
+    const original = vi.mocked(writeFileSync).getMockImplementation();
+    if (!original) throw new Error("Missing filesystem implementation.");
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    vi.mocked(writeFileSync).mockImplementationOnce((path, ...args) => {
+      expect(path).toBe(first);
+      original(path, `${serializeFrontmatter(makeFrontmatter({ meta: "winner" }))}\n`);
+      return original(path, ...args);
+    });
+    const second = createSessionFile(
+      dir,
+      undefined,
+      FIXED_DATE,
+      makeFrontmatter({ meta: "retry" }),
+    );
+    expect(second).not.toBe(first);
+    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    for (const [path, key, other] of [
+      [first, "winner", "retry"],
+      [second, "retry", "winner"],
+    ]) {
+      appendTranscript(path, `PRIVATE:${key}\n`);
+      applyCompletion(path, {
+        status: "succeeded",
+        endedAt: FIXED_DATE.toISOString(),
+        exitReason: "completed",
+        sessionId: key,
+        result: `FINAL:${key}`,
+      });
+      expect(readCompletion(path)).toMatchObject({
+        frontmatter: { meta: key, sessionId: key, status: "succeeded" },
+        result: `FINAL:${key}`,
+      });
+      const content = readFileSync(path, "utf8");
+      expect(content).toContain(`PRIVATE:${key}`);
+      expect(content).not.toContain(`PRIVATE:${other}`);
+    }
+  });
+
+  it("advances past dangling filename symlinks without following or replacing them", () => {
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    mkdirSync(join(dir, "_aligndev"));
+    const target = join(dir, "missing-target");
+    symlinkSync(target, first);
+    expect(existsSync(first)).toBe(false);
+    const second = createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter({ meta: "safe" }));
+    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    expect(readlinkSync(first)).toBe(target);
+    expect(existsSync(target)).toBe(false);
+    expect(readCompletion(second).frontmatter.meta).toBe("safe");
+  });
+
+  it("reports a regular file blocking the session directory without collision retry", () => {
+    writeFileSync(join(dir, "_aligndev"), "blocking file");
+    const claim = vi.mocked(writeFileSync);
+    claim.mockClear();
+    expect(() => createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter())).toThrow(
+      expect.objectContaining({ code: "EEXIST" }),
+    );
+    expect(claim).not.toHaveBeenCalled();
+    expect(readFileSync(join(dir, "_aligndev"), "utf8")).toBe("blocking file");
+  });
+
+  it("propagates non-collision write errors instead of retrying or claiming success", () => {
+    const denied = Object.assign(new Error("write denied"), { code: "EACCES" });
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw denied;
+    });
+    expect(() => createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter())).toThrow(denied);
+    expect(existsSync(resolveSessionFilePath(dir, undefined, FIXED_DATE))).toBe(false);
+  });
+
+  it("refuses a stale filename claim without overwriting the winning run", () => {
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    const stale = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    expect(stale).toBe(first);
+    writeInitialSessionFile(first, makeFrontmatter({ meta: "winner" }));
+    expect(() => writeInitialSessionFile(stale, makeFrontmatter({ meta: "loser" }))).toThrow(
+      expect.objectContaining({ code: "EEXIST" }),
+    );
+    expect(readCompletion(first).frontmatter.meta).toBe("winner");
+  });
 
   it("writes a running header and completes to succeeded with a result", () => {
     writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: 4242, cwd: "/proj" }));

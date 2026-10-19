@@ -26,15 +26,14 @@ import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
 import {
   applyCompletion,
+  createSessionFile,
   findNewestSessionFile,
   listSessionRecords,
   readPidStartTime,
   reconcileSessionFile,
-  resolveSessionFilePath,
   RESULT_MARKER,
   type SessionFrontmatter,
   type SessionRecord,
-  writeInitialSessionFile,
 } from "./session-file.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
@@ -545,9 +544,10 @@ async function runSession(
     args.resume === undefined && companionInUse(report, CONTEXT_COMPANION_ITEMS)
       ? loadContext(alignfirstCommand, cwd, env)
       : undefined;
-  const sessionFilePath = resolveSessionFilePath(tree.sessionsDir, ticket, now);
-  writeInitialSessionFile(
-    sessionFilePath,
+  const sessionFilePath = createSessionFile(
+    tree.sessionsDir,
+    ticket,
+    now,
     buildFrontmatter({ args, agent, profile: code.profile, model, now, realCwd: tree.cwd, ticket }),
   );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);

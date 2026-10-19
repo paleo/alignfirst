@@ -215,36 +215,90 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     }
   }, 15_000);
 
-  it("reports failed process inspection, retains ownership, and permits a fresh cleanup attempt", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-subagent-query-failure-"));
-    const managed = launchManaged({
-      command: process.execPath,
-      args: [fixture, dir, "cooperative"],
-      cwd: dir,
-      stdout: () => {},
-      stderr: () => {},
-      inputError: () => {},
-    });
-    try {
-      await managed.spawned;
-      await waitFor(() => records(dir).length === 2);
-      vi.mocked(readFileSync).mockImplementationOnce(() => {
-        throw Object.assign(new Error("inspection denied"), { code: "EACCES" });
+  it.each(["ENOENT", "ESRCH"])(
+    "tolerates %s during inspection and pre-signal identity checks",
+    async (code) => {
+      const dir = mkdtempSync(join(tmpdir(), "pi-subagent-disappearance-"));
+      const managed = launchManaged({
+        command: process.execPath,
+        args: [fixture, dir, "cooperative"],
+        cwd: dir,
+        stdout: () => {},
+        stderr: () => {},
+        inputError: () => {},
       });
-      const failed = managed.stop();
-      expect(managed.stop()).toBe(failed);
-      await expect(failed).rejects.toThrow("inspection denied");
-      expect(records(dir).some(isLive)).toBe(true);
-      const retry = managed.stop();
-      expect(retry).not.toBe(failed);
-      await retry;
-      expect(records(dir).filter(isLive)).toEqual([]);
-    } finally {
-      for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
-      await managed.stop(Date.now()).catch(() => {});
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }, 12_000);
+      try {
+        await managed.spawned;
+        await waitFor(() => records(dir).length === 2);
+        const original = vi.mocked(readFileSync).getMockImplementation();
+        if (!original) throw new Error("Missing filesystem implementation.");
+        let queryRace = false;
+        let leaderReads = 0;
+        const kill = vi.spyOn(process, "kill");
+        vi.mocked(readFileSync).mockImplementation((...args) => {
+          const path = String(args[0]);
+          if (path === `/proc/${process.pid}/stat` && !queryRace) {
+            queryRace = true;
+            throw Object.assign(new Error("process disappeared during query"), { code });
+          }
+          if (path === `/proc/${managed.child.pid}/stat` && ++leaderReads === 2) {
+            throw Object.assign(new Error("process disappeared before signal"), { code });
+          }
+          return original(...args);
+        });
+        try {
+          await managed.stop(Date.now());
+          expect(queryRace).toBe(true);
+          expect(leaderReads).toBeGreaterThanOrEqual(2);
+          expect(kill).not.toHaveBeenCalledWith(managed.child.pid, "SIGTERM");
+          expect(records(dir).filter(isLive)).toEqual([]);
+          expect(managed.child.exitCode !== null || managed.child.signalCode !== null).toBe(true);
+        } finally {
+          vi.mocked(readFileSync).mockImplementation(original);
+          kill.mockRestore();
+        }
+      } finally {
+        for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
+        await managed.stop(Date.now()).catch(() => {});
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(["EACCES", "EIO"])(
+    "reports %s inspection failure, retains ownership, and permits retry",
+    async (code) => {
+      const dir = mkdtempSync(join(tmpdir(), "pi-subagent-query-failure-"));
+      const managed = launchManaged({
+        command: process.execPath,
+        args: [fixture, dir, "cooperative"],
+        cwd: dir,
+        stdout: () => {},
+        stderr: () => {},
+        inputError: () => {},
+      });
+      try {
+        await managed.spawned;
+        await waitFor(() => records(dir).length === 2);
+        vi.mocked(readFileSync).mockImplementationOnce(() => {
+          throw Object.assign(new Error("inspection denied"), { code });
+        });
+        const failed = managed.stop();
+        expect(managed.stop()).toBe(failed);
+        await expect(failed).rejects.toThrow("inspection denied");
+        expect(records(dir).some(isLive)).toBe(true);
+        const retry = managed.stop();
+        expect(retry).not.toBe(failed);
+        await retry;
+        expect(records(dir).filter(isLive)).toEqual([]);
+      } finally {
+        for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
+        await managed.stop(Date.now()).catch(() => {});
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    12_000,
+  );
 
   it("rejects native Windows before launching", () => {
     vi.stubGlobal("process", { ...process, platform: "win32" });
