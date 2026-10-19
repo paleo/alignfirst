@@ -1,4 +1,5 @@
 import type { BusMessage, ScenarioContext } from "@alignfirst/openclaw-test";
+import { readConfiguredAgent } from "../../scripts/coding-agent-settings.ts";
 import { EXTERNAL_PROJECT_PARENT, PRIMARY_PROJECT_PARENT } from "./project-fixtures.ts";
 
 // Two agent messages carry the delegation outcome — the "started in the background" ack and the
@@ -255,10 +256,7 @@ async function readSessionStart(
 }
 
 async function assertSessionAgent(ctx: ScenarioContext, path: string): Promise<void> {
-  const selectedAgent = process.env.CODING_AGENT;
-  if (selectedAgent !== "claude" && selectedAgent !== "codex") {
-    throw new Error("CODING_AGENT must be set to claude or codex for playbook scenarios");
-  }
+  const selectedAgent = readConfiguredAgent(process.env);
   const result = await ctx.execInGateway(["grep", "-q", `^agent: ${selectedAgent}$`, path]);
   if (result.exitCode !== 0) {
     throw new Error(`session ${path} does not record selected agent ${selectedAgent}`);

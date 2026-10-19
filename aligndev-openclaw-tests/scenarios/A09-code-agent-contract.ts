@@ -1,13 +1,19 @@
 import { writeFile } from "node:fs/promises";
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
+import {
+  type CodingAgent,
+  HARNESS_PROFILE,
+  PI_CONTRACT_MODEL,
+  readConfiguredAgent,
+} from "../scripts/coding-agent-settings.ts";
 import { NIMBUS_PROJECT_PATH } from "./_lib/project-fixtures.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import {
-  type CodingAgent,
   type CodingAgentCall,
   type CodingAgentMockHandle,
   isCodexCatalogCall,
   MOCK_CONTEXT_TOKENS,
+  type PiResponseVariant,
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
 
@@ -15,6 +21,7 @@ const PROJECT_DIR = NIMBUS_PROJECT_PATH;
 const TICKET_ID = "ABC-090";
 const NEW_MESSAGE = "Inspect the fixture and report the result.";
 const RESUME_MESSAGE = "Continue and confirm the result.";
+const CONTRACT_MODELS = { claude: "sonnet", codex: "terra", pi: PI_CONTRACT_MODEL };
 
 interface ExecResult {
   exitCode: number;
@@ -35,11 +42,11 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
     "--message",
     NEW_MESSAGE,
     "--model",
-    agent === "codex" ? "terra" : "sonnet",
+    CONTRACT_MODELS[agent],
   ]);
   assertEqual(first.exitCode, 0, "new aligndev code exit code");
   const firstSession = await readSession(ctx, first.stdout);
-  assertSucceededSession(firstSession, agent, agent === "codex" ? "terra" : "sonnet");
+  assertSucceededSession(firstSession, agent, CONTRACT_MODELS[agent]);
   const sessionId = requiredFrontmatter(firstSession, "sessionId");
   assertSelectedNewCall(mock, agent);
 
@@ -49,11 +56,11 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
     "--message",
     RESUME_MESSAGE,
     "--model",
-    agent === "codex" ? "terra" : "sonnet",
+    CONTRACT_MODELS[agent],
   ]);
   assertEqual(resumed.exitCode, 0, "resume aligndev code exit code");
   const resumedSession = await readSession(ctx, resumed.stdout);
-  assertSucceededSession(resumedSession, agent, agent === "codex" ? "terra" : "sonnet");
+  assertSucceededSession(resumedSession, agent, CONTRACT_MODELS[agent]);
   assertEqual(requiredFrontmatter(resumedSession, "sessionId"), sessionId, "resumed session id");
   assertEqual(requiredFrontmatter(resumedSession, "ticket"), TICKET_ID, "resumed ticket");
   assertSelectedResumeCall(mock, agent, sessionId);
@@ -61,6 +68,7 @@ export default async function codeAgentContract(ctx: ScenarioContext): Promise<v
   await assertLiveCatchup(ctx, mock, agent);
 
   if (agent === "codex") await assertCodexFailures(ctx, mock);
+  if (agent === "pi") await assertPiFailures(ctx, mock, sessionId);
 
   ctx.markScenarioAsEnded("PASS");
   ctx.log("PASS");
@@ -70,8 +78,7 @@ async function readGatewayAgent(ctx: ScenarioContext): Promise<CodingAgent> {
   const result = await ctx.execInGateway(["sh", "-lc", 'printf %s "$CODING_AGENT"']);
   if (result.exitCode !== 0)
     throw new Error(`failed to read gateway CODING_AGENT: ${result.stderr}`);
-  if (result.stdout === "claude" || result.stdout === "codex") return result.stdout;
-  throw new Error(`gateway CODING_AGENT is invalid: ${JSON.stringify(result.stdout)}`);
+  return readConfiguredAgent({ CODING_AGENT: result.stdout });
 }
 
 async function runAligndevCode(ctx: ScenarioContext, args: string[]): Promise<ExecResult> {
@@ -120,10 +127,11 @@ function parseFrontmatter(content: string): Record<string, string> {
 function assertSucceededSession(session: SessionSnapshot, agent: CodingAgent, model: string): void {
   assertEqual(requiredFrontmatter(session, "ticket"), TICKET_ID, "session ticket");
   assertEqual(requiredFrontmatter(session, "agent"), agent, "session agent");
+  assertEqual(requiredFrontmatter(session, "profile"), HARNESS_PROFILE, "session profile");
   assertEqual(requiredFrontmatter(session, "model"), model, "session user-facing model");
   assertEqual(requiredFrontmatter(session, "status"), "succeeded", "session status");
   assertEqual(requiredFrontmatter(session, "exitReason"), "completed", "session exit reason");
-  // The delegation guide's spec-to-plan threshold reads this figure. Both mocks end on the same
+  // The delegation guide's spec-to-plan threshold reads this figure. All mocks end on the same
   // occupancy, and the Codex stream reports a far larger cumulative total: recording that total
   // instead, as `codex exec --json` invites, fails here.
   assertEqual(
@@ -150,20 +158,28 @@ function assertSelectedNewCall(mock: CodingAgentMockHandle, agent: CodingAgent):
   const calls = executionCalls(mock, agent);
   assertEqual(calls.length, 1, "new coding-agent execution count");
   const expected =
-    agent === "codex"
-      ? ["exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-5.6-terra", "-"]
-      : [
-          "-p",
-          "--output-format",
-          "stream-json",
-          "--verbose",
-          "--permission-mode",
-          "auto",
-          "--model",
-          "sonnet",
-        ];
+    agent === "pi"
+      ? ["--mode", "json", "--model", PI_CONTRACT_MODEL]
+      : agent === "codex"
+        ? ["exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-5.6-terra", "-"]
+        : [
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "auto",
+            "--model",
+            "sonnet",
+          ];
   assertArrayEqual(calls[0]?.argv, expected, "new coding-agent argv");
-  assertEqual(calls[0]?.stdin, NEW_MESSAGE, "new coding-agent stdin");
+  const prompt = calls[0]?.stdin;
+  if (!prompt?.startsWith("## Run context\n\n")) throw new Error("missing new-run context");
+  assertEqual(
+    prompt.split("\n\n## Current instruction\n\n").at(-1),
+    NEW_MESSAGE,
+    "new coding-agent stdin instruction",
+  );
   if (agent === "codex") assertCodexCatalogOrder(mock, calls[0]);
 }
 
@@ -176,30 +192,32 @@ function assertSelectedResumeCall(
   const calls = executionCalls(mock, agent);
   assertEqual(calls.length, 2, "new and resume coding-agent execution count");
   const expected =
-    agent === "codex"
-      ? [
-          "exec",
-          "--json",
-          "--sandbox",
-          "workspace-write",
-          "--model",
-          "gpt-5.6-terra",
-          "resume",
-          sessionId,
-          "-",
-        ]
-      : [
-          "-p",
-          "--output-format",
-          "stream-json",
-          "--verbose",
-          "--permission-mode",
-          "auto",
-          "--resume",
-          sessionId,
-          "--model",
-          "sonnet",
-        ];
+    agent === "pi"
+      ? ["--mode", "json", "--model", PI_CONTRACT_MODEL, "--session", sessionId]
+      : agent === "codex"
+        ? [
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            "--model",
+            "gpt-5.6-terra",
+            "resume",
+            sessionId,
+            "-",
+          ]
+        : [
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "auto",
+            "--resume",
+            sessionId,
+            "--model",
+            "sonnet",
+          ];
   assertArrayEqual(calls[1]?.argv, expected, "resume coding-agent argv");
   assertEqual(calls[1]?.stdin, RESUME_MESSAGE, "resume coding-agent stdin");
 }
@@ -230,7 +248,7 @@ async function assertLiveCatchup(
 ): Promise<void> {
   const history = "Preserve the export keyboard behavior.";
   await writeFile(`${PROJECT_DIR}/.plans/${TICKET_ID}/A1-request.md`, `# Request\n\n${history}\n`);
-  const model = agent === "codex" ? "terra" : "sonnet";
+  const model = CONTRACT_MODELS[agent];
   const run = await runAligndevCode(ctx, [
     "new",
     "--ticket",
@@ -257,6 +275,44 @@ async function assertLiveCatchup(
   ]) {
     if (!call.stdin.includes(text)) {
       throw new Error(`catchup prompt omitted ${JSON.stringify(text)}`);
+    }
+  }
+}
+
+async function assertPiFailures(
+  ctx: ScenarioContext,
+  mock: CodingAgentMockHandle,
+  sessionId: string,
+): Promise<void> {
+  const cases: [PiResponseVariant, number, string, string][] = [
+    ["wrongIdentity", 1, "error", "differs from"],
+    ["missingIdentity", 1, "error", "missing initial session header"],
+    ["missingSettlement", 1, "error", "before agent_settled"],
+    ["aborted", 1, "error", "after an abort"],
+    ["assistantError", 1, "error", "Pi provider fixture failure"],
+    ["authenticationFailure", 2, "auth_required", "/login <provider>"],
+    ["malformedJson", 1, "error", "invalid JSON record"],
+    ["malformedHeader", 1, "error", "session header"],
+    ["malformedSettlement", 1, "error", "aborted boolean"],
+  ];
+  for (const [variant, exitCode, exitReason, fragment] of cases) {
+    mock.queuePiResponse(variant);
+    const run = await runAligndevCode(ctx, [
+      "resume",
+      sessionId,
+      "--message",
+      `Exercise ${variant}.`,
+      "--model",
+      PI_CONTRACT_MODEL,
+    ]);
+    assertEqual(run.exitCode, exitCode, `${variant} process exit code`);
+    const session = await readSession(ctx, run.stdout);
+    assertEqual(requiredFrontmatter(session, "status"), "failed", `${variant} status`);
+    assertEqual(requiredFrontmatter(session, "profile"), HARNESS_PROFILE, `${variant} profile`);
+    assertEqual(requiredFrontmatter(session, "agent"), "pi", `${variant} agent`);
+    assertEqual(requiredFrontmatter(session, "exitReason"), exitReason, `${variant} exit reason`);
+    if (!session.result.includes(fragment)) {
+      throw new Error(`${variant} result omitted ${JSON.stringify(fragment)}`);
     }
   }
 }

@@ -2,6 +2,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { text } from "node:stream/consumers";
 import type { CliMockEntry, ScenarioContext } from "@alignfirst/openclaw-test";
+import {
+  type CodingAgent,
+  type CodingAgentEnvironment,
+  readConfiguredAgent,
+} from "../../scripts/coding-agent-settings.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 
 // The coding agent's completion result, written into the `aligndev code` session file's
@@ -77,7 +82,7 @@ const BRANCH_TOKEN_RE = /\b((?:[a-zA-Z]+-)?\d+)\/([a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]
 const FIXTURE_PROJECT_RE = /\b(?:nimbus|lumen|orion)\b/i;
 
 /**
- * Context-window occupancy both mocks end on, so `aligndev code` records the same `contextTokens:`
+ * Context-window occupancy all three mocks end on, so `aligndev code` records the same `contextTokens:`
  * whichever coding agent is selected. The recorded value is the newest response's occupancy, never
  * a sum across the run: the Claude stream reports a smaller figure on its earlier turn, and the
  * Codex mock reports {@link MOCK_CODEX_STREAM_TOTAL} as the run's cumulative total.
@@ -168,8 +173,8 @@ export type CodexResponseVariant =
  * `last_token_usage` is the occupancy and `total_token_usage` the cumulative total the stream also
  * reports; they differ, so a run that recorded the total instead fails the assertion.
  */
-function writeCodexRollout(sessionId: string): void {
-  const dir = join(MOCK_CODEX_HOME, "sessions", "2026", "01", "01");
+function writeCodexRollout(sessionId: string, home: string): void {
+  const dir = join(home, "sessions", "2026", "01", "01");
   mkdirSync(dir, { recursive: true });
   const record = JSON.stringify({
     type: "event_msg",
@@ -252,15 +257,92 @@ export function buildCodexStreamResponse(
   }
 }
 
+export type PiResponseVariant =
+  | "success"
+  | "wrongIdentity"
+  | "missingIdentity"
+  | "missingSettlement"
+  | "aborted"
+  | "assistantError"
+  | "authenticationFailure"
+  | "malformedJson"
+  | "malformedHeader"
+  | "malformedSettlement";
+
+export function buildPiStreamResponse(
+  sessionId: string,
+  cwd: string,
+  result: string,
+  variant: PiResponseVariant = "success",
+): { stdout: string; exitCode: number } {
+  if (result.length > 16_384 || cwd.length > 4_096 || sessionId.length > 256) {
+    throw new Error("Pi mock response exceeds fixture bounds");
+  }
+  const failed = variant === "assistantError" || variant === "authenticationFailure";
+  const events: unknown[] = [];
+  if (variant !== "missingIdentity") {
+    events.push({
+      type: "session",
+      version: variant === "malformedHeader" ? 2 : 3,
+      id: variant === "wrongIdentity" ? `${sessionId}-wrong` : sessionId,
+      timestamp: "2026-10-17T00:00:00.000Z",
+      cwd,
+    });
+  }
+  // Distinct earlier occupancy catches cumulative accounting; totalTokens is deliberately ignored.
+  events.push({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Working on it…" }],
+      stopReason: "toolUse",
+      usage: { input: 8, output: 100, cacheRead: 40_000, cacheWrite: 0 },
+    },
+  });
+  events.push({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      content: failed || variant === "aborted" ? [] : [{ type: "text", text: result }],
+      stopReason: failed ? "error" : variant === "aborted" ? "aborted" : "stop",
+      ...(failed
+        ? {
+            errorMessage:
+              variant === "authenticationFailure"
+                ? "No API key found for openai."
+                : "Pi provider fixture failure",
+          }
+        : {}),
+      usage: {
+        input: 8,
+        output: 992,
+        cacheRead: 125_000,
+        cacheWrite: 2_000,
+        totalTokens: MOCK_CODEX_STREAM_TOTAL,
+      },
+    },
+  });
+  if (variant !== "missingSettlement") {
+    events.push({
+      type: "agent_settled",
+      ...(variant === "malformedSettlement" ? {} : { aborted: variant === "aborted" }),
+    });
+  }
+  return {
+    stdout:
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n` +
+      (variant === "malformedJson" ? "{malformed json\n" : ""),
+    exitCode: failed ? 1 : 0,
+  };
+}
+
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 let streamSessionCounter = 0;
 function nextStreamSessionId(): string {
   streamSessionCounter += 1;
-  return `aligndev-mock-${Date.now().toString(36)}-${streamSessionCounter}`;
+  return `aligndev-mock-${streamSessionCounter}`;
 }
-
-export type CodingAgent = "claude" | "codex";
 
 export interface CodingAgentCall {
   agent: CodingAgent;
@@ -284,9 +366,13 @@ export interface CodingAgentMockHandle {
   /** Resolves on the next captured coding-agent call satisfying `predicate`. */
   waitForCall: (options: WaitForCallOptions) => Promise<CodingAgentCall>;
   queueCodexResponse: (variant: CodexResponseVariant) => void;
+  queuePiResponse: (variant: PiResponseVariant) => void;
 }
 
 export interface SetupCodingAgentMockOptions {
+  environment?: CodingAgentEnvironment;
+  /** Container runtime default; helper tests must supply their own temporary directory. */
+  codexHome?: string;
   /** Override the result returned when the prompt is not a coding-protocol or worktree-creation call. */
   defaultResult?: string;
   /**
@@ -306,7 +392,7 @@ export interface SetupCodingAgentMockOptions {
 }
 
 /**
- * Register both coding-agent mocks, record every invocation, and return protocol-shaped responses.
+ * Register all three coding-agent mocks, record every invocation, and return protocol-shaped responses.
  */
 export function setupCodingAgentMock(
   ctx: ScenarioContext,
@@ -317,8 +403,9 @@ export function setupCodingAgentMock(
   // so the launch turn ends on its ack and the completion wake reaches the same thread.
   const streamDelayMs = options.streamDelayMs ?? 30_000;
   const codingAgentCalls: CodingAgentCall[] = [];
-  const selectedAgent = readConfiguredAgent();
+  const selectedAgent = readConfiguredAgent(options.environment ?? process.env);
   const codexResponses: CodexResponseVariant[] = [];
+  const piResponses: PiResponseVariant[] = [];
   type Watcher = {
     options: WaitForCallOptions;
     resolve: (c: CodingAgentCall) => void;
@@ -327,7 +414,7 @@ export function setupCodingAgentMock(
   const watchers: Watcher[] = [];
   const finalizedCalls = new WeakSet<CodingAgentCall>();
 
-  for (const agent of ["claude", "codex"] as const) {
+  for (const agent of ["claude", "codex", "pi"] as const) {
     ctx.mockCli(agent, async ({ argv, cwd, stdin, stdout, stderr }) => {
       const call: CodingAgentCall = { agent, argv, cwd, stdin: await text(stdin) };
       codingAgentCalls.push(call);
@@ -447,8 +534,17 @@ export function setupCodingAgentMock(
         const sessionId = resumeSessionId(call) ?? nextStreamSessionId();
         if (agent === "claude") {
           stdout.write(buildClaudeStreamResponse(sessionId, resultText));
+        } else if (agent === "pi") {
+          const response = buildPiStreamResponse(
+            sessionId,
+            cwd,
+            resultText,
+            piResponses.shift() ?? "success",
+          );
+          stdout.write(response.stdout);
+          return response.exitCode;
         } else {
-          writeCodexRollout(sessionId);
+          writeCodexRollout(sessionId, options.codexHome ?? MOCK_CODEX_HOME);
           const response = buildCodexStreamResponse(
             sessionId,
             resultText,
@@ -500,9 +596,19 @@ export function setupCodingAgentMock(
     const existing = codingAgentCalls.find((c) => finalizedCalls.has(c) && options.predicate(c));
     if (existing) return Promise.resolve(existing);
     return new Promise<CodingAgentCall>((resolve, reject) => {
-      const watcher: Watcher = { options, resolve, reject };
+      const watcher: Watcher = {
+        options,
+        resolve: (call) => {
+          clearTimeout(timer);
+          resolve(call);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
       watchers.push(watcher);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         const idx = watchers.indexOf(watcher);
         if (idx !== -1) {
           watchers.splice(idx, 1);
@@ -517,6 +623,7 @@ export function setupCodingAgentMock(
     selectedAgent,
     waitForCall,
     queueCodexResponse: (variant) => codexResponses.push(variant),
+    queuePiResponse: (variant) => piResponses.push(variant),
   };
 }
 
@@ -524,17 +631,12 @@ export function isLogReviewPrompt(prompt: string): boolean {
   return LOG_REVIEW_INTENT_RE.test(prompt);
 }
 
-function readConfiguredAgent(): CodingAgent {
-  const agent = process.env.CODING_AGENT;
-  if (agent === "claude" || agent === "codex") return agent;
-  throw new Error("CODING_AGENT must be set to claude or codex for playbook scenarios");
-}
-
 /**
  * True iff the call has the argv shape `aligndev code` emits for the call's agent.
  */
 export function isAlignfirstWrapperCall(call: CodingAgentCall): boolean {
   const a = call.argv;
+  if (call.agent === "pi") return isPiWrapperCall(call);
   if (call.agent === "codex") {
     return (
       a[0] === "exec" &&
@@ -554,6 +656,19 @@ export function isAlignfirstWrapperCall(call: CodingAgentCall): boolean {
   );
 }
 
+function isPiWrapperCall(call: CodingAgentCall): boolean {
+  const args = call.argv;
+  if (args[0] !== "--mode" || args[1] !== "json" || call.stdin.trim() === "") return false;
+  let index = 2;
+  for (const flag of ["--model", "--session"]) {
+    if (args[index] !== flag) continue;
+    const value = args[index + 1];
+    if (value === undefined || value.trim() === "" || value.startsWith("--")) return false;
+    index += 2;
+  }
+  return index === args.length;
+}
+
 export function isCodexCatalogCall(call: CodingAgentCall): boolean {
   return (
     call.agent === "codex" &&
@@ -570,6 +685,10 @@ export function extractCodingPrompt(call: CodingAgentCall): string | undefined {
 }
 
 function resumeSessionId(call: CodingAgentCall): string | undefined {
+  if (call.agent === "pi") {
+    const index = call.argv.indexOf("--session");
+    return index === -1 ? undefined : call.argv[index + 1];
+  }
   if (call.agent === "claude") {
     const index = call.argv.indexOf("--resume");
     return index === -1 ? undefined : call.argv[index + 1];
@@ -764,7 +883,7 @@ export interface NoProtocolDelegationResult {
   call: CodingAgentCall;
   /**
    * Bus cursor captured the instant the delegation is detected, before the
-   * judge runs. The judge is a multi-second Anthropic round-trip; the agent
+   * judge runs. The judge is a multi-second OpenRouter round-trip; the agent
    * posts its summary right after the coding-agent mock returns, so a cursor taken
    * after the judge lands past the summary and strands it.
    */

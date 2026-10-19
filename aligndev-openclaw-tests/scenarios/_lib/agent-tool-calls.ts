@@ -54,15 +54,12 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
   return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
-// `aligndev` at a word boundary — bare, absolute path (`/usr/local/bin/aligndev …`), or after a shell
-// separator/subshell open (`(aligndev code … ; openclaw system event …)` is the guide's chained
-// completion-event launch shape) — but not a substring of another token.
-const ALIGNDEV_INVOCATION_RE = /(^|[\s/;(&|])aligndev(\s|$)/;
 // A coding-agent launch. `aligndev code status` and `aligndev guide code` launch nothing.
 const ALIGNDEV_CODE_LAUNCH_RE = /(^|[\s/;(&|])aligndev\s+code\s+(new|resume)(\s|$)/;
 // Only `aligndev code` may launch a coding agent. Its subprocess appears as a cliMock entry rather
 // than an OpenClaw agent tool call.
-const CODING_AGENT_INVOCATION_RE = /(^|[\s/;(&|])(claude|codex)(\s|$)/;
+const CODING_AGENT_INVOCATION_RE =
+  /(^|[;(&|\n])\s*(?:(?:env|command|exec|npx|sudo)\s+(?:-[\w-]+\s+)*|[A-Za-z_]\w*=[^\s;|&]+\s+)*(?:[^\s;|&()]*\/)?(claude|codex|pi)(\s|$)/;
 
 /** True when the call is an `exec` that launches the coding agent through the real `aligndev code` CLI. */
 export function invokesAligndevCode(call: AgentToolCall): boolean {
@@ -90,11 +87,9 @@ export function nthMatchingCall(
   };
 }
 
-/** True when the call is an `exec` that invokes Claude or Codex directly. */
+/** True when the call is an `exec` that invokes Claude, Codex or Pi directly. */
 export function invokesCodingAgentDirectly(call: AgentToolCall): boolean {
   const input = inputOf(call);
   if (call.toolName !== "exec" || typeof input.command !== "string") return false;
-  return (
-    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALIGNDEV_INVOCATION_RE.test(input.command)
-  );
+  return CODING_AGENT_INVOCATION_RE.test(input.command);
 }

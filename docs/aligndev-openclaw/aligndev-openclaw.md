@@ -26,7 +26,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    [`aligndev-openclaw-tests/`](../../aligndev-openclaw-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
    It bind-mounts the workspace and the monorepo root into the gateway, so `aligndev` and `alignfirst` run from the checkout and `aligndev guide` prints the checkout's playbook.
-   The harness intercepts both supported delegated-agent subprocesses.
+   The harness intercepts Claude Code, Codex and Pi delegated-agent subprocesses through a generated named profile. Its offline helper tests cover mock contracts; scenario and live deployment acceptance remain separate.
 
 ## How a turn flows
 
