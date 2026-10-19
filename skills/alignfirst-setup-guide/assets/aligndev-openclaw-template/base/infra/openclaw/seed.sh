@@ -22,10 +22,13 @@ ENVIRONMENT_DIR="$HOME/.config/environment.d"
 ALIGNFIRST_HOME="$HOME/.alignfirst"
 ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.settings.json"
 COMPANIONS_DIR="$ALIGNFIRST_HOME/companions"
+DEPLOYMENT_PROFILES=
+INSTRUCTION_FILE=
 
 main() {
   load_env
   load_modules
+  load_deployment_profiles
   # `${array[@]+"${array[@]}"}` keeps `set -u` quiet when a module declares an empty array.
   require_variables "${required_common[@]}" \
     ${required_surface[@]+"${required_surface[@]}"} \
@@ -86,6 +89,16 @@ load_modules() {
     echo "[seed] surface_plugin_id is not defined by seed/surface.sh." >&2
     exit 1
   fi
+}
+
+load_deployment_profiles() {
+  DEPLOYMENT_PROFILES=$(node "$DIR/deployment-profiles.mjs" \
+    "$DIR/aligndev.settings.json" "$HOME" "$ALIGNDEV_CONFIG_FILE")
+  if [ "$(jq -r '.agent' <<<"$DEPLOYMENT_PROFILES")" != "$coding_agent_kind" ]; then
+    echo "[seed] deployment profiles do not match the coding-agent overlay" >&2
+    exit 1
+  fi
+  INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$DEPLOYMENT_PROFILES")
 }
 
 prepare_filesystem() {
@@ -152,8 +165,12 @@ install_aligndev_config() {
   if ! cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
     install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
   fi
-  # Fails on an invalid file or a missing code.agent.
-  aligndev guide code >/dev/null
+  # Explicit overrides avoid the seed cwd's project-registry selection. Validate every profile,
+  # including profiles reachable only through --profile or an editable project registry.
+  local profile
+  while IFS= read -r profile; do
+    aligndev guide code --profile "$profile" >/dev/null
+  done < <(jq -r '.profiles[]' <<<"$DEPLOYMENT_PROFILES")
 }
 
 create_companions_dir() {

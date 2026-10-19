@@ -9,6 +9,8 @@ read_when:
 
 **Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, `aligndev.settings.json` (the aligndev settings), a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
 
+Profiles retain the overlay's existing default native store. Before any writes, the shared inventory checks every profile, including those selected only by a project registry. Custom stores and mixed agents require separate hardening work; do not bypass the inventory. When profiles change, review every profile with `aligndev guide code --profile <name>` after re-seeding.
+
 Changing the model never changes the agent runtime. Keep
 `models.providers.<provider>.agentRuntime.id` set to `openclaw`; the assistant requires OpenClaw's
 `exec` and `process` tools.

@@ -83,21 +83,13 @@ parse_arguments() {
 }
 
 resolve_paths() {
-  local config="$ADMIN_REPOSITORY/infra/openclaw/aligndev.settings.json"
-  if [ -r "$config" ]; then
-    CODING_AGENT=$(jq -r '.code.agent' "$config" 2>/dev/null) || CODING_AGENT=
-  fi
-  case "$CODING_AGENT" in
-    codex)
-      INSTRUCTION_FILE="$SERVICE_HOME/.codex/AGENTS.md"
-      AGENT_SKILLS_DIR="$SERVICE_HOME/.codex/skills"
-      ;;
-    claude)
-      INSTRUCTION_FILE="$SERVICE_HOME/.claude/CLAUDE.md"
-      AGENT_SKILLS_DIR="$SERVICE_HOME/.claude/skills"
-      ;;
-    *) echo "Cannot determine the coding agent from $config." >&2; exit 1 ;;
-  esac
+  local config="$ADMIN_REPOSITORY/infra/openclaw/aligndev.settings.json" inventory
+  # Read the admin-controlled inventory before containment/unlock. Unsupported stores fail closed.
+  inventory=$(/usr/bin/node "$ADMIN_REPOSITORY/infra/openclaw/deployment-profiles.mjs" \
+    "$config" "$SERVICE_HOME" "$ALIGNDEV_CONFIG_FILE")
+  CODING_AGENT=$(jq -r '.agent' <<<"$inventory")
+  INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$inventory")
+  AGENT_SKILLS_DIR=$(jq -r '.skillsDir' <<<"$inventory")
 }
 
 refresh_seed() {

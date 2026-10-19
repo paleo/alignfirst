@@ -47,7 +47,7 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aligndev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.unset` in the aligndev settings, `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aligndev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.profiles.service-codex.unset` in `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
 
@@ -106,7 +106,9 @@ The bundled `skill-creator` and `skill-installer` become visible to the delegate
 
 ### Global Instructions
 
-The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `${CODEX_HOME:-~/.codex}/AGENTS.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
+The `service-codex` profile explicitly sets `configDir: "~/.codex"`, overriding inherited `CODEX_HOME`. Authenticate in that same store; interactive shells with a custom `CODEX_HOME` must clear it first. These runbooks support no custom service-account store.
+
+The seed merges `infra/openclaw/coding-agent/AGENTS.md` into the inventoried `~/.codex/AGENTS.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
 To change the instructions, edit the repository file and run `docs/operations/configure-assistant.md` with its `config instructions` scopes. The maintenance wrapper contains the assistant before either file becomes writable and restores both through an `EXIT` trap.
 

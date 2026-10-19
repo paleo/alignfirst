@@ -126,6 +126,12 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
 
 Continue with the regular steps below.
 
+## One-time: convert direct launch settings
+
+Before installing profile-aware AlignDev, convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to `~/.claude` or `~/.codex`; remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults.
+
+Bring `deployment-profiles.mjs`, `seed.sh`, `seed/coding-agent.sh` and `assistant-maintenance.sh` forward together, then reinstall the maintenance controls. The new wrapper reads named profiles even while the installed settings still have the old shape. After the package upgrade, re-seed through a `config instructions` window before help, delegation or restart. Do not restart between package installation and re-seeding. The inventory checks all provisioned profiles; these runbooks support only profiles sharing the selected agent's default store. No account files or historical transcripts are migrated.
+
 ## npm packages
 
 The prefix is root-owned and immutable ([06](../installations/06-security-hardening.md)). The maintenance wrapper gives the service account this scope for the command, then restores root ownership, modes and the immutable flag through an `EXIT` trap. `openclaw update` is channel-aware and refreshes its plugins at the core's version; the other packages ride `@latest`.
@@ -138,6 +144,8 @@ openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
 /opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aligndev@latest ctx7@latest
 '
 ```
+
+On the first profile-aware upgrade, re-seed now through the `config instructions` command in [configure-assistant.md](configure-assistant.md), before any CLI help, delegation or restart. This replaces the protected direct launch settings; the new CLI rejects them.
 
 Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual project `.alignfirst.json` files retain their singular `portRange` claims:
 

@@ -23,7 +23,8 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 - `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel.
 - `infra/openclaw/seed/coding-agent.sh` — the delegated coding agent's global instructions (merged into its instruction file).
 - `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`; `runtime.conf` is generated).
-- `infra/openclaw/aligndev.settings.json` — the aligndev settings: platform, projects root and coding agent. The seed installs it at `~/.alignfirst/aligndev.settings.json`, the fixed path `aligndev` reads. `code.skipPermissions` passes the agent CLI's permission-bypass flag, since backgrounded runs have no approval loop. `code.unset` strips the listed variables from the agent's environment, so the agent uses its own login, never a stray API key.
+- `infra/openclaw/aligndev.settings.json` — platform, projects root, `code.profile` and complete `code.profiles` definitions. The seed installs it at `~/.alignfirst/aligndev.settings.json`. Each profile's `skipPermissions` passes the native bypass flag for unattended runs; its `unset` removes inherited API-key routes. Its explicit `configDir` selects the service account's native login store.
+- `infra/openclaw/deployment-profiles.mjs` — seed/maintenance inventory of every selectable profile. These runbooks cover only the selected overlay's agent and default native store (`~/.claude` or `~/.codex`); profiles may share it. Custom stores, mixed agents, Pi and symlinked native/instruction/skills roots are rejected before seed writes or unlocks. An explicit quota must use that same agent/store (with explicit `configDir`) or `source: "none"`. This deployment policy is narrower than the CLI's profile support.
 - `infra/openclaw/workspace/` — the workspace files, applied by `apply-workspace.sh`.
 - `infra/openclaw/heartbeat-scratch.md` — the heartbeat job's checklist, pushed by `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)).
 - `infra/openclaw/projects/.alignfirst-projects.json` — the project parent, policy, and port range used by `aligndev project`.
@@ -31,5 +32,7 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 ## Module contract
 
 `seed.sh` sources the three modules and calls, in order, `validate_common`, `validate_surface`, `validate_coding_agent`, then `configure_common`, `configure_surface`, `configure_coding_agent`. Each module declares its required variables (`required_*`) and its secret variables (`secret_variables_*`); the surface module also declares `surface_plugin_id`. Every setting goes through `openclaw config set`; every credential through `set_secret_ref`.
+
+The seed validates every installed profile with explicit `--profile`, so a registry entry for its cwd cannot redirect validation. At runtime, project selection can override `code.profile`; provision only profiles intended to be available to this service account. Registry routing is not account authorization.
 
 To change something: edit the owning source, then [configure-assistant.md](operations/configure-assistant.md).

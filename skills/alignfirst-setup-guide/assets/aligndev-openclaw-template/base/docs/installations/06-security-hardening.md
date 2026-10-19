@@ -86,7 +86,7 @@ sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type f -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/skills
 ```
 
-The coding agent's own skill directory and global instruction file: [08-coding-agent.md § Hardening](08-coding-agent.md#hardening).
+The coding agent's own skill directory and global instruction file: [08-coding-agent.md § Hardening](08-coding-agent.md#hardening). Seed and maintenance inventory every named profile before changing paths; all profiles must share this overlay's default native store. Custom stores, mixed agents and Pi require separate policy work. These unchanged filesystem procedures do not certify a generalized resource-discovery boundary.
 
 ## Runtime launchers
 

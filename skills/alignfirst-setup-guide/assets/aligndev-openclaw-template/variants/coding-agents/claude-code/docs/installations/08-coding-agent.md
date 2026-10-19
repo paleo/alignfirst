@@ -53,7 +53,7 @@ sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-s
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aligndev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.unset` in the aligndev settings, `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aligndev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.profiles.service-claude.unset` in `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** The login prints a URL and waits for a one-shot code on stdin, tied to the same process. Run it from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`.
 
@@ -90,7 +90,9 @@ npx -y skills add https://github.com/paleo/skills --yes --agent claude-code --sk
 
 ### Global Instructions
 
-The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into `~/.claude/CLAUDE.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
+The `service-claude` profile explicitly sets `configDir: "~/.claude"`, overriding inherited `CLAUDE_CONFIG_DIR`. Authenticate in that same store; interactive shells with a custom `CLAUDE_CONFIG_DIR` must clear it first. These runbooks support no custom service-account store.
+
+The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into the inventoried `~/.claude/CLAUDE.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
 To change the instructions, edit the repository file and run `docs/operations/configure-assistant.md` with its `config instructions` scopes. The maintenance wrapper contains the assistant before either file becomes writable and restores both through an `EXIT` trap.
 

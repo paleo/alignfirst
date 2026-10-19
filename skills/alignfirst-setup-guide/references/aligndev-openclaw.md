@@ -4,11 +4,13 @@ An assistant is a dedicated Linux service account. It receives work through Slac
 
 ## Deployment gate
 
-The checkout's deployment migration is paused. Do not render or deploy these assets with profile-aware AlignDev yet: the Claude/Codex overlays still emit the retired direct `code.agent` shape, and no hardened Pi overlay is available.
+Claude/Codex overlays use named profiles and retain their existing default service-account stores. Their offline render/seed checks cover both surfaces. No hardened Pi overlay is available; Pi deployment remains **Blocked**.
 
 Pi 1.3.0 requires mutable native credentials for normal credential updates, but its writable `auth.json` can also declare shell commands through a leading `!` in an API key. Those commands run on fresh offline CLI startup. Locking the file blocks native credential writes; locking the directory blocks adjacent authentication locks. Protecting instructions, resource settings and package trees alone cannot close this persistent executable surface. No authentication restriction, native change or sandbox has been approved. Stop rather than bypassing this gate with mutable declarations, blanket directory locks or launcher-only validation. The [maintainer map](../../../docs/aligndev-openclaw/aligndev-openclaw.md#pi-deployment-gate) records the offline reproducer and remaining work.
 
-The lifecycle below describes the existing Claude/Codex templates, not completed profile migration or Pi acceptance. OpenClaw remains the persistent parent. A Pi child would need no `pi-background` package; production headless waiting has not shipped.
+The lifecycle below covers Claude/Codex only. Deployment profiles must explicitly select the overlay's agent and its default native store (`~/.claude` or `~/.codex`). Multiple profiles may share that store. `deployment-profiles.mjs` inventories every profile, including unselected ones, and rejects Pi, mixed agents, custom stores, native-directory env/unset conflicts and symlinked managed roots before seed writes or maintenance unlocks. Relative paths resolve against the deployed settings location, never the admin checkout. This deliberately preserves the existing hardening paths; multi-store hardening, native backup/recovery inventory and Pi parity remain unfinished.
+
+OpenClaw remains the persistent parent. A Pi child would need no `pi-background` package; production headless waiting has not shipped. Offline checks do not certify OS hardening or live deployment acceptance.
 
 ## Topology
 
@@ -124,11 +126,12 @@ rg -n --hidden -g '!node_modules' '\{\{[A-Z][A-Z0-9_]*\}\}' .
 rg -n --hidden -g '!node_modules' 'TEAM_PLANS_SECTION|DEV_SERVER_GATEWAY_SECTION' .
 for f in infra/openclaw/seed.sh infra/openclaw/seed/*.sh infra/openclaw/bin/*.sh infra/openclaw/bin/openclaw infra/openclaw/node-runtime/project-shell infra/openclaw/node-runtime/init.bash infra/openclaw/node-runtime/admin-npm infra/openclaw/node-runtime/check-project-runtimes.sh; do bash -n "$f"; done
 node --check scripts/workspace/workspace.mjs
+node --check infra/openclaw/deployment-profiles.mjs
 node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aligndev.settings.json .alignfirst.json package.json
 npm run validate
 ```
 
-Both `rg` searches must be empty. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 

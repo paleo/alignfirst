@@ -26,7 +26,7 @@ channel message ({{ASSISTANT_NAME}} on the selected surface)
   → project workspace under ~/projects
 ```
 
-The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent selected by `code.agent` in the aligndev settings.
+The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. `code.profile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned profile must use this overlay's agent and default native store ([configuration.md](configuration.md)).
 
 ## Ownership
 
