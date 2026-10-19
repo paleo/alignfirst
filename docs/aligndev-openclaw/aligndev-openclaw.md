@@ -79,3 +79,15 @@ reference assembles a version-controlled admin repository from a common base plu
 overlay, one coding-agent overlay and the optional dev-server gateway. The generated runbooks derive
 configuration from the installed OpenClaw version, keep secrets outside git, and prepare managed
 projects through the complete AlignDev contract.
+
+### Pi deployment gate
+
+The hardened Pi child overlay is blocked on Pi 1.3.0's native credential storage. The CLI adapter and synchronous Pi subagents remain independent of this deployment gate. OpenClaw is the persistent parent; it does not need `pi-background` to delegate. No production headless background waiting was shipped.
+
+`<agent-dir>/auth.json` is both mutable credential state and an executable declaration. A stored `api_key.key` beginning with `!` runs a shell command. The real npm CLI executes it during offline `--list-models` startup, even with extensions, skills, templates, themes and context discovery disabled. It repeats in fresh processes. The native credential backend writes the same file during credential updates and creates `<agent-dir>/auth.json.lock` beside it. Protecting all instruction and extension paths would still leave this persistent executable surface writable.
+
+Read-only credentials prevent native updates, including OAuth-token persistence. Freezing the entire agent directory also prevents adjacent lock creation. An initial audit or launcher-time scan cannot enforce future contents against a process with the same user's write permissions. This is expected native behavior, not a Pi privilege-boundary bypass. A solution needs an approved authentication restriction, native behavior change, or isolation boundary. None has been selected; do not substitute an instruction-only policy or declare hardening complete.
+
+Run `fnm exec --using=.nvmrc npm run test:deployment-templates` to reproduce the gate offline. The Node built-in tests in `scripts/test/deployment-native-policy.test.mjs` use disposable homes and default/custom agent directories, fake credentials, a network-rejecting preload and the manifest-declared CLI entry. They check real credential writes, adjacent locks and unprivileged POSIX permission failures. Passing means the blocker was reproduced. This is not the planned six-variant render/maintenance suite or a test of root ownership, immutable flags, service containment or live deployment.
+
+The checkout's Claude/Codex assets still need conversion from retired direct launch settings to named profiles before use with profile-aware AlignDev. Pi rendering, protected launcher installation, resource inventories, maintenance, backup/recovery and live acceptance remain unimplemented. See the setup reference's [deployment gate](../../skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate) before rendering.

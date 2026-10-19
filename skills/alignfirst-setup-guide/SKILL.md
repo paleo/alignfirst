@@ -83,7 +83,7 @@ channel identity, on Slack or Discord. These two terms are used throughout this 
 repositories it renders.
 
 Preparing a project makes its repository compatible with an assistant. Creating an assistant builds and
-deploys it.
+deploys it. Before rendering or upgrading a deployment, check the [deployment gate](references/aligndev-openclaw.md#deployment-gate). The checkout's profile migration and hardened Pi child overlay are paused; ordinary coding-agent assistant setup remains independent.
 
 ## Prepare a Project for an Assistant
 

@@ -30,7 +30,7 @@ A task can also start at any intermediate step.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
-For a coding-agent assistant, parent host and delegated child are independent: a coding profile selects Claude Code, Codex or Pi. Without a profile selection, the detected parent kind supplies the default child. OpenClaw deployment templates still offer Claude Code or Codex.
+For a coding-agent assistant, parent host and delegated child are independent: a coding profile selects Claude Code, Codex or Pi. Without a profile selection, the detected parent kind supplies the default child. OpenClaw deployment templates still offer Claude Code or Codex. The checkout's deployment migration is [paused](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate): those assets require named-profile conversion, and Pi's native mutable credentials leave an executable declaration outside the proposed hardening boundary. No hardened Pi child overlay is shipped.
 
 ## Start in Claude Code, Codex or Pi
 

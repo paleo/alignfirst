@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:deployment-templates": "node --test scripts/test/*.test.mjs",
     "changeset": "changeset",
     "ci:version": "changeset version && npm i",
     "release:smoke": "node scripts/release-smoke.mjs",

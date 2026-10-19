@@ -2,6 +2,14 @@
 
 An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code or Codex through `aligndev code`. This reference produces its **admin repository**: a private repository rendered from `assets/aligndev-openclaw-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
 
+## Deployment gate
+
+The checkout's deployment migration is paused. Do not render or deploy these assets with profile-aware AlignDev yet: the Claude/Codex overlays still emit the retired direct `code.agent` shape, and no hardened Pi overlay is available.
+
+Pi 1.3.0 requires mutable native credentials for normal credential updates, but its writable `auth.json` can also declare shell commands through a leading `!` in an API key. Those commands run on fresh offline CLI startup. Locking the file blocks native credential writes; locking the directory blocks adjacent authentication locks. Protecting instructions, resource settings and package trees alone cannot close this persistent executable surface. No authentication restriction, native change or sandbox has been approved. Stop rather than bypassing this gate with mutable declarations, blanket directory locks or launcher-only validation. The [maintainer map](../../../docs/aligndev-openclaw/aligndev-openclaw.md#pi-deployment-gate) records the offline reproducer and remaining work.
+
+The lifecycle below describes the existing Claude/Codex templates, not completed profile migration or Pi acceptance. OpenClaw remains the persistent parent. A Pi child would need no `pi-background` package; production headless waiting has not shipped.
+
 ## Topology
 
 Three roles, named as the runbooks name them:
