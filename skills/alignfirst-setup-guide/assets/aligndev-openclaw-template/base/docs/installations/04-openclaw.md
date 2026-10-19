@@ -15,6 +15,9 @@ The seed assets live in `infra/openclaw/`:
 infra/openclaw/
 ├── .env.example        # every value the seed reads; copy to .env (gitignored)
 ├── apparmor/           # Playwright Chromium user-namespace profile
+├── deployment-profiles.mjs # all-profile/native-store and resource inventory
+├── deployment-policy.mjs   # prepare, harden, maintenance, private backup/recovery
+├── aligndev.settings.json  # explicit default profile and provisioned native stores
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
@@ -59,13 +62,17 @@ sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
 
 The execute bits are tracked by git; no `chmod` is needed.
 
-The snapshot copies `bin/openclaw` and `node-runtime/` but executes neither. `03-toolchain.md` deploys their runtime files root-owned under `/opt/{{SERVICE_USER}}/`.
+The snapshot copies `bin/openclaw`, both deployment helpers and `node-runtime/`. `03-toolchain.md` installs the protected runtime/helper copies under `/opt/{{SERVICE_USER}}/`. Root maintenance and backup use the protected helpers; the seed uses its snapshot copies. After hardening, let the maintenance wrapper refresh the snapshot while the service account is contained rather than rsyncing over active workloads.
 
 ## 3. Seed
 
-`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aligndev.settings.json` as `~/.alignfirst/aligndev.settings.json`, the aligndev settings, and validates it with `aligndev guide code`. It creates `~/.alignfirst/companions/`, which holds the companions and their registry. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
+`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aligndev.settings.json` as `~/.alignfirst/aligndev.settings.json` and validates every provisioned profile with explicit `aligndev guide code --profile <name>`. The inventory includes custom directories and optional quota stores, deduplicates shared stores, and resolves `~/` against the service home and relative paths against the deployed settings directory. Every store needs an explicit `configDir` and must remain isolated beneath the service home. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs, overlapping stores and ambiguous HOME/session overrides fail before writes. It creates `~/.alignfirst/companions/`, which holds the companions and their registry. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
 
-The provider and model are deployment choices. The seed always pins
+The seed reserves managed discovery paths through `deployment-policy.mjs prepare` and merges the selected overlay's instructions into every store of that agent kind. It preserves text outside managed markers and existing Pi `agents/` profiles. Additional agent kinds and quota stores need their own installation, authentication and instruction review; selecting them in settings does not install or authenticate them. Provision only accounts intended to be available to this Linux user.
+
+For Pi, install approved native `rg`/`fd` helpers in its inventoried `bin/` or system PATH before hardening. Pi prepends that native bin for tools and otherwise downloads missing helpers there. Protect this executable discovery path; do not place Node overrides in it.
+
+The OpenClaw provider/model and coding-child provider/model/authentication are separate choices. The seed always pins
 `models.providers.{{RUNTIME_PROVIDER}}.agentRuntime.id` to `openclaw`. The embedded runtime owns the
 turn and supplies the `exec` and `process` tools that the assistant's playbook uses. Keep this pin
 when changing models.

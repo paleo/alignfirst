@@ -8,7 +8,7 @@ read_when:
 
 # Slack Channel
 
-**Role: Slack administrator** for the platform setup, **operator** for the smoke test. Platform setup runs before `04` (its tokens and IDs go into `infra/openclaw/.env`); the smoke test runs after `08`.
+**Role: Slack administrator** for the platform setup, **operator** for the smoke test. Platform setup runs before `04` (its tokens and IDs go into `infra/openclaw/.env`); the smoke test runs after `08` authentication/trust and `06` hardening.
 
 ## Socket Mode
 
@@ -127,7 +127,7 @@ The app configuration is scoped to a private channel (`groups:*`, `message.group
 
 ## Smoke Test
 
-Run it after `08`, as the operator, from the Slack client.
+Run it after `08` and `06`, as the operator, from the Slack client. These are live deployment acceptance procedures, separate from offline template checks. OpenClaw remains the persistent parent for Claude Code, Codex and Pi; no Pi background extension is required.
 
 First verify the effective gateway configuration:
 
@@ -143,6 +143,7 @@ The plugin must be loaded, `thread_handoff` allowed, and both the global and all
 
 1. Send small talk in the allowlisted channel. It receives one channel-root reply and no thread.
 2. Request a complete small read-only task against a listed project. One starter appears under the request, and the channel gets one line pointing to the thread. Work begins without a follow-up. The report returns in that same thread, never at the root.
+   Inspect that task's `.plans/<ticket>/_aligndev/*.md` under the service account. Confirm the recorded `profile`, `agent`, native session identity and real cwd match the selected project. With Pi, verify the saved approved parent covers this cwd and the future worktree layout; do not bypass trust prompts or expose native credentials.
 3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
 4. Post the same project request in a channel the bot is not allowlisted in, then DM the bot. Neither gets a reply or starts work.
 5. In a thread the bot has already replied in, write a message addressed to another human. The bot stays silent and posts nothing.

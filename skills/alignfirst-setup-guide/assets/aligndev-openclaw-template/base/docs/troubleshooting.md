@@ -42,6 +42,37 @@ playbook's background delegation contract. Re-seed before investigating `alignde
 
 The session file under the project's `.plans/<ticket>/_aligndev/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 9](installations/04-openclaw.md#9-environment-changes)).
 
+## Profiles and Pi
+
+Inspect the complete deployment inventory, not only the default profile:
+
+```sh
+sudo -H -u {{SERVICE_USER}} /usr/bin/node \
+  /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile>
+```
+
+A registry-selected profile overrides the global default; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
+
+For a Pi deployment, check the protected executable and supported system runtime without a model call:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'command -v pi; PI_OFFLINE=1 pi --version'
+/usr/bin/node --version
+```
+
+Expect `/opt/{{SERVICE_USER}}/bin/pi`. A package/version/Node mismatch needs the reviewed package update followed by launcher regeneration after prefix hardening ([update-assistant.md](operations/update-assistant.md)). Do not invoke a second installer, fnm wrapper or unprotected package entry point as a workaround.
+
+- **`auth_required` or refresh failure:** authenticate as the service account in the effective profile's resolved `PI_CODING_AGENT_DIR`, not the admin account's store. Check its private `auth.json` ownership and adjacent lock permissions. The root/ancestor anchors should be root-owned, service-group writable and sticky (`1770`), not immutable. Preserve the approved same-UID auth exception; never thaw all native resources.
+- **Trust prompt in a new worktree:** check the recorded approved parent, canonical worktree path and nearest saved decision in `<agent-dir>/trust.json`. Use `agent-config` maintenance for `/trust`, then restart Pi. Do not broaden trust silently or add `--approve`.
+- **Settings/package write fails:** expected outside `agent-config` maintenance. Missing declared npm packages must be installed into that native store's managed npm directory. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs and globs need reviewed concrete paths, not relaxed validation.
+- **Missing `rg`/`fd`:** native `<agent-dir>/bin` is protected. Provision approved helpers there through `agent-config` or system PATH; do not grant runtime download writes or install Node there.
+- **Subagent tool missing/duplicated:** check selected store, package identity and declarations, then install exactly one reviewed `@alignfirst/pi-subagent` with approval. Preserve user `agents/` profiles. OpenClaw needs no `pi-background` for delegation.
+
+Pi `auth.json` may hold executable API-key commands. Another same-UID process can persist commands there with account privileges; permissions cannot distinguish that from credential renewal. Treat suspected persistence as an incident: contain the account, preserve a private mapped backup, review credentials/resources and recover through [recover-assistant.md](operations/recover-assistant.md), without copying secret contents into reports.
+
 ## Channel and thread flow
 
 Run the smoke test of [07-channel.md](installations/07-channel.md). Check the allowlisted channel, the session binding and the thread destination before touching the playbook.

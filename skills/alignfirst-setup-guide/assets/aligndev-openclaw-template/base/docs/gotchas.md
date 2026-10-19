@@ -24,6 +24,22 @@ A background command that must own its process uses `exec node …`. A shell kep
 
 The audited PATH keeps `/opt/{{SERVICE_USER}}/bin` and `~/.npm-system-global/bin` ahead of fnm's writable runtime bin. A service-account `npm i -g` can install developer tools into the selected runtime but cannot shadow OpenClaw or the protected CLIs.
 
+## Pi keeps its runtime without replacing the project's PATH
+
+The protected npm Pi launcher executes the verified package entry point with `/usr/bin/node`, preserving cwd, arguments, environment and PATH. Packaged subagents reuse `process.execPath`. Regenerate the launcher after each reviewed Pi update, only after package hardening is restored. Do not use Pi's managed installer or self-updater alongside this installation.
+
+Pi prepends `<agent-dir>/bin` for native tool-helper discovery. Provision approved `rg`/`fd` there or on system PATH before hardening; missing helpers otherwise trigger downloads into that directory. Protect native bin through `agent-config`, preserve executable bits, and never put a Node override in it.
+
+## Pi auth is writable; declarations and their anchors are protected
+
+`deployment-policy.mjs` protects managed context/settings/trust/resources and their parents across every profile, custom store and quota store. It reserves absent context alternatives as directory sentinels. Do not replace `AGENTS.override.md` with an empty file: it would hide the normal instruction file. The pinned loader treats empty system/appended prompts as neutral.
+
+Native roots and their ancestors up to the service home are root-owned sticky writable `1770` anchors. The service group can create ordinary files but cannot rename protected root-owned children. Freezing a whole Pi directory would break authentication locks and renewal. Blanket `chmod 644` breaks executable packages.
+
+The sole approved executable-declaration exception is `<agent-dir>/auth.json`, private, service-owned and replaceable with adjacent locks for OAuth and automatic credential/refresh-token renewal. It may contain executable API-key commands; another same-UID process can persist them for later account-level execution. This is not administrator escalation, and permissions cannot distinguish it from native renewal. Protected settings cannot save interactive preferences outside maintenance. Trust edits use `agent-config`, skills use `agent-skills`, and context edits use `instructions`.
+
+Saved project trust applies to a manually approved parent and future worktrees beneath it. The nearest saved decision wins. Trust is discovery policy, not a sandbox. A writable project registry can route to every provisioned account; it grants no extra Linux isolation. OpenClaw is the persistent parent and needs no `pi-background` for a Pi child.
+
 ## Containers are per-user
 
 Rootless podman scopes containers to the invoking user's socket. `docker ps` as the operator shows nothing (or the operator's own containers), never the assistant's:
@@ -36,7 +52,7 @@ A bare `docker …` without `DOCKER_HOST` fails on `unix:///var/run/docker.sock`
 
 ## `skills` CLI writes escaped symlinks under `~/.openclaw/skills/`
 
-For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. [update-assistant.md](operations/update-assistant.md) sweeps the links inside the `skills` maintenance scope because the managed directory is locked.
+For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/skills/<name>` pointing outside that directory, to the canonical `~/.agents/skills/<name>`. OpenClaw's path-safety check rejects it and `openclaw doctor` logs `Skipping escaped skill path …`. Discovery of shared skills works through the `~/.agents/skills/` tier. Strict maintenance validation rejects those links before unlock. [update-assistant.md](operations/update-assistant.md) contains the account, validates the directory's ancestors, removes only its direct symlink entries as the operator, then restores the `skills` policy. It never follows their targets.
 
 ## Shared skills live under `~/.agents/skills`
 

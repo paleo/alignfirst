@@ -99,7 +99,7 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
 
    Once separately authenticated, `aligndev code quota --profile pi-quota` reads the selected native account's limits. The report labels the profile/source, not a verified Pi account. If pairing cannot be established, treat it only as that CLI's quota or select `none`.
 
-For a future OpenClaw Pi deployment, installation and native authentication must target the service account and its effective service environment, not the operator's login. The hardened Pi child overlay remains unimplemented; this procedure does not enable deployment.
+For an OpenClaw Pi deployment, installation and native authentication target the service account and its effective service environment, not the operator's login. Follow the [Pi deployment overlay](../assets/aligndev-openclaw-template/variants/coding-agents/pi/docs/installations/08-coding-agent.md), including protected native stores, the absolute-Node launcher and the explicit writable `auth.json` exception. This optional quota procedure alone does not establish deployment readiness.
 
 ## 3. Install the skill globally
 

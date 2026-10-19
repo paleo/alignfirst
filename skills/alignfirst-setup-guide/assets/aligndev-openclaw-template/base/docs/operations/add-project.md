@@ -8,7 +8,7 @@ read_when:
 # Add a Project
 
 **Operator.** Read the projects guide first. Every project is a direct child of `~/projects`, and the
-clone uses the service account's git access from `03`.
+clone uses the service account's git access from `03`. Before onboarding Pi, agree on a dedicated parent containing the clone and all future worktrees. Verify the workspace's actual layout against it. If the direct-child inventory layout prevents that boundary, arrange a compatible layout and discovery policy with the operator before cloning; do not silently trust all `~/projects`.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev guide project'
@@ -49,6 +49,40 @@ alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
 
 Without a usable link, `workspace setup` aborts on `alignfirst plans check`.
 <!-- TEAM_PLANS_SECTION -->
+
+## Select a provisioned profile
+
+The deployment default is `code.profile`. To route this project elsewhere, edit the service account's `~/.alignfirst/companions/registry.json`, preserving existing entries, `dir` and `items`. A profile-only entry is valid:
+
+```json
+{
+  "projects": {
+    "~/projects/<repo>": { "aligndev": { "profile": "<provisioned-profile>" } }
+  }
+}
+```
+
+Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any account provisioned in protected settings. It is routing, not account authorization.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code'
+```
+
+Confirm the effective profile, native directory and model without printing credentials. An explicit `--profile` overrides the registry. Changing a profile on resume must retain the native agent/session and selected account's conversation; it never copies sessions or silently starts another. Pi also requires the recorded real cwd.
+
+### Pi parent trust
+
+Repeat for every Pi store that may serve this project. Use its resolved path from the deployment inventory, not the operator's native store. Before hardening, start Pi directly as the service user in the approved parent; after hardening, use this interactive maintenance window:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-config -- \
+  env PI_CODING_AGENT_DIR=<resolved-service-agent-dir> \
+  bash -c 'cd "$1" && exec pi' bash <approved-parent>
+```
+
+Run `/trust`, select **Trust**, then exit and restart Pi. From an immediate child, **Trust parent folder** is equivalent. Record the canonical approved parent in the onboarding report. Saved decisions live in `<agent-dir>/trust.json`; the nearest decision wins. Verify a future worktree beneath that parent after restart. Never add `--approve` or set `defaultProjectTrust: "always"`. Future project resources inherit the decision; trust is not an OS sandbox or protection against project modifications.
+
+The maintenance window leaves the gateway stopped. Restart it only after successful policy restoration.
 
 ## Claim ports
 

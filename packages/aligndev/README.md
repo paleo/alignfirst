@@ -30,7 +30,7 @@ A task can also start at any intermediate step.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
-For a coding-agent assistant, parent host and delegated child are independent: a coding profile selects Claude Code, Codex or Pi. Without a profile selection, the detected parent kind supplies the default child. OpenClaw deployment templates still offer Claude Code or Codex. Those templates use named profiles within their existing single-agent/default-store policy. Pi deployment remains [Blocked](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate): its native mutable credentials leave an executable declaration outside the proposed hardening boundary. No hardened Pi child overlay is shipped.
+For a coding-agent assistant, parent host and delegated child are independent: a coding profile selects Claude Code, Codex or Pi. Without a profile selection, the detected parent kind supplies the default child. OpenClaw deployment templates offer all three agents on Slack or Discord, with explicit profiles and inventoried default/custom native stores. The Pi overlay uses a protected absolute-Node launcher while retaining project PATH. Its [deployment boundary](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate) explicitly permits writable native `auth.json` and adjacent locks for OAuth renewal. That file can persist same-account executable API-key commands; this is account-level persistence, not administrator privilege escalation. Other managed resources and trust retain controlled-maintenance protection. Project trust is not a sandbox, and offline checks do not certify live deployment.
 
 ## Start in Claude Code, Codex or Pi
 
@@ -148,7 +148,7 @@ AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a
 ```mermaid
 flowchart TD
   U([User]) -->|Slack or Discord| O[OpenClaw]
-  O -->|aligndev guide and aligndev code| CA[Claude Code or Codex]
+  O -->|aligndev guide and aligndev code| CA[Claude Code, Codex or Pi]
   CA -->|AlignFirst protocols| FS[(Managed project)]
 ```
 
@@ -158,7 +158,7 @@ Install the setup skill where your agent will assemble the deployment's private 
 npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 
 ## Under the Hood
 

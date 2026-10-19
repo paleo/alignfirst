@@ -9,7 +9,9 @@ read_when:
 
 **Operator.** Re-seed when `infra/openclaw/.env`, `seed.sh`, `aligndev.settings.json` (the aligndev settings), a module under `seed/`, `environment.d/` or `coding-agent/` changed: a rotated token, a channel ID, the model provider or model, the skill allowlist, a new variable.
 
-Profiles retain the overlay's existing default native store. Before any writes, the shared inventory checks every profile, including those selected only by a project registry. Custom stores and mixed agents require separate hardening work; do not bypass the inventory. When profiles change, review every profile with `aligndev guide code --profile <name>` after re-seeding.
+Before any writes, the shared inventory checks every provisioned profile and optional quota store, including custom directories and profiles selected only by a project registry. Use explicit isolated `configDir` values beneath the service home. Relative values resolve against the deployed settings directory, never this checkout. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs, unsafe overlaps and HOME/session-root overrides fail closed.
+
+Provision and authenticate each account separately. The selected overlay seeds instructions for its own agent kind; additional kinds require their own reviewed instructions and packages. All provisioned accounts are available to the service UID; the editable registry routes work and is not an authorization boundary. Child provider/model/authentication and quota account are independent of OpenClaw's model.
 
 Changing the model never changes the agent runtime. Keep
 `models.providers.<provider>.agentRuntime.id` set to `openclaw`; the assistant requires OpenClaw's
@@ -30,6 +32,27 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance config instructions -- \
   /home/{{SERVICE_USER}}/seed/seed.sh
 ```
 
+When adding/removing profiles, changing native directories, Pi declarations/packages or saved trust, include all native scopes. Review old and new inventories before the window; the wrapper saves root-private resolved inventories for restoration:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-maintenance config instructions agent-skills agent-config -- \
+  /home/{{SERVICE_USER}}/seed/seed.sh
+```
+
+This does not migrate credentials or sessions. Retain old private backups and stores until the new account works. Install Pi packages before declaring them in settings, within `agent-config` maintenance after hardening. Native `auth.json` and adjacent locks remain writable for renewal; other Pi declarations, including `trust.json`, require maintenance. Never unlock the entire native root.
+
+Inspect every profile explicitly after seeding, without the cwd's registry selection:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+jq -r '.code.profiles | keys[]' "$HOME/.alignfirst/aligndev.settings.json" |
+  while IFS= read -r profile; do
+    aligndev guide code --profile "$profile"
+  done
+EOS
+```
+
 ## Apply
 
 A successful maintenance window leaves the gateway stopped. When `environment.d/` changed, rebuild the user manager's environment first. Then start the gateway:
@@ -42,11 +65,11 @@ sudo -i -u {{SERVICE_USER}} -- \
 # Expected: {"id":"openclaw"}
 ```
 
-Run these commands only after the wrapper reports that hardening was restored and exits 0. A failure leaves the assistant contained for diagnosis.
+Run these commands only after the wrapper reports that hardening was restored and exits 0. After a failure, follow [recovery](recover-assistant.md#failed-maintenance-cleanup). Failed recontainment leaves gateway state unknown; failed policy restoration retains the private inventory for operator repair.
 
 ## Scope
 
-The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf` and `~/.alignfirst/aligndev.settings.json`, creates `~/.alignfirst/companions/`, and merges the coding agent's global instruction file. It does not touch:
+The seed writes `~/.openclaw/openclaw.json` through `openclaw config set`, creates `~/.openclaw/workspace/scratch/`, rewrites `~/.openclaw/secrets/secrets.json` and `~/.openclaw/.env` from `~/seed/.env`, installs `~/.config/environment.d/*.conf` and `~/.alignfirst/aligndev.settings.json`, creates `~/.alignfirst/companions/`, reserves managed resource paths and merges instructions in every store of the overlay's agent kind. It preserves text outside the managed block and user Pi `agents/` profiles. It does not touch:
 
 - `~/.openclaw/workspace/*.md` — [update-workspace.md](update-workspace.md).
 - `~/projects/.alignfirst-projects.json` — [update-assistant.md](update-assistant.md).
