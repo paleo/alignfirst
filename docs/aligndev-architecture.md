@@ -92,6 +92,7 @@ A projects directory carries a `.alignfirst-projects.json` marker, with an optio
 - A direct child that is a Git main worktree is a project. Its linked worktrees are its workspaces.
 - A child directory may be a nested projects directory.
 - These are inventory issues: a child outside Git with a root `.alignfirst.json`, and two projects sharing one companion directory. `aligndev project doctor` succeeds only without any issue.
+- `list` and `status` carry the registry's independent `aligndev: { profile } | null` selection alongside companion and location data. Inventory reports it without resolving a launch profile or requiring an available coding agent. A missing top-level `aligndev` field in `alignfirst config --json` is an outdated contract and requires an AlignFirst upgrade.
 - `--root` defaults to `projectsRoot` in the config, then to the working directory.
 - A marker with the old `"portRange": { … }` key is rejected. A project's `.alignfirst.json` keeps its singular `portRange`.
 

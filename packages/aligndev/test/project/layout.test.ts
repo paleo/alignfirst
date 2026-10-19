@@ -6,46 +6,71 @@ import { readProjectReport } from "../../src/project/layout.js";
 
 describe("readProjectReport", () => {
   const cwd = tmpdir();
-  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires alignfirst 0.9.0 or later.`;
+  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`;
 
-  it("names the minimum alignfirst version for a report without locations", () => {
-    const command = reportCommand({ source: "root", cli: null, config: null });
-    expect(readProjectReport(command, cwd, process.env)).toEqual({ error: tooOld });
+  it.each([
+    { source: "root", cli: null, config: null },
+    { ...report(cwd), locations: {} },
+    Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "aligndev")),
+  ])("requires the profile-aware contract, not a version number: %#", (value) => {
+    expect(readProjectReport(reportCommand(value), cwd, {})).toEqual({ error: tooOld });
   });
 
-  it("names the minimum alignfirst version for a report without .alignfirst-instructions", () => {
-    const location = { path: cwd, in: "project", exists: false };
-    const command = reportCommand({
-      source: null,
-      cli: null,
-      config: null,
-      companion: null,
-      locations: { ".alignfirst.json": location, ".alignfirst.md": location },
-    });
-    expect(readProjectReport(command, cwd, process.env)).toEqual({ error: tooOld });
+  it.each([null, { profile: "work" }, { profile: " Work " }])(
+    "carries a selection independently of the companion: %j",
+    (aligndev) => {
+      const value = { ...report(cwd), aligndev };
+      expect(readProjectReport(reportCommand(value), cwd, {})).toEqual(value);
+    },
+  );
+
+  it.each([
+    {},
+    [],
+    "work",
+    false,
+    { profile: null },
+    { profile: 1 },
+    { profile: "" },
+    { profile: "  " },
+    { profile: "work", extra: true },
+  ])("rejects a malformed selection: %j", (aligndev) => {
+    expect(() => readProjectReport(reportCommand({ ...report(cwd), aligndev }), cwd, {})).toThrow(
+      `Invalid alignfirst config report for ${cwd}`,
+    );
   });
 
-  it("reads plans.folder from an alignfirst older than 0.12.0", () => {
-    const location = { path: cwd, in: "project", exists: false };
-    const names = [
-      ".alignfirst.json",
-      ".alignfirst-instructions",
-      "DEVELOPERS.md",
-      "docs",
-      ".plans",
-    ];
+  it("retains the legacy plans.folder parser for compatible reports", () => {
     const command = reportCommand({
+      ...report(cwd),
       source: "project",
-      cli: null,
       config: { schemaVersion: 1, plans: { folder: "project-plans" } },
-      companion: null,
-      locations: Object.fromEntries([...names, "_aligndev"].map((name) => [name, location])),
     });
-    expect(readProjectReport(command, cwd, process.env)).toMatchObject({
+    expect(readProjectReport(command, cwd, {})).toMatchObject({
       config: { plans: { repositoryFolder: "project-plans" } },
     });
   });
 });
+
+function report(cwd: string) {
+  const location = { path: cwd, in: "project", exists: false };
+  const names = [
+    ".alignfirst.json",
+    ".alignfirst-instructions",
+    "DEVELOPERS.md",
+    "docs",
+    ".plans",
+    "_aligndev",
+  ];
+  return {
+    source: null,
+    cli: null,
+    config: null,
+    companion: null,
+    aligndev: null,
+    locations: Object.fromEntries(names.map((name) => [name, location])),
+  };
+}
 
 function reportCommand(report: object): string[] {
   const json = JSON.stringify(report);

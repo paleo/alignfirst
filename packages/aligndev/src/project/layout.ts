@@ -2,8 +2,6 @@ import { runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
-const MIN_ALIGNFIRST_VERSION = "0.9.0";
-
 export type ItemName =
   | ".alignfirst.json"
   | ".alignfirst-instructions"
@@ -19,7 +17,12 @@ export interface ProjectReport {
   cli: ProjectCliReport | null;
   config: ProjectConfigView | null;
   companion: CompanionReport | null;
+  aligndev: AligndevProjectSettings | null;
   locations: Record<ItemName, ItemLocation>;
+}
+
+export interface AligndevProjectSettings {
+  profile: string;
 }
 
 export type ConfigSource = "project" | "companion";
@@ -75,17 +78,19 @@ function firstLine(value: string): string {
   return value.trim().split("\n", 1)[0] ?? "";
 }
 
-// Before alignfirst 0.9.0, the report had no `.alignfirst-instructions` location.
+// Detect the contract rather than the package version, including unreleased checkout builds.
 function isOutdatedReport(value: unknown): boolean {
   return (
-    isRecord(value) && !(isRecord(value.locations) && ".alignfirst-instructions" in value.locations)
+    isRecord(value) &&
+    (!Object.hasOwn(value, "aligndev") ||
+      !(isRecord(value.locations) && ".alignfirst-instructions" in value.locations))
   );
 }
 
 function outdatedAlignfirst(path: string): string {
   return (
-    `The alignfirst CLI used in ${path} is too old: aligndev requires alignfirst ` +
-    `${MIN_ALIGNFIRST_VERSION} or later.`
+    `The alignfirst CLI used in ${path} is too old: aligndev requires the profile-aware ` +
+    'alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.'
   );
 }
 
@@ -96,8 +101,21 @@ function parseProjectReport(value: unknown, path: string): ProjectReport {
     cli: parseCli(value.cli, path),
     config: parseConfig(value.config, path),
     companion: parseCompanion(value.companion, path),
+    aligndev: parseAligndev(value.aligndev, path),
     locations: parseLocations(value.locations, path),
   };
+}
+
+function parseAligndev(value: unknown, path: string): AligndevProjectSettings | null {
+  if (value === null) return null;
+  if (
+    !isRecord(value) ||
+    typeof value.profile !== "string" ||
+    value.profile.trim().length === 0 ||
+    Object.keys(value).some((key) => key !== "profile")
+  )
+    throw invalidReport(path);
+  return { profile: value.profile };
 }
 
 function parseSource(value: unknown, path: string): ConfigSource | null {

@@ -813,6 +813,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     cli: null,
     config: null,
     companion: { dir: "/companions/proj", exists: true },
+    aligndev: null,
     locations: {
       ".alignfirst.json": location(".alignfirst.json", ".alignfirst.json"),
       ".alignfirst-instructions": location(".alignfirst-instructions", ".alignfirst-instructions"),

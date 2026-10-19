@@ -19,11 +19,11 @@ npx -y alignfirst companion register [--dir <path>]
 npx -y alignfirst config --json
 ```
 
-`companion register` adds the project's main worktree to the registry, unless it is registered. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path. The command refuses a directory that is or contains the home directory or `~/.alignfirst/companions`, or that overlaps the project or another companion.
+`companion register` adds a companion for the project's main worktree, unless it already has one. A profile-only entry retains its original key and selection when gaining a directory. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path. The command refuses a directory that is or contains the home directory or `~/.alignfirst/companions`, or that overlaps the project or another companion.
 
 The new entry leaves every item on `"auto"`: an item the repository already has stays in use, and a missing one goes to the companion. To force an item's location, add it to the entry's `items` as `"companion"` or `"project"`, then read the layout again.
 
-`companion.dir` is the companion directory, and `locations` gives each item's path.
+`companion.dir` is the companion directory, and `locations` gives each item's path. The independent top-level `aligndev` field reports a project profile selection or null.
 
 Write each item below at its `locations` path. Skip an item located in the project (`"in": "project"`): the repository provides it.
 
@@ -79,6 +79,12 @@ The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives i
 - **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
 - **Developer guide:** write `DEVELOPERS.md` in the companion, without a workspaces section. The project runs in main-worktree mode: one working thread at a time, in the main worktree. Name the project's Node version there; the repository receives no `.nvmrc`.
 - **Check (step 9):** `aligndev project doctor --root <projects-directory>` must pass too.
+
+## Select a Profile Without a Companion
+
+The same registry accepts `{ "aligndev": { "profile": "<name>" } }` under the project's main-worktree key. Edit it by hand; AlignDev owns the forthcoming named-profile settings and resolution contract. This entry creates no companion or separate session tree. Linked worktrees share the selection and keep their own project file locations.
+
+An entry can contain both `dir` and `aligndev`. `companion unregister` removes `dir/items`, preserving the selection and reporting the remaining profile-only entry. Remove that selection through a separate registry edit. An entry with only `aligndev` has no companion to unregister.
 
 ## Keep Only aligndev's Session Files Out
 

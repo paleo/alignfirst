@@ -1,17 +1,133 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { makeCompanionProject, makeTempDir, runMain, writeRegistry } from "./helpers.js";
+import { resolveSkillRoots } from "../src/skills.js";
+import { makeCompanionProject, makeTempDir, runMain, writeRegistry, makeSink } from "./helpers.js";
 
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("doctor command", () => {
+  it("reports a profile without a companion and warns about unmatched profile keys", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    writeRegistry(home, {
+      projects: {
+        "~/app": { aligndev: { profile: "unprovisioned" } },
+        "~/gone": { aligndev: { profile: "work" } },
+      },
+    });
+    const result = await runMain(["doctor"], { cwd: project, home });
+    expect(result.stdout).toContain("[ok] Companion: none");
+    expect(result.stdout).toContain("[ok] AlignDev: profile unprovisioned");
+    expect(result.stdout).toContain("key ~/gone names no git main worktree");
+    expect(result.stdout).not.toContain("share the companion");
+  });
+
+  it.each([
+    "default",
+    "empty",
+    "absolute",
+    "relative",
+    "tilde",
+    "bareTilde",
+    "fileUrl",
+    "spaces",
+    "literalVariable",
+    "otherUser",
+  ])("finds native global Pi skills using supplied context: %s", async (kind) => {
+    const home = temp();
+    const cwd = temp();
+    const custom = join(home, "custom agent");
+    const cases: Record<string, { value?: string; agent: string }> = {
+      default: { agent: join(home, ".pi", "agent") },
+      empty: { value: "", agent: join(home, ".pi", "agent") },
+      absolute: { value: custom, agent: custom },
+      relative: { value: "relative", agent: join(cwd, "relative") },
+      tilde: { value: "~/custom agent", agent: custom },
+      bareTilde: { value: "~", agent: home },
+      fileUrl: { value: pathToFileURL(custom).href, agent: custom },
+      spaces: { value: " padded ", agent: join(cwd, " padded ") },
+      literalVariable: { value: "$HOME/custom", agent: join(cwd, "$HOME", "custom") },
+      otherUser: { value: "~otheruser/custom", agent: join(cwd, "~otheruser", "custom") },
+    };
+    const { value, agent } = cases[kind];
+    const root = join(agent, "skills");
+    installSkill(root, "alignfirst", "4.2.0");
+    installSkill(root, "alspec", "4.1.0");
+    vi.stubEnv("PI_CODING_AGENT_DIR", join(temp(), "ambient-agent"));
+    vi.stubEnv("HOME", temp());
+    const result = await runMain(["doctor"], { cwd, home, env: { PI_CODING_AGENT_DIR: value } });
+    expect(result.stdout).toContain(`[ok] Skills: alignfirst 4.2.0 (${root})`);
+    expect(result.stdout).toContain(`[ok] Skills: alspec 4.1.0 (${root})`);
+    expect(result.stdout).toContain("[warn] Skills: alplan missing");
+  });
+
+  it("replaces only the default Pi root and preserves shared/Claude/Codex precedence", async () => {
+    const home = temp();
+    const custom = join(home, "custom");
+    installSkill(join(home, ".pi", "agent", "skills"), "alplan", "4.0.0");
+    for (const root of [".agents/skills", ".claude/skills", ".codex/skills", "custom/skills"])
+      installSkill(join(home, root), "alspec", "4.0.0");
+    installSkill(join(home, ".claude", "skills"), "al", "4.0.1");
+    installSkill(join(home, ".codex", "skills"), "al", "4.0.2");
+    const result = await runMain(["doctor"], {
+      cwd: home,
+      home,
+      env: { PI_CODING_AGENT_DIR: custom },
+    });
+    expect(result.stdout).toContain(
+      `[ok] Skills: alspec 4.0.0 (${join(home, ".agents", "skills")})`,
+    );
+    expect(result.stdout).toContain(`[ok] Skills: al 4.0.1 (${join(home, ".claude", "skills")})`);
+    expect(result.stdout).toContain("[warn] Skills: alplan missing");
+  });
+
+  it("does not fall back to default Pi skills when the custom root is missing", async () => {
+    const home = temp();
+    installSkill(join(home, ".pi", "agent", "skills"), "alspec", "4.0.0");
+    const result = await runMain(["doctor"], {
+      cwd: home,
+      home,
+      env: { PI_CODING_AGENT_DIR: "missing" },
+    });
+    expect(result.stdout).toContain("[ok] Skills: no command skill installed");
+  });
+
+  it.each(["3.9.0", undefined])("retains Pi version warnings: %s", async (version) => {
+    const home = temp();
+    installSkill(join(home, ".pi", "agent", "skills"), "alignfirst", version);
+    const result = await runMain(["doctor"], { cwd: home, home });
+    expect(result.stdout).toContain(
+      `[warn] Skills: alignfirst ${version ?? "unknown"} predates v4`,
+    );
+  });
+
+  it("deduplicates canonical roots without changing precedence and tolerates missing roots", () => {
+    const home = temp();
+    mkdirSync(join(home, ".agents", "skills"), { recursive: true });
+    mkdirSync(join(home, ".pi", "agent"), { recursive: true });
+    symlinkSync(join(home, ".agents", "skills"), join(home, ".pi", "agent", "skills"));
+    const ctx = {
+      home,
+      cwd: home,
+      env: {},
+      form: "alignfirst",
+      version: "0.0.0",
+      stdout: makeSink(),
+      stderr: makeSink(),
+    };
+    expect(resolveSkillRoots(ctx)).toEqual(
+      [".agents/skills", ".claude/skills", ".codex/skills"].map((root) => join(home, root)),
+    );
+  });
   it("always reports every section in an empty directory", async () => {
     const cwd = temp();
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
@@ -58,6 +174,7 @@ describe("doctor command", () => {
         `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,
         `[ok] Companion: _aligndev (auto): ${join(project, ".plans")} (project)`,
+        "[ok] AlignDev: profile none",
         "[warn] Git:",
       ].join("\n"),
     );
@@ -209,6 +326,15 @@ describe("doctor command", () => {
     expect(result.stdout).not.toContain("no command skill installed");
   });
 });
+
+function installSkill(root: string, name: string, version: string | undefined): void {
+  const dir = join(root, name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "SKILL.md"),
+    version === undefined ? "# Skill\n" : `---\nmetadata:\n  version: "${version}"\n---\n`,
+  );
+}
 
 function temp(): string {
   const dir = makeTempDir("alignfirst-doctor-");

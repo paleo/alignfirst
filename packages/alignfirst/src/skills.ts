@@ -1,5 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import type { CommandContext } from "./context.js";
 
 export const COMMAND_SKILLS = [
   "alspec",
@@ -20,9 +23,35 @@ export interface InstalledSkill {
   version: string | undefined;
 }
 
-export function findInstalledSkill(home: string, name: string): InstalledSkill | undefined {
-  for (const relativeRoot of SKILL_ROOTS) {
-    const root = join(home, relativeRoot);
+export function resolveSkillRoots(ctx: CommandContext): string[] {
+  const roots = [
+    ...SKILL_ROOTS.map((root) => join(ctx.home, root)),
+    join(resolvePiAgentDir(ctx), "skills"),
+  ];
+  const seen = new Set<string>();
+  return roots.filter((root) => {
+    const canonical = existsSync(root) ? realpathSync(root) : resolve(root);
+    if (seen.has(canonical)) return false;
+    seen.add(canonical);
+    return true;
+  });
+}
+
+function resolvePiAgentDir({ home, cwd, env }: CommandContext): string {
+  const value = env.PI_CODING_AGENT_DIR;
+  if (value === undefined || value === "") return join(home, ".pi", "agent");
+  if (value === "~") return home;
+  if (value.startsWith("~/") || (process.platform === "win32" && value.startsWith("~\\")))
+    return join(home, value.slice(2));
+  if (/^file:\/\//.test(value)) return fileURLToPath(value);
+  return resolve(cwd, value);
+}
+
+export function findInstalledSkill(
+  roots: readonly string[],
+  name: string,
+): InstalledSkill | undefined {
+  for (const root of roots) {
     const skillFile = join(root, name, "SKILL.md");
     if (!existsSync(skillFile)) continue;
     return { root, version: readSkillVersion(skillFile) };

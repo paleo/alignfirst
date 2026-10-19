@@ -13,6 +13,7 @@ export function renderProjectList(inventory: ProjectInventory): string {
       `  Path: ${renderOutputValue(project.path)}`,
       `  Directory: ${renderOutputValue(project.directory)}`,
       `  Port range: ${renderProjectRange(project.portRange, project.portRangeCode)}`,
+      `  AlignDev profile: ${renderNullableValue(project.description.aligndev?.profile ?? null)}`,
       `  Workspaces: ${renderValues(project.workspaces)}`,
     );
   }
@@ -54,6 +55,7 @@ export function renderProjectListJson(inventory: ProjectInventory): string {
       portRange: project.portRange ?? null,
       portRangeCode: project.portRangeCode ?? null,
       companion: project.description.companion,
+      aligndev: project.description.aligndev,
       locations: project.description.locations,
       workspaces: project.workspaces,
     })),
@@ -104,6 +106,7 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Port range: ${renderProjectRange(details.portRange ?? undefined, details.portRangeCode ?? undefined)}`,
     `  Config source: ${details.configSource ?? "(none)"}`,
     `  Companion: ${renderCompanion(details.companion)}`,
+    `  AlignDev profile: ${renderNullableValue(details.aligndev?.profile ?? null)}`,
     `  DEVELOPERS.md: ${renderLocation(details.locations["DEVELOPERS.md"])}`,
     `  Work files: ${renderLocation(details.locations[".plans"])}`,
     `  Work-files folder: ${renderNullableValue(details.plansFolder)}`,
