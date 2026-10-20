@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.13.1
+
+### Patch Changes
+
+- 205715a: Unknown and obsolete properties in `.alignfirst.json` and the companion registry are now ignored with warnings on stderr. Companion registration and removal preserve unrelated raw settings. Recognized settings remain validated, and `config --json` keeps stdout clean.
+
 ## 0.13.0
 
 ### Minor Changes

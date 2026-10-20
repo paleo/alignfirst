@@ -1,5 +1,15 @@
 # @alignfirst/openclaw-test
 
+## 0.23.4
+
+### Patch Changes
+
+- 205715a: Updated OpenClaw compatibility to 2026.10.5, including trusted Slack routing for native exec completion claims, TypeBox to 1.4.2 and the judge SDKs; pinned generated pnpm setup to 12.14.0.
+- Updated dependencies [205715a]
+  - @alignfirst/openclaw-channel-mock-core@0.11.2
+  - @alignfirst/openclaw-discord-mock@0.6.6
+  - @alignfirst/openclaw-slack-mock@0.6.6
+
 ## 0.23.3
 
 ### Patch Changes
