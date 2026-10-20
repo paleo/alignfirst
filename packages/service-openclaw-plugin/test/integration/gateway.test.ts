@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createBus, injectQaBusInboundMessage } from "@alignfirst/openclaw-channel-mock-core";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
-const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
+const PACKED_ROOT = process.env.THREAD_HANDOFF_PACKED_ROOT;
+const OPENCLAW = resolve(PACKED_ROOT ?? REPO_ROOT, "node_modules/.bin/openclaw");
 const TAKEOVER_MESSAGE = "Take over this thread.";
 const SILENT_TOKEN = "HEARTBEAT_OK";
 const BOT_MENTION = "@openclaw";
@@ -203,7 +204,7 @@ describe("OpenClaw external-plugin gateway", () => {
         attemptCount: 1,
         claimedBy: { sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/u) },
       });
-      expect(records[0].targetSessionKey.toLowerCase()).toContain(expectedThreadId.toLowerCase());
+      expect(records[0].targetSessionKey).toBe(canonicalSessionKey(fixture, expectedThreadId));
       expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "alreadyStarted"')).toBe(true);
@@ -374,45 +375,70 @@ describe("OpenClaw external-plugin gateway", () => {
     },
   );
 
-  it("recovers one pending Slack startup across abrupt and post-claim restarts", async () => {
-    const options = { holdFirstSeed: true };
-    const fixture = await startFixture("slack", options);
-    await injectQaBusInboundMessage({
-      baseUrl: serverUrl(fixture.busServer),
-      input: {
-        accountId: fixture.channelId,
-        conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-        senderId: "User-A",
-        senderName: "User A",
-        text: "Start and survive a restart.",
-      },
-    });
-    await waitUntil(
-      () => fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE)),
-      20_000,
-      () => "the first pending seed was not observed",
-    );
-    const pending = JSON.parse(
-      await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
-    ) as Array<{ state: string }>;
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.state).toBe("pending");
+  it.each(["slack", "discord"] as const)(
+    "recovers one pending %s startup across abrupt and post-claim restarts",
+    async (surface) => {
+      const options = { holdFirstSeed: true };
+      const fixture = await startFixture(surface, options);
+      await injectRootMessage(fixture, "Project-X", "Start and survive a restart.");
+      await waitUntil(
+        () => fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE)),
+        20_000,
+        () => "the first pending seed was not observed",
+      );
+      const threadId = resolveThreadId(surface, fixture.bus.state.getSnapshot(), "Project-X");
+      const pending = JSON.parse(
+        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      ) as Array<{ state: string; targetSessionKey: string; attemptCount: number }>;
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        state: "pending",
+        targetSessionKey: canonicalSessionKey(fixture, threadId),
+        attemptCount: 1,
+      });
 
-    options.holdFirstSeed = false;
-    await restartGateway(fixture, "SIGKILL");
-    await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
-    expect(await handoffStates(fixture)).toEqual(["claimed"]);
-    expect(await handoffAttempts(fixture)).toEqual([2]);
+      options.holdFirstSeed = false;
+      await restartGateway(fixture, "SIGKILL");
+      const started = await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
+      expect(started.threadId).toBe(threadId);
+      expect(await handoffStates(fixture)).toEqual(["claimed"]);
+      expect(await handoffAttempts(fixture)).toEqual([2]);
 
-    await restartGateway(fixture, "SIGKILL");
-    await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
-    expect(
-      fixture.bus.state
-        .getSnapshot()
-        .messages.filter((message) => message.direction === "outbound" && message.text === MARKER),
-    ).toHaveLength(1);
-    expect(await handoffStates(fixture)).toEqual(["claimed"]);
-  }, 300_000);
+      await restartGateway(fixture, "SIGKILL");
+      await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
+      expect(outboundMessages(fixture, MARKER)).toHaveLength(1);
+      expect(await handoffStates(fixture)).toEqual(["claimed"]);
+      expect(await handoffAttempts(fixture)).toEqual([2]);
+      const recovered = JSON.parse(
+        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      );
+      expect(recovered).toMatchObject([
+        { targetSessionKey: canonicalSessionKey(fixture, threadId), threadId },
+      ]);
+      await injectQaBusInboundMessage({
+        baseUrl: serverUrl(fixture.busServer),
+        input: {
+          accountId: fixture.channelId,
+          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
+          senderId: "User-A",
+          text: "Continue in this same thread.",
+          threadId,
+        },
+      });
+      const continued = await waitForMessage(
+        fixture,
+        (message) => message.text === "SAME_SESSION_CONTINUED",
+      );
+      expect(continued.threadId).toBe(threadId);
+      expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([
+        threadId,
+        threadId,
+        threadId,
+      ]);
+      expectNoIsolatedFinalization(fixture);
+    },
+    300_000,
+  );
 
   it.each(["slack", "discord"] as const)(
     "retries one failed %s native starter without duplicating delivery",
@@ -529,8 +555,18 @@ function buildConfig(params: {
       allow: [params.channelId, "alignfirst-service"],
       load: {
         paths: [
-          resolve(REPO_ROOT, `packages/openclaw-${params.surface}-mock`),
-          resolve(REPO_ROOT, "packages/service-openclaw-plugin"),
+          resolve(
+            PACKED_ROOT ?? REPO_ROOT,
+            PACKED_ROOT === undefined
+              ? `packages/openclaw-${params.surface}-mock`
+              : `node_modules/@alignfirst/openclaw-${params.surface}-mock`,
+          ),
+          resolve(
+            PACKED_ROOT ?? REPO_ROOT,
+            PACKED_ROOT === undefined
+              ? "packages/service-openclaw-plugin"
+              : "node_modules/@alignfirst/service-openclaw-plugin",
+          ),
         ],
       },
       entries: {
@@ -874,6 +910,12 @@ function outboundMessages(fixture: Fixture, text: string) {
   return fixture.bus.state
     .getSnapshot()
     .messages.filter((message) => message.direction === "outbound" && message.text === text);
+}
+
+function canonicalSessionKey(fixture: Fixture, threadId: string): string {
+  return fixture.surface === "slack"
+    ? `agent:main:${fixture.channelId}:channel:project-x:thread:${threadId.toLowerCase()}`
+    : `agent:main:${fixture.channelId}:channel:${threadId.toLowerCase()}`;
 }
 
 async function handoffStates(fixture: Fixture): Promise<string[]> {

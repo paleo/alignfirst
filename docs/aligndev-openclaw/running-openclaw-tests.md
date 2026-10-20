@@ -44,6 +44,16 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
 
+## Shared-daemon isolation
+
+Use a disposable consumer copy with a unique basename for concurrent work. Copy `.dockerignore` before any private environment file; it must exclude `.env.local`, `node_modules`, `.workers`, artifacts and logs. Keep credential stores outside the build context. Copy current non-secret inputs and vendor tarballs, then use reviewed npm `ci`; never run the copy's repository-relative vendor script.
+
+Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` for that copy. Use a unique `OPENCLAW_TEST_CONSUMER_IMAGE`. Worker projects derive from the consumer basename and are passed with `-p`; `COMPOSE_PROJECT_NAME` alone does not isolate them.
+
+The base tag is `paleo/openclaw-test-base:<package-version>`. UID/GID build arguments and a unique consumer image do not isolate it. Hold exclusive ownership across the base build and the consumer build that resolves its `FROM`, or use a genuinely separate daemon/image store. An idle daemon, an uncoordinated advisory lock or a second context on the same daemon is insufficient proof. Without ownership, stop before building and retain the blocker. Existing images do not certify new source or pins.
+
+After vendor/install/ci, call the installed `openclaw-test env build` directly to avoid `env:build` repacking and relocking again. Always tear down through the same private project environment and wait for owned runners. Inspect only exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
+
 ## Configuration
 
 Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
@@ -152,6 +162,8 @@ sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 
 The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
 
+The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
+
 These offline checks do not start Docker, import credentials or execute any scenario, including A09. The Pi harness update was verified through these checks only. OpenClaw conversation checks and live deployment acceptance remain unexecuted; mock success certifies neither Pi authentication/trust nor native service-account permissions. Deployment parity and production headless waiting remain blocked independently.
 
 ## Vendored packages
@@ -170,7 +182,9 @@ The complementary deterministic suite makes no model calls and runs outside Dock
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
 ```
 
-It retains test-owned gateway logs, scripted-provider requests, configuration, and SQLite restart state under `/tmp/thread-handoff-*`. Omit the environment variable to clean fixtures automatically.
+It retains test-owned gateway logs, scripted-provider requests, configuration, and SQLite restart state under `/tmp/thread-handoff-*`. Omit the environment variable to clean fixtures automatically. Both surfaces cover abrupt pending and post-claim restarts, exact canonical session keys and continuation after restart. Immediate startup keeps its 20-second bound and `attemptCount: 1`; recovery deliberately records a second attempt.
+
+To repeat that suite against a clean standalone packed install outside Docker, set `THREAD_HANDOFF_PACKED_ROOT` to its absolute consumer directory. The fixture selects that install's OpenClaw executable and installed channel/service plugins instead of repository package paths. Its scripted local provider makes no external model requests. This supplements image loading; it does not certify official plugin capture, credential import or Terra behavior.
 
 ## Layout
 

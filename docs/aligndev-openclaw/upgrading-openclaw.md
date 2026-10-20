@@ -61,7 +61,7 @@ The official plugins require the OpenClaw version they ship with, so the Dockerf
 
 OpenClaw 2026.10.5 still pins Zod `4.6.5`. Keep mock-core's exact development and peer pins there: ncu's standalone latest `4.6.7` would break the shared-host composition contract. Test the public plugin config schema and inspect `npm ls zod typebox --all`; TypeBox `1.4.2` is supported by our public schema and packed Pi checks without overriding host-owned copies.
 
-Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/`.
+Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/`. On a shared Docker daemon, first follow the [isolated build rules](./running-openclaw-tests.md#shared-daemon-isolation). A unique consumer tag does not isolate the version-only base tag.
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
 confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
@@ -88,7 +88,7 @@ for ws in /tmp/doctor-harness /tmp/doctor-template; do
 done
 ```
 
-Two findings are expected noise, because no gateway ever runs in this container: the node-hosting preconditions about the loopback bind and disabled device pairing. Releases up to 2026.9.8 also reported the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`) and the plaintext-secrets warning (the harness injects keys through the environment on purpose). Investigate anything else.
+For an unstarted scratch state on 2026.10.5, expect the two node-hosting findings about the loopback bind and disabled device pairing, plus the heartbeat cron materialization warning. The gateway reconciles heartbeat jobs itself at startup (`reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`); doctor still reports that missing job before startup. Older releases also reported plaintext secrets because the harness injects keys through the environment. Investigate anything else. A zero process exit does not mean `doctor --json` returned `ok: true`.
 
 ## Inspect a running gateway
 
@@ -101,7 +101,9 @@ docker exec aligndev-openclaw-tests-w1-gateway-1 openclaw plugins list
 docker logs aligndev-openclaw-tests-w1-gateway-1 2>&1 | grep 'failed during load'
 ```
 
-Expected: `heartbeat:main` as the only enabled job (the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff. The log check must print nothing: a gateway reports healthy even when a plugin failed to load, and `plugins list` still shows that plugin as enabled. 2026.10.2 failed Codex this way inside the image; see [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration).
+Wait for system-job reconciliation before interpreting the job list. An initial 2026.10.5 `cron list` can be empty even after the gateway logs `ready`; `src/gateway/server-cron-lazy.ts` starts the service lazily and `server-cron.ts` then reconciles its system jobs. Poll to convergence with a bounded deadline.
+
+Expected: `heartbeat:main` as the only enabled job (`name: "heartbeat-main"`, display name `Heartbeat (main)`; the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff. The log check must print nothing: a gateway reports healthy even when a plugin failed to load, and `plugins list` still shows that plugin as enabled. 2026.10.2 failed Codex this way inside the image; see [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration).
 
 ## Run the regression scenarios
 

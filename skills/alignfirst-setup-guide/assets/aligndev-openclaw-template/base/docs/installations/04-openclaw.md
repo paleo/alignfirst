@@ -70,6 +70,8 @@ The snapshot copies `bin/openclaw`, both deployment helpers and `node-runtime/`.
 
 Deployment settings require an explicit valid `code.profile`, even with one profile or a profile-local `default: true`. Flags must be booleans, with at most one true flag per agent across all provisioned profiles. The retired `code.defaultProfiles` map requires manual conversion before seeding; keep names unchanged. Inventory does not infer a global selection.
 
+On OpenClaw 2026.10.5, keep Workshop's mode at `off`; `propose` is retired. The seed also disables memory learning/flush, startup telemetry and automatic updates, and keeps Tool Search and Code Mode off so the handoff tools remain visible. Review these policy opt-outs against each upgraded release before re-seeding.
+
 The seed reserves managed discovery paths through `deployment-policy.mjs prepare` and merges the selected overlay's instructions into every store of that agent kind. It preserves text outside managed markers and existing Pi `agents/` profiles. Additional agent kinds and quota stores need their own installation, authentication and instruction review; selecting them in settings does not install or authenticate them. Provision only accounts intended to be available to this Linux user.
 
 For Pi, install approved native `rg`/`fd` helpers in its inventoried `bin/` or system PATH before hardening. Pi prepends that native bin for tools and otherwise downloads missing helpers there. Protect this executable discovery path; do not place Node overrides in it.
