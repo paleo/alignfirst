@@ -174,11 +174,17 @@ function absentConfig(home: string): ConfigFile {
 }
 
 function parseConfigFile(path: string): ConfigFile {
-  let value: unknown;
+  let text: string;
   try {
-    value = JSON.parse(readFileSync(path, "utf8"));
+    text = readFileSync(path, "utf8");
   } catch (error) {
     throw invalidConfig(path, errorMessage(error));
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw invalidConfig(path, "must contain valid JSON");
   }
   return parseShape(configShape, value, (detail) => invalidConfig(path, detail));
 }

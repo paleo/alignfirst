@@ -1,4 +1,4 @@
-import { describeAlignfirst, runAlignfirst } from "../alignfirst-cli.js";
+import { describeAlignfirst, forwardSettingsWarnings, runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
@@ -61,7 +61,7 @@ export function readProjectReport(
 ): ProjectReport | ProjectError {
   const result = runAlignfirst(command, ["config", "--json"], cwd, env);
   if (result.status !== 0) {
-    const error = firstLine(result.stderr);
+    const error = firstLine(forwardSettingsWarnings(result.stderr));
     return { error: error === "" ? "alignfirst config failed" : error };
   }
   let value: unknown;

@@ -46,7 +46,11 @@ The companion registry, `~/.alignfirst/companions/registry.json`, has a fixed pa
 
 Each entry requires `dir`, `aligndev`, or both. A profile-only entry leaves every item in the project and creates no companion or separate session tree. Edit the registry by hand to select or remove a profile; report reads create no files.
 
-Registry validation rejects unknown keys at every level. A registry with a top-level `paths` key has the earlier shape: the error names the new shape and the setup guide's upgrade reference, which converts it. An unreadable or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
+Unknown or obsolete settings properties are ignored with `console.warn` on stderr. This applies to the registry root, each project entry, `items` and `aligndev`, and to `.alignfirst.json` and its recognized nested objects. Warnings identify the setting without printing its value; registry warnings redact dynamic project-path keys. Project paths under `projects` are map keys, and the six supported item names are recognized settings. Reads leave both files unchanged, and `config --json` keeps stdout as JSON containing only recognized settings.
+
+The obsolete registry `paths` property is ignored with a manual-conversion hint pointing to the setup guide's upgrade reference. It does not select companions. `root` is also ignored; use a symlink at `~/.alignfirst/companions` or a per-project `dir`. The current `projects` object is still required, so a file containing only `paths` warns and then fails validation. In `.alignfirst.json`, `ticketPattern` is ignored with a hint to use `ticketIdPattern`; the explicitly supported deprecated `plans.folder` alias still maps to `plans.repositoryFolder`.
+
+Recognized values, required structure and semantic constraints still undergo validation. An unreadable, malformed or invalid registry is a `CliError` naming the file, raised by every command that resolves the layout. `config` exits 1 with it; `doctor` reports it.
 
 ## Matching
 

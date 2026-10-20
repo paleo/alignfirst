@@ -14,36 +14,46 @@ import {
   parseShape,
 } from "./json-shape.js";
 import type { ProjectLayout } from "./project-layout.js";
+import { warnUnknownSetting } from "./settings-warning.js";
 import { isValidVersionRange } from "./version-range.js";
 
 export const PROJECT_CONFIG_FILENAME = ".alignfirst.json";
 
-const portRangeShape = object<PortRange>({
-  first: integerBetween(1, 65_535),
-  last: integerBetween(1, 65_535),
-});
-const plansShape = object<PlansConfig>({
-  repositoryFolder: optional(nonEmptyString),
-  autoArchive: optional(boolean),
-});
-const commitShape = object<CommitConfig>({
-  style: literal("conventionalCommit"),
-  ticketReference: optional(literal("bracketed", "bracketedHash")),
-});
-const gitShape = object<GitConfig>({
-  defaultBranch: optional(nonEmptyString),
-  branchNameTemplate: optional(nonEmptyString),
-  commit: optional(commitShape),
-  agentCoauthoring: optional(boolean),
-});
-const projectConfigShape = object<ProjectConfig>({
-  schemaVersion: literal(1),
-  cli: optional(nonEmptyString),
-  ticketIdPattern: optional(nonEmptyString),
-  plans: optional(plansShape),
-  portRange: optional(portRangeShape),
-  git: optional(gitShape),
-});
+const portRangeShape = object<PortRange>(
+  { first: integerBetween(1, 65_535), last: integerBetween(1, 65_535) },
+  warnUnknownProjectSetting,
+);
+const plansShape = object<PlansConfig>(
+  { repositoryFolder: optional(nonEmptyString), autoArchive: optional(boolean) },
+  warnUnknownProjectSetting,
+);
+const commitShape = object<CommitConfig>(
+  {
+    style: literal("conventionalCommit"),
+    ticketReference: optional(literal("bracketed", "bracketedHash")),
+  },
+  warnUnknownProjectSetting,
+);
+const gitShape = object<GitConfig>(
+  {
+    defaultBranch: optional(nonEmptyString),
+    branchNameTemplate: optional(nonEmptyString),
+    commit: optional(commitShape),
+    agentCoauthoring: optional(boolean),
+  },
+  warnUnknownProjectSetting,
+);
+const projectConfigShape = object<ProjectConfig>(
+  {
+    schemaVersion: literal(1),
+    cli: optional(nonEmptyString),
+    ticketIdPattern: optional(nonEmptyString),
+    plans: optional(plansShape),
+    portRange: optional(portRangeShape),
+    git: optional(gitShape),
+  },
+  warnUnknownProjectSetting,
+);
 
 export interface ProjectConfig {
   schemaVersion: 1;
@@ -100,11 +110,17 @@ export function writeDeprecationWarnings(
 }
 
 export function readProjectConfig(path: string): ProjectConfigFile {
-  let value: unknown;
+  let text: string;
   try {
-    value = JSON.parse(readFileSync(path, "utf-8"));
+    text = readFileSync(path, "utf-8");
   } catch (error) {
     throw invalidConfig(path, errorMessage(error));
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw invalidConfig(path, "must contain valid JSON");
   }
   const config = validateProjectConfig(value, path);
   const deprecations = hasLegacyPlansFolder(value) ? [legacyPlansFolderWarning(path)] : [];
@@ -116,10 +132,16 @@ export function validateProjectConfig(value: unknown, label: string): ProjectCon
     invalidConfig(label, detail),
   );
   if (config.cli !== undefined && !isValidVersionRange(config.cli))
-    throw invalidConfig(label, `cli is not a supported version range: ${config.cli}`);
+    throw invalidConfig(label, "cli is not a supported version range");
   if (config.ticketIdPattern !== undefined) assertValidPattern(config.ticketIdPattern, label);
   if (config.portRange !== undefined) assertValidPortRange(config.portRange, label);
   return config;
+}
+
+function warnUnknownProjectSetting(path: string, key: string): void {
+  const hint =
+    path === "" && key === "ticketPattern" ? "Use ticketIdPattern for ticket matching." : undefined;
+  warnUnknownSetting(PROJECT_CONFIG_FILENAME, path, key, hint);
 }
 
 /** Reads the deprecated `plans.folder` as `plans.repositoryFolder`. */
@@ -154,11 +176,8 @@ function invalidConfig(label: string, detail: string): CliError {
 function assertValidPattern(pattern: string, label: string): void {
   try {
     new RegExp(pattern);
-  } catch (error) {
-    throw invalidConfig(
-      label,
-      `ticketIdPattern is not a valid regular expression: ${errorMessage(error)}`,
-    );
+  } catch {
+    throw invalidConfig(label, "ticketIdPattern is not a valid regular expression");
   }
   if (hasInnerAnchor(pattern))
     throw invalidConfig(

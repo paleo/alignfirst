@@ -403,6 +403,32 @@ test("inventory and real CLI ignore stale settings on stderr without rewriting i
   });
 });
 
+test("inventory and real CLI sanitize malformed settings JSON and preserve input bytes", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    installSettings(fixture);
+    for (const text of ['{"secret":"private-json-value" trailing}', "private-json-value"]) {
+      writeFileSync(fixture.settingsFile, text);
+      writeFileSync(fixture.deployedSettings, text);
+      const before = readFileSync(fixture.settingsFile);
+      const deployedBefore = readFileSync(fixture.deployedSettings);
+      const diagnostic = assertInventoryRejected(fixture, /must contain valid JSON/);
+      assert(!diagnostic.includes("private-json-value"));
+      const result = spawnSync(
+        process.execPath,
+        [join(repository, "packages/aligndev/bin/aligndev.mjs"), "code", "--help"],
+        options(fixture),
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /must contain valid JSON/);
+      assert(result.stderr.includes(fixture.deployedSettings));
+      assert(!result.stderr.includes("private-json-value"));
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+      assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
+    }
+  });
+});
+
 test("inventory and real CLI still reject malformed recognized fields alongside unknown keys", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);

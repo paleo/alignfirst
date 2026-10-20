@@ -128,11 +128,14 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
 }
 
 function readSettings(settingsFile) {
-  const settings = settingsObject(
-    JSON.parse(readFileSync(settingsFile, "utf8")),
-    ["platform", "projectsRoot", "code"],
-    "settings",
-  );
+  const text = readFileSync(settingsFile, "utf8");
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error(`${settingsFile}: must contain valid JSON`);
+  }
+  const settings = settingsObject(value, ["platform", "projectsRoot", "code"], "settings");
   if (settings.platform !== undefined && !["openclaw", "codingAgent"].includes(settings.platform))
     throw new Error("Invalid settings.platform");
   if (

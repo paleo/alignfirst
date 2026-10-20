@@ -51,6 +51,7 @@ async function smoke() {
     const failures = [];
     for (const check of [
       settingsChecks,
+      consumerWarningChecks,
       profileOnlyChecks,
       companionChecks,
       resumeChecks,
@@ -352,6 +353,111 @@ async function settingsChecks(f) {
   }
   console.log(
     "PASS: stale settings warn on stderr, launch succeeds, JSON stays clean, invalid known values fail, input unchanged",
+  );
+}
+
+async function consumerWarningChecks(f) {
+  const projectSettings = join(f.project, ".alignfirst.json");
+  const inventoryMarker = join(f.home, ".alignfirst-projects.json");
+  const registryBefore = readFileSync(f.registry);
+  const staleRegistry = JSON.parse(registryBefore);
+  staleRegistry.unknownRegistry = "private-consumer-value";
+  staleRegistry.projects["~/app"].unknownEntry = "private-consumer-value";
+  staleRegistry.projects["~/app"].aligndev.unknownSelection = "private-consumer-value";
+  staleRegistry.projects["~/companion-app"].items = {
+    docs: "auto",
+    unknownItem: "private-consumer-value",
+  };
+  try {
+    writeJson(inventoryMarker, {});
+    writeJson(f.registry, staleRegistry);
+    writeJson(projectSettings, {
+      schemaVersion: 1,
+      unknownProject: "private-consumer-value",
+      plans: { folder: "alignfirst", unknownPlans: "private-consumer-value" },
+      git: {
+        unknownGit: "private-consumer-value",
+        commit: { style: "conventionalCommit", unknownCommit: "private-consumer-value" },
+      },
+    });
+    const settingsBytes = readFileSync(projectSettings);
+    const registryBytes = readFileSync(f.registry);
+    await readOnly(f, async () => {
+      for (const [executable, args] of [
+        ["alignfirst", ["config", "--json"]],
+        ["aligndev", ["code", "--help"]],
+        ["aligndev", ["guide", "code"]],
+        ["aligndev", ["project", "list", "--json", "--root", f.home]],
+      ]) {
+        const result = await command(f, f.project, executable, args);
+        for (const field of [
+          "unknownProject",
+          "plans.unknownPlans",
+          "git.unknownGit",
+          "git.commit.unknownCommit",
+          "unknownRegistry",
+          "projects[<entry>].unknownEntry",
+          "projects[<entry>].aligndev.unknownSelection",
+          "projects[<entry>].items.unknownItem",
+        ])
+          assert(result.stderr.includes(field), `${executable} must warn about ${field}`);
+        assert.match(result.stderr, /plans.folder is deprecated/);
+        assert.equal(result.stdout.includes("Warning:"), false);
+        assert.equal(`${result.stdout}${result.stderr}`.includes("private-consumer-value"), false);
+        assert.equal(result.stderr.includes("~/app"), false);
+        if (args.includes("--json")) JSON.parse(result.stdout);
+        else assert(result.stdout.includes("a"));
+        assert.deepEqual(readFileSync(projectSettings), settingsBytes);
+        assert.deepEqual(readFileSync(f.registry), registryBytes);
+      }
+    });
+    const validProject = JSON.parse(settingsBytes);
+    for (const source of ["project", "registry"]) {
+      const invalidProject = structuredClone(validProject);
+      const invalidRegistry = structuredClone(staleRegistry);
+      if (source === "project") invalidProject.git.commit.style = "private-invalid-consumer-value";
+      else invalidRegistry.projects["~/app"].aligndev.profile = ["private-invalid-consumer-value"];
+      writeJson(projectSettings, invalidProject);
+      writeJson(f.registry, invalidRegistry);
+      const invalidSettingsBytes = readFileSync(projectSettings);
+      const invalidRegistryBytes = readFileSync(f.registry);
+      const failure = source === "project" ? /git.commit.style must be/ : /profile must be/;
+      const warning = source === "project" ? /unknownProject/ : /unknownRegistry/;
+      await readOnly(f, async () => {
+        for (const [executable, args] of [
+          ["alignfirst", ["config", "--json"]],
+          ["aligndev", ["code", "--help"]],
+          ["aligndev", ["guide", "code"]],
+          ["aligndev", ["project", "list", "--json", "--root", f.home]],
+        ]) {
+          const inventory = args[0] === "project";
+          const result = await command(f, f.project, executable, args, inventory ? 0 : 1);
+          assert.match(result.stderr, warning);
+          if (inventory) {
+            const report = JSON.parse(result.stdout);
+            const issue = report.issues.find((entry) => entry.path === f.project);
+            assert.ok(issue, "Invalid project must remain an inventory issue.");
+            assert.match(issue.message, failure);
+            assert.equal(issue.message.includes("Warning:"), false);
+          } else {
+            assert.equal(result.stdout, "");
+            assert.match(result.stderr, failure);
+          }
+          for (const secret of ["private-consumer-value", "private-invalid-consumer-value"])
+            assert.equal(`${result.stdout}${result.stderr}`.includes(secret), false);
+          assert.equal(result.stdout.includes("Warning:"), false);
+          assert.deepEqual(readFileSync(projectSettings), invalidSettingsBytes);
+          assert.deepEqual(readFileSync(f.registry), invalidRegistryBytes);
+        }
+      });
+    }
+  } finally {
+    writeFileSync(f.registry, registryBefore);
+    rmSync(projectSettings, { force: true });
+    rmSync(inventoryMarker, { force: true });
+  }
+  console.log(
+    "PASS: project/nested registry warnings reach help, guide and JSON inventory on success and failure; real validation errors remain visible, values private and source bytes unchanged",
   );
 }
 

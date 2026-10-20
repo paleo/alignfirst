@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   boolean,
@@ -60,6 +60,24 @@ describe("json shape", () => {
   it("reports an unknown key before the fields, then the first field in declaration order", () => {
     expect(() => parse(sampleShape, { port: 0, extra: 1 })).toThrow("extra must be removed");
     expect(() => parse(sampleShape, { port: 0 })).toThrow("name must be a non-empty string");
+  });
+
+  it("strips unknown fields with an optional callback and redacts record keys in warnings", () => {
+    const warn = vi.fn();
+    const check = object<{ map: Record<string, { flag: boolean }> }>(
+      { map: record(object<{ flag: boolean }>({ flag: boolean }, warn)) },
+      warn,
+    );
+    expect(
+      parse(check, { extra: "PRIVATE", map: { "PRIVATE-PATH": { flag: true, other: null } } }),
+    ).toEqual({ map: { "PRIVATE-PATH": { flag: true } } });
+    expect(warn.mock.calls).toEqual([
+      ["", "extra"],
+      ["map[<entry>]", "other"],
+    ]);
+    expect(() => parse(check, { map: { "/p": { flag: "PRIVATE", extra: true } } })).toThrow(
+      'map["/p"].flag must be a boolean',
+    );
   });
 
   it.each<[Check<unknown>, string]>([

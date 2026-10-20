@@ -85,6 +85,28 @@ describe("settings shape", () => {
     expect(() => requireProjectsRoot(loadConfig(makeHome()))).toThrow("projectsRoot");
   });
 
+  it.each(['{"secret":"private-json-value" trailing}', "private-json-value"])(
+    "sanitizes malformed JSON without rewriting input: %s",
+    (text) => {
+      const home = makeHome({});
+      const path = join(home, ".alignfirst/aligndev.settings.json");
+      writeFileSync(path, text);
+      expect(() => loadConfig(home)).toThrow(
+        `Error: invalid aligndev config ${path}: must contain valid JSON`,
+      );
+      expect(() => loadConfig(home)).not.toThrow("private-json-value");
+      expect(readFileSync(path, "utf8")).toBe(text);
+    },
+  );
+
+  it("retains filesystem diagnostics for unreadable settings", () => {
+    const home = makeHome();
+    const path = join(home, ".alignfirst/aligndev.settings.json");
+    mkdirSync(path, { recursive: true });
+    expect(() => loadConfig(home)).toThrow(`Error: invalid aligndev config ${path}:`);
+    expect(() => loadConfig(home)).toThrow("EISDIR");
+  });
+
   it("rejects the old filename only when the current file is absent", () => {
     const home = makeHome();
     mkdirSync(join(home, ".alignfirst"));
