@@ -107,7 +107,11 @@ Expected: `heartbeat:main` as the only enabled job (`name: "heartbeat-main"`, di
 
 ## Run the regression scenarios
 
-Pick the scenarios that exercise what the release changed, from the table in [Running the OpenClaw Tests](./running-openclaw-tests.md#scenarios), and run them on both surfaces with the command given there. A change to plugin loading or to the tool and hook registrations hits the handoff, which every thread bootstrap goes through (A01). A change to reply delivery hits the starter retry (A21) and later-run delivery (A08). A change to cron, heartbeats or turn queuing hits the background completion chain (A08) and the takeover race (A20).
+Select a few representative scenarios for the release's changed behavior using [Scenario selection](./running-openclaw-tests.md#scenario-selection). Never run the full matrix by default. Use only Terra for conversation-model tests and Haiku through OpenRouter for the judge. Start with one iteration on the relevant surface; include both surfaces when the change affects their shared contract.
+
+A change to plugin loading or to tool and hook registrations hits the handoff (A01). A change to reply delivery hits starter retry (A21) and later-run delivery (A08). A change to cron, heartbeats or turn queuing hits the background completion chain (A08) and takeover race (A20). Choose the relevant cases rather than collecting every example into an upgrade checklist.
+
+Inspect retained artifacts for unexpected errors, identify their cause and fix them before expanding coverage. Rerun the affected case to verify the fix. Record the reason for any additional scenarios, surfaces or iterations; a full matrix requires explicit justification.
 
 ```sh
 npm run env:down

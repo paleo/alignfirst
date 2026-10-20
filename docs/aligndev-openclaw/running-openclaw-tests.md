@@ -75,7 +75,7 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
@@ -88,7 +88,7 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
 
   Then set `OPENCLAW_CODEX_HOME` in `.env.local` to `$PWD/.codex-home` with `$PWD` expanded to its absolute value. Repeat the login when the stored access token expires.
 
-  Since 2026.9.6, OpenClaw does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts, which keeps a stale credential from blocking the matrices that do not use it. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
+  Since 2026.9.6, OpenClaw does not use the mounted Codex `auth.json` directly for the OpenClaw runtime. The image's `gateway-entrypoint` copies the credential to a temporary writable directory, imports it with `openclaw migrate apply codex`, deletes the copy, then starts the gateway. Without `auth.json` it skips the import, so other providers need no Codex login. A failed import is reported and the gateway still starts. For Terra acceptance, investigate and fix that failure before running scenarios. `openclaw.json` routes the subscription credential through the ChatGPT Codex endpoint.
 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
 
@@ -147,23 +147,30 @@ Starter values, canonical paths, full detailed requests, and actual session owne
 
 The fresh-session reaction helper observes a claim, history read, and lobster reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation. The quiet-takeover helper then waits for a terminal turn before checking that the starter's question was not repeated. A17 applies the structural reaction assertion to an active takeover and checks the approved readiness meaning. A23 applies it to a human-created thread whose claim returns `none`. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
-For later authorized scenario acceptance, from `aligndev-openclaw-tests/`, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
+### Scenario selection
+
+After upgrades, select a few representative scenarios for the changed behavior. Never run the full matrix by default. Record the selected cases and what each checks. Start with one iteration on the relevant surface; use both surfaces when the change affects their shared contract. Conversation-model tests use Terra only, with Haiku through OpenRouter as judge.
+
+For example, A01 exercises native handoff and A08 exercises background completion and later-run delivery. Choose A21 for retry changes or A20 for takeover races. These are selection examples, not a required combined set.
+
+For authorized acceptance, rebuild the CLIs and harness image from `aligndev-openclaw-tests/`. This example selects two scenarios on Slack:
 
 ```bash
 npm run build --prefix ..
 npm run env:build
+CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel slack-mock --iterations 1 \
+  A01-new-work-to-be-done A08-go-ahead-delegation
+```
 
-scenario_names=()
-for scenario_file in scenarios/A*.ts; do
-  case "$scenario_file" in scenarios/A09-*) continue ;; esac
-  scenario_name="${scenario_file##*/}"
-  scenario_names+=("${scenario_name%.ts}")
-done
-CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenario_names[@]}"
+Inspect the cell results, transcripts and gateway logs. Investigate and fix unexpected errors before expanding coverage, then rerun the affected case to verify the fix. Additional scenarios, surfaces or iterations need a recorded coverage gap or diagnostic reason. A full matrix requires explicit justification; a failure alone is not a reason to launch one.
+
+Run the deterministic A09 contract once for each coding agent affected by the change:
+
+```bash
 CODING_AGENT=codex npm run e2e -- --channel slack-mock A09-code-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. For each other child, run A09 once with `CODING_AGENT=claude` or `CODING_AGENT=pi`; channel/model repetition adds no coverage to that contract. Clear a previous `CODING_AGENT_MODELS` override or set it to include the selected child's contract model.
+Select `CODING_AGENT=claude` or `CODING_AGENT=pi` for the other children as needed; channel/model repetition adds no coverage to that contract. Clear a previous `CODING_AGENT_MODELS` override or set it to include the selected child's contract model.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
@@ -183,7 +190,7 @@ The Node built-in suite checks profile generation, native-agent bypass detection
 
 The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
 
-These offline checks do not start Docker, import credentials or execute any scenario, including A09. The Pi harness update was verified through these checks only. OpenClaw conversation checks and live deployment acceptance remain unexecuted; mock success certifies neither Pi authentication/trust nor native service-account permissions. Deployment parity and production headless waiting remain blocked independently.
+These offline checks do not start Docker, import credentials or execute any scenario, including A09. Record conversation-model results separately from offline checks. Mock success certifies neither Pi authentication/trust nor native service-account permissions. Live deployment acceptance, deployment parity and production headless waiting require their own evidence.
 
 ## Vendored packages
 

@@ -33,3 +33,7 @@ The tooling runs through the `alignfirst` CLI built in this workspace, so run `n
 | `npm run plans:sync` | Publish and retrieve the work files (`.plans`) |
 
 In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a clone of the work-files repository. The folder is shared with the team and never committed here.
+
+## OpenClaw regression policy
+
+After upgrades, select a few representative scenarios for the changed behavior. The full matrix is never the default. Investigate and fix unexpected errors before expanding coverage, and record the reason for any additional scenarios, surfaces or iterations. Conversation-model tests use Terra only; the judge uses Haiku through OpenRouter. See [Running the OpenClaw Tests](docs/aligndev-openclaw/running-openclaw-tests.md#scenario-selection) for selection and commands.

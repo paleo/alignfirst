@@ -69,7 +69,7 @@ The same templates serve a second platform, `codingAgent`: a Claude Code, Codex 
 
 ## Running the suite
 
-[Running the OpenClaw Tests](./running-openclaw-tests.md) is the operator guide for the AlignDev harness. It covers setup, safe artifact handling, focused checks, full matrices, and the ticket-id convention.
+[Running the OpenClaw Tests](./running-openclaw-tests.md) is the operator guide for the AlignDev harness. It covers setup, safe artifact handling, representative scenario selection, justified coverage expansion, and the ticket-id convention.
 
 ## Deployment
 
