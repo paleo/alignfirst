@@ -42,6 +42,7 @@ const quotaShape = object<QuotaSettings>({
 });
 const profileShape = object<CodingProfile>({
   agent: literal(...CODING_AGENTS),
+  default: optional(boolean),
   configDir: optional(directoryValue),
   defaultModel: optional(nonblankString),
   models: optional(arrayOf(nonblankString)),
@@ -53,13 +54,6 @@ const profileShape = object<CodingProfile>({
 });
 const codeShape = object<CodeSettings>({
   profile: optional(nonblankString),
-  defaultProfiles: optional(
-    object<Partial<Record<CodingAgent, string>>>({
-      claude: optional(nonblankString),
-      codex: optional(nonblankString),
-      pi: optional(nonblankString),
-    }),
-  ),
   profiles: optional(record(profileShape, nonblankString)),
 });
 const configShape = object<ConfigFile>({
@@ -85,12 +79,12 @@ export interface ProjectsRoot {
 
 export interface CodeSettings {
   profile?: string;
-  defaultProfiles?: Partial<Record<CodingAgent, string>>;
   profiles?: Record<string, CodingProfile>;
 }
 
 export interface CodingProfile {
   agent: CodingAgent;
+  default?: boolean;
   configDir?: string;
   defaultModel?: string;
   models?: string[];
@@ -181,6 +175,16 @@ function parseConfigFile(path: string): ConfigFile {
     typeof value.code === "object" &&
     value.code !== null
   ) {
+    if (Object.hasOwn(value.code, "defaultProfiles")) {
+      throw invalidConfig(
+        path,
+        "code.defaultProfiles is retired: move each needed preference to its referenced " +
+          "matching-agent profile's default: true (omit singleton flags), remove the map and " +
+          "keep profile names unchanged. See " +
+          "https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/" +
+          "references/alignfirst-upgrade.md#convert-aligndev-profile-defaults",
+      );
+    }
     const retired = RETIRED_CODE_KEYS.find((key) => Object.hasOwn(value.code ?? {}, key));
     if (retired !== undefined) {
       throw invalidConfig(
@@ -270,13 +274,12 @@ export function resolveCodeConfig(
   let effectiveName = name;
   if (name !== undefined) {
     profile = referencedProfile(config, name, "selected profile");
+  } else if (selection.recorded === null) {
+    profile = { agent: detectAgent(config, env) };
   } else {
-    const agent = detectAgent(config, env);
-    effectiveName = config.code.defaultProfiles?.[agent];
-    profile =
-      effectiveName === undefined
-        ? { agent }
-        : referencedProfile(config, effectiveName, "defaultProfiles");
+    const automatic = resolveAutomaticProfile(config, env);
+    profile = automatic.profile;
+    effectiveName = automatic.name;
   }
   checkDefaultModel(profile, config.path, effectiveName);
   const overrides = { ...profile.env };
@@ -299,12 +302,15 @@ export function resolveCodeConfig(
 function validateReferences(config: LoadedConfig): void {
   if (config.code.profile !== undefined)
     referencedProfile(config, config.code.profile, "code.profile");
-  for (const [agent, name] of Object.entries(config.code.defaultProfiles ?? {})) {
-    const profile = referencedProfile(config, name, `code.defaultProfiles.${agent}`);
-    if (profile.agent !== agent)
+  for (const agent of CODING_AGENTS) {
+    const names = Object.entries(config.code.profiles ?? {})
+      .filter(([, profile]) => profile.agent === agent && profile.default === true)
+      .map(([name]) => JSON.stringify(name));
+    if (names.length > 1)
       throw invalidConfig(
         config.path,
-        `code.defaultProfiles.${agent} references a ${profile.agent} profile`,
+        `multiple default: true profiles for ${agent}: ${names.join(", ")}; ` +
+          `leave only one default: true for ${agent}`,
       );
   }
 }
@@ -322,14 +328,45 @@ function referencedProfile(config: LoadedConfig, name: string, field: string): C
   return profile;
 }
 
+function resolveAutomaticProfile(
+  config: LoadedConfig,
+  env: NodeJS.ProcessEnv,
+): { profile: CodingProfile; name?: string } {
+  const detected = detectCodingAgents(env);
+  const profiles = Object.entries(config.code.profiles ?? {});
+  if (detected.length === 0 && profiles.length === 1) {
+    const [name, profile] = profiles[0];
+    return { name, profile };
+  }
+  if (detected.length !== 1) throw selectionRequired(config, detected);
+  const agent = detected[0];
+  const matching = profiles.filter(([, profile]) => profile.agent === agent);
+  if (matching.length === 0) return { profile: { agent } };
+  const selected =
+    matching.length === 1 ? matching[0] : matching.find(([, p]) => p.default === true);
+  if (selected !== undefined) return { name: selected[0], profile: selected[1] };
+  throw invalidConfig(
+    config.path,
+    `multiple profiles for detected ${agent}: ${matching.map(([name]) => JSON.stringify(name)).join(", ")}; ` +
+      "select --profile, a project registry profile, code.profile, or set one matching " +
+      "profile's default: true",
+  );
+}
+
 function detectAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent {
   const detected = detectCodingAgents(env);
   if (detected.length === 1) return detected[0];
+  throw selectionRequired(config, detected);
+}
+
+function selectionRequired(config: LoadedConfig, detected: CodingAgent[]): Error {
   const problem =
     detected.length === 0
       ? `no coding agent detected (${CODING_AGENTS.join(", ")})`
       : `multiple coding agents detected (${detected.join(", ")})`;
-  throw new Error(`Error: ${problem}: select --profile or set "code.profile" in ${config.path}.`);
+  return new Error(
+    `Error: ${problem}: select --profile, a project registry profile, or set "code.profile" in ${config.path}.`,
+  );
 }
 
 function checkDefaultModel(code: CodingProfile, path: string, profile: string | undefined): void {

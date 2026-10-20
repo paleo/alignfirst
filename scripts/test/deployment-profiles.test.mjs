@@ -179,7 +179,8 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       configDir: "~/native/claude-child",
       quota: { source: "none" },
     };
-    fixture.settings.code.defaultProfiles = { codex: selected, pi: "pi", claude: "other" };
+    for (const name of [selected, "pi", "other"])
+      fixture.settings.code.profiles[name].default = true;
     saveSettings(fixture);
     installSettings(fixture);
     validateProfiles(fixture);
@@ -256,6 +257,49 @@ test("inventory rejects unsafe unselected stores, retired selection and native-d
   });
 });
 
+test("inventory validates every flag and requires explicit deployment selection", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    const selected = original.code.profile;
+    for (const value of [null, "true", 1, [], {}]) {
+      fixture.settings = structuredClone(original);
+      fixture.settings.code.profiles[selected].default = value;
+      saveSettings(fixture);
+      const diagnostic = assertInventoryRejected(fixture, /\.default must be a boolean/);
+      assert(diagnostic.includes(`code.profiles[${JSON.stringify(selected)}].default`));
+    }
+    fixture.settings = structuredClone(original);
+    fixture.settings.code.profiles[selected].default = true;
+    fixture.settings.code.profiles.conflict = {
+      ...fixture.settings.code.profiles[selected],
+      configDir: "~/native/conflict",
+    };
+    saveSettings(fixture);
+    const duplicate = assertInventoryRejected(fixture, /multiple default: true profiles for codex/);
+    assert(duplicate.includes(JSON.stringify(selected)));
+    assert.match(duplicate, /conflict.*leave only one default: true for codex/);
+    fixture.settings.code.profiles.conflict.default = false;
+    saveSettings(fixture);
+    assert.equal(readInventory(fixture).profiles.length, 2);
+    delete fixture.settings.code.profile;
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    delete fixture.settings.code.profiles.conflict;
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    for (const map of [{}, null, { codex: selected }]) {
+      fixture.settings = structuredClone(original);
+      fixture.settings.code.defaultProfiles = map;
+      fixture.settings.code.profiles[selected].default = true;
+      saveSettings(fixture);
+      assertInventoryRejected(
+        fixture,
+        /code.defaultProfiles is retired.*matching-agent.*singleton.*keep profile names unchanged/,
+      );
+    }
+  });
+});
+
 test("inventory refuses native root, managed resource and ancestor symlinks", () => {
   for (const path of ["root", "instructions", "skills", "ancestor"]) {
     withFixture("codex", "slack", {}, (fixture) => {
@@ -322,10 +366,15 @@ test("real CLI rejects malformed profile fields instead of the inventory inventi
   });
 });
 
-function assertInventoryRejected(fixture) {
+function assertInventoryRejected(fixture, diagnostic) {
   const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, "");
+  if (diagnostic !== undefined) {
+    assert.match(result.stderr, diagnostic);
+    assert(result.stderr.includes(fixture.settingsFile));
+  }
+  return result.stderr;
 }
 
 function auditRendered(fixture) {

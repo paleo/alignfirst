@@ -47,9 +47,17 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   rejectSymlinks(settingsFile);
   rejectSymlinks(deployedSettingsFile);
   const code = JSON.parse(readFileSync(settingsFile, "utf8")).code;
+  if (isObject(code) && Object.hasOwn(code, "defaultProfiles")) {
+    throw new Error(
+      `${settingsFile}: code.defaultProfiles is retired; move needed preferences to referenced ` +
+        "matching-agent profiles' default: true (omit singleton flags), remove the map and keep " +
+        "profile names unchanged. See skills/alignfirst-setup-guide/references/" +
+        "alignfirst-upgrade.md#convert-aligndev-profile-defaults",
+    );
+  }
   if (
     !isObject(code) ||
-    Object.keys(code).some((key) => !["profile", "profiles", "defaultProfiles"].includes(key))
+    Object.keys(code).some((key) => !["profile", "profiles"].includes(key))
   ) {
     throw new Error(
       `${settingsFile}: use code.profile and code.profiles; direct launch keys are retired`,
@@ -62,6 +70,7 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   ) {
     throw new Error(`${settingsFile}: an explicit code.profile must name a provisioned profile`);
   }
+  validateDefaults(code.profiles, settingsFile);
   const stores = [];
   for (const [name, profile] of Object.entries(code.profiles)) {
     if (name.trim() === "" || /[\x00-\x1f\x7f]/u.test(name) || !isObject(profile))
@@ -76,13 +85,6 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
         throw new Error("Disabled quota accepts only source none");
     } else {
       addStore(stores, name, quota.source, quota, home, deployedSettingsFile);
-    }
-  }
-  if (code.defaultProfiles !== undefined) {
-    if (!isObject(code.defaultProfiles)) throw new Error("Invalid defaultProfiles");
-    for (const [agent, name] of Object.entries(code.defaultProfiles)) {
-      if (!Object.hasOwn(nativeDirectories, agent) || code.profiles[name]?.agent !== agent)
-        throw new Error("defaultProfiles must reference a matching provisioned profile");
     }
   }
   for (const store of stores) {
@@ -138,6 +140,28 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
     resources,
     serviceHome: home,
   };
+}
+
+function validateDefaults(profiles, settingsFile) {
+  const defaults = new Map();
+  for (const [name, profile] of Object.entries(profiles)) {
+    if (!isObject(profile)) continue;
+    if (Object.hasOwn(profile, "default") && typeof profile.default !== "boolean")
+      throw new Error(
+        `${settingsFile}: code.profiles[${JSON.stringify(name)}].default must be a boolean`,
+      );
+    if (profile.default !== true) continue;
+    const names = defaults.get(profile.agent) ?? [];
+    names.push(JSON.stringify(name));
+    defaults.set(profile.agent, names);
+  }
+  for (const [agent, names] of defaults) {
+    if (names.length > 1)
+      throw new Error(
+        `${settingsFile}: multiple default: true profiles for ${agent}: ${names.join(", ")}; ` +
+          `leave only one default: true for ${agent}`,
+      );
+  }
 }
 
 function isObject(value) {

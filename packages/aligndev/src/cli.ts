@@ -83,7 +83,8 @@ Run \`${aligndev} <command> --help\` for the usage of a command.
 
 Config (optional): ~/.alignfirst/aligndev.settings.json. "platform" (${PLATFORMS.join(" or ")})
 defaults to codingAgent. Named code.profiles select child agents and native configuration.
-Use code.profile for a global selection, or code.defaultProfiles for detected-agent defaults.
+Use code.profile for a global selection. A sole matching profile is inferred; with several,
+set one profile's default: true per agent. Without a parent, only a sole total profile is inferred.
 `;
 }
 

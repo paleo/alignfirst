@@ -49,7 +49,13 @@ async function smoke() {
     fixture = createFixture(root);
     await createProjects(fixture);
     const failures = [];
-    for (const check of [profileOnlyChecks, companionChecks, resumeChecks, quotaChecks])
+    for (const check of [
+      profileOnlyChecks,
+      companionChecks,
+      resumeChecks,
+      quotaChecks,
+      automaticChecks,
+    ])
       await checkCase(check.name, () => check(fixture), failures);
     assert.equal(failures.length, 0, `${failures.length} integration section(s) failed.`);
     console.log("PASS: real CLI reports, profiles, worktrees, resume identity, and isolated quota");
@@ -432,6 +438,86 @@ async function companionChecks(f) {
   assert.ok(lastEvent(f).args.includes("--add-dir"));
   assert.ok(lastEvent(f).args.includes(f.companion));
   console.log("PASS: companion-backed profile and normal companion session placement");
+}
+
+async function automaticChecks(f) {
+  const path = join(f.home, ".alignfirst/aligndev.settings.json");
+  const originalSettings = readFileSync(path, "utf8");
+  const originalRegistry = readFileSync(f.registry, "utf8");
+  const originalEnv = f.env;
+  const profiles = JSON.parse(originalSettings).code.profiles;
+  try {
+    writeJson(f.registry, { projects: {} });
+    f.env = { ...originalEnv };
+    for (const marker of [
+      "CLAUDECODE",
+      "CLAUDE_CODE_SESSION_ID",
+      "CODEX_THREAD_ID",
+      "PI_CODING_AGENT",
+      "AI_AGENT",
+    ])
+      delete f.env[marker];
+    writeJson(path, { code: { profiles: { pi: profiles.pi } } });
+    const pi = await launch(f, f.project, ["new", "-m", "no-parent singleton"]);
+    await metadata(f, f.project, pi.file, { profile: "pi", agent: "pi", status: "succeeded" });
+    f.env.CLAUDECODE = "1";
+    f.env.CLAUDE_CONFIG_DIR = f.stores.a;
+    for (const field of ["blank", "missing"]) {
+      writeJson(path, { code: { profiles: { a: { agent: "claude", configDir: f.stores.a } } } });
+      const initial = await launch(f, f.project, ["new", "-m", "matching singleton"]);
+      const id = lastEvent(f).id;
+      await metadata(f, f.project, initial.file, {
+        profile: "a",
+        agent: "claude",
+        status: "succeeded",
+      });
+      const historical = readFileSync(initial.file, "utf8").replace(
+        /^profile: a\n/m,
+        field === "blank" ? "profile: \n" : "",
+      );
+      writeFileSync(initial.file, historical);
+      writeJson(path, {
+        code: {
+          profiles: {
+            preferred: { ...profiles.b, default: true },
+            other: { agent: "claude", configDir: f.stores.b },
+          },
+        },
+      });
+      const resumed = await launch(f, f.project, ["resume", id, "-m", "legacy built-ins"]);
+      await metadata(f, f.project, resumed.file, {
+        profile: "",
+        model: "",
+        agent: "claude",
+        status: "succeeded",
+      });
+      assert.equal(lastEvent(f).store, f.stores.a);
+      assert.equal(lastEvent(f).removed, "synthetic-remove-value");
+      assert.equal(readFileSync(initial.file, "utf8"), historical);
+      delete f.env.CLAUDECODE;
+      const failed = await command(
+        f,
+        f.project,
+        "aligndev",
+        ["code", "resume", id, "-m", "no parent"],
+        1,
+      );
+      assert.match(failed.stderr, /no coding agent/);
+      f.env.CLAUDECODE = "1";
+      const inferred = await launch(f, f.project, ["new", "-m", "preferred profile"]);
+      await metadata(f, f.project, inferred.file, {
+        profile: "preferred",
+        model: "sonnet",
+        status: "succeeded",
+      });
+      assert.equal(lastEvent(f).store, f.stores.b);
+    }
+  } finally {
+    f.env = originalEnv;
+    writeFileSync(path, originalSettings);
+    writeFileSync(f.registry, originalRegistry);
+  }
+  console.log("PASS: automatic singleton/preferred launches and protected historical-null resume");
 }
 
 async function resumeChecks(f) {

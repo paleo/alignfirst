@@ -1012,7 +1012,6 @@ function fixture(callback) {
     f.settings = {
       code: {
         profile: "main",
-        defaultProfiles: { pi: "custom", claude: "claude" },
         profiles: {
           main: {
             agent: "pi",
@@ -1020,8 +1019,8 @@ function fixture(callback) {
             quota: { source: "codex", configDir: "~/.codex-quota" },
           },
           shared: { agent: "pi", configDir: "~/.pi/agent" },
-          custom: { agent: "pi", configDir: "~/custom-pi" },
-          claude: { agent: "claude", configDir: "~/.claude" },
+          custom: { agent: "pi", default: true, configDir: "~/custom-pi" },
+          claude: { agent: "claude", default: true, configDir: "~/.claude" },
         },
       },
     };

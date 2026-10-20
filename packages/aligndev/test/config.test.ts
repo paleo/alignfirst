@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
+import type { QuotaReader } from "../src/code/quota.js";
 import {
   type CodingProfile,
   loadConfig,
@@ -38,7 +39,7 @@ function profileConfig(profile: object): object {
   return { code: { profile: "test", profiles: { test: profile } } };
 }
 
-function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}) {
+function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}, quotaReader?: QuotaReader) {
   const stdout = makeSink();
   const stderr = makeSink();
   return main({
@@ -49,6 +50,7 @@ function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}) {
     alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
     stdout,
     stderr,
+    quotaReader,
   }).then((code) => ({ code, stdout: stdout.text(), stderr: stderr.text() }));
 }
 
@@ -106,7 +108,6 @@ describe("settings shape", () => {
     [{ platform: "other" }, "platform"],
     [{ code: { extra: 1 } }, "code.extra"],
     [{ code: { profile: "  " } }, "code.profile"],
-    [{ code: { defaultProfiles: { other: "a" } } }, "other"],
     [{ code: { profiles: { " ": { agent: "pi" } } } }, "nonblank"],
     [profileConfig({ agent: "other" }), "agent"],
     [profileConfig({ agent: "pi", extra: 1 }), "extra"],
@@ -149,6 +150,22 @@ describe("settings shape", () => {
     const home = makeHome(settings);
     expect(() => loadConfig(home)).toThrow(field);
     expect(() => loadConfig(home)).toThrow(join(home, ".alignfirst/aligndev.settings.json"));
+  });
+
+  it.each([null, "true", 1, [], {}])("rejects non-boolean defaults %j", (value) => {
+    const home = makeHome(profileConfig({ agent: "pi", default: value }));
+    expect(() => loadConfig(home)).toThrow(/code.profiles.*test.*default/);
+    expect(() => loadConfig(home)).toThrow(join(home, ".alignfirst/aligndev.settings.json"));
+  });
+
+  it.each([{}, null, { claude: "a" }])("retires every map value %j before parsing", (map) => {
+    for (const profiles of [undefined, { a: { agent: "claude", default: true } }]) {
+      const home = makeHome({ code: { defaultProfiles: map, profiles, unknown: true } });
+      expect(() => loadConfig(home)).toThrow(/code.defaultProfiles is retired/);
+      expect(() => loadConfig(home)).toThrow(/matching-agent.*default: true.*singleton/);
+      expect(() => loadConfig(home)).toThrow(/keep profile names unchanged/);
+      expect(() => loadConfig(home)).toThrow(/alignfirst-upgrade.md/);
+    }
   });
 
   it("reports malformed and unreadable JSON without loading native state", () => {
@@ -210,28 +227,99 @@ describe("profile resolution", () => {
     ["pi", { PI_CODING_AGENT: "true" }],
     ["pi", { AI_AGENT: "pi" }],
     ["pi", { PI_CODING_AGENT: "true", AI_AGENT: "pi" }],
-  ])("uses %s built-ins or its mapped default", (agent, env) => {
+  ])("uses %s built-ins, matching singleton or per-agent preference", (agent, env) => {
     const home = makeHome();
     expect(resolveCodeConfig(loadConfig(home), env)).toMatchObject({ agent, profile: null });
+    for (const flag of [undefined, false, true]) {
+      writeConfig(home, { code: { profiles: { only: { agent, default: flag } } } });
+      const config = loadConfig(home);
+      expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: "only" });
+      expect(resolveCodeConfig(config, {})).toMatchObject({ agent, profile: "only" });
+      expect(resolveCodeConfig(config, env, { recorded: undefined }).profile).toBe("only");
+      expect(resolveCodeConfig(config, env, { recorded: null }).profile).toBeNull();
+      expect(() => resolveCodeConfig(config, {}, { recorded: null })).toThrow("no coding agent");
+      expect(() => resolveCodeConfig(config, { CLAUDECODE: "1", AI_AGENT: "pi" })).toThrow(
+        "multiple coding agents",
+      );
+    }
     writeConfig(home, {
       code: {
-        profiles: PROFILES,
-        defaultProfiles: {
-          [agent]: agent === "codex" ? "detected" : agent === "pi" ? "recorded" : "global",
+        profiles: {
+          preferred: { agent, default: true },
+          other: { agent },
         },
       },
     });
-    expect(resolveCodeConfig(loadConfig(home), env).profile).not.toBeNull();
+    const config = loadConfig(home);
+    expect(resolveCodeConfig(config, env).profile).toBe("preferred");
+    expect(resolveCodeConfig(config, env, { recorded: null }).profile).toBeNull();
+    expect(() => resolveCodeConfig(config, {})).toThrow("no coding agent");
   });
+
+  it.each([
+    ["claude", { CLAUDECODE: "1" }, "pi"],
+    ["codex", { CODEX_THREAD_ID: "t" }, "claude"],
+    ["pi", { AI_AGENT: "pi" }, "codex"],
+  ])("never overrides detected %s with another agent's singleton", (agent, env, other) => {
+    const config = loadConfig(
+      makeHome({ code: { profiles: { other: { agent: other, default: true } } } }),
+    );
+    expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: null });
+  });
+
+  it.each(["claude", "codex", "pi"])("explains same-agent %s ambiguity without values", (agent) => {
+    const marker =
+      agent === "claude"
+        ? { CLAUDECODE: "1" }
+        : agent === "codex"
+          ? { CODEX_THREAD_ID: "t" }
+          : { AI_AGENT: "pi" };
+    for (const flag of [undefined, false]) {
+      const config = loadConfig(
+        makeHome({
+          code: {
+            profiles: {
+              first: { agent, default: flag, env: { SECRET: "never-print-me" } },
+              second: { agent, default: flag },
+            },
+          },
+        }),
+      );
+      expect(() => resolveCodeConfig(config, marker)).toThrow(
+        /first.*second.*--profile.*project.*code.profile.*default: true/,
+      );
+      expect(() => resolveCodeConfig(config, marker)).not.toThrow(/never-print-me/);
+      expect(resolveCodeConfig(config, marker, { recorded: null }).profile).toBeNull();
+    }
+  });
+
+  it.each([{ explicit: "first" }, { project: { profile: "first" } }, { recorded: "first" }, {}])(
+    "rejects duplicate defaults even with named selection %j",
+    (selection) => {
+      const config = loadConfig(
+        makeHome({
+          code: {
+            profile: "first",
+            profiles: {
+              first: { agent: "pi", default: true },
+              second: { agent: "pi", default: true },
+            },
+          },
+        }),
+      );
+      expect(() => resolveCodeConfig(config, {}, selection)).toThrow(
+        /pi.*first.*second.*leave only one/,
+      );
+    },
+  );
 
   it("keeps different model defaults for each detected agent", () => {
     const home = makeHome({
       code: {
-        defaultProfiles: { claude: "claude", codex: "codex", pi: "pi" },
         profiles: {
-          claude: { agent: "claude", defaultModel: "opus" },
-          codex: { agent: "codex", defaultModel: "sol" },
-          pi: { agent: "pi", defaultModel: "openai/sol" },
+          claude: { agent: "claude", default: true, defaultModel: "opus" },
+          codex: { agent: "codex", default: true, defaultModel: "sol" },
+          pi: { agent: "pi", default: true, defaultModel: "openai/sol" },
         },
       },
     });
@@ -263,13 +351,38 @@ describe("profile resolution", () => {
     );
   });
 
-  it.each([
-    { profile: "missing" },
-    { defaultProfiles: { claude: "missing" } },
-    { defaultProfiles: { claude: "project" } },
-  ])("validates configured references at launch resolution, not shape loading %j", (settings) => {
-    const config = loadConfig(makeHome({ code: { ...settings, profiles: PROFILES } }));
+  it("validates global references at resolution even with valid explicit selection", () => {
+    const config = loadConfig(makeHome({ code: { profile: "missing", profiles: PROFILES } }));
     expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow("invalid aligndev config");
+    expect(() => resolveCodeConfig(config, {}, { explicit: "explicit" })).toThrow("code.profile");
+  });
+
+  it.each([
+    {},
+    { CLAUDECODE: "1", AI_AGENT: "pi" },
+    { CODEX_THREAD_ID: "t", PI_CODING_AGENT: "true" },
+  ])("requires names rather than agent-kind defaults for absent/multiple detection %j", (env) => {
+    const home = makeHome({
+      code: {
+        profiles: {
+          claude: { agent: "claude", default: true, env: { SECRET: "never-print-me" } },
+          codex: { agent: "codex", default: true },
+          pi: { agent: "pi", default: true },
+        },
+      },
+    });
+    const config = loadConfig(home);
+    expect(() => resolveCodeConfig(config, env)).toThrow(/--profile.*project.*code.profile/);
+    expect(() => resolveCodeConfig(config, env)).not.toThrow(/default: true|never-print-me/);
+    expect(() => resolveCodeConfig(config, env, { recorded: null })).toThrow("coding agent");
+    for (const selection of [
+      { explicit: "pi" },
+      { project: { profile: "codex" } },
+      { recorded: "claude" },
+    ])
+      expect(resolveCodeConfig(config, env, selection).profile).not.toBeNull();
+    writeConfig(home, { code: { ...config.code, profile: "pi" } });
+    expect(resolveCodeConfig(loadConfig(home), env).profile).toBe("pi");
   });
 
   it("uses own properties for arbitrary profile and alias names", () => {
@@ -348,6 +461,44 @@ describe("profile resolution", () => {
 });
 
 describe("command boundaries outside Git", () => {
+  it.each([false, true])(
+    "shares automatic singleton/preferred selection across commands: %s",
+    async (multiple) => {
+      const home = makeHome({
+        code: {
+          profiles: {
+            inferred: {
+              agent: "claude",
+              default: multiple,
+              configDir: "~/native",
+              defaultModel: "opus",
+            },
+            ...(multiple ? { other: { agent: "claude" } } : {}),
+          },
+        },
+      });
+      for (const args of [
+        ["code", "--help"],
+        ["guide", "code"],
+        ["code", "quota"],
+      ]) {
+        let calls = 0;
+        const result = await run(home, args, { CLAUDECODE: "1" }, async (source, options) => {
+          ++calls;
+          expect(source).toBe("claude");
+          expect(options.env.CLAUDE_CONFIG_DIR).toBe(join(home, "native"));
+          return "synthetic limits";
+        });
+        expect(result.code, result.stderr).toBe(0);
+        expect(result.stdout).toContain("inferred");
+        expect(result.stdout).toContain("claude");
+        expect(calls).toBe(args.includes("quota") ? 1 : 0);
+      }
+      expect(existsSync(join(home, ".plans"))).toBe(false);
+      expect(existsSync(join(home, ".git"))).toBe(false);
+    },
+  );
+
   it.each([
     ["code", "--help"],
     ["code", "new", "--help"],
@@ -373,11 +524,18 @@ describe("command boundaries outside Git", () => {
     },
   );
 
-  it("keeps durable status independent of launch references and default policy", async () => {
-    const home = makeHome({ code: { profile: "deleted", defaultProfiles: { pi: "missing" } } });
+  it.each([
+    { profile: "deleted" },
+    { defaultProfiles: {} },
+    { profiles: { a: { agent: "pi", default: "bad" } } },
+    { profiles: { a: { agent: "pi", default: true }, b: { agent: "pi", default: true } } },
+  ])("keeps durable status independent of launch settings %j", async (code) => {
+    const home = makeHome({ code });
     const result = await run(home, ["code", "status", "--no-ticket"]);
     expect(result.stderr).toContain("no session file");
     expect(result.stderr).not.toContain("missing profile");
+    expect(result.stderr).not.toContain("invalid aligndev config");
+    expect((await run(home, ["code", "status", "--help"])).code).toBe(0);
   });
 
   it("spares top-level help/version and status but rejects corrupt settings elsewhere", async () => {

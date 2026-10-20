@@ -134,6 +134,19 @@ function newest() {
   return records().reduce((a, b) => (a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b));
 }
 
+async function historicalRecord(field: string) {
+  settings({ profiles: { a: { agent: "claude", configDir: nativeA } } });
+  expect((await launch(["new", "-m", "go"])).code).toBe(0);
+  const path = newest().path;
+  const bytes = readFileSync(path, "utf8").replace(
+    /^profile: a\n/m,
+    field === "blank" ? "profile: \n" : "",
+  );
+  writeFileSync(path, bytes);
+  expect(newest().frontmatter.profile).toBeNull();
+  return { path, bytes };
+}
+
 function observed() {
   return JSON.parse(readFileSync(join(root, "observed.json"), "utf8"));
 }
@@ -300,6 +313,114 @@ describe("independent quota configuration", () => {
 });
 
 describe("effective profiles through CLI launch and resume", () => {
+  it.each([false, true])(
+    "records inferred singleton/preferred profiles and preserves named resume: %s",
+    async (multiple) => {
+      const profiles = loadConfig(home).code.profiles;
+      settings({
+        profile: undefined,
+        profiles: {
+          a: { ...profiles?.a, default: multiple },
+          ...(multiple ? { b: profiles?.b } : {}),
+        },
+      });
+      env.CLAUDECODE = "1";
+      const initial = await launch(["new", "-m", "go"]);
+      expect(initial.code, initial.stderr).toBe(0);
+      expect(newest().frontmatter).toMatchObject({ profile: "a", model: "choice" });
+      expect(observed()).toMatchObject({ store: nativeA, keyPresent: false });
+      expect(initial.modelResolver).toHaveBeenCalledWith("claude", "opus", expect.anything());
+      settings({
+        profile: "b",
+        profiles: {
+          a: { ...profiles?.a, default: false },
+          b: { ...profiles?.b, default: true },
+        },
+      });
+      const resumed = await launch(["resume", "native-session", "-m", "more"]);
+      expect(resumed.code, resumed.stderr).toBe(0);
+      expect(newest().frontmatter.profile).toBe("a");
+      expect(observed().store).toBe(nativeA);
+    },
+  );
+
+  it.each([
+    ["blank", false],
+    ["missing", false],
+    ["blank", true],
+    ["missing", true],
+  ])(
+    "keeps historical %s profiles on built-ins despite configured inference: multiple=%s",
+    async (field, multiple) => {
+      const historical = await historicalRecord(field);
+      settings({
+        profile: undefined,
+        profiles: {
+          a: {
+            agent: "claude",
+            configDir: nativeB,
+            default: true,
+            defaultModel: "opus",
+            unset: ["TOKEN"],
+          },
+          ...(multiple ? { b: { agent: "claude", configDir: nativeB } } : {}),
+        },
+      });
+      env.CLAUDECODE = "1";
+      env.CLAUDE_CONFIG_DIR = nativeA;
+      const resumed = await launch(["resume", "native-session", "-m", "more"]);
+      expect(resumed.code, resumed.stderr).toBe(0);
+      expect(newest().frontmatter).toMatchObject({ profile: null, model: null, agent: "claude" });
+      expect(observed()).toMatchObject({ store: nativeA, keyPresent: true });
+      expect(observed().args).not.toContain("--model");
+      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
+    },
+  );
+
+  it.each([{}, { CLAUDECODE: "1", AI_AGENT: "pi" }, { AI_AGENT: "pi" }])(
+    "keeps detection and same-agent guards on historical fallback %j",
+    async (markers) => {
+      const historical = await historicalRecord("missing");
+      settings({
+        profile: undefined,
+        profiles: { only: { agent: "claude", configDir: nativeA, default: true } },
+      });
+      Object.assign(env, markers);
+      const resumed = await launch(["resume", "native-session", "-m", "more"]);
+      expect(resumed.code).toBe(1);
+      expect(resumed.stderr).toContain(
+        "AI_AGENT" in markers && !("CLAUDECODE" in markers)
+          ? "belongs to agent claude"
+          : "coding agent",
+      );
+      expect(resumed.modelResolver).not.toHaveBeenCalled();
+      expect(records()).toHaveLength(1);
+      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
+    },
+  );
+
+  it.each(["explicit", "project", "global"])(
+    "allows deliberate %s replacement of null history",
+    async (selection) => {
+      const historical = await historicalRecord("blank");
+      settings({ profile: selection === "global" ? "b" : undefined });
+      writeFileSync(join(nativeB, "identity"), "native-session");
+      if (selection === "project")
+        writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
+      const resumed = await launch([
+        "resume",
+        "native-session",
+        "-m",
+        "more",
+        ...(selection === "explicit" ? ["--profile", "b"] : []),
+      ]);
+      expect(resumed.code, resumed.stderr).toBe(0);
+      expect(newest().frontmatter).toMatchObject({ profile: "b", model: null });
+      expect(observed().store).toBe(nativeB);
+      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
+    },
+  );
+
   it("uses the actual-cwd project selection for guide/help and preserves subcommand help overrides", async () => {
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
     const help = await launch(["--help"]);
@@ -663,7 +784,9 @@ process.exitCode = 1;
   it.each([
     { profile: "dangling" },
     { defaultProfiles: { claude: "dangling" } },
-    { defaultProfiles: { claude: "pi" } },
+    { defaultProfiles: {} },
+    { profiles: { a: { agent: "claude", default: "invalid" } } },
+    { profiles: { a: { agent: "claude", default: true }, b: { agent: "claude", default: true } } },
     { profiles: {} },
     { profiles: { a: { agent: "claude", defaultModel: "disallowed" } } },
   ])("reads terminal status despite launch-resolution failures %j", async (invalid) => {
@@ -676,18 +799,30 @@ process.exitCode = 1;
     expect(result.stdout).toContain("profile: a");
     expect(result.stdout).toContain("done");
     expect(readFileSync(file, "utf8")).toBe(before);
+    expect((await launch(["status", "--help"])).code).toBe(0);
   });
 
-  it("requires a replacement for a deleted recorded profile unless project/explicit selection overrides it", async () => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    settings({
-      profile: "b",
-      profiles: { b: { agent: "claude", configDir: nativeA, modelAliases: { choice: "opus" } } },
-    });
-    expect((await launch(["resume", "native-session", "-m", "more"])).stderr).toContain(
-      "missing profile",
-    );
-    const result = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
-    expect(result.code, result.stderr).toBe(0);
-  });
+  it.each(["explicit", "project"])(
+    "requires %s replacement for a deleted recorded profile",
+    async (replacement) => {
+      expect((await launch(["new", "-m", "go"])).code).toBe(0);
+      settings({
+        profile: "b",
+        profiles: { b: { agent: "claude", configDir: nativeA, modelAliases: { choice: "opus" } } },
+      });
+      expect((await launch(["resume", "native-session", "-m", "more"])).stderr).toContain(
+        "missing profile",
+      );
+      if (replacement === "project")
+        writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
+      const result = await launch([
+        "resume",
+        "native-session",
+        "-m",
+        "more",
+        ...(replacement === "explicit" ? ["--profile", "b"] : []),
+      ]);
+      expect(result.code, result.stderr).toBe(0);
+    },
+  );
 });

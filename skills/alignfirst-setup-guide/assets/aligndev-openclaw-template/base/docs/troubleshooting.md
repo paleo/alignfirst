@@ -44,7 +44,7 @@ The session file under the project's `.plans/<ticket>/_aligndev/` carries the ex
 
 ## Profiles and Pi
 
-Inspect the complete deployment inventory, not only the default profile:
+Inspect the complete deployment inventory, not only the global `code.profile`:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} /usr/bin/node \
@@ -54,7 +54,7 @@ sudo -H -u {{SERVICE_USER}} /usr/bin/node \
 sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile>
 ```
 
-A registry-selected profile overrides the global default; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
+Deployment requires explicit `code.profile`; singleton counts and per-agent `default: true` flags do not replace it. Duplicate true flags for one agent fail even with a named selection. Convert any retired `code.defaultProfiles` map manually, preserving names. A registry-selected profile overrides the global selection; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
 
 For a Pi deployment, check the protected executable and supported system runtime without a model call:
 
