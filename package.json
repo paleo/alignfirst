@@ -24,6 +24,13 @@
     "release:smoke": "node scripts/release-smoke.mjs",
     "ci:publish": "npm run clear && npm run build && npm run lint && npm run test && npm pkg delete scripts --workspaces && npm run release:smoke && changeset publish"
   },
+  "allowScripts": {
+    "@google/genai": false,
+    "esbuild@0.28.2": true,
+    "koffi@3.3.2": true,
+    "openclaw@2026.10.5": true,
+    "protobufjs": false
+  },
   "devDependencies": {
     "@biomejs/biome": "~2.5.15",
     "@changesets/cli": "~3.0.3"

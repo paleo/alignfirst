@@ -1,6 +1,6 @@
 # @alignfirst/openclaw-channel-mock-core
 
-Shared library powering the synthetic OpenClaw channel plugins used in test harnesses. Provides the bus client, action handlers, account / inbound / outbound primitives, plugin and setup factories, and the typebox-based config schema.
+Shared library powering the synthetic OpenClaw channel plugins used in test harnesses. Provides the bus client, action handlers, account / inbound / outbound primitives, plugin and setup factories, and the Zod-based config schema.
 
 Not meant to be consumed directly. Use the surface wrappers:
 
@@ -22,7 +22,7 @@ consumes it before side effects, so a retry can prove that only one native start
 `threadOnly: true`, an `outbound-message` fault waits for a send that carries a thread target and
 lets root posts through.
 
-`zod` is a peer dependency pinned to OpenClaw's own version: the config schema composes OpenClaw's zod objects with locally built ones, so both must resolve to the same zod instance. When upgrading OpenClaw, move the peer pin to whatever zod version the new OpenClaw release pins.
+`zod` is a peer dependency pinned to OpenClaw's own version: the config schema composes OpenClaw's zod objects with locally built ones, so both must resolve to the same zod instance. OpenClaw 2026.10.5 pins `4.6.5`, so both the peer and development dependency retain that version even though standalone Zod latest is `4.6.7`. When upgrading OpenClaw, move both pins to its Zod version and verify the public plugin schema, tool-policy composition and JSON Schema export.
 
 ## Attribution
 

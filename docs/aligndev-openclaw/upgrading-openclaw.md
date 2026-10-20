@@ -21,7 +21,7 @@ The current version is the exact `"openclaw"` pin in [`aligndev-openclaw-tests/p
 
 ## Refresh the read-only clone
 
-`.local/openclaw/` is a shallow clone of the upstream repository, kept for verifying source claims ([openclaw-context-engineering.md](./openclaw-context-engineering.md)). Move it to the new tag:
+`.local/openclaw/` is a shallow clone of the upstream repository, kept for verifying source claims ([openclaw-context-engineering.md](./openclaw-context-engineering.md)). If `.local` is shared across worktrees, use a private scratch clone for the upgrade review; do not switch the shared clone during another task. For an exclusively owned clone, move it to the new tag:
 
 ```sh
 git -C .local/openclaw fetch --quiet --depth=1 origin tag v<version>
@@ -55,9 +55,11 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json) — the exact `"openclaw"` pin.
 - [`aligndev-openclaw-tests/Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
 - `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
-- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (`<2026.10.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
+- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (currently `<2026.11.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
 
 The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
+
+OpenClaw 2026.10.5 still pins Zod `4.6.5`. Keep mock-core's exact development and peer pins there: ncu's standalone latest `4.6.7` would break the shared-host composition contract. Test the public plugin config schema and inspect `npm ls zod typebox --all`; TypeBox `1.4.2` is supported by our public schema and packed Pi checks without overriding host-owned copies.
 
 Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/`.
 

@@ -194,9 +194,9 @@ for (const [agent, adapter] of [
       });
       const response = await fixture.invoke(agent, argv);
       assert.equal((await pendingCall).argv, argv);
-      assert.equal(response.exitCode, 0, response.stderr);
+      assert.equal(response.exitCode, 0, response.stderr ?? "Mock exited unsuccessfully");
       const assessment = assessStream(adapter, config, response.stdout);
-      assert.equal(assessment.succeeded, true, assessment.error);
+      assert.equal(assessment.succeeded, true, assessment.error ?? "Stream did not succeed");
       assert.equal(assessment.result, "Fixture result");
       assert.equal(assessment.contextTokens, MOCK_CONTEXT_TOKENS);
       assert.equal(assessment.contextCompacted, false);

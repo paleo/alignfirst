@@ -51,8 +51,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         await copyBootstrapTemplate(scenario);
         scaffoldCreated = true;
       }
-      // A verifying bot may ask for the `packageManager` declaration the template omits;
-      // comply, like a real coding agent would.
+      // Preserve the template's exact package manager if a verifying bot requests it.
       if (/\bpackageManager\b/u.test(prompt)) await declarePackageManager(scenario);
       await verifyProjectInventory(scenario);
       const holdsCommit = /\b(?:do not|don't|never)\s+(?:\w+\s+){0,3}commit\b/iu.test(prompt);
@@ -222,7 +221,7 @@ async function declarePackageManager(ctx: ScenarioContext): Promise<void> {
       "node",
       "-e",
       'const fs=require("node:fs");const p=process.argv[1];const pkg=JSON.parse(fs.readFileSync(p,"utf8"));' +
-        'pkg.packageManager??="pnpm@12.3.4";fs.writeFileSync(p,JSON.stringify(pkg,null,2)+"\\n");',
+        'pkg.packageManager??="pnpm@12.14.0";fs.writeFileSync(p,JSON.stringify(pkg,null,2)+"\\n");',
       `${NOVA_PROJECT_PATH}/package.json`,
     ],
     { timeoutMs: 30_000 },
@@ -242,12 +241,10 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
       "-c",
       `cp -R /opt/aligndev-openclaw-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
         `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
-        `sed -i -e 's/base: 6500/base: 6600/' ` +
-        // Match the project config the bot wrote (2 ports × 4 workspaces) —
-        // a verifying bot treats a mismatched template as a bootstrap defect
-        // and loops on fixing it.
-        `-e 's/maxWorkspaces: 10/maxWorkspaces: ${MAX_WORKSPACES}/' ` +
-        `"${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs" && ` +
+        `node --input-type=module -e 'import fs from "node:fs"; ` +
+        `import { patchDevServerRange } from "/opt/openclaw-test/scripts/fixture-personalization.ts"; ` +
+        `const p = "${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs"; ` +
+        `fs.writeFileSync(p, patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607));' && ` +
         `printf '%s\\n' '${config}' > "${NOVA_PROJECT_PATH}/.alignfirst.json"`,
     ],
     { timeoutMs: 30_000 },
@@ -350,10 +347,18 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
 async function assertPreparedProjectContract(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    // Recursive: the bootstrap template pins a published package whose workspace.mjs still
-    // reads the variable; a project on the current package reads it in dev-server.mjs.
-    ["grep", "-rF", "REMOTE_DEV_DOMAIN", `${NOVA_PROJECT_PATH}/scripts/workspace`],
+    ["grep", "-F", "REMOTE_DEV_DOMAIN", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
     "public URLs from the environment",
+  );
+  await assertGatewayCommand(
+    ctx,
+    ["grep", "-F", "REMOTE_DEV_HOST", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    "direct remote URLs from the environment",
+  );
+  await assertGatewayCommand(
+    ctx,
+    ["grep", "-F", "runFilesInputs", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    "run-file environment input tracking",
   );
   await assertGatewayCommand(
     ctx,

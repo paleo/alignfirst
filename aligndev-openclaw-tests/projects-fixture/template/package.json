@@ -2,6 +2,7 @@
   "name": "@aligndev-openclaw-tests/fixture-template",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.14.0",
   "engines": {
     "node": ">=22"
   },
@@ -13,10 +14,10 @@
     "lint": "for f in *.mjs; do node --check \"$f\" || exit 1; done"
   },
   "dependencies": {
-    "express": "5.2.1"
+    "express": "5.3.0"
   },
   "devDependencies": {
-    "@alignfirst/docmap": "~0.11.0",
-    "@alignfirst/workspace": "~0.34.0"
+    "@alignfirst/docmap": "~0.11.2",
+    "@alignfirst/workspace": "~0.39.0"
   }
 }

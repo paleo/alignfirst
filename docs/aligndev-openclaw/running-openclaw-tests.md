@@ -42,6 +42,8 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
+The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
+
 ## Configuration
 
 Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
@@ -69,6 +71,8 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
 ## Fixtures
 
 Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../aligndev-openclaw-tests/scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](../../aligndev-openclaw-tests/projects-fixture/template/). `nimbus` and `lumen` live under `/home/assistant/projects`; `orion` lives under `/home/assistant/projects/external-projects`. Each project has `.alignfirst.json`, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
+
+Workspace setup is portless. The dev-server wrapper allocates `frontend` and generates `local.env` on `dev` or `dev setup`; reset does not seed that file. `REMOTE_DEV_DOMAIN` takes precedence over `REMOTE_DEV_HOST`, then localhost. Both environment inputs participate in run-file invalidation. Registries live in `.local-wt/workspace-registry`.
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and a default `portRanges` entry. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
@@ -146,7 +150,7 @@ fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test
 sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 ```
 
-The Node built-in suite imports helpers only. It checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
 
 These offline checks do not start Docker, import credentials or execute any scenario, including A09. The Pi harness update was verified through these checks only. OpenClaw conversation checks and live deployment acceptance remain unexecuted; mock success certifies neither Pi authentication/trust nor native service-account permissions. Deployment parity and production headless waiting remain blocked independently.
 

@@ -6,7 +6,7 @@ import { renderHomePage } from "./home-page.mjs";
 
 const port = Number(process.env.PORT ?? readLocalEnvPort());
 if (!Number.isInteger(port)) {
-  console.error("No port: set the PORT env var, or run `pnpm workspace setup` to get a local.env");
+  console.error("No port: set the PORT env var, or run `pnpm dev setup` to create local.env");
   process.exit(1);
 }
 
