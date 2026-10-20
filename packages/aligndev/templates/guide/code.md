@@ -13,6 +13,8 @@ Run `{{ALIGNDEV}} code` from the root of the target project, so the agent works 
 
 {{ALIGNFIRST_SETUP}}
 
+Each ticketed run writes `.plans/<ticket>/_aligndev/<stamp>.md`. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `{{ALIGNDEV}} code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. A run that answers more than once lists each response oldest first, separated by `---- Later result ----`. A substantive report may precede a short later acknowledgement; report the substantive outcome.
+
 {{#openclaw}}
 ## How it runs
 
@@ -34,8 +36,6 @@ Under OpenClaw, background it through the `exec` tool:
 - The acknowledgement's "Use process (list/poll/log/…) for follow-up" does not apply to an `{{ALIGNDEV}} code` run. Call no `process` action on the `{{ALIGNDEV}} code` session, before or after the acknowledgement, including `poll` and `log`.
 
 As soon as the run is backgrounded, tell the user — in the user's language — that the agent is now working in the background and that you will report back when it finishes (e.g. *"The agent is running in the background — I'll let you know as soon as it's done."*). Post it even when the user asked to be notified only at completion: this line is the promise of exactly that, not an interruption — a launch with no acknowledgement reads as a session gone silent. The acknowledgement is the plain text that ends the turn on every surface. Only the final message is guaranteed to post, so write nothing and call no tool after it. Do **not** also post it via `message`, and do **not** poll.
-
-Each ticketed run writes `.plans/<ticket>/_aligndev/<stamp>.md`. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `{{ALIGNDEV}} code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome.
 
 **One protocol run at a time per workspace and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or kill) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 

@@ -38,6 +38,7 @@ export function buildCodexArgs(config: RunConfig): string[] {
 export function createCodexState(config?: RunConfig): AgentProtocolState {
   return {
     expectedSessionId: config?.resume,
+    earlierResults: [],
     nativeEnv: config?.env ?? {},
     protocolComplete: false,
     protocolFailed: false,

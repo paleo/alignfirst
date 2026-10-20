@@ -380,11 +380,23 @@ describe("command boundaries outside Git", () => {
     expect(result.stderr).not.toContain("missing profile");
   });
 
-  it("spares top-level help/version but rejects corrupt settings elsewhere", async () => {
+  it("spares top-level help/version and status but rejects corrupt settings elsewhere", async () => {
     const home = makeHome({});
     writeFileSync(join(home, ".alignfirst/aligndev.settings.json"), "bad json");
-    for (const args of [["--help"], ["--version"]]) expect((await run(home, args)).code).toBe(0);
-    for (const args of [["code", "status", "--no-ticket"], ["guide"]])
+    for (const args of [["--help"], ["--version"], ["code", "status", "--help"]]) {
+      expect((await run(home, args)).code).toBe(0);
+    }
+    expect((await run(home, ["code", "status", "--no-ticket"])).stderr).toContain(
+      "no session file",
+    );
+    for (const args of [
+      ["code", "--help"],
+      ["code", "quota"],
+      ["code", "new", "-m", "go"],
+      ["guide"],
+      ["project", "list"],
+    ]) {
       expect((await run(home, args)).stderr).toContain("invalid aligndev config");
+    }
   });
 });

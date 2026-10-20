@@ -18,6 +18,7 @@ import {
   appendTranscript,
   applyCompletion,
   createSessionFile,
+  formatResults,
   type SessionFrontmatter,
   listSessionRecords,
   parseFrontmatter,
@@ -36,6 +37,18 @@ vi.mock("node:fs", async (original) => {
 });
 
 const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
+
+describe("formatResults", () => {
+  it("leaves a single response unchanged", () => {
+    expect(formatResults([], "x")).toBe("x");
+  });
+
+  it("joins completed responses oldest first", () => {
+    expect(formatResults(["first", "second"], "third")).toBe(
+      "first\n\n---- Later result ----\n\nsecond\n\n---- Later result ----\n\nthird",
+    );
+  });
+});
 
 function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
   return {

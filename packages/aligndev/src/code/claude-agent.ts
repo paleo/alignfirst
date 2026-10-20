@@ -35,6 +35,7 @@ export function buildClaudeArgs(config: RunConfig): string[] {
 export function createClaudeState(config?: RunConfig): AgentProtocolState {
   return {
     expectedSessionId: config?.resume,
+    earlierResults: [],
     protocolComplete: false,
     protocolFailed: false,
     authEvidence: false,
@@ -89,11 +90,13 @@ export function assessClaudeState(state: AgentProtocolState) {
   };
 }
 
-// Background work wakes the agent for more turns, each closed by its own `result` event. A turn
-// with nothing to report closes with an empty one, which must not erase the previous result.
+// Background turns each close with a result. Keep superseded responses; empty turns erase none.
 function captureResult(result: string | undefined, state: AgentProtocolState): void {
   if (state.protocolFailed) state.failure = result;
   if (result === "" && state.result !== undefined) return;
+  if (state.result !== undefined && result !== undefined && result !== "") {
+    state.earlierResults.push(state.result);
+  }
   state.result = result;
 }
 

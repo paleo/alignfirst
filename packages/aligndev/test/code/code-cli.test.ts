@@ -421,6 +421,47 @@ describe("status", () => {
     return stdout.text();
   }
 
+  it.each([
+    "bad json",
+    JSON.stringify({ code: { agent: "claude" } }),
+    JSON.stringify({ code: { profile: "gone", profiles: {} } }),
+  ])("reads status without loading invalid settings: %s", async (settings) => {
+    const settingsPath = join(dir, ".alignfirst", "aligndev.settings.json");
+    writeFileSync(settingsPath, settings);
+    writeStatusRecord(process.pid);
+    const result = "substantive report\n\n---- Later result ----\n\nacknowledgement";
+    applyCompletion(sessionFilePath, {
+      status: "succeeded",
+      exitReason: "completed",
+      endedAt: "2026-08-29T11:56:29.000Z",
+      sessionId: "sess-42",
+      result,
+    });
+    const before = readFileSync(settingsPath);
+    const output = await status([sessionFilePath, "--result"]);
+    expect(output).toContain("status: succeeded\n");
+    expect(output).toContain(`${RESULT_MARKER}\n${result}\n`);
+    expect(await status(["--help"])).toContain("without reading settings");
+    expect(readFileSync(settingsPath)).toEqual(before);
+    const records = listSessionRecords(join(dir, ".plans"));
+    const stderr = makeSink();
+    expect(
+      await main({
+        argv: ["node", "aligndev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
+        cwd: dir,
+        env: { HOME: dir },
+        home: dir,
+        alignfirstCommand: ALIGNFIRST,
+        stdout: makeSink(),
+        stderr,
+      }),
+    ).toBe(1);
+    if (settings.includes("gone")) expect(stderr.text()).toContain("gone");
+    else expect(stderr.text()).toContain(settingsPath);
+    expect(listSessionRecords(join(dir, ".plans"))).toEqual(records);
+    expect(readFileSync(settingsPath)).toEqual(before);
+  });
+
   it.each(["succeeded", "failed"] as const)(
     "returns only metadata and the authoritative %s result for every selector",
     async (terminalStatus) => {
@@ -1052,6 +1093,7 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stderr.text()).toContain("alignfirst is not installed");
+    expect(stderr.text()).toContain("executable /nonexistent/alignfirst (not found)");
     expect(listSessionRecords(plans)).toEqual([]);
   });
 

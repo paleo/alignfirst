@@ -96,7 +96,7 @@ interface ConfigReport {
 }
 ```
 
-AlignDev requires the profile-aware report with a top-level `aligndev` field, including when null. It detects this field rather than checking a package version, so unreleased checkout builds work. An older contract produces an upgrade error.
+AlignDev requires the profile-aware report with a top-level `aligndev` field, including when null. It detects this field rather than checking a package version, so unreleased checkout builds work. An older contract produces an upgrade error. When `alignfirst` is missing or its report is outdated or invalid, aligndev appends a one-line diagnostic with the command and why it chose that form, the resolved executable for direct launches, the available AlignFirst version, and its own version and entry path. Successful reports trigger no diagnostic work.
 
 Paths are absolute. `config` is the validated config, with the deprecated `plans.folder` reported as `plans.repositoryFolder`. The AlignDev parser retains the `plans.folder` fallback for compatible reports using that older spelling. `key` is the registry key as written; `aligndev` ignores `key` and `items`.
 

@@ -51,6 +51,15 @@ const PLAYBOOK_TITLES: Record<string, string> = {
 useProjectFixtures();
 
 describe("renderCodeGuide", () => {
+  it.each(["codingAgent", "openclaw"] as const)(
+    "explains ordered responses and substantive reporting for %s parents",
+    (platform) => {
+      const guide = renderCodeGuide(platform, "pi", undefined, undefined, GLOBAL_FORMS);
+      expect(guide).toContain("each response oldest first, separated by `---- Later result ----`");
+      expect(guide).toContain("report the substantive outcome");
+    },
+  );
+
   it("renders pi native model policy, authentication and OS access metadata", () => {
     const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, GLOBAL_FORMS);
     expect(guide).not.toContain("{{");

@@ -58,12 +58,13 @@ describe("shared runner helpers", () => {
   it("builds a terminal update with captured identity", () => {
     const state = createClaudeState();
     state.sessionId = "sess-1";
+    state.earlierResults = ["report"];
     expect(buildTerminationUpdate("SIGTERM", state, new Date("2026-07-02T10:00:00Z"))).toEqual({
       status: "failed",
       endedAt: "2026-07-02T10:00:00.000Z",
       exitReason: "terminated",
       sessionId: "sess-1",
-      result: "Terminated by SIGTERM before completion.",
+      result: "report\n\n---- Later result ----\n\nTerminated by SIGTERM before completion.",
       contextTokens: null,
       contextCompacted: false,
       contextTokensError: null,
@@ -96,6 +97,76 @@ describe("shared runner helpers", () => {
       frontmatter: { status: "succeeded", agent: "codex" },
       result: "yes:undefined",
     });
+  });
+
+  it.each([false, true])("keeps earlier responses before a final failure=%s", async (failed) => {
+    const { config, sessionFilePath } = makeRun();
+    config.nativeContext = "Claude profile work";
+    const events = [
+      { type: "result", session_id: "claude-1", result: "Substantive report.", is_error: false },
+      { type: "result", session_id: "claude-1", result: "", is_error: false },
+      {
+        type: "result",
+        session_id: "claude-1",
+        result: failed ? "follow-up failed" : "Acknowledged.",
+        is_error: failed,
+      },
+    ];
+    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
+    const result = await runAgent(config, createClaudeAdapter(), makeSink(), nodeFixture(script));
+    const last = failed ? "Claude profile work: follow-up failed" : "Acknowledged.";
+    expect(result).toMatchObject({ status: failed ? "failed" : "succeeded", result: last });
+    expect(readCompletion(sessionFilePath).result).toBe(
+      `Substantive report.\n\n---- Later result ----\n\n${last}`,
+    );
+  });
+
+  it("keeps a Pi report before its follow-up acknowledgement in the durable block", async () => {
+    const { config, sessionFilePath } = makeRun();
+    const events = [
+      {
+        type: "session",
+        version: 3,
+        id: "pi-1",
+        cwd: config.cwd,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Report." }],
+        },
+      },
+      { type: "turn_start" },
+      { type: "message_start", message: { role: "assistant" } },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "toolUse",
+          content: [{ type: "text", text: "Working" }],
+        },
+      },
+      { type: "turn_start" },
+      { type: "message_start", message: { role: "assistant" } },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Acknowledged." }],
+        },
+      },
+      { type: "agent_settled", aborted: false },
+    ];
+    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
+    const result = await runAgent(config, createPiAdapter(), makeSink(), nodeFixture(script));
+    expect(result).toMatchObject({ status: "succeeded", result: "Acknowledged." });
+    expect(readCompletion(sessionFilePath).result).toBe(
+      "Report.\n\n---- Later result ----\n\nAcknowledged.",
+    );
   });
 
   it.each([createClaudeAdapter(), createCodexAdapter()])(

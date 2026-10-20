@@ -1,7 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
 import type { Output } from "../output.js";
-import { appendTranscript, applyCompletion, type CompletionUpdate } from "./session-file.js";
+import {
+  appendTranscript,
+  applyCompletion,
+  type CompletionUpdate,
+  formatResults,
+} from "./session-file.js";
 
 const TERMINATION_GRACE_MS = 2000;
 
@@ -54,6 +59,8 @@ export interface RunResult {
 export interface AgentProtocolState {
   sessionId?: string;
   result?: string;
+  // Completed responses superseded by a later one, oldest first. The Result block keeps them all.
+  earlierResults: string[];
   failure?: string;
   protocolComplete: boolean;
   protocolFailed: boolean;
@@ -135,7 +142,7 @@ export async function runAgent(
     endedAt: new Date().toISOString(),
     exitReason: authRequired ? "auth_required" : failed ? "error" : "completed",
     sessionId,
-    result,
+    result: formatResults(state.earlierResults, result),
     contextTokens: assessment.contextTokens ?? null,
     contextCompacted: assessment.contextCompacted ?? false,
     contextTokensError: assessment.contextTokensError ?? null,
@@ -353,7 +360,7 @@ export function buildTerminationUpdate(
     endedAt: now.toISOString(),
     exitReason: "terminated",
     sessionId: state.expectedSessionId ?? state.sessionId ?? null,
-    result: `Terminated by ${signal} before completion.`,
+    result: formatResults(state.earlierResults, `Terminated by ${signal} before completion.`),
     contextTokens: state.contextTokens ?? null,
     contextCompacted: isCompacted(state),
     contextTokensError: state.contextTokensError ?? null,

@@ -49,6 +49,7 @@ export interface SessionFrontmatter {
 }
 
 export const RESULT_MARKER = "\n---- Result ----\n";
+const LATER_RESULT_SEPARATOR = "\n\n---- Later result ----\n\n";
 
 export function createSessionFile(
   sessionsDir: string,
@@ -112,6 +113,10 @@ export interface CompletionUpdate {
   contextTokens?: number | null;
   contextCompacted?: boolean;
   contextTokensError?: string | null;
+}
+
+export function formatResults(earlier: readonly string[], last: string): string {
+  return [...earlier, last].join(LATER_RESULT_SEPARATOR);
 }
 
 // Appends the result block, then rewrites the frontmatter in place. Append-first keeps the tailed
