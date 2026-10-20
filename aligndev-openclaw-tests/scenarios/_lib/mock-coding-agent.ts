@@ -9,6 +9,9 @@ import {
 } from "../../scripts/coding-agent-settings.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
 
+const CODING_PROTOCOL_RE =
+  /^Run `(?:npx -y )?alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./u;
+
 // The coding agent's completion result, written into the `aligndev code` session file's
 // `---- Result ----` block. A real coding agent's result describes the task it
 // was actually given, so the mock derives it from the prompt (see
@@ -736,9 +739,6 @@ function parseWorktreeRequest(
   return { projectPath, branch };
 }
 
-const CODING_PROTOCOL_RE =
-  /^Run `(?:npx -y )?alignfirst guide (spec|plan|aad|description|review|merge)` and follow the protocol\./;
-
 // The edit each coding result stands behind, applied to the fixture's
 // `home-page.mjs` with `sed`. A run reports "changes committed on the ticket
 // branch", and the agent is told to verify a completed run — so the claim has
@@ -854,11 +854,18 @@ function isFixtureWorktreePath(path: string): boolean {
   return fixtureProjectForWorktree(path) !== undefined;
 }
 
-/** Recognize the active instruction after optional catchup history. */
+/** Recognize the active instruction after optional run context and catchup history. */
 export function isCodingProtocolPrompt(prompt: string | undefined): boolean {
-  if (prompt === undefined) return false;
-  const instruction = prompt.split("\n\n## Current instruction\n\n").at(-1);
-  return instruction !== undefined && CODING_PROTOCOL_RE.test(instruction);
+  return codingProtocolFor(prompt) !== undefined;
+}
+
+export function isReviewProtocolPrompt(prompt: string | undefined): boolean {
+  return codingProtocolFor(prompt) === "review";
+}
+
+function codingProtocolFor(prompt: string | undefined): string | undefined {
+  const instruction = prompt?.split("\n\n## Current instruction\n\n").at(-1);
+  return instruction?.match(CODING_PROTOCOL_RE)?.[1];
 }
 
 /** Render a captured coding-agent invocation as a single text blob for the judge. */
