@@ -300,6 +300,57 @@ test("inventory validates every flag and requires explicit deployment selection"
   });
 });
 
+test("inventory and real CLI reject duplicate invalid agents without leaking values or injecting lines", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    for (const agent of [
+      undefined,
+      null,
+      true,
+      1,
+      {},
+      ["codex"],
+      "constructor",
+      "private-agent-marker\n\r\u001b\u0085\u2028\u2029\u202e",
+    ]) {
+      fixture.settings = structuredClone(original);
+      const selected = fixture.settings.code.profile;
+      Object.assign(fixture.settings.code.profiles[selected], { agent, default: true });
+      fixture.settings.code.profiles.conflict = {
+        agent,
+        default: true,
+        configDir: "~/native/conflict",
+      };
+      saveSettings(fixture);
+      installSettings(fixture);
+      const before = readFileSync(fixture.settingsFile);
+      const deployedBefore = readFileSync(fixture.deployedSettings);
+      for (const args of [
+        inventoryArgs(fixture),
+        [
+          join(repository, "packages/aligndev/bin/aligndev.mjs"),
+          "guide",
+          "code",
+          "--profile",
+          selected,
+        ],
+      ]) {
+        const result = spawnSync(process.execPath, args, options(fixture));
+        assert.equal(result.status, 1);
+        assert.equal(result.stdout, "");
+        assert.match(result.stderr, /agent/);
+        assert(!result.stderr.includes("multiple default"));
+        assert(!result.stderr.includes("private-agent-marker"));
+        assert.equal(result.stderr.trim().split("\n").length, 1);
+        for (const character of ["\r", "\u001b", "\u0085", "\u2028", "\u2029", "\u202e"])
+          assert(!result.stderr.includes(character));
+        assert.deepEqual(readFileSync(fixture.settingsFile), before);
+        assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
+      }
+    }
+  });
+});
+
 test("inventory refuses native root, managed resource and ancestor symlinks", () => {
   for (const path of ["root", "instructions", "skills", "ancestor"]) {
     withFixture("codex", "slack", {}, (fixture) => {
@@ -433,6 +484,7 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
     for (const invalid of [
+      { agent: "private-value\n\u001b" },
       { default: "yes" },
       { skipPermissions: "yes" },
       { models: "sol" },
@@ -450,7 +502,9 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
       saveSettings(fixture);
       installSettings(fixture);
       const before = readFileSync(fixture.settingsFile);
-      assertInventoryRejected(fixture);
+      const diagnostic = assertInventoryRejected(fixture);
+      assert(diagnostic.includes("code.profiles[<entry>].unknownFixtureField"));
+      assert(!diagnostic.includes("private-value"));
       const result = spawnSync(
         process.execPath,
         [

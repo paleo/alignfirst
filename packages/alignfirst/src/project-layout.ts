@@ -123,6 +123,16 @@ interface RegistryItems {
 
 interface Registry extends RegistryFile {
   path: string;
+  raw: RawRegistryFile;
+}
+
+interface RawRegistryFile {
+  [key: string]: unknown;
+  projects: Record<string, RawRegistryProject>;
+}
+
+interface RawRegistryProject {
+  [key: string]: unknown;
 }
 
 interface RegistryEntry {
@@ -205,7 +215,9 @@ function readRegistry(home: string): Registry | undefined {
       path,
       `projects key must be an absolute path or start with ~/: ${badKey}`,
     );
-  return { path, projects: file.projects };
+  // The schema validates these object boundaries; retain unknown fields only for mutations.
+  const raw = value as RawRegistryFile;
+  return { path, projects: file.projects, raw };
 }
 
 function warnUnknownRegistrySetting(path: string, key: string): void {
@@ -396,7 +408,11 @@ export function registerCompanion(
 ): CompanionRegistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
-  const registry = readRegistry(home) ?? { path: registryPath(home), projects: {} };
+  const registry = readRegistry(home) ?? {
+    path: registryPath(home),
+    projects: {},
+    raw: { projects: {} },
+  };
   const registered = findEntry(registry, mainWorktree, realHome);
   const existing =
     registered?.project.dir === undefined
@@ -449,7 +465,8 @@ function addEntry(
   const project: RegistryProject = { ...registered?.project, dir: dirValue };
   const dir = companionDir(dirValue, realHome);
   assertCompanionDirBounds(registry, { key, project, dir }, mainWorktree, realHome);
-  writeRegistry(registry.path, { ...registry.projects, [key]: project });
+  const rawProject = { ...registry.raw.projects[key], dir: dirValue };
+  writeRegistry(registry, { ...registry.raw.projects, [key]: rawProject });
   return { key, project, dir };
 }
 
@@ -517,10 +534,11 @@ function keysByCompanionDir(registry: Registry, realHome: string): Map<string, s
   return keysByDir;
 }
 
-function writeRegistry(path: string, projects: Record<string, RegistryProject>): void {
+function writeRegistry(registry: Registry, projects: Record<string, RawRegistryProject>): void {
+  const { path } = registry;
   mkdirSync(dirname(path), { recursive: true });
   const tmpPath = `${path}.${process.pid}.tmp`;
-  const file: RegistryFile = { projects };
+  const file: RawRegistryFile = { ...registry.raw, projects };
   writeFileSync(tmpPath, `${JSON.stringify(file, undefined, 2)}\n`);
   renameSync(tmpPath, path);
 }
@@ -565,10 +583,13 @@ export function unregisterCompanion(
   const deletable = removeDir && isSameOrInside(dir, root);
   if (deletable)
     assertRemovableDir(registry, companionEntry, entries, { force, mainWorktree, realHome });
-  const { [entry.key]: _removed, ...projects } = registry.projects;
+  const { [entry.key]: _removed, ...projects } = registry.raw.projects;
   const aligndev = entry.project.aligndev ?? null;
-  if (aligndev !== null) projects[entry.key] = { aligndev };
-  writeRegistry(path, projects);
+  if (aligndev !== null) {
+    const { dir: _dir, items: _items, ...remaining } = registry.raw.projects[entry.key];
+    projects[entry.key] = remaining;
+  }
+  writeRegistry(registry, projects);
   const removed = deletable && entries !== undefined;
   if (removed) rmSync(dir, { recursive: true, force: true });
   return {

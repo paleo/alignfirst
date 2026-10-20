@@ -9,13 +9,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { configureGit, initRepository, makeTempDir, runMain, writeRegistry } from "./helpers.js";
 
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -467,6 +468,138 @@ describe("companion unregister", () => {
     const result = await runMain(["companion", "unregister", "--force"], { cwd: project, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("--force requires --remove-dir.");
+  });
+});
+
+describe("companion registry preservation", () => {
+  it("round-trips a new registration without losing obsolete or unrelated settings", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    const secret = "PRIVATE-EXTENSION-VALUE";
+    const original = {
+      root: secret,
+      paths: { "~/legacy": { docs: true, extra: secret } },
+      extra: { nested: [secret, null, false] },
+      projects: {
+        "~/other": {
+          dir: "other",
+          extra: { nested: secret },
+          items: { docs: "project", extra: { nested: secret } },
+          aligndev: { profile: "other", extra: { nested: secret } },
+        },
+      },
+    };
+    writeRegistry(home, original);
+    const registered = await runMain(["companion", "register"], { cwd: project, home });
+    expect(registered.code).toBe(0);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      ...original,
+      projects: { ...original.projects, "~/projects/app": { dir: "projects_app" } },
+    });
+    const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(removed.code).toBe(0);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual(original);
+    const before = readFileSync(registryOf(home), "utf-8");
+    const report = await runMain(["config", "--json"], { cwd: project, home });
+    expect(report.code).toBe(0);
+    expect(JSON.parse(report.stdout)).toMatchObject({ aligndev: null, companion: null });
+    expect(report.stdout).not.toContain(secret);
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+    const warnings = warn.mock.calls.flat().join("\n");
+    expect(warnings).toContain("convert paths manually");
+    expect(warnings).toContain("projects[<entry>].items.extra");
+    expect(warnings).toContain("projects[<entry>].aligndev.extra");
+    expect(warnings).not.toContain(secret);
+    expect(warnings).not.toContain("~/other");
+  });
+
+  it.each(["__proto__", "constructor", "prototype"])(
+    "preserves %s extension keys through profile-only registration and removal",
+    async (key) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { root, home, project } = makeHome();
+      const alias = join(root, "project-alias");
+      symlinkSync(project, alias);
+      const extension = { [key]: { profile: "PRIVATE", polluted: true } };
+      const aligndev = { profile: "work", ...extension };
+      const profileEntry = { aligndev, ...extension };
+      const original = {
+        ...extension,
+        projects: { [alias]: profileEntry, "~/other": { dir: "other", ...extension } },
+      };
+      writeRegistry(home, original);
+      const registered = await runMain(["companion", "register", "--dir", "chosen"], {
+        cwd: project,
+        home,
+      });
+      expect(registered.code).toBe(0);
+      const withCompanion = {
+        ...original,
+        projects: {
+          ...original.projects,
+          [alias]: {
+            ...profileEntry,
+            dir: "chosen",
+            items: { docs: "project", ...extension },
+          },
+        },
+      };
+      expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+        ...original,
+        projects: { ...original.projects, [alias]: { ...profileEntry, dir: "chosen" } },
+      });
+      writeRegistry(home, withCompanion);
+      const before = readFileSync(registryOf(home), "utf-8");
+      const again = await runMain(["companion", "register"], { cwd: project, home });
+      expect(again.code).toBe(0);
+      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+      const report = await runMain(["config", "--json"], { cwd: project, home });
+      expect(report.code).toBe(0);
+      const parsed = JSON.parse(report.stdout);
+      expect(parsed.aligndev).toEqual({ profile: "work" });
+      expect(parsed.companion.items.docs).toBe("project");
+      expect(Object.hasOwn(parsed.companion.items, key)).toBe(false);
+      expect(report.stdout).not.toContain("PRIVATE");
+      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+      const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+      expect(removed.code).toBe(0);
+      expect(removed.stdout).toContain("Kept profile-only entry: work");
+      const remaining = JSON.parse(readFileSync(registryOf(home), "utf-8"));
+      expect(remaining).toEqual(original);
+      expect(Object.hasOwn(remaining, key)).toBe(true);
+      expect(Object.hasOwn(remaining.projects[alias], key)).toBe(true);
+      expect(Object.hasOwn(remaining.projects[alias].aligndev, key)).toBe(true);
+      expect(Object.getPrototypeOf(remaining)).toBe(Object.prototype);
+      expect(Object.prototype).not.toHaveProperty("polluted");
+      expect(warn.mock.calls.flat().join("\n")).not.toContain("PRIVATE");
+    },
+  );
+
+  it.each([
+    { dir: "app", items: { docs: "PRIVATE" } },
+    { dir: "app", aligndev: { profile: "  " } },
+    { dir: "~invalid" },
+    { dir: "app", items: { _aligndev: "companion" } },
+  ])("rejects known-invalid settings before either mutation: %j", async (entry) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    writeRegistry(home, {
+      paths: { "~/legacy": { docs: true } },
+      extra: "PRIVATE",
+      projects: { "~/projects/app": entry },
+    });
+    const before = readFileSync(registryOf(home), "utf-8");
+    for (const args of [
+      ["companion", "register", "--dir", "chosen", "--create-dir"],
+      ["companion", "unregister", "--remove-dir", "--force"],
+    ]) {
+      const result = await runMain(args, { cwd: project, home });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`Invalid ${registryOf(home)}`);
+      expect(result.stderr).not.toContain("PRIVATE");
+      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+      expect(existsSync(join(rootOf(home), "chosen"))).toBe(false);
+    }
   });
 });
 

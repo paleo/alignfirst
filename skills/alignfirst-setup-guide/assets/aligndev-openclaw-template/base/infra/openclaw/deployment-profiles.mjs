@@ -165,6 +165,8 @@ function readSettings(settingsFile) {
         ],
         path,
       );
+      if (!["claude", "codex", "pi"].includes(profile.agent))
+        throw new Error(`${path}.agent must be claude, codex or pi`);
       validateLaunchFields(profile, path);
       if (profile.quota !== undefined) {
         profile.quota = settingsObject(

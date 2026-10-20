@@ -65,7 +65,7 @@ Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
 confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
-start, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
+start, native background exec completion and its trusted tool-factory context, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
 does not establish these combined contracts.
 
 Keep the first-attempt assertion on the immediate reply dispatch. It must start and claim the target session before recovery spacing elapses. This catches dispatches that inherit a closed asynchronous work scope from the calling tool turn.
