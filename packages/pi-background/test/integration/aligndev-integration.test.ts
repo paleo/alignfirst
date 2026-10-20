@@ -12,12 +12,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { host, jobFrom, waitFor, waitJob } from "./host-fixture.js";
+import { host, jobFrom, waitFor, waitJob } from "../host-fixture.js";
 
-const root = fileURLToPath(new URL("../../../", import.meta.url));
+const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const packedRoot = mkdtempSync(join(tmpdir(), "pi-background-integration-pack-"));
 const background = join(packedRoot, "package");
-const codingAgent = fileURLToPath(new URL("./fixtures/coding-agent.mjs", import.meta.url));
+const codingAgent = fileURLToPath(new URL("../fixtures/coding-agent.mjs", import.meta.url));
 
 beforeAll(() => {
   execFileSync(

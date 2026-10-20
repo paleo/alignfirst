@@ -117,13 +117,14 @@ Linux cleanup verifies process-start identities before signalling. macOS uses pr
 
 ```sh
 npm test --workspace @alignfirst/pi-background
+npm run test:integration --workspace @alignfirst/pi-background
 npm run typecheck --workspace @alignfirst/pi-background
 npm run build --workspace @alignfirst/pi-background
 npm run lint --workspace @alignfirst/pi-background
 npm pack --workspace @alignfirst/pi-background --dry-run --json
 ```
 
-`test/process-tree.test.ts` exercises real descendants, TERM resistance, separate groups, retained pipes, actual Pi/bash cleanup, parent shutdown, query failure/retry, and reaping. `test/lifecycle.test.ts` uses Pi's public session runtime and a local scripted provider to exercise scheduling and replacement. `test/tool.test.ts` covers public actions, startup/cancellation races, capacity, cleanup failures, and output limits. Deterministic tests require no external model or network request. `test/aligndev-integration.test.ts` adds real CLI subprocess tests through the packed extension; this is a test dependency only. Repository `npm run release:smoke` verifies standalone packed installs without either CLI. Opt-in Terra and real terminal lifecycle checks are documented in [Pi Extensions](../../docs/pi-extensions.md#checks).
+`test/process-tree.test.ts` exercises real descendants, TERM resistance, separate groups, retained pipes, actual Pi/bash cleanup, parent shutdown, query failure/retry, and reaping. `test/lifecycle.test.ts` uses Pi's public session runtime and a local scripted provider to exercise scheduling and replacement. `test/tool.test.ts` covers public actions, startup/cancellation races, capacity, cleanup failures, and output limits. Deterministic tests require no external model or network request. `test/integration/aligndev-integration.test.ts` runs through `test:integration` and adds real CLI subprocess tests through the packed extension; this is a test dependency only. Repository `npm run release:smoke` verifies standalone packed installs without either CLI. Opt-in Terra and real terminal lifecycle checks are documented in [Pi Extensions](../../docs/pi-extensions.md#checks).
 
 The package-local `src/process-tree.ts` deliberately duplicates the small cleanup leaf from `pi-subagent`; propagate generic cleanup fixes and their conformance cases to both packages. Neither package imports the other at runtime.
 

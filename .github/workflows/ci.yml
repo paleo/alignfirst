@@ -26,6 +26,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace
 
   node-22:
     # The Version Packages PR only bumps versions and changelogs.
@@ -43,3 +44,4 @@ jobs:
           node-version: 22
       - run: npm run build --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
       - run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
+      - run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace

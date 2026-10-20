@@ -11,6 +11,8 @@ vi.mock("node:fs", async (original) => {
   return { ...fs, readFileSync: vi.fn(fs.readFileSync) };
 });
 
+const TEST_GRACE_MS = 300;
+const LATE_GRACE_MS = 1_500;
 const fixture = fileURLToPath(new URL("./fixtures/tree.mjs", import.meta.url));
 
 interface FixturePid {
@@ -44,10 +46,10 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
           expect(records(dir).some(isLive)).toBe(true);
         }
         const start = Date.now();
-        const stop = managed.stop();
+        const stop = managed.stop(Date.now() + (mode === "late" ? LATE_GRACE_MS : TEST_GRACE_MS));
         expect(managed.stop()).toBe(stop);
         await stop;
-        expect(Date.now() - start).toBeLessThan(8_000);
+        expect(Date.now() - start).toBeLessThan(4_000);
         await managed.closed;
         await managed.exited;
         expect(managed.child.exitCode !== null || managed.child.signalCode !== null).toBe(true);
@@ -64,7 +66,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         rmSync(dir, { recursive: true, force: true });
       }
     },
-    12_000,
+    8_000,
   );
 
   it("cleans actual Pi print-mode bash and its separately grouped grandchild", async () => {
@@ -121,7 +123,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
       const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
       shell = { pid, identity: fields[19], role: "bash" };
       expect(Number(fields[2])).not.toBe(managed.child.pid);
-      await managed.stop();
+      await managed.stop(Date.now() + TEST_GRACE_MS);
       expect(records(dir).filter(isLive)).toEqual([]);
       expect(isLive(shell)).toBe(false);
       expect(managed.child.exitCode !== null || managed.child.signalCode !== null).toBe(true);
