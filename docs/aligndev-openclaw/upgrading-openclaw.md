@@ -122,3 +122,9 @@ npm run env:down
 The seed targets the current release. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
 
 Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The opt-outs above hold their policies: no autonomous model spend, no telemetry ping, and a handoff and reply contract visible on every turn.
+
+## Known audit exceptions
+
+OpenClaw `2026.10.5` carries npm `12.2.0` with five unchanged package-level audit findings: `brace-expansion@5.0.9`, `http-cache-semantics@4.2.0`, `ip-address@10.5.0`, `postcss-selector-parser@7.1.4` and `undici@6.28.0`. Each exception is restricted to `node_modules/npm/node_modules/<package>`. Retain the exact audit advisories with upgrade evidence and reassess when npm refreshes its bundle and OpenClaw accepts that release. Ordinary transitive updates cannot repair bundled files; do not edit them or blanket-suppress audit.
+
+The standalone gateway includes these dependencies in production. A zero root production-only audit excludes its development-only OpenClaw host and does not certify the gateway image. The separate unbundled `brace-expansion` must resolve to patched `5.0.12`; it is outside these exceptions.
