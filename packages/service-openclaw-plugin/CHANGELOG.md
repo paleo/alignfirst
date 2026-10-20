@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.5.3
+
+### Patch Changes
+
+- 205715a: Updated OpenClaw compatibility to 2026.10.5, including trusted Slack routing for native exec completion claims, TypeBox to 1.4.2 and the judge SDKs; pinned generated pnpm setup to 12.14.0.
+
 ## 0.5.2
 
 ### Patch Changes
