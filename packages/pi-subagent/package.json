@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/pi-subagent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Synchronous isolated Pi subagents with bounded results and owned process cleanup.",
   "license": "MIT",
   "author": "Thomas MUR",

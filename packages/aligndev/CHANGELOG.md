@@ -1,5 +1,15 @@
 # aligndev
 
+## 0.25.0
+
+### Minor Changes
+
+- 85aa30f: Added named coding profiles, project profile selection, account-isolated resume and explicit native quota sources. Convert former direct `code` launch settings to `code.profiles`; profile-aware delegation requires the new AlignFirst report contract. Added global Pi skill diagnostics and root Pi extension entries without `:dist` display suffixes. Preserved distinct run files during concurrent launches and handled disappearing Linux processes during Pi cleanup.
+
+### Patch Changes
+
+- 09cf1ce: Kept `code status` available with invalid settings, added command and version diagnostics for missing or incompatible AlignFirst CLIs, and preserved completed responses before later acknowledgements, failures or termination diagnostics in session results.
+
 ## 0.24.0
 
 ### Minor Changes
