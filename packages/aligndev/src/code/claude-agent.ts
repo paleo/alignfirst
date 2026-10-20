@@ -93,11 +93,10 @@ export function assessClaudeState(state: AgentProtocolState) {
 // Background turns each close with a result. Keep superseded responses; empty turns erase none.
 function captureResult(result: string | undefined, state: AgentProtocolState): void {
   if (state.protocolFailed) state.failure = result;
-  if (result === "" && state.result !== undefined) return;
-  if (state.result !== undefined && result !== undefined && result !== "") {
-    state.earlierResults.push(state.result);
-  }
+  if (result === "" || result === undefined) return;
+  if (state.result !== undefined) state.earlierResults.push(state.result);
   state.result = result;
+  state.resultComplete = !state.protocolFailed;
 }
 
 // What the newest assistant response holds in the context window. Claude reports cache reads and

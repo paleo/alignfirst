@@ -144,6 +144,18 @@ describe("Claude adapter", () => {
     expect(state.earlierResults).toEqual(["Launched the subagent."]);
   });
 
+  it("ignores initially empty results when collecting completed responses", () => {
+    const state = createClaudeState();
+    for (const result of ["", "Report."]) {
+      interpretClaudeLine(
+        JSON.stringify({ type: "result", session_id: "sess-1", result, is_error: false }),
+        state,
+      );
+    }
+    expect(state.earlierResults).toEqual([]);
+    expect(state.result).toBe("Report.");
+  });
+
   it("measures the context window from the newest main-loop response", () => {
     const state = createClaudeState();
     assistant(state, { input_tokens: 10, cache_read_input_tokens: 40_000, output_tokens: 100 });

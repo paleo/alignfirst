@@ -59,6 +59,8 @@ export interface RunResult {
 export interface AgentProtocolState {
   sessionId?: string;
   result?: string;
+  // A response boundary, independent of run settlement; excludes partial/tool commentary.
+  resultComplete?: boolean;
   // Completed responses superseded by a later one, oldest first. The Result block keeps them all.
   earlierResults: string[];
   failure?: string;
@@ -360,7 +362,12 @@ export function buildTerminationUpdate(
     endedAt: now.toISOString(),
     exitReason: "terminated",
     sessionId: state.expectedSessionId ?? state.sessionId ?? null,
-    result: formatResults(state.earlierResults, `Terminated by ${signal} before completion.`),
+    result: formatResults(
+      state.resultComplete === true && state.result !== undefined
+        ? [...state.earlierResults, state.result]
+        : state.earlierResults,
+      `Terminated by ${signal} before completion.`,
+    ),
     contextTokens: state.contextTokens ?? null,
     contextCompacted: isCompacted(state),
     contextTokensError: state.contextTokensError ?? null,

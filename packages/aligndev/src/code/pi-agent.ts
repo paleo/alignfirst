@@ -118,6 +118,7 @@ function supersedeCompletedResponse(state: PiState): void {
   if (state.stopReason === "stop" && state.result !== undefined) {
     state.earlierResults.push(state.result);
   }
+  state.resultComplete = false;
 }
 
 function invalidProtocol(state: PiState, detail: string): string {
@@ -184,6 +185,7 @@ function captureMessage(event: Record<string, unknown>, state: PiState): string 
     )
     .join("\n");
   state.result = text.trim() === "" ? undefined : text;
+  state.resultComplete = message.stopReason === "stop";
   // A malformed protocol remains fatal even if a later model response succeeds.
   if (!state.protocolFailed) {
     state.failure = typeof message.errorMessage === "string" ? message.errorMessage : undefined;
