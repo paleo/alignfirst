@@ -129,9 +129,9 @@ describe("Claude adapter", () => {
     });
   });
 
-  it("keeps the last non-empty result when background work adds turns", () => {
+  it("keeps superseded responses when background work adds turns", () => {
     const state = createClaudeState();
-    for (const result of ["Launched the subagent.", "The subagent finished.", ""]) {
+    for (const result of ["Launched the subagent.", "", "The subagent finished.", ""]) {
       interpretClaudeLine(
         JSON.stringify({ type: "result", session_id: "sess-1", result, is_error: false }),
         state,
@@ -141,6 +141,19 @@ describe("Claude adapter", () => {
       succeeded: true,
       result: "The subagent finished.",
     });
+    expect(state.earlierResults).toEqual(["Launched the subagent."]);
+  });
+
+  it("ignores initially empty results when collecting completed responses", () => {
+    const state = createClaudeState();
+    for (const result of ["", "Report."]) {
+      interpretClaudeLine(
+        JSON.stringify({ type: "result", session_id: "sess-1", result, is_error: false }),
+        state,
+      );
+    }
+    expect(state.earlierResults).toEqual([]);
+    expect(state.result).toBe("Report.");
   });
 
   it("measures the context window from the newest main-loop response", () => {

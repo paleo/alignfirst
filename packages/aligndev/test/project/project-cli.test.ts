@@ -446,9 +446,26 @@ describe("project discovery", () => {
     expect(JSON.parse(result.stdout).issues).toEqual([
       {
         path: old,
-        message: `The alignfirst CLI used in ${old} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`,
+        message: expect.stringContaining(
+          `The alignfirst CLI used in ${old} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`,
+        ),
       },
     ]);
+    const message: string = JSON.parse(result.stdout).issues[0].message;
+    expect(message.startsWith(`The alignfirst CLI used in ${old} is too old:`)).toBe(true);
+    expect(message).toContain("alignfirst: ");
+    expect(message).not.toContain("\n");
+    const doctor = await runProjects(fixture, ["doctor"], {
+      alignfirstCommand: [
+        process.execPath,
+        "-e",
+        `process.stdout.write(${JSON.stringify(report)})`,
+      ],
+    });
+    expect(doctor.code).toBe(1);
+    expect(doctor.stdout.split("\n").filter((line) => line.includes("alignfirst: "))).toHaveLength(
+      1,
+    );
   });
 
   it("fails the listing when alignfirst is missing", async () => {
@@ -459,6 +476,7 @@ describe("project discovery", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("alignfirst is not installed");
+    expect(result.stderr).toContain("executable /nonexistent/alignfirst (not found)");
   });
 });
 

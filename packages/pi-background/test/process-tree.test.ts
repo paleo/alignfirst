@@ -1,23 +1,20 @@
 import type * as FileSystem from "node:fs";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { launchManaged } from "../src/process-tree.js";
+import { type FixturePid, isLive, records, waitFor } from "./process-tree-helpers.js";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
   return { ...fs, readFileSync: vi.fn(fs.readFileSync) };
 });
 
+const TEST_GRACE_MS = 300;
+const LATE_GRACE_MS = 1_500;
 const fixture = fileURLToPath(new URL("./fixtures/tree.mjs", import.meta.url));
-
-interface FixturePid {
-  pid: number;
-  identity: string;
-  role: string;
-}
 
 describe.skipIf(process.platform !== "linux")("real process cleanup gate", () => {
   it.each(["cooperative", "ignoring", "grouped", "natural", "closed", "late"])(
@@ -44,10 +41,10 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
           expect(records(dir).some(isLive)).toBe(true);
         }
         const start = Date.now();
-        const stop = managed.stop();
+        const stop = managed.stop(Date.now() + (mode === "late" ? LATE_GRACE_MS : TEST_GRACE_MS));
         expect(managed.stop()).toBe(stop);
         await stop;
-        expect(Date.now() - start).toBeLessThan(8_000);
+        expect(Date.now() - start).toBeLessThan(4_000);
         await managed.closed;
         await managed.exited;
         expect(managed.child.exitCode !== null || managed.child.signalCode !== null).toBe(true);
@@ -64,7 +61,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         rmSync(dir, { recursive: true, force: true });
       }
     },
-    12_000,
+    8_000,
   );
 
   it("cleans actual Pi print-mode bash and its separately grouped grandchild", async () => {
@@ -121,7 +118,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
       const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
       shell = { pid, identity: fields[19], role: "bash" };
       expect(Number(fields[2])).not.toBe(managed.child.pid);
-      await managed.stop();
+      await managed.stop(Date.now() + TEST_GRACE_MS);
       expect(records(dir).filter(isLive)).toEqual([]);
       expect(isLive(shell)).toBe(false);
       expect(managed.child.exitCode !== null || managed.child.signalCode !== null).toBe(true);
@@ -331,44 +328,3 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     await managed.stop();
   });
 });
-
-function records(dir: string): FixturePid[] {
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => {
-      const value: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"));
-      if (
-        typeof value !== "object" ||
-        value === null ||
-        !("pid" in value) ||
-        !("identity" in value) ||
-        !("role" in value) ||
-        typeof value.pid !== "number" ||
-        !Number.isSafeInteger(value.pid) ||
-        value.pid <= 1 ||
-        typeof value.identity !== "string" ||
-        typeof value.role !== "string"
-      )
-        throw new Error("Invalid fixture PID record.");
-      return { pid: value.pid, identity: value.identity, role: value.role };
-    });
-}
-
-function isLive(record: FixturePid): boolean {
-  try {
-    const stat = readFileSync(`/proc/${record.pid}/stat`, "utf8");
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    return fields[19] === record.identity && fields[0] !== "Z";
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-async function waitFor(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 3_000;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error("Fixture synchronization timed out.");
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-}

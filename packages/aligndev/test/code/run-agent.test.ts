@@ -58,12 +58,13 @@ describe("shared runner helpers", () => {
   it("builds a terminal update with captured identity", () => {
     const state = createClaudeState();
     state.sessionId = "sess-1";
+    state.earlierResults = ["report"];
     expect(buildTerminationUpdate("SIGTERM", state, new Date("2026-07-02T10:00:00Z"))).toEqual({
       status: "failed",
       endedAt: "2026-07-02T10:00:00.000Z",
       exitReason: "terminated",
       sessionId: "sess-1",
-      result: "Terminated by SIGTERM before completion.",
+      result: "report\n\n---- Later result ----\n\nTerminated by SIGTERM before completion.",
       contextTokens: null,
       contextCompacted: false,
       contextTokensError: null,
@@ -96,6 +97,95 @@ describe("shared runner helpers", () => {
       frontmatter: { status: "succeeded", agent: "codex" },
       result: "yes:undefined",
     });
+  });
+
+  it("writes a single result without a separator after an initially empty Claude result", async () => {
+    const { config, sessionFilePath } = makeRun();
+    const events = ["", "Report."].map((result) => ({
+      type: "result",
+      session_id: "claude-1",
+      result,
+      is_error: false,
+    }));
+    await runAgent(
+      config,
+      createClaudeAdapter(),
+      makeSink(),
+      nodeFixture(
+        `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`,
+      ),
+    );
+    expect(readCompletion(sessionFilePath).result).toBe("Report.");
+  });
+
+  it.each([false, true])("keeps earlier responses before a final failure=%s", async (failed) => {
+    const { config, sessionFilePath } = makeRun();
+    config.nativeContext = "Claude profile work";
+    const events = [
+      { type: "result", session_id: "claude-1", result: "Substantive report.", is_error: false },
+      { type: "result", session_id: "claude-1", result: "", is_error: false },
+      {
+        type: "result",
+        session_id: "claude-1",
+        result: failed ? "follow-up failed" : "Acknowledged.",
+        is_error: failed,
+      },
+    ];
+    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
+    const result = await runAgent(config, createClaudeAdapter(), makeSink(), nodeFixture(script));
+    const last = failed ? "Claude profile work: follow-up failed" : "Acknowledged.";
+    expect(result).toMatchObject({ status: failed ? "failed" : "succeeded", result: last });
+    expect(readCompletion(sessionFilePath).result).toBe(
+      `Substantive report.\n\n---- Later result ----\n\n${last}`,
+    );
+  });
+
+  it("keeps a Pi report before its follow-up acknowledgement in the durable block", async () => {
+    const { config, sessionFilePath } = makeRun();
+    const events = [
+      {
+        type: "session",
+        version: 3,
+        id: "pi-1",
+        cwd: config.cwd,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Report." }],
+        },
+      },
+      { type: "turn_start" },
+      { type: "message_start", message: { role: "assistant" } },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "toolUse",
+          content: [{ type: "text", text: "Working" }],
+        },
+      },
+      { type: "turn_start" },
+      { type: "message_start", message: { role: "assistant" } },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Acknowledged." }],
+        },
+      },
+      { type: "agent_settled", aborted: false },
+    ];
+    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
+    const result = await runAgent(config, createPiAdapter(), makeSink(), nodeFixture(script));
+    expect(result).toMatchObject({ status: "succeeded", result: "Acknowledged." });
+    expect(readCompletion(sessionFilePath).result).toBe(
+      "Report.\n\n---- Later result ----\n\nAcknowledged.",
+    );
   });
 
   it.each([createClaudeAdapter(), createCodexAdapter()])(
@@ -231,6 +321,77 @@ describe("shared runner helpers", () => {
   });
 });
 
+describe.each([createClaudeAdapter(), createPiAdapter()])(
+  "$executable termination results",
+  (adapter) => {
+    it.each([0, 1, 2])("preserves %i completed responses before diagnostics", (count) => {
+      for (const activity of ["waiting", "partial", "toolUse"]) {
+        const { config, sessionFilePath } = makeRun();
+        const state = adapter.createState(config);
+        const emit = (event: object) => adapter.interpretLine(JSON.stringify(event), state);
+        const claude = adapter.executable === "claude";
+        emit(
+          claude
+            ? { type: "system", subtype: "init", session_id: "session-1" }
+            : {
+                type: "session",
+                version: 3,
+                id: "session-1",
+                cwd: config.cwd,
+                timestamp: new Date().toISOString(),
+              },
+        );
+        const reports = ["First report.", "Second report."].slice(0, count);
+        for (const report of reports) {
+          if (!claude) emit({ type: "message_start", message: { role: "assistant" } });
+          emit(
+            claude
+              ? { type: "result", result: report, is_error: false }
+              : {
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    stopReason: "stop",
+                    content: [{ type: "text", text: report }],
+                  },
+                },
+          );
+        }
+        if (activity !== "waiting") {
+          if (!claude) emit({ type: "message_start", message: { role: "assistant" } });
+          emit(
+            claude
+              ? {
+                  type: "assistant",
+                  message: { content: [{ type: "text", text: "Unfinished commentary" }] },
+                }
+              : activity === "toolUse"
+                ? {
+                    type: "message_end",
+                    message: {
+                      role: "assistant",
+                      stopReason: "toolUse",
+                      content: [{ type: "text", text: "Unfinished commentary" }],
+                    },
+                  }
+                : {
+                    type: "message_update",
+                    assistantMessageEvent: { type: "text_delta", delta: "Unfinished commentary" },
+                  },
+          );
+        }
+        applyCompletion(sessionFilePath, buildTerminationUpdate("SIGTERM", state, new Date()));
+        expect(readCompletion(sessionFilePath)).toMatchObject({
+          frontmatter: { status: "failed", exitReason: "terminated" },
+          result: [...reports, "Terminated by SIGTERM before completion."].join(
+            "\n\n---- Later result ----\n\n",
+          ),
+        });
+      }
+    });
+  },
+);
+
 describe.each([createClaudeAdapter(), createCodexAdapter(), createPiAdapter()])(
   "$executable durable resume identity",
   (adapter) => {
@@ -305,6 +466,7 @@ describe.each([createClaudeAdapter(), createCodexAdapter(), createPiAdapter()])(
           status: "failed",
           exitReason: "terminated",
           sessionId: "original-session",
+          result: "done\n\n---- Later result ----\n\nTerminated by SIGTERM before completion.",
         });
         applyCompletion(sessionFilePath, update);
         expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({

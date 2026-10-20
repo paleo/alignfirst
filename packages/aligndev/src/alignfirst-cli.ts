@@ -1,4 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
+import { delimiter, resolve, sep } from "node:path";
+
+import { readPackageVersion } from "./package-version.js";
 
 export interface AlignfirstResult {
   status: number;
@@ -20,7 +24,7 @@ export function runAlignfirst(
   if (result.error && isErrnoException(result.error) && result.error.code === "ENOENT") {
     throw new Error(
       "alignfirst is not installed. Install it globally (`npm install -g alignfirst`), or run " +
-        "aligndev through npx (`npx -y aligndev`).",
+        `aligndev through npx (\`npx -y aligndev\`). ${describeAlignfirst(command, cwd, env)}`,
     );
   }
   if (result.error) throw result.error;
@@ -29,6 +33,44 @@ export function runAlignfirst(
     stdout: result.stdout,
     stderr: result.stderr,
   };
+}
+
+export function describeAlignfirst(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {
+  const npx = command[0] === "npx";
+  const reason = npx
+    ? "aligndev was launched through npm/npx; npx prefers the project's local alignfirst dependency"
+    : "aligndev runs alignfirst from PATH when launched directly";
+  const facts = [`\`${command.join(" ")}\` (${reason})`];
+  if (!npx) facts.push(describeExecutable(command[0], cwd, env));
+  const version = spawnSync(command[0], [...command.slice(1), "--version"], {
+    cwd,
+    env,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  const line = version.stdout?.split(/\r?\n/, 1)[0]?.trim();
+  if (version.status === 0 && line !== undefined && line !== "" && line.length <= 80) {
+    facts.push(`version ${line}`);
+  }
+  const entry = process.argv[1] === undefined ? "" : ` at ${process.argv[1]}`;
+  facts.push(`aligndev ${readPackageVersion()}${entry}`);
+  return `alignfirst: ${facts.join("; ")}`.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+}
+
+function describeExecutable(command: string, cwd: string, env: NodeJS.ProcessEnv): string {
+  if (command.includes(sep)) {
+    return `executable ${command}${existsSync(resolve(cwd, command)) ? "" : " (not found)"}`;
+  }
+  for (const dir of env.PATH?.split(delimiter) ?? []) {
+    const path = resolve(cwd, dir, command);
+    try {
+      accessSync(path, constants.X_OK);
+      if (statSync(path).isFile()) return `executable ${path}`;
+    } catch {
+      // Continue through PATH when an entry is missing or not executable.
+    }
+  }
+  return "not found on PATH";
 }
 
 export function reserveSideTicket(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {

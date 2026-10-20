@@ -1,4 +1,4 @@
-import { runAlignfirst } from "../alignfirst-cli.js";
+import { describeAlignfirst, runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
@@ -68,10 +68,18 @@ export function readProjectReport(
   try {
     value = JSON.parse(result.stdout);
   } catch (error) {
-    throw new Error(`Invalid alignfirst config report for ${cwd}: ${errorMessage(error)}`);
+    throw new Error(
+      `Invalid alignfirst config report for ${cwd}: ${errorMessage(error)} ${describeAlignfirst(command, cwd, env)}`,
+    );
   }
-  if (isOutdatedReport(value)) return { error: outdatedAlignfirst(cwd) };
-  return parseProjectReport(value, cwd);
+  if (isOutdatedReport(value)) {
+    return { error: `${outdatedAlignfirst(cwd)} ${describeAlignfirst(command, cwd, env)}` };
+  }
+  try {
+    return parseProjectReport(value, cwd);
+  } catch (error) {
+    throw new Error(`${errorMessage(error)} ${describeAlignfirst(command, cwd, env)}`);
+  }
 }
 
 function firstLine(value: string): string {

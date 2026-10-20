@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { runCode } from "./code/code-cli.js";
@@ -9,6 +8,7 @@ import { loadConfig, PLATFORMS } from "./config.js";
 import { errorMessage } from "./errors.js";
 import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
+import { readPackageVersion } from "./package-version.js";
 import { runProject } from "./project/project-cli.js";
 
 export interface MainOptions {
@@ -53,9 +53,9 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
   try {
+    if (command === "code") return await runCode(tokens, () => loadConfig(ctx.home), ctx);
     const config = loadConfig(ctx.home);
     if (command === "project") return runProject(tokens, config, ctx);
-    if (command === "code") return await runCode(tokens, config, ctx);
     return runGuide(tokens, config, ctx);
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
@@ -111,12 +111,4 @@ function resolveContext(options: MainOptions | undefined): CliContext {
     modelResolver: options?.modelResolver ?? createExecutableModelResolver(),
     quotaReader: options?.quotaReader ?? readQuota,
   };
-}
-
-function readPackageVersion(): string {
-  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
-    version?: string;
-  };
-  if (pkg.version === undefined) throw new Error("aligndev: package.json is missing 'version'");
-  return pkg.version;
 }

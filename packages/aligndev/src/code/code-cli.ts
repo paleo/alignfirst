@@ -113,7 +113,7 @@ export interface SessionArgs {
 
 export async function runCode(
   tokens: string[],
-  config: LoadedConfig,
+  loadSettings: () => LoadedConfig,
   ctx: CodeContext,
 ): Promise<number> {
   try {
@@ -121,10 +121,11 @@ export async function runCode(
     if (command.kind === "status") return showStatus(ctx, command.target, command.includeResult);
     if (command.kind === "help" && command.status === true) {
       ctx.stdout.write(
-        `${ctx.forms.aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without resolving a launch profile.\n`,
+        `${ctx.forms.aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without reading settings.\n`,
       );
       return 0;
     }
+    const config = loadSettings();
     const report = readReport(ctx);
     const records =
       command.kind === "session" ? listSessionRecords(report.locations._aligndev.path) : [];

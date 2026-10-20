@@ -41,6 +41,7 @@ function buildPiArgs(config: RunConfig): string[] {
 function createPiState(config: RunConfig): PiState {
   return {
     expectedSessionId: config.resume,
+    earlierResults: [],
     headerSeen: false,
     settledAborted: false,
     protocolComplete: false,
@@ -69,6 +70,7 @@ function interpretPiLine(line: string, state: PiState): string | undefined {
       return captureHeader(event, state);
     case "agent_start":
     case "turn_start":
+      supersedeCompletedResponse(state);
       state.stopReason = undefined;
       state.result = undefined;
       state.protocolComplete = false;
@@ -80,6 +82,7 @@ function interpretPiLine(line: string, state: PiState): string | undefined {
     case "message_start":
       state.protocolComplete = false;
       if (isRecord(event.message) && event.message.role === "assistant") {
+        supersedeCompletedResponse(state);
         state.stopReason = undefined;
         state.result = undefined;
         captureUsage(undefined, state);
@@ -109,6 +112,13 @@ function interpretPiLine(line: string, state: PiState): string | undefined {
     default:
       return;
   }
+}
+
+function supersedeCompletedResponse(state: PiState): void {
+  if (state.stopReason === "stop" && state.result !== undefined) {
+    state.earlierResults.push(state.result);
+  }
+  state.resultComplete = false;
 }
 
 function invalidProtocol(state: PiState, detail: string): string {
@@ -175,6 +185,7 @@ function captureMessage(event: Record<string, unknown>, state: PiState): string 
     )
     .join("\n");
   state.result = text.trim() === "" ? undefined : text;
+  state.resultComplete = message.stopReason === "stop";
   // A malformed protocol remains fatal even if a later model response succeeds.
   if (!state.protocolFailed) {
     state.failure = typeof message.errorMessage === "string" ? message.errorMessage : undefined;

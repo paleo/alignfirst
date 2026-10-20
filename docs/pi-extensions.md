@@ -61,6 +61,7 @@ From the repository root:
 ```sh
 fnm exec --using=.nvmrc npm test --workspace @alignfirst/pi-subagent
 fnm exec --using=.nvmrc npm test --workspace @alignfirst/pi-background
+fnm exec --using=.nvmrc npm run test:integration --workspace @alignfirst/pi-background
 fnm exec --using=.nvmrc npm run typecheck --workspace @alignfirst/pi-subagent
 fnm exec --using=.nvmrc npm run typecheck --workspace @alignfirst/pi-background
 fnm exec --using=.nvmrc npm run build --workspace @alignfirst/pi-subagent
@@ -69,7 +70,7 @@ fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-subagent
 fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-background
 ```
 
-`packages/pi-background/test/aligndev-integration.test.ts` builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
+`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration`, builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
 
 After builds, run the packed-distribution gate:
 

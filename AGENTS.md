@@ -14,7 +14,7 @@ Run `npx -y alignfirst context` from the repository root as your first command i
 
 **Linter / formatter**: Biome (`biome.json` at root). `npm run lint` / `npm run lint:fix`.
 
-**Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`.
+**Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`. Suites that build and spawn real CLIs run separately through `npm run test:integration`.
 
 **Model-test policy**: Run model-driven matrices with Terra only. The Anthropic and Z.AI keys are
 not provisioned; their providers stay in the test config as examples. The judge runs Haiku through

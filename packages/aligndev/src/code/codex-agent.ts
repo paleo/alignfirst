@@ -38,6 +38,7 @@ export function buildCodexArgs(config: RunConfig): string[] {
 export function createCodexState(config?: RunConfig): AgentProtocolState {
   return {
     expectedSessionId: config?.resume,
+    earlierResults: [],
     nativeEnv: config?.env ?? {},
     protocolComplete: false,
     protocolFailed: false,
@@ -55,6 +56,7 @@ export function interpretCodexLine(line: string, state: AgentProtocolState): str
       return captureCompletedItem(event, state);
     case "turn.completed":
       state.protocolComplete = true;
+      state.resultComplete = !state.protocolFailed;
       captureStreamTotal(event, state);
       return;
     case "turn.failed":
@@ -125,7 +127,10 @@ function captureCompletedItem(
   if (!isRecord(item)) return;
   if (item.type === "agent_message") {
     const text = asString(item.text);
-    if (text !== undefined && text !== "") state.result = text;
+    if (text !== undefined && text !== "") {
+      state.result = text;
+      state.resultComplete = false;
+    }
     return text;
   }
   if (item.type !== "error") return;

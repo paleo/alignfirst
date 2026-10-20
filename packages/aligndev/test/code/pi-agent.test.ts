@@ -156,6 +156,22 @@ describe("pi adapter", () => {
     f.settle();
     expect(f.assess().succeeded).toBe(false);
     expect(f.assess().result).toBeUndefined();
+    expect(f.state.earlierResults).toEqual(["final answer"]);
+  });
+
+  it("keeps completed responses across follow-up tool work without duplicating reset boundaries", () => {
+    const f = fixture();
+    f.emit(HEADER);
+    f.message();
+    f.emit({ type: "turn_start" });
+    f.emit({ type: "message_start", message: { role: "assistant" } });
+    f.message("toolUse", "intermediate tool commentary");
+    f.emit({ type: "turn_start" });
+    f.emit({ type: "message_start", message: { role: "assistant" } });
+    f.message("stop", "Acknowledged.");
+    f.settle();
+    expect(f.state.earlierResults).toEqual(["final answer"]);
+    expect(f.assess()).toMatchObject({ succeeded: true, result: "Acknowledged." });
   });
 
   it("recovers intermediate provider errors and failed retry evidence with a later settled answer", () => {
@@ -168,6 +184,7 @@ describe("pi adapter", () => {
     f.message();
     f.settle();
     expect(f.assess()).toMatchObject({ succeeded: true, authEvidence: false, error: undefined });
+    expect(f.state.earlierResults).toEqual([]);
   });
 
   it.each([

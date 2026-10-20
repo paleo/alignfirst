@@ -5,6 +5,7 @@ import { validateInput } from "../src/background-tool.js";
 import { launchManaged as importLaunch, type ManagedProcess } from "../src/process-tree.js";
 import { gate, host, jobFrom, waitFor } from "./host-fixture.js";
 
+const TEST_GRACE_MS = 300;
 const waitCommand = "while [ ! -f release ]; do sleep 0.02; done; printf 'done'; exit 0";
 
 describe("public background actions", () => {
@@ -218,7 +219,7 @@ describe("public background actions", () => {
               await cleanupGate.promise;
               throw new Error("controlled inspection denied");
             }
-            return original(deadline);
+            return original(deadline ?? Date.now() + TEST_GRACE_MS);
           };
           return managed;
         },

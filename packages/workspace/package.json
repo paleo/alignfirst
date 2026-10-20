@@ -45,6 +45,7 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
   },
   "devDependencies": {
