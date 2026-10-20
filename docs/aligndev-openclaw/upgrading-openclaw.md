@@ -61,7 +61,7 @@ The official plugins require the OpenClaw version they ship with, so the Dockerf
 
 OpenClaw 2026.10.5 still pins Zod `4.6.5`. Keep mock-core's exact development and peer pins there: ncu's standalone latest `4.6.7` would break the shared-host composition contract. Test the public plugin config schema and inspect `npm ls zod typebox --all`; TypeBox `1.4.2` is supported by our public schema and packed Pi checks without overriding host-owned copies.
 
-Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/`. On a shared Docker daemon, first follow the [isolated build rules](./running-openclaw-tests.md#shared-daemon-isolation). A unique consumer tag does not isolate the version-only base tag.
+Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/` when its shared base tag is exclusively owned. On a shared Docker daemon, the [manual isolation procedure](./running-openclaw-tests.md#shared-daemon-isolation) builds the unchanged base Dockerfile under a nonce-qualified tag and the consumer under a unique image tag. Use raw Compose with an explicit unique `-p` and per-command Docker-driver builder selection. The stock CLI overwrites the base-tag override, so do not use its build/up/run commands for this route. Carry the private absolute path/config overrides through doctor, inspection and each recreated acceptance cell, then tear down only that project.
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
 confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session

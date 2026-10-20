@@ -60,25 +60,7 @@ test("fixture frozen install and real workspace/dev lifecycle", { timeout: 240_0
   const root = mkdtempSync(join(tmpdir(), "side-27-fixtures-"));
   const projects = [join(root, "nimbus"), join(root, "lumen")];
   const ownedWorktrees = [...projects];
-  const pnpm = execFileSync("npx", ["--yes", "--package=pnpm@12.14.0", "--", "which", "pnpm"], {
-    encoding: "utf8",
-    timeout: 60_000,
-  }).trim();
-  const home = join(root, "home");
-  mkdirSync(home);
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    HOME: home,
-    PATH: `${dirname(pnpm)}:${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-  };
-  for (const key of Object.keys(env)) {
-    if (/API_KEY|TOKEN|SECRET|PASSWORD/.test(key) || key.startsWith("GIT_CONFIG_KEY_"))
-      delete env[key];
-  }
-  for (const key of ["REMOTE_DEV_DOMAIN", "REMOTE_DEV_HOST", "PORT", "GIT_CONFIG_COUNT"])
-    delete env[key];
+  const { pnpm, env } = fixtureEnvironment(root);
   try {
     for (const [index, repo] of projects.entries()) {
       prepareProject(repo, index === 0 ? 6500 : 6520, env);
@@ -169,6 +151,98 @@ test("fixture frozen install and real workspace/dev lifecycle", { timeout: 240_0
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("reset stops Nova and linked lifecycle servers before deleting their registries", {
+  timeout: 240_000,
+}, async () => {
+  const root = mkdtempSync(join(tmpdir(), "side-27-fixture-reset-"));
+  const primary = join(root, "projects");
+  const lifecycle = join(primary, "lifecycle-projects");
+  const nova = join(lifecycle, "nova");
+  const linked = join(lifecycle, "nova-feature");
+  const { pnpm, env } = fixtureEnvironment(root);
+  const pids: number[] = [];
+  const ports: number[] = [];
+  mkdirSync(lifecycle, { recursive: true });
+  try {
+    prepareProject(nova, 6600, env);
+    command(nova, pnpm, ["install", "--frozen-lockfile"], env);
+    command(nova, process.execPath, [workspaceScript, "setup"], env);
+    command(nova, process.execPath, [workspaceScript, "setup", "-c", "feature"], env);
+    for (const repo of [nova, linked]) {
+      const output = command(repo, process.execPath, [devScript, "up"], env);
+      const pid = output.match(/\(PID (\d+)\)/)?.[1];
+      assert.notEqual(pid, undefined, output);
+      pids.push(Number(pid));
+      const port = readPort(repo);
+      ports.push(port);
+      assert.equal((await fetch(`http://127.0.0.1:${port}`)).status, 200);
+    }
+    assert.equal(new Set(ports).size, 2);
+    assert(existsSync(join(nova, ".local-wt/workspace-registry/dev-servers.json")));
+
+    command(
+      root,
+      process.execPath,
+      [fileURLToPath(new URL("../scripts/reset-fixture.mjs", import.meta.url))],
+      {
+        ...env,
+        ALIGNDEV_FIXTURE_TEMPLATE: template,
+        ALIGNDEV_FIXTURE_PROJECTS: primary,
+        ALIGNDEV_FIXTURE_ORIGINS: join(root, "origins"),
+      },
+    );
+
+    for (const repo of [nova, linked]) assert.equal(existsSync(repo), false);
+    for (const port of ports) await assert.rejects(fetch(`http://127.0.0.1:${port}`));
+    for (const pid of pids) {
+      assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+    }
+    for (const project of ["nimbus", "lumen", "external-projects/orion"]) {
+      assert(existsSync(join(primary, project, ".git/refs/heads/main")));
+    }
+    assert(existsSync(join(lifecycle, ".alignfirst-projects.json")));
+  } finally {
+    for (const repo of [nova, linked]) {
+      if (existsSync(join(repo, "node_modules"))) {
+        command(repo, process.execPath, [devScript, "down", "--all"], env);
+      }
+    }
+    for (const pid of pids) killOwnedProcessGroup(pid);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function killOwnedProcessGroup(pid: number): void {
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") throw error;
+  }
+}
+
+function fixtureEnvironment(root: string): { pnpm: string; env: NodeJS.ProcessEnv } {
+  const pnpm = execFileSync("npx", ["--yes", "--package=pnpm@12.14.0", "--", "which", "pnpm"], {
+    encoding: "utf8",
+    timeout: 60_000,
+  }).trim();
+  const home = join(root, "home");
+  mkdirSync(home);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    HOME: home,
+    PATH: `${dirname(pnpm)}:${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+  for (const key of Object.keys(env)) {
+    if (/API_KEY|TOKEN|SECRET|PASSWORD/.test(key) || key.startsWith("GIT_CONFIG_KEY_"))
+      delete env[key];
+  }
+  for (const key of ["REMOTE_DEV_DOMAIN", "REMOTE_DEV_HOST", "PORT", "GIT_CONFIG_COUNT"])
+    delete env[key];
+  return { pnpm, env };
+}
 
 function prepareProject(repo: string, first: number, env: NodeJS.ProcessEnv): void {
   cpSync(template, repo, { recursive: true, filter: (path) => !path.includes("node_modules") });

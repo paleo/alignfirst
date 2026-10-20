@@ -34,33 +34,45 @@ export const CONFIG_DIRECTORY_VARIABLES = {
 
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
-const quotaShape = object<QuotaSettings>({
-  source: literal("claude", "codex", "none"),
-  configDir: optional(directoryValue),
-  env: optional(environmentShape),
-  unset: optional(arrayOf(environmentName)),
-});
-const profileShape = object<CodingProfile>({
-  agent: literal(...CODING_AGENTS),
-  default: optional(boolean),
-  configDir: optional(directoryValue),
-  defaultModel: optional(nonblankString),
-  models: optional(arrayOf(nonblankString)),
-  modelAliases: optional(record(nonblankString, nonblankString)),
-  skipPermissions: optional(boolean),
-  env: optional(environmentShape),
-  unset: optional(arrayOf(environmentName)),
-  quota: optional(quotaShape),
-});
-const codeShape = object<CodeSettings>({
-  profile: optional(nonblankString),
-  profiles: optional(record(profileShape, nonblankString)),
-});
-const configShape = object<ConfigFile>({
-  platform: optional(literal(...PLATFORMS)),
-  projectsRoot: optional(nonEmptyString),
-  code: optional(codeShape),
-});
+const quotaShape = object<QuotaSettings>(
+  {
+    source: literal("claude", "codex", "none"),
+    configDir: optional(directoryValue),
+    env: optional(environmentShape),
+    unset: optional(arrayOf(environmentName)),
+  },
+  warnUnknownSetting,
+);
+const profileShape = object<CodingProfile>(
+  {
+    agent: literal(...CODING_AGENTS),
+    default: optional(boolean),
+    configDir: optional(directoryValue),
+    defaultModel: optional(nonblankString),
+    models: optional(arrayOf(nonblankString)),
+    modelAliases: optional(record(nonblankString, nonblankString)),
+    skipPermissions: optional(boolean),
+    env: optional(environmentShape),
+    unset: optional(arrayOf(environmentName)),
+    quota: optional(quotaShape),
+  },
+  warnUnknownSetting,
+);
+const codeShape = object<CodeSettings>(
+  {
+    profile: optional(nonblankString),
+    profiles: optional(record(profileShape, nonblankString)),
+  },
+  warnUnknownSetting,
+);
+const configShape = object<ConfigFile>(
+  {
+    platform: optional(literal(...PLATFORMS)),
+    projectsRoot: optional(nonEmptyString),
+    code: optional(codeShape),
+  },
+  warnUnknownSetting,
+);
 const RETIRED_CODE_KEYS = ["agent", "defaultModel", "models", "skipPermissions", "unset"];
 
 export type Platform = (typeof PLATFORMS)[number];
@@ -168,33 +180,33 @@ function parseConfigFile(path: string): ConfigFile {
   } catch (error) {
     throw invalidConfig(path, errorMessage(error));
   }
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    typeof value.code === "object" &&
-    value.code !== null
-  ) {
-    if (Object.hasOwn(value.code, "defaultProfiles")) {
-      throw invalidConfig(
-        path,
-        "code.defaultProfiles is retired: move each needed preference to its referenced " +
-          "matching-agent profile's default: true (omit singleton flags), remove the map and " +
-          "keep profile names unchanged. See " +
-          "https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/" +
-          "references/alignfirst-upgrade.md#convert-aligndev-profile-defaults",
-      );
-    }
-    const retired = RETIRED_CODE_KEYS.find((key) => Object.hasOwn(value.code ?? {}, key));
-    if (retired !== undefined) {
-      throw invalidConfig(
-        path,
-        `code.${retired} is retired: move launch settings into ` +
-          "code.profiles and select one with code.profile (manual conversion required)",
-      );
-    }
-  }
   return parseShape(configShape, value, (detail) => invalidConfig(path, detail));
+}
+
+function warnUnknownSetting(path: string, key: string): void {
+  const quoted = JSON.stringify(key).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) =>
+    character
+      .split("")
+      .map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
+      .join(""),
+  );
+  const field = /^[A-Za-z_$][\w$]*$/.test(key)
+    ? `${path === "" ? "" : `${path}.`}${key}`
+    : `${path === "" ? "settings" : path}[${quoted}]`;
+  let migration = "Remove it or check its spelling.";
+  if (path === "code" && key === "defaultProfiles") {
+    migration =
+      "code.defaultProfiles is retired: manually move each needed preference to its referenced " +
+      "matching-agent profile's default: true (omit singleton flags), remove the map and " +
+      "keep profile names unchanged. See " +
+      "https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/" +
+      "references/alignfirst-upgrade.md#convert-aligndev-profile-defaults";
+  } else if (path === "code" && RETIRED_CODE_KEYS.includes(key)) {
+    migration =
+      "Retired launch setting: move it into code.profiles and select one with code.profile " +
+      "(manual conversion required).";
+  }
+  console.warn(`Warning: ignoring unknown aligndev setting ${field}. ${migration}`);
 }
 
 function invalidConfig(path: string, detail: string): Error {

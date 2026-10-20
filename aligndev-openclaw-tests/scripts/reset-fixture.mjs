@@ -11,8 +11,9 @@ import {
 } from "node:fs";
 import { fixturePortRange, patchDevServerRange } from "./fixture-personalization.ts";
 
-const TEMPLATE = "/opt/aligndev-openclaw-tests/fixtures/template";
-const PRIMARY = "/home/assistant/projects";
+const TEMPLATE =
+  process.env.ALIGNDEV_FIXTURE_TEMPLATE ?? "/opt/aligndev-openclaw-tests/fixtures/template";
+const PRIMARY = process.env.ALIGNDEV_FIXTURE_PROJECTS ?? "/home/assistant/projects";
 const EXTERNAL = `${PRIMARY}/external-projects`;
 const LIFECYCLE = `${PRIMARY}/lifecycle-projects`;
 const PRIMARY_MARKER = {
@@ -40,15 +41,16 @@ const FIXTURES = [
 // clone (a remote-less fixture made the playbook's new-work path — fetch +
 // fast-forward the base — hard-fail with "origin/main - not something we can
 // merge"). Kept out of PROJECTS so it never reads as a project directory.
-const ORIGINS = "/home/assistant/.fixture-origins";
+const ORIGINS = process.env.ALIGNDEV_FIXTURE_ORIGINS ?? "/home/assistant/.fixture-origins";
 const BASE_BRANCH = "main";
 
 async function main() {
-  // Stop dev-servers from the prior run before wiping. Configured fixtures
-  // know their `dev down --all`; for any stray dir we kill anything still
-  // listening best-effort.
-  for (const { name, parent } of FIXTURES) {
-    const dst = `${parent}/${name}`;
+  // Stop while each project's scripts and teardown registry still exist.
+  const projects = [
+    ...FIXTURES.map(({ name, parent }) => `${parent}/${name}`),
+    ...lifecycleProjects(),
+  ];
+  for (const dst of projects) {
     if (existsSync(dst)) {
       await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
     }
@@ -68,6 +70,14 @@ async function main() {
   for (const fixture of FIXTURES) {
     await resetFixture(fixture);
   }
+}
+
+function lifecycleProjects() {
+  if (!existsSync(LIFECYCLE)) return [];
+  return readdirSync(LIFECYCLE, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${LIFECYCLE}/${entry.name}`)
+    .filter((path) => existsSync(`${path}/package.json`));
 }
 
 function createProjectsDirectory(path, marker) {

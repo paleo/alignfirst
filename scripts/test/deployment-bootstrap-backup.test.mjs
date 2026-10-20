@@ -118,12 +118,13 @@ for (const agent of Object.keys(legacySettings)) {
     });
   });
 
-  test(`${agent}: ordinary backup still rejects legacy settings without migration`, () => {
+  test(`${agent}: ordinary backup ignores retired fields but requires an explicit provisioned profile`, () => {
     fixture(agent, (f) => {
       runSection(f, "Maintenance controls");
       const result = run(f, "bash", [join(f.infra, "bin/backup.sh")], {}, false);
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /direct launch keys are retired/u);
+      assert.match(result.stderr, /code.agent.*Retired launch setting.*manual conversion/u);
+      assert.match(result.stderr, /an explicit code.profile must name a provisioned profile/u);
       assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
       assert(!readFileSync(f.log, "utf8").includes("openclaw\n"));
     });

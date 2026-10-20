@@ -48,11 +48,30 @@ The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.
 
 Use a disposable consumer copy with a unique basename for concurrent work. Copy `.dockerignore` before any private environment file; it must exclude `.env.local`, `node_modules`, `.workers`, artifacts and logs. Keep credential stores outside the build context. Copy current non-secret inputs and vendor tarballs, then use reviewed npm `ci`; never run the copy's repository-relative vendor script.
 
-Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` for that copy. Use a unique `OPENCLAW_TEST_CONSUMER_IMAGE`. Worker projects derive from the consumer basename and are passed with `-p`; `COMPOSE_PROJECT_NAME` alone does not isolate them.
+The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<package-version>` and derives worker project names from the consumer basename. Exporting `OPENCLAW_TEST_BASE_TAG` or `COMPOSE_PROJECT_NAME` does not override those decisions. For concurrent acceptance, bypass `env build`, `env up` and `run` with manual builds and raw Compose:
 
-The base tag is `paleo/openclaw-test-base:<package-version>`. UID/GID build arguments and a unique consumer image do not isolate it. Hold exclusive ownership across the base build and the consumer build that resolves its `FROM`, or use a genuinely separate daemon/image store. An idle daemon, an uncoordinated advisory lock or a second context on the same daemon is insufficient proof. Without ownership, stop before building and retain the blocker. Existing images do not certify new source or pins.
+1. Choose a nonce-qualified base tag, a unique consumer image and an explicit unique Compose project. For example, use `0.23.3-side-27-<nonce>`, `side-27-openclaw-<nonce>:acceptance` and `side-27-openclaw-<nonce>-w1`. Keep package versions unchanged.
+2. Build the installed package's unchanged `Dockerfile.base` with the caller's UID/GID. Build only Compose's `bus` target; all services share its image. Select the local-image-store builder per command, without changing the global builder:
 
-After vendor/install/ci, call the installed `openclaw-test env build` directly to avoid `env:build` repacking and relocking again. Always tear down through the same private project environment and wait for owned runners. Inspect only exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
+   ```sh
+   # HARNESS_RUN and all path overrides below must be absolute.
+   package_dir="$HARNESS_RUN/node_modules/@alignfirst/openclaw-test"
+   export OPENCLAW_TEST_BASE_TAG="0.23.3-side-27-$nonce"
+   export OPENCLAW_TEST_CONSUMER_IMAGE="side-27-openclaw-$nonce:acceptance"
+   project="side-27-openclaw-$nonce-w1"
+   BUILDX_BUILDER=default docker build -f "$package_dir/Dockerfile.base" \
+     --build-arg ASSISTANT_UID="$(id -u)" --build-arg ASSISTANT_GID="$(id -g)" \
+     -t "paleo/openclaw-test-base:$OPENCLAW_TEST_BASE_TAG" "$package_dir"
+   BUILDX_BUILDER=default docker compose -f "$HARNESS_RUN/docker-compose.yml" \
+     -p "$project" build bus
+   ```
+
+   Here `default` is the Docker-driver builder on the default context. A container-driver builder cannot resolve a local-only base tag. Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` before Compose. Pre-create writable bind-mount directories as the caller. Keep the dedicated Codex home outside the build context and mount it read-only.
+3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-5.6-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
+4. Refresh a private worker workspace before each cell. Start only the owned bus/gateway with `up -d --no-build --pull never --force-recreate --wait bus gateway`. Invoke `run --rm --no-deps --pull never --use-aliases runner` with the scenario, channel, model ID/ref, iteration index/width, base stamp and results-directory arguments from `packages/openclaw-test/src/loop.ts`. Check both the runner exit and its cell JSON. Recreate between cells; do not use stack reuse.
+5. Wait for every runner and tear down only the explicit owned project with the same Compose files and environment. Remove only its owned volumes/networks when needed. Preserve timestamped results and sanitized build/gateway logs. Inspect exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
+
+Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resource window, begin with one worker and limit owned services when needed. Never overwrite the shared version tag, prune the daemon or sweep unrelated projects. If using the stock CLI instead, coordinate exclusive ownership of its exact shared base tag through both builds, or use a genuinely separate daemon/image store.
 
 ## Configuration
 

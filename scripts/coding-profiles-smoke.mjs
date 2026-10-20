@@ -50,6 +50,7 @@ async function smoke() {
     await createProjects(fixture);
     const failures = [];
     for (const check of [
+      settingsChecks,
       profileOnlyChecks,
       companionChecks,
       resumeChecks,
@@ -282,6 +283,76 @@ function run(executable, args, cwd, env) {
       else resolveResult({ code, signal, stdout, stderr });
     });
   });
+}
+
+async function settingsChecks(f) {
+  const path = join(f.home, ".alignfirst/aligndev.settings.json");
+  const original = readFileSync(path);
+  const inventoryRoot = join(f.home, "settings-inventory");
+  writeJson(join(inventoryRoot, ".alignfirst-projects.json"), {});
+  const stale = JSON.parse(original);
+  stale.unknownRoot = "private-stale-value";
+  stale.code.unknownCode = "private-stale-value";
+  stale.code.agent = "pi";
+  stale.code.defaultProfiles = { claude: "missing" };
+  stale.code.profiles.a.unknownProfile = "private-stale-value";
+  stale.code.profiles.a.quota = { source: "none", unknownQuota: "private-stale-value" };
+  try {
+    writeJson(path, stale);
+    const before = readFileSync(path);
+    await readOnly(f, async () => {
+      for (const args of [
+        ["code", "--help"],
+        ["guide", "code"],
+        ["project", "list", "--json", "--root", inventoryRoot],
+      ]) {
+        const result = await command(f, f.project, "aligndev", args);
+        assert.match(result.stderr, /unknownRoot/);
+        assert.match(result.stderr, /code.unknownCode/);
+        assert(result.stderr.includes("code.profiles[<entry>].unknownProfile"));
+        assert(result.stderr.includes("code.profiles[<entry>].quota.unknownQuota"));
+        assert.match(result.stderr, /code.agent.*manual conversion/);
+        assert.match(result.stderr, /code.defaultProfiles is retired.*manually/);
+        assert.equal(result.stdout.includes("Warning:"), false);
+        assert.equal(result.stderr.includes("private-stale-value"), false);
+        if (args.includes("--json")) JSON.parse(result.stdout);
+        else assert(result.stdout.includes("a"));
+      }
+    });
+    const started = await launch(f, f.project, ["new", "-m", "stale settings fixture"]);
+    await metadata(f, f.project, started.file, {
+      profile: "a",
+      agent: "claude",
+      status: "succeeded",
+    });
+    assert.equal(lastEvent(f).store, f.stores.a);
+    assert.deepEqual(readFileSync(path), before);
+    stale.code.profiles.a.default = "invalid-known-value";
+    writeJson(path, stale);
+    const invalidBefore = readFileSync(path);
+    const eventCount = events(f).length;
+    await readOnly(f, async () => {
+      for (const args of [
+        ["code", "--help"],
+        ["guide", "code"],
+        ["project", "list", "--json", "--root", inventoryRoot],
+        ["code", "new", "-m", "invalid known field"],
+      ]) {
+        const result = await command(f, f.project, "aligndev", args, 1);
+        assert.match(result.stderr, /default must be a boolean/);
+        assert.equal(result.stdout, "");
+        assert.equal(result.stderr.includes("invalid-known-value"), false);
+        assert.equal(result.stderr.includes("private-stale-value"), false);
+      }
+    });
+    assert.equal(events(f).length, eventCount);
+    assert.deepEqual(readFileSync(path), invalidBefore);
+  } finally {
+    writeFileSync(path, original);
+  }
+  console.log(
+    "PASS: stale settings warn on stderr, launch succeeds, JSON stays clean, invalid known values fail, input unchanged",
+  );
 }
 
 async function profileOnlyChecks(f) {

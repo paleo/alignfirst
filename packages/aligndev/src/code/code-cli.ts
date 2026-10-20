@@ -969,6 +969,9 @@ Options (new, resume):
 ${requires}
 
 Config (~/.alignfirst/aligndev.settings.json):
+  Unknown/obsolete keys are ignored with value-free warnings on stderr. Recognized invalid values
+  and duplicate defaults still fail. Settings are never rewritten. Retired direct launch keys and
+  code.defaultProfiles have no effect; convert them manually to profiles and profile.default flags.
   code.profile          Global named profile. Effective profile: ${profile ?? "(built-in)"} (selected: ${agent}).
   code.profiles         Complete named profiles: agent, default, configDir, env, unset,
                         defaultModel, models, modelAliases, skipPermissions, quota. No inheritance.

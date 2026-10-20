@@ -86,7 +86,7 @@ On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and i
 
 ## Convert AlignDev Launch Settings
 
-When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually before using profile-aware AlignDev. The CLI rejects the old shape and performs no automatic conversion. Preserve top-level `platform` and `projectsRoot`.
+When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually to preserve the intended launch behavior. The CLI ignores retired fields with warnings on stderr and performs no automatic conversion. Recognized invalid values still fail. Preserve top-level `platform` and `projectsRoot`.
 
 1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`, including the required `agent`.
 2. Set `code.profile` to that name for a global child selection. Alternatively, omit it to infer a sole matching profile, or set one profile's `default: true` per agent when several match.
@@ -120,7 +120,7 @@ On an OpenClaw host, convert the private admin repository and protected settings
 
 ## Convert AlignDev Profile Defaults
 
-When `aligndev.settings.json` contains `code.defaultProfiles`, convert it manually. Any presence, including an empty or null map or a map alongside new flags, is rejected before generic settings parsing.
+When `aligndev.settings.json` contains `code.defaultProfiles`, convert it manually to preserve needed preferences. Any presence, including an empty or null map or a map alongside new flags, is ignored with a warning on stderr. The map never supplies defaults. Unknown keys at each fixed settings/profile/quota shape are also ignored with warnings; recognized invalid values and duplicate true flags still fail. Profile, environment and alias dictionaries remain maps. Neither the CLI nor the deployment inventory rewrites settings.
 
 1. For each old entry, set `default: true` on its referenced matching-agent profile when a preference is needed. Omit the flag when that agent has only one profile. False and omitted have the same meaning.
 2. Leave at most one true flag per agent. Different agents may each have a preference. A flag is per-agent selection metadata; `code.profile` remains the global named child choice.

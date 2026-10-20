@@ -32,6 +32,8 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 
 ## Profiles, authentication and trust
 
+AlignDev and the deployment inventory ignore unknown or obsolete keys at the settings root, `code`, each profile and each quota object, with value-free warnings on stderr. Dynamic profile, environment and alias dictionaries remain maps. Recognized invalid values, duplicate defaults and deployment safety violations still fail. Neither reader rewrites settings. Retired direct launch fields and `code.defaultProfiles` supply no behavior; convert them manually into profiles and profile-local `default` flags. Deployment still requires explicit valid `code.profile`.
+
 Pi's provider/model, authentication method and optional quota source are collected separately from OpenClaw's conversational model. Use provider-qualified native selectors in `modelAliases`: an exact ID pins a model; shorthand delegates resolution to Pi. Quota uses its separately configured Claude/Codex account and does not prove Pi account identity.
 
 Pi's native `<agent-dir>/auth.json` is the sole approved executable-declaration exception. It remains private, service-owned and replaceable with adjacent locks for OAuth and automatic refresh-token renewal. The file may contain executable API-key commands; another same-UID process can persist them for later account-level execution. Permissions cannot distinguish that write from renewal. All other managed declarations/resources stay protected through maintenance. Never make the entire Pi directory immutable.

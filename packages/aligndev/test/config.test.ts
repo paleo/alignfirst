@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../src/cli.js";
 import type { QuotaReader } from "../src/code/quota.js";
@@ -25,6 +25,7 @@ const PROFILES = {
 } satisfies Record<string, CodingProfile>;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
 
@@ -94,23 +95,22 @@ describe("settings shape", () => {
   });
 
   it.each(["agent", "defaultModel", "models", "skipPermissions", "unset"])(
-    "rejects retired code.%s with conversion instructions",
+    "ignores retired code.%s with manual conversion warnings",
     (field) => {
       const home = makeHome({ code: { [field]: "old" } });
-      expect(() => loadConfig(home)).toThrow(
-        new RegExp(`code.${field}.*code.profiles.*code.profile.*manual`),
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(loadConfig(home).code).toEqual({});
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringMatching(new RegExp(`code.${field}.*code.profiles.*code.profile.*manual`)),
       );
     },
   );
 
   it.each([
-    [{ platfrom: "openclaw" }, "platfrom"],
     [{ platform: "other" }, "platform"],
-    [{ code: { extra: 1 } }, "code.extra"],
     [{ code: { profile: "  " } }, "code.profile"],
     [{ code: { profiles: { " ": { agent: "pi" } } } }, "nonblank"],
     [profileConfig({ agent: "other" }), "agent"],
-    [profileConfig({ agent: "pi", extra: 1 }), "extra"],
     [profileConfig({ agent: "pi", models: [" "] }), "models"],
     [profileConfig({ agent: "pi", defaultModel: " " }), "defaultModel"],
     [profileConfig({ agent: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
@@ -158,14 +158,88 @@ describe("settings shape", () => {
     expect(() => loadConfig(home)).toThrow(join(home, ".alignfirst/aligndev.settings.json"));
   });
 
-  it.each([{}, null, { claude: "a" }])("retires every map value %j before parsing", (map) => {
-    for (const profiles of [undefined, { a: { agent: "claude", default: true } }]) {
-      const home = makeHome({ code: { defaultProfiles: map, profiles, unknown: true } });
-      expect(() => loadConfig(home)).toThrow(/code.defaultProfiles is retired/);
-      expect(() => loadConfig(home)).toThrow(/matching-agent.*default: true.*singleton/);
-      expect(() => loadConfig(home)).toThrow(/keep profile names unchanged/);
-      expect(() => loadConfig(home)).toThrow(/alignfirst-upgrade.md/);
-    }
+  it.each([{}, null, { claude: "a" }])("ignores every retired map value %j", (map) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const home = makeHome({
+      code: {
+        defaultProfiles: map,
+        profiles: { a: { agent: "claude" }, b: { agent: "claude" } },
+      },
+    });
+    const config = loadConfig(home);
+    expect(config.code).not.toHaveProperty("defaultProfiles");
+    expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow("multiple profiles");
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(
+        /code.defaultProfiles is retired.*manually.*matching-agent.*default: true.*singleton.*keep profile names unchanged.*alignfirst-upgrade.md/,
+      ),
+    );
+  });
+
+  it("warns at every fixed settings shape, discards unknown values and preserves maps and bytes", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const home = makeHome({
+      unknownRoot: "private-value",
+      code: {
+        unknownCode: { nested: "private-value" },
+        profiles: {
+          "sk-secret-profile\n\u001b[31m": {
+            agent: "pi",
+            unknownProfile: ["private-value"],
+            env: { CUSTOM: "private-value" },
+            modelAliases: { custom: "private-value" },
+            quota: { source: "none", unknownQuota: "private-value" },
+          },
+        },
+      },
+    });
+    const path = join(home, ".alignfirst/aligndev.settings.json");
+    const before = readFileSync(path);
+    const config = loadConfig(home);
+    const profile = config.code.profiles?.["sk-secret-profile\n\u001b[31m"];
+    expect(profile).toEqual({
+      agent: "pi",
+      env: { CUSTOM: "private-value" },
+      modelAliases: { custom: "private-value" },
+      quota: { source: "none" },
+    });
+    expect(warn).toHaveBeenCalledTimes(4);
+    const warnings = warn.mock.calls.flat().join("\n");
+    for (const field of [
+      "unknownRoot",
+      "code.unknownCode",
+      "code.profiles[<entry>].unknownProfile",
+      "code.profiles[<entry>].quota.unknownQuota",
+    ])
+      expect(warnings).toContain(field);
+    for (const text of ["private-value", "sk-secret-profile", "\u001b"])
+      expect(warnings).not.toContain(text);
+    expect(readFileSync(path)).toEqual(before);
+  });
+
+  it("escapes unusual unknown property names on one physical warning line", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    loadConfig(makeHome({ "bad\n\u001b\u0085\u202e\u{e0001}.key": "private-value" }));
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('settings["bad\\n\\u001b\\u0085\\u202e\\udb40\\udc01.key"]'),
+    );
+    for (const character of ["\n", "\u001b", "\u0085", "\u202e", "\u{e0001}"])
+      expect(warn.mock.calls[0]?.[0]).not.toContain(character);
+  });
+
+  it("still rejects invalid recognized values alongside stale properties", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() =>
+      loadConfig(
+        makeHome({
+          stale: true,
+          code: {
+            defaultProfiles: {},
+            profiles: { broken: { agent: "pi", default: "yes", stale: true } },
+          },
+        }),
+      ),
+    ).toThrow("default must be a boolean");
   });
 
   it("reports malformed and unreadable JSON without loading native state", () => {
