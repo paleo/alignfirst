@@ -34,7 +34,9 @@ export function readSourceContext(
   const sessionId = nonempty(context.sessionId);
   const channelId = nonempty(context.messageChannel) ?? deliveryContext?.channel;
   const parentConversationId =
-    nonempty(context.nativeChannelId) ?? readConversationId(deliveryContext?.to);
+    nonempty(context.nativeChannelId) ??
+    readConversationId(deliveryContext?.to) ??
+    readBareSlackConversation(context, configuration, deliveryContext);
   const accountId = nonempty(context.agentAccountId) ?? deliveryContext?.accountId;
   if (!agentId || !sessionKey || !sessionId || !channelId || !parentConversationId) return;
   if (!configuration.channelSurfaces[channelId]) return;
@@ -47,6 +49,34 @@ export function readSourceContext(
     parentConversationId,
     ...(deliveryContext ? { deliveryContext } : {}),
   };
+}
+
+function readBareSlackConversation(
+  context: OpenClawPluginToolContext,
+  configuration: PluginConfiguration,
+  route: DeliveryRoute | undefined,
+): string | undefined {
+  // Native exec session events retain Slack's bare currentChannelId but no nativeChannelId.
+  if (!route || configuration.channelSurfaces[route.channel] !== "slack") return;
+  if (!/^[^:/\s]+$/u.test(route.to)) return;
+  const channel = nonempty(context.messageChannel);
+  const account = nonempty(context.agentAccountId);
+  if (channel !== undefined && channel !== route.channel) return;
+  if (account !== undefined && route.accountId !== undefined && account !== route.accountId) return;
+  const thread = parseThreadSessionSuffix(context.sessionKey);
+  const session = parseAgentSessionKey(thread.baseSessionKey);
+  if (
+    !session ||
+    session.agentId !== nonempty(context.agentId)?.toLowerCase() ||
+    session.rest !== `${route.channel}:channel:${route.to}`.toLowerCase()
+  )
+    return;
+  if (
+    thread.threadId !== undefined &&
+    thread.threadId.toLowerCase() !== route.threadId?.toLowerCase()
+  )
+    return;
+  return route.to;
 }
 
 export function readConversationId(target: string | undefined): string | undefined {

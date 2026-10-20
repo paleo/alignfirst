@@ -2,13 +2,14 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readProjectReport } from "../../src/project/layout.js";
 
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -88,6 +89,69 @@ describe("readProjectReport", () => {
     expect(f.invocations()).toEqual([["config", "--json"]]);
   });
 
+  it("forwards settings warnings without leaking arbitrary successful report stderr", () => {
+    const warning =
+      "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = executableFixture(
+      "alignfirst",
+      report(cwd),
+      "0.21.0\n",
+      `${warning}\nWarning: private-child-value\nprivate-child-value\n`,
+    );
+    expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual(report(cwd));
+    expect(warn).toHaveBeenCalledExactlyOnceWith(warning);
+    expect(f.invocations()).toEqual([["config", "--json"]]);
+  });
+
+  it.each(["\n", "\r\n"])(
+    "separates settings warnings from the first failure diagnostic with %j line endings",
+    (newline) => {
+      const warnings = [
+        "Warning: ignoring unknown .alignfirst.json setting git.extra. Remove it or check its spelling.",
+        "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
+        'Warning: /project/.alignfirst.json: plans.folder is deprecated; rename it to plans.repositoryFolder. See "Rename the Work-Files Folder Setting" in the setup guide\'s alignfirst-upgrade reference.',
+      ];
+      const error = "Invalid .alignfirst.json: git.commit.style must be conventionalCommit";
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const f = executableFixture(
+        "alignfirst",
+        {},
+        "0.21.0\n",
+        [...warnings, error, "private-child-value", "Warning: private-child-warning"].join(newline),
+        1,
+      );
+      expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({ error });
+      expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
+      expect(log).not.toHaveBeenCalled();
+      expect(f.invocations()).toEqual([["config", "--json"]]);
+    },
+  );
+
+  it.each(["", "  \n", "private-child-error\nprivate-child-detail"])(
+    "preserves the existing failure fallback and first-line behavior for %j",
+    (stderr) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const f = executableFixture("alignfirst", {}, "0.21.0\n", stderr, 1);
+      expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({
+        error: stderr.trim() === "" ? "alignfirst config failed" : "private-child-error",
+      });
+      expect(warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses a generic failure when stderr contains only recognized settings warnings", () => {
+    const warning =
+      "Warning: ignoring unknown .alignfirst.json setting extra. Remove it or check its spelling.";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = executableFixture("alignfirst", {}, "0.21.0\n", `${warning}\n`, 1);
+    expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({
+      error: "alignfirst config failed",
+    });
+    expect(warn).toHaveBeenCalledExactlyOnceWith(warning);
+  });
+
   it("explains the npx form without claiming a resolved executable", () => {
     const f = executableFixture("npx", {});
     const result = readProjectReport(["npx", "-y", "alignfirst"], cwd, { PATH: f.dir });
@@ -127,7 +191,13 @@ describe("readProjectReport", () => {
   });
 });
 
-function executableFixture(name: string, value: object, version = "0.21.0\n") {
+function executableFixture(
+  name: string,
+  value: object,
+  version = "0.21.0\n",
+  stderr = "",
+  status = 0,
+) {
   const dir = mkdtempSync(join(tmpdir(), "aligndev-report-"));
   dirs.push(dir);
   const executable = join(dir, name);
@@ -138,7 +208,9 @@ function executableFixture(name: string, value: object, version = "0.21.0\n") {
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + "\\n");
+if (!args.includes("--version")) process.stderr.write(${JSON.stringify(stderr)});
 process.stdout.write(args.includes("--version") ? ${JSON.stringify(version)} : ${JSON.stringify(JSON.stringify(value))});
+if (!args.includes("--version")) process.exitCode = ${status};
 `,
   );
   chmodSync(executable, 0o755);

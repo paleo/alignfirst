@@ -49,7 +49,15 @@ async function smoke() {
     fixture = createFixture(root);
     await createProjects(fixture);
     const failures = [];
-    for (const check of [profileOnlyChecks, companionChecks, resumeChecks, quotaChecks])
+    for (const check of [
+      settingsChecks,
+      consumerWarningChecks,
+      profileOnlyChecks,
+      companionChecks,
+      resumeChecks,
+      quotaChecks,
+      automaticChecks,
+    ])
       await checkCase(check.name, () => check(fixture), failures);
     assert.equal(failures.length, 0, `${failures.length} integration section(s) failed.`);
     console.log("PASS: real CLI reports, profiles, worktrees, resume identity, and isolated quota");
@@ -278,6 +286,181 @@ function run(executable, args, cwd, env) {
   });
 }
 
+async function settingsChecks(f) {
+  const path = join(f.home, ".alignfirst/aligndev.settings.json");
+  const original = readFileSync(path);
+  const inventoryRoot = join(f.home, "settings-inventory");
+  writeJson(join(inventoryRoot, ".alignfirst-projects.json"), {});
+  const stale = JSON.parse(original);
+  stale.unknownRoot = "private-stale-value";
+  stale.code.unknownCode = "private-stale-value";
+  stale.code.agent = "pi";
+  stale.code.defaultProfiles = { claude: "missing" };
+  stale.code.profiles.a.unknownProfile = "private-stale-value";
+  stale.code.profiles.a.quota = { source: "none", unknownQuota: "private-stale-value" };
+  try {
+    writeJson(path, stale);
+    const before = readFileSync(path);
+    await readOnly(f, async () => {
+      for (const args of [
+        ["code", "--help"],
+        ["guide", "code"],
+        ["project", "list", "--json", "--root", inventoryRoot],
+      ]) {
+        const result = await command(f, f.project, "aligndev", args);
+        assert.match(result.stderr, /unknownRoot/);
+        assert.match(result.stderr, /code.unknownCode/);
+        assert(result.stderr.includes("code.profiles[<entry>].unknownProfile"));
+        assert(result.stderr.includes("code.profiles[<entry>].quota.unknownQuota"));
+        assert.match(result.stderr, /code.agent.*manual conversion/);
+        assert.match(result.stderr, /code.defaultProfiles is retired.*manually/);
+        assert.equal(result.stdout.includes("Warning:"), false);
+        assert.equal(result.stderr.includes("private-stale-value"), false);
+        if (args.includes("--json")) JSON.parse(result.stdout);
+        else assert(result.stdout.includes("a"));
+      }
+    });
+    const started = await launch(f, f.project, ["new", "-m", "stale settings fixture"]);
+    await metadata(f, f.project, started.file, {
+      profile: "a",
+      agent: "claude",
+      status: "succeeded",
+    });
+    assert.equal(lastEvent(f).store, f.stores.a);
+    assert.deepEqual(readFileSync(path), before);
+    stale.code.profiles.a.default = "invalid-known-value";
+    writeJson(path, stale);
+    const invalidBefore = readFileSync(path);
+    const eventCount = events(f).length;
+    await readOnly(f, async () => {
+      for (const args of [
+        ["code", "--help"],
+        ["guide", "code"],
+        ["project", "list", "--json", "--root", inventoryRoot],
+        ["code", "new", "-m", "invalid known field"],
+      ]) {
+        const result = await command(f, f.project, "aligndev", args, 1);
+        assert.match(result.stderr, /default must be a boolean/);
+        assert.equal(result.stdout, "");
+        assert.equal(result.stderr.includes("invalid-known-value"), false);
+        assert.equal(result.stderr.includes("private-stale-value"), false);
+      }
+    });
+    assert.equal(events(f).length, eventCount);
+    assert.deepEqual(readFileSync(path), invalidBefore);
+  } finally {
+    writeFileSync(path, original);
+  }
+  console.log(
+    "PASS: stale settings warn on stderr, launch succeeds, JSON stays clean, invalid known values fail, input unchanged",
+  );
+}
+
+async function consumerWarningChecks(f) {
+  const projectSettings = join(f.project, ".alignfirst.json");
+  const inventoryMarker = join(f.home, ".alignfirst-projects.json");
+  const registryBefore = readFileSync(f.registry);
+  const staleRegistry = JSON.parse(registryBefore);
+  staleRegistry.unknownRegistry = "private-consumer-value";
+  staleRegistry.projects["~/app"].unknownEntry = "private-consumer-value";
+  staleRegistry.projects["~/app"].aligndev.unknownSelection = "private-consumer-value";
+  staleRegistry.projects["~/companion-app"].items = {
+    docs: "auto",
+    unknownItem: "private-consumer-value",
+  };
+  try {
+    writeJson(inventoryMarker, {});
+    writeJson(f.registry, staleRegistry);
+    writeJson(projectSettings, {
+      schemaVersion: 1,
+      unknownProject: "private-consumer-value",
+      plans: { folder: "alignfirst", unknownPlans: "private-consumer-value" },
+      git: {
+        unknownGit: "private-consumer-value",
+        commit: { style: "conventionalCommit", unknownCommit: "private-consumer-value" },
+      },
+    });
+    const settingsBytes = readFileSync(projectSettings);
+    const registryBytes = readFileSync(f.registry);
+    await readOnly(f, async () => {
+      for (const [executable, args] of [
+        ["alignfirst", ["config", "--json"]],
+        ["aligndev", ["code", "--help"]],
+        ["aligndev", ["guide", "code"]],
+        ["aligndev", ["project", "list", "--json", "--root", f.home]],
+      ]) {
+        const result = await command(f, f.project, executable, args);
+        for (const field of [
+          "unknownProject",
+          "plans.unknownPlans",
+          "git.unknownGit",
+          "git.commit.unknownCommit",
+          "unknownRegistry",
+          "projects[<entry>].unknownEntry",
+          "projects[<entry>].aligndev.unknownSelection",
+          "projects[<entry>].items.unknownItem",
+        ])
+          assert(result.stderr.includes(field), `${executable} must warn about ${field}`);
+        assert.match(result.stderr, /plans.folder is deprecated/);
+        assert.equal(result.stdout.includes("Warning:"), false);
+        assert.equal(`${result.stdout}${result.stderr}`.includes("private-consumer-value"), false);
+        assert.equal(result.stderr.includes("~/app"), false);
+        if (args.includes("--json")) JSON.parse(result.stdout);
+        else assert(result.stdout.includes("a"));
+        assert.deepEqual(readFileSync(projectSettings), settingsBytes);
+        assert.deepEqual(readFileSync(f.registry), registryBytes);
+      }
+    });
+    const validProject = JSON.parse(settingsBytes);
+    for (const source of ["project", "registry"]) {
+      const invalidProject = structuredClone(validProject);
+      const invalidRegistry = structuredClone(staleRegistry);
+      if (source === "project") invalidProject.git.commit.style = "private-invalid-consumer-value";
+      else invalidRegistry.projects["~/app"].aligndev.profile = ["private-invalid-consumer-value"];
+      writeJson(projectSettings, invalidProject);
+      writeJson(f.registry, invalidRegistry);
+      const invalidSettingsBytes = readFileSync(projectSettings);
+      const invalidRegistryBytes = readFileSync(f.registry);
+      const failure = source === "project" ? /git.commit.style must be/ : /profile must be/;
+      const warning = source === "project" ? /unknownProject/ : /unknownRegistry/;
+      await readOnly(f, async () => {
+        for (const [executable, args] of [
+          ["alignfirst", ["config", "--json"]],
+          ["aligndev", ["code", "--help"]],
+          ["aligndev", ["guide", "code"]],
+          ["aligndev", ["project", "list", "--json", "--root", f.home]],
+        ]) {
+          const inventory = args[0] === "project";
+          const result = await command(f, f.project, executable, args, inventory ? 0 : 1);
+          assert.match(result.stderr, warning);
+          if (inventory) {
+            const report = JSON.parse(result.stdout);
+            const issue = report.issues.find((entry) => entry.path === f.project);
+            assert.ok(issue, "Invalid project must remain an inventory issue.");
+            assert.match(issue.message, failure);
+            assert.equal(issue.message.includes("Warning:"), false);
+          } else {
+            assert.equal(result.stdout, "");
+            assert.match(result.stderr, failure);
+          }
+          for (const secret of ["private-consumer-value", "private-invalid-consumer-value"])
+            assert.equal(`${result.stdout}${result.stderr}`.includes(secret), false);
+          assert.equal(result.stdout.includes("Warning:"), false);
+          assert.deepEqual(readFileSync(projectSettings), invalidSettingsBytes);
+          assert.deepEqual(readFileSync(f.registry), invalidRegistryBytes);
+        }
+      });
+    }
+  } finally {
+    writeFileSync(f.registry, registryBefore);
+    rmSync(projectSettings, { force: true });
+    rmSync(inventoryMarker, { force: true });
+  }
+  console.log(
+    "PASS: project/nested registry warnings reach help, guide and JSON inventory on success and failure; real validation errors remain visible, values private and source bytes unchanged",
+  );
+}
+
 async function profileOnlyChecks(f) {
   await readOnly(f, async () => {
     for (const cwd of [f.project, f.linked]) {
@@ -432,6 +615,86 @@ async function companionChecks(f) {
   assert.ok(lastEvent(f).args.includes("--add-dir"));
   assert.ok(lastEvent(f).args.includes(f.companion));
   console.log("PASS: companion-backed profile and normal companion session placement");
+}
+
+async function automaticChecks(f) {
+  const path = join(f.home, ".alignfirst/aligndev.settings.json");
+  const originalSettings = readFileSync(path, "utf8");
+  const originalRegistry = readFileSync(f.registry, "utf8");
+  const originalEnv = f.env;
+  const profiles = JSON.parse(originalSettings).code.profiles;
+  try {
+    writeJson(f.registry, { projects: {} });
+    f.env = { ...originalEnv };
+    for (const marker of [
+      "CLAUDECODE",
+      "CLAUDE_CODE_SESSION_ID",
+      "CODEX_THREAD_ID",
+      "PI_CODING_AGENT",
+      "AI_AGENT",
+    ])
+      delete f.env[marker];
+    writeJson(path, { code: { profiles: { pi: profiles.pi } } });
+    const pi = await launch(f, f.project, ["new", "-m", "no-parent singleton"]);
+    await metadata(f, f.project, pi.file, { profile: "pi", agent: "pi", status: "succeeded" });
+    f.env.CLAUDECODE = "1";
+    f.env.CLAUDE_CONFIG_DIR = f.stores.a;
+    for (const field of ["blank", "missing"]) {
+      writeJson(path, { code: { profiles: { a: { agent: "claude", configDir: f.stores.a } } } });
+      const initial = await launch(f, f.project, ["new", "-m", "matching singleton"]);
+      const id = lastEvent(f).id;
+      await metadata(f, f.project, initial.file, {
+        profile: "a",
+        agent: "claude",
+        status: "succeeded",
+      });
+      const historical = readFileSync(initial.file, "utf8").replace(
+        /^profile: a\n/m,
+        field === "blank" ? "profile: \n" : "",
+      );
+      writeFileSync(initial.file, historical);
+      writeJson(path, {
+        code: {
+          profiles: {
+            preferred: { ...profiles.b, default: true },
+            other: { agent: "claude", configDir: f.stores.b },
+          },
+        },
+      });
+      const resumed = await launch(f, f.project, ["resume", id, "-m", "legacy built-ins"]);
+      await metadata(f, f.project, resumed.file, {
+        profile: "",
+        model: "",
+        agent: "claude",
+        status: "succeeded",
+      });
+      assert.equal(lastEvent(f).store, f.stores.a);
+      assert.equal(lastEvent(f).removed, "synthetic-remove-value");
+      assert.equal(readFileSync(initial.file, "utf8"), historical);
+      delete f.env.CLAUDECODE;
+      const failed = await command(
+        f,
+        f.project,
+        "aligndev",
+        ["code", "resume", id, "-m", "no parent"],
+        1,
+      );
+      assert.match(failed.stderr, /no coding agent/);
+      f.env.CLAUDECODE = "1";
+      const inferred = await launch(f, f.project, ["new", "-m", "preferred profile"]);
+      await metadata(f, f.project, inferred.file, {
+        profile: "preferred",
+        model: "sonnet",
+        status: "succeeded",
+      });
+      assert.equal(lastEvent(f).store, f.stores.b);
+    }
+  } finally {
+    f.env = originalEnv;
+    writeFileSync(path, originalSettings);
+    writeFileSync(f.registry, originalRegistry);
+  }
+  console.log("PASS: automatic singleton/preferred launches and protected historical-null resume");
 }
 
 async function resumeChecks(f) {

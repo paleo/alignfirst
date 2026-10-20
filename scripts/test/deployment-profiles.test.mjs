@@ -179,7 +179,8 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       configDir: "~/native/claude-child",
       quota: { source: "none" },
     };
-    fixture.settings.code.defaultProfiles = { codex: selected, pi: "pi", claude: "other" };
+    for (const name of [selected, "pi", "other"])
+      fixture.settings.code.profiles[name].default = true;
     saveSettings(fixture);
     installSettings(fixture);
     validateProfiles(fixture);
@@ -218,7 +219,7 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
   });
 });
 
-test("inventory rejects unsafe unselected stores, retired selection and native-directory conflicts", () => {
+test("inventory rejects unsafe unselected stores, missing selection and native-directory conflicts", () => {
   withFixture("codex", "discord", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
     for (const profile of [
@@ -243,15 +244,109 @@ test("inventory rejects unsafe unselected stores, retired selection and native-d
       saveSettings(fixture);
       assertInventoryRejected(fixture);
     }
-    for (const code of [
-      { agent: "codex" },
-      { ...original.code, profile: "missing" },
-      { ...original.code, defaultProfiles: { codex: "missing" } },
-      { ...original.code, defaultProfiles: { pi: original.code.profile } },
-    ]) {
+    for (const code of [{ agent: "codex" }, { ...original.code, profile: "missing" }]) {
       fixture.settings = { ...original, code };
       saveSettings(fixture);
       assertInventoryRejected(fixture);
+    }
+  });
+});
+
+test("inventory validates every flag and requires explicit deployment selection", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    const selected = original.code.profile;
+    for (const value of [null, "true", 1, [], {}]) {
+      fixture.settings = structuredClone(original);
+      fixture.settings.code.profiles[selected].default = value;
+      saveSettings(fixture);
+      const diagnostic = assertInventoryRejected(fixture, /\.default must be a boolean/);
+      assert(diagnostic.includes(`code.profiles[${JSON.stringify(selected)}].default`));
+    }
+    fixture.settings = structuredClone(original);
+    fixture.settings.code.profiles[selected].default = true;
+    fixture.settings.code.profiles.conflict = {
+      ...fixture.settings.code.profiles[selected],
+      configDir: "~/native/conflict",
+    };
+    saveSettings(fixture);
+    const duplicate = assertInventoryRejected(fixture, /multiple default: true profiles for codex/);
+    assert(duplicate.includes(JSON.stringify(selected)));
+    assert.match(duplicate, /conflict.*leave only one default: true for codex/);
+    fixture.settings.code.profiles.conflict.default = false;
+    saveSettings(fixture);
+    assert.equal(readInventory(fixture).profiles.length, 2);
+    delete fixture.settings.code.profile;
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    delete fixture.settings.code.profiles.conflict;
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    for (const map of [{}, null, { codex: selected }]) {
+      fixture.settings = structuredClone(original);
+      fixture.settings.code.defaultProfiles = map;
+      fixture.settings.code.profiles[selected].default = true;
+      saveSettings(fixture);
+      const before = readFileSync(fixture.settingsFile);
+      const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).profile, selected);
+      assert.match(
+        result.stderr,
+        /code.defaultProfiles is retired.*matching-agent.*singleton.*keep profile names unchanged/,
+      );
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+    }
+  });
+});
+
+test("inventory and real CLI reject duplicate invalid agents without leaking values or injecting lines", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    for (const agent of [
+      undefined,
+      null,
+      true,
+      1,
+      {},
+      ["codex"],
+      "constructor",
+      "private-agent-marker\n\r\u001b\u0085\u2028\u2029\u202e",
+    ]) {
+      fixture.settings = structuredClone(original);
+      const selected = fixture.settings.code.profile;
+      Object.assign(fixture.settings.code.profiles[selected], { agent, default: true });
+      fixture.settings.code.profiles.conflict = {
+        agent,
+        default: true,
+        configDir: "~/native/conflict",
+      };
+      saveSettings(fixture);
+      installSettings(fixture);
+      const before = readFileSync(fixture.settingsFile);
+      const deployedBefore = readFileSync(fixture.deployedSettings);
+      for (const args of [
+        inventoryArgs(fixture),
+        [
+          join(repository, "packages/aligndev/bin/aligndev.mjs"),
+          "guide",
+          "code",
+          "--profile",
+          selected,
+        ],
+      ]) {
+        const result = spawnSync(process.execPath, args, options(fixture));
+        assert.equal(result.status, 1);
+        assert.equal(result.stdout, "");
+        assert.match(result.stderr, /agent/);
+        assert(!result.stderr.includes("multiple default"));
+        assert(!result.stderr.includes("private-agent-marker"));
+        assert.equal(result.stderr.trim().split("\n").length, 1);
+        for (const character of ["\r", "\u001b", "\u0085", "\u2028", "\u2029", "\u202e"])
+          assert(!result.stderr.includes(character));
+        assert.deepEqual(readFileSync(fixture.settingsFile), before);
+        assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
+      }
     }
   });
 });
@@ -301,31 +396,143 @@ test("seed rejects a mismatched overlay before writing instructions or installed
   });
 });
 
-test("real CLI rejects malformed profile fields instead of the inventory inventing a settings schema", () => {
+test("inventory and real CLI ignore stale settings on stderr without rewriting input or polluting stdout", () => {
   withFixture("codex", "slack", {}, (fixture) => {
-    fixture.settings.code.profiles[fixture.settings.code.profile].unknownFixtureField = true;
+    const selected = fixture.settings.code.profile;
+    fixture.settings.unknownRoot = "private-value";
+    fixture.settings.code.unknownCode = { nested: "private-value" };
+    fixture.settings.code.agent = "retired-value";
+    fixture.settings.code.defaultProfiles = { codex: "missing" };
+    fixture.settings.code.profiles["sk-secret-profile-name"] = {
+      agent: "pi",
+      configDir: "~/native/pi",
+      unknownProfile: "private-value",
+      env: { CUSTOM: "private-value" },
+      modelAliases: { custom: "private-value" },
+      quota: { source: "none", unknownQuota: "private-value" },
+    };
+    fixture.settings["bad\n\u001b\u0085\u202e.key"] = "private-value";
     saveSettings(fixture);
     installSettings(fixture);
-    const result = spawnSync(
-      process.execPath,
+    const before = readFileSync(fixture.settingsFile);
+    const deployedBefore = readFileSync(fixture.deployedSettings);
+    for (const args of [
+      inventoryArgs(fixture),
       [
         join(repository, "packages/aligndev/bin/aligndev.mjs"),
         "guide",
         "code",
         "--profile",
-        fixture.settings.code.profile,
+        selected,
       ],
-      options(fixture),
-    );
-    assert.notEqual(result.status, 0);
-    assert(result.stderr.includes("unknownFixtureField"));
+    ]) {
+      const result = spawnSync(process.execPath, args, options(fixture));
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stderr, /unknownRoot/);
+      assert.match(result.stderr, /code.unknownCode/);
+      assert(result.stderr.includes("code.profiles[<entry>].unknownProfile"));
+      assert(result.stderr.includes("code.profiles[<entry>].quota.unknownQuota"));
+      assert.match(result.stderr, /code.agent.*manual conversion/);
+      assert.match(result.stderr, /code.defaultProfiles is retired.*manually/);
+      for (const text of [
+        "private-value",
+        "retired-value",
+        "sk-secret-profile-name",
+        "\u001b",
+        "\u0085",
+        "\u202e",
+      ])
+        assert(!result.stderr.includes(text));
+      assert(!result.stdout.includes("Warning:"));
+      assert.equal(result.stderr.trim().split("\n").length, 7);
+      if (args[0].endsWith("deployment-profiles.mjs"))
+        assert.equal(JSON.parse(result.stdout).profile, selected);
+      else assert(result.stdout.includes(selected));
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+      assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
+    }
   });
 });
 
-function assertInventoryRejected(fixture) {
+test("inventory and real CLI sanitize malformed settings JSON and preserve input bytes", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    installSettings(fixture);
+    for (const text of ['{"secret":"private-json-value" trailing}', "private-json-value"]) {
+      writeFileSync(fixture.settingsFile, text);
+      writeFileSync(fixture.deployedSettings, text);
+      const before = readFileSync(fixture.settingsFile);
+      const deployedBefore = readFileSync(fixture.deployedSettings);
+      const diagnostic = assertInventoryRejected(fixture, /must contain valid JSON/);
+      assert(!diagnostic.includes("private-json-value"));
+      const result = spawnSync(
+        process.execPath,
+        [join(repository, "packages/aligndev/bin/aligndev.mjs"), "code", "--help"],
+        options(fixture),
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /must contain valid JSON/);
+      assert(result.stderr.includes(fixture.deployedSettings));
+      assert(!result.stderr.includes("private-json-value"));
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+      assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
+    }
+  });
+});
+
+test("inventory and real CLI still reject malformed recognized fields alongside unknown keys", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    for (const invalid of [
+      { agent: "private-value\n\u001b" },
+      { default: "yes" },
+      { skipPermissions: "yes" },
+      { models: "sol" },
+      { modelAliases: { custom: 3 } },
+      { env: { CUSTOM: 3 } },
+      { unset: "CUSTOM" },
+      { env: { CUSTOM: "value" }, unset: ["CUSTOM"] },
+      { quota: { source: "bad", unknownQuota: true } },
+      { quota: { source: "none", env: {}, unknownQuota: true } },
+    ]) {
+      fixture.settings = structuredClone(original);
+      Object.assign(fixture.settings.code.profiles[fixture.settings.code.profile], invalid, {
+        unknownFixtureField: "private-value",
+      });
+      saveSettings(fixture);
+      installSettings(fixture);
+      const before = readFileSync(fixture.settingsFile);
+      const diagnostic = assertInventoryRejected(fixture);
+      assert(diagnostic.includes("code.profiles[<entry>].unknownFixtureField"));
+      assert(!diagnostic.includes("private-value"));
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(repository, "packages/aligndev/bin/aligndev.mjs"),
+          "guide",
+          "code",
+          "--profile",
+          fixture.settings.code.profile,
+        ],
+        options(fixture),
+      );
+      assert.notEqual(result.status, 0);
+      assert.equal(result.stdout, "");
+      assert(!result.stderr.includes("private-value"));
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+    }
+  });
+});
+
+function assertInventoryRejected(fixture, diagnostic) {
   const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, "");
+  if (diagnostic !== undefined) {
+    assert.match(result.stderr, diagnostic);
+    assert(result.stderr.includes(fixture.settingsFile));
+  }
+  return result.stderr;
 }
 
 function auditRendered(fixture) {

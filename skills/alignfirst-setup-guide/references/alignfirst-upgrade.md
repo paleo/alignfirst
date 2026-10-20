@@ -86,10 +86,10 @@ On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and i
 
 ## Convert AlignDev Launch Settings
 
-When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually before using profile-aware AlignDev. The CLI rejects the old shape and performs no automatic conversion. Preserve top-level `platform` and `projectsRoot`.
+When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually to preserve the intended launch behavior. The CLI ignores retired fields with warnings on stderr and performs no automatic conversion. Recognized invalid values still fail. Preserve top-level `platform` and `projectsRoot`.
 
 1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`, including the required `agent`.
-2. Set `code.profile` to that name for a global child selection. Alternatively, omit it and map each detected kind through `code.defaultProfiles` to a profile with the matching agent.
+2. Set `code.profile` to that name for a global child selection. Alternatively, omit it to infer a sole matching profile, or set one profile's `default: true` per agent when several match.
 3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate with the child's effective environment and cwd, applying profile `unset/env/configDir`, including HOME, PATH and credential routing. Native directory variables in `env` also select storage; a bare login in another shell may use another account. Never copy conversations or credentials between accounts to make resume work.
 4. Review project registry selections and run `aligndev guide code --profile <name>`. Profile selection alone needs no companion or `.plans`. Obtain approval before changing any user's real settings or native account state.
 
@@ -114,9 +114,55 @@ to:
 }
 ```
 
-New-session precedence is explicit → project → global → detected-agent default → built-in detected defaults. Resume inserts its recorded profile before global resolution; existing records without a profile remain readable as null and need no transcript rewrite. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
+New-session precedence is explicit → project → global → automatic resolution. Resume inserts its recorded named profile before global resolution. Historical blank or missing profiles read as null and keep detected built-ins unless explicit/project/global selection replaces them; configured counts and flags do not trigger inference. No or multiple detected parents still fail, and the original transcript stays unchanged. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
 
 On an OpenClaw host, convert the private admin repository and protected settings together through controlled maintenance. Upgrade `seed.sh`, the inventory/policy helpers, maintenance/backup scripts and runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment child and optional native quota source needs an explicit isolated `configDir`; inventory all profiles, not just the global selection. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json`/adjacent-lock exception and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
+
+## Convert AlignDev Profile Defaults
+
+When `aligndev.settings.json` contains `code.defaultProfiles`, convert it manually to preserve needed preferences. Any presence, including an empty or null map or a map alongside new flags, is ignored with a warning on stderr. The map never supplies defaults. Unknown keys at each fixed settings/profile/quota shape are also ignored with warnings; recognized invalid values and duplicate true flags still fail. Profile, environment and alias dictionaries remain maps. Neither the CLI nor the deployment inventory rewrites settings.
+
+1. For each old entry, set `default: true` on its referenced matching-agent profile when a preference is needed. Omit the flag when that agent has only one profile. False and omitted have the same meaning.
+2. Leave at most one true flag per agent. Different agents may each have a preference. A flag is per-agent selection metadata; `code.profile` remains the global named child choice.
+3. Remove `code.defaultProfiles`. Keep profile names unchanged so project references and named resumes remain valid.
+4. Validate with `aligndev guide code --profile <name>` for every profile. Obtain approval before editing real settings or native account state; the CLI never rewrites them.
+
+Before:
+
+```json
+{
+  "code": {
+    "defaultProfiles": { "claude": "work", "pi": "solo" },
+    "profiles": {
+      "work": { "agent": "claude", "configDir": "~/.claude-work" },
+      "personal": { "agent": "claude", "configDir": "~/.claude" },
+      "solo": { "agent": "pi", "configDir": "~/.pi/agent" }
+    }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "work": { "agent": "claude", "default": true, "configDir": "~/.claude-work" },
+      "personal": { "agent": "claude", "configDir": "~/.claude" },
+      "solo": { "agent": "pi", "configDir": "~/.pi/agent" }
+    }
+  }
+}
+```
+
+For new sessions, help, guide and quota, automatic resolution selects the sole profile matching one detected parent, or its unique true flag among several matches. Without a match, it uses that parent's built-ins; another agent's profile never overrides it. Without a parent, exactly one total profile is inferable. Several detected kinds always require a named choice. Flags cannot resolve absent or ambiguous agent-kind detection.
+
+Unique-profile inference is an intentional behavior change. New runs that previously used built-ins may now use configured native storage, models, environment and permission settings. Review those settings before launching.
+
+Historical null/missing-profile resumes are separate: without an explicit/project/global replacement, they still detect the parent and use only built-ins, ignoring configured counts and flags. The new record keeps null and the original transcript remains unchanged. Named resumes keep their recorded name ahead of changed global settings or flags; a deleted recorded name requires an explicit or project replacement.
+
+On an OpenClaw host, update the private admin repository and protected settings through controlled maintenance. Explicit valid `code.profile` remains mandatory even with one profile or a true flag. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
 
 ## Convert the Companion Registry
 

@@ -99,6 +99,33 @@ describe("json shape", () => {
     expect(() => parse(sampleShape, { root: "" })).toThrow('agent must be "claude" or "codex"');
   });
 
+  it("opts into unknown-key handling without retaining or traversing unknown values", () => {
+    const warnings: string[] = [];
+    const tolerant = object<{ enabled: boolean }>({ enabled: boolean }, (path, key) =>
+      warnings.push(`${path}.${key}`),
+    );
+    const value = { enabled: false, old: { broken: true }, other: null };
+    expect(parse(tolerant, value)).toEqual({ enabled: false });
+    expect(warnings).toEqual([".old", ".other"]);
+    expect(value.old).toEqual({ broken: true });
+    expect(() => parse(tolerant, { enabled: "yes", stale: true })).toThrow("be a boolean");
+    expect(() => parse(sampleShape, { agent: "claude", stale: true })).toThrow("be removed");
+  });
+
+  it("redacts dynamic record keys in warning paths while keeping validation paths", () => {
+    const warnings: string[] = [];
+    const shape = record(
+      object<{ enabled: boolean }>({ enabled: boolean }, (path, key) =>
+        warnings.push(`${path}.${key}`),
+      ),
+    );
+    expect(parse(shape, { "sk-sensitive\nname": { enabled: true, stale: 1 } })).toEqual({
+      "sk-sensitive\nname": { enabled: true },
+    });
+    expect(warnings).toEqual(["[<entry>].stale"]);
+    expect(() => parse(shape, { named: { enabled: "yes" } })).toThrow("named.enabled");
+  });
+
   it.each<[Check<unknown>, string]>([
     [literal(1), "value must be 1"],
     [literal("a", "b", "c"), 'value must be "a", "b" or "c"'],

@@ -1,6 +1,7 @@
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
-export type Check<T> = (value: unknown, path: string) => T;
+// Warning paths redact dynamic map keys; validation paths retain field identity.
+export type Check<T> = (value: unknown, path: string, warningPath?: string) => T;
 
 export interface OptionalField<T> {
   optional: Check<T>;
@@ -27,18 +28,25 @@ export function parseShape<T>(
   }
 }
 
-/** Rejects the first unknown key, then checks each field in declaration order. */
-export function object<T extends object>(fields: Fields<T>): Check<T> {
+export function object<T extends object>(
+  fields: Fields<T>,
+  onUnknown?: (path: string, key: string) => void,
+): Check<T> {
   const entries: [string, Check<unknown> | OptionalField<unknown>][] = Object.entries(fields);
-  return (value, path) => {
+  return (value, path, warningPath = path) => {
     if (!isPlainObject(value)) throw shapeError(path, "be an object");
-    const unknownKey = Object.keys(value).find((key) => !Object.hasOwn(fields, key));
-    if (unknownKey !== undefined) throw shapeError(childPath(path, unknownKey), "be removed");
+    for (const key of Object.keys(value)) {
+      if (Object.hasOwn(fields, key)) continue;
+      if (onUnknown === undefined) throw shapeError(childPath(path, key), "be removed");
+      onUnknown(warningPath, key);
+    }
     const result: Record<string, unknown> = {};
     for (const [key, field] of entries) {
       const fieldPath = childPath(path, key);
-      if (typeof field === "function") result[key] = field(value[key], fieldPath);
-      else if (value[key] !== undefined) result[key] = field.optional(value[key], fieldPath);
+      const fieldWarningPath = childPath(warningPath, key);
+      if (typeof field === "function") result[key] = field(value[key], fieldPath, fieldWarningPath);
+      else if (value[key] !== undefined)
+        result[key] = field.optional(value[key], fieldPath, fieldWarningPath);
     }
     // The fields mirror T key by key.
     return result as T;
@@ -69,10 +77,13 @@ export function optional<T>(check: Check<T>): OptionalField<T> {
 }
 
 export function record<T>(check: Check<T>): Check<Record<string, T>> {
-  return (value, path) => {
+  return (value, path, warningPath = path) => {
     if (!isPlainObject(value)) throw shapeError(path, "be an object");
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, check(item, childPath(path, key))]),
+      Object.entries(value).map(([key, item]) => [
+        key,
+        check(item, childPath(path, key), `${warningPath}[<entry>]`),
+      ]),
     );
   };
 }

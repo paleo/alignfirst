@@ -969,12 +969,20 @@ Options (new, resume):
 ${requires}
 
 Config (~/.alignfirst/aligndev.settings.json):
+  Unknown/obsolete keys are ignored with value-free warnings on stderr. Recognized invalid values
+  and duplicate defaults still fail. Settings are never rewritten. Retired direct launch keys and
+  code.defaultProfiles have no effect; convert them manually to profiles and profile.default flags.
   code.profile          Global named profile. Effective profile: ${profile ?? "(built-in)"} (selected: ${agent}).
-  code.defaultProfiles  Per detected-agent default profile names.
-  code.profiles         Complete named profiles: agent, configDir, env, unset, defaultModel,
-                        models, modelAliases, skipPermissions, quota. No inheritance.
+  code.profiles         Complete named profiles: agent, default, configDir, env, unset,
+                        defaultModel, models, modelAliases, skipPermissions, quota. No inheritance.
+  profile.default       Optional boolean preference for that agent; at most one true per agent.
+                        A sole matching profile is inferred without a flag. No matching profile
+                        uses detected built-ins. Without a parent, only a sole total profile is
+                        inferred; multiple parents require a named choice.
   --profile <name>      Override for new, resume, quota and help (also guide code).
-                        Precedence: explicit > project > recorded resume > global > detected default.
+                        Precedence: explicit > project > recorded named resume > global > automatic.
+                        Historical null/missing-profile resumes keep detected built-ins unless
+                        explicit/project/global selection replaces them; no automatic inference.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
                         One configured alias expands before native model handling.
 

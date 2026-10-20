@@ -16,17 +16,24 @@
     "env:down": "openclaw-test env down",
     "e2e": "openclaw-test run"
   },
+  "allowScripts": {
+    "@google/genai": false,
+    "esbuild@0.28.2": true,
+    "koffi@3.3.2": true,
+    "openclaw@2026.10.5": true,
+    "protobufjs": false
+  },
   "dependencies": {
-    "@anthropic-ai/sdk": "~0.127.0",
+    "@anthropic-ai/sdk": "~0.135.0",
     "@alignfirst/openclaw-channel-mock-core": "file:vendor/openclaw-channel-mock-core.tgz",
     "@alignfirst/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",
     "@alignfirst/openclaw-slack-mock": "file:vendor/openclaw-slack-mock.tgz",
     "@alignfirst/openclaw-test": "file:vendor/openclaw-test.tgz",
     "@alignfirst/service-openclaw-plugin": "file:vendor/service-openclaw-plugin.tgz",
-    "openclaw": "2026.10.2"
+    "openclaw": "2026.10.5"
   },
   "devDependencies": {
-    "@types/node": "~26.5.0",
+    "@types/node": "~26.6.5",
     "typescript": "~7.0.2"
   }
 }

@@ -46,15 +46,8 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   rejectSymlinks(home);
   rejectSymlinks(settingsFile);
   rejectSymlinks(deployedSettingsFile);
-  const code = JSON.parse(readFileSync(settingsFile, "utf8")).code;
-  if (
-    !isObject(code) ||
-    Object.keys(code).some((key) => !["profile", "profiles", "defaultProfiles"].includes(key))
-  ) {
-    throw new Error(
-      `${settingsFile}: use code.profile and code.profiles; direct launch keys are retired`,
-    );
-  }
+  const settings = readSettings(settingsFile);
+  const code = settings.code;
   if (
     !isObject(code.profiles) ||
     typeof code.profile !== "string" ||
@@ -62,6 +55,7 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   ) {
     throw new Error(`${settingsFile}: an explicit code.profile must name a provisioned profile`);
   }
+  validateDefaults(code.profiles, settingsFile);
   const stores = [];
   for (const [name, profile] of Object.entries(code.profiles)) {
     if (name.trim() === "" || /[\x00-\x1f\x7f]/u.test(name) || !isObject(profile))
@@ -76,13 +70,6 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
         throw new Error("Disabled quota accepts only source none");
     } else {
       addStore(stores, name, quota.source, quota, home, deployedSettingsFile);
-    }
-  }
-  if (code.defaultProfiles !== undefined) {
-    if (!isObject(code.defaultProfiles)) throw new Error("Invalid defaultProfiles");
-    for (const [agent, name] of Object.entries(code.defaultProfiles)) {
-      if (!Object.hasOwn(nativeDirectories, agent) || code.profiles[name]?.agent !== agent)
-        throw new Error("defaultProfiles must reference a matching provisioned profile");
     }
   }
   for (const store of stores) {
@@ -138,6 +125,152 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
     resources,
     serviceHome: home,
   };
+}
+
+function readSettings(settingsFile) {
+  const text = readFileSync(settingsFile, "utf8");
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error(`${settingsFile}: must contain valid JSON`);
+  }
+  const settings = settingsObject(value, ["platform", "projectsRoot", "code"], "settings");
+  if (settings.platform !== undefined && !["openclaw", "codingAgent"].includes(settings.platform))
+    throw new Error("Invalid settings.platform");
+  if (
+    settings.projectsRoot !== undefined &&
+    (typeof settings.projectsRoot !== "string" || settings.projectsRoot.length === 0)
+  )
+    throw new Error("Invalid settings.projectsRoot");
+  const code = settingsObject(settings.code, ["profile", "profiles"], "code");
+  if (code.profiles === undefined) return { ...settings, code };
+  if (!isObject(code.profiles)) throw new Error("Invalid code.profiles");
+  code.profiles = Object.fromEntries(
+    Object.entries(code.profiles).map(([name, value]) => {
+      const path = "code.profiles[<entry>]";
+      const profile = settingsObject(
+        value,
+        [
+          "agent",
+          "default",
+          "configDir",
+          "defaultModel",
+          "models",
+          "modelAliases",
+          "skipPermissions",
+          "env",
+          "unset",
+          "quota",
+        ],
+        path,
+      );
+      if (!["claude", "codex", "pi"].includes(profile.agent))
+        throw new Error(`${path}.agent must be claude, codex or pi`);
+      validateLaunchFields(profile, path);
+      if (profile.quota !== undefined) {
+        profile.quota = settingsObject(
+          profile.quota,
+          ["source", "configDir", "env", "unset"],
+          `${path}.quota`,
+        );
+        validateLaunchFields(profile.quota, `${path}.quota`);
+      }
+      return [name, profile];
+    }),
+  );
+  return { ...settings, code };
+}
+
+function settingsObject(value, keys, path) {
+  if (!isObject(value)) throw new Error(`${path} must be an object`);
+  for (const key of Object.keys(value)) {
+    if (keys.includes(key)) continue;
+    const quoted = JSON.stringify(key).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) =>
+      character
+        .split("")
+        .map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
+        .join(""),
+    );
+    const field = /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${quoted}]`;
+    let migration = "Remove it or check its spelling.";
+    if (path === "code" && key === "defaultProfiles")
+      migration =
+        "code.defaultProfiles is retired; manually move needed preferences to referenced " +
+        "matching-agent profiles' default: true (omit singleton flags), remove the map and keep " +
+        "profile names unchanged. See skills/alignfirst-setup-guide/references/" +
+        "alignfirst-upgrade.md#convert-aligndev-profile-defaults";
+    else if (
+      path === "code" &&
+      ["agent", "defaultModel", "models", "skipPermissions", "unset"].includes(key)
+    )
+      migration =
+        "Retired launch setting: move it into code.profiles and select one with " +
+        "code.profile (manual conversion required).";
+    console.warn(`Warning: ignoring unknown aligndev setting ${field}. ${migration}`);
+  }
+  return Object.fromEntries(
+    keys.filter((key) => Object.hasOwn(value, key)).map((key) => [key, value[key]]),
+  );
+}
+
+function validateLaunchFields(value, path) {
+  const nonblank = (text) => typeof text === "string" && text.trim() !== "";
+  const environmentName = (name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name);
+  for (const key of ["configDir", "defaultModel"])
+    if (value[key] !== undefined && !nonblank(value[key]))
+      throw new Error(`${path}.${key} must be a nonblank string`);
+  if (value.skipPermissions !== undefined && typeof value.skipPermissions !== "boolean")
+    throw new Error(`${path}.skipPermissions must be a boolean`);
+  if (value.models !== undefined && (!Array.isArray(value.models) || !value.models.every(nonblank)))
+    throw new Error(`${path}.models must be an array of nonblank strings`);
+  if (
+    value.modelAliases !== undefined &&
+    (!isObject(value.modelAliases) ||
+      !Object.entries(value.modelAliases).every(
+        ([key, target]) => nonblank(key) && nonblank(target),
+      ))
+  )
+    throw new Error(`${path}.modelAliases must map nonblank names to nonblank strings`);
+  if (
+    value.env !== undefined &&
+    (!isObject(value.env) ||
+      !Object.entries(value.env).every(
+        ([key, text]) =>
+          environmentName(key) && typeof text === "string" && !text.includes("\u0000"),
+      ))
+  )
+    throw new Error(`${path}.env must map environment names to NUL-free strings`);
+  if (
+    value.unset !== undefined &&
+    (!Array.isArray(value.unset) ||
+      !value.unset.every((name) => typeof name === "string" && environmentName(name)))
+  )
+    throw new Error(`${path}.unset must be an array of environment names`);
+  if (value.unset?.some((name) => Object.hasOwn(value.env ?? {}, name)))
+    throw new Error(`${path}.unset overlaps env`);
+}
+
+function validateDefaults(profiles, settingsFile) {
+  const defaults = new Map();
+  for (const [name, profile] of Object.entries(profiles)) {
+    if (!isObject(profile)) continue;
+    if (Object.hasOwn(profile, "default") && typeof profile.default !== "boolean")
+      throw new Error(
+        `${settingsFile}: code.profiles[${JSON.stringify(name)}].default must be a boolean`,
+      );
+    if (profile.default !== true) continue;
+    const names = defaults.get(profile.agent) ?? [];
+    names.push(JSON.stringify(name));
+    defaults.set(profile.agent, names);
+  }
+  for (const [agent, names] of defaults) {
+    if (names.length > 1)
+      throw new Error(
+        `${settingsFile}: multiple default: true profiles for ${agent}: ${names.join(", ")}; ` +
+          `leave only one default: true for ${agent}`,
+      );
+  }
 }
 
 function isObject(value) {
@@ -406,8 +539,10 @@ function resolveContainedLink(path, root) {
     if (!stat.isSymbolicLink()) {
       if (!stat.isDirectory() && pending.length > 0)
         throw new Error(`Invalid package link chain: ${path}`);
-      if (!stat.isDirectory() && !stat.isFile()) throw new Error(`Refusing special file: ${current}`);
-      if (stat.isFile() && stat.nlink !== 1) throw new Error(`Refusing hard-linked file: ${current}`);
+      if (!stat.isDirectory() && !stat.isFile())
+        throw new Error(`Refusing special file: ${current}`);
+      if (stat.isFile() && stat.nlink !== 1)
+        throw new Error(`Refusing hard-linked file: ${current}`);
       continue;
     }
     if (++links > 40) throw new Error(`Cyclic package link: ${path}`);

@@ -21,7 +21,7 @@ The current version is the exact `"openclaw"` pin in [`aligndev-openclaw-tests/p
 
 ## Refresh the read-only clone
 
-`.local/openclaw/` is a shallow clone of the upstream repository, kept for verifying source claims ([openclaw-context-engineering.md](./openclaw-context-engineering.md)). Move it to the new tag:
+`.local/openclaw/` is a shallow clone of the upstream repository, kept for verifying source claims ([openclaw-context-engineering.md](./openclaw-context-engineering.md)). If `.local` is shared across worktrees, use a private scratch clone for the upgrade review; do not switch the shared clone during another task. For an exclusively owned clone, move it to the new tag:
 
 ```sh
 git -C .local/openclaw fetch --quiet --depth=1 origin tag v<version>
@@ -55,15 +55,17 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json) — the exact `"openclaw"` pin.
 - [`aligndev-openclaw-tests/Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
 - `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
-- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (`<2026.10.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
+- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (currently `<2026.11.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
 
 The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
 
-Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/`.
+OpenClaw 2026.10.5 still pins Zod `4.6.5`. Keep mock-core's exact development and peer pins there: ncu's standalone latest `4.6.7` would break the shared-host composition contract. Test the public plugin config schema and inspect `npm ls zod typebox --all`; TypeBox `1.4.2` is supported by our public schema and packed Pi checks without overriding host-owned copies.
+
+Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/` when its shared base tag is exclusively owned. On a shared Docker daemon, the [manual isolation procedure](./running-openclaw-tests.md#shared-daemon-isolation) builds the unchanged base Dockerfile under a nonce-qualified tag and the consumer under a unique image tag. Use raw Compose with an explicit unique `-p` and per-command Docker-driver builder selection. The stock CLI overwrites the base-tag override, so do not use its build/up/run commands for this route. Carry the private absolute path/config overrides through doctor, inspection and each recreated acceptance cell, then tear down only that project.
 
 Before model-driven scenarios, run the harness's deterministic handoff checks against the new host:
 confirmed native receipt, trusted tool context, exact canonical thread delivery, reply-run session
-start, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
+start, native background exec completion and its trusted tool-factory context, pending restart recovery, and the human-message-before-takeover race. A successful plugin import alone
 does not establish these combined contracts.
 
 Keep the first-attempt assertion on the immediate reply dispatch. It must start and claim the target session before recovery spacing elapses. This catches dispatches that inherit a closed asynchronous work scope from the calling tool turn.
@@ -86,7 +88,7 @@ for ws in /tmp/doctor-harness /tmp/doctor-template; do
 done
 ```
 
-Two findings are expected noise, because no gateway ever runs in this container: the node-hosting preconditions about the loopback bind and disabled device pairing. Releases up to 2026.9.8 also reported the heartbeat cron materialization warning (the gateway reconciles those jobs itself at startup — `reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`) and the plaintext-secrets warning (the harness injects keys through the environment on purpose). Investigate anything else.
+For an unstarted scratch state on 2026.10.5, expect the two node-hosting findings about the loopback bind and disabled device pairing, plus the heartbeat cron materialization warning. The gateway reconciles heartbeat jobs itself at startup (`reconcileHeartbeatMonitorJobs` in `src/gateway/server-cron.ts`); doctor still reports that missing job before startup. Older releases also reported plaintext secrets because the harness injects keys through the environment. Investigate anything else. A zero process exit does not mean `doctor --json` returned `ok: true`.
 
 ## Inspect a running gateway
 
@@ -99,11 +101,17 @@ docker exec aligndev-openclaw-tests-w1-gateway-1 openclaw plugins list
 docker logs aligndev-openclaw-tests-w1-gateway-1 2>&1 | grep 'failed during load'
 ```
 
-Expected: `heartbeat:main` as the only enabled job (the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff. The log check must print nothing: a gateway reports healthy even when a plugin failed to load, and `plugins list` still shows that plugin as enabled. 2026.10.2 failed Codex this way inside the image; see [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration).
+Wait for system-job reconciliation before interpreting the job list. An initial 2026.10.5 `cron list` can be empty even after the gateway logs `ready`; `src/gateway/server-cron-lazy.ts` starts the service lazily and `server-cron.ts` then reconciles its system jobs. Poll to convergence with a bounded deadline.
+
+Expected: `heartbeat:main` as the only enabled job (`name: "heartbeat-main"`, display name `Heartbeat (main)`; the skill-collection review may be listed as disabled), and no plugin outside `openclaw.json`. A new enabled job or an unlisted plugin is a default the release turned on; find its knob in the config help diff. The log check must print nothing: a gateway reports healthy even when a plugin failed to load, and `plugins list` still shows that plugin as enabled. 2026.10.2 failed Codex this way inside the image; see [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration).
 
 ## Run the regression scenarios
 
-Pick the scenarios that exercise what the release changed, from the table in [Running the OpenClaw Tests](./running-openclaw-tests.md#scenarios), and run them on both surfaces with the command given there. A change to plugin loading or to the tool and hook registrations hits the handoff, which every thread bootstrap goes through (A01). A change to reply delivery hits the starter retry (A21) and later-run delivery (A08). A change to cron, heartbeats or turn queuing hits the background completion chain (A08) and the takeover race (A20).
+Select a few representative scenarios for the release's changed behavior using [Scenario selection](./running-openclaw-tests.md#scenario-selection). Never run the full matrix by default. Use only Terra for conversation-model tests and Haiku through OpenRouter for the judge. Start with one iteration on the relevant surface; include both surfaces when the change affects their shared contract.
+
+A change to plugin loading or to tool and hook registrations hits the handoff (A01). A change to reply delivery hits starter retry (A21) and later-run delivery (A08). A change to cron, heartbeats or turn queuing hits the background completion chain (A08) and takeover race (A20). Choose the relevant cases rather than collecting every example into an upgrade checklist.
+
+Inspect retained artifacts for unexpected errors, identify their cause and fix them before expanding coverage. Rerun the affected case to verify the fix. Record the reason for any additional scenarios, surfaces or iterations; a full matrix requires explicit justification.
 
 ```sh
 npm run env:down
@@ -114,3 +122,9 @@ npm run env:down
 The seed targets the current release. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
 
 Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The opt-outs above hold their policies: no autonomous model spend, no telemetry ping, and a handoff and reply contract visible on every turn.
+
+## Known audit exceptions
+
+OpenClaw `2026.10.5` carries npm `12.2.0` with five unchanged package-level audit findings: `brace-expansion@5.0.9`, `http-cache-semantics@4.2.0`, `ip-address@10.5.0`, `postcss-selector-parser@7.1.4` and `undici@6.28.0`. Each exception is restricted to `node_modules/npm/node_modules/<package>`. Retain the exact audit advisories with upgrade evidence and reassess when npm refreshes its bundle and OpenClaw accepts that release. Ordinary transitive updates cannot repair bundled files; do not edit them or blanket-suppress audit.
+
+The standalone gateway includes these dependencies in production. A zero root production-only audit excludes its development-only OpenClaw host and does not certify the gateway image. The separate unbundled `brace-expansion` must resolve to patched `5.0.12`; it is outside these exceptions.

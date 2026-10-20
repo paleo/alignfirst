@@ -17,7 +17,7 @@ infra/openclaw/
 ├── apparmor/           # Playwright Chromium user-namespace profile
 ├── deployment-profiles.mjs # all-profile/native-store and resource inventory
 ├── deployment-policy.mjs   # prepare, harden, maintenance, private backup/recovery
-├── aligndev.settings.json  # explicit default profile and provisioned native stores
+├── aligndev.settings.json  # explicit global profile and provisioned native stores
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
@@ -67,6 +67,10 @@ The snapshot copies `bin/openclaw`, both deployment helpers and `node-runtime/`.
 ## 3. Seed
 
 `seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aligndev.settings.json` as `~/.alignfirst/aligndev.settings.json` and validates every provisioned profile with explicit `aligndev guide code --profile <name>`. The inventory includes custom directories and optional quota stores, deduplicates shared stores, and resolves `~/` against the service home and relative paths against the deployed settings directory. Every store needs an explicit `configDir` and must remain isolated beneath the service home. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs, overlapping stores and ambiguous HOME/session overrides fail before writes. It creates `~/.alignfirst/companions/`, which holds the companions and their registry. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
+
+Deployment settings require an explicit valid `code.profile`, even with one profile or a profile-local `default: true`. Flags must be booleans, with at most one true flag per agent across all provisioned profiles. Unknown or obsolete settings keys warn on stderr and are ignored. Retired direct launch fields and `code.defaultProfiles` supply no behavior; convert them manually to preserve intent, keeping profile names unchanged. Recognized invalid fields and deployment safety violations still fail. Inventory never rewrites settings or infers a global selection.
+
+On OpenClaw 2026.10.5, keep Workshop's mode at `off`; `propose` is retired. The seed also disables memory learning/flush, startup telemetry and automatic updates, and keeps Tool Search and Code Mode off so the handoff tools remain visible. Review these policy opt-outs against each upgraded release before re-seeding.
 
 The seed reserves managed discovery paths through `deployment-policy.mjs prepare` and merges the selected overlay's instructions into every store of that agent kind. It preserves text outside managed markers and existing Pi `agents/` profiles. Additional agent kinds and quota stores need their own installation, authentication and instruction review; selecting them in settings does not install or authenticate them. Provision only accounts intended to be available to this Linux user.
 

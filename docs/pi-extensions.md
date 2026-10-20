@@ -42,7 +42,7 @@ Once submitted, a message is **Pi-owned**. Native follow-ups can survive interru
 
 ## Supported and tested baseline
 
-Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and start at **0.0.0**. Deterministic package/host tests have run on **Linux**, **Node 26.8.1** and **Node 22.23.3**, with local scripted providers. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
+Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and currently carry version **0.1.1**. Deterministic package/host tests have run on **Linux**, **Node 26.8.1**, **Node 24.22.0** and **Node 22.23.3**, with local scripted providers. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
 
 The deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. Release smoke additionally installs each packed extension independently and together against Pi 1.3.0. Cross-product tests launch the real AlignDev CLI through a packed background extension, with controlled child streams and companion-backed worktrees.
 

@@ -48,13 +48,15 @@ The bot claims only what it does. The channel session posts the starter in the t
 - A recovery scan retries a pending nudge after a gateway restart, at most ten times. A record still pending after that stays claimable by the next human message in the thread.
 - `openclaw thread-handoff list | receipts | retire` inspect and maintain the records.
 
+Native exec completions on OpenClaw 2026.10.5 enter through session events. Their trusted tool context omits `nativeChannelId` and can retain Slack's bare channel destination. The plugin accepts that bare form only for configured Slack surfaces when the agent, channel and parent match the canonical session key, the thread suffix matches the delivery thread, and supplied account fields agree. Missing or conflicting routing remains an error; model arguments supply no routing authority. A real-gateway background-process test captures this factory context and verifies the completion claim and thread delivery on both surfaces.
+
 The receipt and the claim depend on per-session state captured on one side and read on the other: the tool factory captures the session's channel context, and `before_tool_call` remembers the run ID. Since 2026.9.8, a gateway process evaluates the plugin twice. A turn takes its tools from the gateway's registration (`adoptRuntimeToolRegistrations` in `src/plugins/tool-registry-adoption.ts`) and runs its tool hooks in its own. That state therefore lives in process-wide slots (`process-shared.ts`); a per-registration cache dropped every receipt and failed each `start` with `unverifiedThreadDelivery`.
 
 `thread_handoff` is an agent tool the plugin registers itself, marked optional, so a deployment allows it explicitly. The `openclaw thread-handoff` subcommands are plugin CLI registrations. OpenClaw ships neither.
 
 ## How the channel turn ends silently
 
-A channel message that mentions the bot requires a reply. A turn that ends on `NO_REPLY` stays silent only when core counts a message-tool post as the turn's source reply; otherwise OpenClaw runs the isolated finalizer, which posts an unsolicited answer. The starter therefore has to be that source reply. Facts established on OpenClaw 2026.9.8 in the deterministic gateway suite, with a mentioning root message:
+A channel message that mentions the bot requires a reply. A turn that ends on `NO_REPLY` stays silent only when core counts a message-tool post as the turn's source reply; otherwise OpenClaw runs the isolated finalizer, which posts an unsolicited answer. The starter therefore has to be that source reply. Facts reverified on OpenClaw 2026.10.5 in the deterministic gateway suite, with a mentioning root message:
 
 - Slack: a `send` to the current channel with the triggering message as `threadId` is the source reply. Core matches the delivered thread with the turn's current thread, which native Slack sets to the triggering message on a root turn. The turn ends on `NO_REPLY` with the starter as its only post.
 - Discord: an anchored `thread-create` without content, then a `thread-reply` carrying the starter, is the source reply. The thread-create adopts the thread, which moves the turn's final delivery into it, and the extension tags the `thread-reply` into the adopted thread as current-source. The turn ends on `NO_REPLY` with the starter as its only post.
@@ -64,7 +66,7 @@ The Discord facts rest on the mock, which reproduces native adoption and tagging
 
 ## How the nudge enters OpenClaw
 
-The handoff service owns an asynchronous boundary created outside inbound agent turns. It enters that clean context only while calling `runtime.channel.inbound.dispatchReply`, so the reply run cannot inherit a closing tool-turn work scope. The plugin builds the inbound context itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.5 in the deterministic gateway suite, which still passes on 2026.9.8:
+The handoff service owns an asynchronous boundary created outside inbound agent turns. It enters that clean context only while calling `runtime.channel.inbound.dispatchReply`, so the reply run cannot inherit a closing tool-turn work scope. The plugin builds the inbound context itself: `SenderName: "AlignFirst Service"`, no sender ID, `WasMentioned: false`, command interpretation suppressed, a distinct `MessageSid` per attempt. Core delivers the turn's final text into the thread through the adapter's `durable` option. Facts established on OpenClaw 2026.9.5 and reverified on 2026.10.5 in the deterministic gateway suite, including a standalone packed install:
 
 - The plugin-dispatched turn must disable block streaming. With streaming on, OpenClaw marked the response streamed through a nonposting fallback and dropped the final payload before delivery.
 - A silent plugin-dispatched turn ends on `HEARTBEAT_OK`. `NO_REPLY` invoked the isolated finalizer in six probes out of six, on both surfaces, and produced an unsolicited answer.
@@ -72,7 +74,9 @@ The handoff service owns an asynchronous boundary created outside inbound agent 
 - A human message posted while the nudge turn runs queues behind it and is processed. This is the property the `agent` gateway method lacked (see below).
 - After a gateway restart, core may replay the nudge as a durable user turn while the plugin retries the pending record. The idempotent claim absorbs the duplicate.
 
-Host entry points checked and refused for an external plugin, so the plugin owns its SQLite database and builds the inbound context itself: `openKeyedStore()` (bundled or verified-official plugins only), `api.runtime.gateway.request` (throws for untrusted plugins), `runEmbeddedAgent` (returns payloads without delivering them), `runCommandFromIngress` (for channel plugins with an authenticated sender). A bot's own post never becomes an inbound event, so posting the nudge through the channel API is not an option either.
+The plugin owns its SQLite database and builds the inbound context itself. On 2026.10.5, `api.runtime.gateway.request` still requires bundled or verified-official trust (`src/gateway/server-plugins.ts`), and `dispatchHookAgentTurn` has the same trust boundary (`src/plugins/registry-runtime.ts`). An ordinary allowlist grants neither. `runEmbeddedAgent` returns payloads without delivering them; `runCommandFromIngress` requires channel ingress with an authenticated sender. A bot's own post never becomes an inbound event.
+
+The earlier `openKeyedStore()` trust restriction is historical. The reviewed tag exposes plugin-scoped non-core namespaces through `src/plugin-state/plugin-state-store.ts`, with lifecycle checks in `registry-runtime.ts`. This does not require migrating the existing durable SQLite handoff store or changing its recovery contract.
 
 ## Tried and dropped
 

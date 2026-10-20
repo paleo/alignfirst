@@ -94,6 +94,22 @@ describe("thread_handoff tool", () => {
     fixture.store.close();
   });
 
+  it("rejects a claim without trusted routing even when model input supplies a route", async () => {
+    const fixture = toolFixture(null, { nativeChannelId: undefined, deliveryContext: undefined });
+    await expect(fixture.tool.execute("missing", { action: "claim" })).rejects.toThrow(
+      /unsupportedContext/,
+    );
+    await expect(
+      fixture.tool.execute("forged", {
+        action: "claim",
+        deliveryContext: { channel: "slack", to: "C1", threadId: "100.200" },
+      }),
+    ).rejects.toThrow(/invalidTarget/);
+    expect(fixture.waitForReceipt).not.toHaveBeenCalled();
+    expect(fixture.startTurn).not.toHaveBeenCalled();
+    fixture.store.close();
+  });
+
   it("treats a blank handoffId as a claim without an id", async () => {
     const fixture = toolFixture();
     fixture.store.insertHandoff(handoff());

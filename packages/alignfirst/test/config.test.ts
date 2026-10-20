@@ -181,11 +181,11 @@ describe("config command", () => {
 
   it("reports an invalid registry as a CLI error", async () => {
     const home = temp();
-    writeRegistry(home, { root: "~/c", projects: {} });
+    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: false } } } });
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(
-      `Invalid ${join(home, ".alignfirst", "companions", "registry.json")}: root must be removed`,
+      `Invalid ${join(home, ".alignfirst", "companions", "registry.json")}: projects["~/app"].aligndev.profile must be a non-empty string`,
     );
   });
 });

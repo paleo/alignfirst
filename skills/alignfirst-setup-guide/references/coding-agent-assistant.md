@@ -12,18 +12,19 @@ The project needs a `.plans` directory, in its repository or in its companion di
 
 ## 2. Configure `aligndev` (recommended)
 
-Without settings, `aligndev` launches the same agent as the one that runs the assistant, detected from its environment. Settings make the choice explicit, which matters when the detection is ambiguous, for example Codex started in a VS Code terminal where the Claude Code extension also sets its variable. Write `~/.alignfirst/aligndev.settings.json`:
+Without settings, one detected parent kind supplies built-in child defaults. For a minimal singleton setup, write `~/.alignfirst/aligndev.settings.json`:
 
 ```json
 {
   "code": {
-    "profile": "claude-personal",
     "profiles": { "claude-personal": { "agent": "claude", "configDir": "~/.claude" } }
   }
 }
 ```
 
-A profile's required `agent` selects the child: `claude`, `codex` or `pi`, independently of the parent's launch tool. Profiles are complete, without inheritance. New-session selection is `--profile` → actual-cwd project registry selection → `code.profile` → detected-agent `code.defaultProfiles` → built-in detected defaults. Resume inserts its latest recorded profile before the global default. Help and `guide code` accept `--profile` and use the same resolver, even outside Git. Status reads durable metadata without validating launch profiles.
+A profile's required `agent` selects the child: `claude`, `codex` or `pi`, independently of the parent's launch tool. Profiles are complete, without inheritance. The example selects `claude-personal` for a Claude parent or with no detected parent. Another detected kind keeps its own built-ins when no profile matches. With several profiles matching one detected kind, set one matching profile's `default: true` or make a named choice. Omitted and false flags are equivalent; at most one true flag per agent is allowed. A flag never chooses between agent kinds. No parent with several profiles, or several detected kinds, requires a named choice.
+
+New-session, help, `guide code` and quota selection is `--profile` → actual-cwd project registry selection → global `code.profile` → automatic resolution. Named choices bypass detection; `code.profile` can deliberately choose a different child kind. Resume inserts its latest recorded named profile before the global selection. A deleted recorded name requires explicit/project replacement. Historical null/missing profiles use detected built-ins unless explicit/project/global selection replaces them; counts and flags never trigger inference there. The original transcript stays unchanged. Help/guide/quota share the resolver outside Git and `.plans`. Status reads durable metadata without validating launch settings. Unknown or obsolete settings keys are ignored with value-free warnings on stderr; recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch/default-map semantics. For existing settings, follow the [launch-settings](alignfirst-upgrade.md#convert-aligndev-launch-settings) and [profile-default](alignfirst-upgrade.md#convert-aligndev-profile-defaults) migrations.
 
 `configDir` selects native storage through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. `~/` uses the configured home; relative paths use the settings directory. Omitting it keeps the inherited/default native store. Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs; credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields, and neither may conflict with an explicit `configDir`. Native directory variables in profile `env` also select storage. Before login, reproduce the child's effective environment and cwd: apply `unset/env/configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values; a bare login in another shell may select another account.
 

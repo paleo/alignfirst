@@ -140,8 +140,8 @@ configure_common() {
   # `clawhub` is deliberately absent: the assistant cannot install skills on its own.
   set_json agents.defaults.skills \
     '["alignfirst-setup-guide","sharp-writing"]'
-  # Skill Workshop defaults to "auto": a weekly system-owned cron job lets the assistant rewrite or
-  # drop writable skills. Same rule as clawhub.
+  # Skill Workshop defaults to "auto": learning saves/updates procedures and archives skills
+  # unused for 30 days. "off" disables learning; the former "propose" mode is retired.
   set_scalar skills.workshop.autonomous.mode off
 
   echo "[seed] updates — operator-driven (update-assistant.md)"

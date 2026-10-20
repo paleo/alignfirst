@@ -1,7 +1,15 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   registryPath,
@@ -16,6 +24,7 @@ import { configureGit, git, initRepository, makeTempDir, writeRegistry } from ".
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -33,16 +42,105 @@ describe("project layout", () => {
     expect(layout.locations._aligndev).toEqual(layout.locations[".plans"]);
   });
 
+  it("warns at every settings level, redacts map keys and leaves the registry unchanged", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    const secret = "PRIVATE-SETTING-VALUE";
+    writeRegistry(home, {
+      root: secret,
+      paths: { [secret]: { docs: true } },
+      extra: { nested: secret },
+      projects: {
+        "~/projects/app": {
+          dir: "app",
+          extra: secret,
+          items: { docs: "project", extra: secret },
+          aligndev: { profile: "work", extra: secret },
+        },
+        [`~/${secret}`]: { aligndev: { profile: "other", extra: secret } },
+      },
+    });
+    const before = readFileSync(registryPath(home), "utf-8");
+    const layout = resolveProjectLayout(project, home);
+    expect(layout.aligndev).toEqual({ profile: "work" });
+    expect(layout.companion?.items.docs).toBe("project");
+    expect(layout.companion?.items).not.toHaveProperty("extra");
+    expect(warn).toHaveBeenCalledTimes(7);
+    const warnings = warn.mock.calls.flat().join("\n");
+    for (const field of [
+      "root",
+      "paths",
+      "extra",
+      "projects[<entry>].extra",
+      "projects[<entry>].items.extra",
+      "projects[<entry>].aligndev.extra",
+    ])
+      expect(warnings).toContain(`setting ${field}.`);
+    expect(warnings).toContain("convert paths manually");
+    expect(warnings).toContain("Use a symlink");
+    expect(warnings).not.toContain(secret);
+    expect(warnings).not.toContain("~/projects/app");
+    expect(readFileSync(registryPath(home), "utf-8")).toBe(before);
+  });
+
+  it("ignores obsolete paths even when projects is absent, but still requires projects", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    writeRegistry(home, { paths: { "~/projects/app": { docs: true } } });
+    expect(() => resolveProjectLayout(project, home)).toThrow("projects must be an object");
+    expect(warn.mock.calls.flat().join("\n")).toContain("convert paths manually");
+    writeRegistry(home, { paths: "PRIVATE", projects: {} });
+    expect(resolveProjectLayout(project, home).companion).toBeNull();
+  });
+
+  it("does not treat project-map keys or supported item names as unknown settings", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    writeRegistry(home, {
+      projects: {
+        "~/projects/app": {
+          dir: "app",
+          items: {
+            ".alignfirst.json": "project",
+            ".alignfirst-instructions": "auto",
+            "DEVELOPERS.md": "companion",
+            docs: "project",
+            ".plans": "project",
+            _aligndev: "companion",
+          },
+        },
+        "/other/path": { aligndev: { profile: "work" } },
+      },
+    });
+    expect(resolveProjectLayout(project, home).companion).not.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("still validates known values and semantics when unknown settings are present", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    for (const entry of [
+      { dir: "app", items: { docs: "PRIVATE" } },
+      { dir: "app", aligndev: { profile: "  " } },
+      { items: {}, aligndev: { profile: "work" } },
+      { dir: "app", items: { _aligndev: "companion" } },
+    ]) {
+      writeRegistry(home, { extra: "PRIVATE", projects: { "~/projects/app": entry } });
+      expect(() => resolveProjectLayout(project, home)).toThrow("Invalid");
+      expect(() => resolveProjectLayout(project, home)).not.toThrow("PRIVATE");
+    }
+    expect(warn).toHaveBeenCalled();
+  });
+
   it.each([
     ["{", "JSON"],
+    ['{"projects": {}, "extra": "PRIVATE", BROKEN}', "must contain valid JSON"],
+    [JSON.stringify(null), "must be an object"],
+    [JSON.stringify([]), "must be an object"],
     [JSON.stringify({}), "projects must be an object"],
-    [
-      JSON.stringify({ paths: { "~/p": {} } }),
-      'the companion registry now uses "projects" entries with a "dir". Convert it as the alignfirst-upgrade reference',
-    ],
-    [JSON.stringify({ projects: {}, paths: {} }), 'now uses "projects" entries'],
-    [JSON.stringify({ root: "~/c", projects: {} }), "root must be removed"],
-    [JSON.stringify({ projects: {}, extra: 1 }), "extra must be removed"],
+    [JSON.stringify({ projects: [] }), "projects must be an object"],
+    [JSON.stringify({ projects: { "~/p": null } }), "must be an object"],
+    [JSON.stringify({ projects: { "~/p": { dir: "p", items: [] } } }), "items must be an object"],
     [JSON.stringify({ projects: { "~/p": {} } }), 'define "dir" or "aligndev"'],
     [JSON.stringify({ projects: { "~/p": { items: {} } } }), 'define "dir" when "items"'],
     [JSON.stringify({ projects: { "~/p": { aligndev: {} } } }), "profile must"],
@@ -50,20 +148,11 @@ describe("project layout", () => {
     [JSON.stringify({ projects: { "~/p": { aligndev: { profile: 1 } } } }), "profile must"],
     [JSON.stringify({ projects: { "~/p": { aligndev: { profile: "" } } } }), "profile must"],
     [JSON.stringify({ projects: { "~/p": { aligndev: { profile: "  " } } } }), "nonblank"],
-    [
-      JSON.stringify({ projects: { "~/p": { aligndev: { profile: "work", extra: 1 } } } }),
-      "extra must be removed",
-    ],
     [JSON.stringify({ projects: { "~/p": { dir: " " } } }), "nonblank path"],
     [JSON.stringify({ projects: { "~/p": { dir: "a\u0000b" } } }), "nonblank path"],
     [JSON.stringify({ projects: { "~/p": { dir: "" } } }), "dir must be a non-empty string"],
     [JSON.stringify({ projects: { "~/p": { dir: "~x" } } }), "dir must be a relative path"],
     [JSON.stringify({ projects: { "~/p": { dir: "~" } } }), "dir must be a relative path"],
-    [JSON.stringify({ projects: { "~/p": { dir: "p", other: 1 } } }), "other must be removed"],
-    [
-      JSON.stringify({ projects: { "~/p": { dir: "p", items: { x: "auto" } } } }),
-      "x must be removed",
-    ],
     [JSON.stringify({ projects: { "~/p": { dir: "p", items: { docs: true } } } }), "docs must be"],
     [
       JSON.stringify({ projects: { "~/p": { dir: "p", items: { _aligndev: "project" } } } }),

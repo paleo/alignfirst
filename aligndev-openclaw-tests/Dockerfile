@@ -16,7 +16,7 @@ USER root
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl sqlite && \
     npm install --global corepack@0.36.0 && \
-    corepack enable && corepack prepare pnpm@latest --activate && \
+    corepack enable && corepack prepare pnpm@12.14.0 --activate && \
     for name in claude codex pi gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/assistant/projects && \
     chown assistant:assistant /home/assistant/projects
@@ -84,11 +84,11 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 RUN npm ci --include=dev && \
     export OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/codex@2026.10.2 && \
+      npm:@openclaw/codex@2026.10.5 && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/zai-provider@2026.10.2 && \
+      npm:@openclaw/zai-provider@2026.10.5 && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/perplexity-plugin@2026.10.2 && \
+      npm:@openclaw/perplexity-plugin@2026.10.5 && \
     npx openclaw plugins registry --refresh && \
     npx openclaw update repair --yes && \
     for attempt in 1 2 3; do \
@@ -117,5 +117,5 @@ RUN npx -y skills add https://github.com/paleo/alignfirst --global --yes \
       --skill alignfirst-setup-guide
 
 USER root
-RUN corepack install --global pnpm@latest
+RUN corepack install --global pnpm@12.14.0
 USER assistant

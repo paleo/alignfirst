@@ -44,7 +44,7 @@ Record the printed `~/backups/bootstrap/<stamp>/` path in the report, without it
 
 The private archive preserves the entire service home except `~/backups/`, including the original deployed settings, old seed and `.env`, native credentials, trust, sessions, shared skills, companions and registry, project files, npm/fnm trees, and all OpenClaw and thread-handoff database sidecars. Original modes and symlinks are retained inside the archive; the archive and marker are `0600`, and backup directories are `0700`. Check free space for the complete home. Symlink targets outside the home, external mounts and system-owned files outside the home need a separate reviewed private backup before proceeding. Links are never followed. Transient sockets are not persistent state.
 
-This is a pre-conversion recovery snapshot, distinct from the mapped profile backup in [recover-assistant.md](recover-assistant.md#restore). To inspect or recover it, extract as the service account into a fresh private staging directory while contained. Review original destinations and symlinks before activating individual files. Keep legacy settings as evidence or for a reviewed rollback with the matching old packages and controls; never feed them to the new profile-only helpers or CLI. Do not overlay the archive onto a live home or use it as a `native-recovery` mapping.
+This is a pre-conversion recovery snapshot, distinct from the mapped profile backup in [recover-assistant.md](recover-assistant.md#restore). To inspect or recover it, extract as the service account into a fresh private staging directory while contained. Review original destinations and symlinks before activating individual files. Keep legacy settings as evidence or for a reviewed rollback with the matching old packages and controls. New readers ignore retired launch fields with warnings; profile-only deployment helpers still require an explicit provisioned profile. Do not overlay the archive onto a live home or use it as a `native-recovery` mapping.
 
 Now refresh the contained snapshot:
 
@@ -55,7 +55,7 @@ sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
 
 ## One-time: convert direct launch settings
 
-Before installing profile-aware AlignDev or opening its first maintenance window, manually convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to the existing service-account store (`~/.claude` or `~/.codex` on a default installation); remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults. Obtain approval for the reviewed settings replacement; no command below converts settings automatically.
+Before installing profile-aware AlignDev or opening its first maintenance window, manually convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to the existing service-account store (`~/.claude` or `~/.codex` on a default installation); remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults. Obtain approval for the reviewed settings replacement; no command below converts settings automatically. Unknown or obsolete keys warn on stderr and are ignored, including direct launch fields and `code.defaultProfiles`; they supply no legacy behavior. Manually move needed default-map preferences to matching profiles' `default: true`, omitting singleton flags and keeping profile names. Recognized invalid values, duplicate defaults and deployment safety violations still fail.
 
 Bring `deployment-profiles.mjs`, `deployment-policy.mjs`, `seed.sh`, `seed/coding-agent.sh` and `assistant-maintenance.sh` forward together. After the bootstrap backup and snapshot refresh above, convert the installed settings while contained. The wrapper validates deployed profiles too:
 
@@ -193,7 +193,7 @@ openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
 '
 ```
 
-On the first profile-aware upgrade, re-seed now through the `config instructions` command in [configure-assistant.md](configure-assistant.md), before any CLI help, delegation or restart. This replaces the protected direct launch settings; the new CLI rejects them.
+On the first profile-aware upgrade, re-seed now through the `config instructions` command in [configure-assistant.md](configure-assistant.md), before any CLI help, delegation or restart. This replaces the protected direct launch settings; the new CLI ignores them with warnings, so they no longer preserve the deployment's launch policy.
 
 Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual project `.alignfirst.json` files retain their singular `portRange` claims:
 

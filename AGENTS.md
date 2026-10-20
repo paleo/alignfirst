@@ -16,9 +16,7 @@ Run `npx -y alignfirst context` from the repository root as your first command i
 
 **Test runner**: Vitest (`vitest run`). Per-package: `npm test --workspace <name>`. All packages: `npm test`. Suites that build and spawn real CLIs run separately through `npm run test:integration`.
 
-**Model-test policy**: Run model-driven matrices with Terra only. The Anthropic and Z.AI keys are
-not provisioned; their providers stay in the test config as examples. The judge runs Haiku through
-OpenRouter.
+**Model-test policy**: After upgrades, select a few representative OpenClaw scenarios based on the changed behavior; never run the full matrix by default. Investigate and fix unexpected errors before any justified expansion of scenarios, surfaces or iterations. Use only Terra for conversation-model tests and Haiku through OpenRouter for the judge. The Anthropic and Z.AI keys are not provisioned; their providers stay in the test config as examples. See [Running the OpenClaw Tests](docs/aligndev-openclaw/running-openclaw-tests.md#scenario-selection).
 
 **Releases**: Changesets (`.changeset/`). Base branch: `main`. Default access: `public`. Stable releases publish from CI through npm trusted publishing — see `docs/releasing.md`. For local opt-in previews, see `docs/publishing-previews.md`.
 

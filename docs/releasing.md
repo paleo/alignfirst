@@ -21,6 +21,8 @@ Stable releases publish from GitHub Actions through npm trusted publishing (OIDC
 
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
+The publish job uses Node 26 and npm `12.2.0`, which retains trusted publishing and automatic OIDC provenance. npm 12 blocks dependency lifecycle scripts by default; the root manifest records version-scoped approvals for the reviewed build dependencies. The workflow identity, release approval and trusted-publisher bindings are unchanged. Locally, use `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm <command>` rather than upgrading a global installation.
+
 ## Verifying provenance
 
 In any project that depends on these packages:
@@ -91,7 +93,7 @@ A trusted publisher binds to an existing package, so a name the registry has nev
    npm deprecate @paleo/docmap "Renamed to @alignfirst/docmap"
    ```
 
-`@alignfirst/pi-subagent` and `@alignfirst/pi-background` are new names awaiting the owner's bootstrap and individual trusted-publisher bindings. Their `0.0.0` placeholders are deliberately excluded by `scripts/release-pending.mjs`; the minor changesets prepare their first consumer releases. Follow the steps above for both names before merging them to `main`. No additional publish job or GitHub environment is needed.
+`@alignfirst/pi-subagent` and `@alignfirst/pi-background` each need their own bootstrap and trusted-publisher binding. Their current manifest versions are `0.1.1`; a version bump alone does not establish registry provisioning. `scripts/release-pending.mjs` excludes only `0.0.0` placeholders. For an unprovisioned name, follow the steps above before its first CI publication. No additional publish job or GitHub environment is needed.
 
 Publishing the current versions first preserves the invariant above: `check` reports nothing pending until the **release: version packages** PR lands, and the rename's own release is the first one CI is asked to approve.
 

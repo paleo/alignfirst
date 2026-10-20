@@ -4,11 +4,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBus, injectQaBusInboundMessage } from "@alignfirst/openclaw-channel-mock-core";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
-const OPENCLAW = resolve(REPO_ROOT, "node_modules/.bin/openclaw");
+const PACKED_ROOT = process.env.THREAD_HANDOFF_PACKED_ROOT;
+const OPENCLAW = resolve(PACKED_ROOT ?? REPO_ROOT, "node_modules/.bin/openclaw");
 const TAKEOVER_MESSAGE = "Take over this thread.";
 const SILENT_TOKEN = "HEARTBEAT_OK";
 const BOT_MENTION = "@openclaw";
@@ -28,6 +30,8 @@ type Surface = "slack" | "discord";
 
 type FixtureOptions = {
   answerFinalizer?: boolean;
+  nativeExecCompletion?: boolean;
+  dropCompletionRoute?: boolean;
   claimTwice?: boolean;
   duplicateStart?: boolean;
   starterInThreadCreate?: boolean;
@@ -65,6 +69,73 @@ afterEach(async () => {
 });
 
 describe("OpenClaw external-plugin gateway", () => {
+  it.each(["slack", "discord"] as const)(
+    "claims and delivers a %s native exec completion on its canonical thread",
+    async (surface) => {
+      const fixture = await startFixture(surface, { nativeExecCompletion: true });
+      await injectRootMessage(fixture, "Project-X", "Start native completion verification.");
+      const completed = await waitForMessage(
+        fixture,
+        (message) => message.text === "NATIVE_COMPLETION_REPORTED",
+        40_000,
+      );
+      const threadId = resolveThreadId(surface, fixture.bus.state.getSnapshot(), "Project-X");
+      expect(completed.threadId).toBe(threadId);
+      expect(completed.conversation.id).toBe("Project-X");
+      expect(providerContentIncludes(fixture, "Exec completed (")).toBe(true);
+      expect(providerContentIncludes(fixture, "NATIVE_EXEC_OUTPUT")).toBe(true);
+      expect([...providerClaimResults(fixture).values()]).toEqual(["claimed", "alreadyClaimed"]);
+      const contexts = (await readFile(resolve(fixture.root, "tool-contexts.jsonl"), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line): OpenClawPluginToolContext => JSON.parse(line));
+      expect(contexts).toContainEqual(
+        expect.objectContaining({
+          sessionKey: canonicalSessionKey(fixture, threadId),
+          deliveryContext: expect.objectContaining({
+            channel: fixture.channelId,
+            to: surface === "slack" ? "Project-X" : `channel:${threadId}`,
+          }),
+        }),
+      );
+      const completionContexts = contexts.filter(
+        (context) =>
+          context.nativeChannelId === undefined && context.deliveryContext?.to !== undefined,
+      );
+      expect(completionContexts).not.toHaveLength(0);
+      expect(
+        completionContexts.every(
+          (context) =>
+            context.sessionKey === canonicalSessionKey(fixture, threadId) &&
+            (surface !== "slack" || context.deliveryContext?.threadId === threadId),
+        ),
+      ).toBe(true);
+      expectNoIsolatedFinalization(fixture);
+    },
+  );
+
+  it("rejects a native exec completion with missing trusted routing", async () => {
+    const fixture = await startFixture("slack", {
+      nativeExecCompletion: true,
+      dropCompletionRoute: true,
+    });
+    await injectRootMessage(fixture, "Project-X", "Verify the native completion routing guard.");
+    await waitForMessage(
+      fixture,
+      (message) => message.text === "NATIVE_COMPLETION_CLAIM_REJECTED",
+      40_000,
+    );
+    expect(providerContentIncludes(fixture, "Exec completed (")).toBe(true);
+    expect(
+      providerContentIncludes(
+        fixture,
+        "unsupportedContext: Trusted channel session context is unavailable.",
+      ),
+    ).toBe(true);
+    expect([...providerClaimResults(fixture).values()]).toEqual(["claimed", "error"]);
+    expect(outboundMessages(fixture, "NATIVE_COMPLETION_REPORTED")).toHaveLength(0);
+  });
+
   it.each(["slack", "discord"] as const)(
     "keeps a claimed %s seed silent while awaiting a human answer",
     async (surface) => {
@@ -203,7 +274,7 @@ describe("OpenClaw external-plugin gateway", () => {
         attemptCount: 1,
         claimedBy: { sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/u) },
       });
-      expect(records[0].targetSessionKey.toLowerCase()).toContain(expectedThreadId.toLowerCase());
+      expect(records[0].targetSessionKey).toBe(canonicalSessionKey(fixture, expectedThreadId));
       expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "alreadyStarted"')).toBe(true);
@@ -374,45 +445,70 @@ describe("OpenClaw external-plugin gateway", () => {
     },
   );
 
-  it("recovers one pending Slack startup across abrupt and post-claim restarts", async () => {
-    const options = { holdFirstSeed: true };
-    const fixture = await startFixture("slack", options);
-    await injectQaBusInboundMessage({
-      baseUrl: serverUrl(fixture.busServer),
-      input: {
-        accountId: fixture.channelId,
-        conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-        senderId: "User-A",
-        senderName: "User A",
-        text: "Start and survive a restart.",
-      },
-    });
-    await waitUntil(
-      () => fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE)),
-      20_000,
-      () => "the first pending seed was not observed",
-    );
-    const pending = JSON.parse(
-      await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
-    ) as Array<{ state: string }>;
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.state).toBe("pending");
+  it.each(["slack", "discord"] as const)(
+    "recovers one pending %s startup across abrupt and post-claim restarts",
+    async (surface) => {
+      const options = { holdFirstSeed: true };
+      const fixture = await startFixture(surface, options);
+      await injectRootMessage(fixture, "Project-X", "Start and survive a restart.");
+      await waitUntil(
+        () => fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE)),
+        20_000,
+        () => "the first pending seed was not observed",
+      );
+      const threadId = resolveThreadId(surface, fixture.bus.state.getSnapshot(), "Project-X");
+      const pending = JSON.parse(
+        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      ) as Array<{ state: string; targetSessionKey: string; attemptCount: number }>;
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        state: "pending",
+        targetSessionKey: canonicalSessionKey(fixture, threadId),
+        attemptCount: 1,
+      });
 
-    options.holdFirstSeed = false;
-    await restartGateway(fixture, "SIGKILL");
-    await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
-    expect(await handoffStates(fixture)).toEqual(["claimed"]);
-    expect(await handoffAttempts(fixture)).toEqual([2]);
+      options.holdFirstSeed = false;
+      await restartGateway(fixture, "SIGKILL");
+      const started = await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
+      expect(started.threadId).toBe(threadId);
+      expect(await handoffStates(fixture)).toEqual(["claimed"]);
+      expect(await handoffAttempts(fixture)).toEqual([2]);
 
-    await restartGateway(fixture, "SIGKILL");
-    await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
-    expect(
-      fixture.bus.state
-        .getSnapshot()
-        .messages.filter((message) => message.direction === "outbound" && message.text === MARKER),
-    ).toHaveLength(1);
-    expect(await handoffStates(fixture)).toEqual(["claimed"]);
-  }, 300_000);
+      await restartGateway(fixture, "SIGKILL");
+      await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
+      expect(outboundMessages(fixture, MARKER)).toHaveLength(1);
+      expect(await handoffStates(fixture)).toEqual(["claimed"]);
+      expect(await handoffAttempts(fixture)).toEqual([2]);
+      const recovered = JSON.parse(
+        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      );
+      expect(recovered).toMatchObject([
+        { targetSessionKey: canonicalSessionKey(fixture, threadId), threadId },
+      ]);
+      await injectQaBusInboundMessage({
+        baseUrl: serverUrl(fixture.busServer),
+        input: {
+          accountId: fixture.channelId,
+          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
+          senderId: "User-A",
+          text: "Continue in this same thread.",
+          threadId,
+        },
+      });
+      const continued = await waitForMessage(
+        fixture,
+        (message) => message.text === "SAME_SESSION_CONTINUED",
+      );
+      expect(continued.threadId).toBe(threadId);
+      expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([
+        threadId,
+        threadId,
+        threadId,
+      ]);
+      expectNoIsolatedFinalization(fixture);
+    },
+    300_000,
+  );
 
   it.each(["slack", "discord"] as const)(
     "retries one failed %s native starter without duplicating delivery",
@@ -470,6 +566,9 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   await listen(providerServer);
   const channelId = `${surface}-mock`;
   const configPath = resolve(root, "openclaw.json");
+  const handoffPluginPath = options.nativeExecCompletion
+    ? await createContextObserver(root, options)
+    : undefined;
   const gatewayPort = await reservePort();
   await writeFile(
     configPath,
@@ -481,6 +580,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
         busUrl: serverUrl(busServer),
         providerUrl: serverUrl(providerServer),
         gatewayPort,
+        handoffPluginPath,
       }),
       null,
       2,
@@ -514,6 +614,45 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   return fixture;
 }
 
+async function createContextObserver(root: string, options: FixtureOptions): Promise<string> {
+  const pluginRoot = resolve(
+    PACKED_ROOT ?? REPO_ROOT,
+    PACKED_ROOT === undefined
+      ? "packages/service-openclaw-plugin"
+      : "node_modules/@alignfirst/service-openclaw-plugin",
+  );
+  const observer = resolve(root, "context-observer");
+  await mkdir(observer);
+  await writeFile(resolve(observer, "package.json"), JSON.stringify({ type: "module" }));
+  await writeFile(
+    resolve(observer, "openclaw.plugin.json"),
+    await readFile(resolve(pluginRoot, "openclaw.plugin.json")),
+  );
+  await writeFile(
+    resolve(observer, "index.js"),
+    `
+import { appendFileSync } from "node:fs";
+import plugin from ${JSON.stringify(resolve(pluginRoot, "dist/index.js"))};
+export default { ...plugin, register(api) {
+  plugin.register({ ...api, registerTool(tool, options) {
+    api.registerTool(typeof tool !== "function" ? tool : (context) => {
+      const { agentId, sessionKey, sessionId, messageChannel, nativeChannelId,
+        agentAccountId, deliveryContext } = context;
+      appendFileSync(${JSON.stringify(resolve(root, "tool-contexts.jsonl"))}, JSON.stringify({
+        agentId, sessionKey, sessionId, messageChannel, nativeChannelId,
+        agentAccountId, deliveryContext,
+      }) + "\\n");
+      const dropRoute = ${options.dropCompletionRoute === true} &&
+        nativeChannelId === undefined && deliveryContext?.to !== undefined;
+      return tool(dropRoute ? { ...context, deliveryContext: undefined } : context);
+    }, options);
+  }});
+}};
+`,
+  );
+  return observer;
+}
+
 function buildConfig(params: {
   surface: Surface;
   channelId: string;
@@ -521,6 +660,7 @@ function buildConfig(params: {
   busUrl: string;
   providerUrl: string;
   gatewayPort: number;
+  handoffPluginPath?: string;
 }) {
   return {
     gateway: { mode: "local", port: params.gatewayPort, auth: { mode: "none" } },
@@ -529,8 +669,19 @@ function buildConfig(params: {
       allow: [params.channelId, "alignfirst-service"],
       load: {
         paths: [
-          resolve(REPO_ROOT, `packages/openclaw-${params.surface}-mock`),
-          resolve(REPO_ROOT, "packages/service-openclaw-plugin"),
+          resolve(
+            PACKED_ROOT ?? REPO_ROOT,
+            PACKED_ROOT === undefined
+              ? `packages/openclaw-${params.surface}-mock`
+              : `node_modules/@alignfirst/openclaw-${params.surface}-mock`,
+          ),
+          params.handoffPluginPath ??
+            resolve(
+              PACKED_ROOT ?? REPO_ROOT,
+              PACKED_ROOT === undefined
+                ? "packages/service-openclaw-plugin"
+                : "node_modules/@alignfirst/service-openclaw-plugin",
+            ),
         ],
       },
       entries: {
@@ -621,6 +772,15 @@ function createProviderScript(
         typeof message.content === "string" ? message.content : JSON.stringify(message.content),
       )
       .join("\n");
+    if (options.nativeExecCompletion && latestUserText.includes("Exec completed (")) {
+      if (latestToolText?.includes('"status": "alreadyClaimed"')) {
+        return { content: "NATIVE_COMPLETION_REPORTED" };
+      }
+      if (latestToolText?.includes('"status": "error"')) {
+        return { content: "NATIVE_COMPLETION_CLAIM_REJECTED" };
+      }
+      return { tool: "thread_handoff", arguments: { action: "claim" } };
+    }
     if (all.includes("Keep this turn busy.")) {
       const delayMs = options.stallChannelReplyMs ?? 0;
       options.stallEndsAt = Date.now() + delayMs;
@@ -667,7 +827,16 @@ function createProviderScript(
           },
         };
       }
+      if (options.nativeExecCompletion && latestToolText?.includes("Command still running")) {
+        return { content: SILENT_TOKEN };
+      }
       if (latestToolText?.includes("preserve this exact starter.")) {
+        if (options.nativeExecCompletion) {
+          return {
+            tool: "exec",
+            arguments: { command: "sleep 2; printf NATIVE_EXEC_OUTPUT", background: true },
+          };
+        }
         if (options.silenceAfterClaim) return { content: SILENT_TOKEN };
         if (options.stallSeedReplyMs !== undefined && options.seedStallStartedAt === undefined) {
           options.seedStallStartedAt = Date.now();
@@ -874,6 +1043,12 @@ function outboundMessages(fixture: Fixture, text: string) {
   return fixture.bus.state
     .getSnapshot()
     .messages.filter((message) => message.direction === "outbound" && message.text === text);
+}
+
+function canonicalSessionKey(fixture: Fixture, threadId: string): string {
+  return fixture.surface === "slack"
+    ? `agent:main:${fixture.channelId}:channel:project-x:thread:${threadId.toLowerCase()}`
+    : `agent:main:${fixture.channelId}:channel:${threadId.toLowerCase()}`;
 }
 
 async function handoffStates(fixture: Fixture): Promise<string[]> {

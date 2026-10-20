@@ -10,6 +10,7 @@ import type { CliMockHandler, ScenarioContext } from "@alignfirst/openclaw-test"
 import { createClaudeAdapter } from "../../packages/aligndev/dist/code/claude-agent.js";
 import { createCodexAdapter } from "../../packages/aligndev/dist/code/codex-agent.js";
 import { createPiAdapter } from "../../packages/aligndev/dist/code/pi-agent.js";
+import { buildPrompt } from "../../packages/aligndev/dist/code/prompt.js";
 import type { AgentAdapter, RunConfig } from "../../packages/aligndev/dist/code/run-agent.js";
 import { type CodingAgent, PI_CONTRACT_MODEL } from "../scripts/coding-agent-settings.ts";
 
@@ -20,16 +21,21 @@ import {
   isAlignfirstWrapperCall,
   isCodingProtocolPrompt,
   isLogReviewPrompt,
+  isReviewProtocolPrompt,
   MOCK_CONTEXT_TOKENS,
   type PiResponseVariant,
   pushMockFixtureBranch,
   type PushFixtureContext,
   renderCodingAgentCall,
   setupCodingAgentMock,
+  type SetupCodingAgentMockOptions,
 } from "../scenarios/_lib/mock-coding-agent.ts";
 
 const PROMPT =
   "Run `alignfirst guide aad` and follow the protocol. Ticket ID = 29.\n\nFix `code` and $(literal).";
+const REVIEW_INSTRUCTION =
+  "Run `npx -y alignfirst guide review` and follow the protocol. Ticket ID = ABC-0160.";
+const REVIEW_RESULT = "Review complete against main. No findings.";
 const WORKTREE = "/home/assistant/projects/nimbus-ABC-0120-export-bold";
 const PUBLISH_REQUEST =
   "Publish the existing local commit on branch ABC-0120/export-bold: push it to origin " +
@@ -79,6 +85,107 @@ test("recognizes the active protocol after catchup and ignores historical instru
     isCodingProtocolPrompt("Run `alignfirst guide catchup` and follow the protocol."),
     false,
   );
+});
+
+for (const [agent, adapter] of [
+  ["claude", createClaudeAdapter()],
+  ["codex", createCodexAdapter()],
+  ["pi", createPiAdapter()],
+] as const) {
+  test(`${agent} A16 review matcher and mock accept actual CLI prompt wrapping`, async (t) => {
+    const fixture = createMockFixture(t, agent, {
+      onPrompt: async (_ctx, _cwd, prompt) => {
+        if (isReviewProtocolPrompt(prompt)) return REVIEW_RESULT;
+      },
+    });
+    for (const alignfirst of ["alignfirst", "npx -y alignfirst"]) {
+      for (const wrapping of [
+        { newSession: true },
+        { newSession: false },
+        {
+          newSession: false,
+          contextContent: "Use the project conventions.",
+          catchupContent: "Earlier implementation is complete; the review remains.",
+        },
+      ]) {
+        const prompt = buildPrompt({
+          ...wrapping,
+          alignfirst,
+          protocol: "review",
+          ticket: "ABC-0160",
+          message: "Base branch: `main`.",
+        });
+        const config = {
+          ...mockRunConfig(fixture.home, wrapping.newSession ? undefined : "native-id"),
+          prompt,
+        };
+        const argv = adapter.buildArgs(config);
+        const call: CodingAgentCall = { agent, argv, cwd: fixture.home, stdin: prompt };
+        assert.equal(isReviewProtocolPrompt(extractCodingPrompt(call)), true);
+        const response = await fixture.invoke(agent, argv, prompt);
+        assert.equal(response.exitCode, 0, response.stderr);
+        const assessment = assessStream(adapter, config, response.stdout);
+        assert.equal(
+          assessment.succeeded,
+          true,
+          assessment.error ?? "Review stream did not succeed",
+        );
+        assert.equal(assessment.result, REVIEW_RESULT);
+        assert.doesNotMatch(response.stdout, /Implemented the requested change/u);
+      }
+    }
+    const prompt = buildPrompt({
+      alignfirst: "alignfirst",
+      newSession: true,
+      contextContent: REVIEW_INSTRUCTION,
+      catchupContent: REVIEW_INSTRUCTION,
+      protocol: "aad",
+      ticket: "ABC-0160",
+    });
+    const config = { ...mockRunConfig(fixture.home), prompt };
+    const response = await fixture.invoke(agent, adapter.buildArgs(config), prompt);
+    assert.equal(response.exitCode, 0, response.stderr);
+    assert.match(response.stdout, /Implemented the requested change/u);
+    assert.doesNotMatch(response.stdout, /Review complete against main/u);
+  });
+}
+
+test("review matcher rejects history, context, quotations, and other active instructions", () => {
+  const nonReview = buildPrompt({
+    alignfirst: "alignfirst",
+    newSession: true,
+    protocol: "aad",
+    ticket: "ABC-0160",
+    contextContent: REVIEW_INSTRUCTION,
+    catchupContent: REVIEW_INSTRUCTION,
+    message: `Previous instruction: ${REVIEW_INSTRUCTION}`,
+  });
+  assert.equal(isCodingProtocolPrompt(nonReview), true);
+  for (const prompt of [
+    undefined,
+    "",
+    nonReview,
+    buildPrompt({
+      alignfirst: "alignfirst",
+      newSession: true,
+      contextContent: REVIEW_INSTRUCTION,
+      catchupContent: REVIEW_INSTRUCTION,
+      message: "Summarize the history, without performing a review.",
+    }),
+    `Quoted instruction: ${REVIEW_INSTRUCTION}`,
+    `\`\`\`text\n${REVIEW_INSTRUCTION}\n\`\`\``,
+    `Review the logs.\n\n${REVIEW_INSTRUCTION}`,
+    "Run `alignfirst guide review` but do not follow the protocol.",
+    "Run `alignfirst guide review-extra` and follow the protocol.",
+    `${buildPrompt({
+      alignfirst: "alignfirst",
+      newSession: true,
+      protocol: "review",
+      catchupContent: REVIEW_INSTRUCTION,
+    })}\n\n## Current instruction\n\nSummarize only.`,
+  ]) {
+    assert.equal(isReviewProtocolPrompt(prompt), false, String(prompt));
+  }
 });
 
 test("rejects argv prompts and model-catalog calls as wrapper executions", () => {
@@ -194,9 +301,9 @@ for (const [agent, adapter] of [
       });
       const response = await fixture.invoke(agent, argv);
       assert.equal((await pendingCall).argv, argv);
-      assert.equal(response.exitCode, 0, response.stderr);
+      assert.equal(response.exitCode, 0, response.stderr ?? "Mock exited unsuccessfully");
       const assessment = assessStream(adapter, config, response.stdout);
-      assert.equal(assessment.succeeded, true, assessment.error);
+      assert.equal(assessment.succeeded, true, assessment.error ?? "Stream did not succeed");
       assert.equal(assessment.result, "Fixture result");
       assert.equal(assessment.contextTokens, MOCK_CONTEXT_TOKENS);
       assert.equal(assessment.contextCompacted, false);
@@ -317,7 +424,11 @@ test("Pi streams are bounded deterministic version-3 records with latest-respons
   assert.throws(() => buildPiStreamResponse("id", "/fixture", "x".repeat(16_385)), /bounds/u);
 });
 
-function createMockFixture(t: TestContext, agent: CodingAgent) {
+function createMockFixture(
+  t: TestContext,
+  agent: CodingAgent,
+  options: Pick<SetupCodingAgentMockOptions, "onPrompt"> = {},
+) {
   const home = mkdtempSync(join(tmpdir(), "harness-coding-helper-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const handlers = new Map<string, CliMockHandler>();
@@ -339,9 +450,9 @@ function createMockFixture(t: TestContext, agent: CodingAgent) {
     streamDelayMs: 0,
     environment: { CODING_AGENT: agent },
     codexHome: home,
-    onPrompt: async () => "Fixture result",
+    onPrompt: options.onPrompt ?? (async () => "Fixture result"),
   });
-  async function invoke(name: string, argv: string[]) {
+  async function invoke(name: string, argv: string[], prompt = PROMPT) {
     const handler = handlers.get(name);
     assert.ok(handler, `unexpected real CLI fallback: ${name}`);
     let stdout = "";
@@ -361,7 +472,7 @@ function createMockFixture(t: TestContext, agent: CodingAgent) {
     const exitCode = await handler({
       argv,
       cwd: home,
-      stdin: Readable.from([PROMPT]),
+      stdin: Readable.from([prompt]),
       stdout: out,
       stderr: err,
     });
