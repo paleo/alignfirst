@@ -7,7 +7,7 @@ read_when:
 
 # Server Setup
 
-**Human administrator**, on a fresh server, from the laptop. First runbook of the execution order: `01` → `02` → `03` → `05` → `07` (platform part) → `04` → `08` → `09` when selected → `06` → `07` (smoke test). The last step installs the coding agent for the admin account; from there, a session in the cloned repository takes over as the **operator**.
+**Human administrator**, on a fresh server, from the laptop. First runbook of the execution order: `01` → `02` → `03` → `05` → `07` (platform part) → `04` → `08` → `09` when selected → `06` → `07` (smoke test). The last step installs Claude Code, Codex or Pi for the admin account; from there, a session in the cloned repository takes over as the **operator**. Admin and service accounts authenticate separately.
 
 > **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
@@ -137,7 +137,7 @@ echo 'fs.inotify.max_user_instances=1024'   | sudo tee -a /etc/sysctl.conf
 
 ## 6. Node
 
-Install the newest Node 26 from NodeSource. OpenClaw supports `>=24.16.0 <25 || >=26.1.0`; this deployment keeps the admin account, OpenClaw and its companion CLIs on the pinned system runtime. The admin account uses no version manager.
+Install the newest Node 26 from NodeSource. OpenClaw supports `>=24.16.0 <25 || >=26.1.0`; this deployment keeps the admin account, OpenClaw and its companion CLIs on the pinned system runtime. The admin account uses no version manager. Pi 1.3.0 and the optional `pi-subagent` package require Node >=22.19.0; this deployment's system Node also satisfies OpenClaw's higher requirement. Pi's service launcher uses `/usr/bin/node` while preserving the project PATH.
 
 ```sh
 curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -

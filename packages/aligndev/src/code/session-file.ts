@@ -13,6 +13,7 @@ import type { CodingAgent } from "./coding-agent.js";
 export interface SessionFrontmatter {
   status: "running" | "succeeded" | "failed";
   agent: CodingAgent | null;
+  profile: string | null;
   protocol: string | null;
   ticket: string | null;
   model: string | null;
@@ -49,6 +50,34 @@ export interface SessionFrontmatter {
 
 export const RESULT_MARKER = "\n---- Result ----\n";
 
+export function createSessionFile(
+  sessionsDir: string,
+  ticket: string | undefined,
+  now: Date,
+  frontmatter: SessionFrontmatter,
+): string {
+  const dir = join(sessionsDir, ...(ticket === undefined ? [] : [ticket]), "_aligndev");
+  mkdirSync(dir, { recursive: true });
+  const stamp = formatStamp(now);
+  for (let suffix = 1; ; ++suffix) {
+    const path = sessionFileCandidate(dir, stamp, suffix);
+    try {
+      claimSessionFile(path, frontmatter);
+      return path;
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+    }
+  }
+}
+
+function sessionFileCandidate(dir: string, stamp: string, suffix: number): string {
+  return join(dir, `${stamp}${suffix === 1 ? "" : `-${suffix}`}.md`);
+}
+
+function claimSessionFile(path: string, frontmatter: SessionFrontmatter): void {
+  writeFileSync(path, `${serializeFrontmatter(frontmatter)}\n`, { flag: "wx" });
+}
+
 // `sessionsDir` is the `.plans`-shaped directory holding the session directories: the resolved
 // `_aligndev` location, which is the resolved `.plans` unless the companion holds a separate tree.
 export function resolveSessionFilePath(
@@ -59,13 +88,9 @@ export function resolveSessionFilePath(
 ): string {
   const dir = join(sessionsDir, ...(ticket === undefined ? [] : [ticket]), "_aligndev");
   const stamp = formatStamp(now);
-  let candidate = join(dir, `${stamp}.md`);
-  let suffix = 2;
-  while (fileExists(candidate)) {
-    candidate = join(dir, `${stamp}-${suffix}.md`);
-    ++suffix;
-  }
-  return candidate;
+  let suffix = 1;
+  while (fileExists(sessionFileCandidate(dir, stamp, suffix))) ++suffix;
+  return sessionFileCandidate(dir, stamp, suffix);
 }
 
 // Writes the initial `running` header. Present before the run starts so an interrupted run still
@@ -74,9 +99,8 @@ export function writeInitialSessionFile(
   sessionFilePath: string,
   frontmatter: SessionFrontmatter,
 ): void {
-  const header = `${serializeFrontmatter(frontmatter)}\n`;
   mkdirSync(dirname(sessionFilePath), { recursive: true });
-  writeFileSync(sessionFilePath, header);
+  claimSessionFile(sessionFilePath, frontmatter);
 }
 
 export interface CompletionUpdate {
@@ -274,7 +298,7 @@ function serializeValue(value: string | number | boolean | null): string {
 }
 
 function needsQuote(value: string): boolean {
-  return value === "" || /[:"#]/.test(value) || value !== value.trim();
+  return value === "" || /[:"#\p{Cc}\p{Zl}\p{Zp}]/u.test(value) || value !== value.trim();
 }
 
 interface SplitSessionFile {
@@ -299,6 +323,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
   return {
     status: (map.status as SessionFrontmatter["status"]) ?? "running",
     agent: parseAgent(map.agent),
+    profile: map.profile ?? null,
     protocol: map.protocol ?? null,
     ticket: map.ticket ?? null,
     model: map.model ?? null,

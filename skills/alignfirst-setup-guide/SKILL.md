@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.48.5"
+  version: "0.49.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -76,14 +76,14 @@ Installing Docmap or workspace alone does not opt the project into AlignFirst pr
 
 **AlignDev for OpenClaw** turns an OpenClaw **assistant** into a developer who works with AlignFirst. The
 assistant holds a chat identity, its channels and its sessions, and runs repository work through a
-coding **agent** (Claude Code or Codex) using the AlignFirst protocols.
+coding **agent** (Claude Code, Codex or Pi) using the AlignFirst protocols.
 
 One deployment is a dedicated Linux service account running the assistant under its own name and
 channel identity, on Slack or Discord. These two terms are used throughout this skill and the
 repositories it renders.
 
 Preparing a project makes its repository compatible with an assistant. Creating an assistant builds and
-deploys it.
+deploys it. Before rendering or upgrading, read the [deployment boundary](references/aligndev-openclaw.md#deployment-gate). All three overlays use named profiles and inventoried native stores. Pi preserves native authentication through an explicit writable `auth.json` exception; every other managed resource retains controlled-maintenance protection. Offline template checks do not replace live deployment acceptance.
 
 ## Prepare a Project for an Assistant
 

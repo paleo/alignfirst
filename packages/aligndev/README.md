@@ -30,13 +30,13 @@ A task can also start at any intermediate step.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
-For a coding-agent assistant, parent host and delegated child are independent: `code.agent` selects Claude Code, Codex or Pi. Without that setting, the detected parent kind is the default child. OpenClaw deployment templates still offer Claude Code or Codex.
+For a coding-agent assistant, parent host and delegated child are independent: a coding profile selects Claude Code, Codex or Pi. Without a profile selection, the detected parent kind supplies the default child. OpenClaw deployment templates offer all three agents on Slack or Discord, with explicit profiles and inventoried default/custom native stores. The Pi overlay uses a protected absolute-Node launcher while retaining project PATH. Its [deployment boundary](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate) explicitly permits writable native `auth.json` and adjacent locks for OAuth renewal. That file can persist same-account executable API-key commands; this is account-level persistence, not administrator privilege escalation. Other managed resources and trust retain controlled-maintenance protection. Project trust is not a sandbox, and offline checks do not certify live deployment.
 
 ## Start in Claude Code, Codex or Pi
 
 The project needs an AlignFirst `.plans` directory, in its repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it.
 
-The child needs network access and writes outside the repository. Claude Code/Codex parents request their established sandbox bypass or elevation; approve that request when it comes. Pi uses ordinary OS permissions and saved project trust. It has no implied sandbox or per-command approval boundary, and `code.skipPermissions` has no effect on Pi.
+The child needs network access and writes outside the repository. Claude Code/Codex parents request their established sandbox bypass or elevation; approve that request when it comes. Pi uses ordinary OS permissions and saved project trust. It has no implied sandbox or per-command approval boundary, and A profile's `skipPermissions` has no effect on Pi.
 
 ### With the Skill
 
@@ -74,29 +74,72 @@ Then ask your session to work with aligndev.
 ### Requirements
 
 - Node.js 22.11 or later. The assistant runs `aligndev` through `npx`, so there is nothing to install.
-- The selected child installed and authenticated: `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.3.0.
+- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.3.0.
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 
 ## Configuration
 
-`~/.alignfirst/aligndev.settings.json` is optional. Without it, every key takes its default. For example, to launch Codex as the agent, whatever runs the assistant, with `sol` as the default model:
+`~/.alignfirst/aligndev.settings.json` is optional. Without it, the detected parent kind supplies built-in child defaults. For example:
 
 ```json
 {
-  "code": { "agent": "codex", "defaultModel": "sol" }
+  "code": {
+    "profile": "codex-personal",
+    "defaultProfiles": { "claude": "claude-personal", "codex": "codex-personal" },
+    "profiles": {
+      "codex-personal": { "agent": "codex", "configDir": "~/.codex", "defaultModel": "sol" },
+      "claude-personal": {
+        "agent": "claude", "configDir": "~/.claude", "defaultModel": "opus",
+        "unset": ["ANTHROPIC_API_KEY"]
+      },
+      "claude-work": {
+        "agent": "claude", "configDir": "~/.claude-work", "defaultModel": "opus",
+        "unset": ["ANTHROPIC_API_KEY"]
+      },
+      "pi-codex": {
+        "agent": "pi", "configDir": "~/.pi/agent", "defaultModel": "sol",
+        "modelAliases": { "sol": "openai/sol" },
+        "quota": { "source": "codex", "configDir": "~/.codex" }
+      },
+      "pi-anthropic": {
+        "agent": "pi", "configDir": "~/.pi/anthropic", "defaultModel": "opus",
+        "modelAliases": { "opus": "anthropic/opus" },
+        "quota": { "source": "claude", "configDir": "~/.claude" }
+      }
+    }
+  }
 }
 ```
 
-- `platform` — `codingAgent` (default) for a coding-agent assistant, `openclaw` for an OpenClaw bot.
-- `projectsRoot` — the projects directory of an OpenClaw host. Required by `openclaw`. `~/` expands to the home directory; a relative path resolves against `~/.alignfirst/`.
-- `code.agent` — the child: `claude`, `codex` or `pi`. Default: the coding agent running the assistant, detected from its environment. Set it to choose another child or resolve mixed host markers. It never selects the parent's launch tool.
-- `code.defaultModel` — the model of a new session without `--model`, one of the accepted models. Default: the child's own default. A resumed session keeps its recorded model; Pi resumes require the original worktree.
-- `code.models` — a nonempty list restricts accepted selectors. Defaults: Claude's `fable`, `opus`, `sonnet`, `haiku`, or Codex's `astra`, `sol`, `terra`, `luna`. Pi accepts any nonblank native selector by default, preferably `provider/model`; an absent or empty list adds no allowlist.
-- `code.skipPermissions` — `true` runs Claude Code with `--dangerously-skip-permissions` instead of `--permission-mode auto`, and Codex with `--dangerously-bypass-approvals-and-sandbox` instead of `--sandbox workspace-write`. Default: `false`. Irrelevant to Pi's ordinary OS permissions.
-- `code.unset` — environment variables to hide from the agent, such as an API key meant for another tool on the host.
+The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. AlignDev neither guesses providers nor implements newest-family ordering.
 
-Unknown keys and invalid values are errors. `aligndev code quota` is unsupported for Pi; consult the selected provider directly.
+- `platform` — `codingAgent` (default), or `openclaw`.
+- `projectsRoot` — projects directory, required by the OpenClaw playbook. `~/` uses the configured home; relative paths resolve against the settings directory.
+- `code.profile` — global named child profile, independent of the parent host.
+- `code.defaultProfiles` — defaults by detected agent kind. Remove `code.profile` above to use these defaults.
+- `code.profiles` — complete profiles, with required `agent` (`claude`, `codex`, `pi`). Names and references are exact, nonblank strings. Profiles have no inheritance or merging.
+
+Each profile accepts:
+
+- `configDir` — native configuration and authentication storage: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. `~/` uses the configured home; relative paths resolve against the settings directory. Omission keeps native inherited/default storage.
+- `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
+- `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. An explicit `configDir` cannot coexist with its native directory variable in either field.
+- `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
+- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi accepts every nonblank selector. An empty list adds no override.
+- `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A Codex alias target such as `sol` still resolves through its bundled catalog.
+- `skipPermissions` — defaults to false. Claude uses `--permission-mode auto`, or `--dangerously-skip-permissions`; Codex uses `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox`. Pi ignores this setting.
+- `quota` — independent native usage reader: `source` is `claude`, `codex`, or `none`, with optional `configDir`, `env`, `unset`. `none` disables quota and accepts no other options. Omitted quota uses a native Claude/Codex profile's coding environment; Pi requires an explicit source.
+
+Selection for new sessions, help, `guide code`, and quota: `--profile` → project registry selection → `code.profile` → detected-agent `code.defaultProfiles` → detected built-in defaults. Resume inserts its latest recorded profile before the global default. Explicit selections work without parent detection. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics.
+
+`aligndev code quota [--profile <name>]` needs neither a ticket nor `.plans` and starts no coding session. Explicit quota settings start from the original caller environment, apply only their own `unset`, `env` and source-specific `configDir`, then strip parent-session identities. Coding-profile overrides and Pi credentials are not copied into the quota environment. The same path and validation rules apply. For multiple accounts, set quota `configDir` explicitly; omission deliberately keeps the native CLI's inherited/default configuration. Pair each Pi profile with the intended Codex or Claude account, as in the examples above. Reports name the profile and native source; the limits belong to that CLI's account. AlignDev does not verify that it matches Pi's account or infer it from a model. Native requests time out after 30 seconds and await bounded process cleanup.
+
+The child inherits the caller environment, removes `unset`, then applies `env` and `configDir`. Parent-session identities are stripped afterward, and required adapter values win. The same finalized environment reaches discovery, execution and native context lookup. Help, guides and failures identify native storage selected through `configDir`, profile environment overrides, inherited variables or profile removal. They show environment-variable names and origins, never their values. Login must reproduce that effective environment and cwd. No environment values are printed or saved in run metadata.
+
+Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records without a profile read as null. Status reads durable metadata even when a launch profile has been deleted.
+
+Unknown keys and invalid structural values fail with the settings path and field. Direct `code.agent/defaultModel/models/skipPermissions/unset` settings are retired and rejected. Move them manually into a named profile and select it with `code.profile`; see the [upgrade reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-upgrade.md#convert-aligndev-launch-settings). Authenticate under the selected native configuration before launching. Never retry against another account after an authentication or missing-conversation failure.
 
 ## Start as an OpenClaw Bot
 
@@ -105,7 +148,7 @@ AlignDev for OpenClaw runs the assistant as an OpenClaw bot. One deployment is a
 ```mermaid
 flowchart TD
   U([User]) -->|Slack or Discord| O[OpenClaw]
-  O -->|aligndev guide and aligndev code| CA[Claude Code or Codex]
+  O -->|aligndev guide and aligndev code| CA[Claude Code, Codex or Pi]
   CA -->|AlignFirst protocols| FS[(Managed project)]
 ```
 
@@ -115,7 +158,7 @@ Install the setup skill where your agent will assemble the deployment's private 
 npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code or Codex variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 
 ## Under the Hood
 

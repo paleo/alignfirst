@@ -33,7 +33,7 @@ function runRegister(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} companion register [--dir <path>] [--create-dir]
 
 Registers the current project in ~/.alignfirst/companions/registry.json as { "dir": <path> },
-with every item on "auto". A registered project keeps its registration. Fails when the companion
+with every item on "auto", preserving any profile selection. An existing companion is kept. Fails when the companion
 directory is or contains ~/.alignfirst/companions or the home directory, or when it is, contains
 or is inside the project or the companion directory of another key.
 
@@ -75,8 +75,8 @@ Options:
 function runUnregister(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} companion unregister [--remove-dir [--force]]
 
-Removes the current project from ~/.alignfirst/companions/registry.json. Keeps its companion
-directory, unless --remove-dir.
+Removes the companion fields from ~/.alignfirst/companions/registry.json, preserving any
+profile selection. Keeps its companion directory, unless --remove-dir.
 
 Options:
   --remove-dir  Also remove the companion directory when it is inside ~/.alignfirst/companions;
@@ -100,6 +100,10 @@ Options:
   if (force && !removeDir) throw new CliError(`--force requires --remove-dir.\n\n${usage}`);
   const removal = unregisterCompanion(ctx.cwd, ctx.home, { removeDir, force });
   ctx.stdout.write(`Unregistered ${removal.key} from ${removal.registry}.\n`);
+  if (removal.aligndev !== null)
+    ctx.stdout.write(
+      `Kept profile-only entry: ${removal.aligndev.profile}. Remove the selection by editing the registry.\n`,
+    );
   if (removal.removed) ctx.stdout.write(`Removed companion directory: ${removal.dir}\n`);
   else if (removal.empty !== undefined)
     ctx.stdout.write(

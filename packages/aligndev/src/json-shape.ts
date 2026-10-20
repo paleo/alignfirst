@@ -45,6 +45,34 @@ export function object<T extends object>(fields: Fields<T>): Check<T> {
   };
 }
 
+export function record<T>(
+  check: Check<T>,
+  keyCheck: Check<string> = string,
+): Check<Record<string, T>> {
+  return (value, path) => {
+    if (!isPlainObject(value)) throw shapeError(path, "be an object");
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        const fieldPath = childPath(path, key);
+        keyCheck(key, fieldPath);
+        return [key, check(item, fieldPath)];
+      }),
+    );
+  };
+}
+
+export function nonblankString(value: unknown, path: string): string {
+  const text = string(value, path);
+  if (text.trim() === "") throw shapeError(path, "be nonblank");
+  return text;
+}
+
+export function nulFreeString(value: unknown, path: string): string {
+  const text = string(value, path);
+  if (text.includes("\u0000")) throw shapeError(path, "contain no NUL characters");
+  return text;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null) return false;
   const prototype = Object.getPrototypeOf(value);

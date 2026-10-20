@@ -1,4 +1,4 @@
-import { isCompacted } from "./run-agent.js";
+import { captureNativeSession, isCompacted } from "./run-agent.js";
 import type { AgentAdapter, AgentProtocolState, RunConfig } from "./run-agent.js";
 
 // After the agent's turn, `claude -p` waits for its background work, but stops it after 10 minutes
@@ -32,8 +32,9 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   return args;
 }
 
-export function createClaudeState(): AgentProtocolState {
+export function createClaudeState(config?: RunConfig): AgentProtocolState {
   return {
+    expectedSessionId: config?.resume,
     protocolComplete: false,
     protocolFailed: false,
     authEvidence: false,
@@ -67,10 +68,21 @@ export function interpretClaudeLine(line: string, state: AgentProtocolState): st
 
 export function assessClaudeState(state: AgentProtocolState) {
   return {
-    succeeded: state.protocolComplete && !state.protocolFailed && state.result !== undefined,
+    succeeded:
+      state.sessionId !== undefined &&
+      state.identityFailure === undefined &&
+      state.protocolComplete &&
+      !state.protocolFailed &&
+      state.result !== undefined,
     sessionId: state.sessionId,
     result: state.result,
-    error: state.failure,
+    error:
+      state.identityFailure ??
+      state.failure ??
+      (state.sessionId === undefined &&
+      (state.protocolComplete || state.expectedSessionId !== undefined)
+        ? "Claude reported no native session identity in the selected native configuration."
+        : undefined),
     authEvidence: state.authEvidence,
     contextTokens: state.contextTokens,
     contextCompacted: isCompacted(state),
@@ -112,8 +124,9 @@ function parseEventLine(line: string): unknown {
 }
 
 function captureSessionId(event: Record<string, unknown>, state: AgentProtocolState): void {
-  const id = asString(event.session_id);
-  if (id !== undefined && id !== "") state.sessionId = id;
+  if (event.session_id !== undefined || (event.type === "system" && event.subtype === "init")) {
+    captureNativeSession(state, event.session_id, "Claude");
+  }
 }
 
 function renderMessageContent(event: Record<string, unknown>): string | undefined {
@@ -152,7 +165,8 @@ function renderToolResult(content: unknown): string {
 function claudeAuthenticationMessage(detail?: string): string {
   const base =
     "Coding agent not authenticated (authentication_failed): the host session is missing, " +
-    "expired, or rejected. An administrator must re-login on the host (run `claude`, then " +
+    "expired, or rejected. An administrator must re-login with the same effective environment and cwd as the child " +
+    "(apply profile unset/env/configDir, including HOME, PATH and credential routing; run `claude`, then " +
     "`/login`) before `aligndev code` can run again.";
   const reason = detail?.trim();
   return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;

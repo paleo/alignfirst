@@ -68,7 +68,7 @@ If the frontmatter's `exitReason` is `auth_required`, the coding agent is not au
 
 `{{ALIGNDEV}} code` runs the agent in the **foreground** until it exits. It never backgrounds or detaches itself. By default it streams the transcript to stdout; `--quiet` suppresses that stream while preserving the durable session file and control/diagnostic output.
 
-Choose the launch facility from your **parent host**, independently of the selected child `{{AGENT}}`. `code.agent` selects the child only. All three children (Claude Code, Codex, Pi) remain available from any supported parent.
+Choose the launch facility from your **parent host**, independently of the selected child `{{AGENT}}`. The selected profile chooses the child only. All three children (Claude Code, Codex, Pi) remain available from any supported parent.
 
 **One protocol run at a time per worktree and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or cancel) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
@@ -107,7 +107,7 @@ Cancel through `background` with `{"action":"stop","id":"<returned-job-id>"}`. I
 
 **Host limits:** standalone manual compaction or cancelled/failed navigation can delay a notice until another ordinary turn. Interruption or native queue clearing can lose automatic continuation. Already-submitted notices can appear after navigation or reload; validate ownership as above. Delivery is not exactly once. Normal shutdown, session replacement, successful tree navigation and `/reload` cancel owned work; crash recovery is not promised.
 
-Pi uses ordinary OS permissions and saved project trust, not an implied sandbox. `code.skipPermissions` does not elevate Pi or force project approval.
+Pi uses ordinary OS permissions and saved project trust, not an implied sandbox. `profile.skipPermissions` does not elevate Pi or force project approval.
 
 ### Claude Code parent
 
@@ -143,7 +143,7 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 {{ALIGNDEV}} code resume <sessionId> --message-file <path> --quiet --meta <unique-run-key>
 {{ALIGNDEV}} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]
 {{/codingAgent}}
-{{ALIGNDEV}} code quota
+{{ALIGNDEV}} code quota [--profile <name>]
 ```
 
 | Command | Description |
@@ -152,15 +152,16 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 | `resume <sessionId>` | Continue an existing session. |
 {{#openclaw}}
 | `status` | Reconcile and show one run's durable status, including `contextTokens`. Give the session file, or `--ticket <id>` / `--no-ticket` to select the newest run of that scope. Does not start the agent. |
-| `quota` | Show the selected coding agent's account limits and reset times. Takes no option. |
+| `quota` | Show the profile's native quota source and account limits. Accepts `--profile`; independent of the coding child. |
 {{/openclaw}}
 {{#codingAgent}}
 | `status` | Reconcile and show one run's durable status, including `contextTokens`. Select exactly one file, `--ticket <id>`, `--no-ticket`, or `--meta <key>`; scope/key selectors choose their newest matching run. Does not start the agent. |
-| `quota` | Show account limits and reset times for Claude Code/Codex. Unsupported for Pi; check the provider directly. Takes no option. |
+| `quota` | Show the profile's native quota source and account limits. Accepts `--profile`; independent of the coding child. |
 {{/codingAgent}}
 
 | Option | Description |
 |--------|-------------|
+| `--profile <name>` | Select a complete named profile for new/resume/quota or agent-specific help; also accepted by `guide code`. Rejected on status. |
 | `--protocol <p>` | One of `spec`, `plan`, `aad`, `description`, `review`, `merge`. Optional. |
 | `--ticket <id>` | Ticket ID. With `status`, selects that ticket's newest run. `new --protocol` requires it, or `--no-ticket`. |
 | `--no-ticket` | With `status`, selects the newest run outside a ticket. With `new --protocol`, `{{ALIGNDEV}} code` reserves the next side ticket through `{{ALIGNFIRST}} ticket --side` and passes it to the agent. The reserved id is in the session file's path and `ticket:` frontmatter; pass it as `--ticket side-N` in later runs. |
@@ -178,15 +179,29 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 {{/codingAgent}}
 
 {{#openclaw}}
-The current coding agent is `{{AGENT}}`. `code.models` in the aligndev settings replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's nonempty `models` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output follows the selected agent's available account limits.
+`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
 {{#codingAgent}}
-The current coding agent is `{{AGENT}}`. A nonempty `code.models` in the aligndev settings replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses `code.defaultModel`, else Pi's own default; a resume keeps its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session; Pi quota is unsupported.
+`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/codingAgent}}
+
+### Profiles and resume
+
+Effective profile: `{{PROFILE}}`; agent: `{{AGENT}}`; native configuration: `{{NATIVE_CONFIG}}`. Environment values are omitted. Login must use the same effective environment as the child: apply profile `unset/env/configDir`, including HOME, PATH and credential routing, from the same working directory. A bare login in another shell may use a different account.
+
+New-session, help, guide and quota selection: explicit `--profile` → project's registry selection → global `code.profile` → detected-agent `code.defaultProfiles` → detected built-in defaults. Resume inserts the latest run's recorded named profile before the global default. A missing selected profile is an error; profiles never merge. Help, guide and quota use the actual cwd and require no `.plans`.
+
+Profiles select native configuration/authentication through `configDir` or the corresponding effective environment variable: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. `~/` uses the configured home; relative paths use the settings directory. Authenticate in this selected native configuration, not a different account. `env` values are literal non-secret configuration; `unset` removes inherited variables. Credentials remain in native stores or provisioned process environments. Parent identities are stripped after these overrides. Environment values are never recorded in session metadata.
+
+Select a user-facing model name, validate it against the accepted names, expand one `modelAliases` mapping, then apply native handling. Without a nonempty `models` override, Claude/Codex add alias names to their native default names; Pi accepts any nonblank selector. Pi exact provider-qualified IDs pin models; fuzzy selectors and thinking suffixes pass through to Pi. Use separate Pi profiles for Codex-backed and Anthropic-backed choices; AlignDev never guesses providers or accounts. Omitted quota uses a native Claude/Codex profile's environment; Pi needs explicit `quota.source: "codex"` or `"claude"`. `"none"` disables quota. Explicit quota starts from the caller environment, applies only quota `unset/env/configDir` and strips parent identities. It never copies coding-profile overrides or Pi credentials. Set quota `configDir` for the intended native account; omission deliberately keeps inherited/default storage. Quota paths follow profile expansion rules. Do not infer account pairing from model selection or retry against a different account after failure.
+
+Resume keeps the latest user-facing model unless `--model` replaces it; new-session defaults are ignored. A retained name disallowed by the selected profile requires an explicit accepted replacement. Null keeps the native conversation model. Retained aliases use current mappings, which can change their native targets. Resume requires the same agent and native identity; Pi also requires its recorded real directory. An unavailable conversation fails under the selected account with no fallback, copying or replacement conversation. Run metadata records the effective profile (or null), agent, model name, native ID and cwd. Historical records stay readable; status does not validate launch profiles.
+
+Direct launch keys under `code` are retired. Move them into `code.profiles.<name>` and select the name with `code.profile`; no automatic conversion occurs.
 
 `contextTokens` is what the run left in the agent's context window, measured from its last model response. It describes the conversation, so resuming a session carries the figure forward and each run reports a larger one.
 

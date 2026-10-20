@@ -84,6 +84,40 @@ On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and i
    sudo lsattr -d /home/<service-user>/.alignfirst /home/<service-user>/.alignfirst/aligndev.settings.json
    ```
 
+## Convert AlignDev Launch Settings
+
+When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually before using profile-aware AlignDev. The CLI rejects the old shape and performs no automatic conversion. Preserve top-level `platform` and `projectsRoot`.
+
+1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`, including the required `agent`.
+2. Set `code.profile` to that name for a global child selection. Alternatively, omit it and map each detected kind through `code.defaultProfiles` to a profile with the matching agent.
+3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate with the child's effective environment and cwd, applying profile `unset/env/configDir`, including HOME, PATH and credential routing. Native directory variables in `env` also select storage; a bare login in another shell may use another account. Never copy conversations or credentials between accounts to make resume work.
+4. Review project registry selections and run `aligndev guide code --profile <name>`. Profile selection alone needs no companion or `.plans`. Obtain approval before changing any user's real settings or native account state.
+
+For example, convert:
+
+```json
+{ "code": { "agent": "claude", "defaultModel": "opus", "unset": ["ANTHROPIC_API_KEY"] } }
+```
+
+to:
+
+```json
+{
+  "code": {
+    "profile": "claude-personal",
+    "profiles": {
+      "claude-personal": {
+        "agent": "claude", "defaultModel": "opus", "unset": ["ANTHROPIC_API_KEY"]
+      }
+    }
+  }
+}
+```
+
+New-session precedence is explicit → project → global → detected-agent default → built-in detected defaults. Resume inserts its recorded profile before global resolution; existing records without a profile remain readable as null and need no transcript rewrite. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
+
+On an OpenClaw host, convert the private admin repository and protected settings together through controlled maintenance. Upgrade `seed.sh`, the inventory/policy helpers, maintenance/backup scripts and runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment child and optional native quota source needs an explicit isolated `configDir`; inventory all profiles, not just the global selection. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json`/adjacent-lock exception and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
+
 ## Convert the Companion Registry
 
 `alignfirst` 0.11.0 reads the companion registry as `{ "projects": … }`, and each entry names its companion directory. When `~/.alignfirst/companions/registry.json` has a top-level `paths`, every command fails with an error pointing here. Convert it once:

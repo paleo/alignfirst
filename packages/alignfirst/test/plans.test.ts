@@ -24,6 +24,22 @@ afterEach(() => {
 });
 
 describe("plans commands", () => {
+  it("archives and restores profile-only work files with sessions in the project tree", async () => {
+    const { root, product } = makeFixture();
+    writeRegistry(root, { projects: { "~/product": { aligndev: { profile: "work" } } } });
+    const ticket = join(product, ".plans", "78");
+    mkdirSync(join(ticket, "_aligndev"), { recursive: true });
+    writeFileSync(join(ticket, "_aligndev", "run.md"), "run\n");
+    const archived = await runMain(["plans", "archive", "78"], { cwd: product, home: root });
+    expect(archived.code).toBe(0);
+    expect(existsSync(join(product, ".plans", "_archives", "78", "_aligndev", "run.md"))).toBe(
+      true,
+    );
+    const restored = await runMain(["ticket", "78", "--json"], { cwd: product, home: root });
+    expect(restored.code).toBe(0);
+    expect(existsSync(join(ticket, "_aligndev", "run.md"))).toBe(true);
+    expect(readdirSync(join(root, ".alignfirst", "companions"))).toEqual(["registry.json"]);
+  });
   it("reports local mode", async () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.product, ".plans"));
@@ -487,37 +503,40 @@ describe("plans commands with a companion .plans", () => {
 });
 
 describe("plans commands with a separate session tree", () => {
-  it("archives each tree into its own _archives", async () => {
-    const fixture = makeFixture();
-    const plans = join(fixture.product, ".plans");
-    const sessions = join(useSessionTree(fixture), ".plans");
-    const old = new Date(Date.now() - 2 * 86_400_000);
-    for (const path of [
-      join(plans, "79", "A1-spec.md"),
-      join(sessions, "79", "_aligndev", "a.md"),
-    ]) {
-      mkdirSync(join(path, ".."), { recursive: true });
-      writeFileSync(path, "x\n");
-      utimesSync(path, old, old);
-    }
-    const noTicket = join(sessions, "_aligndev", "20260901-100000.md");
-    writeFileSync(noTicket, "---\nstatus: succeeded\n---\n");
-    utimesSync(noTicket, old, old);
+  it.each([undefined, "work"])(
+    "archives each tree into its own _archives with profile %s",
+    async (profile) => {
+      const fixture = makeFixture();
+      const plans = join(fixture.product, ".plans");
+      const sessions = join(useSessionTree(fixture, profile), ".plans");
+      const old = new Date(Date.now() - 2 * 86_400_000);
+      for (const path of [
+        join(plans, "79", "A1-spec.md"),
+        join(sessions, "79", "_aligndev", "a.md"),
+      ]) {
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, "x\n");
+        utimesSync(path, old, old);
+      }
+      const noTicket = join(sessions, "_aligndev", "20260901-100000.md");
+      writeFileSync(noTicket, "---\nstatus: succeeded\n---\n");
+      utimesSync(noTicket, old, old);
 
-    const result = await runMain(["plans", "auto-archive"], {
-      cwd: fixture.product,
-      home: fixture.root,
-      env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
-    });
+      const result = await runMain(["plans", "auto-archive"], {
+        cwd: fixture.product,
+        home: fixture.root,
+        env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+      });
 
-    expect(result.stdout).toContain("Archived 79 → _archives/79");
-    expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
-    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md (session tree)");
-    expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "79", "_aligndev", "a.md"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
-    expect(existsSync(join(plans, "_archives", "_aligndev"))).toBe(false);
-  });
+      expect(result.stdout).toContain("Archived 79 → _archives/79");
+      expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
+      expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md (session tree)");
+      expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
+      expect(existsSync(join(sessions, "_archives", "79", "_aligndev", "a.md"))).toBe(true);
+      expect(existsSync(join(sessions, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
+      expect(existsSync(join(plans, "_archives", "_aligndev"))).toBe(false);
+    },
+  );
 
   it("archives a ticket's session directory with the ticket", async () => {
     const fixture = makeFixture();
@@ -539,10 +558,14 @@ describe("plans commands with a separate session tree", () => {
 });
 
 /** Project `.plans`, session tree in `<root>/.alignfirst/companions/product/.plans`. */
-function useSessionTree(fixture: Fixture): string {
+function useSessionTree(fixture: Fixture, profile?: string): string {
   writeRegistry(fixture.root, {
     projects: {
-      "~/product": { dir: "product", items: { ".plans": "project", _aligndev: "companion" } },
+      "~/product": {
+        dir: "product",
+        items: { ".plans": "project", _aligndev: "companion" },
+        ...(profile === undefined ? {} : { aligndev: { profile } }),
+      },
     },
   });
   const companion = join(fixture.root, ".alignfirst", "companions", "product");

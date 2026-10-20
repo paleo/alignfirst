@@ -45,20 +45,35 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'which claude && claude --version'
 Same user settings as the admin account, and the same alias for interactive `sudo -i -u {{SERVICE_USER}}` shells:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc '[ -f ~/.claude/settings.json ] || echo "{}" > ~/.claude/settings.json
-jq ". + {disableClaudeAiConnectors: true, autoMemoryEnabled: false, autoDreamEnabled: false}" \
-  ~/.claude/settings.json > ~/.claude/settings.json.new && mv ~/.claude/settings.json.new ~/.claude/settings.json'
+set -o pipefail
+store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs \
+  infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -r '.configDir')
+sudo -H -u {{SERVICE_USER}} env CLAUDE_CONFIG_DIR="$store" bash -l <<'EOS'
+set -e
+store=$CLAUDE_CONFIG_DIR
+mkdir -p "$store"
+[ -f "$store/settings.json" ] || echo '{}' > "$store/settings.json"
+jq '. + {disableClaudeAiConnectors: true, autoMemoryEnabled: false, autoDreamEnabled: false}' \
+  "$store/settings.json" > "$store/settings.json.new"
+mv "$store/settings.json.new" "$store/settings.json"
+EOS
 sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-skip-permissions'\" >> ~/.bashrc"
 ```
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aligndev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.unset` in the aligndev settings, `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Claude Code keeps its own login (subscription or console account), independent from the OpenClaw model provider. `aligndev code` strips `ANTHROPIC_API_KEY` from every delegated run (`code.profiles.service-claude.unset` in `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** The login prints a URL and waits for a one-shot code on stdin, tied to the same process. Run it from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`.
 
 ```sh
 sudo -i -u {{SERVICE_USER}}
+set -o pipefail
+CLAUDE_CONFIG_DIR=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir') || exit 1
+export CLAUDE_CONFIG_DIR
 claude                    # /login, then follow the browser flow and paste the code; /exit
 cd ~/projects && claude   # accept "Trust this folder?", then /exit
 claude auth status
@@ -69,16 +84,27 @@ Trusting `~/projects` once covers every project cloned under it; `aligndev code`
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). The setup guide and `sharp-writing` use two tiers: `--agent universal` writes the canonical `~/.agents/skills/<name>`, which OpenClaw scans; `--agent claude-code` adds the `~/.claude/skills/<name>` symlink that the `claude` CLI reads. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). Install canonical shared skills with `--agent universal`, then copy them into every inventoried Claude store. Managed native symlinks are rejected by the deployment policy, so do not use the CLI's `--agent claude-code` alias tier for this service account. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
-sudo -i -u {{SERVICE_USER}} bash <<'EOS'
-set -e
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent universal --agent claude-code \
-  --skill alignfirst-setup-guide < /dev/null
+  --agent universal --skill alignfirst-setup-guide < /dev/null
 npx -y skills add https://github.com/paleo/skills --global --yes \
-  --agent universal --agent claude-code --skill sharp-writing < /dev/null
+  --agent universal --skill sharp-writing < /dev/null
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" |
+  jq -r '.stores[] | select(.agent == "claude") | .skillsDir' |
+  while IFS= read -r target; do
+    mkdir -p "$target"
+    for skill in alignfirst-setup-guide sharp-writing; do
+      test ! -L "$target/$skill"
+      mkdir -p "$target/$skill"
+      rsync -a --delete "$HOME/.agents/skills/$skill/" "$target/$skill/"
+    done
+  done
 EOS
 ```
 
@@ -90,29 +116,33 @@ npx -y skills add https://github.com/paleo/skills --yes --agent claude-code --sk
 
 ### Global Instructions
 
-The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into `~/.claude/CLAUDE.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
+The `service-claude` profile sets explicit `configDir: "~/.claude"`, overriding inherited `CLAUDE_CONFIG_DIR`. Custom stores are supported when isolated beneath the service home; authenticate each profile with `CLAUDE_CONFIG_DIR` set to its inventoried resolved directory. The login example above selects the deployment default. Additional stores need the same settings/skills preparation and their own authentication; profiles sharing a store share its account.
+
+The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into `<configDir>/CLAUDE.md` for every inventoried Claude store, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
 To change the instructions, edit the repository file and run `docs/operations/configure-assistant.md` with its `config instructions` scopes. The maintenance wrapper contains the assistant before either file becomes writable and restores both through an `EXIT` trap.
 
 ### Hardening
 
-**Role: operator**, during `06-security-hardening.md`. `~/.claude/skills` (the symlinks) and `~/.claude/CLAUDE.md` feed the delegated agent's prompt, so both become admin-owned and immutable. `~/.claude` itself stays writable: the CLI keeps its login and session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
+**Role: operator**, during `06-security-hardening.md`. Use its shared `deployment-policy.mjs harden` command for every inventoried store. It protects instructions and real native skill copies, preserves executable modes, and protects root replacement through root-owned sticky writable anchors. Credentials and sessions remain writable. This Claude policy covers instructions/skills; it does not certify every native settings surface. Do not restore the former symlink-based skill policy.
+
+Verify in each resolved store: opening instructions for writing and unlinking must fail; authentication status must work.
 
 ```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.claude/skills /home/{{SERVICE_USER}}/.claude/CLAUDE.md 2>/dev/null || true
-sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.claude/skills /home/{{SERVICE_USER}}/.claude/CLAUDE.md
-sudo find /home/{{SERVICE_USER}}/.claude/skills -type d -exec chmod 755 {} +
-sudo find /home/{{SERVICE_USER}}/.claude/skills -type f -exec chmod 644 {} +
-sudo chmod 644 /home/{{SERVICE_USER}}/.claude/CLAUDE.md
-sudo chattr +i /home/{{SERVICE_USER}}/.claude/skills /home/{{SERVICE_USER}}/.claude/CLAUDE.md
-```
-
-Verify: the first two commands fail (`Permission denied`, `Operation not permitted`), the third works.
-
-```sh
-sudo -i -u {{SERVICE_USER}} -- bash -c 'echo x >> ~/.claude/CLAUDE.md'
-sudo -i -u {{SERVICE_USER}} -- bash -c 'rm ~/.claude/CLAUDE.md'
-sudo -i -u {{SERVICE_USER}} -- claude auth status
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+CLAUDE_CONFIG_DIR=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir')
+export CLAUDE_CONFIG_DIR
+if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$CLAUDE_CONFIG_DIR/CLAUDE.md"; then
+  echo 'ERROR: instructions are writable' >&2; exit 1
+fi
+if rm "$CLAUDE_CONFIG_DIR/CLAUDE.md"; then
+  echo 'ERROR: instructions were removable; restore them before restart' >&2; exit 1
+fi
+claude auth status
+EOS
 ```
 
 ### Update
@@ -132,9 +162,11 @@ CODING_AGENT=claude \
 '
 ```
 
-The `skills` scope of `update-assistant.md` includes `~/.claude/skills`, so the symlink tier is restored with the canonical tree.
+The `skills` scope covers every inventoried native skills directory. Repeat the shared-install/native-copy block in [Skills](#skills) inside that window to refresh real copies, preserving executable bits.
 
 ### Verification
+
+These host-side acceptance procedures are separate from offline template tests. Repeat authentication/permission checks for every provisioned store. Verify the recorded profile as well as `agent: claude` in delegated session files.
 
 After the seed and the gateway start (`04-openclaw.md`):
 

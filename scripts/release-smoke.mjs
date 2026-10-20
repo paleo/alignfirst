@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -64,7 +64,12 @@ function smokeTestRelease() {
     for (const packed of packages) inspectExtension(root, packed);
     assert(!existsSync(join(root, "node_modules/alignfirst")));
     assert(!existsSync(join(root, "node_modules/aligndev")));
-    for (const script of ["pi-packed-smoke.mjs", "pi-smoke-provider.mjs"]) {
+    for (const script of [
+      "pi-packed-smoke.mjs",
+      "pi-packed-presentation.mjs",
+      "pi-packed-tui.py",
+      "pi-smoke-provider.mjs",
+    ]) {
       copyFileSync(join(repositoryRoot, "scripts", script), join(root, script));
     }
     copyFileSync(
@@ -79,6 +84,17 @@ function smokeTestRelease() {
         env: isolatedEnvironment(root),
         stdio: "inherit",
         timeout: 120000,
+      },
+    );
+    verifyBrokenRootEntries(root, packages);
+    execFileSync(
+      process.execPath,
+      [join(root, "pi-packed-presentation.mjs"), ...packages.map((p) => p.name)],
+      {
+        cwd: root,
+        env: isolatedEnvironment(root),
+        stdio: "inherit",
+        timeout: 45000,
       },
     );
   }
@@ -134,11 +150,12 @@ function inspectExtension(root, packed) {
   assert.equal(manifest.license, "MIT");
   assert(manifest.keywords.includes("pi-package"));
   assert.deepEqual(Object.keys(manifest.pi), ["extensions"]);
+  assert.deepEqual(manifest.pi.extensions, ["./index.js"]);
   assert.deepEqual(manifest.dependencies ?? {}, {});
   assert(!existsSync(join(directory, "node_modules")), "No bundled host/sibling copies");
   for (const resource of ["prompts", "skills", "agents", ".pi", "src"])
     assert(!existsSync(join(directory, resource)), `Unexpected installed resource ${resource}`);
-  for (const file of ["README.md", "LICENSE", "NOTICE.md", ...manifest.pi.extensions]) {
+  for (const file of ["README.md", "LICENSE", "NOTICE.md", "index.js", "dist/index.js"]) {
     assert(existsSync(join(directory, file)), `Missing packed asset: ${file}`);
   }
   const license = readFileSync(join(directory, "LICENSE"), "utf8");
@@ -149,10 +166,6 @@ function inspectExtension(root, packed) {
   ])
     assert(license.includes(phrase));
   assert.match(readFileSync(join(directory, "NOTICE.md"), "utf8"), /Pi|pi/);
-  for (const entry of manifest.pi.extensions) {
-    assert.match(entry, /^\.\/dist\/.+\.js$/);
-    assert.match(readFileSync(join(directory, entry), "utf8"), /export default/);
-  }
   for (const [name, range] of Object.entries(manifest.peerDependencies)) {
     assert(name.startsWith("@earendil-works/pi-") || name === "typebox");
     assert.equal(range, "*");
@@ -162,6 +175,30 @@ function inspectExtension(root, packed) {
       readFileSync(join(directory, "dist/agents.js"), "utf8"),
       /Follow the delegated assignment/,
     );
+}
+
+function verifyBrokenRootEntries(root, packages) {
+  for (const packed of packages) {
+    const entry = join(root, "node_modules", packed.name, "index.js");
+    const original = readFileSync(entry, "utf8");
+    try {
+      for (const fault of ["missing", "invalidFactory"]) {
+        if (fault === "missing") rmSync(entry);
+        else writeFileSync(entry, "export default {};\n");
+        // A fresh host avoids jiti's module cache masking a broken forwarder.
+        const result = spawnSync(
+          process.execPath,
+          [join(root, "pi-packed-smoke.mjs"), "--load-only", packed.name],
+          { cwd: root, env: isolatedEnvironment(root), encoding: "utf8", timeout: 30000 },
+        );
+        assert.ifError(result.error);
+        assert.notEqual(result.status, 0, `${packed.name}: ${fault} root must fail loading`);
+        assert.match(result.stderr, /Packed extension loader:/);
+      }
+    } finally {
+      writeFileSync(entry, original);
+    }
+  }
 }
 
 function verifyCliVersion(root, name, args, expected) {

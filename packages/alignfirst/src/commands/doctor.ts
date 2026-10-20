@@ -26,7 +26,12 @@ import {
   type ProjectLayout,
   renderItemLocation,
 } from "../project-layout.js";
-import { COMMAND_SKILLS, findInstalledSkill, type InstalledSkill } from "../skills.js";
+import {
+  COMMAND_SKILLS,
+  findInstalledSkill,
+  type InstalledSkill,
+  resolveSkillRoots,
+} from "../skills.js";
 import { cliRangeResult } from "../version-guard.js";
 import { isAheadOfRange } from "../version-range.js";
 
@@ -45,6 +50,12 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
     return inspectConfig(ctx, resolved);
   });
   writeSection(ctx, "Companion", () => inspectCompanion(ctx));
+  writeSection(ctx, "AlignDev", () => [
+    {
+      level: "ok",
+      text: `profile ${layoutOf(ctx).aligndev?.profile ?? "none"}`,
+    },
+  ]);
   writeSection(ctx, "Git", () => inspectGit(ctx, resolved));
   writeSection(ctx, "Work files", () => inspectPlans(ctx));
   writeSection(ctx, "Docmap", () => inspectDocmap(ctx));
@@ -195,14 +206,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function inspectSkills(ctx: CommandContext): DoctorLine[] {
-  const alignfirst = findInstalledSkill(ctx.home, "alignfirst");
+  const roots = resolveSkillRoots(ctx);
+  const alignfirst = findInstalledSkill(roots, "alignfirst");
   const alignfirstLine: DoctorLine =
     alignfirst === undefined
       ? { level: "ok", text: "alignfirst none" }
       : describeInstalledSkill("alignfirst", alignfirst);
   const commands = COMMAND_SKILLS.map((name) => ({
     name,
-    installed: findInstalledSkill(ctx.home, name),
+    installed: findInstalledSkill(roots, name),
   }));
   if (commands.every(({ installed }) => installed === undefined))
     return [alignfirstLine, { level: "ok", text: "no command skill installed" }];

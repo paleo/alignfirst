@@ -326,6 +326,7 @@ describe("project discovery", () => {
     expect(projects).toEqual([
       {
         name: "alpha",
+        aligndev: null,
         path: alpha,
         directory: realpathSync(fixture.root),
         portRange: range(8000, 8099),
@@ -334,6 +335,7 @@ describe("project discovery", () => {
       },
       {
         name: "beta",
+        aligndev: null,
         path: beta,
         directory: realpathSync(nested),
         portRange: range(8500, 8549),
@@ -342,6 +344,7 @@ describe("project discovery", () => {
       },
       {
         name: "portless",
+        aligndev: null,
         path: portless,
         directory: realpathSync(fixture.root),
         portRange: null,
@@ -443,7 +446,7 @@ describe("project discovery", () => {
     expect(JSON.parse(result.stdout).issues).toEqual([
       {
         path: old,
-        message: `The alignfirst CLI used in ${old} is too old: aligndev requires alignfirst 0.9.0 or later.`,
+        message: `The alignfirst CLI used in ${old} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`,
       },
     ]);
   });
@@ -460,6 +463,41 @@ describe("project discovery", () => {
 });
 
 describe("project classification and companions", () => {
+  it("carries profile-only and combined selections without requiring a launchable agent", async () => {
+    const fixture = makeFixture({});
+    const one = makeRepository(fixture.root, "one");
+    const two = makeRepository(fixture.root, "two");
+    const aligndev = { profile: "not-provisioned" };
+    writeRegistry(fixture.home, {
+      projects: {
+        [one]: { aligndev },
+        [two]: { dir: "two", aligndev },
+      },
+    });
+    const list = await runProjects(fixture, ["list", "--json"]);
+    expect(list.code).toBe(0);
+    expect(JSON.parse(list.stdout)).toMatchObject({
+      issues: [],
+      projects: [
+        { name: "one", companion: null, aligndev },
+        { name: "two", aligndev },
+      ],
+    });
+    const text = await runProjects(fixture, ["list"]);
+    expect(text.stdout).toContain('AlignDev profile: "not-provisioned"');
+    const status = await runProjects(fixture, ["status", one, "--json"]);
+    expect(status.code).toBe(0);
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      companion: null,
+      aligndev,
+      locations: { _aligndev: { path: join(one, ".plans"), in: "project", exists: false } },
+    });
+    expect((await runProjects(fixture, ["status", one])).stdout).toContain(
+      'AlignDev profile: "not-provisioned"',
+    );
+    expect(existsSync(join(fixture.home, ".alignfirst", "companions", "two"))).toBe(false);
+    expect(existsSync(join(one, ".plans"))).toBe(false);
+  });
   it("lists a git repository without config as a project and a non-git config as an issue", async () => {
     const fixture = makeFixture({});
     const bare = makeRepository(fixture.root, "bare");
@@ -581,6 +619,7 @@ describe("project status", () => {
       ticketIdPattern: "^P-\\d+$",
       configSource: "project",
       companion: null,
+      aligndev: null,
       locations: {
         ".alignfirst.json": {
           path: join(project, ".alignfirst.json"),

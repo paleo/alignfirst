@@ -1,6 +1,18 @@
 # Create an Assistant
 
-An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code or Codex through `aligndev code`. This reference produces its **admin repository**: a private repository rendered from `assets/aligndev-openclaw-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
+An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code, Codex or Pi through `aligndev code`. This reference produces its **admin repository**: a private repository rendered from `assets/aligndev-openclaw-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
+
+## Deployment gate
+
+The three overlays use explicit named profiles on both surfaces. Pi targets 1.3.0 and Node.js 22.19.0 or later. Its protected launcher executes the verified npm CLI with `/usr/bin/node`, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse that Node through `process.execPath`. AlignDev's own minimum Node requirement remains separate.
+
+**Approved Pi authentication exception:** `<agent-dir>/auth.json` stays private, service-owned and writable/replaceable, with adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also contain executable API-key commands. Any process under that account can persist such commands for later Pi execution. This is account-level persistence, not administrator privilege escalation; filesystem permissions cannot distinguish a refresh from another same-UID write. All other managed instructions, executable resources, settings/declarations, trust and launchers retain controlled-maintenance protection. Project trust is not a sandbox.
+
+`deployment-profiles.mjs` inventories every provisioned child and optional quota store, deduplicating shared directories. Custom stores must be isolated beneath the service home. Relative values resolve against the deployed settings; `~/` uses the service home. Symlinked roots, overlapping stores, native-directory env/unset conflicts and ambiguous native paths fail before mutation. Protected package trees allow only validated internal links. Do not treat the editable project registry as account authorization: all provisioned profiles are available to that account.
+
+The runbooks install the inventory/policy helpers root-owned under `/opt/{{SERVICE_USER}}/libexec`. Native anchors are root-owned service-group-writable sticky directories; individual resources and trees are protected without freezing the whole Pi directory. Managed alternate context names use neutral directory sentinels; empty reserved system-prompt files retain Pi's normal prompt. Credentials, locks, sessions and native caches remain mutable. Native `bin` helpers, npm/git packages, external managed targets and shared skills are inventoried too. Use concrete unpadded filesystem paths, not file URLs or external discovery globs.
+
+OpenClaw remains the persistent parent. A Pi child needs no `pi-background`; production headless waiting has not shipped. The [maintainer map](../../../docs/aligndev-openclaw/aligndev-openclaw.md#pi-deployment-gate) describes offline evidence. OS ownership/immutable enforcement, real authentication/renewal, conversation, reboot and recovery acceptance must still be executed on the deployment host.
 
 ## Topology
 
@@ -31,7 +43,8 @@ The human performs every interactive authentication and secret entry. Credential
 ### Options
 
 - **Surface**: `slack` or `discord`.
-- **Coding agent**: `claude-code` or `codex`.
+- **Coding agent**: `claude-code`, `codex` or `pi`.
+- **Pi child choices**, when selected: provider, native model ID, default/custom native directory, authentication method and optional quota source, independently of OpenClaw's runtime model. Offer installation of the independent `pi-subagent` package only with approval and a duplicate-tool audit. Quota `codex`/`claude` needs its own installed CLI and separately authenticated store; see [Optional quota setup for Pi](coding-agent-assistant.md#optional-quota-setup-for-pi).
 - **Work-files repository**: yes or no. Yes when the team has one (see [plans-setup.md](plans-setup.md)).
 - **Dev-server gateway**: yes or no, default yes. Skipping is not recommended: without the gateway there are no remote dev URLs, and the managed projects' public URLs fall back to localhost.
 
@@ -53,7 +66,11 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 | `{{ASSISTANT_NAME}}` | Operator | assistant identity, bot name (`07`), secret provider id `{{ASSISTANT_NAME}}file` (lowercased by the seed; letters, digits, `-` and `_`, starting with a letter) |
 | `{{TIME_ZONE}}` | Operator | `timedatectl` (`01`), `USER.md`, overview |
 | `{{GIT_HOSTS}}` | Operator | `03`, `05` (git-host CLIs), workspace `AGENTS.md`, coding-agent instructions |
-| `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (provider login) |
+| `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (OpenClaw provider login) |
+| `{{PI_PROVIDER}}`, `{{PI_MODEL}}` | Operator, Pi only | Explicit child provider and native model ID; settings constructs `provider/model` |
+| `{{PI_CONFIG_DIR}}` | Operator, Pi only | `~/.pi/agent` or an isolated custom service-home directory |
+| `{{PI_AUTH_METHOD}}` | Operator, Pi only | Non-secret description of the selected native OAuth/API-key/environment flow |
+| `{{PI_QUOTA_JSON}}` | Operator, Pi only | Raw JSON quota object: `{"source":"none"}`, or an explicit native source with its own `configDir` |
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
 | `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
 | `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alignfirst-projects.json`, overview, workspace `AGENTS.md`, `09` |
@@ -71,6 +88,8 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 ```markdown
 - Alex Example — lead developer, Slack member ID `U0123456789`
 ```
+
+Pi values must be safely encoded for their destination (JSON strings versus Markdown/shell text); parse the rendered settings and syntax-check scripts after substitution. `PI_QUOTA_JSON` is JSON, not a quoted string. A native quota source needs an explicit directory in this deployment policy. Never render credentials. The child provider/model and quota account are independent of the OpenClaw runtime provider/model.
 
 The channel IDs are known before the bot exists (the channel, the server and the accounts pre-date the app). `04` lets the human correct them in `.env`.
 
@@ -99,7 +118,7 @@ On the operator's machine, from the installed skill directory:
 6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `.alignfirst.json` writes `plans.repositoryFolder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
 7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Dotfiles (`.env.example`, `.alignfirst.json`, `.alignfirst-projects.json`) are part of the sweep.
 8. `npm install`.
-9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` or `.agents/skills/`) and the repository's own `skills-lock.json`; both are committed.
+9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex|pi> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` for Claude, `.agents/skills/` for Codex/Pi) and the repository's own `skills-lock.json`; both are committed. The verified `skills@1.7.2` Pi target uses `.agents/skills/`; recheck the installed CLI contract when upgrading.
 10. Run the audits below.
 11. `git init -b main`, first commit `chore: initialize assistant administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
 
@@ -116,11 +135,15 @@ rg -n --hidden -g '!node_modules' '\{\{[A-Z][A-Z0-9_]*\}\}' .
 rg -n --hidden -g '!node_modules' 'TEAM_PLANS_SECTION|DEV_SERVER_GATEWAY_SECTION' .
 for f in infra/openclaw/seed.sh infra/openclaw/seed/*.sh infra/openclaw/bin/*.sh infra/openclaw/bin/openclaw infra/openclaw/node-runtime/project-shell infra/openclaw/node-runtime/init.bash infra/openclaw/node-runtime/admin-npm infra/openclaw/node-runtime/check-project-runtimes.sh; do bash -n "$f"; done
 node --check scripts/workspace/workspace.mjs
+node --check infra/openclaw/deployment-profiles.mjs
+node --check infra/openclaw/deployment-policy.mjs
+# Pi overlay: also bash -n node-runtime/install-pi-launcher.sh and
+# node --check node-runtime/pi-launcher.mjs under infra/openclaw/.
 node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aligndev.settings.json .alignfirst.json package.json
 npm run validate
 ```
 
-Both `rg` searches must be empty. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 

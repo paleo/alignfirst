@@ -26,7 +26,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    [`aligndev-openclaw-tests/`](../../aligndev-openclaw-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and judges the result.
    It bind-mounts the workspace and the monorepo root into the gateway, so `aligndev` and `alignfirst` run from the checkout and `aligndev guide` prints the checkout's playbook.
-   The harness intercepts both supported delegated-agent subprocesses.
+   The harness intercepts Claude Code, Codex and Pi delegated-agent subprocesses through a generated named profile. Its offline helper tests cover mock contracts; scenario and live deployment acceptance remain separate.
 
 ## How a turn flows
 
@@ -57,7 +57,7 @@ A managed project can keep its AlignFirst files in a companion directory, outsid
 
 ## A coding agent as the assistant
 
-The same templates serve a second platform, `codingAgent`: a Claude Code or Codex session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the aligndev settings, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
+The same templates serve a second platform, `codingAgent`: a Claude Code, Codex or persistent Pi session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the aligndev settings, and each template keeps platform-specific paragraphs in `{{#openclaw}}` and `{{#codingAgent}}` blocks. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant.md`](../../skills/alignfirst-setup-guide/references/coding-agent-assistant.md) the installation.
 
 ## Reading order for maintainers
 
@@ -79,3 +79,15 @@ reference assembles a version-controlled admin repository from a common base plu
 overlay, one coding-agent overlay and the optional dev-server gateway. The generated runbooks derive
 configuration from the installed OpenClaw version, keep secrets outside git, and prepare managed
 projects through the complete AlignDev contract.
+
+### Pi deployment gate
+
+Pi deployment templates target Pi 1.3.0 on both Slack and Discord. The earlier credential-policy blocker was resolved by explicit approval of one exception: `<agent-dir>/auth.json` remains private, service-owned and writable/replaceable, including adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also declare executable API-key commands. Another process under that UID can persist a command for later Pi execution with the account's privileges. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish native renewal from other same-UID writers.
+
+All other managed instructions, settings/resource declarations, extensions, skills, npm/git package trees, native `bin` helpers, trust and path anchors retain controlled-maintenance protection. Root-owned sticky writable native anchors permit auth/session/cache writes without permitting replacement of root-owned managed entries. Do not freeze the whole native directory. Project trust governs discovery, not an OS sandbox or protection against project changes. Record one manually approved dedicated project/worktree parent; never silently trust the entire projects root.
+
+The protected launcher verifies the pinned npm package's `bin.pi` and execs `/usr/bin/node` with its protected CLI entry, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse `process.execPath`. Both installed inventory/policy helpers run from root-owned `/opt/<service-user>/libexec`, not the mutable seed. They inventory all child and optional quota stores, reject ambiguous paths, aliases/overlaps and escaping package links, and retain resolved pre-unlock inventories for failure restoration. Native backup/recovery uses private explicit destination mappings and exact replacement, not a merge of executable trees. See the setup reference's [deployment boundary](../../skills/alignfirst-setup-guide/references/aligndev-openclaw.md#deployment-gate) and generated runbooks.
+
+After building `alignfirst` and `aligndev`, run `fnm exec --using=.nvmrc npm run test:deployment-templates`. The stdlib suite renders three agents × two surfaces with gateway/work-files options, checks default/custom and multi-profile inventory, JSON, dotfiles, script syntax, executable modes, real AlignDev validation and managed-block idempotence. Native tests preserve the original command-persistence/permission evidence with fake credentials, disposable state and network rejection; they also exercise no-model startup, native locks and neutral reserved resources. Rewritten maintenance fixtures use audited privileged-command doubles for success, failure, signals, partial unlock, snapshot restoration and backup mapping. Runtime fixtures prove project-tool Node selection and packed subagent reuse. These observations do not certify kernel ownership/immutable enforcement or real containment.
+
+OpenClaw remains the persistent parent and needs no `pi-background` to delegate. Production headless waiting remains unchanged and independently blocked under B7. Real service-user enforcement, OAuth login/renewal, reboot, recovery and channel-conversation acceptance remain unexecuted by this template work.

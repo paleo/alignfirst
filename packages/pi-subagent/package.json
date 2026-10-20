@@ -12,9 +12,9 @@
     "directory": "packages/pi-subagent"
   },
   "engines": { "node": ">=22.19.0" },
-  "files": ["dist", "README.md", "LICENSE", "NOTICE.md"],
+  "files": ["index.js", "dist", "README.md", "LICENSE", "NOTICE.md"],
   "publishConfig": { "access": "public" },
-  "pi": { "extensions": ["./dist/index.js"] },
+  "pi": { "extensions": ["./index.js"] },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

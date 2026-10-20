@@ -4,7 +4,13 @@ import { basename } from "node:path";
 
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
-import type { CompanionReport, ConfigSource, ItemLocation, ItemName } from "./layout.js";
+import type {
+  AligndevProjectSettings,
+  CompanionReport,
+  ConfigSource,
+  ItemLocation,
+  ItemName,
+} from "./layout.js";
 import type { PortRange } from "./markers.js";
 
 const URL_WITH_AUTHORITY = /^[A-Za-z][A-Za-z\d+.-]*:\/\//u;
@@ -20,6 +26,7 @@ export interface ProjectDetails {
   ticketIdPattern: string | null;
   configSource: ConfigSource | null;
   companion: CompanionReport | null;
+  aligndev: AligndevProjectSettings | null;
   locations: Record<ItemName, ItemLocation>;
   workspaces: string[];
   worktrees: ProjectWorktree[];
@@ -64,6 +71,7 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     ticketIdPattern: project.description.config?.ticketIdPattern ?? null,
     configSource: project.description.source,
     companion: project.description.companion,
+    aligndev: project.description.aligndev,
     locations: project.description.locations,
     workspaces: project.workspaces,
     worktrees: readWorktrees(project.path),

@@ -21,16 +21,64 @@ sudo install -m 755 -o root -g root infra/openclaw/bin/assistant-kill.sh \
   /usr/local/sbin/alignfirst-assistant-kill
 sudo install -m 755 -o root -g root infra/openclaw/bin/assistant-maintenance.sh \
   /usr/local/sbin/alignfirst-assistant-maintenance
+sudo install -d -m 755 -o root -g root /opt/{{SERVICE_USER}}/libexec
+sudo install -m 644 -o root -g root \
+  infra/openclaw/deployment-profiles.mjs infra/openclaw/deployment-policy.mjs \
+  /opt/{{SERVICE_USER}}/libexec/
+sudo install -m 755 -o root -g root infra/openclaw/bin/bootstrap-backup.sh \
+  /opt/{{SERVICE_USER}}/libexec/bootstrap-backup.sh
+sudo /usr/local/sbin/alignfirst-assistant-kill
 ```
+
+No root operation should execute a helper from a service-writable snapshot. Keep the account contained through backup, conversion and the remaining maintenance steps.
+
+## Bootstrap backup before conversion
+
+Run this schema-independent backup before refreshing `~/seed`, replacing deployed settings or invoking any profile-dependent backup, inventory, seed or maintenance window. It uses only shell utilities and tar, so the original direct `code.agent` settings remain untouched. Containment closes OpenClaw and thread-handoff writers before the copy:
+
+```sh
+sudo -H -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/bootstrap-backup.sh
+```
+
+Record the printed `~/backups/bootstrap/<stamp>/` path in the report, without its contents. Proceed only when the command succeeds and that directory contains `COMPLETE` and `service-home.tar.gz`. A failed attempt retains an incomplete directory; it is not a recovery point. Correct the failure and rerun before changing deployed state.
+
+The private archive preserves the entire service home except `~/backups/`, including the original deployed settings, old seed and `.env`, native credentials, trust, sessions, shared skills, companions and registry, project files, npm/fnm trees, and all OpenClaw and thread-handoff database sidecars. Original modes and symlinks are retained inside the archive; the archive and marker are `0600`, and backup directories are `0700`. Check free space for the complete home. Symlink targets outside the home, external mounts and system-owned files outside the home need a separate reviewed private backup before proceeding. Links are never followed. Transient sockets are not persistent state.
+
+This is a pre-conversion recovery snapshot, distinct from the mapped profile backup in [recover-assistant.md](recover-assistant.md#restore). To inspect or recover it, extract as the service account into a fresh private staging directory while contained. Review original destinations and symlinks before activating individual files. Keep legacy settings as evidence or for a reviewed rollback with the matching old packages and controls; never feed them to the new profile-only helpers or CLI. Do not overlay the archive onto a live home or use it as a `native-recovery` mapping.
+
+Now refresh the contained snapshot:
+
+```sh
+sudo rsync -a --delete infra/openclaw/ /home/{{SERVICE_USER}}/seed/
+sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
+```
+
+## One-time: convert direct launch settings
+
+Before installing profile-aware AlignDev or opening its first maintenance window, manually convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name and its explicit `configDir` to the existing service-account store (`~/.claude` or `~/.codex` on a default installation); remove Codex's former `CODEX_HOME` unset entry because the explicit directory now overrides it. Preserve native authentication and model defaults. Obtain approval for the reviewed settings replacement; no command below converts settings automatically.
+
+Bring `deployment-profiles.mjs`, `deployment-policy.mjs`, `seed.sh`, `seed/coding-agent.sh` and `assistant-maintenance.sh` forward together. After the bootstrap backup and snapshot refresh above, convert the installed settings while contained. The wrapper validates deployed profiles too:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-kill
+sudo chattr -i /home/{{SERVICE_USER}}/.alignfirst \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo install -o root -g root -m 644 infra/openclaw/aligndev.settings.json \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
+  /home/{{SERVICE_USER}}/.alignfirst
+```
+
+Complete the package upgrade before CLI help, delegation or restart. After upgrading, re-seed through `config instructions agent-skills agent-config`, then reapply [06](../installations/06-security-hardening.md). The inventory covers every provisioned coding/quota store, including isolated custom paths beneath the service home. No account files or historical transcripts are migrated.
+
+Existing managed native symlinks need an operator-reviewed conversion before the new wrapper can inventory them. For a former Claude skill alias, contain the account, unlock only its native skills root, verify the entry is a symlink to the intended canonical skill, remove that link (not its target), and copy the reviewed canonical directory into its place. Preserve executable bits with `rsync -a`. Check every profile's store, then apply the shared hardening policy. Do not disable symlink validation or recursively follow an alias during ownership changes.
 
 ## Back up
 
-Before a core bump, stop the gateway so both OpenClaw and the independent thread-handoff database
-close consistently, then keep the state the migrations will rewrite
-([recover-assistant.md](recover-assistant.md#restore)):
+With reviewed profile settings installed and legacy managed links converted, run the strict mapped backup before the package upgrade. The original pre-conversion state remains in the bootstrap snapshot. Refresh the protected helpers and seed first as above; an old `backup.sh` may omit native stores, credentials, trust or package mode mappings ([recover-assistant.md](recover-assistant.md#restore)):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- systemctl --user stop openclaw-gateway
+sudo /usr/local/sbin/alignfirst-assistant-kill
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/backup.sh
 ```
 
@@ -56,7 +104,13 @@ sudo install -m 755 -o root -g root \
   infra/openclaw/node-runtime/check-project-runtimes.sh \
   /opt/{{SERVICE_USER}}/libexec/
 sudo install -m 644 -o root -g root infra/openclaw/node-runtime/init.bash /opt/{{SERVICE_USER}}/libexec/init.bash
+sudo install -m 755 -o root -g root \
+  infra/openclaw/node-runtime/pi-launcher.mjs \
+  infra/openclaw/node-runtime/install-pi-launcher.sh \
+  /opt/{{SERVICE_USER}}/libexec/
 ```
+
+For an installed Pi child, regenerate `/opt/{{SERVICE_USER}}/bin/pi` using its exact reviewed version after the package maintenance window has restored root ownership, write restrictions and the immutable prefix anchor. The installer verifies the package's declared `bin.pi` and system Node. Never regenerate while the prefix is service-writable.
 
 Remove only the legacy npm prefix setting and add missing profile hooks. Keep the existing login profile's environment bridge and custom settings. This shell bypasses the profiles while migrating them:
 
@@ -117,7 +171,7 @@ Run this section once, on a deployment that still has `@alignfirst/alcode` and `
    sudo -i -u {{SERVICE_USER}} -- systemctl --user daemon-reexec
    ```
 
-6. Verify. The listing must show exactly five packages: `openclaw`, the coding agent, `alignfirst`, `aligndev` and `ctx7`.
+6. Verify the listing against the reviewed inventory: `openclaw`, the coding agent, `alignfirst`, `aligndev`, `ctx7`, plus any explicitly provisioned quota CLI.
 
    ```sh
    sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
@@ -138,6 +192,8 @@ openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
 /opt/{{SERVICE_USER}}/libexec/admin-npm install -g alignfirst@latest aligndev@latest ctx7@latest
 '
 ```
+
+On the first profile-aware upgrade, re-seed now through the `config instructions` command in [configure-assistant.md](configure-assistant.md), before any CLI help, delegation or restart. This replaces the protected direct launch settings; the new CLI rejects them.
 
 Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual project `.alignfirst.json` files retain their singular `portRange` claims:
 
@@ -162,7 +218,14 @@ Update the coding agent through its package-scoped command: [08-coding-agent.md 
 
 `openclaw update` exits 1 when its post-install doctor attempts a config write, which the immutable `openclaw.json` blocks (`ENOTDIR: not a directory, scandir '…/openclaw.json'`). Exit 0 means no write was attempted. Either way the package update succeeded; the verify step is what counts, and the migration step below finishes what the lock interrupted.
 
-Verify — the listing must show exactly five packages (`openclaw`, the coding agent, `alignfirst`, `aligndev`, `ctx7`); anything else is a stray from a mistyped install, to remove through another `packages` maintenance window:
+Verify the listing against the reviewed deployment inventory (`openclaw`, coding agents, `alignfirst`, `aligndev`, `ctx7`, and any explicit quota CLI). Remove unexplained packages through another `packages` maintenance window. After a Pi package update, regenerate its launcher first:
+
+```sh
+# Pi deployments only; match the exact version approved and installed through 08.
+sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh <reviewed-version>
+```
+
+Then verify:
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --version && aligndev --version && aligndev code --help >/dev/null && echo aligndev-ok && ctx7 --version'
@@ -170,34 +233,43 @@ sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --d
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-CODING_AGENT=<claude|codex> \
+CODING_AGENT=<claude|codex|pi> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
 ```
 
-Also run the [project-runtime audit](../installations/06-security-hardening.md#project-runtime-audit). It inventories writable runtime bins and globals across every installed version, separately from the protected five-package listing.
+Also run the [project-runtime audit](../installations/06-security-hardening.md#project-runtime-audit). It inventories writable runtime bins and globals across every installed version, separately from the protected package inventory.
 
 ## Skills
 
-The shared `~/.agents` tree and OpenClaw's managed `~/.openclaw/skills` tree are admin-owned and immutable. The `skills` scope also covers Claude Code's symlink tier when selected.
+The shared `~/.agents` tree and OpenClaw's managed `~/.openclaw/skills` tree are protected. The `skills` scope also covers all inventoried native skill stores. Non-package skill symlinks are rejected: use canonical shared skills for Codex/Pi and real native copies for Claude, as described in `08`. Preserve executable modes when refreshing skill scripts.
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
   bash -lc 'npx -y skills update -g -y </dev/null'
 ```
 
-Then make sure every target exists. If an entry is missing, repeat the idempotent `skills add` block of [08-coding-agent.md § Skills](../installations/08-coding-agent.md#skills), replacing its opening command with:
+Repeat the idempotent shared-skill install block in [08-coding-agent.md](../installations/08-coding-agent.md) to ensure every target exists. For Claude, run its native-copy loop on every update, even when the targets already exist. Use the same `skills` scope, replacing the block's opening command with:
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- bash <<'EOS'
 ```
 
-Sweep the escaped symlinks the `skills` CLI writes into `~/.openclaw/skills/` ([gotchas.md](../gotchas.md#skills-cli-writes-escaped-symlinks-under-openclawskills)). Run it as a separate command: the symlink writes lag the CLI's return, so a sweep chained in the same heredoc deletes nothing.
+The skills CLI may write escaped symlinks under `~/.openclaw/skills/` ([gotchas.md](../gotchas.md#skills-cli-writes-escaped-symlinks-under-openclawskills)). Policy restoration or the next window then fails closed. Keep the gateway stopped. The operator removes only direct symlink entries, without following their targets, after validating the root and its ancestors:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- \
-  find /home/{{SERVICE_USER}}/.openclaw/skills -maxdepth 1 -type l -print -delete
+sudo /usr/local/sbin/alignfirst-assistant-kill
+sudo /usr/bin/node --input-type=module -e '
+  import { rejectSymlinks } from "/opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs";
+  rejectSymlinks("/home/{{SERVICE_USER}}/.openclaw/skills");
+'
+sudo chattr -i /home/{{SERVICE_USER}}/.openclaw/skills
+sudo find /home/{{SERVICE_USER}}/.openclaw/skills -maxdepth 1 -type l -print -delete
+sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/skills
+sudo /usr/local/sbin/alignfirst-assistant-maintenance skills -- true
 ```
+
+Run the cleanup after the CLI process tree is contained; delayed writes can outlive the CLI's return. A new maintenance window cannot clean those links itself because validation precedes unlock. Native-store symlinks need the separate reviewed conversion above. If cleanup retained a root-private inventory directory, restore those original resources too through [failed-cleanup recovery](recover-assistant.md#failed-maintenance-cleanup). Restart only after successful full policy restoration.
 
 The setup guide and `sharp-writing` are shared through `~/.agents/skills/` ([gotchas.md](../gotchas.md#shared-skills-live-under-agentsskills)).
 
@@ -243,6 +315,8 @@ sudo cat "/proc/$gateway_pid/environ" | tr '\0' '\n' | grep -E '^(PATH|SHELL)='
 
 ## Smoke test
 
+These are deployment-host acceptance procedures, separate from offline template checks. Record actual channel, native authentication/renewal, private backup/recovery and reboot results. For Pi, recheck the selected store, saved parent trust, native `bin` helpers, one copy of each subagent tool, and protected resources after updates. An OpenClaw Pi child does not require `pi-background`.
+
 `--non-interactive` reports without applying anything:
 
 ```sh
@@ -250,7 +324,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=<claude|codex> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=<claude|codex|pi> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json

@@ -1,9 +1,16 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { registryPath, resolveProjectLayout } from "../src/project-layout.js";
+import {
+  registryPath,
+  resolveProjectLayout,
+  separateSessionTree,
+  sharedCompanionDirs,
+  nestedCompanionDirs,
+  strayRegistryKeys,
+} from "../src/project-layout.js";
 import { configureGit, git, initRepository, makeTempDir, writeRegistry } from "./helpers.js";
 
 const dirs: string[] = [];
@@ -17,6 +24,7 @@ describe("project layout", () => {
     const { home, project } = makeHome();
     const layout = resolveProjectLayout(project, home);
     expect(layout.companion).toBeNull();
+    expect(layout.aligndev).toBeNull();
     expect(layout.locations[".plans"]).toEqual({
       path: join(project, ".plans"),
       in: "project",
@@ -35,7 +43,19 @@ describe("project layout", () => {
     [JSON.stringify({ projects: {}, paths: {} }), 'now uses "projects" entries'],
     [JSON.stringify({ root: "~/c", projects: {} }), "root must be removed"],
     [JSON.stringify({ projects: {}, extra: 1 }), "extra must be removed"],
-    [JSON.stringify({ projects: { "~/p": {} } }), "dir must be a non-empty string"],
+    [JSON.stringify({ projects: { "~/p": {} } }), 'define "dir" or "aligndev"'],
+    [JSON.stringify({ projects: { "~/p": { items: {} } } }), 'define "dir" when "items"'],
+    [JSON.stringify({ projects: { "~/p": { aligndev: {} } } }), "profile must"],
+    [JSON.stringify({ projects: { "~/p": { aligndev: null } } }), "aligndev must"],
+    [JSON.stringify({ projects: { "~/p": { aligndev: { profile: 1 } } } }), "profile must"],
+    [JSON.stringify({ projects: { "~/p": { aligndev: { profile: "" } } } }), "profile must"],
+    [JSON.stringify({ projects: { "~/p": { aligndev: { profile: "  " } } } }), "nonblank"],
+    [
+      JSON.stringify({ projects: { "~/p": { aligndev: { profile: "work", extra: 1 } } } }),
+      "extra must be removed",
+    ],
+    [JSON.stringify({ projects: { "~/p": { dir: " " } } }), "nonblank path"],
+    [JSON.stringify({ projects: { "~/p": { dir: "a\u0000b" } } }), "nonblank path"],
     [JSON.stringify({ projects: { "~/p": { dir: "" } } }), "dir must be a non-empty string"],
     [JSON.stringify({ projects: { "~/p": { dir: "~x" } } }), "dir must be a relative path"],
     [JSON.stringify({ projects: { "~/p": { dir: "~" } } }), "dir must be a relative path"],
@@ -60,6 +80,37 @@ describe("project layout", () => {
     writeFileSync(registryPath(home), content);
     expect(() => resolveProjectLayout(project, home)).toThrow(`Invalid ${registryPath(home)}: `);
     expect(() => resolveProjectLayout(project, home)).toThrow(message);
+  });
+
+  it("shares a profile-only selection through symlink keys and linked worktrees without redirecting files", () => {
+    const { root, home, project } = makeHome();
+    const linked = join(root, "linked");
+    git(project, "worktree", "add", "--quiet", "-b", "feature", linked);
+    const alias = join(root, "alias");
+    symlinkSync(project, alias);
+    const baseline = resolveProjectLayout(linked, home);
+    symlinkSync(join(root, "missing-plans"), join(linked, ".plans"));
+    writeRegistry(home, {
+      projects: {
+        [alias]: { aligndev: { profile: "unprovisioned-profile" } },
+        "~/gone": { aligndev: { profile: "work" } },
+      },
+    });
+    const before = readdirSync(join(home, ".alignfirst", "companions"));
+    const layout = resolveProjectLayout(linked, home);
+    expect(layout.aligndev).toEqual({ profile: "unprovisioned-profile" });
+    expect(resolveProjectLayout(project, home).aligndev).toEqual(layout.aligndev);
+    expect(layout.companion).toBeNull();
+    expect(layout.locations).toEqual({
+      ...baseline.locations,
+      ".plans": { path: join(linked, ".plans"), in: "project", exists: true },
+      _aligndev: { path: join(linked, ".plans"), in: "project", exists: true },
+    });
+    expect(separateSessionTree(layout)).toBeUndefined();
+    expect(sharedCompanionDirs(home)).toEqual([]);
+    expect(nestedCompanionDirs(home)).toEqual([]);
+    expect(strayRegistryKeys(home)).toEqual(["~/gone"]);
+    expect(readdirSync(join(home, ".alignfirst", "companions"))).toEqual(before);
   });
 
   it("expands a ~/ key against the home directory and joins a relative dir to the companions", () => {
@@ -90,10 +141,12 @@ describe("project layout", () => {
         "~/projects/app": {
           dir: "projects_app",
           items: { docs: "companion", ".plans": "project" },
+          aligndev: { profile: "work" },
         },
       },
     });
     const layout = resolveProjectLayout(linked, home);
+    expect(layout.aligndev).toEqual({ profile: "work" });
     expect(layout.companion?.dir).toBe(join(home, ".alignfirst", "companions", "projects_app"));
     expect(layout.locations.docs.path).toBe(
       join(home, ".alignfirst", "companions", "projects_app", "docs"),

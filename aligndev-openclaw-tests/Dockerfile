@@ -12,12 +12,12 @@ USER root
 # Fixture runtime deps (git for `git init` / worktree, curl for the playbook's
 # verification step — "confirm the app still serves" — pnpm through Corepack for
 # the project's dev scripts). Plus the per-command mock-cli shim symlinks
-# this consumer wants intercepted. `claude`, `codex`, and `gh` are shimmed. `aligndev` runs for real,
+# this consumer wants intercepted. `claude`, `codex`, `pi`, and `gh` are shimmed. `aligndev` runs for real,
 # and its selected coding-agent subprocess resolves back to the shim via PATH order.
 RUN apk add --no-cache git curl sqlite && \
     npm install --global corepack@0.36.0 && \
     corepack enable && corepack prepare pnpm@latest --activate && \
-    for name in claude codex gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
+    for name in claude codex pi gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done && \
     mkdir -p /home/assistant/projects && \
     chown assistant:assistant /home/assistant/projects
 
@@ -39,7 +39,9 @@ RUN printf '#!/bin/sh\nexec /opt/openclaw-test/src/node_modules/.bin/openclaw "$
 
 # Reset / seed scripts invoked from scenarios via ctx.execInGateway(...).
 COPY --chown=root:root scripts/ /opt/openclaw-test/scripts/
-RUN chmod +x /opt/openclaw-test/scripts/*.mjs && \
+# Scenario imports resolve ../scripts from /opt/openclaw-test/src/scenarios.
+RUN ln -s ../scripts /opt/openclaw-test/src/scripts && \
+    chmod +x /opt/openclaw-test/scripts/*.mjs && \
     install -m 0755 /opt/openclaw-test/scripts/gateway-entrypoint.sh \
       /usr/local/bin/gateway-entrypoint
 

@@ -9,6 +9,7 @@ import {
   writeDeprecationWarnings,
 } from "../project-config.js";
 import {
+  type AligndevProjectSettings,
   type CompanionLayout,
   ITEM_NAMES,
   type ItemLocation,
@@ -24,6 +25,7 @@ interface ConfigReport {
   cli: CliReport | null;
   config: ProjectConfig | null;
   companion: CompanionLayout | null;
+  aligndev: AligndevProjectSettings | null;
   locations: Record<ItemName, ItemLocation>;
 }
 
@@ -77,6 +79,7 @@ function buildConfigReport(
     cli: cli ? { installed: ctx.version, range: cli.range, satisfied: cli.satisfied } : null,
     config: resolved?.config ?? null,
     companion: layout.companion,
+    aligndev: layout.aligndev,
     locations: layout.locations,
   };
 }
@@ -89,6 +92,7 @@ function renderConfigReport(report: ConfigReport): string {
     );
   else lines.push("CLI range: none");
   lines.push(...renderCompanionLines(report.companion));
+  lines.push(`AlignDev profile: ${report.aligndev?.profile ?? "none"}`);
   for (const name of ITEM_NAMES) lines.push(renderItemLocation(name, report.locations[name]));
   if (report.config) lines.push("Config:", JSON.stringify(report.config, undefined, 2));
   return `${lines.join("\n")}\n`;

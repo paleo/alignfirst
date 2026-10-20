@@ -20,6 +20,69 @@ afterEach(() => {
 });
 
 describe("companion register", () => {
+  it("adds a companion to the original profile-only key and preserves the selection through removal", async () => {
+    const { root, home, project } = makeHome();
+    const alias = join(root, "project-alias");
+    symlinkSync(project, alias);
+    const aligndev = { profile: "work" };
+    writeRegistry(home, {
+      projects: {
+        [alias]: { aligndev },
+        "~/other": { aligndev },
+      },
+    });
+    const registered = await runMain(["companion", "register", "--dir", "chosen", "--create-dir"], {
+      cwd: project,
+      home,
+    });
+    expect(registered.code).toBe(0);
+    expect(registered.stdout).toContain(`Registered ${alias}`);
+    expect(registered.stdout).toContain("(created)");
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      projects: {
+        [alias]: { aligndev, dir: "chosen" },
+        "~/other": { aligndev },
+      },
+    });
+    const again = await runMain(["companion", "register", "--dir", "chosen"], {
+      cwd: project,
+      home,
+    });
+    expect(again.stdout).toContain(`Already registered by ${alias}`);
+    const removed = await runMain(["companion", "unregister", "--remove-dir"], {
+      cwd: project,
+      home,
+    });
+    expect(removed.code).toBe(0);
+    expect(removed.stdout).toContain("Kept profile-only entry: work");
+    expect(existsSync(join(rootOf(home), "chosen"))).toBe(false);
+    const preserved = readFileSync(registryOf(home), "utf-8");
+    expect(JSON.parse(preserved)).toEqual({
+      projects: { [alias]: { aligndev }, "~/other": { aligndev } },
+    });
+    const noCompanion = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(noCompanion.code).toBe(1);
+    expect(noCompanion.stderr).toContain("has no companion");
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(preserved);
+  });
+
+  it("validates bounds before adding a directory to a profile-only entry", async () => {
+    const { home, project } = makeHome();
+    const projects = {
+      "~/projects/app": { aligndev: { profile: "work" } },
+      "~/other": { dir: "shared" },
+    };
+    writeRegistry(home, { projects });
+    const before = readFileSync(registryOf(home), "utf-8");
+    for (const dir of ["shared", "shared/nested", project, home]) {
+      const result = await runMain(["companion", "register", "--dir", dir, "--create-dir"], {
+        cwd: project,
+        home,
+      });
+      expect(result.code).toBe(1);
+      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+    }
+  });
   it("creates the registry and registers the project, without its companion", async () => {
     const { home, project } = makeHome();
     const result = await runMain(["companion", "register"], { cwd: project, home });
@@ -215,6 +278,33 @@ describe("companion register", () => {
 });
 
 describe("companion unregister", () => {
+  it("keeps combined entries unchanged on refusal and removes items while preserving profiles", async () => {
+    const { home, project } = makeHome();
+    const aligndev = { profile: "work" };
+    writeRegistry(home, {
+      projects: {
+        "~/projects/app": {
+          dir: "projects_app",
+          items: { docs: "companion" },
+          aligndev,
+        },
+      },
+    });
+    mkdirSync(join(companionOf(home), "docs"), { recursive: true });
+    const before = readFileSync(registryOf(home), "utf-8");
+    const refused = await runMain(["companion", "unregister", "--remove-dir"], {
+      cwd: project,
+      home,
+    });
+    expect(refused.code).toBe(1);
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+    const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(removed.code).toBe(0);
+    expect(removed.stdout).toContain("Orphaned companion directory:");
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      projects: { "~/projects/app": { aligndev } },
+    });
+  });
   it("removes the key and reports the orphaned companion directory", async () => {
     const { root, home, project } = makeHome();
     const companion = join(root, "companion");

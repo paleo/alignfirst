@@ -4,6 +4,7 @@
 # The agent is selected by the overlay (aligndev.settings.json, the aligndev settings), not by .env.
 
 required_coding_agent=()
+coding_agent_kind=claude
 
 validate_coding_agent() {
   if ! command -v claude >/dev/null 2>&1; then
@@ -13,6 +14,6 @@ validate_coding_agent() {
 }
 
 configure_coding_agent() {
-  echo "[seed] Claude Code global instructions — ~/.claude/CLAUDE.md"
-  merge_managed_block "$HOME/.claude/CLAUDE.md" "$DIR/coding-agent/CLAUDE.md" alignfirst-dev-kit
+  echo "[seed] Claude Code global instructions — $INSTRUCTION_FILE"
+  merge_managed_block "$INSTRUCTION_FILE" "$DIR/coding-agent/CLAUDE.md" alignfirst-dev-kit
 }

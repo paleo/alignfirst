@@ -110,6 +110,20 @@ Ensure the alignfirst-setup-guide skill is installed, then ask your agent:
 Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
 ```
 
+The same registry can select a named AlignDev profile without a companion:
+
+```json
+{
+  "projects": {
+    "~/projects/client-api": { "aligndev": { "profile": "claude-work" } }
+  }
+}
+```
+
+Edit this selection by hand. A profile-only entry leaves project files in place, including in linked worktrees. `config --json` reports `aligndev` independently of `companion`; `config` and `doctor` show the selection. Named-profile resolution belongs to AlignDev's forthcoming settings contract.
+
+`companion register` preserves a selection when adding a directory. `companion unregister` removes companion fields and preserves the selection; remove the remaining profile-only entry through a separate registry edit.
+
 ### Loading the AlignFirst context
 
 If you can't edit the project's `AGENTS.md` file, add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent), with the project's path:
@@ -119,6 +133,10 @@ If you can't edit the project's `AGENTS.md` file, add this section to your globa
 
 When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
 ```
+
+### Global skill diagnostics
+
+`alignfirst doctor` checks global skills in shared, Claude Code, Codex, then Pi roots. Pi defaults to `~/.pi/agent/skills`; `PI_CODING_AGENT_DIR` replaces that Pi root with `<agent-dir>/skills`. Relative paths resolve from the command's working directory. This check excludes project resources, package filters and trust decisions.
 
 ## Upgrade from v1, v2, or v3
 

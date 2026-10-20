@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,6 +26,7 @@ describe("config command", () => {
         "Source: none",
         "CLI range: none",
         "Companion: none",
+        "AlignDev profile: none",
         `.alignfirst.json: ${join(cwd, ".alignfirst.json")} (project, missing)`,
         `.alignfirst-instructions: ${join(cwd, ".alignfirst-instructions")} (project, missing)`,
         `DEVELOPERS.md: ${join(cwd, "DEVELOPERS.md")} (project, missing)`,
@@ -36,7 +37,13 @@ describe("config command", () => {
       ].join("\n"),
     );
     const report = JSON.parse((await runMain(["config", "--json"], { cwd })).stdout);
-    expect(report).toMatchObject({ source: null, cli: null, config: null, companion: null });
+    expect(report).toMatchObject({
+      source: null,
+      cli: null,
+      config: null,
+      companion: null,
+      aligndev: null,
+    });
     expect(report.locations.docs).toEqual({
       path: join(cwd, "docs"),
       in: "project",
@@ -94,6 +101,7 @@ describe("config command", () => {
     const json = JSON.parse((await runMain(["config", "--json"], { cwd: project, home })).stdout);
     expect(json).toEqual({
       source: "companion",
+      aligndev: null,
       cli: null,
       config: { schemaVersion: 1 },
       companion: {
@@ -142,6 +150,25 @@ describe("config command", () => {
     expect((await runMain(["config"], { cwd: project, home })).stdout).toContain(
       `Companion: ${companion} (missing)\nCompanion items: all auto\n`,
     );
+  });
+
+  it("reports an independent profile selection without creating project or companion files", async () => {
+    const home = temp();
+    configureGit(home);
+    const project = join(home, "app");
+    initRepository(project);
+    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "work" } } } });
+    const before = readdirSync(project);
+    const json = await runMain(["config", "--json"], { cwd: project, home });
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      companion: null,
+      aligndev: { profile: "work" },
+    });
+    const text = await runMain(["config"], { cwd: project, home });
+    expect(text.stdout).toContain("Companion: none\nAlignDev profile: work\n");
+    expect(readdirSync(project)).toEqual(before);
+    expect(readdirSync(join(home, ".alignfirst", "companions"))).toEqual(["registry.json"]);
   });
 
   it("reports an invalid config as a CLI error", async () => {

@@ -8,7 +8,7 @@ read_when:
 
 # Discord Channel
 
-**Role: Discord administrator** for the platform setup, **operator** for the smoke test. Platform setup runs before `04` (its token and IDs go into `infra/openclaw/.env`); the smoke test runs after `08`.
+**Role: Discord administrator** for the platform setup, **operator** for the smoke test. Platform setup runs before `04` (its token and IDs go into `infra/openclaw/.env`); the smoke test runs after `08` authentication/trust and `06` hardening.
 
 ## Enable Developer Mode
 
@@ -56,7 +56,7 @@ The seed allowlists that one channel (`channels.discord.guilds`, `groupPolicy al
 
 ## Smoke Test
 
-Run it after `08`, as the operator, from the Discord client.
+Run it after `08` and `06`, as the operator, from the Discord client. These are live deployment acceptance procedures, separate from offline template checks. OpenClaw remains the persistent parent for Claude Code, Codex and Pi; no Pi background extension is required.
 
 First verify the effective gateway configuration:
 
@@ -72,6 +72,7 @@ allowlisted channel.
 
 1. Send small talk in the allowlisted channel. It receives one channel-root reply and no thread.
 2. Request a complete small read-only task against a listed project. One named thread and one starter appear, and the channel gets one line linking to the thread. Work begins without a follow-up and reports in that same thread.
+   Inspect that task's `.plans/<ticket>/_aligndev/*.md` under the service account. Confirm the recorded `profile`, `agent`, native session identity and real cwd match the selected project. With Pi, verify the saved approved parent covers this cwd and the future worktree layout; do not bypass trust prompts or expose native credentials.
 3. Request work while omitting one genuinely required value. The starter asks once; no work begins until an answer arrives in the same thread, then that session continues.
 4. Post the same request in a channel or guild the bot is not allowlisted in. No thread opens and no work starts.
 5. Confirm that the channel root received neither a duplicate starter nor a completion report.

@@ -1,12 +1,23 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import type * as FileSystem from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   appendTranscript,
   applyCompletion,
+  createSessionFile,
   type SessionFrontmatter,
   listSessionRecords,
   parseFrontmatter,
@@ -19,12 +30,18 @@ import {
   writeInitialSessionFile,
 } from "../../src/code/session-file.js";
 
+vi.mock("node:fs", async (original) => {
+  const fs = await original<typeof FileSystem>();
+  return { ...fs, writeFileSync: vi.fn(fs.writeFileSync) };
+});
+
 const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
 
 function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
   return {
     status: "running",
     agent: "claude",
+    profile: null,
     protocol: "spec",
     ticket: "29",
     model: null,
@@ -90,6 +107,26 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block)).toEqual(frontmatter);
   });
 
+  it.each(["line\nbreak", "line\r\nbreak", "tab\tinside", "nul\u0000inside", "next\u0085line"])(
+    "round-trips embedded controls in all string metadata: %j",
+    (value) => {
+      const metadata = makeFrontmatter({
+        profile: value,
+        model: value,
+        sessionId: value,
+        command: value,
+        meta: value,
+        cwd: value,
+        contextTokensError: value,
+      });
+      const block = serializeFrontmatter(metadata)
+        .replace(/^---\n/, "")
+        .replace(/\n---\n$/, "");
+      expect(parseFrontmatter(block)).toEqual(metadata);
+      expect(block.split("\n")).toHaveLength(Object.keys(metadata).length);
+    },
+  );
+
   it("round-trips null pid and cwd", () => {
     const block = serializeFrontmatter(makeFrontmatter())
       .replace(/^---\n/, "")
@@ -104,8 +141,12 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block).agent).toBe("pi");
   });
 
-  it("parses an omitted legacy agent as null", () => {
+  it("reads omitted historical profile/agent fields as null", () => {
     expect(parseFrontmatter("status: succeeded").agent).toBeNull();
+    expect(parseFrontmatter("status: succeeded").profile).toBeNull();
+    expect(
+      parseFrontmatter(serializeFrontmatter({ ...frontmatter, profile: "work account" })).profile,
+    ).toBe("work account");
   });
 
   it("round-trips the context size and rejects a non-numeric one", () => {
@@ -140,6 +181,89 @@ describe("session file lifecycle", () => {
     sessionFilePath = join(dir, "session.md");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("retries an atomic claim lost after path selection, preserving both runs and results", () => {
+    const original = vi.mocked(writeFileSync).getMockImplementation();
+    if (!original) throw new Error("Missing filesystem implementation.");
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    vi.mocked(writeFileSync).mockImplementationOnce((path, ...args) => {
+      expect(path).toBe(first);
+      original(path, `${serializeFrontmatter(makeFrontmatter({ meta: "winner" }))}\n`);
+      return original(path, ...args);
+    });
+    const second = createSessionFile(
+      dir,
+      undefined,
+      FIXED_DATE,
+      makeFrontmatter({ meta: "retry" }),
+    );
+    expect(second).not.toBe(first);
+    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    for (const [path, key, other] of [
+      [first, "winner", "retry"],
+      [second, "retry", "winner"],
+    ]) {
+      appendTranscript(path, `PRIVATE:${key}\n`);
+      applyCompletion(path, {
+        status: "succeeded",
+        endedAt: FIXED_DATE.toISOString(),
+        exitReason: "completed",
+        sessionId: key,
+        result: `FINAL:${key}`,
+      });
+      expect(readCompletion(path)).toMatchObject({
+        frontmatter: { meta: key, sessionId: key, status: "succeeded" },
+        result: `FINAL:${key}`,
+      });
+      const content = readFileSync(path, "utf8");
+      expect(content).toContain(`PRIVATE:${key}`);
+      expect(content).not.toContain(`PRIVATE:${other}`);
+    }
+  });
+
+  it("advances past dangling filename symlinks without following or replacing them", () => {
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    mkdirSync(join(dir, "_aligndev"));
+    const target = join(dir, "missing-target");
+    symlinkSync(target, first);
+    expect(existsSync(first)).toBe(false);
+    const second = createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter({ meta: "safe" }));
+    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    expect(readlinkSync(first)).toBe(target);
+    expect(existsSync(target)).toBe(false);
+    expect(readCompletion(second).frontmatter.meta).toBe("safe");
+  });
+
+  it("reports a regular file blocking the session directory without collision retry", () => {
+    writeFileSync(join(dir, "_aligndev"), "blocking file");
+    const claim = vi.mocked(writeFileSync);
+    claim.mockClear();
+    expect(() => createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter())).toThrow(
+      expect.objectContaining({ code: "EEXIST" }),
+    );
+    expect(claim).not.toHaveBeenCalled();
+    expect(readFileSync(join(dir, "_aligndev"), "utf8")).toBe("blocking file");
+  });
+
+  it("propagates non-collision write errors instead of retrying or claiming success", () => {
+    const denied = Object.assign(new Error("write denied"), { code: "EACCES" });
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw denied;
+    });
+    expect(() => createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter())).toThrow(denied);
+    expect(existsSync(resolveSessionFilePath(dir, undefined, FIXED_DATE))).toBe(false);
+  });
+
+  it("refuses a stale filename claim without overwriting the winning run", () => {
+    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    const stale = resolveSessionFilePath(dir, undefined, FIXED_DATE);
+    expect(stale).toBe(first);
+    writeInitialSessionFile(first, makeFrontmatter({ meta: "winner" }));
+    expect(() => writeInitialSessionFile(stale, makeFrontmatter({ meta: "loser" }))).toThrow(
+      expect.objectContaining({ code: "EEXIST" }),
+    );
+    expect(readCompletion(first).frontmatter.meta).toBe("winner");
+  });
 
   it("writes a running header and completes to succeeded with a result", () => {
     writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: 4242, cwd: "/proj" }));
@@ -187,10 +311,15 @@ describe("session file lifecycle", () => {
   it("reconciles a dead running process without waiting for another run", () => {
     const child = spawnSync("node", ["-e", ""]);
     if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-    writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: child.pid }));
+    writeInitialSessionFile(
+      sessionFilePath,
+      makeFrontmatter({ pid: child.pid, sessionId: "requested-resume-id" }),
+    );
 
     const completion = reconcileSessionFile(sessionFilePath, FIXED_DATE);
 
+    expect(completion.frontmatter.sessionId).toBe("requested-resume-id");
+    expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe("requested-resume-id");
     expect(completion.frontmatter.status).toBe("failed");
     expect(completion.frontmatter.endedAt).toBe(FIXED_DATE.toISOString());
     expect(completion.frontmatter.exitReason).toBe("terminated");

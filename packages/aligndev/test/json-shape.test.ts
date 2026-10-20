@@ -9,9 +9,12 @@ import {
   matching,
   nonEmptyArrayOf,
   nonEmptyString,
+  nonblankString,
+  nulFreeString,
   object,
   optional,
   parseShape,
+  record,
   string,
 } from "../src/json-shape.js";
 
@@ -106,6 +109,20 @@ describe("json shape", () => {
 
   it("puts array indexes on the root path", () => {
     expect(() => parse(arrayOf(string), [1])).toThrow("invalid: value[0] must be a string");
+  });
+
+  it("validates arbitrary record keys and values without prototype lookup", () => {
+    const value = JSON.parse('{"__proto__":"native","constructor":"other"}');
+    const checked = parse(record(nonblankString, nonblankString), value);
+    expect(Object.hasOwn(checked, "__proto__")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(checked, "__proto__")?.value).toBe("native");
+    expect(checked.constructor).toBe("other");
+    expect(() => parse(record(string), [])).toThrow("be an object");
+    expect(() => parse(record(nonblankString), { target: " " })).toThrow("target must be nonblank");
+    expect(() => parse(record(string, nonblankString), { " ": "target" })).toThrow(
+      'value[" "] must be nonblank',
+    );
+    expect(() => parse(nulFreeString, "a\0b")).toThrow("NUL");
   });
 
   it("lets non-shape errors pass through", () => {

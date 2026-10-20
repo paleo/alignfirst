@@ -16,7 +16,7 @@ Two independently installable MIT packages extend Pi without requiring AlignFirs
 | [`@alignfirst/pi-subagent`](../packages/pi-subagent/README.md) | `packages/pi-subagent/src/` | Synchronous isolated Pi children through `subagent`, with a bundled worker, optional profiles, parallel and chain modes. |
 | [`@alignfirst/pi-background`](../packages/pi-background/README.md) | `packages/pi-background/src/` | Arbitrary attached shell commands through `background`, prompt startup acknowledgement, bounded output, status/cancellation and native follow-up requests. |
 
-Each package exposes compiled `dist/index.js` through `pi.extensions`. Imported Pi libraries and TypeBox are host peers, not bundled runtime copies. Public schemas, output bounds, examples and provenance are maintained in the linked READMEs. `packages/pi-subagent/src/run.ts` defines its parameters/results; `packages/pi-background/src/background-tool.ts` defines its action union/results. Neither package installs profiles or skills. Disable an existing local `subagent` implementation explicitly before loading its packaged replacement; keep user profiles.
+Each package declares only root `index.js` in `pi.extensions`. That published file forwards the default factory from compiled `dist/index.js`, keeping Pi's compact npm-source labels free of `:dist`. Imported Pi libraries and TypeBox are host peers, not bundled runtime copies. Public schemas, output bounds, examples and provenance are maintained in the linked READMEs. `packages/pi-subagent/src/run.ts` defines its parameters/results; `packages/pi-background/src/background-tool.ts` defines its action union/results. Neither package installs profiles or skills. Disable an existing local `subagent` implementation explicitly before loading its packaged replacement; keep user profiles.
 
 ## Integration boundary
 
@@ -48,6 +48,12 @@ The deterministic matrices cover public tools, bounded results, ownership races,
 
 Live acceptance has exercised **openai/gpt-5.6-terra**, including headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
 
+## Archived headless feasibility research
+
+B7's five native Pi 1.3.0 settlement characterization checks used a test-only SDK extension, not the shipped background extension. Their exact reproducers from commit `66c87aa`, prerequisites and manual reproduction notes are preserved with the ticket evidence in `.plans/side-25/b7-native-settlement-reproducers/` in the separate work-files repository. They are outside active package tests and published artifacts.
+
+B7 remains blocked and unshipped; production waiting is unchanged. Removing these checks removes no shipped extension behavior coverage, but loses automatic upstream-change detection. Revisiting B7 requires a deliberate fresh feasibility gate, including cancellation and cleanup-failure safety, rather than relying on historical assertions that upstream bugs persist.
+
 ## Checks
 
 From the repository root:
@@ -71,7 +77,7 @@ After builds, run the packed-distribution gate:
 fnm exec --using=.nvmrc npm run release:smoke
 ```
 
-It installs the CLI tarballs without Pi, then creates three separate disposable Pi 1.3.0 installs. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
+It installs the CLI tarballs without Pi, then creates three separate disposable Pi 1.3.0 installs. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. Missing root entries and invalid default factories must fail the public loader check. `scripts/pi-packed-presentation.mjs` checks unversioned npm-source discovery against those same local tarballs, then captures a prompt-free real TUI startup through `scripts/pi-packed-tui.py`. It verifies package labels without `:dist` and single tool registration; Python 3 and a Unix PTY are required. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
 
 Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly after builds:
 

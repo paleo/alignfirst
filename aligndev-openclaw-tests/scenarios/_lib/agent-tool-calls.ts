@@ -54,15 +54,8 @@ export function execCommandOf(call: AgentToolCall): string | undefined {
   return call.toolName === "exec" && typeof input.command === "string" ? input.command : undefined;
 }
 
-// `aligndev` at a word boundary — bare, absolute path (`/usr/local/bin/aligndev …`), or after a shell
-// separator/subshell open (`(aligndev code … ; openclaw system event …)` is the guide's chained
-// completion-event launch shape) — but not a substring of another token.
-const ALIGNDEV_INVOCATION_RE = /(^|[\s/;(&|])aligndev(\s|$)/;
 // A coding-agent launch. `aligndev code status` and `aligndev guide code` launch nothing.
 const ALIGNDEV_CODE_LAUNCH_RE = /(^|[\s/;(&|])aligndev\s+code\s+(new|resume)(\s|$)/;
-// Only `aligndev code` may launch a coding agent. Its subprocess appears as a cliMock entry rather
-// than an OpenClaw agent tool call.
-const CODING_AGENT_INVOCATION_RE = /(^|[\s/;(&|])(claude|codex)(\s|$)/;
 
 /** True when the call is an `exec` that launches the coding agent through the real `aligndev code` CLI. */
 export function invokesAligndevCode(call: AgentToolCall): boolean {
@@ -90,11 +83,92 @@ export function nthMatchingCall(
   };
 }
 
-/** True when the call is an `exec` that invokes Claude or Codex directly. */
+/** True when the call is an `exec` that invokes Claude, Codex or Pi directly. */
 export function invokesCodingAgentDirectly(call: AgentToolCall): boolean {
-  const input = inputOf(call);
-  if (call.toolName !== "exec" || typeof input.command !== "string") return false;
-  return (
-    CODING_AGENT_INVOCATION_RE.test(input.command) && !ALIGNDEV_INVOCATION_RE.test(input.command)
-  );
+  const command = execCommandOf(call);
+  if (command === undefined) return false;
+  for (const words of shellCommands(command)) {
+    if (launchesNativeAgent(words)) return true;
+  }
+  return false;
+}
+
+// Only `aligndev code` may launch a coding agent. Its child is recorded as a cliMock entry.
+function launchesNativeAgent(words: string[]): boolean {
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index];
+    if (/^[A-Za-z_]\w*=/.test(word)) {
+      ++index;
+    } else if (/^(env|command|exec|npx|sudo)$/.test(word)) {
+      ++index;
+      while (index < words.length && /^-[\w-]+$/.test(words[index])) ++index;
+    } else {
+      return /^(?:.*\/)?(claude|codex|pi)$/.test(word);
+    }
+  }
+  return false;
+}
+
+// Track words, quotes and executable substitutions, not the full shell grammar.
+function* shellCommands(
+  command: string,
+  start = 0,
+  terminator?: ")" | "`",
+): Generator<string[], number> {
+  let words: string[] = [];
+  let word: string | undefined;
+  let quote: string | undefined;
+  let parentheses = 0;
+  let index = start;
+  for (; index < command.length; ++index) {
+    const char = command[index];
+    const next = command[index + 1];
+    if (char === "\\" && quote !== "'" && next !== undefined) {
+      if (quote === undefined || /[$`"\\\n]/.test(next)) {
+        if (next !== "\n") word = (word ?? "") + next;
+        ++index;
+        continue;
+      }
+    }
+    if (quote === undefined && char === terminator && parentheses === 0) break;
+    if (quote !== "'" && (char === "`" || (char === "$" && next === "("))) {
+      const closing = char === "`" ? "`" : ")";
+      index = yield* shellCommands(command, index + (char === "`" ? 1 : 2), closing);
+      // Expansion output is unknown; do not join surrounding fragments into a literal agent name.
+      word = `${word ?? ""}$()`;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (char === quote) quote = undefined;
+      else word = (word ?? "") + char;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      word ??= "";
+      continue;
+    }
+    if (char === "#" && word === undefined) {
+      while (index < command.length && command[index] !== "\n") ++index;
+      --index;
+      continue;
+    }
+    if (char === "(") ++parentheses;
+    if (char === ")") --parentheses;
+    const boundary = /[;(&|)\n]/.test(char);
+    if (boundary || /\s/.test(char)) {
+      if (word !== undefined) words.push(word);
+      word = undefined;
+      if (boundary && words.length > 0) {
+        yield words;
+        words = [];
+      }
+      continue;
+    }
+    word = (word ?? "") + char;
+  }
+  if (word !== undefined) words.push(word);
+  if (words.length > 0) yield words;
+  return index;
 }

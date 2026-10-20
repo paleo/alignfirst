@@ -47,18 +47,23 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 
 ### Authenticate
 
-**Role: human**, after `04-openclaw.md`. Codex keeps its own login under `~/.codex/auth.json`, independent from the OpenClaw model provider and its authentication. `aligndev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.unset` in the aligndev settings, `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
+**Role: human**, after `04-openclaw.md`. Codex keeps its own login under the selected profile's `<configDir>/auth.json`, independent from the OpenClaw model provider and its authentication. `aligndev code` strips `OPENAI_API_KEY`, `CODEX_API_KEY` and OpenClaw's `CODEX_*` exports from every delegated run (`code.profiles.service-codex.unset` in `infra/openclaw/aligndev.settings.json`), so this login is the only credential the coding agent uses.
 
 > **User action required.** Enable the flow on the account first: ChatGPT settings, **Security**, **Enable device code authorization for Codex**. Then run the login from an interactive service-account shell, in a fresh terminal as `{{SERVER_ADMIN_USER}}`, and complete it in a laptop browser signed in to that account.
 
 ```sh
 sudo -i -u {{SERVICE_USER}}
+set -o pipefail
+CODEX_HOME=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir') || exit 1
+export CODEX_HOME
 codex login --device-auth
 codex login status
 exit
 ```
 
-`~/.codex/auth.json` is a secret: never copy it into the repository, the seed or a project. When the account forbids device codes, run `codex login` without the flag through an SSH tunnel to the localhost callback port it prints.
+`<configDir>/auth.json` is a secret: never copy it into the repository, the seed or a project. When the account forbids device codes, run `codex login` without the flag through an SSH tunnel to the localhost callback port it prints.
 
 ### Skills
 
@@ -81,55 +86,65 @@ The `sysadmin` skill is project-local to the admin repository and belongs to the
 npx -y skills add https://github.com/paleo/skills --yes --agent codex --skill sysadmin < /dev/null
 ```
 
-**System skills.** Codex unpacks its bundled skills into `~/.codex/skills/.system/` at session start, behind a content-hash marker. Run this block before `06-security-hardening.md`. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
+**System skills.** Codex unpacks bundled skills into `<configDir>/skills/.system/` at session start, behind a content-hash marker. Run this block before `06-security-hardening.md` for every inventoried Codex store, including quota-only stores. This is a live model-backed acceptance command, not an offline test. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} mkdir -p /home/{{SERVICE_USER}}/.codex/skills
-sudo chattr -i /home/{{SERVICE_USER}}/.codex/skills 2>/dev/null || true
-sudo chown -Rh {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.codex/skills
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop."' < /dev/null
-sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.codex/skills
-sudo find /home/{{SERVICE_USER}}/.codex/skills -type d -exec chmod 755 {} +
-sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
-sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" |
+  jq -r '.stores[] | select(.agent == "codex") | .configDir' |
+  while IFS= read -r store; do
+    mkdir -p "$store/skills"
+    CODEX_HOME="$store" codex exec --sandbox read-only --skip-git-repo-check \
+      -C /tmp 'Reply with exactly OK and stop.' < /dev/null
+  done
+EOS
 ```
 
 After `06`, run the same refresh through the root-owned maintenance wrapper. It contains the assistant before the directory becomes writable and restores the directory through an `EXIT` trap:
 
 ```sh
-sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- bash -lc \
-  'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop."' \
-  < /dev/null
+sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- \
+  env CODEX_HOME=<resolved-service-codex-dir> codex exec --sandbox read-only \
+  --skip-git-repo-check -C /tmp 'Reply with exactly OK and stop.' < /dev/null
 ```
 
 The bundled `skill-creator` and `skill-installer` become visible to the delegated agent. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
 
 ### Global Instructions
 
-The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `${CODEX_HOME:-~/.codex}/AGENTS.md`, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
+The `service-codex` profile sets explicit `configDir: "~/.codex"`, overriding inherited `CODEX_HOME`. Isolated custom stores beneath the service home are supported. Set `CODEX_HOME` to each profile's inventoried resolved directory for authentication and native commands; the login example above selects the deployment default. Profiles sharing a store share its account. Optional quota credentials belong to the quota store independently of the coding child.
+
+The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `<configDir>/AGENTS.md` for every inventoried Codex store, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
 To change the instructions, edit the repository file and run `docs/operations/configure-assistant.md` with its `config instructions` scopes. The maintenance wrapper contains the assistant before either file becomes writable and restores both through an `EXIT` trap.
 
 ### Hardening
 
-**Role: operator**, during `06-security-hardening.md`, after the system-skills block of [Skills](#skills). `~/.codex/skills` and `~/.codex/AGENTS.md` feed the delegated agent's prompt, so both become admin-owned and immutable. `~/.codex` itself stays writable: the CLI keeps `auth.json` (a secret) and its session state there. The flag goes on the instruction file, since a writable parent would let the account unlink it and write its own.
+**Role: operator**, during `06-security-hardening.md`, after the system-skills block of [Skills](#skills). Use its shared `deployment-policy.mjs harden` command for every inventoried store. It protects instructions and skills, retains executable bits, and protects native roots and ancestors through root-owned sticky writable anchors. Authentication/session state stays writable. This Codex policy covers instructions/skills, not every native settings surface.
+
+Verify each resolved store: opening instructions for writing, unlinking instructions and creating a native skill must fail; login status must work.
 
 ```sh
-sudo chattr -i /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md 2>/dev/null || true
-sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md
-sudo find /home/{{SERVICE_USER}}/.codex/skills -type d -exec chmod 755 {} +
-sudo find /home/{{SERVICE_USER}}/.codex/skills -type f -exec chmod 644 {} +
-sudo chmod 644 /home/{{SERVICE_USER}}/.codex/AGENTS.md
-sudo chattr +i /home/{{SERVICE_USER}}/.codex/skills /home/{{SERVICE_USER}}/.codex/AGENTS.md
-```
-
-Verify: the first three commands fail (`Permission denied`, `Operation not permitted`), the fourth works.
-
-```sh
-sudo -i -u {{SERVICE_USER}} -- bash -c 'echo x >> ~/.codex/AGENTS.md'
-sudo -i -u {{SERVICE_USER}} -- bash -c 'rm ~/.codex/AGENTS.md'
-sudo -i -u {{SERVICE_USER}} -- bash -c 'touch ~/.codex/skills/x'
-sudo -i -u {{SERVICE_USER}} -- codex login status
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+CODEX_HOME=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir')
+export CODEX_HOME
+if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$CODEX_HOME/AGENTS.md"; then
+  echo 'ERROR: instructions are writable' >&2; exit 1
+fi
+if rm "$CODEX_HOME/AGENTS.md"; then
+  echo 'ERROR: instructions were removable; restore them before restart' >&2; exit 1
+fi
+if touch "$CODEX_HOME/skills/probe"; then
+  echo 'ERROR: native skills are writable; remove probe and restore policy' >&2; exit 1
+fi
+codex login status
+EOS
 ```
 
 ### Update
@@ -152,12 +167,15 @@ CODING_AGENT=codex \
 A Codex upgrade changes the system-skills marker, so repeat the post-hardening maintenance command in [Skills](#skills). Then verify the marker took: a second session prints nothing.
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
+sudo -H -u {{SERVICE_USER}} env CODEX_HOME=<resolved-service-codex-dir> \
+  bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
 ```
 
 The `skills` scope of `update-assistant.md` covers `~/.agents` and `~/.openclaw/skills`. Codex's bundled skills under `~/.codex/skills` use the separate `agent-skills` scope.
 
 ### Verification
+
+These host-side acceptance procedures are separate from offline template tests. Repeat authentication/permission and bundled-skill refresh checks for every provisioned store. Verify the recorded profile as well as `agent: codex` in delegated session files.
 
 After the seed and the gateway start (`04-openclaw.md`):
 

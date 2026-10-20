@@ -18,7 +18,9 @@ read_when:
 
 `{{SERVICE_USER}}` has no sudo, so filesystem permissions are a guarantee, not an instruction. Two mechanisms: `chattr +i` (the owner can neither modify nor delete the file; only root removes the flag), and ownership handoff to `root` or `{{SERVER_ADMIN_USER}}` with the write bits stripped. Each locked directory root that sits in a service-writable parent is flagged as well; otherwise the tree could be renamed and recreated writable.
 
-The assistant can no longer edit its own instruction files or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
+The assistant can no longer edit managed instructions or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
+
+Pi's sole approved executable-declaration exception is native `<agent-dir>/auth.json`. It stays private, service-owned and replaceable, including adjacent lock operations, for normal OAuth login and automatic credential/refresh-token renewal. It can contain executable API-key commands; any same-UID process can persist such commands for later execution as that account. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish renewal from another same-UID write. Project trust is not a sandbox.
 
 ## Install the maintenance controls
 
@@ -31,8 +33,15 @@ sudo install -m 755 -o root -g root \
 sudo install -m 755 -o root -g root \
   ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/bin/assistant-maintenance.sh \
   /usr/local/sbin/alignfirst-assistant-maintenance
+sudo install -d -m 755 -o root -g root /opt/{{SERVICE_USER}}/libexec
+sudo install -m 644 -o root -g root \
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/deployment-profiles.mjs \
+  ~/{{ADMIN_REPOSITORY_NAME}}/infra/openclaw/deployment-policy.mjs \
+  /opt/{{SERVICE_USER}}/libexec/
 sudo /usr/local/sbin/alignfirst-assistant-kill
 ```
+
+Keep both deployment helpers together: policy imports inventory by relative path. The root-owned copies must match the maintenance wrapper and backup script before opening a window.
 
 ## Configuration and workspace files
 
@@ -57,7 +66,7 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So are the aligndev settings (`~/.alignfirst/aligndev.settings.json`), with their directory `~/.alignfirst/`. The service account owns its home: with only the file locked, it could rename `~/.alignfirst/` and create its own settings in a new directory of that name.
+So are the aligndev settings (`~/.alignfirst/aligndev.settings.json`), with their directory `~/.alignfirst/`. Protect the directory as well as the file against parent replacement. The native policy below also protects service-home anchors; neither measure replaces the other.
 
 ```sh
 sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
@@ -77,16 +86,37 @@ The setup guide and `sharp-writing` under `~/.agents/skills/` feed both OpenClaw
 ```sh
 sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.agents
 sudo find /home/{{SERVICE_USER}}/.agents -type d -exec chmod 755 {} +
-sudo find /home/{{SERVICE_USER}}/.agents -type f -exec chmod 644 {} +
+sudo find /home/{{SERVICE_USER}}/.agents -type f -perm /111 -exec chmod 755 {} +
+sudo find /home/{{SERVICE_USER}}/.agents -type f ! -perm /111 -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.agents
 sudo mkdir -p /home/{{SERVICE_USER}}/.openclaw/skills
 sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.openclaw/skills
 sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type d -exec chmod 755 {} +
-sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type f -exec chmod 644 {} +
+sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type f -perm /111 -exec chmod 755 {} +
+sudo find /home/{{SERVICE_USER}}/.openclaw/skills -type f ! -perm /111 -exec chmod 644 {} +
 sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/skills
 ```
 
-The coding agent's own skill directory and global instruction file: [08-coding-agent.md § Hardening](08-coding-agent.md#hardening).
+### Native profile resources and anchors
+
+Review the complete inventory, then apply the shared policy once for every provisioned store, including custom paths and optional quota stores:
+
+```sh
+sudo /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+sudo /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-policy.mjs harden \
+  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
+```
+
+For Claude/Codex, this protects inventoried instructions and skills; it does not certify every native configuration surface. For Pi, it protects settings/models/MCP/keybindings declarations, saved trust, alternate context names, system/appended prompts, extensions, skills, prompts/themes, native `bin`, `agents`, npm/git package trees, and declared local resource roots. Existing executables retain executable modes. Install declared npm packages into the native managed npm directory before hardening; legacy global fallback, escaping manifest resources and discovery globs are refused.
+
+The helper reserves absent context alternatives, including `AGENTS.override.md`, as immutable directory sentinels. The pinned context loader skips them. Empty `SYSTEM.md` and `APPEND_SYSTEM.md` preserve the normal prompt; an empty override instruction file would mask other instructions and is not equivalent. Do not replace sentinels manually.
+
+The helper makes native roots and their ancestors up to the service home root-owned, service-group writable and sticky (`1770`). Root-owned protected children cannot be renamed through these anchors, while the service account can create ordinary files, replace its `auth.json`, and create adjacent locks. It removes immutable flags from these writable anchors. Never recursively freeze the entire Pi directory or home, recursively hand ownership back to the service user, or apply a blanket file mode to executable package trees. Managed anchors and non-package resources reject symlinks and hardlinks. Package-tree links are allowed only when every resolved target remains inside the same package tree; escapes, cycles and dangling links fail closed. Padded native paths, `file:` URLs, unsafe overlaps and mutable-state declarations are rejected before privileged changes.
+
+Authenticate and save approved parent trust before this step ([08-coding-agent.md](08-coding-agent.md)). New managed paths or changed declarations require the appropriate maintenance scopes.
 
 ## Runtime launchers
 
@@ -138,7 +168,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions` and `agent-skills`. The `config` scope covers `openclaw.json` and the aligndev settings with their directory `~/.alignfirst/`. Before an unlock, the wrapper contains the account and refreshes `~/seed/` from this repository. Its `EXIT` trap contains the account again and restores ownership, modes and immutable flags on success, failure or interruption. The gateway stays stopped.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions`, `agent-skills` and `agent-config`. The `config` scope covers `openclaw.json` and the aligndev settings with their directory `~/.alignfirst/`. The native scopes cover every inventoried profile/store, not just `code.profile`: `instructions` covers managed context/system files, `agent-skills` native skills, and `agent-config` Pi declarations, trust, executable helpers, packages and other resources. `skills` also covers native skills. Before an unlock, the wrapper validates paths, contains the account and refreshes `~/seed/` from this repository. It saves resolved admin/deployed inventories in a root-private directory so original resources remain tracked when declarations change. Its `EXIT` trap contains the account again before restoring ownership, modes and immutable flags on success, failure or interruption. Failed recontainment aborts privileged cleanup and leaves gateway state unknown. Failed cleanup retains the inventory path for [operator recovery](../operations/recover-assistant.md#failed-maintenance-cleanup); never pass it to a service-account command.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -152,7 +182,9 @@ sudo /usr/local/sbin/alignfirst-assistant-kill
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 ```
 
-## Verification
+## Deployment acceptance
+
+These host-side checks are separate from offline fixture tests. Run them on the deployment host and record actual results; template tests do not prove OS permission enforcement, live OAuth renewal, channel behavior or reboot recovery.
 
 As the service account, every write must fail with `Operation not permitted` or `Permission denied`:
 
@@ -189,13 +221,45 @@ command -v openclaw
 EOS
 # Expected: /opt/{{SERVICE_USER}}/bin/openclaw
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
-# Expected: exactly openclaw, the coding agent, alignfirst, aligndev and ctx7
+# Expected: the reviewed deployment inventory, including any explicit quota CLI
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
-CODING_AGENT=<claude|codex> \
+CODING_AGENT=<claude|codex|pi> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
+```
+
+For each Pi store from the inventory, verify as the real service UID that protected files cannot be opened for writing and that managed anchors cannot be renamed, unlinked or replaced through any ancestor. Include alternate context sentinels, `trust.json`, `settings.json`, native `bin`, package executables and declared external roots. Stop if any protected operation succeeds. Confirm root-owned sticky `1770` anchors with `stat`, and immutable resource flags with `lsattr`.
+
+Check every Pi store's anchor modes and ordinary adjacent lock writes without reading credentials:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+  "$HOME/.alignfirst/aligndev.settings.json" |
+  jq -r '.stores[] | select(.agent == "pi") | .configDir' |
+  while IFS= read -r store; do
+    stat -c '%U:%G %a %n' "$HOME" "$store" "$store/settings.json" "$store/trust.json"
+    test -w "$store"
+    probe=$(mktemp "$store/.auth-lock-probe.XXXXXX")
+    rm "$probe"
+    if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$store/settings.json"; then
+      echo 'ERROR: managed Pi settings are writable' >&2; exit 1
+    fi
+  done
+EOS
+```
+
+In an interactive Pi session using that store, verify `/login`, a real OAuth refresh, native adjacent auth lock creation/removal and session/cache writes; do not print credentials. The disposable lock probe alone does not prove the native renewal flow. Restart Pi in the approved parent and a new linked worktree to verify inherited saved trust. OpenClaw needs no `pi-background` for a Pi child. Test failed-command restoration before reopening the channel:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-maintenance instructions agent-skills agent-config -- false
+# Expected: nonzero exit, restored policy, gateway stopped. Inspect ownership/flags again.
+sudo -i -u {{SERVICE_USER}} -- systemctl --user is-active openclaw-gateway
+# Expected: inactive
 ```
 
 Still working: reads of the instructions, skills and project listing; writes under `~/.openclaw/workspace/scratch/`; project-level and fnm-runtime global npm installs; the coding agent's authentication and session state.
@@ -214,7 +278,7 @@ sudo lsattr /home/{{SERVICE_USER}}/.openclaw/openclaw.json /home/{{SERVICE_USER}
 sudo -i -u {{SERVICE_USER}} -- systemctl --user is-active openclaw-gateway podman.socket
 ```
 
-Finish with [08-coding-agent.md § Verification](08-coding-agent.md#verification), then the smoke test of [07-channel.md](07-channel.md).
+Finish with the selected agent's verification/acceptance section in [08-coding-agent.md](08-coding-agent.md), a private backup/recovery rehearsal ([recover-assistant.md](../operations/recover-assistant.md)), then the smoke test of [07-channel.md](07-channel.md).
 
 Start the gateway before that smoke test:
 

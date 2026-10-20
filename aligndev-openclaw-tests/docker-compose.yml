@@ -19,8 +19,8 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
-      # The entrypoint writes both into the aligndev settings.
-      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
+      # The entrypoint generates a named profile, independently of Terra authentication.
+      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex, claude or pi}
       CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
       # `codex` is the mock shim here (symlinked in the image, first on PATH), so no real Codex
       # reads this. It points at the IPC volume, which the runner also mounts, so the mocked CLI
@@ -40,7 +40,7 @@ services:
   runner:
     environment:
       OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:-openrouter/anthropic/claude-haiku-4.5}
-      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex or claude}
+      CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex, claude or pi}
       CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
     volumes:
       - fixture-projects:/home/assistant/projects

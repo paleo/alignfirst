@@ -62,7 +62,11 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --skill alcatchupaad --skill alcatchupspec </dev/null
 ```
 
-Pi discovers global `~/.agents/skills/`; the verified installer writes there. Confirm current help/source when upgrading, since target layouts can change. Invoke `/skill:alspec`, not `/alspec`, in stock Pi.
+Pi discovers global `~/.agents/skills/`; the verified installer writes there. It also discovers `<agent-dir>/skills`, defaulting to `~/.pi/agent/skills`. `PI_CODING_AGENT_DIR` replaces the Pi agent directory. Confirm current help/source when upgrading, since target layouts can change. Invoke `/skill:alspec`, not `/alspec`, in stock Pi.
+
+`alignfirst doctor` checks shared, Claude Code, Codex, then the selected Pi root, keeping the first installation and deduplicating canonical roots. It reports missing command skills once any is installed, and warns about old or unknown versions. The Pi override accepts `~`, `~/`, absolute/relative paths and native file URLs; relative paths use the command's working directory, and an empty override uses the default. Nonempty paths retain whitespace and do not expand variables or `~otheruser`.
+
+This is a global installation check. It excludes project `.pi/skills`, ancestor resources, packages, resource filters and trust decisions.
 
 For Claude Code and Codex together:
 

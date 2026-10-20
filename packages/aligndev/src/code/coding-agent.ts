@@ -18,7 +18,7 @@ export function createAgentAdapter(agent: CodingAgent): AgentAdapter {
   }
 }
 
-// Host markers select the child only when code.agent is absent.
+// Host detection is reached only when no named profile selects a child.
 export function detectCodingAgents(env: NodeJS.ProcessEnv): CodingAgent[] {
   const detected: CodingAgent[] = [];
   if (env.CLAUDECODE === "1") detected.push("claude");

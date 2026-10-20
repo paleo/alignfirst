@@ -11,7 +11,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const root = process.cwd();
-const names = process.argv.slice(2);
+const loadOnly = process.argv[2] === "--load-only";
+const names = process.argv.slice(loadOnly ? 3 : 2);
 const paths = names.map((name) => join(root, "node_modules", name));
 const agentDir = process.env.PI_CODING_AGENT_DIR;
 const cwd = join(root, "project");
@@ -34,6 +35,7 @@ writeFileSync(
   }),
 );
 await verifyLoadSideEffects();
+if (loadOnly) process.exit(0);
 const runtime = await createRuntime();
 try {
   assert.deepEqual(
@@ -88,7 +90,7 @@ async function verifyLoadSideEffects() {
       additionalExtensionPaths,
     });
     await loader.reload();
-    assert.deepEqual(loader.getExtensions().errors, []);
+    assert.deepEqual(loader.getExtensions().errors, [], "Packed extension loader: load errors");
     return loader;
   };
   await load([]);
@@ -102,9 +104,15 @@ async function verifyLoadSideEffects() {
     "Extension load creates no process/timer beyond host initialization",
   );
   const extensions = loader.getExtensions().extensions;
-  assert.equal(extensions.length, names.length);
+  assert.equal(extensions.length, names.length, "Packed extension loader: extension count");
+  for (const extension of extensions)
+    assert.equal(extension.tools.size, 1, "Packed extension loader: one tool per factory");
   const tools = extensions.flatMap((extension) => [...extension.tools.keys()]);
-  assert.equal(new Set(tools).size, names.length);
+  assert.deepEqual(
+    tools.sort(),
+    names.map((name) => (name.endsWith("subagent") ? "subagent" : "background")).sort(),
+    "Packed extension loader: exact tool registrations",
+  );
   assert(paths.every((path) => extensions.some((extension) => extension.path.startsWith(path))));
   assert.deepEqual(loader.getSkills().skills, []);
 }

@@ -2,8 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { runCode } from "./code/code-cli.js";
-import { CODING_AGENTS } from "./code/coding-agent.js";
-import { type ExecutableModelResolver, resolveExecutableModel } from "./code/models.js";
+import { createExecutableModelResolver, type ExecutableModelResolver } from "./code/models.js";
 import { type QuotaReader, readQuota } from "./code/quota.js";
 import { type CommandForms, resolveCommandForms } from "./command-form.js";
 import { loadConfig, PLATFORMS } from "./config.js";
@@ -83,8 +82,8 @@ ${usage}
 Run \`${aligndev} <command> --help\` for the usage of a command.
 
 Config (optional): ~/.alignfirst/aligndev.settings.json. "platform" (${PLATFORMS.join(" or ")})
-defaults to codingAgent. "code.agent" (${CODING_AGENTS.join(" or ")}) defaults to the coding agent that
-runs aligndev, detected from its environment.
+defaults to codingAgent. Named code.profiles select child agents and native configuration.
+Use code.profile for a global selection, or code.defaultProfiles for detected-agent defaults.
 `;
 }
 
@@ -109,7 +108,7 @@ function resolveContext(options: MainOptions | undefined): CliContext {
     stderr: options?.stderr ?? process.stderr,
     forms,
     alignfirstCommand: options?.alignfirstCommand ?? forms.alignfirst.split(" "),
-    modelResolver: options?.modelResolver ?? resolveExecutableModel,
+    modelResolver: options?.modelResolver ?? createExecutableModelResolver(),
     quotaReader: options?.quotaReader ?? readQuota,
   };
 }

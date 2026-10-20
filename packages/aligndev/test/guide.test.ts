@@ -120,8 +120,8 @@ describe("renderCodeGuide", () => {
       );
       expect(guide).toContain("aligndev code quota");
       expect(guide).toContain("alignfirst");
-      expect(guide).toContain("`code.models` in the aligndev settings");
-      expect(guide).toContain("`code.skipPermissions: true` in the aligndev settings");
+      expect(guide).toContain("`models`");
+      expect(guide).toContain("`profile.skipPermissions: true` in the aligndev settings");
       expect(guide).toContain("in the repository or in its companion directory");
       expect(guide).toContain(
         "plus `--add-dir <companion>` for a project with a companion directory.",
@@ -130,7 +130,8 @@ describe("renderCodeGuide", () => {
         "A new session defaults to the coding agent's default; a resume keeps the session's model.",
       );
       expect(guide).not.toContain("reserve-side-ticket");
-      expect(guide).toContain("account limits and reset times");
+      expect(guide).toContain("native quota source and account limits");
+      expect(guide).toContain("account pairing with the coding child is not verified");
       expect(guide).toContain("## Spec-Plan-Execute workflow");
       expect(guide).toContain("### Where the plan runs");
       expect(guide).toContain("contextTokens");
@@ -213,11 +214,11 @@ describe("Pi parent delegation", () => {
       });
       expect(result.code, result.stderr).toBe(0);
       const guide = result.stdout;
-      expect(guide).toContain(`The current coding agent is \`${agent}\`.`);
+      expect(guide).toContain(`The current coding agent is \`${agent}\`, profile \`test\`.`);
       for (const host of ["Pi", "Claude Code", "Codex"]) {
         expect(guide).toContain(`### ${host} parent`);
       }
-      expect(guide).toContain("`code.agent` selects the child only");
+      expect(guide).toContain("The selected profile chooses the child only");
       const example = guide.match(/```json\n([^\n]+)\n```/);
       expect(example).not.toBeNull();
       const call = JSON.parse(example?.[1] ?? "{}");
@@ -281,7 +282,7 @@ describe("Pi parent delegation", () => {
       "Delivery is not exactly once",
       "crash recovery is not promised",
       "`/reload` cancel owned work",
-      "`code.skipPermissions` does not elevate Pi",
+      "`profile.skipPermissions` does not elevate Pi",
     ])
       expect(pi, instruction).toContain(instruction);
     expect(pi).not.toContain("Then read the session file");
@@ -308,7 +309,8 @@ describe("Pi parent delegation", () => {
           ? "A new session defaults to `provider/custom:high`"
           : "A new session defaults to the coding agent's default",
       );
-      expect(guide).toContain("Pi quota is unsupported");
+      expect(guide).toContain('Pi needs explicit `quota.source: "codex"` or `"claude"`');
+      expect(guide).toContain('`"none"` disables quota');
       expect(guide).toContain("with optional thinking suffix");
       expect(guide).toContain("Saved project trust is honored; no forced approval is passed");
       expect(guide).not.toContain("{{");
@@ -880,7 +882,7 @@ describe("aligndev guide code", () => {
     const result = await runGuide(fixture, ["code"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/^# AlignFirst Delegation Guide\n/);
-    expect(result.stdout).toContain("The current coding agent is `codex`.");
+    expect(result.stdout).toContain("The current coding agent is `codex`, profile `test`.");
     expect(result.stdout).toContain("One of `terra`.");
     expect(result.stdout).not.toContain("{{");
   });

@@ -1,0 +1,15 @@
+{
+  "platform": "openclaw",
+  "projectsRoot": "~/projects",
+  "code": {
+    "profile": "service-pi",
+    "profiles": {
+      "service-pi": {
+        "agent": "pi",
+        "configDir": "{{PI_CONFIG_DIR}}",
+        "defaultModel": "{{PI_PROVIDER}}/{{PI_MODEL}}",
+        "quota": {{PI_QUOTA_JSON}}
+      }
+    }
+  }
+}

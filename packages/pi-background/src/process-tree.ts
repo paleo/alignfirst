@@ -207,7 +207,12 @@ function linuxIdentity(pid: number): string | undefined {
     if (identity === undefined || !/^\d+$/.test(identity)) throw new Error("Invalid /proc stat.");
     return identity;
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    )
+      return;
     throw error;
   }
 }

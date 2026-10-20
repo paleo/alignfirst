@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
-import { makeSink, writeConfig } from "./helpers.js";
+import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
 
 const PACKAGE_JSON = new URL("../package.json", import.meta.url);
 
@@ -27,7 +27,8 @@ async function run(
   const code = await main({
     argv: ["node", "aligndev", ...args],
     cwd: home,
-    env: {},
+    env: { HOME: home },
+    alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
     home,
     stdout,
     stderr,

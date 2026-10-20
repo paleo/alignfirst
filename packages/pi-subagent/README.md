@@ -14,6 +14,8 @@ pi install npm:@alignfirst/pi-subagent
 
 Reload Pi after changing extensions. `/reload` cancels running subagents. No other extension package is required.
 
+The sole Pi extension entry, root `index.js`, forwards the default factory from compiled `dist/index.js`. Pi displays the npm package label without `:dist`. Loading starts no process or timer.
+
 ## Three modes
 
 Use exactly one mode. An omitted `agent` selects the bundled `worker`.

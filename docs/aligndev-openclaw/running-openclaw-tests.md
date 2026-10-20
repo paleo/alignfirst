@@ -62,8 +62,8 @@ Terra (`openai/gpt-5.6-terra`) is the only tested conversation model. The judge 
   The image build runs `openclaw update repair` followed by `openclaw doctor --fix` to settle deferred plugin state in this OpenClaw release. Recheck this workaround when changing the pinned OpenClaw version.
 
   The plugin installs, the repair and Doctor share one image layer, which then drops the plugin captures they left. Since 2026.10, loading a plugin with native binaries (Codex) hardlinks its files and checks the link's inode. Overlayfs gives a new inode to a lower-layer file with several links when the link copies it up, so a split layer or a leftover capture makes Codex fail to load: `Native plugin artifact changed during admission`.
-- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while both `claude` and `codex` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
-- `CODING_AGENT=codex|claude` — required selector for the coding agent. It does not affect the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally narrows the agent models or pins a full Codex slug. Both reach the gateway and the runner. At startup, the gateway entrypoint writes them into the aligndev settings at `/home/assistant/.alignfirst/aligndev.settings.json`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. A missing or invalid `CODING_AGENT` fails the start.
+- `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while `claude`, `codex` and `pi` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
+- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profile: "harness"` and `code.profiles.harness: { agent, models? }`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-5.6-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
 - [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
 
 ## Fixtures
@@ -114,7 +114,7 @@ Starter values, canonical paths, full detailed requests, and actual session owne
 
 The fresh-session reaction helper observes a claim, history read, and lobster reaction in that order. It verifies that the reaction targets the newest visible message from the read snapshot and is the first surface mutation. The quiet-takeover helper then waits for a terminal turn before checking that the starter's question was not repeated. A17 applies the structural reaction assertion to an active takeover and checks the approved readiness meaning. A23 applies it to a human-created thread whose claim returns `none`. The helper does not require an ID in the nudge, a particular silent token, or a fixed 90-second delay. Completion checks require the real chained process to exit, its report to arrive, and the target thread to settle for three seconds without more messages. The only system event is the guide's chained completion command, run by the agent; the suite injects none itself. Native notices are recorded when observed; OpenClaw may defer them until its next scheduled tick, so the suite does not promise to exercise every later notice or count unrelated finalizers in gateway-wide logs.
 
-From `aligndev-openclaw-tests/`, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
+For later authorized scenario acceptance, from `aligndev-openclaw-tests/`, rebuild the CLIs and harness image, then run 22 conversation scenarios on both surfaces with Terra. Run the deterministic A09 contract once for the selected coding agent.
 
 ```bash
 npm run build --prefix ..
@@ -130,9 +130,25 @@ CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel all "${scenari
 CODING_AGENT=codex npm run e2e -- --channel slack-mock A09-code-agent-contract
 ```
 
-For a focused pass, supply only the affected scenario names instead of the array. If the selected coding agent changes to Claude, run A09 once with `CODING_AGENT=claude`; channel/model repetition adds no coverage to that contract.
+For a focused pass, supply only the affected scenario names instead of the array. For each other child, run A09 once with `CODING_AGENT=claude` or `CODING_AGENT=pi`; channel/model repetition adds no coverage to that contract. Clear a previous `CODING_AGENT_MODELS` override or set it to include the selected child's contract model.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+
+## Offline helper checks
+
+From the repository root, using Node 26:
+
+```sh
+fnm exec --using=.nvmrc npm run build --workspace aligndev
+fnm exec --using=.nvmrc npm test --prefix aligndev-openclaw-tests
+fnm exec --using=.nvmrc npm run typecheck --prefix aligndev-openclaw-tests
+fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test.ts
+sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
+```
+
+The Node built-in suite imports helpers only. It checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+
+These offline checks do not start Docker, import credentials or execute any scenario, including A09. The Pi harness update was verified through these checks only. OpenClaw conversation checks and live deployment acceptance remain unexecuted; mock success certifies neither Pi authentication/trust nor native service-account permissions. Deployment parity and production headless waiting remain blocked independently.
 
 ## Vendored packages
 

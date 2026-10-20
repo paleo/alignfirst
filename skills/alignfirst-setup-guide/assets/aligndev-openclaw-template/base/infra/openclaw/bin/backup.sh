@@ -14,6 +14,7 @@ umask 077
 BACKUP_BASE="$HOME/backups/deployment"
 BACKUP_DIR=
 WORKSPACE="$HOME/.openclaw/workspace"
+LIBEXEC=/opt/{{SERVICE_USER}}/libexec
 
 main() {
   check_user
@@ -25,10 +26,17 @@ main() {
   copy_environment
   copy_file "$HOME/.alignfirst/aligndev.settings.json" aligndev.settings.json
   copy_companions
+  copy_native_stores
   create_openclaw_archive
   copy_thread_handoff_state
   chmod -R go-rwx "$BACKUP_DIR"
   echo "$BACKUP_DIR"
+}
+
+copy_native_stores() {
+  /usr/bin/node "$LIBEXEC/deployment-policy.mjs" backup \
+    "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
+    "$HOME/.alignfirst/aligndev.settings.json" "$BACKUP_DIR/native"
 }
 
 # OpenClaw's archive holds what the plain copies above cannot: the SQLite state (sessions, cron

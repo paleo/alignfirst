@@ -4,7 +4,12 @@ import { parseArgs } from "node:util";
 
 import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
-import { type CodeConfig, type LoadedConfig, resolveCodeConfig } from "../config.js";
+import {
+  type CodeConfig,
+  type LoadedConfig,
+  resolveCodeConfig,
+  resolveQuotaConfig,
+} from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import {
@@ -14,21 +19,21 @@ import {
   readProjectReport,
 } from "../project/layout.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
-import { type ExecutableModelResolver, resolveModels } from "./models.js";
+import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
+import { describeNativeStorage } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import type { QuotaReader } from "./quota.js";
-import { buildAgentEnv, runAgent, type RunConfig } from "./run-agent.js";
+import { runAgent, type RunConfig } from "./run-agent.js";
 import {
   applyCompletion,
+  createSessionFile,
   findNewestSessionFile,
   listSessionRecords,
   readPidStartTime,
   reconcileSessionFile,
-  resolveSessionFilePath,
   RESULT_MARKER,
   type SessionFrontmatter,
   type SessionRecord,
-  writeInitialSessionFile,
 } from "./session-file.js";
 
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
@@ -42,6 +47,7 @@ const SESSION_OPTIONS = {
   ticket: { type: "string" },
   message: { type: "string", short: "m" },
   model: { type: "string" },
+  profile: { type: "string" },
   meta: { type: "string" },
   quiet: { type: "boolean" },
   help: { type: "boolean", short: "h", default: false },
@@ -79,9 +85,9 @@ interface SessionTree {
 }
 
 export type CodeCommand =
-  | { kind: "help" }
+  | { kind: "help"; profile?: string; status?: boolean }
   | { kind: "status"; target: StatusTarget; includeResult: boolean }
-  | { kind: "quota" }
+  | { kind: "quota"; profile?: string }
   | { kind: "session"; args: SessionArgs };
 
 export type StatusTarget =
@@ -92,6 +98,7 @@ export type StatusTarget =
 
 // `resume` undefined means a new session.
 export interface SessionArgs {
+  profile?: string;
   resume?: string;
   ticket?: string;
   noTicket: boolean;
@@ -112,11 +119,32 @@ export async function runCode(
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
     if (command.kind === "status") return showStatus(ctx, command.target, command.includeResult);
-    const code = resolveCodeConfig(config, ctx.env);
+    if (command.kind === "help" && command.status === true) {
+      ctx.stdout.write(
+        `${ctx.forms.aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without resolving a launch profile.\n`,
+      );
+      return 0;
+    }
+    const report = readReport(ctx);
+    const records =
+      command.kind === "session" ? listSessionRecords(report.locations._aligndev.path) : [];
+    const args = command.kind === "session" ? command.args : undefined;
+    const previous =
+      args?.resume === undefined
+        ? undefined
+        : latestRecord(records.filter((record) => record.frontmatter.sessionId === args.resume));
+    if (args?.resume !== undefined && previous === undefined) {
+      throw new Error(unknownResumeError(args.resume, records));
+    }
+    const code = resolveCodeConfig(config, ctx.env, {
+      project: report.aligndev,
+      explicit: args?.profile ?? (command.kind === "session" ? undefined : command.profile),
+      recorded: previous?.frontmatter.profile,
+    });
     if (command.kind === "quota") return await showQuota(ctx, code);
-    const models = resolveModels(code.agent, code.models);
+    const models = resolveModels(code.agent, code.models, code.modelAliases);
     if (command.kind === "help") {
-      ctx.stdout.write(renderHelp(code.agent, models, ctx.forms));
+      ctx.stdout.write(renderHelp(code, models, ctx.forms));
       return 0;
     }
     loadMessage(command.args, ctx.cwd);
@@ -125,7 +153,7 @@ export async function runCode(
       ctx.stderr.write(`${validationError}\n`);
       return 1;
     }
-    return await runSession(command.args, code, ctx);
+    return await runSession(command.args, code, ctx, report, records, previous);
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
     return 1;
@@ -161,12 +189,24 @@ function sessionTreeOf(report: ProjectReport, cwd: string): SessionTree {
 }
 
 async function showQuota(ctx: CodeContext, code: CodeConfig): Promise<number> {
-  const report = await ctx.quotaReader(code.agent, {
-    cwd: ctx.cwd,
-    env: ctx.env,
-    unset: code.unset,
-  });
-  ctx.stdout.write(`${report.trimEnd()}\n`);
+  const label = `profile ${JSON.stringify(code.profile ?? "(built-in)")}`;
+  const quota = resolveQuotaConfig(code, ctx.env);
+  if (quota.source === "none")
+    throw new Error(`Quota is disabled for ${label} (quota.source: none).`);
+  let report: string;
+  try {
+    report = await ctx.quotaReader(quota.source, { cwd: ctx.cwd, env: quota.env });
+  } catch (error) {
+    throw new Error(
+      `Quota source ${quota.source}, ${label}, selected native configuration: ${errorMessage(error)} ` +
+        `Check that ${quota.source} is installed and authenticated under this quota configuration.`,
+    );
+  }
+  ctx.stdout.write(
+    `Profile: ${code.profile ?? "(built-in)"}; native source: ${quota.source}\n` +
+      "Limits belong to this native CLI's account; account pairing with the coding agent is not verified.\n" +
+      `${report.trimEnd()}\n`,
+  );
   return 0;
 }
 
@@ -258,6 +298,9 @@ function renderSessionStatus(
   return [
     `sessionFile: ${displayPath(cwd, sessionFilePath)}`,
     `sessionId: ${frontmatter.sessionId ?? ""}`,
+    `agent: ${frontmatter.agent ?? ""}`,
+    `profile: ${frontmatter.profile ?? ""}`,
+    `model: ${frontmatter.model ?? ""}`,
     `status: ${frontmatter.status}`,
     `pid: ${frontmatter.pid ?? ""}`,
     `startedAt: ${frontmatter.startedAt}`,
@@ -278,7 +321,9 @@ export function parseCodeArgs(tokens: string[], aligndev: string): CodeCommand {
       throw new Error(`Error: no command given. Run \`${aligndev} code --help\`.`);
     case "--help":
     case "-h":
-      return { kind: "help" };
+      return parseBareCommand(tokens, "help");
+    case "--profile":
+      return parseBareCommand(tokens, "help");
     case "new":
       return parseNewCommand(rest);
     case "resume":
@@ -305,7 +350,7 @@ function parseStatusCommand(tokens: string[]): CodeCommand {
     strict: true,
     allowPositionals: true,
   });
-  if (values.help) return { kind: "help" };
+  if (values.help) return { kind: "help", status: true };
   const targetCount =
     positionals.length +
     Number(values.ticket !== undefined) +
@@ -334,10 +379,12 @@ function parseNewCommand(tokens: string[]): CodeCommand {
     options: { ...SESSION_OPTIONS, "no-ticket": { type: "boolean", default: false } },
     strict: true,
   });
-  if (values.help) return { kind: "help" };
+  if (values.help)
+    return { kind: "help", ...(values.profile === undefined ? {} : { profile: values.profile }) };
   return {
     kind: "session",
     args: {
+      profile: values.profile,
       ticket: values.ticket,
       noTicket: values["no-ticket"],
       quiet: values.quiet,
@@ -358,7 +405,8 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
     strict: true,
     allowPositionals: true,
   });
-  if (values.help) return { kind: "help" };
+  if (values.help)
+    return { kind: "help", ...(values.profile === undefined ? {} : { profile: values.profile }) };
   if (positionals.length !== 1) {
     throw new Error("Error: `aligndev code resume` takes exactly one <sessionId>.");
   }
@@ -366,6 +414,7 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
     kind: "session",
     args: {
       resume: positionals[0],
+      profile: values.profile,
       ticket: values.ticket,
       noTicket: false,
       quiet: values.quiet,
@@ -379,13 +428,19 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
   };
 }
 
-function parseBareCommand(tokens: string[], kind: "quota"): CodeCommand {
+function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand {
   const { values } = parseArgs({
     args: tokens,
-    options: { help: { type: "boolean", short: "h", default: false } },
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      profile: { type: "string" },
+    },
     strict: true,
   });
-  return values.help ? { kind: "help" } : { kind };
+  return {
+    kind: values.help ? "help" : kind,
+    ...(values.profile === undefined ? {} : { profile: values.profile }),
+  };
 }
 
 export function validateSessionArgs(
@@ -439,11 +494,17 @@ function isPathSafeTicket(ticket: string): boolean {
 // agent's background task) — aligndev owns no backgrounding or callback of its own. The per-run session
 // file is the durable result handoff: on completion the frontmatter carries the session id and
 // status, and the `---- Result ----` block carries the outcome for a waking caller (or a human).
-async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext): Promise<number> {
+async function runSession(
+  args: SessionArgs,
+  code: CodeConfig,
+  ctx: CodeContext,
+  report: ProjectReport,
+  records: SessionRecord[],
+  previous: SessionRecord | undefined,
+): Promise<number> {
   const { cwd, env, stdout, stderr, forms, alignfirstCommand, modelResolver } = ctx;
   const { agent } = code;
 
-  const report = readReport(ctx);
   const tree = sessionTreeOf(report, cwd);
   const plans = report.locations[".plans"];
   if (!plans.exists) {
@@ -454,14 +515,19 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     return 1;
   }
 
-  const records = listSessionRecords(tree.sessionsDir);
-  const resolvedTicket = args.noTicket ? undefined : resolveTicket(args, records);
-  const guardError = checkLaunchGuards(args, agent, tree.cwd, resolvedTicket, records);
+  const resolvedTicket = args.noTicket
+    ? undefined
+    : (args.ticket ??
+      (args.resume === undefined
+        ? inferTicketFromMessage(args.message ?? "")
+        : (previous?.frontmatter.ticket ?? undefined)));
+  const guardError = checkLaunchGuards(args, agent, tree.cwd, resolvedTicket, records, previous);
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
   }
 
+  const model = selectModel(args, code, previous);
   const now = new Date();
   const ticket = args.noTicket ? reserveSideTicket(alignfirstCommand, cwd, env) : resolvedTicket;
   if (ticket !== undefined && !args.noTicket && args.resume === undefined) {
@@ -478,36 +544,35 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     args.resume === undefined && companionInUse(report, CONTEXT_COMPANION_ITEMS)
       ? loadContext(alignfirstCommand, cwd, env)
       : undefined;
-  const model = selectModel(args, code, records);
-  const sessionFilePath = resolveSessionFilePath(tree.sessionsDir, ticket, now);
-  writeInitialSessionFile(
-    sessionFilePath,
-    buildFrontmatter({ args, agent, model, now, realCwd: tree.cwd, ticket }),
+  const sessionFilePath = createSessionFile(
+    tree.sessionsDir,
+    ticket,
+    now,
+    buildFrontmatter({ args, agent, profile: code.profile, model, now, realCwd: tree.cwd, ticket }),
   );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, model, {
+    executableModel = await modelResolver(agent, expandModelAlias(model, code.modelAliases), {
       cwd,
-      env: buildAgentEnv(env, code.unset),
+      env: code.childEnv,
     });
-  } catch (error) {
-    const message = errorMessage(error);
+  } catch {
+    const message =
+      `Could not resolve the ${agent} model; check --model, profile.models/modelAliases and the agent installation. ` +
+      `${nativeContext(code)}.` +
+      (agent === "codex"
+        ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
+        : "");
     applyCompletion(sessionFilePath, {
       status: "failed",
       endedAt: new Date().toISOString(),
       exitReason: "error",
-      sessionId: null,
+      sessionId: args.resume ?? null,
       result: message,
     });
-    writeFailureDiagnostic(
-      ctx,
-      sessionFilePath,
-      args.quiet === true
-        ? `Could not resolve the ${agent} model; check --model, code.models and the agent installation.`
-        : message,
-    );
+    writeFailureDiagnostic(ctx, sessionFilePath, message);
     return 1;
   }
 
@@ -518,7 +583,6 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     ticket,
     cwd,
     sessionFilePath,
-    env,
     executableModel,
     catchupContent,
     contextContent,
@@ -534,14 +598,24 @@ async function runSession(args: SessionArgs, code: CodeConfig, ctx: CodeContext)
     writeFailureDiagnostic(
       ctx,
       sessionFilePath,
-      "coding agent not authenticated — an administrator must re-login on the host " +
-        `(${authenticationInstruction(agent)}).`,
+      `${nativeContext(code)} not authenticated — an administrator must re-login ` +
+        "with the same effective environment as the child (apply profile unset/env/configDir, " +
+        "including HOME, PATH and credential routing), from the same working directory. " +
+        `Then use ${authenticationInstruction(agent)}. A bare login in another shell may use a different account.`,
     );
     return EXIT_AUTH_REQUIRED;
   }
   if (result.status === "succeeded") return 0;
-  writeFailureDiagnostic(ctx, sessionFilePath, failureDiagnostic(agent, result.result));
+  writeFailureDiagnostic(
+    ctx,
+    sessionFilePath,
+    `${nativeContext(code)}: ${failureDiagnostic(agent, result.result)}${args.resume === undefined ? "" : " Check that the native conversation exists in this configuration; select the correct --profile or start a new session. No account fallback was attempted."}`,
+  );
   return 1;
+}
+
+function nativeContext(code: CodeConfig): string {
+  return `${code.agent} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${describeNativeStorage(code)})`;
 }
 
 function authenticationInstruction(agent: CodingAgent): string {
@@ -579,6 +653,7 @@ export function checkLaunchGuards(
   realCwd: string,
   ticket: string | undefined,
   records: SessionRecord[],
+  previous?: SessionRecord,
 ): string | undefined {
   if (args.resume !== undefined) {
     // A resumed run writes a new session file carrying the same sessionId as the original, so one
@@ -592,7 +667,7 @@ export function checkLaunchGuards(
         "wait for it to finish or kill it."
       );
     }
-    const latest = latestRecord(matches);
+    const latest = previous ?? latestRecord(matches);
     if (latest.frontmatter.agent === null) {
       return (
         `Error: session ${args.resume} predates agent-aware sessions and cannot be resumed; ` +
@@ -677,9 +752,7 @@ export function resolveTicket(args: SessionArgs, records: SessionRecord[]): stri
 // Latest record of the resumed session that carries a ticket — the resumed run keeps writing
 // under the same ticket directory, and its frontmatter keeps the ticket for later resumes.
 function inheritTicketFromResume(resume: string, records: SessionRecord[]): string | undefined {
-  const ticketed = records.filter(
-    (r) => r.frontmatter.sessionId === resume && r.frontmatter.ticket !== null,
-  );
+  const ticketed = records.filter((r) => r.frontmatter.sessionId === resume);
   const latest = ticketed.sort((a, b) =>
     b.frontmatter.startedAt.localeCompare(a.frontmatter.startedAt),
   )[0];
@@ -698,23 +771,31 @@ function inferTicketFromMessage(message: string): string | undefined {
   return [...candidates][0];
 }
 
-// `--model` wins. Otherwise a new session takes `code.defaultModel`, and a resume keeps the model
-// of its latest run, unchecked against the current allowlist. `undefined` leaves the agent's
-// default.
+// A null recorded model retains the native conversation's model; profile defaults are new-only.
 function selectModel(
   args: SessionArgs,
   code: CodeConfig,
-  records: SessionRecord[],
+  previous: SessionRecord | undefined,
 ): string | undefined {
   if (args.model !== undefined) return args.model;
   if (args.resume === undefined) return code.defaultModel;
-  const runs = records.filter((r) => r.frontmatter.sessionId === args.resume);
-  return latestRecord(runs).frontmatter.model ?? undefined;
+  const model = previous?.frontmatter.model ?? undefined;
+  const models = resolveModels(code.agent, code.models, code.modelAliases);
+  if (
+    model !== undefined &&
+    (model.trim() === "" || (models !== undefined && !models.includes(model)))
+  ) {
+    throw new Error(
+      "Error: retained session model is not accepted by the selected profile; supply --model with an accepted replacement.",
+    );
+  }
+  return model;
 }
 
 interface FrontmatterInput {
   args: SessionArgs;
   agent: CodingAgent;
+  profile: string | null;
   // The model name chosen by `selectModel`, before alias resolution.
   model: string | undefined;
   now: Date;
@@ -727,10 +808,11 @@ function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
   return {
     status: "running",
     agent: input.agent,
+    profile: input.profile,
     protocol: args.protocol ?? null,
     ticket: ticket ?? null,
     model: input.model ?? null,
-    sessionId: null,
+    sessionId: args.resume ?? null,
     command: formatCommand(args),
     meta: args.meta ?? null,
     pid: process.pid,
@@ -756,6 +838,7 @@ function formatCommand(args: SessionArgs): string {
   if (args.noTicket) parts.push("--no-ticket");
   if (args.catchup === true) parts.push("--catchup");
   if (args.model !== undefined) parts.push("--model", args.model);
+  if (args.profile !== undefined) parts.push("--profile", JSON.stringify(args.profile));
   if (args.messageFile !== undefined) {
     parts.push("--message-file", JSON.stringify(args.messageFile));
   } else if (args.message !== undefined) {
@@ -773,7 +856,6 @@ export interface RunInput {
   ticket: string | undefined;
   cwd: string;
   sessionFilePath: string;
-  env: NodeJS.ProcessEnv;
   executableModel: string | undefined;
   catchupContent?: string;
   contextContent?: string;
@@ -794,6 +876,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
       alignfirst: input.alignfirst,
     }),
     sessionFilePath: input.sessionFilePath,
+    nativeContext: nativeContext(code),
     cwd: input.cwd,
     resume: args.resume,
     quiet: args.quiet,
@@ -803,8 +886,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
       code.agent !== "pi" && !code.skipPermissions && report.companion !== null
         ? [report.companion.dir]
         : [],
-    unset: code.unset,
-    env: input.env,
+    env: code.childEnv,
   };
 }
 
@@ -816,14 +898,15 @@ function createMissingCompanion(report: ProjectReport) {
 }
 
 function renderHelp(
-  agent: CodingAgent,
+  code: CodeConfig,
   models: readonly string[] | undefined,
   forms: CommandForms,
 ): string {
+  const { agent, profile, defaultModel } = code;
   const { aligndev, alignfirst } = forms;
   const permissionMode =
     agent === "pi"
-      ? "Ordinary OS permissions; code.skipPermissions has no effect. Saved project trust is honored."
+      ? "Ordinary OS permissions; profile.skipPermissions has no effect. Saved project trust is honored."
       : agent === "claude"
         ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
         : "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
@@ -854,7 +937,7 @@ Commands:
                         run of the ticket, of no-ticket work, or of the --meta key. Includes
                         contextTokens, the context-window occupancy the run ended on, and
                         contextCompacted. Does not start an agent.
-  quota                 Show account limits and reset times (unsupported for pi).
+  quota                 Show native account limits via the profile's quota source.
 
 Options (status):
   --ticket <id>         Newest run of that ticket.
@@ -876,7 +959,7 @@ Options (new, resume):
   -m, --message "..."   Message to send. Required for spec/aad, or without protocol/catchup.
   --message-file <path> Read the message from a UTF-8 file, or stdin with -. Exclusive with -m.
   --model <model>       ${modelPolicy}. A new session defaults to
-                        code.defaultModel, else to the coding agent's default. A resume keeps the
+                        profile.defaultModel, else to the coding agent's default. A resume keeps the
                         session's model.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
                         (\`meta:\`). aligndev never interprets it; a later reader of the session file
@@ -885,12 +968,20 @@ Options (new, resume):
 ${requires}
 
 Config (~/.alignfirst/aligndev.settings.json):
-  code.agent            Coding agent: claude, codex or pi (selected: ${agent}). Defaults to the coding
-                        agent that runs aligndev.
-  code.defaultModel     Default model of a new session, one of the models accepted by --model.
-  code.models           List replacing the models accepted by --model.
-  code.skipPermissions  true to run the coding agent with permission prompts disabled.
-  code.unset            Env vars to strip from the coding agent child.
+  code.profile          Global named profile. Effective profile: ${profile ?? "(built-in)"} (selected: ${agent}).
+  code.defaultProfiles  Per detected-agent default profile names.
+  code.profiles         Complete named profiles: agent, configDir, env, unset, defaultModel,
+                        models, modelAliases, skipPermissions, quota. No inheritance.
+  --profile <name>      Override for new, resume, quota and help (also guide code).
+                        Precedence: explicit > project > recorded resume > global > detected default.
+  Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
+                        One configured alias expands before native model handling.
+
+Native configuration: ${describeNativeStorage(code)}.
+Login must use the same effective environment as the child: apply profile unset/env/configDir,
+including HOME, PATH and credential routing, from the same working directory. Then use
+${authenticationInstruction(agent)}. A bare login in another shell may use a different account.
+Environment values are omitted.
 
 Selected-agent permissions: ${permissionMode}
 The project's companion directory is prepared before launch; pi uses ordinary OS access.
