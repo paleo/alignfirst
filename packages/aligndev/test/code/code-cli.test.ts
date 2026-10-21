@@ -1309,8 +1309,8 @@ describe("companion projects", () => {
     const gated = await run(project, ["new", "-m", "go"]);
     expect(gated.code).toBe(1);
     expect(gated.stderr).toBe(
-      `Error: no .plans/ directory at ${plans}. ` +
-        "Create it, or run `alignfirst plans setup <clone>`.\n",
+      `Error: no .plans/ directory usable at ${plans}. ` +
+        "See `aligndev guide work-files-setup` for authorized preparation.\n",
     );
 
     mkdirSync(plans, { recursive: true });

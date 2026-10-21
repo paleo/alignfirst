@@ -18,6 +18,7 @@ import {
   type ProjectReport,
   readProjectReport,
 } from "../project/layout.js";
+import { validateEffectivePlans } from "../project/plans.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
 import { describeNativeStorage } from "./native-context.js";
@@ -127,6 +128,7 @@ export async function runCode(
     }
     const config = loadSettings();
     const report = readReport(ctx);
+    if (command.kind === "session") validateEffectivePlans(ctx, report);
     const records =
       command.kind === "session" ? listSessionRecords(report.locations._aligndev.path) : [];
     const args = command.kind === "session" ? command.args : undefined;
@@ -507,15 +509,6 @@ async function runSession(
   const { agent } = code;
 
   const tree = sessionTreeOf(report, cwd);
-  const plans = report.locations[".plans"];
-  if (!plans.exists) {
-    stderr.write(
-      `Error: no .plans/ directory at ${displayPath(tree.cwd, plans.path)}. ` +
-        `Create it, or run \`${forms.alignfirst} plans setup <clone>\`.\n`,
-    );
-    return 1;
-  }
-
   const resolvedTicket = args.noTicket
     ? undefined
     : (args.ticket ??

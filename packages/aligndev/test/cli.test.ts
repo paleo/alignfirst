@@ -37,11 +37,16 @@ async function run(
 }
 
 describe("aligndev", () => {
-  it("lists the three subcommands in its help", async () => {
+  it("lists the four subcommands in its help", async () => {
     for (const flag of ["--help", "-h"]) {
       const result = await run([flag]);
       expect(result.code).toBe(0);
-      for (const command of ["aligndev code", "aligndev project", "aligndev guide"]) {
+      for (const command of [
+        "aligndev code",
+        "aligndev project",
+        "aligndev worktree",
+        "aligndev guide",
+      ]) {
         expect(result.stdout).toContain(command);
       }
       expect(result.stdout).toContain("~/.alignfirst/aligndev.settings.json");
@@ -77,6 +82,10 @@ describe("aligndev", () => {
     const project = await run(["project", "--help"]);
     expect(project.code).toBe(0);
     expect(project.stdout).toContain("aligndev project list [--json] [--root <path>]");
+
+    const worktree = await run(["worktree", "--help"]);
+    expect(worktree.code).toBe(0);
+    expect(worktree.stdout).toContain("aligndev worktree add <path> <branch> [--json]");
 
     const guide = await run(["guide", "--help"], {
       platform: "openclaw",
