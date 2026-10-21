@@ -41,6 +41,7 @@ const PLAYBOOK_TITLES: Record<string, string> = {
   playbook: "# Operating Instructions for an AlignFirst Assistant",
   "channel-handling": "# Channel handling",
   "working-session": "# Working session",
+  "work-files-setup": "# Runbook: Work-files setup",
   "project-workspace-setup": "# Runbook: Project workspace setup",
   "project-lifecycle": "# Runbook: Project lifecycle",
   consultation: "# Runbook: Consultation",
@@ -420,20 +421,25 @@ describe("aligndev guide playbook", () => {
     expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
   });
 
-  it("describes the main-worktree mode", async () => {
+  it("uses lightweight worktrees and optional full workspace onboarding", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const setup = await runGuide(fixture, ["project-workspace-setup"]);
-    expect(setup.stdout).toContain(
-      "**main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section",
-    );
-    expect(setup.stdout).toContain("telling the user the project is busy");
-    expect(setup.stdout).toContain("`git switch -c {TICKET_ID}/{1-3-words}`");
-    expect(setup.stdout).not.toContain("not set up for you");
-    const session = await runGuide(fixture, ["working-session"]);
-    expect(session.stdout).toContain("A project in main-worktree mode has no linked worktree");
-    const lifecycle = await runGuide(fixture, ["project-lifecycle"]);
-    expect(lifecycle.stdout).toContain("When DEVELOPERS_PATH exists, the project is prepared");
+    for (const topic of ["project-workspace-setup", "working-session", "project-lifecycle"]) {
+      const result = await runGuide(fixture, [topic]);
+      expect(result.stdout, topic).not.toContain("main-worktree mode");
+      expect(result.stdout, topic).not.toContain("git switch -c {TICKET_ID}/{1-3-words}");
+      expect(result.stdout, topic).toContain("aligndev worktree");
+    }
+    const lifecycle = (await runGuide(fixture, ["project-lifecycle"])).stdout;
+    expect(lifecycle).toContain("Full workspace installation is optional");
+    expect(lifecycle).toContain("A guide's existence alone does not prove readiness");
+    expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
+    expect(lifecycle).toContain("Stop immediately if any removal fails");
+    expect(lifecycle).toContain("No coding launch or plans preparation is needed");
+    expect(lifecycle).toContain("ask whether to keep or delete it");
+    const working = (await runGuide(fixture, ["working-session"])).stdout;
+    expect(working).toContain("bootstrapping a new project before its initial commit");
+    expect(working).toContain("repository-onboarding setup branch");
   });
 
   it("routes companion rules and preparation to the companion", async () => {
@@ -448,7 +454,9 @@ describe("aligndev guide playbook", () => {
     expect(lifecycle.stdout).toContain(
       'its procedure "Set up a project through its companion" for an assistant',
     );
-    expect(lifecycle.stdout).toContain("Run `alignfirst companion register` from PROJECT_PATH.");
+    expect(lifecycle.stdout).toContain(
+      "Complete `aligndev guide work-files-setup` from PROJECT_PATH",
+    );
   });
 
   it("requires a configured or detected agent for the code topic only", async () => {
@@ -511,6 +519,146 @@ describe("aligndev guide playbook", () => {
   });
 });
 
+describe("work-files and lightweight worktree runbooks", () => {
+  it.each(
+    PLATFORMS.flatMap((platform) =>
+      (["developers", "readme", "noGuide"] as const).flatMap((variant) =>
+        [false, true].map((viaNpx) => [platform, variant, viaNpx] as const),
+      ),
+    ),
+  )(
+    "preserves preparation and tooling rules for %s/%s (npx=%s)",
+    async (platform, variant, viaNpx) => {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, {
+        platform,
+        ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
+      });
+      const cwd = makeGuideVariants(fixture)[variant];
+      const env = viaNpx ? NPX_ENV : {};
+      const forms = resolveCommandForms(env);
+      const guides: Record<string, string> = {};
+      for (const topic of [
+        "work-files-setup",
+        "working-session",
+        "project-workspace-setup",
+        "consultation",
+      ]) {
+        const result = await runGuide(fixture, [topic], { cwd, env });
+        expect(result.code, result.stderr).toBe(0);
+        guides[topic] = result.stdout;
+        expect(result.stdout).not.toContain("main-worktree mode");
+        expect(result.stdout).not.toContain("{{");
+      }
+      const preparation = guides["work-files-setup"];
+      for (const text of [
+        `${forms.alignfirst} config --json`,
+        "existing companion copy wins over an existing project copy",
+        "does not enforce AlignDev's tracking rule",
+        "separate work-files repository may track its contents",
+        "unused tracked project `.plans` is not a blocker",
+        "including a tracked symlink and mixed tracked/untracked contents",
+        "compare `git rev-parse --path-format=absolute --git-common-dir` identities",
+        "unless that preparation is already authorized",
+        "selection applies to all worktrees",
+        "Do not copy, merge, migrate, archive, or delete them",
+        "do not ask about copying",
+        "Wait for approval before changing registration",
+        `${forms.alignfirst} companion register`,
+        '`items[".plans"]` to `"companion"`',
+        "Preserve all other fields",
+        "Do not create a worktree `.plans` link for companion plans",
+        "Broken links, invalid configuration",
+        "do not create a second history or repair links silently",
+        "needs no ticket, branch, or new worktree",
+      ])
+        expect(preparation, text).toContain(text);
+      expect(preparation.indexOf("Wait for approval")).toBeLessThan(
+        preparation.indexOf(`${forms.alignfirst} companion register`),
+      );
+      const working = guides["working-session"];
+      const preflight = working.slice(working.indexOf("### Step 3"), working.indexOf("### Step 4"));
+      const preparationGate = preflight.indexOf(`${forms.aligndev} guide work-files-setup`);
+      expect(preparationGate).toBeGreaterThan(0);
+      expect(preflight).toContain("before known-ticket `sync`/`ticket`");
+      expect(preparationGate).toBeLessThan(
+        preflight.indexOf(`run \`${forms.alignfirst} sync\`, then`),
+      );
+      const reservation = working.slice(
+        working.indexOf("### Step 5"),
+        working.indexOf("### Step 6"),
+      );
+      expect(reservation.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
+        reservation.indexOf(`${forms.alignfirst} ticket --side`),
+      );
+      expect(reservation.indexOf(`${forms.alignfirst} ticket --side`)).toBeLessThan(
+        reservation.indexOf("A1-request.md"),
+      );
+      const capture = working.slice(
+        working.indexOf("### Detailed requests"),
+        working.indexOf("### What you delegate"),
+      );
+      expect(capture.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
+        capture.indexOf("--next request.md"),
+      );
+      for (const text of [
+        "The assistant directly invokes",
+        `${forms.aligndev} worktree list/add/remove`,
+        "A branch worked on in place stays checked out",
+        "No coding launch or work-files preparation is required for direct cleanup",
+        "Remove only when that PR/MR is merged",
+        "workspaces with no PR/MR, and unmerged PR/MRs intact",
+        "Refuse dirty removal and stop on failure",
+      ])
+        expect(working, text).toContain(text);
+      const setup = guides["project-workspace-setup"];
+      for (const text of [
+        "including non-Node implementations",
+        "A missing npm dependency is not proof",
+        `${forms.aligndev} worktree list --json`,
+        `${forms.aligndev} worktree add <path> <existing-branch> --json`,
+        `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
+        "you invoke the lightweight commands directly as orchestration",
+        "absolute sibling path",
+        "including dangling symlinks",
+        "Reuse the listed path for an occupied branch",
+        "for a status request, end the turn",
+        "create nothing",
+        "Creating from that ref requires no checkout or clean main worktree",
+        "Tracked `.local` stays branch-local with a warning",
+        "before any `git` inspection or prose",
+        "`ready` covers the worktree and work files only",
+        "documented install/build/test preparation separately",
+        "A symlink is not a sandbox permission grant",
+        "matches the explicit user choice",
+        "rather than choosing another ticket branch",
+      ])
+        expect(setup, text).toContain(text);
+      if (platform === "codingAgent") {
+        expect(setup).toContain(
+          "Missing workspace tooling alone is never a reason for an extra workplace question",
+        );
+        expect(setup).toContain("**The session's branch carries TICKET_ID**");
+        expect(setup).toContain("**Any other branch**");
+      }
+      const consultation = guides.consultation;
+      expect(consultation).toContain(`${forms.aligndev} worktree list --json`);
+      expect(consultation).toContain("Do not create a worktree merely to answer a question");
+      const delegate = consultation.slice(
+        consultation.indexOf("## Step 3"),
+        consultation.indexOf("## Step 4"),
+      );
+      expect(delegate.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
+        delegate.indexOf(`${forms.aligndev} code new`),
+      );
+      const record = consultation.slice(consultation.indexOf("## Step 5"));
+      expect(record.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
+        record.indexOf(`${forms.alignfirst} ticket --side`),
+      );
+    },
+  );
+});
+
 describe("every template, every platform", () => {
   const OPENCLAW_ONLY = [
     "channel-handling",
@@ -542,7 +690,7 @@ describe("every template, every platform", () => {
   it("rejects each OpenClaw-only topic under codingAgent", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    const expected = "Topics: code, working-session, project-workspace-setup, consultation.\n";
+    const expected = `Topics: code, ${PLAYBOOK_TOPICS.codingAgent.join(", ")}.\n`;
     for (const topic of OPENCLAW_ONLY) {
       const result = await runGuide(fixture, [topic]);
       expect(result.code, topic).toBe(1);

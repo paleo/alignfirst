@@ -6,7 +6,7 @@ Workspace can be installed on its own. Add the workspace instructions below; Ali
 
 **Node consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation in the dev-server, branch lifecycle, process control, log polling, CLI). In `workspace.mjs`, you supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list. In `dev-server.mjs`, you declare the port range, the files that carry ports, the infrastructure `setup` and the servers.
 
-**Non-Node consumers** reimplement the system from this design; the concept sections are self-contained. A project managed by an assistant must also meet [the AlignDev contract](#the-aligndev-contract).
+**Non-Node consumers** can reimplement the full system from this design; the concept sections are self-contained. Existing documented implementations remain authoritative for AlignDev. Full workspace installation is optional for an assistant: without project tooling, `aligndev worktree` provides lightweight isolation. Its readiness covers Git and work files, not dependencies, ports, seeded config, infrastructure or servers. Follow repository preparation and teardown commands separately. See [the AlignDev contract](#the-aligndev-contract) when adopting the full system.
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -55,7 +55,7 @@ Suggest `.local/` by default, even when the repo has no such directory yet: a gi
 
 `runtimeDir` (`.local-wt/` above) stays per-worktree, but the kernel symlinks its `workspace-registry/` sub-directory to the main worktree's, so every worktree reads one registry.
 
-The main worktree's `.plans` may itself be a symlink — into a clone of the work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own.
+The main worktree's project-local `.plans` may itself be a symlink into a separate work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own. Companion-backed plans resolve directly through `alignfirst config --json` and need no worktree link; omit `.plans` from `sharedDirs` in that case. AlignDev refuses effective plans tracked by the project's own repository. Missing or project-tracked plans follow the separately authorized `aligndev guide work-files-setup` before ticket or setup effects, without copying existing project files.
 
 ### Port range
 
@@ -273,7 +273,9 @@ The allocated ports are not one of them either: each workspace gets its own, and
 
 ## The AlignDev Contract
 
-An assistant creates every worktree through the workspace system and has no manual fallback. `@alignfirst/workspace` gives it the CLI it relies on: `--guide`, `list`, the `setup` states, one-command `remove`. A reimplementation reproduces that surface as `workspace --guide` describes it. On top of the kernel, a managed project provides:
+When a project provides workspace tooling, the assistant uses its documented lifecycle, including non-Node implementations. `@alignfirst/workspace` supplies `--guide`, `list`, setup states and one-command removal; a full reimplementation reproduces that surface. Without project tooling, the assistant directly uses `aligndev worktree list/add/remove`, backed only by Git's registry. That fallback adds no workspace-package dependency or tracked configuration. It shares usable untracked project directories through locally excluded symlinks, uses companion plans directly, and preserves tracked `.local` with a warning. Lightweight removal refuses dirty worktrees and preserves branches and shared targets; stop processes and tear down infrastructure separately.
+
+The requirements below apply when adopting the full workspace system for an assistant:
 
 1. The workspaces section in `DEVELOPERS.md` ([Agent Instructions](#agent-instructions)).
 2. Public URLs from the environment *(dev server)*, below.

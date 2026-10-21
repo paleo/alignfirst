@@ -120,11 +120,19 @@ Paths are absolute. `config` is the validated config, with the deprecated `plans
 
 ### `aligndev code`
 
-- **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`, and the launch gate requires `locations[".plans"].exists`.
+- **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`. New/resumed launches require usable effective plans with no files tracked by the project's own repository before ticket/session effects. A separate work-files repository is supported; an unused tracked project copy does not block a selected companion. Historical status stays readable.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
 - **Write access**: `createMissingCompanion` prepares a missing companion before launch, independently of the profile's `skipPermissions` or the selected child. In normal permission mode, Claude Code receives `--add-dir <companion>` after its permission flags; Codex receives it among the `exec` options, before `resume`. Pi uses ordinary OS access, receives no `--add-dir`, and honors saved project trust without forced approval.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst-instructions`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
 - **Asynchronous Pi callers**: the generic `background` tool only honors the command and cwd. The CLI still resolves companions and session paths. From the original worktree, `code status --meta <unique-run-key> --result` resolves a run; retain its `sessionFile:` path (relative to that worktree when inside it, absolute otherwise) and use that exact path thereafter. The job handle, unique run key and child conversation ID remain separate identities.
+
+### `aligndev worktree`
+
+Lightweight add reads the main worktree's report, then verifies the finished worktree's effective location. Companion plans are used directly without a generated worktree `.plans` link or local exclusion. Project-local untracked shared plans use a symlink and local Git exclusions; this does not change companion resolution. An independently selected `_aligndev` tree stays independent.
+
+Missing effective plans, including a registered companion without `.plans`, block add before branch/worktree creation. The CLI never registers or provisions a companion. The playbook's `aligndev guide work-files-setup` obtains approval, registers when needed, explicitly selects only that entry's `.plans` as `companion`, then creates and verifies the selected directory. The selection applies to all worktrees; existing project files remain untouched and unused, without copying. Broken links, invalid configuration and conflicting files remain errors.
+
+These are AlignDev gates. Standalone AlignFirst still supports tracked project plans and its existing local-mode `sync` behavior.
 
 ### `aligndev guide`
 
@@ -138,9 +146,7 @@ A direct child whose `.git` is a directory is a project, unless it holds another
 
 DEVELOPERS_PATH is the project's guide file for the assistant. Under OpenClaw, each procedure retains the `DEVELOPERS.md` path from `aligndev project status <PROJECT_PATH>`. A coding-agent assistant retains `locations["DEVELOPERS.md"].path` from `alignfirst config --json` when that file exists, else `README.md` at the root of the main worktree; with neither, its playbook has no DEVELOPERS_PATH. Project rules for a companion-backed project go into its companion `.alignfirst-instructions/context.md` or `DEVELOPERS.md`, edited in place, with no branch or pull request.
 
-Under OpenClaw, a project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. The main worktree is its only workspace, claimed by one working thread at a time. It is free when it is clean on the default branch, or already on the thread's own branch. Branches are created and checked out there with `git switch`.
-
-A coding-agent assistant has no main-worktree mode: it works in the session's directory and branch. A project without workspace tooling gets a branch switched in that directory, on the user's answer.
+Both platforms use the project's documented workspace tooling when present, including non-Node implementations. Otherwise the assistant directly creates or reuses lightweight worktrees through `aligndev worktree`, then delegates from the selected path. Explicit in-place choices and matching-ticket reuse remain valid. Work-files preparation runs before ticket reservation, request capture, coding delegation or discussion recording; it requires only the project path. Full workspace installation is optional.
 
 ## Bootstrap
 
@@ -151,7 +157,7 @@ An agent reads a repository's `AGENTS.md` on its own, never a companion. `alignd
 - **Matching by git remote**, from the earlier overlay design: forks, mirrors and renamed remotes break it, and a wrong match silently serves another project's conventions.
 - **Keys for parent directories**, matching every project below them: projects nobody registered got a companion, and no project could be unregistered alone. They existed while AlignDev for OpenClaw locked the registry; `companion register` replaced them.
 - **A per-file project-then-companion fallback without settings**: the first `aligndev` session file would create a companion `.plans` and switch `alignfirst` to it unannounced.
-- **A `.plans` symlink hidden through `.git/info/exclude`**: it leaves a footprint in the repository and needs one link per worktree.
+- **A `.plans` symlink as companion access**: it leaves a footprint in the repository and needs one link per worktree. Companions resolve directly. Lightweight worktrees may still share project-local plans through locally excluded links.
 - **A coding-agent session hook to load the context**: it ties the bootstrap to one agent.
 - **A configurable companions root**: a symlink at `~/.alignfirst/companions` moves every companion, and a per-project `dir` places one anywhere.
 - **A companion name derived from the project path**, the shape before `dir`: two paths could collide through a `_`, and a moved project required renaming its companion.

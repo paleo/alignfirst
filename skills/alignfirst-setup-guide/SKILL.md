@@ -94,13 +94,12 @@ Inspect the repository before changing it. A prepared project has all of these:
    `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
 2. A clean `aligndev project doctor --root <projects-directory>` result after writing
    `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
-3. The work-files repository through `alignfirst plans setup` when the team has one.
+3. Usable effective work files, untracked by the project's own repository. A separate work-files repository may track them. Before ticket or coding-session effects, follow `aligndev guide work-files-setup` for missing or project-tracked plans; its authorized companion selection leaves project content untouched without copying it.
 4. docmap, including project scripts or CLI instructions. When the repository has no `docs/`
    directory, bootstrap its documentation through
    [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
-5. workspace, adapted to the project's runtime and development lifecycle, meeting
-   [the AlignDev contract](references/workspace-setup.md#the-aligndev-contract).
-6. A Node version declaration (`.nvmrc`, `.node-version` or `engines.node`) so fnm selects the project runtime. Ask which version to declare when the repository has none.
+5. A documented worktree route. Existing project workspace tooling, including non-Node implementations, remains authoritative. Installing a full workspace system is optional; when selected, meet [the AlignDev contract](references/workspace-setup.md#the-aligndev-contract). Otherwise use `aligndev worktree` and document separate install/build/test and application-lifecycle commands.
+6. The project's runtime requirements. For Node projects, declare the version (`.nvmrc`, `.node-version` or `engines.node`) so fnm selects it; ask which version when none exists. Other runtimes follow their documented tools.
 7. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
    documentation map, development workflow, and verification procedures.
 
@@ -134,7 +133,7 @@ Translate commands to that package manager. npm needs `--` before script flags; 
 Detect existing footprints before proposing changes:
 
 - docmap: a `docmap` script, `@alignfirst/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
-- workspace: a `workspace` script or `@alignfirst/workspace`.
+- workspace: documented workspace procedures, including non-Node tooling; a `workspace` script or `@alignfirst/workspace` is one footprint.
 - A pre-`@alignfirst` install: `@paleo/docmap` or `@paleo/workspace` in the manifest. Before
   proposing anything else, replace the dependency with the `@alignfirst` name and rewrite the
   `@paleo/` import specifiers in the wrapper scripts (`scripts/workspace/*.mjs`); the two scopes

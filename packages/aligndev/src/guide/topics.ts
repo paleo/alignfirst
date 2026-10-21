@@ -9,11 +9,12 @@ export const PLAYBOOK_TOPICS: Record<Platform, readonly string[]> = {
   openclaw: [
     "channel-handling",
     "working-session",
+    "work-files-setup",
     "project-workspace-setup",
     "project-lifecycle",
     "consultation",
     "slack-message-tool",
     "discord-message-tool",
   ],
-  codingAgent: ["working-session", "project-workspace-setup", "consultation"],
+  codingAgent: ["working-session", "work-files-setup", "project-workspace-setup", "consultation"],
 };

@@ -53,21 +53,14 @@ Setting up a workspace takes a while, so tell the user it started before you sta
 {{#codingAgent}}
 ## Step 2 — Decide the workplace
 
-{{#hasGuide}}
-The project has **workspace tooling** when DEVELOPERS_PATH describes workspaces.
-{{/hasGuide}}
-{{#noGuide}}
-The project has no **workspace tooling**.
-{{/noGuide}}
-
 The workplace is the first case that matches:
 
-1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there.
-2. **The session's branch carries TICKET_ID** — work in place. Skip Steps 3 and 4: post the `[WORKSPACE]` banner (format in Step 4) with the session's worktree and branch and `Status: ready`, then go to Step 5.
+1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. Use an existing directory as it is after verifying its actual effective work files, post its banner, then go to Step 5. For a named branch without a selected directory, Step 4 finds or attaches that branch rather than choosing another ticket branch.
+2. **The session's branch carries TICKET_ID** — work in place after verifying its actual effective work files. Skip Steps 3 and 4: post the `[WORKSPACE]` banner (format in Step 4) with the session's worktree and branch and `Status: ready`, then go to Step 5.
 3. **The session's branch is long-lived** — the default branch, or a name such as `main`, `master`, `develop`, `release` or `production`: open or create the ticket's workspace in Step 4, without asking.
 4. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
 
-Without workspace tooling, case 3 also ends the turn on that question, and "here" means the ticket's branch in the session's worktree: `git switch <branch>` when it exists, else a fast-forward of the base branch, then `git switch -c {TICKET_ID}/{1-3-words}`. The banner then follows case 2.
+These choices apply with either tooling route in Step 4. Missing workspace tooling alone is never a reason for an extra workplace question. For an in-place choice, run `{{ALIGNDEV}} guide work-files-setup` against the actual workplace before the banner or delegation; its effective plans must match PROJECT_PATH's selected shared target.
 
 ## Step 3 — Post the setup signal
 
@@ -100,32 +93,24 @@ That single call is the whole exception. The post right after it, and every one 
 {{/openclaw}}
 
 {{#openclaw}}
-## Step 4 — Set up the project workspace (worktree, branch, dev server)
+## Step 4 — Set up the project workspace (worktree and branch)
 {{/openclaw}}
 {{#codingAgent}}
-## Step 4 — Set up the workspace (worktree, branch, dev server)
+## Step 4 — Set up the workspace (worktree and branch)
 {{/codingAgent}}
 
 {{#openclaw}}
-A project runs in **main-worktree mode** when DEVELOPERS_PATH is missing or has no workspaces section. Its main worktree at PROJECT_PATH is its only workspace, used by one working thread at a time. "Main-worktree mode" below adapts this step, and wherever the playbook names the linked workspace, you use PROJECT_PATH.
+If the user explicitly selected an in-place directory, use it as it is after verifying its actual effective work files, report its banner, then go to Step 5. Reuse a recorded workplace whose branch already carries TICKET_ID in the same way. For an explicitly selected branch, find or attach that branch below rather than choosing another ticket branch.
 {{/openclaw}}
 
-{{#openclaw}}
-Otherwise, the workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
-{{/openclaw}}
-{{#codingAgent}}
-The workspace tooling owns worktrees. Run its main-worktree commands from PROJECT_PATH. Create, reuse, and tear worktrees down through its commands only — never `git worktree add`/`remove`/`prune`, never `rm -rf` on a worktree directory, never a branch checked out by hand outside a workspace. A worktree the tooling doesn't know about is invisible to every other session.
-{{/codingAgent}}
+Select the tooling from the project's documented procedure, including non-Node implementations. A missing npm dependency is not proof that no workspace tooling exists. Use the documented workspace tooling when present; otherwise use `{{ALIGNDEV}} worktree list/add/remove`. This selection also governs consultation lookup and cleanup. Never bypass the selected tooling with raw `git worktree add`/`remove`/`prune` or directory deletion.
 
-First, fetch remote refs from PROJECT_PATH with `git fetch --prune`. Then check what already exists for the {TICKET_ID} — two checks, both required:
+Complete `{{ALIGNDEV}} guide work-files-setup` before setup if it has not already passed. It precedes ticket effects in the working session and requires no ticket itself.
+
+First, fetch remote refs from PROJECT_PATH with `git fetch --prune` when a remote is configured. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
 - **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
-{{#openclaw}}
-- **Registered workspaces**: `DEVELOPERS.md` names the project's guide command (`workspace --guide`, with the project's own runner). It gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
-{{/openclaw}}
-{{#codingAgent}}
-- **Registered workspaces**: the workspace tooling's guide command (`workspace --guide`, with the project's own runner) gives the commands to **list registered workspaces** and to **set up a workspace** — on an existing branch, or on a new one. Use them.
-{{/codingAgent}}
+- **Worktrees**: use the project's documented workspace list command, or run `{{ALIGNDEV}} worktree list --json` directly from PROJECT_PATH. Git's registry includes lightweight worktrees created outside AlignDev; it is their only inventory. Keep missing, locked, or prunable entries visible and report obstacles rather than repairing them.
 
 Never assume the branch is new; `git worktree list` alone does not answer the branch question.
 
@@ -133,13 +118,17 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: in PROJECT_PATH, fast-forward the base branch from its freshly fetched remote ref so the new branch starts from the latest base, then set up a workspace on a new branch. Name it `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. A fast-forward that brought in new commits leaves the main worktree stale, and no later step refreshes it: once the workspace is up, run the "Refreshing the workspace after a branch refresh" flow on the main worktree at PROJECT_PATH.
+3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: name a new branch `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Select the intended base explicitly, normally the freshly fetched `origin/<base>`, or the local base ref for a repository without a remote. Creating from that ref requires no checkout or clean main worktree. Any separate base refresh that modifies the main checkout requires a clean tree on its base branch and the repository's refresh procedure.
+
+With project workspace tooling, delegate setup through its documented commands. Without it, you invoke the lightweight commands directly as orchestration, before coding delegation. Choose an absolute sibling path derived from PROJECT and the branch (replace branch slashes with dashes); check that it is free, including dangling symlinks. Surface collisions instead of inventing a suffix. For sub-path 2, run `{{ALIGNDEV}} worktree add <path> <existing-branch> --json`. For sub-path 3, run `{{ALIGNDEV}} worktree add <path> -b <new-branch> <explicit-base-ref> --json`. Reuse the listed path for an occupied branch; never force a second checkout. Ambiguous remote branches need an explicit choice.
+
+Lightweight add returns only after Git and work files are ready. It shares usable untracked project `.plans` and optional `.local` by symlink, with local Git exclusions, or uses companion plans directly without a link. Tracked `.local` stays branch-local with a warning; report it. Missing or project-tracked effective plans require the authorized preparation procedure, then an ordinary retry. A late failure retains partial setup: report its paths and recovery instructions rather than deleting it.
 
 {{#openclaw}}
-The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, except in main-worktree mode.
+The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). Run the selected setup command in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, unless the user explicitly chose in-place work.
 {{/openclaw}}
 {{#codingAgent}}
-The moment you have the workplace — in place, attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. `workspace setup` blocks until the bootstrap reaches `ready` or `failed`; run it in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from the workplace.
+The moment you have the workplace — in place, attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. Run the selected setup command in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from the workplace.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -157,25 +146,9 @@ Branch: `{branch}`
 Status: {running | ready | failed}
 ```
 
-The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on.
+The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on. For lightweight worktrees, explain that `ready` covers the worktree and work files only. Delegate the repository's documented install/build/test preparation separately before coding needs it; lightweight setup does not seed config, allocate ports, provision infrastructure, or start servers. Invent no `workspace` or `dev` command.
 
-{{#openclaw}}
-### Main-worktree mode
-{{/openclaw}}
-
-{{#openclaw}}
-The branch check applies; the registered-workspace check does not. Before any checkout, claim the main worktree. It is free when it is on the default branch with a clean `git status`, or already on this thread's {TICKET_ID} branch. Otherwise, end the turn telling the user the project is busy: name the checked-out branch and the uncommitted changes, and change nothing.
-{{/openclaw}}
-
-{{#openclaw}}
-On a free main worktree, the sub-paths above run in PROJECT_PATH with plain `git switch`:
-
-1. **Already on the branch** → use it.
-2. **Branch exists, not checked out** → `git switch <branch>`.
-3. **No branch** → a status request ends as above. Otherwise, fast-forward the base branch as above, then `git switch -c {TICKET_ID}/{1-3-words}`.
-
-The `[WORKSPACE]` banner names the main worktree: `Worktree:` is the directory name of PROJECT_PATH, and `Status:` is `ready`.
-{{/openclaw}}
+Before delegation from a reused worktree, verify its actual effective location through `{{ALIGNDEV}} guide work-files-setup`. Verify that the agent can read and write the selected shared work files under its existing permission policy. A symlink is not a sandbox permission grant. Companion access retains its existing handling; surface missing access rather than enabling bypass permissions or granting the whole main repository.
 
 {{#openclaw}}
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
@@ -190,7 +163,7 @@ In place on an existing branch, fetch first. A fast-forward of the branch onto i
 
 Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 
-1. **Confirm the branch.** Check the worktree's checked-out branch carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
+1. **Confirm the branch.** Check the worktree's checked-out branch matches the explicit user choice, or otherwise carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
 3. **Merge the remote branch.** If the branch has a remote counterpart, merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
 4. **Catch up with the base branch.** If the freshly fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.

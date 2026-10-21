@@ -9,7 +9,9 @@ Run a coding agent through AlignFirst protocols with `{{ALIGNDEV}} code`. It wra
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
-Run `{{ALIGNDEV}} code` from the root of the target project, so the agent works in the right repository. The project must have a `.plans/` directory, in the repository or in its companion directory.
+Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable effective `.plans/`, in the repository or in its companion directory. AlignDev refuses work files tracked by the project's own repository before new/resumed launches; a separate work-files repository and an unused tracked project copy remain supported. Follow `{{ALIGNDEV}} guide work-files-setup` before ticket or session effects when preparation is needed. Historical status remains readable.
+
+Shared project plans may be reached through a symlink; companion plans resolve directly. A symlink grants no sandbox access. Verify the agent's read/write access under its existing permission policy and report missing access rather than enabling bypass permissions or granting the whole main repository.
 
 {{ALIGNFIRST_SETUP}}
 

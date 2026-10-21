@@ -21,10 +21,10 @@ Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/codingAgent}}
 
 {{#openclaw}}
-Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists. In main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`), that workspace is the main worktree while it holds the branch.
+Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/openclaw}}
 {{#codingAgent}}
-Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's workspace guide, and report the limitation rather than inspecting a different branch when no workspace exists.
+Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -47,6 +47,8 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 {{/codingAgent}}
 
 ## Step 3 — Delegate
+
+Before delegation needs session files, complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH and verify the selected worktree's actual effective location too. Preparation requires authorization when plans are missing or project-tracked. It needs no temporary ticket, branch, or worktree.
 
 {{#openclaw}}
 Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
@@ -89,10 +91,10 @@ A request for changes ends the consultation: return to the ticket and workspace 
 
 A single question answered in one turn ends at Step 4. Nothing is written.
 
-Record the exchange when it produced something worth keeping: the user asked for ideas, an opinion, or a decision, or the topic continued past your first answer. Then:
+Record the exchange when it produced something worth keeping: the user asked for ideas, an opinion, or a decision, or the topic continued past your first answer. Before reservation, `sync`, or recording, complete `{{ALIGNDEV}} guide work-files-setup` if it has not already passed. Then:
 
 1. **Ask about the ticket, without waiting for it.** Add one sentence to the answer you are already sending, in the user's language: *"Is there a ticket to attach this discussion to, or do we continue without one?"* Ask it once in the session, then carry on regardless of the reply.
-2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH and take the `side-N` it reports.
+2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH and take the `side-N` it reports.
 3. **Name the file.** Run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID} --next consultation.md --new-cycle`, both from PROJECT_PATH, and append FILE_NAME to TICKET_DIR exactly as printed. Syncing first brings down the ticket's existing work files, so the new file is numbered after them. A consultation opens its own cycle, and the flag is harmless on a ticket with no work files yet.
 4. **Have the agent write it.** Resume the consultation's session with no protocol, naming that exact path. Ask for the discussion's summary, the ideas considered, the decisions reached, and the open questions named as open. The agent syncs its own writes.
 5. **Report where it landed.** Your closing message states TICKET_ID and the file path. The file names the revision retained at Step 2.
