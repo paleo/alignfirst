@@ -47,8 +47,8 @@ sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
 sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.3.0
 set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
-store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
-  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
 native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset PI_CODING_AGENT_DIR; else export PI_CODING_AGENT_DIR="$2"; fi

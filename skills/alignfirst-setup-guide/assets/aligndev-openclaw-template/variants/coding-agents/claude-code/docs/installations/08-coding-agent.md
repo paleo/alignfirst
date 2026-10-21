@@ -40,8 +40,8 @@ tmp=$(mktemp) && jq '. + {disableClaudeAiConnectors: true, autoMemoryEnabled: fa
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @anthropic-ai/claude-code
 set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
-store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
-  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
 native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset CLAUDE_CONFIG_DIR; else export CLAUDE_CONFIG_DIR="$2"; fi

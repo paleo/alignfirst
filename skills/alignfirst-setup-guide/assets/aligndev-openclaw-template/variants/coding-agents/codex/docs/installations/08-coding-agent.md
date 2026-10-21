@@ -37,8 +37,8 @@ source ~/.bashrc
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @openai/codex
 set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
-store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
-  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
 native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset CODEX_HOME; else export CODEX_HOME="$2"; fi
