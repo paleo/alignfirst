@@ -59,13 +59,32 @@ Deployment requires explicit `code.profile`; singleton counts and per-agent `def
 For a Pi deployment, check the protected executable and supported system runtime without a model call:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'command -v pi; PI_OFFLINE=1 pi --version'
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+settings="$HOME/.alignfirst/aligndev.settings.json"
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" >/dev/null
+launch=$(jq -ce --arg name '<pi-profile>' '.code.profiles[$name] | select(.agent == "pi")' "$settings")
+store=$(/usr/bin/node -e '
+  const {resolve, dirname} = require("node:path");
+  const value = JSON.parse(process.argv[1]).configDir;
+  console.log(value === null ? resolve(process.env.HOME, ".pi/agent") :
+    value.startsWith("~/") ? resolve(process.env.HOME, value.slice(2)) :
+    resolve(dirname(process.argv[2]), value));' "$launch" "$settings")
+if jq -e '.configDir == null' <<<"$launch" >/dev/null; then
+  unset PI_CODING_AGENT_DIR
+else
+  export PI_CODING_AGENT_DIR="$store"
+fi
+command -v pi
+PI_OFFLINE=1 pi --version
+EOS
 /usr/bin/node --version
 ```
 
 Expect `/opt/{{SERVICE_USER}}/bin/pi`. A package/version/Node mismatch needs the reviewed package update followed by launcher regeneration after prefix hardening ([update-assistant.md](operations/update-assistant.md)). Do not invoke a second installer, fnm wrapper or unprotected package entry point as a workaround.
 
-- **`auth_required` or refresh failure:** authenticate as the service account in the effective profile's resolved `PI_CODING_AGENT_DIR`, not the admin account's store. Check its private `auth.json` ownership and adjacent lock permissions. The root/ancestor anchors should be root-owned, service-group writable and sticky (`1770`), not immutable. Preserve the approved same-UID auth exception; never thaw all native resources.
+- **`auth_required` or refresh failure:** repeat the service-account routing in `08-coding-agent.md`: after login-shell initialization, unset `PI_CODING_AGENT_DIR` for null or set the resolved explicit path for a string. Reproduce the selected environment and cwd. Check its private `auth.json` ownership and adjacent lock permissions. The root/ancestor anchors should be root-owned, service-group writable and sticky (`1770`), not immutable. Preserve the approved same-UID auth exception; never thaw all native resources.
 - **Trust prompt in a new worktree:** check the recorded approved parent, canonical worktree path and nearest saved decision in `<agent-dir>/trust.json`. Use `agent-config` maintenance for `/trust`, then restart Pi. Do not broaden trust silently or add `--approve`.
 - **Settings/package write fails:** expected outside `agent-config` maintenance. Missing declared npm packages must be installed into that native store's managed npm directory. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs and globs need reviewed concrete paths, not relaxed validation.
 - **Missing `rg`/`fd`:** native `<agent-dir>/bin` is protected. Provision approved helpers there through `agent-config` or system PATH; do not grant runtime download writes or install Node there.

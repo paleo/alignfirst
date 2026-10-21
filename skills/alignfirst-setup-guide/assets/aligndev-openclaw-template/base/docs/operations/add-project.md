@@ -72,12 +72,30 @@ Confirm the effective profile, native directory and model without printing crede
 
 ### Pi parent trust
 
-Repeat for every Pi store that may serve this project. Use its resolved path from the deployment inventory, not the operator's native store. Before hardening, start Pi directly as the service user in the approved parent; after hardening, use this interactive maintenance window:
+Repeat for every Pi profile that may serve this project. Validate its inventory path and retain its original null/string selection; shared paths may have distinct invocation modes. Before hardening, use a service login shell with the same routing. After hardening, use this interactive maintenance window, reproducing any additional profile `env`/`unset` and credential routing:
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-config -- \
-  env PI_CODING_AGENT_DIR=<resolved-service-agent-dir> \
-  bash -c 'cd "$1" && exec pi' bash <approved-parent>
+  bash -l -s -- <pi-profile> <approved-parent> <<'EOS'
+set -eo pipefail
+settings="$HOME/.alignfirst/aligndev.settings.json"
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" >/dev/null
+launch=$(jq -ce --arg name "$1" '.code.profiles[$name] | select(.agent == "pi")' "$settings")
+store=$(/usr/bin/node -e '
+  const {resolve, dirname} = require("node:path");
+  const value = JSON.parse(process.argv[1]).configDir;
+  console.log(value === null ? resolve(process.env.HOME, ".pi/agent") :
+    value.startsWith("~/") ? resolve(process.env.HOME, value.slice(2)) :
+    resolve(dirname(process.argv[2]), value));' "$launch" "$settings")
+if jq -e '.configDir == null' <<<"$launch" >/dev/null; then
+  unset PI_CODING_AGENT_DIR
+else
+  export PI_CODING_AGENT_DIR="$store"
+fi
+cd "$2"
+exec pi < /dev/tty
+EOS
 ```
 
 Run `/trust`, select **Trust**, then exit and restart Pi. From an immediate child, **Trust parent folder** is equivalent. Record the canonical approved parent in the onboarding report. Saved decisions live in `<agent-dir>/trust.json`; the nearest decision wins. Verify a future worktree beneath that parent after restart. Never add `--approve` or set `defaultProjectTrust: "always"`. Future project resources inherit the decision; trust is not an OS sandbox or protection against project modifications.

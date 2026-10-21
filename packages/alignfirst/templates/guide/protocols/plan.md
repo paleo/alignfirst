@@ -20,7 +20,7 @@ Read the spec file entirely before starting. Then plan in six phases, in this or
 5. **Writing**: write the plan files.
 6. **Review**: reread the plans critically and improve them.
 
-One rule holds across all phases: an important design decision the spec leaves open, or a spec that is wrong or contradicts the code, stops the protocol. Ask the user. A plan is executed by an agent that trusts it, often while the user is away.
+One rule holds across all phases: an important design decision the spec leaves open, a spec that is wrong or contradicts the code, or a spec that demands far more work than its problem warrants, stops the protocol. Ask the user. A plan is executed by an agent that trusts it, often while the user is away.
 
 ## Phase 1. Investigation
 
@@ -36,9 +36,7 @@ For each operation in the spec, search for an existing function that does a simi
 
 ### 2.1 Assess Work Scopes
 
-Prefer a single plan when the work fits one session, especially when it stays within one area.
-
-Split complex work into specialized plans, coordinated by a main plan. Split along:
+The size of the work decides. Work that fits one implementation session gets a single plan. Larger work gets specialized plans coordinated by a main plan. Split along:
 
 - **Distinct logical units**: separate features or modules, each large enough to stand alone
 - **Stack boundaries**: different technologies or specialization areas. The descriptions of custom agents, when some are defined, help find these boundaries.
@@ -64,8 +62,9 @@ The plan is a **self-explanatory prompt** for the coding agent. That agent start
 - Give a way to find the **important source files**: file paths, or a function name to search for. Line numbers are fine in a plan.
 - Give **numbered steps**.
 - List the **existing functions to reuse or refactor**. Plan thin wrappers, not re-implementations: each operation has one proper place.
+- Prefer extending the existing mechanisms.
 - Plan a clean break. Unused code is removed. Backward compatibility appears only when the user asked for it.
-- **Tests**: look first for existing tests of the kind you consider. Plan tests only when they fit the project's test setup.
+- **Tests**: look first for existing tests of the kind you consider. Plan tests only when they fit the project's test setup, focused on the changed behavior.
 - Leave out sections that add no actionable information: "Benefits", "Code Style Compliance", "Rationale", and the like.
 
 ### 3.2 Single Plan Format
@@ -219,7 +218,7 @@ Ignore Markdown lint errors in the plan files. Fixing them wastes the session.
 
 ## Phase 6. Review
 
-When you think the plans are complete, read them again with a critical eye and edit them to improve them. Repeat until every plan is solid.
+When you think the plans are complete, read them again with a critical eye and edit them to improve them. Check that the context is complete. Keep only what the task needs. Repeat until every plan is solid.
 
 **Additional review for multiple plans**:
 

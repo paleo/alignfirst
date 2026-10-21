@@ -40,7 +40,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 const index = args.indexOf("--resume");
-const store = process.env.CLAUDE_CONFIG_DIR;
+const store = process.env.CLAUDE_CONFIG_DIR ?? path.join(process.env.HOME, ".claude");
+fs.mkdirSync(store, {recursive: true});
 if (process.env.FIXTURE_AUTH_FAILURE === "1") {
   console.log(JSON.stringify({type: "assistant", error: "authentication_failed"}));
   console.log(JSON.stringify({type: "result", is_error: true, result: "Not logged in. Please run /login."}));
@@ -56,7 +57,8 @@ if (index >= 0) {
   id = fs.readFileSync(identity, "utf8");
 } else fs.writeFileSync(identity, id);
 fs.writeFileSync(${JSON.stringify(join(root, "observed.json"))}, JSON.stringify({
-  args, store, keyPresent: process.env.TOKEN !== undefined,
+  args, store, directoryPresent: Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
+  keyPresent: process.env.TOKEN !== undefined,
   parentPresent: process.env.CLAUDE_CODE_SESSION_ID !== undefined,
   ceiling: process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS,
 }));
@@ -167,6 +169,92 @@ describe("independent quota configuration", () => {
       expect(quota.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
     }
   });
+
+  it.each(["claude", "codex"] as const)(
+    "shares a null %s coding reset with omitted quota only",
+    (agent) => {
+      const variable = agent === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME";
+      const caller = Object.freeze({ ...env, [variable]: nativeB });
+      settings({ profiles: { a: { agent, configDir: null, unset: ["TOKEN"] } } });
+      const code = resolveCodeConfig(loadConfig(home), caller);
+      const quota = resolveQuotaConfig(code, caller);
+      expect(quota).toEqual({ source: agent, env: code.childEnv });
+      if (quota.source === "none") throw new Error("unexpected disabled quota");
+      expect(quota.env).toBe(code.childEnv);
+      expect(Object.hasOwn(quota.env, variable)).toBe(false);
+      expect(quota.env.TOKEN).toBeUndefined();
+      expect(caller[variable]).toBe(nativeB);
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "keeps explicit %s quota omitted/null/string selection independent of coding resets",
+    (source) => {
+      const variable = source === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME";
+      const caller = Object.freeze({
+        ...env,
+        PATH: env.PATH,
+        CLAUDE_CONFIG_DIR: nativeB,
+        CODEX_HOME: nativeB,
+        PI_CODING_AGENT_DIR: "unrelated-store",
+        REMOVE_QUOTA: "remove",
+        ANTHROPIC_API_KEY: "private-key",
+      });
+      for (const configDir of [undefined, null, nativeA]) {
+        settings({
+          profiles: {
+            a: {
+              agent: source,
+              configDir: configDir === null ? nativeA : null,
+              unset: ["TOKEN"],
+              env: { CODING_ONLY: "coding" },
+              quota: {
+                source,
+                configDir,
+                env: { QUOTA_ONLY: "quota" },
+                unset: ["REMOVE_QUOTA"],
+              },
+            },
+          },
+        });
+        const path = join(home, ".alignfirst/aligndev.settings.json");
+        const bytes = readFileSync(path);
+        const config = loadConfig(home);
+        const stored = config.code.profiles?.a;
+        Object.freeze(stored?.unset);
+        Object.freeze(stored?.quota?.unset);
+        Object.freeze(stored?.quota?.env);
+        Object.freeze(stored?.quota);
+        const before = JSON.stringify(config);
+        const code = resolveCodeConfig(config, caller);
+        const quota = resolveQuotaConfig(code, caller);
+        if (quota.source === "none") throw new Error("unexpected disabled quota");
+        expect(quota.source).toBe(source);
+        expect(quota.env[variable]).toBe(
+          configDir === null ? undefined : configDir === undefined ? nativeB : nativeA,
+        );
+        if (configDir === null) expect(Object.hasOwn(quota.env, variable)).toBe(false);
+        expect(quota.env).toMatchObject({
+          HOME: home,
+          PATH: caller.PATH,
+          TOKEN: "fixture-secret",
+          ANTHROPIC_API_KEY: "private-key",
+          PI_CODING_AGENT_DIR: "unrelated-store",
+          QUOTA_ONLY: "quota",
+          [source === "claude" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"]: nativeB,
+        });
+        for (const key of ["CODING_ONLY", "REMOVE_QUOTA", "CLAUDE_CODE_SESSION_ID"])
+          expect(quota.env[key]).toBeUndefined();
+        expect(code.childEnv[variable]).toBe(configDir === null ? nativeA : undefined);
+        expect(code.childEnv.QUOTA_ONLY).toBeUndefined();
+        expect(code.childEnv.REMOVE_QUOTA).toBe("remove");
+        expect(code.quota?.unset).toEqual(["REMOVE_QUOTA"]);
+        expect(caller[variable]).toBe(nativeB);
+        expect(JSON.stringify(config)).toBe(before);
+        expect(readFileSync(path)).toEqual(bytes);
+      }
+    },
+  );
 
   it.each(["pi", "claude"] as const)(
     "resolves explicit Codex quota independently of %s overrides",
@@ -313,6 +401,57 @@ describe("independent quota configuration", () => {
 });
 
 describe("effective profiles through CLI launch and resume", () => {
+  it("unsets inherited storage for a real null-configured child and describes the reset", async () => {
+    settings({ profiles: { a: { agent: "claude", configDir: null, unset: ["TOKEN"] } } });
+    env.CLAUDE_CONFIG_DIR = nativeB;
+    const bytes = readFileSync(join(home, ".alignfirst/aligndev.settings.json"));
+    const initial = await launch(["new", "-m", "go"]);
+    expect(initial.code, initial.stderr).toBe(0);
+    expect(observed()).toMatchObject({
+      store: join(home, ".claude"),
+      directoryPresent: false,
+      keyPresent: false,
+      parentPresent: false,
+      ceiling: "0",
+    });
+    expect(initial.modelResolver).toHaveBeenCalledWith("claude", undefined, {
+      cwd: project,
+      env: expect.not.objectContaining({ CLAUDE_CONFIG_DIR: expect.anything() }),
+    });
+    expect(existsSync(join(home, ".claude/identity"))).toBe(true);
+    expect(existsSync(join(nativeB, "identity"))).toBe(false);
+    const resumed = await launch(["resume", "native-session", "-m", "more"]);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    expect(newest().frontmatter).toMatchObject({ profile: "a", sessionId: "native-session" });
+    expect(observed().directoryPresent).toBe(false);
+    const help = await launch(["--help"]);
+    const stdout = makeSink();
+    const stderr = makeSink();
+    expect(
+      await main({
+        argv: ["node", "aligndev", "guide", "code"],
+        cwd: project,
+        home,
+        env,
+        alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+        stdout,
+        stderr,
+      }),
+      stderr.text(),
+    ).toBe(0);
+    env.FIXTURE_AUTH_FAILURE = "1";
+    const failed = await launch(["new", "-m", "go", "--quiet"]);
+    expect(failed.code, failed.stderr).toBe(2);
+    for (const text of [help.stdout, stdout.text(), failed.stderr]) {
+      expect(text).toContain("CLAUDE_CONFIG_DIR: unset by configDir: null; native defaults apply");
+      expect(text).toContain("HOME: inherited environment (value omitted)");
+      expect(text).not.toContain(nativeB);
+      expect(text).not.toContain("fixture-secret");
+    }
+    expect(env.CLAUDE_CONFIG_DIR).toBe(nativeB);
+    expect(readFileSync(join(home, ".alignfirst/aligndev.settings.json"))).toEqual(bytes);
+  });
+
   it.each([false, true])(
     "records inferred singleton/preferred profiles and preserves named resume: %s",
     async (multiple) => {

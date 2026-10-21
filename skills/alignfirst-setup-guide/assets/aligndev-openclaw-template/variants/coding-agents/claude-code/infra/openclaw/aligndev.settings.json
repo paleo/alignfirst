@@ -6,7 +6,7 @@
     "profiles": {
       "service-claude": {
         "agent": "claude",
-        "configDir": "~/.claude",
+        "configDir": null,
         "skipPermissions": true,
         "unset": ["ANTHROPIC_API_KEY"]
       }

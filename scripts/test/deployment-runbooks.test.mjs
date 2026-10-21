@@ -111,6 +111,121 @@ for (const agent of agents) {
   });
 }
 
+test("native-default rendered Codex authentication removes login-shell routing and preserves explicit strings", () => {
+  for (const selection of [null, "~/.codex", "../native/custom codex"]) {
+    fixture("codex", "slack", (f) => {
+      f.install();
+      const settings = JSON.parse(readFileSync(f.deployed, "utf8"));
+      settings.code.profiles[settings.code.profile].configDir = selection;
+      writeFileSync(f.deployed, JSON.stringify(settings));
+      const block = f.block("installations/08-coding-agent.md", "codex login --device-auth");
+      const interactive = block.replace(
+        "sudo -i -u fixture\n",
+        "sudo -H -u fixture bash -l <<'NATIVE_LOGIN'\n",
+      );
+      assert.notEqual(interactive, block, "Replace only the interactive account-shell entry");
+      f.run(`${interactive}\nNATIVE_LOGIN`, 0, {
+        CODEX_HOME: "/inherited-wrong-account",
+        RUNBOOK_LOGIN_CODEX_HOME: "/login-shell-wrong-account",
+      });
+      const calls = readFileSync(join(f.root, "native-calls.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map(JSON.parse);
+      assert.deepEqual(
+        calls.map((call) => call.args),
+        [
+          ["login", "--device-auth"],
+          ["login", "status"],
+        ],
+      );
+      for (const call of calls) {
+        assert.equal(call.present, selection !== null);
+        assert.equal(
+          call.configDir,
+          selection === null
+            ? undefined
+            : selection === "~/.codex"
+              ? f.native
+              : join(f.home, "native/custom codex"),
+        );
+        assert.equal(call.apiKeyPresent, false);
+      }
+    });
+  }
+});
+
+test("install inventory crosses private account boundaries and fails closed without errexit", () => {
+  for (const agent of agents) {
+    fixture(agent, "slack", (f) => {
+      const command = agent === "claude-code" ? "claude" : agent;
+      const variable = {
+        claude: "CLAUDE_CONFIG_DIR",
+        codex: "CODEX_HOME",
+        pi: "PI_CODING_AGENT_DIR",
+      }[command];
+      const settingsPath = join(f.admin, "infra/openclaw/aligndev.settings.json");
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const profile = settings.code.profiles[settings.code.profile];
+      const guard = join(f.root, "private-home.mjs");
+      writeFileSync(
+        guard,
+        `import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+const read = fs.readFileSync;
+fs.readFileSync = (path, ...args) => {
+  if (process.env.RUNBOOK_ROLE === "service" &&
+      String(path).startsWith(${JSON.stringify(f.admin)} + "/")) {
+    throw Object.assign(new Error("EACCES: private admin repository"), { code: "EACCES" });
+  }
+  return read(path, ...args);
+};
+const lstat = fs.lstatSync;
+fs.lstatSync = (path, ...args) => {
+  if (process.env.RUNBOOK_ROLE === "operator" &&
+      String(path).startsWith(process.env.RUNBOOK_HOME + "/")) {
+    throw Object.assign(new Error("EACCES: private service home"), { code: "EACCES" });
+  }
+  return lstat(path, ...args);
+};
+syncBuiltinESMExports();
+`,
+      );
+      const env = {
+        RUNBOOK_ROLE: "operator",
+        NODE_OPTIONS: `--import=${networkGuard} --import=${guard}`,
+        [variable]: "/inherited-wrong-account",
+        RUNBOOK_LOGIN_CODEX_HOME: "/login-shell-wrong-account",
+      };
+      const install = f.block("installations/08-coding-agent.md", `command -v ${command}`);
+      // Only execute the version check, never the preceding package installation.
+      const check = `set +e\n${install.slice(install.indexOf("set -o pipefail"))}`;
+      const inventory = `${process.execPath} infra/openclaw/deployment-profiles.mjs "${settingsPath}" "${f.home}" "${f.deployed}"`;
+      f.run(inventory, 1, env);
+      assert.match(f.last.stderr, /EACCES: private service home/u);
+      f.run(inventory, 1, { ...env, RUNBOOK_ROLE: "service" });
+      assert.match(f.last.stderr, /EACCES: private admin repository/u);
+      for (const selection of [null, `~/${relative(f.home, f.native)}`]) {
+        profile.configDir = selection;
+        writeFileSync(settingsPath, JSON.stringify(settings));
+        f.run(check, 0, env);
+        const call = JSON.parse(
+          readFileSync(join(f.root, "native-calls.jsonl"), "utf8").trim().split("\n").at(-1),
+        );
+        assert.deepEqual(call.args, ["--version"]);
+        assert.equal(call.present, selection !== null);
+        assert.equal(call.configDir, selection === null ? undefined : f.native);
+        assert.equal(call.role, "service");
+      }
+      const before = readFileSync(join(f.root, "native-calls.jsonl"), "utf8");
+      profile.configDir = "/outside-service-home";
+      writeFileSync(settingsPath, JSON.stringify(settings));
+      f.run(check, 1, env);
+      assert.equal(readFileSync(join(f.root, "native-calls.jsonl"), "utf8"), before);
+    });
+  }
+});
+
 test("native recovery reads a protected reviewed copy while the admin home stays denied", () => {
   fixture("pi", "slack", (f) => {
     f.install();
@@ -301,6 +416,9 @@ function fixture(agent, surface, callback) {
       "chattr",
       "runuser",
       "openclaw",
+      "claude",
+      "codex",
+      "pi",
       "mktemp",
       "date",
       "find",
@@ -358,7 +476,8 @@ function render(text, f, agent) {
     SERVICE_USER: "fixture",
     SERVER_ADMIN_USER: "operator",
     ADMIN_REPOSITORY_NAME: "admin",
-    PI_CONFIG_DIR: "~/.pi/agent",
+    PI_CONFIG_DIR_JSON: "null",
+    PI_CONFIG_DIR_DISPLAY: "~/.pi/agent (native default)",
     PI_PROVIDER: "openai",
     PI_MODEL: "fixture-model",
     PI_AUTH_METHOD: "OAuth",
@@ -600,11 +719,21 @@ function commandDouble() {
       RUNBOOK_ROLE: role,
     });
   } else if (name === "bash") {
+    const env = { ...process.env };
+    if (
+      args.some((arg) => ["-l", "--login", "-lc"].includes(arg)) &&
+      env.RUNBOOK_LOGIN_CODEX_HOME !== undefined
+    ) {
+      env.CODEX_HOME = env.RUNBOOK_LOGIN_CODEX_HOME;
+      env.CODEX_API_KEY = "offline-key-marker";
+      env.OPENAI_API_KEY = "offline-key-marker";
+    }
     execute(
       "/bin/bash",
       args
         .filter((arg) => !["-l", "--login"].includes(arg))
         .map((arg) => (arg === "-lc" ? "-c" : arg)),
+      env,
     );
   } else if (name === "id") {
     if (args.join(" ") === "-u") console.log(process.env.RUNBOOK_ROLE === "root" ? "0" : "1000");
@@ -693,6 +822,29 @@ function commandDouble() {
     if (env.HOME !== home || env.PATH.includes("/usr/bin"))
       throw new Error("Unsafe service environment");
     execute(join(bin, args.shift()), args, env);
+  } else if (["claude", "codex", "pi"].includes(name)) {
+    if (
+      args.join(" ") !== "--version" &&
+      !(name === "codex" && ["login --device-auth", "login status"].includes(args.join(" ")))
+    )
+      throw new Error("Unexpected offline native command");
+    const variable = {
+      claude: "CLAUDE_CONFIG_DIR",
+      codex: "CODEX_HOME",
+      pi: "PI_CODING_AGENT_DIR",
+    }[name];
+    fs.appendFileSync(
+      join(root, "native-calls.jsonl"),
+      `${JSON.stringify({
+        args,
+        role: process.env.RUNBOOK_ROLE,
+        present: Object.hasOwn(process.env, variable),
+        configDir: process.env[variable],
+        apiKeyPresent:
+          Object.hasOwn(process.env, "CODEX_API_KEY") ||
+          Object.hasOwn(process.env, "OPENAI_API_KEY"),
+      })}\n`,
+    );
   } else if (name === "openclaw") {
     if (
       args.length !== 6 ||

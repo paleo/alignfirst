@@ -80,6 +80,16 @@ overlay, one coding-agent overlay and the optional dev-server gateway. The gener
 configuration from the installed OpenClaw version, keep secrets outside git, and prepare managed
 projects through the complete AlignDev contract.
 
+### Native-directory selection
+
+Ordinary developer setup omits `configDir` to inherit the caller's native directory variable unless profile `env`/`unset` changes it. Deployments instead require null or a string for every coding profile and enabled explicit quota source. Generated service defaults use null, removing `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR` so native defaults apply. Custom strings resolve and set the variable; even a string naming the default path remains an explicit selection.
+
+The inventory maps null to the native default beneath the service home and always emits an absolute filesystem path. Authentication/status, configuration/trust, package installation, readiness and update/recovery commands must read mode from the relevant named profile/quota settings, then unset or set the variable after login-shell initialization. Filesystem operations retain the inventory path. Stores deduplicated by path may still need different native invocation modes; coding and explicit quota selections remain independent.
+
+Pi rendering separates `PI_CONFIG_DIR_JSON` (raw JSON null or an encoded string) from `PI_CONFIG_DIR_DISPLAY` (human-facing text). `PI_QUOTA_JSON` is a raw JSON object, with a null/string directory for an enabled native source or only `{"source":"none"}`. These typed values are substituted without surrounding quotes; `PI_CONFIG_DIR` is obsolete.
+
+Confirm the intended mode before changing an existing string. Upgrade the CLI, inventory/policy helpers, settings and matching runbooks together through controlled maintenance; no settings conversion is automatic. On macOS, explicitly setting Claude's default path can select different Keychain credentials from leaving the variable unset. A null reset affects only directory routing, not HOME, PATH or API-key precedence; it includes no login or credential transfer. Authenticate under the same effective environment and cwd as the selected child or quota source.
+
 ### Pi deployment gate
 
 Pi deployment templates target Pi 1.3.0 on both Slack and Discord. The earlier credential-policy blocker was resolved by explicit approval of one exception: `<agent-dir>/auth.json` remains private, service-owned and writable/replaceable, including adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also declare executable API-key commands. Another process under that UID can persist a command for later Pi execution with the account's privileges. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish native renewal from other same-UID writers.

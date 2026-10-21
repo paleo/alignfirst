@@ -85,7 +85,7 @@ Then ask your session to work with aligndev.
 ```json
 {
   "code": {
-    "profiles": { "work": { "agent": "claude", "configDir": "~/.claude-work" } }
+    "profiles": { "work": { "agent": "claude" } }
   }
 }
 ```
@@ -99,9 +99,9 @@ For multiple accounts and independent quota sources:
   "code": {
     "profile": "codex-personal",
     "profiles": {
-      "codex-personal": { "agent": "codex", "configDir": "~/.codex", "defaultModel": "sol" },
+      "codex-personal": { "agent": "codex", "defaultModel": "sol" },
       "claude-personal": {
-        "agent": "claude", "default": true, "configDir": "~/.claude", "defaultModel": "opus",
+        "agent": "claude", "default": true, "defaultModel": "opus",
         "unset": ["ANTHROPIC_API_KEY"]
       },
       "claude-work": {
@@ -109,14 +109,14 @@ For multiple accounts and independent quota sources:
         "unset": ["ANTHROPIC_API_KEY"]
       },
       "pi-codex": {
-        "agent": "pi", "default": true, "configDir": "~/.pi/agent", "defaultModel": "sol",
+        "agent": "pi", "default": true, "defaultModel": "sol",
         "modelAliases": { "sol": "openai/sol" },
-        "quota": { "source": "codex", "configDir": "~/.codex" }
+        "quota": { "source": "codex" }
       },
       "pi-anthropic": {
         "agent": "pi", "configDir": "~/.pi/anthropic", "defaultModel": "opus",
         "modelAliases": { "opus": "anthropic/opus" },
-        "quota": { "source": "claude", "configDir": "~/.claude" }
+        "quota": { "source": "claude" }
       }
     }
   }
@@ -135,9 +135,9 @@ Remove `code.profile` above to use automatic per-agent selection: the sole Codex
 Each profile accepts:
 
 - `default` — optional boolean preference for this profile's agent. With several matching profiles, exactly one true flag selects the preference. Omitted and false are equivalent; a sole matching profile needs no flag. At most one true flag per agent is allowed, even with a named choice. Independent defaults for different agents are valid. The flag never selects an agent kind.
-- `configDir` — native configuration and authentication storage: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. `~/` uses the configured home; relative paths resolve against the settings directory. Omission keeps native inherited/default storage.
+- `configDir` — native directory selection through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. Omit it for ordinary setup: the caller's variable is inherited unless `env` or `unset` changes it; without a variable, native defaults apply. `null` deliberately removes that variable to force native-default directory behavior. A string resolves and sets it, including when naming the default path. `~/` uses the configured home; relative paths resolve against the settings directory.
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
-- `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. An explicit `configDir` cannot coexist with its native directory variable in either field.
+- `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
 - `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi accepts every nonblank selector. An empty list adds no override.
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A Codex alias target such as `sol` still resolves through its bundled catalog.
@@ -146,9 +146,11 @@ Each profile accepts:
 
 Selection for new sessions, help, `guide code`, and quota: `--profile` → project registry selection → `code.profile` → automatic resolution. Resume inserts its latest recorded named profile before the global selection. Named choices bypass parent detection; a missing name fails rather than falling through. Automatic resolution selects a sole matching profile or the unique true flag among several matches; without either, several matches are ambiguous. No matching profile uses the detected agent's built-ins. Without a parent, zero or several profiles require a named choice, regardless of flags. Several detected kinds always require a named choice. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics.
 
-`aligndev code quota [--profile <name>]` needs neither a ticket nor `.plans` and starts no coding session. Explicit quota settings start from the original caller environment, apply only their own `unset`, `env` and source-specific `configDir`, then strip parent-session identities. Coding-profile overrides and Pi credentials are not copied into the quota environment. The same path and validation rules apply. For multiple accounts, set quota `configDir` explicitly; omission deliberately keeps the native CLI's inherited/default configuration. Pair each Pi profile with the intended Codex or Claude account, as in the examples above. Reports name the profile and native source; the limits belong to that CLI's account. AlignDev does not verify that it matches Pi's account or infer it from a model. Native requests time out after 30 seconds and await bounded process cleanup.
+`aligndev code quota [--profile <name>]` needs neither a ticket nor `.plans` and starts no coding session. Explicit quota settings start from the original caller environment, apply only their own `unset`, `env` and source-specific `configDir`, then strip parent-session identities. Coding-profile overrides and Pi credentials are not copied into the quota environment. The same path and validation rules apply. Select quota storage only when needed: omission inherits independently from the original caller, null removes the source's native directory variable, and a string selects explicit storage. Pair each Pi profile with the intended Codex or Claude account, using a custom quota directory when account separation is intended. Reports name the profile and native source; the limits belong to that CLI's account. AlignDev does not verify that it matches Pi's account or infer it from a model. Native requests time out after 30 seconds and await bounded process cleanup.
 
-The child inherits the caller environment, removes `unset`, then applies `env` and `configDir`. Parent-session identities are stripped afterward, and required adapter values win. The same finalized environment reaches discovery, execution and native context lookup. Help, guides and failures identify native storage selected through `configDir`, profile environment overrides, inherited variables or profile removal. They show environment-variable names and origins, never their values. Login must reproduce that effective environment and cwd. No environment values are printed or saved in run metadata.
+For example, `"configDir": null` forces native-default mode despite an inherited directory variable; `"configDir": "~/.claude-work"` deliberately selects custom Claude storage. On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select different Keychain credentials from leaving it unset. Such a string remains valid and is distinct from omission or null. Confirm the intended mode before changing an existing selection; AlignDev performs no settings rewrite, credential transfer or automatic login. A null reset changes only directory routing, not HOME, PATH or API-key precedence.
+
+The child inherits the caller environment, removes `unset`, then applies `env` and the directory selection (setting a string or removing the native variable for null). Parent-session identities are stripped afterward, and required adapter values win. The same finalized environment reaches discovery, execution and native context lookup. Help, guides and failures identify native storage selected through a string `configDir`, a null reset, profile environment overrides, inherited variables or profile removal. They show environment-variable names and origins, never their values. Login must reproduce that effective environment and cwd. No environment values are printed or saved in run metadata.
 
 Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records with blank or missing profiles read as null. Unless an explicit, project or global named choice replaces null, resume uses detected built-ins, ignoring configured profile counts and flags, and records null in the new run. No or several detected parents still fail. Original records remain unchanged. A deleted recorded name needs an explicit or project replacement; global selection and inference cannot rescue it. Status reads durable metadata even when launch settings are invalid or a profile has been deleted.
 
@@ -172,6 +174,8 @@ Install the setup skill where your agent will assemble the deployment's private 
 ```sh
 npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
 ```
+
+Deployments require null or a string for every coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
 Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
 

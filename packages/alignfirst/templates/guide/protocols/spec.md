@@ -71,10 +71,11 @@ Required skills: `skill-1`, `skill-2`
 
 Content rules:
 
-- The spec covers the full scope of the task. Dropping a part to shrink the spec is a frequent failure; splitting the work is the job of the *plan* protocol. Flag inline a section that should land in its own plan ("candidate for a specialized plan").
+- The spec covers the full scope of the task. Dropping a part to shrink the spec is a frequent failure; splitting the work is the job of the *plan* protocol. When a part of the work clearly stands apart, note it inline ("candidate for a specialized plan").
 - Spell out every change to a code contract: database schema and migrations, API shapes, critical type definitions. Leave out other code; refer to source files by path or function name.
 - The code may change before the spec is executed. Name functions, never line numbers.
 - Specify a clean break. Unused code is removed. Backward compatibility appears only when the user asked for it.
+- Leave tests and verification to the plan, except for a decision the user took about them.
 - Leave out sections that add no information: "Benefits", "Code Style Compliance", and the like. Problem and solution only.
 
 Ignore Markdown lint errors in the spec file. Fixing them wastes the session.
