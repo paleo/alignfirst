@@ -1,5 +1,11 @@
 # aligndev
 
+## 0.27.0
+
+### Minor Changes
+
+- 6d1eaa2: Added `configDir: null` to force native-default directory selection for coding profiles and native quota sources.
+
 ## 0.26.0
 
 ### Minor Changes

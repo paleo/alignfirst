@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.13.2
+
+### Patch Changes
+
+- 6d1eaa2: Tightened the spec and plan protocols: verification leaves the spec for the plan, the size of the work decides the split, and the plan review keeps only what the task needs.
+
 ## 0.13.1
 
 ### Patch Changes
