@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.50.0"
+  version: "0.51.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
