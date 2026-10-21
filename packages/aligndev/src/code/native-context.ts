@@ -3,9 +3,11 @@ import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
 export function describeNativeStorage(code: CodeConfig): string {
   const variable = CONFIG_DIRECTORY_VARIABLES[code.agent];
   const directory =
-    code.configDir === undefined
-      ? describeVariable(code, variable)
-      : `${variable}: configDir ${JSON.stringify(code.configDir)}`;
+    code.configDir === null
+      ? `${variable}: unset by configDir: null; native defaults apply`
+      : code.configDir === undefined
+        ? describeVariable(code, variable)
+        : `${variable}: configDir ${JSON.stringify(code.configDir)}`;
   const home = ["HOME", "USERPROFILE"]
     .filter((name) => code.childEnv[name] !== undefined || code.unset?.includes(name))
     .map((name) => describeVariable(code, name));

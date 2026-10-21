@@ -253,7 +253,7 @@ set -eo pipefail
 EOS
 ```
 
-In an interactive Pi session using that store, verify `/login`, a real OAuth refresh, native adjacent auth lock creation/removal and session/cache writes; do not print credentials. The disposable lock probe alone does not prove the native renewal flow. Restart Pi in the approved parent and a new linked worktree to verify inherited saved trust. OpenClaw needs no `pi-background` for a Pi child. Test failed-command restoration before reopening the channel:
+For each original Pi profile selection, repeat the login-shell routing in `08-coding-agent.md`: unset `PI_CODING_AGENT_DIR` for null or set the resolved explicit path for a string. Shared filesystem paths may have different modes. In that routed interactive session, verify `/login`, a real OAuth refresh, native adjacent auth lock creation/removal and session/cache writes; do not print credentials. The disposable lock probe alone does not prove the native renewal flow. Restart Pi in the approved parent and a new linked worktree to verify inherited saved trust. OpenClaw needs no `pi-background` for a Pi child. Test failed-command restoration before reopening the channel:
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance instructions agent-skills agent-config -- false

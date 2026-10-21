@@ -97,7 +97,7 @@ export interface CodeSettings {
 export interface CodingProfile {
   agent: CodingAgent;
   default?: boolean;
-  configDir?: string;
+  configDir?: string | null;
   defaultModel?: string;
   models?: string[];
   modelAliases?: Record<string, string>;
@@ -109,7 +109,7 @@ export interface CodingProfile {
 
 export interface QuotaSettings {
   source: "claude" | "codex" | "none";
-  configDir?: string;
+  configDir?: string | null;
   env?: Record<string, string>;
   unset?: string[];
 }
@@ -134,7 +134,7 @@ export function loadConfig(home: string): LoadedConfig {
   for (const [name, profile] of Object.entries(code.profiles ?? {})) {
     const field = `code.profiles[${JSON.stringify(name)}]`;
     validateEnvironment(profile, profile.agent, field, path);
-    if (profile.configDir !== undefined)
+    if (typeof profile.configDir === "string")
       profile.configDir = resolvePath(profile.configDir, home, path);
     if (profile.quota !== undefined) {
       const quota = profile.quota;
@@ -145,7 +145,8 @@ export function loadConfig(home: string): LoadedConfig {
       } else {
         validateEnvironment(quota, quota.source, `${field}.quota`, path);
       }
-      if (quota.configDir !== undefined) quota.configDir = resolvePath(quota.configDir, home, path);
+      if (typeof quota.configDir === "string")
+        quota.configDir = resolvePath(quota.configDir, home, path);
     }
   }
   return {
@@ -219,13 +220,14 @@ function invalidConfig(path: string, detail: string): Error {
   return new Error(`Error: invalid aligndev config ${path}: ${detail}`);
 }
 
-function directoryValue(value: unknown, path: string): string {
+function directoryValue(value: unknown, path: string): string | null {
+  if (value === null) return null;
   nonblankString(value, path);
   return nulFreeString(value, path);
 }
 
 function validateEnvironment(
-  settings: { env?: Record<string, string>; unset?: string[]; configDir?: string },
+  settings: CodingProfile | QuotaSettings,
   agent: CodingAgent,
   field: string,
   path: string,
@@ -260,18 +262,29 @@ export function resolveQuotaConfig(code: CodeConfig, callerEnv: NodeJS.ProcessEn
     if (code.agent === "pi") {
       throw new Error(
         "Pi account quota is unsupported without explicit configuration: " +
-          "set quota.source to claude or codex with its native configDir, or none to disable it.",
+          "set quota.source to claude or codex, or none to disable it.",
       );
     }
     return { source: code.agent, env: code.childEnv };
   }
-  const overrides = { ...quota.env };
-  if (quota.configDir !== undefined)
-    overrides[CONFIG_DIRECTORY_VARIABLES[quota.source]] = quota.configDir;
   return {
     source: quota.source,
-    env: buildAgentEnv(callerEnv, quota.unset ?? [], overrides),
+    env: buildNativeEnv(callerEnv, quota, quota.source),
   };
+}
+
+function buildNativeEnv(
+  callerEnv: NodeJS.ProcessEnv,
+  settings: CodingProfile | QuotaSettings,
+  agent: CodingAgent,
+  required: Readonly<Record<string, string>> = {},
+): NodeJS.ProcessEnv {
+  const variable = CONFIG_DIRECTORY_VARIABLES[agent];
+  const overrides = { ...settings.env };
+  if (typeof settings.configDir === "string") overrides[variable] = settings.configDir;
+  const unset = settings.unset ?? [];
+  const removals = settings.configDir === null ? [...unset, variable] : unset;
+  return buildAgentEnv(callerEnv, removals, overrides, required);
 }
 
 export interface ProfileSelection {
@@ -300,20 +313,12 @@ export function resolveCodeConfig(
     effectiveName = automatic.name;
   }
   checkDefaultModel(profile, config.path, effectiveName);
-  const overrides = { ...profile.env };
-  if (profile.configDir !== undefined)
-    overrides[CONFIG_DIRECTORY_VARIABLES[profile.agent]] = profile.configDir;
   return {
     ...profile,
     profile: effectiveName ?? null,
     skipPermissions: profile.skipPermissions ?? false,
     unset: profile.unset ?? [],
-    childEnv: buildAgentEnv(
-      env,
-      profile.unset ?? [],
-      overrides,
-      createAgentAdapter(profile.agent).env,
-    ),
+    childEnv: buildNativeEnv(env, profile, profile.agent, createAgentAdapter(profile.agent).env),
   };
 }
 

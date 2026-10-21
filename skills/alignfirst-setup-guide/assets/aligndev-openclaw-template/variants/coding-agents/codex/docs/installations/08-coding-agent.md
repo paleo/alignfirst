@@ -35,7 +35,15 @@ source ~/.bashrc
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @openai/codex
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'which codex && codex --version'
+set -o pipefail
+settings=infra/openclaw/aligndev.settings.json
+store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+sudo -H -u {{SERVICE_USER}} bash -lc '
+  if [ "$1" = true ]; then unset CODEX_HOME; else export CODEX_HOME="$2"; fi
+  command -v codex && codex --version
+' bash "$native_default" "$store"
 # Expected: /home/{{SERVICE_USER}}/.npm-system-global/bin/codex
 ```
 
@@ -54,10 +62,15 @@ printf "alias codexy='codex --yolo'\n" | sudo -H -u {{SERVICE_USER}} tee -a /hom
 ```sh
 sudo -i -u {{SERVICE_USER}}
 set -o pipefail
-CODEX_HOME=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir') || exit 1
-export CODEX_HOME
+settings="$HOME/.alignfirst/aligndev.settings.json"
+store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
+if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+  unset CODEX_HOME
+else
+  export CODEX_HOME="$store"
+fi
+unset CODEX_API_KEY OPENAI_API_KEY
 codex login --device-auth
 codex login status
 exit
@@ -86,36 +99,42 @@ The `sysadmin` skill is project-local to the admin repository and belongs to the
 npx -y skills add https://github.com/paleo/skills --yes --agent codex --skill sysadmin < /dev/null
 ```
 
-**System skills.** Codex unpacks bundled skills into `<configDir>/skills/.system/` at session start, behind a content-hash marker. Run this block before `06-security-hardening.md` for every inventoried Codex store, including quota-only stores. This is a live model-backed acceptance command, not an offline test. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
+**System skills.** Codex unpacks bundled skills into `<configDir>/skills/.system/` at session start, behind a content-hash marker. Run this block before `06-security-hardening.md`. It visits each Codex profile and quota selection, retaining null/string modes even for a shared filesystem path. Reproduce any additional selected `env`/`unset` and credential routing before invoking Codex. This is a live model-backed acceptance command, not an offline test. `codex exec` reads stdin even with a prompt argument, hence `< /dev/null`.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
 set -eo pipefail
+settings="$HOME/.alignfirst/aligndev.settings.json"
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" |
-  jq -r '.stores[] | select(.agent == "codex") | .configDir' |
-  while IFS= read -r store; do
+  "$settings" "$HOME" "$settings" >/dev/null
+jq -c '.code.profiles[] | ., .quota? | select(.agent == "codex" or .source == "codex")' \
+  "$settings" | while IFS= read -r launch; do
+    store=$(/usr/bin/node -e '
+      const {resolve, dirname} = require("node:path");
+      const value = JSON.parse(process.argv[1]).configDir;
+      console.log(value === null ? resolve(process.env.HOME, ".codex") :
+        value.startsWith("~/") ? resolve(process.env.HOME, value.slice(2)) :
+        resolve(dirname(process.argv[2]), value));' "$launch" "$settings")
+    if jq -e '.configDir == null' <<<"$launch" >/dev/null; then
+      unset CODEX_HOME
+    else
+      export CODEX_HOME="$store"
+    fi
+    unset CODEX_API_KEY OPENAI_API_KEY
     mkdir -p "$store/skills"
-    CODEX_HOME="$store" codex exec --sandbox read-only --skip-git-repo-check \
+    codex exec --sandbox read-only --skip-git-repo-check \
       -C /tmp 'Reply with exactly OK and stop.' < /dev/null
   done
 EOS
 ```
 
-After `06`, run the same refresh through the root-owned maintenance wrapper. It contains the assistant before the directory becomes writable and restores the directory through an `EXIT` trap:
-
-```sh
-sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- \
-  env CODEX_HOME=<resolved-service-codex-dir> codex exec --sandbox read-only \
-  --skip-git-repo-check -C /tmp 'Reply with exactly OK and stop.' < /dev/null
-```
+After `06`, repeat the entire refresh block, replacing only its first line with `sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-skills -- bash -l <<'EOS'`. Keep the body and closing `EOS`. The wrapper contains the assistant and restores policy through an `EXIT` trap; the loop applies each selection after login-shell initialization.
 
 The bundled `skill-creator` and `skill-installer` become visible to the delegated agent. They cannot persist anything: both skill roots are admin-owned, so an install attempt fails with `Permission denied`.
 
 ### Global Instructions
 
-The `service-codex` profile sets explicit `configDir: "~/.codex"`, overriding inherited `CODEX_HOME`. Isolated custom stores beneath the service home are supported. Set `CODEX_HOME` to each profile's inventoried resolved directory for authentication and native commands; the login example above selects the deployment default. Profiles sharing a store share its account. Optional quota credentials belong to the quota store independently of the coding child.
+The `service-codex` profile pins native-default mode with `configDir: null`, removing inherited `CODEX_HOME`. A string sets that variable to its resolved explicit path, including a string naming `~/.codex`. Custom stores must be isolated beneath the service home. The login example selects the deployment default after shell initialization. For another profile or quota selection, use its original null/string setting and resolved path; reproduce its `env`/`unset`, cwd and credential routing too. Filesystem deduplication does not merge invocation modes. Optional quota credentials are independent of the coding child.
 
 The seed merges `infra/openclaw/coding-agent/AGENTS.md` into `<configDir>/AGENTS.md` for every inventoried Codex store, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `codex` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
@@ -130,17 +149,22 @@ Verify each resolved store: opening instructions for writing, unlinking instruct
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
 set -eo pipefail
-CODEX_HOME=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir')
-export CODEX_HOME
-if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$CODEX_HOME/AGENTS.md"; then
+settings="$HOME/.alignfirst/aligndev.settings.json"
+store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" | jq -er '.configDir')
+if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+  unset CODEX_HOME
+else
+  export CODEX_HOME="$store"
+fi
+unset CODEX_API_KEY OPENAI_API_KEY
+if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$store/AGENTS.md"; then
   echo 'ERROR: instructions are writable' >&2; exit 1
 fi
-if rm "$CODEX_HOME/AGENTS.md"; then
+if rm "$store/AGENTS.md"; then
   echo 'ERROR: instructions were removable; restore them before restart' >&2; exit 1
 fi
-if touch "$CODEX_HOME/skills/probe"; then
+if touch "$store/skills/probe"; then
   echo 'ERROR: native skills are writable; remove probe and restore policy' >&2; exit 1
 fi
 codex login status
@@ -164,12 +188,7 @@ CODING_AGENT=codex \
 '
 ```
 
-A Codex upgrade changes the system-skills marker, so repeat the post-hardening maintenance command in [Skills](#skills). Then verify the marker took: a second session prints nothing.
-
-```sh
-sudo -H -u {{SERVICE_USER}} env CODEX_HOME=<resolved-service-codex-dir> \
-  bash -lc 'cd /tmp && codex exec --sandbox read-only --skip-git-repo-check -C /tmp "Reply with exactly OK and stop." 2>&1 | grep -i "system skills"' < /dev/null
-```
+A Codex upgrade changes the system-skills marker, so repeat the post-hardening refresh in [Skills](#skills). Run that same profile/quota loop a second time and inspect each invocation's output: no further system-skills unpacking message means the marker took. Keep each selection's null/string routing in both passes.
 
 The `skills` scope of `update-assistant.md` covers `~/.agents` and `~/.openclaw/skills`. Codex's bundled skills under `~/.codex/skills` use the separate `agent-skills` scope.
 

@@ -6,7 +6,7 @@
     "profiles": {
       "service-codex": {
         "agent": "codex",
-        "configDir": "~/.codex",
+        "configDir": null,
         "skipPermissions": true,
         "unset": [
           "OPENAI_API_KEY",

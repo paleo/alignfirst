@@ -6,7 +6,7 @@
     "profiles": {
       "service-pi": {
         "agent": "pi",
-        "configDir": "{{PI_CONFIG_DIR}}",
+        "configDir": {{PI_CONFIG_DIR_JSON}},
         "defaultModel": "{{PI_PROVIDER}}/{{PI_MODEL}}",
         "quota": {{PI_QUOTA_JSON}}
       }

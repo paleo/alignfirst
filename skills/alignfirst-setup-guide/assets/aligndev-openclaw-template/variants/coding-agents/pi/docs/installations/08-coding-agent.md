@@ -9,7 +9,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. [Admin Account](#admin-account) runs during `01-server-setup.md`; [Install](#install) runs during `03-toolchain.md` after the other protected npm CLIs are installed.
 
-OpenClaw is the persistent parent. The `service-pi` profile selects Pi explicitly, independently of parent detection and OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory `{{PI_CONFIG_DIR}}`, and authentication method **{{PI_AUTH_METHOD}}**. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
+OpenClaw is the persistent parent. The `service-pi` profile selects Pi explicitly, independently of parent detection and OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory {{PI_CONFIG_DIR_DISPLAY}}, and authentication method **{{PI_AUTH_METHOD}}**. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
 
 ## Admin Account
 
@@ -45,7 +45,15 @@ sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
 sudo chmod -R go-w /home/{{SERVICE_USER}}/.npm-system-global
 sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
 sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.3.0
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'command -v pi; PI_OFFLINE=1 pi --version'
+set -o pipefail
+settings=infra/openclaw/aligndev.settings.json
+store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+sudo -H -u {{SERVICE_USER}} bash -lc '
+  if [ "$1" = true ]; then unset PI_CODING_AGENT_DIR; else export PI_CODING_AGENT_DIR="$2"; fi
+  command -v pi; PI_OFFLINE=1 pi --version
+' bash "$native_default" "$store"
 # Expected executable: /opt/{{SERVICE_USER}}/bin/pi
 ```
 
@@ -63,10 +71,14 @@ Open an interactive service-account shell and select the rendered store:
 sudo -i -u {{SERVICE_USER}}
 # Resolve ~/ and relative values using the deployed settings, not the operator cwd/home.
 set -o pipefail
-PI_CODING_AGENT_DIR=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir') || exit 1
-export PI_CODING_AGENT_DIR
+settings="$HOME/.alignfirst/aligndev.settings.json"
+store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
+if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+  unset PI_CODING_AGENT_DIR
+else
+  export PI_CODING_AGENT_DIR="$store"
+fi
 pi
 ```
 
@@ -79,7 +91,48 @@ pi auth check --provider '{{PI_PROVIDER}}' --json
 exit
 ```
 
-Do not use `--credentials` or credential-printing commands in reports. When selecting environment authentication, remove an obsolete stored provider credential through `/logout` first; Pi prefers stored credentials to environment keys. For optional Claude/Codex quota, install that native CLI separately and authenticate its explicitly configured quota directory. Quota readiness does not establish Pi account identity.
+Do not use `--credentials` or credential-printing commands in reports. When selecting environment authentication, remove an obsolete stored provider credential through `/logout` first; Pi prefers stored credentials to environment keys. `configDir: null` removes inherited `PI_CODING_AGENT_DIR`; a string sets its resolved explicit path. Both have absolute filesystem inventory paths. Apply routing after login-shell initialization for every native command, including trust, package installation and readiness checks. Reproduce the selected profile's additional `env`/`unset`, cwd and credential routing.
+
+For optional Claude/Codex quota, install that CLI separately, then authenticate each original quota selection. The loop preserves null/string mode even when filesystem inventory deduplicates stores. These subscription-login commands remove API-key routes; adapt additional quota `env`/`unset` privately before running them. Quota readiness does not establish Pi account identity.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -eo pipefail
+settings="$HOME/.alignfirst/aligndev.settings.json"
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" >/dev/null
+jq -c '.code.profiles[] | .quota? | select(.source == "claude" or .source == "codex")' \
+  "$settings" | while IFS= read -r launch; do
+    source=$(jq -r '.source' <<<"$launch")
+    case "$source" in
+      claude) variable=CLAUDE_CONFIG_DIR; native=.claude ;;
+      codex) variable=CODEX_HOME; native=.codex ;;
+    esac
+    store=$(/usr/bin/node -e '
+      const {resolve, dirname} = require("node:path");
+      const value = JSON.parse(process.argv[1]).configDir;
+      console.log(value === null ? resolve(process.env.HOME, process.argv[3]) :
+        value.startsWith("~/") ? resolve(process.env.HOME, value.slice(2)) :
+        resolve(dirname(process.argv[2]), value));' "$launch" "$settings" "$native")
+    if jq -e '.configDir == null' <<<"$launch" >/dev/null; then
+      unset "$variable"
+    else
+      export "$variable=$store"
+    fi
+    mkdir -p "$store"
+    case "$source" in
+      claude) unset ANTHROPIC_API_KEY
+        claude auth login --claudeai < /dev/tty
+        claude auth status ;;
+      codex) unset CODEX_API_KEY OPENAI_API_KEY
+        codex login --device-auth < /dev/tty
+        codex login status ;;
+    esac
+  done
+EOS
+```
+
+Complete interactive login at the private terminal. `/dev/tty` keeps authentication input separate from the settings loop.
 
 A protected native `settings.json` cannot save interactive preferences outside maintenance. Native `auth.json` remains private, service-owned and replaceable; adjacent authentication locks and sessions/caches stay writable. The approved exception allows executable API-key commands in `auth.json`: another process under the same UID can persist commands there. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish a refresh from another same-UID write.
 
@@ -96,7 +149,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc '
 '
 ```
 
-Offer `@alignfirst/pi-subagent` only after explicit approval. Under the selected service-account `PI_CODING_AGENT_DIR`, review existing packages/extensions and `agents/` profiles first. Install one reviewed, version-pinned npm package using `pi install npm:@alignfirst/pi-subagent@<approved-version>`. Preserve user subagent profiles and remove no existing declaration without approval. Verify exactly one `subagent` tool and the package identity `@alignfirst/pi-subagent`, without a `:dist` suffix. The settings declaration and package/resource trees become protected. OpenClaw does not require `pi-background` to delegate to Pi.
+Offer `@alignfirst/pi-subagent` only after explicit approval. Repeat the [Authenticate](#authenticate) shell and null/string routing, then review existing packages/extensions and `agents/` profiles under its absolute `$store` path. In that same routed shell, install one reviewed, version-pinned npm package using `pi install npm:@alignfirst/pi-subagent@<approved-version>`. Preserve user subagent profiles and remove no existing declaration without approval. Verify exactly one `subagent` tool and the package identity `@alignfirst/pi-subagent`, without a `:dist` suffix. The settings declaration and package/resource trees become protected. OpenClaw does not require `pi-background` to delegate to Pi.
 
 After hardening, use the `agent-config` maintenance scope for approved package/declaration changes; use `agent-skills` for native skills and `instructions` for managed instructions. A package that also installs skills needs both scopes. Keep the gateway stopped until policy restoration succeeds.
 
@@ -104,7 +157,7 @@ After hardening, use the `agent-config` maintenance scope for approved package/d
 
 **Role: human**, under the same service account and selected native store. Agree on one dedicated parent containing the project and all linked worktrees. Record its actual canonical path in the onboarding report. Arrange the layout with the operator when needed; do not silently broaden trust to all `~/projects`.
 
-Start Pi in that approved parent, run `/trust`, select **Trust**, and restart. From an immediate child, **Trust parent folder** is equivalent. The nearest saved decision in `<agent-dir>/trust.json` wins. Complete this before hardening; later changes use `agent-config` maintenance. Do not set `defaultProjectTrust: "always"` or add `--approve` to delegation.
+Repeat the [Authenticate](#authenticate) shell and null/string routing, change to that approved parent, start `pi`, run `/trust`, select **Trust**, and restart under the same routing. From an immediate child, **Trust parent folder** is equivalent. The nearest saved decision in `<agent-dir>/trust.json` wins. Complete this before hardening; later changes use `agent-config` maintenance. Do not set `defaultProjectTrust: "always"` or add `--approve` to delegation.
 
 Future resources beneath that parent inherit trust. Project trust controls discovery, not filesystem access or the safety of project resources. Every provisioned profile is available to the service account; the editable registry routes work and is not account authorization.
 

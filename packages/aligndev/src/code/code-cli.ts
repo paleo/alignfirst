@@ -975,6 +975,18 @@ Config (~/.alignfirst/aligndev.settings.json):
   code.profile          Global named profile. Effective profile: ${profile ?? "(built-in)"} (selected: ${agent}).
   code.profiles         Complete named profiles: agent, default, configDir, env, unset,
                         defaultModel, models, modelAliases, skipPermissions, quota. No inheritance.
+  profile.configDir     Omit for ordinary setup: inherit the native directory variable unless
+                        env/unset changes it; otherwise use native defaults. null deliberately
+                        removes it for native-default mode. A string resolves and sets it,
+                        even when naming the default path. ~/ uses the configured home;
+                        relative paths use the settings directory. String/null conflicts with
+                        the matching native variable in env/unset: CLAUDE_CONFIG_DIR (claude),
+                        CODEX_HOME (codex), PI_CODING_AGENT_DIR (pi).
+  profile.quota         source: claude, codex or none. Enabled sources use the same omitted/null/
+                        string directory rules, starting from the original caller env without
+                        coding-profile overrides. Omitted Claude/Codex quota uses the coding
+                        environment; pi requires an explicit source or none. none accepts no
+                        other recognized fields, including configDir: null.
   profile.default       Optional boolean preference for that agent; at most one true per agent.
                         A sole matching profile is inferred without a flag. No matching profile
                         uses detected built-ins. Without a parent, only a sole total profile is
@@ -990,7 +1002,11 @@ Native configuration: ${describeNativeStorage(code)}.
 Login must use the same effective environment as the child: apply profile unset/env/configDir,
 including HOME, PATH and credential routing, from the same working directory. Then use
 ${authenticationInstruction(agent)}. A bare login in another shell may use a different account.
-Environment values are omitted.
+Environment values are omitted. A null reset changes directory routing only, not HOME, PATH
+or API-key precedence. On macOS, setting Claude's default path can select different Keychain
+credentials from an unset CLAUDE_CONFIG_DIR. Confirm the intended mode before changing existing
+strings; no automatic settings rewrite, login or credential transfer occurs. OpenClaw deployments
+require null/string selections for every coding profile and enabled explicit quota source.
 
 Selected-agent permissions: ${permissionMode}
 The project's companion directory is prepared before launch; pi uses ordinary OS access.

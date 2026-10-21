@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../src/cli.js";
+import { describeNativeStorage } from "../src/code/native-context.js";
 import type { QuotaReader } from "../src/code/quota.js";
 import {
   type CodingProfile,
@@ -130,6 +131,11 @@ describe("settings shape", () => {
 
   it.each([
     [{ platform: "other" }, "platform"],
+    [{ projectsRoot: null }, "projectsRoot"],
+    [profileConfig({ agent: "pi", configDir: 1 }), "configDir"],
+    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: false } }), "configDir"],
+    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: " " } }), "configDir"],
+    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: "a\0b" } }), "configDir"],
     [{ code: { profile: "  " } }, "code.profile"],
     [{ code: { profiles: { " ": { agent: "pi" } } } }, "nonblank"],
     [profileConfig({ agent: "other" }), "agent"],
@@ -158,6 +164,10 @@ describe("settings shape", () => {
     [profileConfig({ agent: "pi", quota: { source: "none", env: {} } }), "no other options"],
     [profileConfig({ agent: "pi", quota: { source: "none", configDir: "x" } }), "no other options"],
     [
+      profileConfig({ agent: "pi", quota: { source: "none", configDir: null } }),
+      "no other options",
+    ],
+    [
       profileConfig({
         agent: "pi",
         quota: { source: "codex", configDir: "x", unset: ["CODEX_HOME"] },
@@ -172,6 +182,27 @@ describe("settings shape", () => {
     const home = makeHome(settings);
     expect(() => loadConfig(home)).toThrow(field);
     expect(() => loadConfig(home)).toThrow(join(home, ".alignfirst/aligndev.settings.json"));
+  });
+
+  it.each([
+    ["claude", "CLAUDE_CONFIG_DIR"],
+    ["codex", "CODEX_HOME"],
+    ["pi", "PI_CODING_AGENT_DIR"],
+  ] as const)("rejects null %s directory conflicts in env and unset", (agent, variable) => {
+    for (const conflict of [{ env: { [variable]: "private" } }, { unset: [variable] }]) {
+      const home = makeHome(profileConfig({ agent, configDir: null, ...conflict }));
+      expect(() => loadConfig(home)).toThrow(
+        `code.profiles["test"].configDir conflicts with env/unset for ${variable}`,
+      );
+      if (agent === "pi") continue;
+      writeConfig(
+        home,
+        profileConfig({ agent: "pi", quota: { source: agent, configDir: null, ...conflict } }),
+      );
+      expect(() => loadConfig(home)).toThrow(
+        `code.profiles["test"].quota.configDir conflicts with env/unset for ${variable}`,
+      );
+    }
   });
 
   it.each([null, "true", 1, [], {}])("rejects non-boolean defaults %j", (value) => {
@@ -513,6 +544,74 @@ describe("profile resolution", () => {
     );
     expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe(" provider/model:high ");
   });
+
+  it.each([
+    ["claude", "CLAUDE_CONFIG_DIR", ".claude"],
+    ["codex", "CODEX_HOME", ".codex"],
+    ["pi", "PI_CODING_AGENT_DIR", ".pi/agent"],
+  ] as const)(
+    "preserves omitted/null/string %s directory semantics immutably",
+    (agent, variable, directory) => {
+      const home = makeHome();
+      const caller = Object.freeze({
+        HOME: home,
+        PATH: "/fixture/bin",
+        ANTHROPIC_API_KEY: "private-key",
+        CLAUDE_CONFIG_DIR: "inherited-claude",
+        CODEX_HOME: "inherited-codex",
+        PI_CODING_AGENT_DIR: "inherited-pi",
+        TOKEN: "private-token",
+        CLAUDE_CODE_SESSION_ID: "parent",
+      });
+      for (const configDir of [undefined, null, `~/${directory}`]) {
+        writeConfig(
+          home,
+          profileConfig({ agent, configDir, unset: ["TOKEN"], env: { KEEP: "yes" } }),
+        );
+        const path = join(home, ".alignfirst/aligndev.settings.json");
+        const bytes = readFileSync(path);
+        const config = loadConfig(home);
+        const stored = config.code.profiles?.test;
+        Object.freeze(stored?.unset);
+        Object.freeze(stored?.env);
+        Object.freeze(stored);
+        const before = JSON.stringify(config);
+        const code = resolveCodeConfig(config, caller);
+        const resolved = typeof configDir === "string" ? join(home, directory) : configDir;
+        expect(code.configDir).toBe(resolved);
+        expect(code.childEnv[variable]).toBe(
+          resolved === null ? undefined : (resolved ?? caller[variable]),
+        );
+        if (configDir === null) expect(Object.hasOwn(code.childEnv, variable)).toBe(false);
+        const description = describeNativeStorage(code);
+        expect(description).toContain(
+          configDir === null
+            ? `${variable}: unset by configDir: null; native defaults apply`
+            : configDir === undefined
+              ? `${variable}: inherited environment (value omitted)`
+              : `${variable}: configDir ${JSON.stringify(resolved)}`,
+        );
+        expect(description).toContain("HOME: inherited environment (value omitted)");
+        expect(description).not.toContain(caller[variable]);
+        expect(description).not.toContain("private-key");
+        for (const other of ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR"] as const) {
+          if (other !== variable) expect(code.childEnv[other]).toBe(caller[other]);
+        }
+        expect(code.childEnv).toMatchObject({
+          HOME: home,
+          PATH: caller.PATH,
+          ANTHROPIC_API_KEY: caller.ANTHROPIC_API_KEY,
+          KEEP: "yes",
+        });
+        expect(code.childEnv.TOKEN).toBeUndefined();
+        expect(code.childEnv.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+        expect(code.unset).toEqual(["TOKEN"]);
+        expect(caller[variable]).toBe(`inherited-${agent}`);
+        expect(JSON.stringify(config)).toBe(before);
+        expect(readFileSync(path)).toEqual(bytes);
+      }
+    },
+  );
 
   it("finalizes the child environment once without mutating caller or merging profiles", () => {
     const home = makeHome({

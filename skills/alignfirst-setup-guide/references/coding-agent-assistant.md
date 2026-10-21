@@ -17,7 +17,7 @@ Without settings, one detected parent kind supplies built-in child defaults. For
 ```json
 {
   "code": {
-    "profiles": { "claude-personal": { "agent": "claude", "configDir": "~/.claude" } }
+    "profiles": { "claude-personal": { "agent": "claude" } }
   }
 }
 ```
@@ -26,7 +26,15 @@ A profile's required `agent` selects the child: `claude`, `codex` or `pi`, indep
 
 New-session, help, `guide code` and quota selection is `--profile` → actual-cwd project registry selection → global `code.profile` → automatic resolution. Named choices bypass detection; `code.profile` can deliberately choose a different child kind. Resume inserts its latest recorded named profile before the global selection. A deleted recorded name requires explicit/project replacement. Historical null/missing profiles use detected built-ins unless explicit/project/global selection replaces them; counts and flags never trigger inference there. The original transcript stays unchanged. Help/guide/quota share the resolver outside Git and `.plans`. Status reads durable metadata without validating launch settings. Unknown or obsolete settings keys are ignored with value-free warnings on stderr; recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch/default-map semantics. For existing settings, follow the [launch-settings](alignfirst-upgrade.md#convert-aligndev-launch-settings) and [profile-default](alignfirst-upgrade.md#convert-aligndev-profile-defaults) migrations.
 
-`configDir` selects native storage through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. `~/` uses the configured home; relative paths use the settings directory. Omitting it keeps the inherited/default native store. Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs; credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields, and neither may conflict with an explicit `configDir`. Native directory variables in profile `env` also select storage. Before login, reproduce the child's effective environment and cwd: apply `unset/env/configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values; a bare login in another shell may select another account.
+`configDir` selects native storage through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`:
+
+- **Omitted:** inherit the caller's variable unless profile `env` or `unset` changes it; without a variable, native defaults apply. Use omission for ordinary Claude, Codex and Pi setup. Do not add a directory-selection question unless the user asks to select a specific native configuration.
+- **Null:** deliberately remove the variable to force native-default directory behavior despite an inherited override. For example, `"configDir": null` resets directory routing only; HOME, PATH and API-key precedence remain unchanged.
+- **String:** resolve and set the variable for an intentional selection, such as `"~/.claude-work"`. Strings naming default paths remain explicit selections. `~/` uses the configured home; relative paths use the settings directory.
+
+On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select different Keychain credentials from leaving it unset. Confirm the user's intended mode before changing an existing string; AlignDev performs no settings rewrite, automatic login or credential transfer.
+
+Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs; credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields. A string or null `configDir` conflicts with its matching native variable in either field. Before login, reproduce the child's effective environment and cwd: apply `unset/env/configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values; a bare login in another shell may select another account.
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion. Without a nonempty profile `models`, Pi accepts any nonblank selector; Claude/Codex accept their built-in names plus configured aliases. A nonempty list replaces accepted names. New sessions use profile `defaultModel`, else the native default.
 
@@ -40,7 +48,7 @@ Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or
     "profile": "claude-personal",
     "profiles": {
       "claude-personal": {
-        "agent": "claude", "configDir": "~/.claude", "unset": ["ANTHROPIC_API_KEY"]
+        "agent": "claude", "unset": ["ANTHROPIC_API_KEY"]
       }
     }
   }
@@ -64,7 +72,6 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
        "profiles": {
          "pi-quota": {
            "agent": "pi",
-           "configDir": "~/.pi/agent",
            "quota": {
              "source": "codex",
              "configDir": "~/.codex-pi-quota",
@@ -76,9 +83,9 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
    }
    ```
 
-   Explicit quota starts from the original caller environment, applies only quota's own `unset`, `env` and source-specific `configDir`, then strips parent-session identities. Pi profile overrides are not copied. The same path and validation rules described above apply. Set `quota.configDir` explicitly, especially with multiple accounts. It sets `CODEX_HOME` for Codex or `CLAUDE_CONFIG_DIR` for Claude. Omission keeps quota's effective inherited/environment-selected store or the native default (`~/.codex` or `~/.claude`); it does not select Pi's store.
+   Explicit quota starts from the original caller environment, applies only quota's own `unset`, `env` and source-specific `configDir`, then strips parent-session identities. Pi profile overrides are not copied. The same path and validation rules described above apply. Choose `quota.configDir` only when needed. Omission inherits the quota source's variable independently from the original caller; quota `env` or `unset` may change it. Null deliberately removes `CODEX_HOME` for Codex or `CLAUDE_CONFIG_DIR` for Claude. A string sets explicit storage, as in this custom-account example. Coding and explicit-quota directory resets do not affect each other; neither selects Pi's store. For an ordinary Claude quota source, `{ "source": "claude" }` needs no directory field.
 
-   For Claude subscription quota, replace the quota object with `{ "source": "claude", "configDir": "~/.claude-pi-quota", "unset": ["ANTHROPIC_API_KEY"] }`. To disable quota, use only `{ "source": "none" }`, without other quota fields.
+   For Claude subscription quota, replace the quota object with `{ "source": "claude", "configDir": "~/.claude-pi-quota", "unset": ["ANTHROPIC_API_KEY"] }`. To disable quota, use only `{ "source": "none" }`, without other quota fields, including `configDir: null`.
 4. **Authenticate the native CLI separately.** The human completes login under the same OS user, cwd and effective environment/configuration directory as the quota query. Reproduce quota's `unset/env/configDir`, including HOME, PATH and any credential routing. Pi's `auth.json` and `/login` credentials are not automatically imported into Codex or Claude Code. Never copy tokens between their stores.
 
    For the Codex example above, with ordinary HOME/PATH and no additional credential routing:

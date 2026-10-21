@@ -16,7 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadConfig, resolveCodeConfig } from "../../packages/aligndev/dist/config.js";
+import {
+  loadConfig,
+  resolveCodeConfig,
+  resolveQuotaConfig,
+} from "../../packages/aligndev/dist/config.js";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const template = join(
@@ -37,7 +41,8 @@ const tokens = {
   RUNTIME_MODEL: "fixture-model",
   PI_PROVIDER: "openai",
   PI_MODEL: "fixture-model",
-  PI_CONFIG_DIR: "~/.pi/agent",
+  PI_CONFIG_DIR_JSON: "null",
+  PI_CONFIG_DIR_DISPLAY: "~/.pi/agent (native default)",
   PI_AUTH_METHOD: "OAuth",
   PI_QUOTA_JSON: '{"source":"none"}',
   TEAM_NAME: "Fixture team",
@@ -160,6 +165,114 @@ for (const overlay of Object.keys(agents)) {
     });
   }
 }
+
+test("native-default inventory keeps absolute paths and real resolver modes for null and explicit strings", () => {
+  for (const [overlay, definition] of Object.entries(agents)) {
+    withFixture(overlay, "slack", {}, (fixture) => {
+      const selected = fixture.settings.code.profile;
+      const profile = fixture.settings.code.profiles[selected];
+      assert.equal(profile.configDir, null, "Rendered defaults pin native-default mode");
+      fixture.settings.code.profiles.explicit = {
+        ...profile,
+        configDir: `~/${definition.directory}`,
+      };
+      if (overlay === "pi") profile.quota = { source: "codex", configDir: null };
+      saveSettings(fixture);
+      installSettings(fixture);
+      const before = readFileSync(fixture.settingsFile);
+      const inventory = readInventory(fixture);
+      assert.equal(inventory.configDir, fixture.nativeDir);
+      const store = inventory.stores.find((item) => item.agent === definition.agent);
+      assert.deepEqual(store.profiles, [selected, "explicit"]);
+      for (const item of inventory.stores) {
+        assert(item.configDir.startsWith(`${fixture.home}/`));
+        assert.equal(typeof item.configDir, "string");
+      }
+      assert(inventory.resources.every((item) => item.path.startsWith(`${fixture.home}/`)));
+      const caller = {
+        ...fixture.env,
+        [definition.variable]: "/inherited-wrong-account",
+        CODEX_HOME: "/inherited-wrong-account",
+      };
+      const loaded = loadConfig(fixture.home);
+      const reset = resolveCodeConfig(loaded, caller, { explicit: selected });
+      const explicit = resolveCodeConfig(loaded, caller, { explicit: "explicit" });
+      assert.equal(reset.configDir, null);
+      assert.equal(reset.childEnv[definition.variable], undefined);
+      assert.equal(explicit.configDir, fixture.nativeDir);
+      assert.equal(explicit.childEnv[definition.variable], fixture.nativeDir);
+      if (overlay === "pi") {
+        assert.equal(
+          inventory.stores.find((item) => item.agent === "codex").configDir,
+          join(fixture.home, ".codex"),
+        );
+        const quota = resolveQuotaConfig(reset, caller);
+        assert.equal(quota.source, "codex");
+        assert.equal(quota.env.CODEX_HOME, undefined);
+      }
+      assert.equal(caller[definition.variable], "/inherited-wrong-account");
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
+    });
+  }
+});
+
+test("native-default Pi rendering accepts typed custom directory and independent null quota", () => {
+  const quota = { source: "claude", configDir: null };
+  withFixture("pi", "slack", { custom: true, quota }, (fixture) => {
+    assert.deepEqual(fixture.settings.code.profiles[fixture.settings.code.profile].quota, quota);
+    installSettings(fixture);
+    const inventory = readInventory(fixture);
+    assert.equal(inventory.configDir, fixture.nativeDir);
+    assert.equal(
+      inventory.stores.find((store) => store.agent === "claude").configDir,
+      join(fixture.home, ".claude"),
+    );
+    const code = resolveCodeConfig(loadConfig(fixture.home), fixture.env, {
+      explicit: fixture.settings.code.profile,
+    });
+    assert.equal(code.childEnv.PI_CODING_AGENT_DIR, fixture.nativeDir);
+    assert.equal(
+      resolveQuotaConfig(code, { CLAUDE_CONFIG_DIR: "/inherited" }).env.CLAUDE_CONFIG_DIR,
+      undefined,
+    );
+  });
+});
+
+test("native-default inventory retains null-sensitive safety boundaries", () => {
+  withFixture("codex", "discord", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    for (const invalid of [
+      { configDir: undefined },
+      { configDir: 1 },
+      { configDir: "~/bad\u0000path" },
+      { defaultModel: null },
+      { env: { CODEX_HOME: "/elsewhere" } },
+      { unset: ["CODEX_HOME"] },
+      { env: { HOME: "/elsewhere" } },
+      { unset: ["PI_CODING_AGENT_SESSION_DIR"] },
+      { quota: { source: "claude" } },
+      { quota: { source: "claude", configDir: null, unset: ["CLAUDE_CONFIG_DIR"] } },
+      { quota: { source: "none", configDir: null } },
+    ]) {
+      fixture.settings = structuredClone(original);
+      Object.assign(fixture.settings.code.profiles[fixture.settings.code.profile], invalid);
+      saveSettings(fixture);
+      assertInventoryRejected(fixture);
+    }
+    fixture.settings = structuredClone(original);
+    fixture.settings.projectsRoot = null;
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    fixture.settings = structuredClone(original);
+    fixture.settings.code.profiles.overlap = { agent: "pi", configDir: "~/.codex/nested" };
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+    fixture.settings = structuredClone(original);
+    saveSettings(fixture);
+    symlinkSync(fixture.root, fixture.nativeDir);
+    assertInventoryRejected(fixture);
+  });
+});
 
 test("inventory deduplicates shared stores and includes custom, mixed-agent and independent quota stores", () => {
   withFixture("codex", "slack", {}, (fixture) => {
@@ -574,7 +687,10 @@ function validateProfiles(fixture) {
   );
   assert.equal(effective.agent, fixture.agent);
   assert.equal(effective.profile, selected);
-  assert.equal(effective.childEnv[agents[fixture.overlay].variable], fixture.nativeDir);
+  assert.equal(
+    effective.childEnv[agents[fixture.overlay].variable],
+    fixture.settings.code.profiles[selected].configDir === null ? undefined : fixture.nativeDir,
+  );
   for (const name of fixture.settings.code.profiles[selected].unset ?? []) {
     assert.equal(effective.childEnv[name], undefined);
   }
@@ -666,6 +782,9 @@ function withFixture(overlay, surface, choices, callback) {
     for (const source of fixture.sources) cpSync(source, rendered, { recursive: true });
     const values = {
       ...tokens,
+      PI_CONFIG_DIR_JSON: choices.custom ? JSON.stringify(nativeDir) : "null",
+      PI_CONFIG_DIR_DISPLAY: choices.custom ? nativeDir : tokens.PI_CONFIG_DIR_DISPLAY,
+      PI_QUOTA_JSON: JSON.stringify(choices.quota ?? { source: "none" }),
       PLANS_CLONE_NOTE: choices.plans
         ? " The work-files clone at ~/projects/plans is a repository, not a project."
         : "",
@@ -696,9 +815,16 @@ function withFixture(overlay, surface, choices, callback) {
       writeFileSync(file, text);
     }
     fixture.settings = JSON.parse(readFileSync(fixture.settingsFile, "utf8"));
+    if (overlay === "pi")
+      assert.equal(
+        fixture.settings.code.profiles[fixture.settings.code.profile].configDir,
+        choices.custom ? nativeDir : null,
+        "Render a typed JSON directory selection before fixture adjustments",
+      );
     for (const profile of Object.values(fixture.settings.code.profiles)) {
       if (choices.custom) profile.configDir = nativeDir;
-      else profile.configDir = profile.configDir.replace("/home/fixture/", `${home}/`);
+      else if (typeof profile.configDir === "string")
+        profile.configDir = profile.configDir.replace("/home/fixture/", `${home}/`);
     }
     saveSettings(fixture);
     writeFileSync(

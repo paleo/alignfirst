@@ -38,7 +38,15 @@ tmp=$(mktemp) && jq '. + {disableClaudeAiConnectors: true, autoMemoryEnabled: fa
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @anthropic-ai/claude-code
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'which claude && claude --version'
+set -o pipefail
+settings=infra/openclaw/aligndev.settings.json
+store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
+  /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir')
+native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+sudo -H -u {{SERVICE_USER}} bash -lc '
+  if [ "$1" = true ]; then unset CLAUDE_CONFIG_DIR; else export CLAUDE_CONFIG_DIR="$2"; fi
+  command -v claude && claude --version
+' bash "$native_default" "$store"
 # Expected: /home/{{SERVICE_USER}}/.npm-system-global/bin/claude
 ```
 
@@ -49,9 +57,9 @@ set -o pipefail
 store=$(/usr/bin/node infra/openclaw/deployment-profiles.mjs \
   infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} \
   /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -r '.configDir')
-sudo -H -u {{SERVICE_USER}} env CLAUDE_CONFIG_DIR="$store" bash -l <<'EOS'
+sudo -H -u {{SERVICE_USER}} env STORE_PATH="$store" bash -l <<'EOS'
 set -e
-store=$CLAUDE_CONFIG_DIR
+store=$STORE_PATH
 mkdir -p "$store"
 [ -f "$store/settings.json" ] || echo '{}' > "$store/settings.json"
 jq '. + {disableClaudeAiConnectors: true, autoMemoryEnabled: false, autoDreamEnabled: false}' \
@@ -70,10 +78,15 @@ sudo -H -u {{SERVICE_USER}} bash -c "echo \"alias claudy='claude --dangerously-s
 ```sh
 sudo -i -u {{SERVICE_USER}}
 set -o pipefail
-CLAUDE_CONFIG_DIR=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir') || exit 1
-export CLAUDE_CONFIG_DIR
+settings="$HOME/.alignfirst/aligndev.settings.json"
+store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
+if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+  unset CLAUDE_CONFIG_DIR
+else
+  export CLAUDE_CONFIG_DIR="$store"
+fi
+unset ANTHROPIC_API_KEY
 claude                    # /login, then follow the browser flow and paste the code; /exit
 cd ~/projects && claude   # accept "Trust this folder?", then /exit
 claude auth status
@@ -116,7 +129,7 @@ npx -y skills add https://github.com/paleo/skills --yes --agent claude-code --sk
 
 ### Global Instructions
 
-The `service-claude` profile sets explicit `configDir: "~/.claude"`, overriding inherited `CLAUDE_CONFIG_DIR`. Custom stores are supported when isolated beneath the service home; authenticate each profile with `CLAUDE_CONFIG_DIR` set to its inventoried resolved directory. The login example above selects the deployment default. Additional stores need the same settings/skills preparation and their own authentication; profiles sharing a store share its account.
+The `service-claude` profile pins native-default mode with `configDir: null`, removing inherited `CLAUDE_CONFIG_DIR`. An explicit string sets that variable to its resolved path, even when it names `~/.claude`. Custom stores must be isolated beneath the service home. The login example selects the deployment default after login-shell initialization. For another profile, select its original setting and resolved inventory path; reproduce its `env`/`unset`, cwd and credential routing too. Additional stores need the same settings/skills preparation and their own authentication. Shared filesystem paths do not imply equivalent invocation modes. On macOS, an explicit default-directory string can select different Keychain credentials from an unset variable.
 
 The seed merges `infra/openclaw/coding-agent/CLAUDE.md` into `<configDir>/CLAUDE.md` for every inventoried Claude store, between `<!-- alignfirst-dev-kit:start -->` and `<!-- alignfirst-dev-kit:end -->`. Content outside the markers is preserved. Every `claude` process of the service account reads the file at startup, the delegated runs included, so a change needs no gateway restart.
 
@@ -131,14 +144,19 @@ Verify in each resolved store: opening instructions for writing and unlinking mu
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
 set -eo pipefail
-CLAUDE_CONFIG_DIR=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
-  "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
-  "$HOME/.alignfirst/aligndev.settings.json" | jq -r '.configDir')
-export CLAUDE_CONFIG_DIR
-if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$CLAUDE_CONFIG_DIR/CLAUDE.md"; then
+settings="$HOME/.alignfirst/aligndev.settings.json"
+store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" | jq -er '.configDir')
+if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+  unset CLAUDE_CONFIG_DIR
+else
+  export CLAUDE_CONFIG_DIR="$store"
+fi
+unset ANTHROPIC_API_KEY
+if /usr/bin/node -e 'require("node:fs").openSync(process.argv[1], "r+")' "$store/CLAUDE.md"; then
   echo 'ERROR: instructions are writable' >&2; exit 1
 fi
-if rm "$CLAUDE_CONFIG_DIR/CLAUDE.md"; then
+if rm "$store/CLAUDE.md"; then
   echo 'ERROR: instructions were removable; restore them before restart' >&2; exit 1
 fi
 claude auth status

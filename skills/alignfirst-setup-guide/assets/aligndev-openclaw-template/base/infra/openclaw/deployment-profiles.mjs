@@ -217,9 +217,10 @@ function settingsObject(value, keys, path) {
 function validateLaunchFields(value, path) {
   const nonblank = (text) => typeof text === "string" && text.trim() !== "";
   const environmentName = (name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name);
-  for (const key of ["configDir", "defaultModel"])
-    if (value[key] !== undefined && !nonblank(value[key]))
-      throw new Error(`${path}.${key} must be a nonblank string`);
+  if (value.configDir !== undefined && value.configDir !== null && !nonblank(value.configDir))
+    throw new Error(`${path}.configDir must be null or a nonblank string`);
+  if (value.defaultModel !== undefined && !nonblank(value.defaultModel))
+    throw new Error(`${path}.defaultModel must be a nonblank string`);
   if (value.skipPermissions !== undefined && typeof value.skipPermissions !== "boolean")
     throw new Error(`${path}.skipPermissions must be a boolean`);
   if (value.models !== undefined && (!Array.isArray(value.models) || !value.models.every(nonblank)))
@@ -279,8 +280,11 @@ function isObject(value) {
 
 function addStore(stores, name, agent, profile, home, deployed) {
   if (!Object.hasOwn(nativeDirectories, agent)) throw new Error("Unsupported coding agent");
-  if (typeof profile.configDir !== "string" || profile.configDir.trim() === "")
-    throw new Error("Every deployment profile/quota store needs an explicit configDir");
+  if (
+    profile.configDir !== null &&
+    (typeof profile.configDir !== "string" || profile.configDir.trim() === "")
+  )
+    throw new Error("Every deployment profile/quota store needs an explicit null/string configDir");
   if (
     (isObject(profile.env) && Object.hasOwn(profile.env, directoryVariables[agent])) ||
     profile.unset?.includes(directoryVariables[agent])
@@ -291,7 +295,10 @@ function addStore(stores, name, agent, profile, home, deployed) {
     if (Object.hasOwn(profile.env ?? {}, key) || profile.unset?.includes(key))
       throw new Error(`Deployment inventory forbids ${key} overrides`);
   }
-  const configDir = expandPath(profile.configDir, home, dirname(deployed));
+  const configDir =
+    profile.configDir === null
+      ? join(home, nativeDirectories[agent])
+      : expandPath(profile.configDir, home, dirname(deployed));
   if (
     !within(configDir, home) ||
     configDir === home ||

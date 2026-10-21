@@ -26,7 +26,7 @@ channel message ({{ASSISTANT_NAME}} on the selected surface)
   → project workspace under ~/projects
 ```
 
-The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. `code.profile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned coding/quota store has an explicit service-account `configDir`. The shared inventory covers default/custom directories and deduplicates shared stores ([configuration.md](configuration.md)). Every provisioned account is available to the service UID; the editable project registry is routing, not authorization. OpenClaw remains the persistent parent even with a Pi child and needs no `pi-background` for delegation.
+The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. `code.profile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned coding/quota store pins `configDir: null` for native-default routing or an explicit service-account directory string. The shared inventory covers default/custom directories and deduplicates shared stores ([configuration.md](configuration.md)). Every provisioned account is available to the service UID; the editable project registry is routing, not authorization. OpenClaw remains the persistent parent even with a Pi child and needs no `pi-background` for delegation.
 
 ## Ownership
 
