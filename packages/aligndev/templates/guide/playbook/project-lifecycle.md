@@ -79,12 +79,14 @@ When the user reports the merge, or you observe it while checking the PR:
 
 The preparation targets the project's companion directory. It writes nothing in the repository and creates no branch, commit or pull request.
 
-1. Complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH under the user's authorization for companion preparation. It registers a missing companion, explicitly selects companion plans, and verifies them before any coding launch. Preserve existing work files without copying them.
-2. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
-3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
-4. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
-5. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
-6. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`. Without project workspace tooling, it creates or reuses lightweight worktrees; companion plans need no worktree link.
+1. Run `{{ALIGNFIRST}} companion register` from PROJECT_PATH under the user's authorization for companion preparation, even when existing project plans are usable. Registration is independent of the work-files readiness gate and preserves an existing companion or profile selection.
+2. Complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH, starting at section 3 under that authorization. Explicitly select and verify companion plans before any ticket or coding-launch effect. Preserve existing work files without copying them.
+3. Reread `{{ALIGNFIRST}} config --json`. Verify that `.plans` and every item to write resolve inside `companion.dir`. Missing `.alignfirst.json` and `DEVELOPERS.md` must have companion destinations. If an explicit item selection points a required write into the project, stop and resolve that selection with the user. Retain the reported companion `DEVELOPERS.md` path as DEVELOPERS_PATH.
+4. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
+5. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
+6. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
+7. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
+8. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`. Without project workspace tooling, it creates or reuses lightweight worktrees; companion plans need no worktree link.
 
 ## Remove a project
 

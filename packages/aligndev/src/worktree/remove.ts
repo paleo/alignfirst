@@ -24,6 +24,11 @@ export function removeWorktree(
   if (target.locked) throw new Error(`Cannot remove locked worktree: ${path}`);
   if (!target.exists)
     throw new Error(`Worktree is missing: ${path}. Inspect Git's registration manually.`);
+  const nested = repo.worktrees.find((tree) => tree.path !== path && isInside(path, tree.path));
+  if (nested !== undefined)
+    throw new Error(
+      `Cannot remove ${path}: it contains another registered worktree root: ${nested.path}.`,
+    );
   if (
     git({ ...ctx, cwd: path }, "status", "--porcelain", "-z", "--untracked-files=all").length > 0
   ) {

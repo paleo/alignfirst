@@ -2,6 +2,8 @@
 
 Prepare usable work files before ticket reservation, request capture, coding delegation, or discussion recording. This procedure needs only PROJECT_PATH, the project's main-worktree path. It needs no ticket, branch, or new worktree.
 
+For explicit companion-only onboarding, start at section 3 under the onboarding authorization, even when existing project plans are usable. That route requires registration and an explicit companion-plans selection independently of the readiness gate below.
+
 ## 1. Inspect the effective location
 
 Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH and read `locations[".plans"]`. The report is authoritative. Explicit `project` or `companion` selections win. Under `auto`, an existing companion copy wins over an existing project copy; when neither exists, a registered companion is the creation target.
@@ -16,7 +18,7 @@ Usable, non-project-tracked effective plans need no preparation. Resume the inte
 
 ## 2. Obtain approval when preparation is needed
 
-When effective plans are missing or project-tracked, including an add failure because the intended branch tracks project-local plans, explain the reason and ask to select companion-backed work files, unless that preparation is already authorized. Explain that this selection applies to all worktrees. Existing project work files stay untouched and unused. Do not copy, merge, migrate, archive, or delete them, and do not ask about copying them.
+When effective plans are missing or project-tracked, including an add failure because the intended branch tracks project-local plans, ask in the user's language unless preparation is already authorized: "{Reason}. May I select companion-backed work files for all this project's worktrees, leaving the existing project work files untouched and unused?" Keep the all-worktree scope and preservation promise in the approval question. Do not copy, merge, migrate, archive, or delete existing work files, and do not ask about copying them.
 
 Wait for approval before changing registration, selection, or directories. Do not reserve a temporary ticket or create a temporary worktree to prepare work files.
 

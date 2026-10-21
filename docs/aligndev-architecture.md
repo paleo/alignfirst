@@ -125,7 +125,7 @@ The playbook selects documented project workspace tooling first, including non-N
 
 Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
 
-Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, preserves branches and companion registration, and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown.
+Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown.
 
 ## Project Inventory
 

@@ -459,6 +459,38 @@ describe("aligndev guide playbook", () => {
     );
   });
 
+  it.each([false, true])(
+    "preserves the complete starter request, including short no-ticket choices (npx=%s)",
+    async (viaNpx) => {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, OPENCLAW_CONFIG);
+      const result = await runGuide(fixture, ["channel-handling"], {
+        env: viaNpx ? NPX_ENV : {},
+      });
+      expect(result.code, result.stderr).toBe(0);
+      const guide = result.stdout;
+      expect(guide).toContain(
+        "the complete original user message, unchanged, even for a short request",
+      );
+      expect(guide).toContain(
+        "Include its opening sentence and every itemized point or constraint",
+      );
+      expect(guide).toContain("Always include the original request block.");
+      expect(guide).toContain("Request:\n{REQUEST}");
+      expect(guide).toContain("do not condense or translate it");
+      expect(guide).toContain(
+        "Before sending the starter, compare it with the original message: the Request block must be complete",
+      );
+      expect(guide).toContain("explicit no-ticket choices (such as `sans ticket`)");
+      expect(guide).toContain("authorizations, prohibitions and stopping points");
+      expect(guide).toContain("Keep these instructions even in a short request.");
+      expect(guide).toContain("explicitly says there is no ticket or asks for a side ticket");
+      expect(guide).not.toContain("Omit it for a short request");
+      expect(guide).not.toContain("Add the request block only");
+      expect(guide).not.toContain("{{");
+    },
+  );
+
   it("requires a configured or detected agent for the code topic only", async () => {
     const fixture = makeFixture();
     const code = await runGuide(fixture, ["code"]);
@@ -559,9 +591,11 @@ describe("work-files and lightweight worktree runbooks", () => {
         "unused tracked project `.plans` is not a blocker",
         "including a tracked symlink and mixed tracked/untracked contents",
         "compare `git rev-parse --path-format=absolute --git-common-dir` identities",
-        "unless that preparation is already authorized",
-        "selection applies to all worktrees",
-        "Do not copy, merge, migrate, archive, or delete them",
+        "unless preparation is already authorized",
+        "May I select companion-backed work files for all this project's worktrees",
+        "leaving the existing project work files untouched and unused?",
+        "Keep the all-worktree scope and preservation promise in the approval question",
+        "Do not copy, merge, migrate, archive, or delete existing work files",
         "do not ask about copying",
         "Wait for approval before changing registration",
         `${forms.alignfirst} companion register`,
@@ -597,6 +631,12 @@ describe("work-files and lightweight worktree runbooks", () => {
       expect(reservation.indexOf(`${forms.alignfirst} ticket --side`)).toBeLessThan(
         reservation.indexOf("A1-request.md"),
       );
+      if (platform === "openclaw") {
+        expect(reservation).toContain("complete original request from the starter's Request block");
+        expect(reservation).toContain("short requests included");
+        expect(reservation).toContain("every requirement and the explicit no-ticket choice");
+        expect(reservation).not.toContain("use the starter's task line");
+      }
       const capture = working.slice(
         working.indexOf("### Detailed requests"),
         working.indexOf("### What you delegate"),

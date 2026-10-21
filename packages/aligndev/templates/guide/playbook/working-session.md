@@ -179,7 +179,7 @@ For new single-project work where the user explicitly says there is no ticket or
 3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH. It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
 {{/codingAgent}}
 {{#openclaw}}
-4. Write `{TICKET_DIR}A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
+4. Write `{TICKET_DIR}A1-request.md` with the complete original request from the starter's Request block, short requests included. Preserve every requirement and the explicit no-ticket choice, together with any later human corrections.
 {{/openclaw}}
 {{#codingAgent}}
 4. Write `{TICKET_DIR}A1-request.md` with the complete request. For a short request, use the user's request and the message that explicitly confirmed no ticket.

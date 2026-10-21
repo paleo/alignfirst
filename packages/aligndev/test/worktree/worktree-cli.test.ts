@@ -538,6 +538,76 @@ describe("safe removal", () => {
     expect(readFileSync(registry, "utf8")).toBe(before);
   });
 
+  it.each(["clean", "dirty", "lockedDirty", "missing", "lockedMissing"])(
+    "refuses a clean parent containing a %s registered worktree",
+    async (kind) => {
+      const { fixture, repo, destination } = project();
+      writeFileSync(join(repo, ".gitignore"), "/nested/\n");
+      commit(repo, ".gitignore");
+      addWorktree(repo, destination, "parent");
+      const child = join(destination, "nested");
+      addWorktree(repo, child, "child");
+      const dirty = kind === "dirty" || kind === "lockedDirty";
+      const missing = kind === "missing" || kind === "lockedMissing";
+      if (dirty) {
+        writeFileSync(join(child, "README.md"), "uncommitted child changes\n");
+        writeFileSync(join(child, "uncommitted.txt"), "preserve child data\n");
+      }
+      if (kind === "lockedDirty" || kind === "lockedMissing")
+        execGit(repo, "worktree", "lock", "--reason", "preserve nested worktree", child);
+      if (missing) rmSync(child, { recursive: true });
+      expect(execGit(destination, "status", "--porcelain")).toBe("");
+      const registrations = execGit(repo, "worktree", "list", "--porcelain", "-z");
+      const branches = execGit(repo, "show-ref", "--heads");
+      const result = await run(fixture, repo, ["remove", destination, "--json"]);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("contains another registered worktree root");
+      expect(result.stderr).toContain(child);
+      expect(readFileSync(join(destination, "README.md"), "utf8")).toBe("app\n");
+      expect(readFileSync(join(destination, ".gitignore"), "utf8")).toBe("/nested/\n");
+      expect(execGit(repo, "worktree", "list", "--porcelain", "-z")).toBe(registrations);
+      expect(execGit(repo, "show-ref", "--heads")).toBe(branches);
+      if (missing) {
+        expect(existsSync(child)).toBe(false);
+        return;
+      }
+      expect(readFileSync(join(child, "README.md"), "utf8")).toBe(
+        dirty ? "uncommitted child changes\n" : "app\n",
+      );
+      if (dirty)
+        expect(readFileSync(join(child, "uncommitted.txt"), "utf8")).toBe("preserve child data\n");
+      expect(execGit(child, "status", "--porcelain")).toBe(
+        dirty ? "M README.md\n?? uncommitted.txt" : "",
+      );
+    },
+  );
+
+  it("removes a sibling without affecting a similarly prefixed locked dirty worktree", async () => {
+    const { fixture, repo, destination } = project();
+    addWorktree(repo, destination, "ticket");
+    const sibling = `${destination}-sibling`;
+    addWorktree(repo, sibling, "sibling");
+    writeFileSync(join(sibling, "uncommitted.txt"), "preserve sibling data\n");
+    execGit(repo, "worktree", "lock", "--reason", "preserve sibling", sibling);
+    const before = await run(fixture, repo, ["list", "--json"]);
+    expect(before.code, before.stderr).toBe(0);
+    const branches = execGit(repo, "show-ref", "--heads");
+    const result = await run(fixture, repo, ["remove", destination, "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).removed).toBe(true);
+    expect(existsSync(destination)).toBe(false);
+    expect(readFileSync(join(sibling, "uncommitted.txt"), "utf8")).toBe("preserve sibling data\n");
+    expect(execGit(repo, "show-ref", "--heads")).toBe(branches);
+    const after = await run(fixture, repo, ["list", "--json"]);
+    expect(after.code, after.stderr).toBe(0);
+    expect(JSON.parse(after.stdout).worktrees).toEqual(
+      JSON.parse(before.stdout).worktrees.filter(
+        (tree: { path: string }) => tree.path !== destination,
+      ),
+    );
+  });
+
   it.each(["main", "foreign", "subdir", "locked", "untracked", "modified", "staged"])(
     "refuses %s worktree removal",
     async (kind) => {

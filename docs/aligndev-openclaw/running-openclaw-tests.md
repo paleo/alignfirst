@@ -194,6 +194,26 @@ A24's earlier diagnostic runs remain preserved. They exposed target-session obse
 
 Discord was not run because the required Slack pass gate was not met. Tracked-plan approval remains unverified by a live conversation; the offline companion lifecycle covers its filesystem invariants. Offline suites, typechecks, lint and both manual disposable lifecycles passed. Evidence and diagnostic notes are under `.local/side-29/B5`; mocked child access does not establish native sandbox permissions.
 
+### side-29 review corrections — 2026-10-21
+
+The earlier results above describe the pre-review source. The corrected starter always carries the original Request block, short requests included. Side-ticket capture uses that block without losing explicit no-ticket intent. Rendered-guide tests and offline bootstrap negative controls reject omitted short or itemized constraints; the existing live assertions remain unchanged.
+
+A focused A25 Slack rerun preserved the complete request but failed the approval judge because the question omitted the all-worktree scope (`2026-10-21T09-48-18-side29-C2`). Inspection confirmed that the guide was read and no preparation effects preceded approval. A narrow consent-question form now carries the scope and preservation promise together. One diagnosis-driven A25-only retry passed all approval/history/request/worktree/session assertions (`2026-10-21T09-55-57-side29-C2`). Both used Terra and the Haiku/OpenRouter judge on recreated gateways. Once that Slack gate passed, only the two planned A24 follow-ups ran:
+
+| Final-source case | Result | Artifact run |
+| --- | --- | --- |
+| A25 tracked plans, Slack | Passed | `2026-10-21T09-55-57-side29-C2` |
+| A24 missing plans, Discord | Passed | `2026-10-21T10-01-19-side29-C2` |
+| A24 missing plans, Slack parity | Passed, including the final inventory/path assertion | `2026-10-21T10-06-06-side29-C2` |
+
+No full matrix or extra short-request conversation cell ran. The owned stack and volumes were removed after all runners settled; artifacts were retained.
+
+Final-source offline checks passed: 2,000 root package tests, four AlignDev built-CLI integration tests and 260 standalone harness tests. The broader 61-test integration run also passed; only guide prose changed afterward, and the affected AlignDev integration suite was rerun. Manual shared/companion lifecycles and nested locked/dirty/missing-child refusal passed. Evidence and conversation selection are under `.local/side-29/C2/`, separately from model artifacts. Initial `/tmp` quota failures were resolved by using private home-filesystem scratch directories, without deleting unrelated data.
+
+Actual native Pi 1.3.0 with Terra read and wrote parent-verified nonce markers through ordinary shared project plans, a separate Git work-files repository and a prepared companion. These checks ran as host user `hop`, outside temporary-directory allowances. Pi uses ordinary OS access; this proves neither sandbox confinement nor deployment/service-account parity.
+
+A separate native Codex 0.162.1/Terra probe used verified `--sandbox workspace-write` with no bypass. Worktree writes passed, but shared project `.plans` and `.local` writes returned `Errno 30` (read-only filesystem). The prepared-companion control passed through the existing narrow `--add-dir <companion>` grant; shared `.local` and outside-root writes remained denied. Shared Codex work-file access remains a limitation; no permission remedy or broad main-repository grant was introduced. Native Codex saved disposable-project trust records; read-only comparison confirmed the companion control changed no sandbox, approval or profile value. Native evidence, exact argv, marker verification, cleanup and limitations are in `.local/side-29/C2/native/evidence.md`.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
