@@ -107,9 +107,13 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 `aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
+A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes the project workspace/dev scripts and provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
+
+The lightweight flow discovers worktrees through Git-backed `aligndev worktree list`, not directory naming. The assistant creates the worktree before coding delegation. Its `onPrompt` mock checks the request and branch, writes a small label change, runs the actual test and reports that result without server claims. Companion inspection runs in the gateway; those paths are not runner-local mounts.
+
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 23 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 25 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
@@ -138,6 +142,8 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A21 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
 | A22 | A question about an explicit branch reuses its registered workspace for read-only investigation. |
 | A23 | A human opens the thread and tags the bot inside it: no starter, no handoff. The fresh session reacts to the latest message, resolves the project itself, opens no second thread, and leaves the author's thread name alone. |
+| A24 | No workspace tooling, missing plans and explicit no-ticket work. Snapshots registration, plans and Git state before approval; requires separate companion preparation, explicit selection, side-ticket/request capture before real worktree creation, then coding from that worktree. |
+| A25 | No workspace tooling and tracked project plans. Uses the same approval gate; old history remains byte-identical in the repository and absent from the companion, with no copying offer or operation. New request/session files use the selected companion without a generated plans link. |
 
 A04, A10 and A15 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A18 distinguish a missing task description from a complete detailed request. A20 keeps its startup race separate from A08's explicit hold.
 
@@ -174,6 +180,20 @@ Select `CODING_AGENT=claude` or `CODING_AGENT=pi` for the other children as need
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
+### side-29 acceptance — 2026-10-21
+
+The final selected Slack cells used Terra and Haiku through OpenRouter, one iteration each:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A24 missing plans | Passed | `2026-10-21T08-44-40-side29-B5` |
+| A25 tracked plans | Failed before the approval gate: the starter omitted the detailed request | `2026-10-21T08-50-02-side29-B5` |
+| A02 full-workspace control | Passed | `2026-10-21T08-53-04-side29-B5` |
+
+A24's earlier diagnostic runs remain preserved. They exposed target-session observation and localized-question matching defects, overly literal request comparisons, and loss of the no-ticket instruction in short starters. The final fixture uses an itemized request and structurally checks every requirement while tolerating presentation and grammatical changes. The short-starter loss remains unresolved. The work-files guide now explicitly identifies `projects[companion.key]` after a model initially guessed the registry shape.
+
+Discord was not run because the required Slack pass gate was not met. Tracked-plan approval remains unverified by a live conversation; the offline companion lifecycle covers its filesystem invariants. Offline suites, typechecks, lint and both manual disposable lifecycles passed. Evidence and diagnostic notes are under `.local/side-29/B5`; mocked child access does not establish native sandbox permissions.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
@@ -186,7 +206,7 @@ fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test
 sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 ```
 
-The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Lightweight fixture checks additionally run real AlignFirst/AlignDev worktree commands for shared, missing and tracked plans, discovery/reuse, branch consultation and no-branch status policies, and cleanup. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
 
 The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
 

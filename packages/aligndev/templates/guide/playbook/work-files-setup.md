@@ -26,7 +26,7 @@ After approval:
 
 1. If no companion is registered, run `{{ALIGNFIRST}} companion register` from PROJECT_PATH. This also preserves a profile-only registration.
 2. Reread `{{ALIGNFIRST}} config --json`. Retain `companion.dir` and `companion.key`; use the reported key exactly.
-3. Edit only that entry in `~/.alignfirst/companions/registry.json`, setting `items[".plans"]` to `"companion"`. Preserve all other fields, item settings, profile selections, and entries.
+3. Read `~/.alignfirst/companions/registry.json` before editing. Its project entries live under `projects`. Edit only `projects[companion.key]`, setting `items[".plans"]` to `"companion"` within that entry. Use the key reported by config, not a guessed key or a new top-level `items` object. Preserve all other fields, item settings, profile selections, and entries.
 4. Reread `{{ALIGNFIRST}} config --json`. Verify that `locations[".plans"].in` is `"companion"` and its path is the selected companion's `.plans`. Create that directory if missing, preserving existing contents. Do not create a worktree `.plans` link for companion plans.
 5. Repeat the read-only usability and tracking checks in section 1. Verify the effective location in any already selected worktree too, then resume the interrupted operation.
 
