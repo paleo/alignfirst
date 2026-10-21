@@ -67,6 +67,8 @@ The plan is a **self-explanatory prompt** for the coding agent. That agent start
 - **Tests**: look first for existing tests of the kind you consider. Plan tests only when they fit the project's test setup, focused on the changed behavior.
 - Leave out sections that add no actionable information: "Benefits", "Code Style Compliance", "Rationale", and the like.
 
+Be concise. Small tasks need small plans.
+
 ### 3.2 Single Plan Format
 
 _Use this when writing a single plan. Skip this section for multiple plans._
