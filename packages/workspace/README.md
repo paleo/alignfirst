@@ -35,7 +35,7 @@ The agent reads the skill, adapts the reference scripts to your stack, installs 
 
 Setup writes one or two wrapper scripts on these entry points:
 
-- `runWorkspace(config)` — worktree lifecycle (setup / remove).
+- `runWorkspace(config)` — worktree lifecycle (setup / teardown / remove).
 - `runDevServer(config)` (optional) — ports, run files and infrastructure (`dev setup`), dev-server start (foreground or background) / stop / list.
 
 ### Migration from the old `slots.json` registry
@@ -56,13 +56,22 @@ npm run dev -- up --evict               # if maxConcurrentDevServers is reached,
 npm run dev -- restart                  # stop the dev-server in this worktree if running, then start in the background
 npm run dev -- status                   # report whether this worktree's dev-server is UP or DOWN
 npm run dev -- list                     # active dev-servers across all worktrees
-npm run dev -- down                     # stop dev server (infrastructure stays up)
-npm run workspace -- remove ../my-wt    # full teardown (by dir path or name; omit for the current worktree)
+npm run dev -- down                     # stop processes and callbacks (may stop containers)
+npm run workspace -- teardown           # purge infrastructure; keep files and Git state
+npm run workspace -- remove ../my-wt    # cleanup + Git deletion (exact path or registered name)
 npm run workspace -- prune              # heal workspaces whose worktree was deleted out-of-band
 npm run workspace -- --guide            # full operating guide (workspace + dev-server)
 ```
 
 `--guide` prints the complete procedures in your package-manager's syntax, adapted to your config — a project without a dev server gets a guide without the dev-server section. Point agents at it instead of maintaining a separate doc.
+
+### Externally created worktrees
+
+Run `npm install && npm run workspace -- setup` inside a worktree created by another tool. Use `setup --full` only with a configured dev wrapper. Before the external tool deletes it, run `npm run workspace -- teardown`. Cleanup preserves files, dependencies, shared links and Git state while purging configured infrastructure, including volumes where configured.
+
+Names in `list` are registered keys, with collision suffixes for duplicate basenames; exact paths select the original locations. All participating worktrees need the upgraded package, and Compose wrappers must explicitly select projects from those names. Independent clones retain independent registries. Existing ordinary names stay compatible.
+
+The rendered `--guide` covers hook bootstrap, seed-before-install fallback and cleanup safeguards.
 
 ## API Reference
 

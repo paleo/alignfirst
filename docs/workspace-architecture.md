@@ -16,9 +16,9 @@ For the consumer-facing blueprint — concepts, config fields, the CLI surface, 
 
 ## Setup modes
 
-`workspace setup` creates the worktree synchronously, then runs `finalizeWorkspace` (install, build) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`.
+`workspace setup` synchronously creates or adopts a Git worktree, then runs `finalizeWorkspace` (install, build) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`. Ordinary setup waits for the child.
 
-The child is spawned as `__finalize` with no target argument and `cwd` set to the new worktree. It re-detects that worktree and takes its basename as the workspace name — the registry key — so parent and child agree on the target with nothing passed between them. Only `--force` and `--full` are forwarded.
+The child is spawned as `__finalize` with no target argument and `cwd` set to the target worktree. It re-detects the Git root and resolves its existing registry entry by normalized absolute path, retaining any collision suffix. Only `--force` and `--full` are forwarded.
 
 - **Blocking (default).** After spawning the child, `runSetup` calls `waitForWorkspace`, which polls `workspaces.json` until the finalize child marks the workspace `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed); on settle, one final drain read prints the log bytes written since the last poll.
 - **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker; its `--verbose` first replays the last 30 log lines, since the joiner saw no history. `--enter` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
@@ -82,16 +82,22 @@ So on external stop the foreground's only job is to stop hanging on dead servers
 
 ## Cross-worktree callback dispatch
 
-`dev down --all` and eviction must stop callback servers (Docker, DBs) in worktrees other than the current one. The kernel can't load each victim's config, so it **reuses the current process's loaded callbacks**, invoking each with `ctx.cwd = <victim worktree>`. `ctx.ports` holds the victim worktree's ports, read from its registry entry. This works because every worktree of a repo runs the same dev-server script with the same callback set.
+`dev down --all` and eviction must stop callback servers (Docker, DBs) in worktrees other than the current one. The kernel can't load each victim's config, so it **reuses the current process's loaded callbacks**, invoking each with `{ name, cwd, ports }`. The recorded dev-server entry supplies the victim's name and cwd; its workspace entry supplies ports. `name` is the registered workspace identity, never the callback label such as `docker`. This assumes compatible callback sets across worktrees.
 
 Consequences for callback authors:
 
 - A callback's `stop(ctx)` may run with `ctx.cwd` pointing at a *different* worktree than the one the process started in. Thread `ctx.cwd` into every child-process call and resolve every path against it; capture nothing at module load.
 - If a victim worktree is on a branch that declares an **extra** callback server not present in the current config, that server is skipped — running `dev down` from inside that worktree finishes the cleanup.
 
-## The `workspace remove` re-exec
+## Shared cleanup and configured-wrapper re-exec
 
-`workspace remove` shells out to `node <devServerScript> down` with `cwd: <target worktree>` rather than stopping the dev-server in-process. This is structural: the `workspace` script doesn't import the dev-server config, so it cannot dispatch callbacks itself. Delegating to the target's own `dev-server.mjs` is how the kernel reaches the callbacks defined on the target's branch. A config declaring no `devServerScript` skips the shell-out. When `dev down` fails or times out, for example on a config the package refuses, the target's entry stays in `dev-servers.json` with its servers running. `remove` then kills the recorded spawn PIDs itself through `killRecordedDevServer`, and warns that the callback `stop()` did not run. Only after that does `remove` run `purgeInfrastructure` (e.g. `docker compose down -v`), drop the registry entry, and `git worktree remove --force`. Before any of these teardown steps, `remove` refuses when the worktree has uncommitted changes, unless `--force` is passed.
+`teardown`, `remove` and explicit orphan cleanup share `cleanupTarget`. It refuses pending finalize before side effects, runs the configured absolute `devServerScript` with `down` and target cwd when the target exists, then applies recorded-PID fallback. The workspace script does not load dev configuration itself. Re-execution uses the **configured wrapper**, which can be the main wrapper during bootstrap fallback; it does not discover the target branch's script automatically. Stop failure warns that callbacks may not have run.
+
+Cleanup then invokes `purgeInfrastructure` with the captured registered name, target path, main path, legacy `purgeData` and verbosity, before dropping the workspace entry by path on a fresh locked read. Dev records are unregistered during stop/fallback. Purge exceptions retain the workspace entry; hooks swallowing errors remain best-effort. Failed and partial setups are eligible. No callback or subprocess runs under the registry lock.
+
+`teardown` preserves files, dependencies, seeded/runtime files, shared links and all Git state. Main teardown preserves the shared registry directory and other entries. It accepts dirty worktrees, has no force/all mode, and never runs Git deletion or prune. An already-unregistered verified worktree succeeds without guessed-name purge; a dev-only entry supplies its recorded identity. Unknown names and unrelated same-basename paths fail. Re-adoption runs normal setup again; names and ports are released rather than reserved.
+
+`remove` adds a dirty-worktree check before cleanup (`--force` bypasses it), prohibits main deletion, and finally runs Git worktree deletion while retaining the branch. `dev down` only stops processes and callbacks; destructive purge belongs to teardown/remove/prune.
 
 ## Concurrency-cap TOCTOU race
 
@@ -155,9 +161,13 @@ Every dev-server command runs `checkPortClaim` ([`port-claim.ts`](../packages/wo
 
 ## Registry paths and repair
 
-`workspaces.json` stores each `worktree` as an absolute path, like `dev-servers.json`. All worktrees share the file through the registry symlink while each branch runs its own package version, and every version reads absolute paths alike.
+`workspaces.json` stores normalized absolute worktree paths, like `dev-servers.json`. Version 2 and entry fields stay unchanged. Keys are opaque registered names: `registerWorkspace` first reuses an exact path match, otherwise allocates the basename or appends a SHA-256 path prefix (initially eight hex characters). It extends the digest, then uses numeric discriminators if necessary, under the insertion lock. Assigned suffixes remain stable when collisions disappear. Main dev setup uses the same allocation.
 
-The file carries `"version": 2`. A file without it was written by 0.36 or older. Older versions keep the top-level key when they rewrite the file.
+Selectors resolve exact normalized paths before exact registered names, with no basename-search fallback. Git discovers the current root even from nested cwd. `list` exposes names and full paths. Independent clones have independent registries; there is no machine-wide uniqueness promise.
+
+Every participating duplicate-basename worktree must use the upgraded kernel; old kernels cannot operate suffixed identities safely. Consumer wrappers must also adopt explicit registered-name Compose projects. Ordinary unsuffixed names and default resource naming remain compatible. There is no bulk upgrade or teardown.
+
+A file without `version` was written by 0.36 or older. Older versions keep the top-level key when they rewrite the file.
 
 ### Read-time repair
 
@@ -166,8 +176,7 @@ The file carries `"version": 2`. A file without it was written by 0.36 or older.
 - A `main: true` entry points at the main worktree, so the main worktree can move alone.
 - A relative path, written by an earlier build, is resolved against the main worktree. The repaired path is always absolute.
 - An existing path is kept. Linked worktrees therefore survive a move of the main worktree.
-- A missing path whose sibling `join(dirname(mainWorktree), <key>)` exists points at that sibling: the project moved together with its worktrees.
-- Any other missing path is kept. The entry stays an orphan.
+- A missing linked path is kept as an orphan, even when a same-named sibling exists. A key may have a collision suffix and is never a repair basename.
 
 In a file without `version`, a `ready` entry without `devSetupAt` gets its `createdAt`: its old `finalizeWorkspace` already provisioned the infrastructure.
 
@@ -175,17 +184,19 @@ An old bug left one main entry per name the main directory ever had. `readWorksp
 
 ### Main-entry re-key
 
-The main entry is found by `main: true`, not by its key. A key that differs from `basename(mainWorktree)` means a renamed directory, and `rekeyMainEntry` moves the entry under the new name. The entry keeps `createdAt`, `status`, `ports` and `purgeData`, and loses `devSetupAt` and `runFilesWrittenWith`: the next `dev setup` updates run files and provisions infrastructure under the new name. `registerWorkspace` and the main worktree's `dev setup` re-key before their name-collision check, and warn that resources named after the old name are not reused. Renaming the directory back recovers them; otherwise the user removes them by hand. When another entry already holds the new name, the re-key is skipped and the collision check reports it.
+The main entry is found by `main: true`. Before repairing its path, the loader retains the winning entry's original path. A changed absolute-path basename is rename evidence; parent-only relocation and an unchanged suffixed identity are not. Legacy relative records retain key-based recovery.
+
+`updateWorkspaces` reconciles a genuine rename before mutation, allocating a nonconflicting name rather than overwriting a linked entry. It preserves `createdAt`, status, ports and legacy data. Only a changed registered name invalidates `devSetupAt` and `runFilesWrittenWith`, and warns that old-named resources are not reused. Read-only loading does not persist reconciliation. Status/deletion writes resolve by path again so an earlier captured key cannot target a replacement entry.
 
 ### Registry lock
 
-Every read-modify-write of `workspaces.json` goes through `updateWorkspaces`, which holds `<registryDir>/workspaces.lock` ([`registry-lock.ts`](../packages/workspace/src/registry-lock.ts)). The writers are `registerWorkspace`, the `markWorkspace*` functions, the dev-failure record of `setup --full`, `remove`, `prune`, the `list` auto-prune and `migrate-registry-0.30`. The dev-server writes through it too: `dev setup` creates the main entry, stores the ports, `devSetupAt` and `devSetupFailure`.
+Every read-modify-write of `workspaces.json` goes through `updateWorkspaces`, which holds `<registryDir>/workspaces.lock` ([`registry-lock.ts`](../packages/workspace/src/registry-lock.ts)). The writers are `registerWorkspace`, the `markWorkspace*` functions, the dev-failure record of `setup --full`, `teardown`, `remove`, `prune`, the `list` auto-prune and `migrate-registry-0.30`. The dev-server writes through it too: `dev setup` creates the main entry, stores the ports, `devSetupAt` and `devSetupFailure`.
 
 - The lock file is created with `O_EXCL` and holds `<pid>:<token>`, a token unique to the holder. The `finally` deletes it only while it still holds that token.
 - A lock is stale when its PID is dead or the file is older than 30 seconds. A file without a PID yet is judged by its age only. A waiter renames a stale lock to a unique name before deleting it, so only one waiter replaces it. A rename that caught a fresh lock, told apart by its content, puts it back. A third process that creates a lock during that window overlaps the restored holder; closing it would need OS-level locks.
 - A waiter retries every 50 ms and fails after 10 seconds, with an error naming the lock file.
 
-The lock covers only reading, changing and writing the JSON, plus the listen probes of the allocation. It never spans a callback, git, Docker or a shell-out. `remove` and `prune` therefore take it twice: once to read the entry, then to delete it after the teardown, on a fresh read. `prune` deletes only the names still orphaned at that read. The `list` auto-prune first looks for orphans without the lock, so a `list` with no orphan writes nothing. Read-only paths (`wait`, `status`, the dev-server's lookups) read without the lock. `writeWorkspaces` writes a temporary file next to `workspaces.json` and renames it over the registry, so they never see a half-written file.
+The lock covers only reading, changing and writing the JSON, plus the listen probes of the allocation. It never spans a callback, git, Docker or a shell-out. `teardown`, `remove` and `prune` therefore take it twice: once to read the entry, then to delete it after the teardown, on a fresh read. `prune` deletes only the names still orphaned at that read. The `list` auto-prune first looks for orphans without the lock, so a `list` with no orphan writes nothing. Read-only paths (`wait`, `status`, the dev-server's lookups) read without the lock. `writeWorkspaces` writes a temporary file next to `workspaces.json` and renames it over the registry, so they never see a half-written file.
 
 ## Registry migration
 
@@ -194,9 +205,9 @@ The lock covers only reading, changing and writing the JSON, plus the listen pro
 Conversion rules:
 
 - All entries describing the main worktree collapse into one, keyed by the real main worktree. Old registries accumulate stale main entries when `basePort` changes, and their recorded paths go stale when the repository moves on disk; the collapse absorbs both.
-- Linked entries are keyed by `basename(worktree)`; same-path duplicates keep the newest entry. An entry whose directory is missing migrates as-is — it is an orphan, and the healing machinery reaches it by name.
+- Main is allocated first, then distinct linked paths use the same collision allocator. Same-path duplicates keep the newest state; missing directories remain orphans.
 - Migrated entries carry no ports. Each workspace gets its ports and run files at its next start.
-- `dev-servers.json` entries are rekeyed from `slot` to the workspace name; running PIDs stay valid.
+- `dev-servers.json` identities are translated by converted worktree path and historical main slots; dev-only records reserve nonconflicting names. Running PIDs and timestamps stay valid.
 - The converted registry is written under the registry lock, with `version`. Its `ready` entries get `devSetupAt`, as in the read-time repair.
 
 The command cannot rename slot-derived infrastructure (containers, volumes). When the config declares `purgeInfrastructure` — the marker of a consumer that tears down by name — it warns that old-named resources must be removed manually.
@@ -207,7 +218,7 @@ A `slots.json` present next to an existing `workspaces.json` was re-created afte
 
 A workspace becomes **orphaned** when its worktree directory is deleted out-of-band — a manual `rm -rf`, a bare `git worktree remove`, never going through `workspace remove`. Three pieces of state then go stale: the `workspaces.json` entry (points at a missing path), a possible `dev-servers.json` entry (its detached spawn PIDs can outlive the deleted `cwd`, and PID-based liveness keeps it "live"), and git's own `.git/worktrees/<name>` admin files.
 
-Orphans are found by name (`findOrphanNames`): the registry key outlives the directory it points at, so `prune`, `remove <name>` and the `list` auto-prune all reach an orphan by its basename.
+Orphans are found by name (`findOrphanNames`): the registry key outlives the directory it points at, so `prune`, `teardown <name>`, `remove <name>` and the `list` auto-prune all retain its registered identity.
 
 Healing splits by destructiveness:
 
@@ -216,7 +227,7 @@ Healing splits by destructiveness:
 
 `workspace remove` against an already-deleted worktree dir takes the same direct-kill path (shared `killRecordedDevServer` helper): it can't shell out to `node <devServerScript> down` (the worktree and its `dev-server.mjs` are gone), so it kills the recorded spawn PIDs, runs `purgeInfrastructure`, drops both registry entries, and runs `git worktree prune` — same full cleanup as `workspace prune`.
 
-**Tearing down an orphan's infrastructure.** The kernel still can't run a deleted worktree's callback `stop()` — its dev-server config is gone. It runs `config.purgeInfrastructure` instead: the workspace config is loaded, and it lives in the main worktree, so it outlives the deleted worktree. The hook receives `PurgeContext` (`worktree`, `mainWorktree`, `name`, `purgeData`, `verbose`), with `ctx.worktree` pointing at the now-missing dir.
+**Tearing down an orphan's infrastructure.** The kernel skips wrapper re-execution when the target directory is gone. It kills recorded PIDs and invokes the caller's loaded `config.purgeInfrastructure`; invoke cleanup through a surviving wrapper, usually the main worktree's. Orphan teardown leaves Git's stale registration for the external owner; explicit prune can clear it later. The hook receives `PurgeContext` (`worktree`, `mainWorktree`, `name`, `purgeData`, `verbose`), with `ctx.worktree` pointing at the now-missing dir.
 
 The hook tears down by name. The consumer's `DevServerConfig.setup` names every resource after the workspace, and records a resource with only a random id in a file named after the workspace, under the main worktree. No teardown state is stored in the registry, so a partial `setup` is torn down like a complete one, and the hook runs whether or not `dev setup` ever succeeded.
 

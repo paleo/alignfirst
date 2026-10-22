@@ -128,7 +128,7 @@ export interface WorkspaceConfig {
    * (`ctx.name`): every resource `DevServerConfig.setup` creates is named after it. MUST be
    * idempotent and tolerate already-absent or partial infrastructure: it may run when the worktree
    * directory is gone (`ctx.worktree` no longer exists), so never depend on the worktree's files.
-   * Best-effort; errors should be swallowed.
+   * A thrown error retains the workspace entry. Swallowing errors makes cleanup best-effort.
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */

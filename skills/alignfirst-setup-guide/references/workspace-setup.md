@@ -79,9 +79,11 @@ Docker services can remap the host port without touching the container's interna
 
 ### The workspace registry
 
-A workspace is identified by its **name**: the basename of its worktree directory. `workspaces.json`, under the main worktree's `runtimeDir`, maps each name to its worktree path and state. Commands select a workspace by directory — a path or a bare basename — defaulting to the current worktree; the basename still resolves an orphan whose directory is gone.
+A workspace has an opaque **registered name**, usually its directory basename. A second path with that basename receives a collision suffix; the first keeps its name. Re-registering the same path keeps its assigned name, even after another entry disappears. `workspaces.json`, under the main worktree's `runtimeDir`, maps these names to normalized absolute paths and state. Version 2 and entry fields are unchanged.
 
-**Limitation**: names must be unique. Registering a worktree whose basename already belongs to another path fails with an error naming the existing entry and its path. It surfaces only when worktrees live under different parent directories; the kernel dedupes siblings on its own.
+Commands default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`; a name still reaches an orphan. Paths never fall back to an unrelated same-basename worktree. Removed names, suffixes and ports are not reserved. Independent clones have independent registries.
+
+All participating duplicate-basename worktrees need the upgraded package. Consumer wrappers must adopt explicit registered-name resource selection, including Compose projects, before claiming this isolation. Ordinary names and resource defaults remain compatible. There is no automatic bulk upgrade or teardown.
 
 Registry (under the main worktree's `runtimeDir`, e.g. `.local-wt/workspace-registry/workspaces.json`):
 
@@ -109,6 +111,36 @@ A workspace for a code review needs no ports and no infrastructure. `workspace s
 `dev setup` brings the rest: the ports, the run files, and the infrastructure at its first run. It runs explicitly, or implicitly before every start.
 
 `workspace setup --full` does both at once. A dev failure there leaves the workspace `ready`: the command reports the failure and exits 1, and the next `dev setup` or start retries.
+
+### Externally managed worktrees and bootstrap
+
+`workspace setup` without a branch adopts an existing worktree without changing its path or branch. Configure generic hooks in the external tool, executed **inside the target worktree**. For a typical pnpm consumer:
+
+```sh
+pnpm i && pnpm workspace setup
+pnpm i && pnpm workspace setup --full
+pnpm workspace teardown
+```
+
+The first two are alternative post-creation hooks; the second requires a configured dev wrapper. The last is the pre-deletion hook. Apply the consumer's runtime selection. Installation-first works when dependencies do not require seeded files and uses the new branch's wrapper. Setup blocks by default; detached setup is an explicit alternative and must settle before cleanup.
+
+For seed-before-install or missing local dependencies after failure, stay in the target worktree and invoke the installed main wrapper:
+
+```sh
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
+main_worktree=$(dirname "$common_dir")
+node "$main_worktree/<path-to>/workspace.mjs" setup
+```
+
+Adapt the wrapper-relative path and runtime selection. The main wrapper must have usable dependencies/build output. This fallback runs the main worktree's recipe against the target; it is not a dependency-free launcher.
+
+### Cleanup without deletion
+
+`workspace teardown [<path-or-registered-name>]` stops recorded services, purges configured infrastructure (including volumes where configured), and releases registration and ports. It preserves worktree files, dependencies, seeded/runtime files, shared links and Git state. Main teardown preserves the shared registry directory and all other entries. It is not a filesystem reset. A subsequent setup re-adopts the retained worktree under normal seeding rules.
+
+Pending setup must be waited for; teardown has no force/all mode. Failed and partial setups are eligible, dirty files are accepted, and repeat teardown does not purge again. A thrown purge error retains the entry. Swallowed errors remain best-effort; a zero exit does not prove external-resource deletion. The external tool still owns Git deletion. `remove` adds dirty checks and Git deletion while retaining branches; explicit `prune` also clears stale Git registrations.
+
+`dev down` stops processes and configured callbacks, which may stop containers. Destructive purge belongs to teardown/remove/prune.
 
 ### Concurrent dev-server cap
 
@@ -150,12 +182,12 @@ The assets annotate every field; read them as you fill in the `ADAPT` points. Th
 Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 
 - `workspaceScript` — absolute path; leave the `import.meta.url` line as-is (the package re-spawns the script for the detached finalize phase).
-- `devServerScript` — absolute path to `dev-server.mjs`, so removal can shell out to its `down` and `setup --full` to its `setup`. Omit it when the project has no dev-server script.
+- `devServerScript` — absolute path to the configured dev wrapper. Teardown/removal re-executes its `down` with target cwd; `setup --full` runs its `setup`. This may be the main wrapper during bootstrap fallback; the kernel does not discover target-branch scripts automatically. Omit it without a dev server.
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — the files install, build or tests need ([Gitignored files](#gitignored-files-two-lists)). Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
 - `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the work-files link with `npx alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work.
 - `finalizeWorkspace(ctx)` — the detached background step: install and build. It returns nothing; infrastructure belongs in `setup` of `dev-server.mjs`. `ctx` carries `name`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it. **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`.
-- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace remove`, `prune`, and orphan removal, whether or not `dev setup` ever succeeded. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so tear down *by name* ([Teardown by name](#teardown-by-name)). `ctx.purgeData` is legacy: only a workspace provisioned by an older `finalizeWorkspace` carries one. Swallow errors.
+- `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace teardown`, `remove`, `prune`, and orphan removal, whether or not `dev setup` ever succeeded. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so tear down *by name* ([Teardown by name](#teardown-by-name)). `ctx.purgeData` is legacy: only a workspace provisioned by an older `finalizeWorkspace` carries one. If you swallow errors for absent resources, cleanup remains best-effort.
 - `formatSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
 
 ### `dev-server.mjs`
@@ -172,7 +204,7 @@ Builds a `DevServerConfig` and calls `runDevServer`. Key fields:
 A server is discriminated on `kind`:
 
 - `kind: "spawn"` — `{ name, exec, port?, detectReady, detectError? }`. The runner spawns the process, logs to `<runtimeDir>/logs/<name>.log`, polls the log for readiness, and tracks the PID. `port` is a name from `ports.declare`, resolved to the workspace's port, or a fixed number. Omit `port` for a process that listens on nothing; conflict detection, port sweeping and the summary URL then skip that server. `detectError` (optional) fails fast on a known fatal log pattern.
-- `kind: "callback"` — `{ name, start(ctx), stop(ctx) }`. You own the lifecycle of a resource that runs with the dev server, such as a Docker stack, typically first. Servers start in array order, stop in reverse. `ctx` carries `cwd` and `ports`, the ports of the worktree in `cwd`.
+- `kind: "callback"` — `{ name, start(ctx), stop(ctx) }`. You own the lifecycle of a resource that runs with the dev server, such as a Docker stack, typically first. Servers start in array order, stop in reverse. `ctx` carries `{ name, cwd, ports }`: the target's registered name, worktree directory and allocated ports. `name` is never the server label such as `docker`. Callbacks reading only cwd/ports remain compatible.
 
 `kind: "callback"` rules (not type-enforced — read carefully):
 
@@ -208,9 +240,11 @@ The compose file reaches each worktree through one of two patterns. Follow the o
 
 A required variable (`:?`) fails `up` when `.env` lacks it. A default (`:-8102`) would fall back silently to the main worktree's ports. Keep a default only when the repo already relies on one, such as a CI job running compose without `.env`.
 
-**Isolation comes from the compose project name**, which Compose derives from the worktree directory. Containers are `<project>-<service>-1`, volumes `<project>_<volume>`. Keep it that way: no top-level `name:` in the compose file, no `COMPOSE_PROJECT_NAME` in `.env`.
+**Select the registered project explicitly.** Derive `project = helpers.composeProjectName(ctx.name)` and pass `-p <project>` to every Compose operation: provisioning, readiness `exec`, callback up/down, purge and displayed logs. Launch live-worktree commands with the target cwd; resolve summary files against `workspace.worktree`. Orphan purge uses an existing directory (the main worktree), never a deleted target, and selects the recorded name. Containers are `<project>-<service>-1`, volumes `<project>_<volume>`.
 
-**The project name is normalized.** Compose lowercases the directory name, drops every character outside `[a-z0-9_-]`, and trims leading `-` and `_`. A workspace name keeps the branch's case (`myrepo-feat-ABC-123`), so derive the project with `helpers.composeProjectName(name)`. This holds in both patterns: `container_name` renames a container, never its volumes.
+The unchanged helper lowercases, drops characters outside `[a-z0-9_-]`, and trims leading `-` and `_`. For ordinary unsuffixed names this equals the former directory-derived default, so explicit selection reaches existing resources. Do not replace this with a new normalization algorithm. A `container_name` still needs registered-name scoping; it renames only a container, never its volumes.
+
+Migration/seed scripts that invoke Compose indirectly must inherit matching `COMPOSE_PROJECT_NAME` while retaining the existing environment. Adapt any explicit overrides inside consumer scripts to the same project. Do not install a global environment override; implicit directory selection cannot isolate duplicate basenames.
 
 **Teardown needs no compose file.** `docker compose -p <project> down -v` removes the project's containers, volumes and network by label, from any directory. It also catches a volume that a branch added.
 
