@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   configureGit,
+  git,
   initRepository,
   makeCompanionProject,
   makeTempDir,
@@ -101,6 +102,33 @@ describe("context command", () => {
     );
     expect(result.stdout).toContain("# AlignFirst Protocols");
   });
+
+  it.each(["tracked", "differentTarget"])(
+    "prints only the first-line Work files diagnostic for %s plans",
+    async (kind) => {
+      const { root, home, project } = makeCompanionProject({ ".plans": "project" });
+      dirs.push(root);
+      mkdirSync(join(project, ".plans"));
+      let cwd = project;
+      if (kind === "tracked") {
+        writeFileSync(join(project, ".plans", "note.md"), "tracked\n");
+        git(project, "add", ".plans");
+      } else {
+        cwd = join(root, "linked");
+        git(project, "worktree", "add", "--quiet", "-b", "ticket", cwd);
+        mkdirSync(join(cwd, ".plans"));
+      }
+      const check = await runMain(["plans", "check"], { cwd, home });
+      expect(check.code).toBe(1);
+      const result = await runMain(["context"], { cwd, home });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(result.stdout.split("\n").filter((line) => line.startsWith("Work files:"))).toEqual([
+        `Work files: ${check.stderr.trim().split("\n")[0]}`,
+      ]);
+      expect(result.stdout).not.toContain("git rm -r --cached");
+      expect(result.stdout).toContain("# AlignFirst Protocols");
+    },
+  );
 
   it("renders the npx command form", async () => {
     const result = await runMain(["context"], {

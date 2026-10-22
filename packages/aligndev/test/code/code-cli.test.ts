@@ -1309,7 +1309,9 @@ describe("companion projects", () => {
     const gated = await run(project, ["new", "-m", "go"]);
     expect(gated.code).toBe(1);
     expect(gated.stderr).toBe(
-      `Error: no .plans/ directory usable at ${plans}. ` +
+      `No .plans/ directory at ${plans} (companion).\n` +
+        `Local work files:  mkdir -p ${plans}\n` +
+        "Team work files:   alignfirst plans setup <clone-dir>\n" +
         "See `aligndev guide work-files-setup` for authorized preparation.\n",
     );
 

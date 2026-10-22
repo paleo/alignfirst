@@ -90,7 +90,7 @@ describe("explicit companion-only onboarding", () => {
       expect(result.code, result.stderr).toBe(0);
       expect(result.stdout).not.toContain("{{");
       const explicitEntry = result.stdout.indexOf("For explicit companion-only onboarding");
-      const readinessGate = result.stdout.indexOf("## 1. Inspect the effective location");
+      const readinessGate = result.stdout.indexOf("## 1. Check the effective work files");
       expect(explicitEntry).toBeGreaterThan(0);
       expect(explicitEntry).toBeLessThan(readinessGate);
       expect(result.stdout).toContain("start at section 3 under the onboarding authorization");

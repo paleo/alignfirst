@@ -9,12 +9,13 @@ import {
 import { dirname, join, resolve } from "node:path";
 
 import { errorMessage } from "../errors.js";
-import { type ProjectReport, readProjectReport } from "../project/layout.js";
-import { isProjectTrackedDirectory, validateEffectivePlans } from "../project/plans.js";
+import type { ProjectReport } from "../project/layout.js";
+import { readReport, validateEffectivePlans } from "../project/plans.js";
 import {
   canonicalPath,
   git,
   isInside,
+  isProjectTrackedDirectory,
   pathExists,
   readRepository,
   type Repository,
@@ -45,8 +46,6 @@ export interface DirectoryReport {
 interface PreparedAdd {
   destination: string;
   branch: BranchPlan;
-  sourceReport: ProjectReport;
-  plansTarget: string;
   directories: Record<".local" | ".plans", DirectoryReport>;
   warnings: string[];
 }
@@ -73,7 +72,7 @@ function prepareAdd(ctx: WorktreeContext, repo: Repository, options: AddOptions)
   const branch = prepareBranch(ctx, repo, options);
   const sourceCtx = { ...ctx, cwd: repo.mainWorktree };
   const sourceReport = readReport(sourceCtx);
-  const plansTarget = validateEffectivePlans(sourceCtx, sourceReport, true);
+  const plansTarget = validateEffectivePlans(sourceCtx);
   const warnings: string[] = [];
   const directories = planDirectories(
     sourceCtx,
@@ -84,7 +83,7 @@ function prepareAdd(ctx: WorktreeContext, repo: Repository, options: AddOptions)
     plansTarget,
     warnings,
   );
-  return { destination, branch, sourceReport, plansTarget, directories, warnings };
+  return { destination, branch, directories, warnings };
 }
 
 function validateDestination(ctx: WorktreeContext, repo: Repository, input: string): string {
@@ -145,12 +144,6 @@ function prepareBranch(ctx: WorktreeContext, repo: Repository, options: AddOptio
   }
   const commit = git(ctx, "rev-parse", "--verify", "--end-of-options", `${start}^{commit}`).trim();
   return { create, start: !create ? options.branch : start, commit, track };
-}
-
-function readReport(ctx: WorktreeContext): ProjectReport {
-  const report = readProjectReport(ctx.alignfirstCommand, ctx.cwd, ctx.env);
-  if ("error" in report) throw new Error(report.error);
-  return report;
 }
 
 function planDirectories(
@@ -231,20 +224,13 @@ function finishSetup(
   options: AddOptions,
   prepared: PreparedAdd,
 ): AddReport {
-  const { destination, directories, sourceReport, plansTarget, warnings } = prepared;
+  const { destination, directories, warnings } = prepared;
   let step = "directory links and local Git exclusions";
   try {
     const targetCtx = { ...ctx, cwd: destination };
     createLinks(targetCtx, repo, directories);
     step = "effective work-files verification";
-    const finalReport = readReport(targetCtx);
-    const finalTarget = validateEffectivePlans(targetCtx, finalReport, true);
-    if (
-      finalTarget !== plansTarget ||
-      finalReport.locations[".plans"].in !== sourceReport.locations[".plans"].in
-    ) {
-      throw new Error(`Effective .plans changed from ${plansTarget} to ${finalTarget}.`);
-    }
+    validateEffectivePlans(targetCtx);
     const worktree = readRepository(targetCtx).worktrees.find((tree) => tree.path === destination);
     if (worktree === undefined || worktree.branch !== options.branch) {
       throw new Error("Created worktree does not have the requested branch in Git's registry.");

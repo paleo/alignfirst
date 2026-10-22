@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 import { CliError } from "./cli-error.js";
 import type { Streams } from "./context.js";
@@ -44,6 +44,32 @@ export function assertMainWorktreeRoot(cwd: string): void {
     throw new CliError(
       "Run this command from the main worktree. Linked worktrees reach .plans through it.",
     );
+}
+
+export function linkedMainWorktree(cwd: string): string | undefined {
+  const mainWorktree = findMainWorktree(cwd);
+  if (mainWorktree === undefined) return;
+  const root = gitOutputOrUndefined(cwd, "rev-parse", "--show-toplevel");
+  if (root === undefined || realpathSync(root) === mainWorktree) return;
+  return mainWorktree;
+}
+
+/** The main worktree is the parent of the common `.git` directory; a bare repository has none. */
+export function findMainWorktree(cwd: string): string | undefined {
+  const identity = optionalRepositoryId(cwd);
+  if (identity === undefined || basename(identity) !== ".git") return;
+  return realpathSync(dirname(identity));
+}
+
+export function optionalRepositoryId(dir: string): string | undefined {
+  const commonDir = gitOutputOrUndefined(
+    dir,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  );
+  if (commonDir === undefined) return;
+  return realpathSync(commonDir);
 }
 
 export function gitOutput(dir: string, ...args: string[]): string {

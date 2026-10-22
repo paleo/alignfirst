@@ -65,7 +65,7 @@ function renderPlans(ctx: CommandContext): string | undefined {
   const plans = layoutOf(ctx).locations[".plans"];
   if (!plans.exists) return;
   try {
-    const mode = resolvePlansMode(ctx.cwd, plans, ctx.form);
+    const mode = resolvePlansMode(ctx.cwd, plans, ctx.form, ctx.home);
     const folder = ctx.projectConfig?.config.plans?.repositoryFolder;
     const sharedFolder =
       folder === undefined ? "" : ` (folder \`${folder}\` in the work-files repository)`;

@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { isNodeError } from "../errors.js";
+import { errorMessage, isNodeError } from "../errors.js";
 
 export interface GitContext {
   cwd: string;
@@ -40,8 +40,46 @@ export function readRepository(ctx: GitContext): Repository {
   return { mainWorktree, commonDir, worktrees };
 }
 
-export function repositoryIdentity(ctx: GitContext): string {
+function repositoryIdentity(ctx: GitContext): string {
   return realpathSync(git(ctx, "rev-parse", "--path-format=absolute", "--git-common-dir").trim());
+}
+
+export function isProjectTrackedDirectory(
+  ctx: GitContext,
+  path: string,
+  identity: string,
+): boolean {
+  const root = realpathSync(git(ctx, "rev-parse", "--show-toplevel").trim());
+  const logicalPath = join(realpathSync(dirname(path)), basename(path));
+  if (
+    isInside(root, logicalPath) &&
+    hasTrackedFiles({ ...ctx, cwd: root }, relative(root, logicalPath))
+  )
+    return true;
+  const resolved = realpathSync(path);
+  const source = { ...ctx, cwd: resolved };
+  if (optionalRepositoryIdentity(source) !== identity) return false;
+  const sourceRoot = git(source, "rev-parse", "--show-toplevel").trim();
+  return hasTrackedFiles({ ...ctx, cwd: sourceRoot }, relative(sourceRoot, resolved));
+}
+
+function hasTrackedFiles(ctx: GitContext, path: string): boolean {
+  return (
+    git(ctx, "--literal-pathspecs", "ls-files", "-z", "--", path === "" ? "." : path).length > 0
+  );
+}
+
+function optionalRepositoryIdentity(ctx: GitContext): string | undefined {
+  try {
+    return repositoryIdentity(ctx);
+  } catch (error) {
+    if (
+      errorMessage(error).includes("not a git repository") ||
+      (isNodeError(error) && error.code === "ENOENT")
+    )
+      return;
+    throw error;
+  }
 }
 
 export function readWorktrees(ctx: GitContext, mainWorktree: string): Worktree[] {

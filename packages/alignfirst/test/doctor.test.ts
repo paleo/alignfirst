@@ -5,7 +5,14 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveSkillRoots } from "../src/skills.js";
-import { makeCompanionProject, makeTempDir, runMain, writeRegistry, makeSink } from "./helpers.js";
+import {
+  git,
+  makeCompanionProject,
+  makeTempDir,
+  runMain,
+  writeRegistry,
+  makeSink,
+} from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -180,6 +187,34 @@ describe("doctor command", () => {
     );
     expect(result.stdout).toContain("[ok] Work files: local");
   });
+
+  it.each(["tracked", "differentTarget"])(
+    "reports %s plans as a Work files error and continues other sections",
+    async (kind) => {
+      const { root, home, project } = makeCompanionProject({ ".plans": "project" });
+      dirs.push(root);
+      mkdirSync(join(project, ".plans"));
+      let cwd = project;
+      if (kind === "tracked") {
+        writeFileSync(join(project, ".plans", "note.md"), "tracked\n");
+        git(project, "add", ".plans");
+      } else {
+        cwd = join(root, "linked");
+        git(project, "worktree", "add", "--quiet", "-b", "ticket", cwd);
+        mkdirSync(join(cwd, ".plans"));
+      }
+      const check = await runMain(["plans", "check"], { cwd, home });
+      expect(check.code).toBe(1);
+      const result = await runMain(["doctor"], { cwd, home, env: { PATH: "" } });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(result.stdout).toContain(
+        `[error] Work files: ${check.stderr.trim().split("\n")[0]}\n`,
+      );
+      expect(result.stdout).not.toContain("[ok] Work files:");
+      expect(result.stdout).toContain("] Docmap:");
+      expect(result.stdout).toContain("] Skills:");
+    },
+  );
 
   it("warns about registry keys that name no git main worktree", async () => {
     const { root, home, project } = makeCompanionProject({});

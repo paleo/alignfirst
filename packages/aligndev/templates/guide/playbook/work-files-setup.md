@@ -4,17 +4,13 @@ Prepare usable work files before ticket reservation, request capture, coding del
 
 For explicit companion-only onboarding, start at section 3 under the onboarding authorization, even when existing project plans are usable. That route requires registration and an explicit companion-plans selection independently of the readiness gate below.
 
-## 1. Inspect the effective location
+## 1. Check the effective work files
 
-Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH and read `locations[".plans"]`. The report is authoritative. Explicit `project` or `companion` selections win. Under `auto`, an existing companion copy wins over an existing project copy; when neither exists, a registered companion is the creation target.
+Run `{{ALIGNFIRST}} plans check` from PROJECT_PATH. It reads the effective `.plans` location from `{{ALIGNFIRST}} config --json`, where explicit `project` or `companion` selections win and, under `auto`, an existing companion copy wins over an existing project copy; when neither exists, a registered companion is the creation target. The check passes when that location is a usable directory with no file tracked by this project's own repository, through a tracked symlink, mixed tracked/untracked contents, or an alias into tracked files included. A separate work-files repository may track its contents, and an unused tracked project `.plans` is not a blocker when a usable companion is effective.
 
-Check the reported path read-only, including its resolved real path. It must be a usable directory. Run `{{ALIGNFIRST}} plans check` from PROJECT_PATH (or the selected worktree during its verification): it validates usability, but does not enforce AlignDev's tracking rule.
+When an existing linked worktree is selected, run the command there too: it also requires the same effective target as the main worktree. A different location is an error: do not create a second history or repair links silently.
 
-Check whether the effective path contains files tracked by this project's Git repository. Use `git --literal-pathspecs ls-files -z -- <relative-path>` from the containing worktree root, checking the directory itself as well as descendants, including a tracked symlink and mixed tracked/untracked contents. Check the resolved source too: compare `git rev-parse --path-format=absolute --git-common-dir` identities so an untracked alias into this project's tracked files cannot bypass the rule. A separate work-files repository may track its contents. An unused tracked project `.plans` is not a blocker when a usable companion is effective.
-
-When an existing linked worktree is selected, repeat these checks there with its actual `config --json` report. Its effective work files must resolve to the same shared target selected from PROJECT_PATH. A different location is an error: do not create a second history or repair links silently.
-
-Usable, non-project-tracked effective plans need no preparation. Resume the interrupted operation. Broken links, invalid configuration, unreadable paths, and conflicting non-directory files remain errors; report them rather than replacing them.
+Usable, non-project-tracked effective plans need no preparation: resume the interrupted operation. Any other failure (broken links, invalid configuration, unreadable paths, conflicting non-directory files) is reported, not repaired.
 
 ## 2. Obtain approval when preparation is needed
 
@@ -30,6 +26,6 @@ After approval:
 2. Reread `{{ALIGNFIRST}} config --json`. Retain `companion.dir` and `companion.key`; use the reported key exactly.
 3. Read `~/.alignfirst/companions/registry.json` before editing. Its project entries live under `projects`. Edit only `projects[companion.key]`, setting `items[".plans"]` to `"companion"` within that entry. Use the key reported by config, not a guessed key or a new top-level `items` object. Preserve all other fields, item settings, profile selections, and entries.
 4. Reread `{{ALIGNFIRST}} config --json`. Verify that `locations[".plans"].in` is `"companion"` and its path is the selected companion's `.plans`. Create that directory if missing, preserving existing contents. Do not create a worktree `.plans` link for companion plans.
-5. Repeat the read-only usability and tracking checks in section 1. Verify the effective location in any already selected worktree too, then resume the interrupted operation.
+5. Run `{{ALIGNFIRST}} plans check` again from PROJECT_PATH, and from any already selected worktree, then resume the interrupted operation.
 
 This is the sole assistant preparation procedure. `{{ALIGNDEV}} worktree add` and coding launches validate work files; they do not authorize this selection or provision missing plans.

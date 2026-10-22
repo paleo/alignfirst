@@ -9,12 +9,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
-import { gitOutputOrUndefined } from "./git.js";
+import { findMainWorktree } from "./git.js";
 import {
   literal,
   nonEmptyString,
@@ -253,18 +253,6 @@ function isUserPath(value: string): boolean {
   return (
     !value.includes("\u0000") && (value === "~" || value.startsWith("~/") || isAbsolute(value))
   );
-}
-
-/** The main worktree is the parent of the common `.git` directory; a bare repository has none. */
-function findMainWorktree(cwd: string): string | undefined {
-  const commonDir = gitOutputOrUndefined(
-    cwd,
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-common-dir",
-  );
-  if (commonDir === undefined || basename(commonDir) !== ".git") return;
-  return realpathSync(dirname(commonDir));
 }
 
 function normalizePath(value: string, realHome: string): string {

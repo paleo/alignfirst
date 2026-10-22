@@ -128,7 +128,7 @@ export async function runCode(
     }
     const config = loadSettings();
     const report = readReport(ctx);
-    if (command.kind === "session") validateEffectivePlans(ctx, report);
+    if (command.kind === "session") validateEffectivePlans(ctx);
     const records =
       command.kind === "session" ? listSessionRecords(report.locations._aligndev.path) : [];
     const args = command.kind === "session" ? command.args : undefined;

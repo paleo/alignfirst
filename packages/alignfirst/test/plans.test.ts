@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -263,7 +264,15 @@ describe("plans commands", () => {
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(1);
     expect(conflict.stderr).toContain("Work-files synchronization stopped on a conflict");
-    expect((await runMain(["plans", "check"], { cwd: fixture.product })).code).toBe(1);
+    for (const args of [
+      ["plans", "check"],
+      ["plans", "check", "--json"],
+    ]) {
+      const check = await runMain(args, { cwd: fixture.product });
+      expect(check.code).toBe(1);
+      expect(check.stdout).toBe("");
+      expect(check.stderr).toContain("Work-files synchronization stopped on a conflict");
+    }
     expect(
       (
         await runMain(["doctor"], {
@@ -443,6 +452,500 @@ describe("plans commands", () => {
     expect(result.stderr).toContain("mutually exclusive");
   });
 });
+
+describe("plans check contract", () => {
+  it.each([["--help"], ["check", "--help"], ["check", "-h"]])(
+    "documents check --json in %j without requiring plans",
+    async (...args) => {
+      const fixture = makeFixture();
+      const result = await runMain(["plans", ...args], { cwd: fixture.product });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(result.stdout).toContain("alignfirst plans check [--json]");
+    },
+  );
+
+  it.each([["extra"], ["--root", "x"], ["--unknown"], ["--json", "extra"]])(
+    "rejects check arguments %j without a success document",
+    async (...args) => {
+      const fixture = makeFixture();
+      mkdirSync(join(fixture.product, ".plans"));
+      const result = await runMain(["plans", "check", ...args], { cwd: fixture.product });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("Usage: alignfirst plans check [--json]");
+    },
+  );
+
+  it("reports exact local JSON and preserves the legacy text", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    mkdirSync(plans);
+    const options = { cwd: fixture.product, home: fixture.root };
+    const result = await runMain(["plans", "check", "--json"], options);
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      mode: "local",
+      plans: { in: "project", path: plans, target: realpathSync(plans) },
+      mainWorktree: null,
+    });
+    expect(await runMain(["plans", "check"], options)).toEqual({
+      code: 0,
+      stdout: ".plans is a local directory (local mode): synchronization is disabled.\n",
+      stderr: "",
+    });
+  });
+
+  it("accepts a separate repository tracking its own work files through an alias chain", async () => {
+    const fixture = makeFixture();
+    const target = join(fixture.clone, "product-plans");
+    mkdirSync(target);
+    writeFileSync(join(target, "note.md"), "shared\n");
+    git(fixture.clone, "add", "product-plans");
+    git(fixture.clone, "commit", "--quiet", "-m", "work files");
+    const alias = join(fixture.root, "work-files-alias");
+    symlinkSync(target, alias);
+    const plans = join(fixture.product, ".plans");
+    symlinkSync(alias, plans);
+    const options = { cwd: fixture.product, home: fixture.root };
+    const result = await runMain(["plans", "check", "--json"], options);
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      mode: "shared",
+      plans: { in: "project", path: plans, target: realpathSync(target) },
+      mainWorktree: null,
+    });
+    expect(await runMain(["plans", "check"], options)).toEqual({
+      code: 0,
+      stdout: ".plans is linked to the work-files repository.\n",
+      stderr: "",
+    });
+  });
+
+  it.each(["local", "shared"])(
+    "reports effective companion plans in %s mode despite an unused tracked project copy",
+    async (mode) => {
+      const fixture = makeFixture();
+      const unused = join(fixture.product, ".plans");
+      mkdirSync(unused);
+      writeFileSync(join(unused, "tracked.md"), "unused\n");
+      git(fixture.product, "add", ".plans");
+      git(fixture.product, "commit", "--quiet", "-m", "unused plans");
+      const plans = join(useCompanion(fixture), ".plans");
+      mkdirSync(join(plans, ".."), { recursive: true });
+      const target = mode === "local" ? plans : join(fixture.clone, "product-plans");
+      mkdirSync(target);
+      if (mode === "shared") symlinkSync(target, plans);
+      const before = snapshotTree(unused);
+      const registry = join(fixture.root, ".alignfirst", "companions", "registry.json");
+      const registryBefore = readFileSync(registry);
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: fixture.product,
+        home: fixture.root,
+      });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(JSON.parse(result.stdout)).toEqual({
+        mode,
+        plans: { in: "companion", path: plans, target: realpathSync(target) },
+        mainWorktree: null,
+      });
+      expect(snapshotTree(unused)).toEqual(before);
+      expect(readFileSync(registry)).toEqual(registryBefore);
+    },
+  );
+
+  it("accepts a real local directory outside Git", async () => {
+    const fixture = makeFixture();
+    const cwd = join(fixture.root, "plain");
+    const plans = join(cwd, ".plans");
+    mkdirSync(plans, { recursive: true });
+    const result = await runMain(["plans", "check", "--json"], { cwd, home: fixture.root });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      mode: "local",
+      plans: { in: "project", path: plans, target: realpathSync(plans) },
+      mainWorktree: null,
+    });
+  });
+
+  it.each(["missing", "broken", "file", "outsideGit"])(
+    "preserves the %s refusal without partial JSON",
+    async (kind) => {
+      const fixture = makeFixture();
+      const plans = join(fixture.product, ".plans");
+      if (kind === "broken") symlinkSync(join(fixture.root, "missing"), plans);
+      if (kind === "file") writeFileSync(plans, "not a directory\n");
+      if (kind === "outsideGit") {
+        const target = join(fixture.root, "plain");
+        mkdirSync(target);
+        symlinkSync(target, plans);
+      }
+      const messages: Record<string, string> = {
+        missing: "No .plans/ directory",
+        broken: "The .plans symlink is broken.",
+        file: ".plans is not a directory.",
+        outsideGit: ".plans points outside any git repository.",
+      };
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: fixture.product,
+        home: fixture.root,
+      });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(messages[kind]);
+    },
+  );
+});
+
+describe("project-tracked plans gate", () => {
+  it.each(["tracked", "staged", "mixed", "trackedLink", "alias", "linkedAlias"])(
+    "refuses %s effective plans without touching their index or contents",
+    async (kind) => {
+      const fixture = makeFixture();
+      const plans = join(fixture.product, ".plans");
+      let source = plans;
+      if (kind === "alias" || kind === "linkedAlias") {
+        let sourceRepo = fixture.product;
+        if (kind === "linkedAlias") {
+          sourceRepo = join(fixture.root, "other-worktree");
+          git(fixture.product, "worktree", "add", "--quiet", "-b", "other", sourceRepo);
+        }
+        source = join(sourceRepo, "tracked-plans");
+        mkdirSync(source);
+        writeFileSync(join(source, "note.md"), "tracked\n");
+        git(sourceRepo, "add", "tracked-plans");
+        git(sourceRepo, "commit", "--quiet", "-m", "track target");
+        symlinkSync(source, plans);
+      } else if (kind === "trackedLink") {
+        source = join(fixture.clone, "source");
+        mkdirSync(source);
+        symlinkSync(source, plans);
+        git(fixture.product, "add", ".plans");
+        git(fixture.product, "commit", "--quiet", "-m", "track link");
+      } else {
+        mkdirSync(plans);
+        writeFileSync(join(plans, "tracked.md"), "tracked\n");
+        git(fixture.product, "add", ".plans");
+        if (kind !== "staged") git(fixture.product, "commit", "--quiet", "-m", "track plans");
+        if (kind === "mixed") writeFileSync(join(plans, "untracked.md"), "untracked\n");
+      }
+      const index = readFileSync(join(fixture.product, ".git", "index"));
+      const sourceIndexPath = git(
+        source,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        "index",
+      );
+      const sourceIndex = existsSync(sourceIndexPath) ? readFileSync(sourceIndexPath) : undefined;
+      const before = snapshotTree(fixture.product);
+      const sourceBefore = snapshotTree(source);
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: fixture.product,
+        home: fixture.root,
+      });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expectTrackingRemedies(result.stderr, plans);
+      expect(snapshotTree(fixture.product)).toEqual(before);
+      expect(snapshotTree(source)).toEqual(sourceBefore);
+      expect(readFileSync(join(fixture.product, ".git", "index"))).toEqual(index);
+      expect(existsSync(sourceIndexPath) ? readFileSync(sourceIndexPath) : undefined).toEqual(
+        sourceIndex,
+      );
+    },
+  );
+
+  it("refuses a tracked symlink through an aliased checkout path", async () => {
+    const fixture = makeFixture();
+    symlinkSync(fixture.clone, join(fixture.product, ".plans"));
+    git(fixture.product, "add", ".plans");
+    git(fixture.product, "commit", "--quiet", "-m", "track link");
+    const alias = join(fixture.root, "aliased-checkout");
+    symlinkSync(fixture.product, alias);
+    const before = snapshotTree(fixture.clone);
+    const result = await runMain(["plans", "check", "--json"], {
+      cwd: alias,
+      home: fixture.root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("tracked by this project's repository");
+    expect(snapshotTree(fixture.clone)).toEqual(before);
+  });
+
+  it.each([false, true])(
+    "uses literal paths when companion plans are tracked: %s",
+    async (tracked) => {
+      const fixture = makeFixture();
+      const companion = join(fixture.product, "plans[1]");
+      const plans = join(companion, ".plans");
+      mkdirSync(plans, { recursive: true });
+      writeFileSync(join(plans, "note.md"), "effective\n");
+      const unrelated = join(fixture.product, "plans1", ".plans");
+      mkdirSync(unrelated, { recursive: true });
+      writeFileSync(join(unrelated, "note.md"), "unrelated\n");
+      git(
+        fixture.product,
+        "--literal-pathspecs",
+        "add",
+        "plans1",
+        ...(tracked ? ["plans[1]"] : []),
+      );
+      writeRegistry(fixture.root, {
+        projects: { [fixture.product]: { dir: companion, items: { ".plans": "companion" } } },
+      });
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: fixture.product,
+        home: fixture.root,
+      });
+      expect(result.code, result.stderr).toBe(tracked ? 1 : 0);
+      if (tracked) {
+        expect(result.stdout).toBe("");
+        expectTrackingRemedies(result.stderr, plans);
+      } else {
+        expect(JSON.parse(result.stdout)).toEqual({
+          mode: "local",
+          plans: { in: "companion", path: plans, target: realpathSync(plans) },
+          mainWorktree: null,
+        });
+      }
+    },
+  );
+
+  it("propagates index-query failures instead of declaring plans untracked", async () => {
+    const fixture = makeFixture();
+    mkdirSync(join(fixture.product, ".plans"));
+    const index = join(fixture.product, ".git", "index");
+    writeFileSync(index, "corrupt index\n");
+    const result = await runMain(["plans", "check", "--json"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(index, "utf8")).toBe("corrupt index\n");
+  });
+});
+
+describe("linked-worktree plans parity", () => {
+  it.each(["local", "shared", "companion", "sharedCompanion"])(
+    "reports %s plans shared through the main worktree",
+    async (kind) => {
+      const fixture = makeFixture();
+      const companion = kind === "companion" || kind === "sharedCompanion";
+      const shared = kind === "shared" || kind === "sharedCompanion";
+      const mainPlans = join(companion ? useCompanion(fixture) : fixture.product, ".plans");
+      mkdirSync(join(mainPlans, ".."), { recursive: true });
+      const target = shared ? join(fixture.clone, "product-plans") : mainPlans;
+      mkdirSync(target);
+      if (shared) symlinkSync(target, mainPlans);
+      const worktree = join(fixture.root, "ticket-worktree");
+      git(fixture.product, "worktree", "add", "--quiet", "-b", "ticket", worktree);
+      const plans = companion ? mainPlans : join(worktree, ".plans");
+      if (!companion) symlinkSync(mainPlans, plans);
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: worktree,
+        home: fixture.root,
+      });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(JSON.parse(result.stdout)).toEqual({
+        mode: shared ? "shared" : "local",
+        plans: {
+          in: companion ? "companion" : "project",
+          path: plans,
+          target: realpathSync(target),
+        },
+        mainWorktree: realpathSync(fixture.product),
+      });
+    },
+  );
+
+  it("does not mistake main-worktree subdirectories or checkout aliases for linked roots", async () => {
+    const fixture = makeFixture();
+    const subdir = join(fixture.product, "subdir");
+    mkdirSync(join(subdir, ".plans"), { recursive: true });
+    mkdirSync(join(fixture.product, ".plans"));
+    const alias = join(fixture.root, "checkout-alias");
+    symlinkSync(fixture.product, alias);
+    for (const cwd of [subdir, alias]) {
+      const result = await runMain(["plans", "check", "--json"], { cwd, home: fixture.root });
+      expect(result.code, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        mode: "local",
+        plans: {
+          in: "project",
+          path: join(cwd, ".plans"),
+          target: realpathSync(join(cwd, ".plans")),
+        },
+        mainWorktree: null,
+      });
+    }
+  });
+
+  it.each(["missing", "broken", "file"])(
+    "validates %s main plans before resolving the main target",
+    async (kind) => {
+      const fixture = makeFixture();
+      const mainPlans = join(fixture.product, ".plans");
+      if (kind === "broken") symlinkSync(join(fixture.root, "missing"), mainPlans);
+      if (kind === "file") writeFileSync(mainPlans, "not a directory\n");
+      const worktree = join(fixture.root, "ticket-worktree");
+      git(fixture.product, "worktree", "add", "--quiet", "-b", "ticket", worktree);
+      mkdirSync(join(worktree, ".plans"));
+      const result = await runMain(["plans", "check", "--json"], {
+        cwd: worktree,
+        home: fixture.root,
+      });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        kind === "missing"
+          ? "No .plans/ directory"
+          : kind === "broken"
+            ? "symlink is broken"
+            : "not a directory",
+      );
+      expect(result.stderr).not.toContain("ENOENT");
+    },
+  );
+});
+
+describe("plans refusals before command side effects", () => {
+  it.each(["tracked", "differentTarget"])(
+    "blocks check, ticket reservation/restoration and sync for %s plans",
+    async (kind) => {
+      const fixture = makeFixture();
+      const mainPlans = join(fixture.product, ".plans");
+      mkdirSync(mainPlans);
+      let cwd = fixture.product;
+      if (kind === "differentTarget") {
+        cwd = join(fixture.root, "ticket-worktree");
+        git(fixture.product, "worktree", "add", "--quiet", "-b", "ticket", cwd);
+      }
+      const plans = join(cwd, ".plans");
+      mkdirSync(join(plans, "78"), { recursive: true });
+      mkdirSync(join(plans, "_archives", "79"), { recursive: true });
+      const active = join(plans, "78", "A1-spec.md");
+      writeFileSync(active, "active\n");
+      writeFileSync(join(plans, "_archives", "79", "A1-spec.md"), "archived\n");
+      const old = new Date(Date.now() - 2 * 86_400_000);
+      utimesSync(active, old, old);
+      if (kind === "tracked") git(cwd, "add", ".plans");
+      const before = snapshotTree(cwd);
+      const mainBefore = snapshotTree(mainPlans);
+      const indexPath = git(cwd, "rev-parse", "--path-format=absolute", "--git-path", "index");
+      const indexBefore = readFileSync(indexPath);
+      for (const args of [
+        ["plans", "check", "--json"],
+        ["ticket", "--side", "--json"],
+        ["ticket", "80", "--json"],
+        ["ticket", "79", "--json"],
+        ["sync", "--auto-archive"],
+      ]) {
+        const result = await runMain(args, {
+          cwd,
+          home: fixture.root,
+          env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
+        });
+        expect(result.code, `${args.join(" ")}: ${result.stderr}`).toBe(1);
+        expect(result.stdout).toBe("");
+        if (kind === "tracked") expectTrackingRemedies(result.stderr, plans);
+        else {
+          expect(result.stderr).toContain(realpathSync(plans));
+          expect(result.stderr).toContain(realpathSync(mainPlans));
+          expect(result.stderr).toMatch(/linked worktrees.*main worktree/is);
+        }
+        expect(snapshotTree(cwd)).toEqual(before);
+        expect(snapshotTree(mainPlans)).toEqual(mainBefore);
+        expect(readFileSync(indexPath)).toEqual(indexBefore);
+      }
+    },
+  );
+});
+
+describe("plans setup tracking protection", () => {
+  it.each(["directory", "link", "brokenLink"])(
+    "refuses a tracked %s before creating folders or migrating anything",
+    async (kind) => {
+      const fixture = makeFixture();
+      const plans = join(fixture.product, ".plans");
+      if (kind === "directory") {
+        mkdirSync(plans);
+        writeFileSync(join(plans, "A1-spec.md"), "original\n");
+      } else {
+        const target = join(fixture.clone, "existing");
+        if (kind === "link") {
+          mkdirSync(target);
+          writeFileSync(join(target, "A1-spec.md"), "original\n");
+        }
+        symlinkSync(target, plans);
+      }
+      git(fixture.product, "add", ".plans");
+      git(fixture.product, "commit", "--quiet", "-m", "track plans");
+      const before = snapshotTree(fixture.product);
+      const cloneBefore = snapshotTree(fixture.clone);
+      const indexPath = join(fixture.product, ".git", "index");
+      const indexBefore = readFileSync(indexPath);
+      const result = await runMain(["plans", "setup", fixture.clone, "--folder", "new-folder"], {
+        cwd: fixture.product,
+        home: fixture.root,
+      });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expectTrackingRemedies(result.stderr, plans);
+      expect(snapshotTree(fixture.product)).toEqual(before);
+      expect(snapshotTree(fixture.clone)).toEqual(cloneBefore);
+      expect(readFileSync(indexPath)).toEqual(indexBefore);
+    },
+  );
+
+  it("migrates untracked local files and repairs an untracked broken link", async () => {
+    const fixture = makeFixture();
+    const plans = join(fixture.product, ".plans");
+    mkdirSync(join(plans, "78"), { recursive: true });
+    writeFileSync(join(plans, "78", "A1-spec.md"), "local\n");
+    const options = { cwd: fixture.product, home: fixture.root };
+    const migrated = await runMain(
+      ["plans", "setup", fixture.clone, "--folder", "migrated"],
+      options,
+    );
+    expect(migrated.code, migrated.stderr).toBe(0);
+    expect(lstatSync(plans).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(fixture.clone, "migrated", "78", "A1-spec.md"), "utf8")).toBe(
+      "local\n",
+    );
+    rmSync(plans);
+    symlinkSync(join(fixture.root, "missing-clone"), plans);
+    const repaired = await runMain(
+      ["plans", "setup", fixture.clone, "--folder", "migrated"],
+      options,
+    );
+    expect(repaired.code, repaired.stderr).toBe(0);
+    expect(realpathSync(plans)).toBe(realpathSync(join(fixture.clone, "migrated")));
+    expect(readFileSync(join(plans, "78", "A1-spec.md"), "utf8")).toBe("local\n");
+  });
+});
+
+function expectTrackingRemedies(stderr: string, path: string): void {
+  expect(stderr).toContain(path);
+  expect(stderr).toContain("tracked by this project's repository");
+  expect(stderr).toContain("git rm -r --cached .plans && echo .plans >> .gitignore");
+  expect(stderr).toMatch(/commit/i);
+  expect(stderr).toContain("plans setup <clone-dir>");
+  expect(stderr).toContain("companion register");
+  expect(stderr).toContain('items[".plans"]');
+  expect(stderr).toContain('"companion"');
+}
+
+function snapshotTree(path: string): string[] {
+  const stats = lstatSync(path);
+  if (stats.isSymbolicLink()) return [`link:${readlinkSync(path)}`];
+  if (!stats.isDirectory()) return [`file:${readFileSync(path, "utf8")}`];
+  return readdirSync(path)
+    .filter((name) => name !== ".git")
+    .sort()
+    .flatMap((name) => [`entry:${name}`, ...snapshotTree(join(path, name))]);
+}
 
 describe("plans commands with a companion .plans", () => {
   it("sets up the link in the companion, relative to its parent", async () => {

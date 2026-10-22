@@ -581,6 +581,7 @@ describe("work-files and lightweight worktree runbooks", () => {
       writeConfig(fixture.home, {
         platform,
         ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
+        code: { agent: "claude" },
       });
       const cwd = makeGuideVariants(fixture)[variant];
       const env = viaNpx ? NPX_ENV : {};
@@ -591,22 +592,24 @@ describe("work-files and lightweight worktree runbooks", () => {
         "working-session",
         "project-workspace-setup",
         "consultation",
+        "code",
       ]) {
         const result = await runGuide(fixture, [topic], { cwd, env });
         expect(result.code, result.stderr).toBe(0);
         guides[topic] = result.stdout;
         expect(result.stdout).not.toContain("main-worktree mode");
         expect(result.stdout).not.toContain("{{");
+        expect(result.stdout).not.toContain(`${forms.aligndev} plans check`);
       }
       const preparation = guides["work-files-setup"];
       for (const text of [
+        `Run \`${forms.alignfirst} plans check\` from PROJECT_PATH`,
+        `Run \`${forms.alignfirst} plans check\` again from PROJECT_PATH`,
         `${forms.alignfirst} config --json`,
         "existing companion copy wins over an existing project copy",
-        "does not enforce AlignDev's tracking rule",
         "separate work-files repository may track its contents",
         "unused tracked project `.plans` is not a blocker",
-        "including a tracked symlink and mixed tracked/untracked contents",
-        "compare `git rev-parse --path-format=absolute --git-common-dir` identities",
+        "through a tracked symlink, mixed tracked/untracked contents, or an alias into tracked files",
         "unless preparation is already authorized",
         "May I select companion-backed work files for all this project's worktrees",
         "leaving the existing project work files untouched and unused?",
@@ -621,7 +624,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         "not a guessed key or a new top-level `items` object",
         "Preserve all other fields",
         "Do not create a worktree `.plans` link for companion plans",
-        "Broken links, invalid configuration",
+        "broken links, invalid configuration",
         "do not create a second history or repair links silently",
         "needs no ticket, branch, or new worktree",
       ])
@@ -671,6 +674,16 @@ describe("work-files and lightweight worktree runbooks", () => {
       ])
         expect(working, text).toContain(text);
       const setup = guides["project-workspace-setup"];
+      const branchPrecondition = setup.slice(
+        setup.indexOf("## Step 5"),
+        setup.indexOf("## Step 6"),
+      );
+      expect(branchPrecondition).toContain(
+        `Then run \`${forms.alignfirst} plans check\` from the worktree.`,
+      );
+      expect(guides.code).toContain(
+        `\`${forms.alignfirst} plans check\` verifies it, and \`${forms.aligndev} guide work-files-setup\` prepares it.`,
+      );
       for (const text of [
         "whatever the implementation",
         `${forms.aligndev} worktree list --json`,

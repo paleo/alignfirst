@@ -20,7 +20,7 @@ A **companion directory** holds a project's AlignFirst files outside its reposit
 
 Two cases drive the feature:
 
-- A team uses AlignFirst and keeps `.plans/` in its repository, but `aligndev`'s session files (`_aligndev/`) must live elsewhere.
+- A team shares `.plans/` through a work-files repository, but `aligndev`'s session files (`_aligndev/`) must stay out of it.
 - A team does not use AlignFirst. `.alignfirst.json`, `.plans/`, `docs/`, `DEVELOPERS.md` and the project instructions come from outside the repository, which stays untouched.
 
 ## The registry
@@ -120,7 +120,7 @@ Paths are absolute. `config` is the validated config, with the deprecated `plans
 
 ### `aligndev code`
 
-- **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`. New/resumed launches require usable effective plans with no files tracked by the project's own repository before ticket/session effects. A separate work-files repository is supported; an unused tracked project copy does not block a selected companion. Historical status stays readable.
+- **Session tree**: `new`, `resume` and `status` read the report first. Session files go under `locations._aligndev.path`. New/resumed launches run `alignfirst plans check --json` before ticket/session effects. AlignFirst requires usable effective plans untracked by the project's own repository and, from a linked worktree, the same real target and `in` as the main worktree. Shared mode through a separate work-files repository remains supported; an unused tracked project copy does not block a selected companion. Historical status stays readable.
 - **Active tickets**: the registry lists `_aligndev/` and every `<ticket>/_aligndev/` of the session tree, `_archives/` excluded. A ticketed `new` runs `alignfirst ticket <id> --json` first, as a developer would.
 - **Write access**: `createMissingCompanion` prepares a missing companion before launch, independently of the profile's `skipPermissions` or the selected child. In normal permission mode, Claude Code receives `--add-dir <companion>` after its permission flags; Codex receives it among the `exec` options, before `resume`. Pi uses ordinary OS access, receives no `--add-dir`, and honors saved project trust without forced approval.
 - **Project context**: on a `new` session, when `.alignfirst.json`, `.alignfirst-instructions`, `docs` or `.plans` exists in the companion, the prompt opens with the `alignfirst context` output under `## Project context`. A resumed session gets none.
@@ -128,11 +128,11 @@ Paths are absolute. `config` is the validated config, with the deprecated `plans
 
 ### `aligndev worktree`
 
-Lightweight add reads the main worktree's report, then verifies the finished worktree's effective location. Companion plans are used directly without a generated worktree `.plans` link or local exclusion. Project-local untracked shared plans use a symlink and local Git exclusions; this does not change companion resolution. An independently selected `_aligndev` tree stays independent.
+Lightweight add reads the main worktree's report and runs `alignfirst plans check --json` before creation and in the finished worktree. Companion plans are used directly without a generated worktree `.plans` link or local exclusion. Project-local untracked shared plans use a symlink and local Git exclusions; this does not change companion resolution. An independently selected `_aligndev` tree stays independent.
 
 Missing effective plans, including a registered companion without `.plans`, block add before branch/worktree creation. The CLI never registers or provisions a companion. The playbook's `aligndev guide work-files-setup` obtains approval, registers when needed, explicitly selects only that entry's `.plans` as `companion`, then creates and verifies the selected directory. The selection applies to all worktrees; existing project files remain untouched and unused, without copying. Broken links, invalid configuration and conflicting files remain errors.
 
-These are AlignDev gates. Standalone AlignFirst still supports tracked project plans and its existing local-mode `sync` behavior.
+AlignFirst owns these work-files rules. It refuses effective plans tracked by the product repository and requires linked worktrees to reach the main worktree's effective plans, with the same real target and `in`. Local and shared modes remain supported.
 
 ### `aligndev guide`
 

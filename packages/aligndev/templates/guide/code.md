@@ -9,7 +9,7 @@ Run a coding agent through AlignFirst protocols with `{{ALIGNDEV}} code`. It wra
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
-Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNDEV}} guide work-files-setup` verifies it.
+Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNFIRST}} plans check` verifies it, and `{{ALIGNDEV}} guide work-files-setup` prepares it.
 
 {{ALIGNFIRST_SETUP}}
 

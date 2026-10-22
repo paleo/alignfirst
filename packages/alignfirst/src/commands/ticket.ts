@@ -67,7 +67,7 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
   if (parsed === undefined) return 0;
   const layout = layoutOf(ctx);
   const plans = layout.locations[".plans"];
-  assertPlansGate(plans, ctx.form);
+  assertPlansGate(ctx.cwd, plans, ctx.form, ctx.home);
   const result = resolveTicket(plans.path, parsed);
   if (!parsed.side && !parsed.dryRun) restoreSessionTreeTicket(layout, result.id);
   if (parsed.catchup) {
@@ -208,7 +208,7 @@ function resolveTicketId(
   }
   const plans = layoutOf(ctx).locations[".plans"];
   if (flags.side) {
-    assertPlansGate(plans, ctx.form);
+    assertPlansGate(ctx.cwd, plans, ctx.form, ctx.home);
     return { id: flags["dry-run"] ? peekSideTicket(plans.path) : reserveSideTicket(plans.path) };
   }
   const template = ctx.projectConfig?.config.git?.branchNameTemplate;

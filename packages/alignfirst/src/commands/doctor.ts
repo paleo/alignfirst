@@ -174,7 +174,7 @@ function inspectGit(
 }
 
 function inspectPlans(ctx: CommandContext): DoctorLine[] {
-  const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form, ctx.home);
   if (mode.kind === "shared" && findStoppedRebase(mode.repoToplevel) !== undefined)
     return [{ level: "error", text: `rebase stopped on a conflict in ${mode.repoToplevel}` }];
   return [

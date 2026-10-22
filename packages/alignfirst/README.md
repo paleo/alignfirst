@@ -61,7 +61,7 @@ The guide installs the selected components and configures the repository. You ca
 
 ## Set up a project manually
 
-1. Create `.plans/` and ignore it:
+1. Create `.plans/` and ignore it. It must stay untracked by the project's repository:
 
    ```sh
    mkdir .plans
@@ -89,7 +89,7 @@ The guide installs the selected components and configures the repository. You ca
 - `guide` — Print an AlignFirst protocol.
 - `ticket` — Resolve a ticket directory, load its history (`--catchup`, plans excluded), or get its next file.
 - `sync` — Synchronize the work files with the work-files repository.
-- `plans` — Link `.plans` to the work-files repository, check the link, archive tickets.
+- `plans` — Link `.plans` to the work-files repository, check the effective work files (`plans check`, with `--json` for a machine-readable report), or archive tickets.
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print the conventions, the project instructions from `.alignfirst-instructions/context.md`, the documentation map when `docs/` exists, and the protocol aliases.

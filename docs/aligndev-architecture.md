@@ -22,7 +22,7 @@ read_when:
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
-| `src/project/` | `aligndev project`: discovery, markers, status, port allocation; shared effective-plans validation. |
+| `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
 | `src/worktree/` | Lightweight Git-backed worktree inventory, add, directory policy and non-force removal. |
 | `templates/guide/` | The playbook and guides, rendered per platform. |
 
@@ -117,9 +117,9 @@ This is CLI integration, not OpenClaw deployment, Docker, conversation or provid
 
 `aligndev worktree` dispatches before coding settings, model discovery and project-marker checks. Git's worktree registry is its only inventory, including externally created, detached, missing, locked and prunable entries. `src/worktree/git.ts` parses Git's NUL-delimited output; project status adapts it to its existing report shape. CLI help owns command forms and JSON schemas.
 
-Add resolves the main worktree even from a linked worktree or subdirectory. It validates branch, destination and effective plans before creating anything. It shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. Tracked `.local` stays branch-local with a warning. Companion plans resolve directly, without a link or exclusion. The finished worktree's report must select the same plans target. Late failures retain the branch and worktree and name manual recovery actions.
+Add resolves the main worktree even from a linked worktree or subdirectory. It validates branch, destination and effective plans before creating anything. It shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. Tracked `.local` stays branch-local with a warning. Companion plans resolve directly, without a link or exclusion. The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Late failures retain the branch and worktree and name manual recovery actions.
 
-`src/project/plans.ts` uses the AlignFirst report and checks both logical and resolved paths for project-tracked files, comparing Git common-directory identities. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before ticket, session or launch effects. Historical status, help and inventory remain readable. Standalone AlignFirst tracked-plans and local-mode sync behavior is unchanged.
+`src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
 
 The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
 

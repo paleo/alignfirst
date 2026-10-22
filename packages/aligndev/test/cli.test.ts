@@ -37,7 +37,7 @@ async function run(
 }
 
 describe("aligndev", () => {
-  it("lists the four subcommands in its help", async () => {
+  it("lists the subcommands in its help", async () => {
     for (const flag of ["--help", "-h"]) {
       const result = await run([flag]);
       expect(result.code).toBe(0);
@@ -49,6 +49,7 @@ describe("aligndev", () => {
       ]) {
         expect(result.stdout).toContain(command);
       }
+      expect(result.stdout).not.toContain("aligndev plans");
       expect(result.stdout).toContain("~/.alignfirst/aligndev.settings.json");
     }
   });
@@ -69,6 +70,16 @@ describe("aligndev", () => {
     const unknown = await run(["nope"]);
     expect(unknown.code).toBe(1);
     expect(unknown.stderr).toMatch(/^Error: unknown command "nope"\.\n\naligndev — /);
+  });
+
+  it("rejects the unpublished plans command without a compatibility alias", async () => {
+    for (const args of [["plans"], ["plans", "--help"], ["plans", "check", "--json"]]) {
+      const result = await run(args);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toMatch(/^Error: unknown command "plans"\.\n\naligndev — /);
+      expect(result.stderr).not.toContain("aligndev plans");
+    }
   });
 
   it("delegates --help to each subcommand", async () => {

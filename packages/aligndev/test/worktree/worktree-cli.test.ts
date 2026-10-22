@@ -281,59 +281,22 @@ describe("worktree add", () => {
     expect(realpathSync(join(destination, ".local"))).toBe(local);
   });
 
-  it.each(["tracked", "mixed", "trackedLink", "alias", "linkedAlias"])(
-    "refuses effective plans %s without creating branch or reconciling sessions",
-    async (kind) => {
-      const { fixture, repo, destination } = project();
-      let plans = join(repo, ".plans");
-      if (kind === "alias" || kind === "linkedAlias") {
-        rmSync(plans, { recursive: true });
-        const sourceRepo = kind === "linkedAlias" ? join(fixture.root, "other") : repo;
-        if (sourceRepo !== repo) addWorktree(repo, sourceRepo, "other");
-        plans = join(sourceRepo, "tracked-plans");
-        mkdirSync(plans);
-        writeFileSync(join(plans, "note"), "tracked");
-        commit(sourceRepo, "tracked-plans");
-        symlinkSync(plans, join(repo, ".plans"));
-      } else if (kind === "trackedLink") {
-        rmSync(plans, { recursive: true });
-        mkdirSync(join(repo, "plans-source"));
-        symlinkSync(join(repo, "plans-source"), plans);
-        commit(repo, ".plans");
-      } else {
-        writeFileSync(join(plans, "tracked"), "tracked");
-        commit(repo, ".plans");
-        if (kind === "mixed") writeFileSync(join(plans, "untracked"), "untracked");
-      }
-      const result = await run(fixture, repo, ["add", destination, "-b", "ticket", "--json"]);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("tracked");
-      expect(result.stderr).toContain("guide work-files-setup");
-      expect(result.stdout).toBe("");
-      expect(existsSync(destination)).toBe(false);
-      expect(execGit(repo, "branch", "--list", "ticket")).toBe("");
-    },
-  );
-
-  it.each(["missing", "broken", "file", "externalPlain"])(
-    "refuses %s plans before branch creation",
-    async (kind) => {
-      const { fixture, repo, destination } = project();
-      const plans = join(repo, ".plans");
-      rmSync(plans, { recursive: true });
-      if (kind === "broken") symlinkSync(join(fixture.root, "missing"), plans);
-      if (kind === "file") writeFileSync(plans, "conflict");
-      if (kind === "externalPlain") {
-        mkdirSync(join(fixture.root, "plain"));
-        symlinkSync(join(fixture.root, "plain"), plans);
-      }
-      const result = await run(fixture, repo, ["add", destination, "-b", "ticket", "--json"]);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("guide work-files-setup");
-      expect(existsSync(destination)).toBe(false);
-      expect(execGit(repo, "branch", "--list", "ticket")).toBe("");
-    },
-  );
+  it("surfaces AlignFirst's effective-plans refusal before creating a branch or destination", async () => {
+    const { fixture, repo, destination } = project();
+    const plans = join(repo, ".plans");
+    writeFileSync(join(plans, "tracked"), "tracked");
+    commit(repo, ".plans");
+    const result = await run(fixture, repo, ["add", destination, "-b", "ticket", "--json"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(plans);
+    expect(result.stderr).toContain("tracked");
+    expect(result.stderr).toContain("git rm -r --cached .plans && echo .plans >> .gitignore");
+    expect(result.stderr).toContain("plans setup <clone-dir>");
+    expect(result.stderr).toContain("guide work-files-setup");
+    expect(result.stdout).toBe("");
+    expect(existsSync(destination)).toBe(false);
+    expect(execGit(repo, "branch", "--list", "ticket")).toBe("");
+  });
 
   it("refuses tracked plans in the target commit before creating the requested branch", async () => {
     const { fixture, repo, destination } = project();
@@ -676,23 +639,6 @@ describe("safe removal", () => {
 
 // A tracked-plans refusal must precede stale-run reconciliation and all ticket/launch writes.
 describe("coding launch gate", () => {
-  it("refuses a tracked .plans symlink from an aliased checkout path", async () => {
-    const { fixture, repo } = project();
-    const workfiles = makeRepository(fixture.root, "workfiles");
-    rmSync(join(repo, ".plans"), { recursive: true });
-    symlinkSync(workfiles, join(repo, ".plans"));
-    commit(repo, ".plans");
-    writeConfig(fixture.home, { code: { agent: "pi" } });
-    const alias = join(fixture.root, "aliased-checkout");
-    symlinkSync(repo, alias);
-    const result = await runAligndev(fixture, ["code", "new", "--ticket", "123", "-m", "work"], {
-      cwd: alias,
-    });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("tracked");
-    expect(existsSync(join(workfiles, "123"))).toBe(false);
-  });
-
   it.each(["new", "resume"])(
     "refuses %s before changing a stale session or discovering a model",
     async (command) => {

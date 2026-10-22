@@ -89,4 +89,4 @@ An entry can contain both `dir` and `aligndev`. `companion unregister` removes `
 
 ## Keep Only aligndev's Session Files Out
 
-When usable project-local plans stay effective and only `aligndev`'s session files must live elsewhere, the entry's `items` is `{ ".plans": "project", "_aligndev": "companion" }`. AlignDev requires those plans to be untracked by the project's own repository; a separate work-files repository remains supported. Standalone AlignFirst still permits tracked project plans. The full companion procedure does not apply.
+When usable project-local plans stay effective and only `aligndev`'s session files must live elsewhere, the entry's `items` is `{ ".plans": "project", "_aligndev": "companion" }`. AlignFirst requires those plans to be untracked by the project's own repository; shared mode through a separate work-files repository remains supported. The full companion procedure does not apply.
