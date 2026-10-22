@@ -172,7 +172,7 @@ function translateDevServers(
   const data = JSON.parse(readFileSync(filePath, "utf-8")) as { servers: OldDevServerEntry[] };
   const { paths, bySlot } = convertedIdentities(slots, registry, mainWorktree);
   const reserved: Record<string, { worktree: string }> = { ...registry.workspaces };
-  const servers = data.servers.map((old): DevServerEntry => {
+  const translated = data.servers.map((old): DevServerEntry => {
     const path = resolve(mainWorktree, old.worktree);
     const converted =
       paths.get(path) ?? (old.slot === undefined ? undefined : bySlot.get(String(old.slot)));
@@ -184,8 +184,38 @@ function translateDevServers(
     if ((converted?.main ?? old.main) === true) entry.main = true;
     return entry;
   });
+  const servers = consolidateDevServers(translated);
   writeDevServers(mainWorktree, registryDir, { servers });
   return servers.length;
+}
+
+function consolidateDevServers(entries: DevServerEntry[]): DevServerEntry[] {
+  const byWorktree = new Map<string, DevServerEntry>();
+  for (const entry of entries) {
+    const kept = byWorktree.get(entry.worktree) ?? { ...entry, pids: {} };
+    kept.pids = mergeDevServerPids(kept.pids, entry.pids);
+    if (entry.startedAt < kept.startedAt) kept.startedAt = entry.startedAt;
+    if (entry.main === true) kept.main = true;
+    byWorktree.set(entry.worktree, kept);
+  }
+  return [...byWorktree.values()];
+}
+
+function mergeDevServerPids(
+  kept: Record<string, number>,
+  incoming: Record<string, number>,
+): Record<string, number> {
+  const pids = new Map(Object.entries(kept));
+  const knownPids = new Set(pids.values());
+  for (const [label, pid] of Object.entries(incoming)) {
+    if (knownPids.has(pid)) continue;
+    let name = label;
+    let suffix = 1;
+    while (pids.has(name)) name = `${label}-${++suffix}`;
+    pids.set(name, pid);
+    knownPids.add(pid);
+  }
+  return Object.fromEntries(pids);
 }
 
 interface ConvertedIdentities {

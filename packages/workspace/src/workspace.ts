@@ -771,11 +771,11 @@ function runStatus(command: StatusCommand, kernel: Kernel): void {
 async function runList(kernel: Kernel): Promise<void> {
   const { registryDir } = kernel;
   const ctx = detectWorktree();
-  const liveOrphans = await autoPruneSafeOrphans(ctx.mainWorktree, registryDir);
+  const retainedOrphans = await autoPruneSafeOrphans(ctx.mainWorktree, registryDir);
   const entries = sortedEntries(readWorkspaces(ctx.mainWorktree, registryDir));
   if (entries.length === 0) {
     console.log("No workspaces registered.");
-    hintLiveOrphans(liveOrphans);
+    hintRetainedOrphans(retainedOrphans);
     return;
   }
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
@@ -795,7 +795,7 @@ async function runList(kernel: Kernel): Promise<void> {
     return cells;
   });
   for (const line of renderTable(headers, rows)) console.log(line);
-  hintLiveOrphans(liveOrphans);
+  hintRetainedOrphans(retainedOrphans);
 }
 
 /** Main worktree first, then by workspace name. */
@@ -817,34 +817,34 @@ function renderTable(headers: string[], rows: string[][]): string[] {
 
 /**
  * Silently drop registry entries for worktrees deleted out-of-band that have no live dev-server —
- * harmless bookkeeping, consistent with the existing dead-PID pruning. Orphans whose dev-server is
- * still running are left untouched (stopping a live process is the explicit `workspace prune`'s job)
- * and returned so the caller can hint about them.
+ * harmless bookkeeping, consistent with the existing dead-PID pruning. Failed entries retain their
+ * cleanup identity for purge retries. Failed or live orphans need explicit `workspace prune` and
+ * are returned so the caller can hint about them.
  */
 async function autoPruneSafeOrphans(mainWorktree: string, registryDir: string): Promise<string[]> {
   // Checked without the lock first: a plain `list` with no orphan writes nothing.
   if (findOrphanNames(readWorkspaces(mainWorktree, registryDir)).length === 0) return [];
   return updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const live = liveWorktrees(readDevServers(mainWorktree, registryDir));
-    const liveOrphans: string[] = [];
+    const retainedOrphans: string[] = [];
     for (const name of findOrphanNames(registry)) {
       const entry = registry.workspaces[name];
-      if (live.has(resolve(entry.worktree))) {
-        liveOrphans.push(name);
+      if (entry.status === "failed" || live.has(resolve(entry.worktree))) {
+        retainedOrphans.push(name);
         continue;
       }
       delete registry.workspaces[name];
       removeDevServerEntryByWorktree(mainWorktree, registryDir, entry.worktree);
     }
-    return liveOrphans;
+    return retainedOrphans;
   });
 }
 
-function hintLiveOrphans(liveOrphans: string[]): void {
-  if (liveOrphans.length === 0) return;
+function hintRetainedOrphans(retainedOrphans: string[]): void {
+  if (retainedOrphans.length === 0) return;
   console.log(
-    `\nNote: ${liveOrphans.length} workspace(s) have a deleted worktree but a still-running ` +
-      `dev-server. Run \`${wsCmd("prune")}\` to stop them and clean up.`,
+    `\nNote: ${retainedOrphans.length} workspace(s) have a deleted worktree and need explicit ` +
+      `cleanup. Run \`${wsCmd("prune")}\` to clean up.`,
   );
 }
 
@@ -895,7 +895,10 @@ async function cleanupTarget(
   orphanOnly = false,
 ): Promise<number> {
   const { config, registryDir } = kernel;
-  refusePendingCleanup(ctx, registryDir, target.worktree);
+  if (!orphanOnly || existsSync(target.worktree)) {
+    refusePendingCleanup(ctx, registryDir, target.worktree);
+  }
+  await retainCleanupIdentity(ctx, registryDir, target);
   const log = makeVerboseLog(target.verbose);
   if (config.devServerScript === undefined) {
     log("No dev-server script configured; skipping stop.");
@@ -919,6 +922,28 @@ async function cleanupTarget(
     await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, target.worktree);
   }
   return leftover;
+}
+
+/** A stop wrapper can unregister the only dev record before infrastructure purge has succeeded. */
+async function retainCleanupIdentity(
+  ctx: WorktreeContext,
+  registryDir: string,
+  target: PurgeContext,
+): Promise<void> {
+  await updateWorkspaces(ctx.mainWorktree, registryDir, (registry) => {
+    if (findWorkspaceByPath(registry, target.worktree)) return;
+    if (Object.hasOwn(registry.workspaces, target.name)) {
+      throw new WorkspaceError(`Workspace name ${target.name} belongs to a different worktree.`);
+    }
+    const now = new Date().toISOString();
+    registry.workspaces[target.name] = {
+      worktree: resolve(target.worktree),
+      createdAt: now,
+      status: "failed",
+      failure: { at: now, message: "Infrastructure cleanup incomplete; retry workspace teardown." },
+      ...(resolve(target.worktree) === resolve(ctx.mainWorktree) ? { main: true } : {}),
+    };
+  });
 }
 
 function refusePendingCleanup(ctx: WorktreeContext, registryDir: string, worktree: string): void {

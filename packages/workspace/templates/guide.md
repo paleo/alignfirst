@@ -78,7 +78,7 @@ All participating duplicate-basename worktrees need the upgraded package. Consum
 
 `teardown` stops recorded services, purges configured infrastructure (including volumes where configured), and releases registration and ports. It preserves worktree files, installed dependencies, seeded/runtime files, shared links and Git state, even when dirty. Main-worktree teardown preserves the shared registry directory and other entries. It is not a filesystem reset.
 
-Wait for pending setup before cleanup. Failed or partial setups are eligible; teardown has no force or all mode. Repeating it succeeds without purging again. Hooks that swallow purge errors remain best-effort; a zero exit does not prove external-resource deletion.
+Wait for pending setup before cleanup. Failed or partial setups are eligible; teardown has no force or all mode. After success, repeating it succeeds without purging again. A thrown purge error retains the registered name for retry. Hooks that swallow purge errors remain best-effort; a zero exit does not prove external-resource deletion.
 
 Run `setup` afterward to adopt and finalize the retained worktree again. Former names, collision suffixes and ports are not reserved after removal from the registry.
 
@@ -108,7 +108,7 @@ Removal refuses on uncommitted changes. Pass `--force` to discard them. When rem
 
 ### Healing orphaned workspaces
 
-A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server). For the rest:
+A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server and no failed state). Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
 
 ```sh
 {{COMMANDS:prune}}

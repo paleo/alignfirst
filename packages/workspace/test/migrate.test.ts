@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readDevServers } from "../src/dev-servers-registry.js";
+import { findOwnEntry, readDevServers } from "../src/dev-servers-registry.js";
 import {
   convertSlotsRegistry,
   type OldSlotEntry,
@@ -212,6 +212,69 @@ describe("runMigrate", () => {
     ]);
   });
 
+  it.each([
+    { target: "main", worktree: ".", main: true },
+    { target: "linked", worktree: "../linked/wt", main: false },
+    { target: "dev-only", worktree: "../dev-only/wt", main: false },
+  ])("consolidates same-path $target dev-server records", async ({ target, worktree, main }) => {
+    writeOldRegistry(
+      target === "dev-only"
+        ? {}
+        : {
+            "8110": oldEntry(worktree, { main }),
+            "8120": oldEntry(worktree, { main, createdAt: "2026-06-01T00:00:00.000Z" }),
+          },
+    );
+    const path = join(mainWorktree, worktree);
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-servers.json"),
+      JSON.stringify({
+        servers: [
+          { slot: 8110, worktree, pids: { web: 101 }, startedAt: "2026-06-01T00:00:00.000Z" },
+          { slot: 8120, worktree: path, pids: { api: 102 }, startedAt: "2026-05-10T00:00:00.000Z" },
+        ],
+      }),
+    );
+    const output = await migrate();
+    const { servers } = readDevServers(mainWorktree, registryDir);
+    expect(servers).toEqual([
+      {
+        name: basename(path),
+        worktree: path,
+        pids: { web: 101, api: 102 },
+        startedAt: "2026-05-10T00:00:00.000Z",
+        ...(main ? { main: true } : {}),
+      },
+    ]);
+    expect(findOwnEntry(mainWorktree, registryDir, path)).toEqual(servers[0]);
+    expect(output).toContain("Translated 1 dev-server entry");
+  });
+
+  it("preserves every distinct PID when labels and generated labels collide", async () => {
+    writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-servers.json"),
+      JSON.stringify({
+        servers: [
+          { pids: { web: 101, "web-2": 102 } },
+          { pids: { web: 103, "web-2": 104, alias: 101 } },
+          { pids: { web: 105, duplicate: 103 } },
+        ].map((entry) => ({
+          ...entry,
+          worktree: "/repo/wt-a",
+          startedAt: "2026-05-10T00:00:00.000Z",
+        })),
+      }),
+    );
+    await migrate();
+    const { servers } = readDevServers(mainWorktree, registryDir);
+    expect(servers).toHaveLength(1);
+    const own = findOwnEntry(mainWorktree, registryDir, "/repo/wt-a");
+    expect(own?.pids.web).toBe(101);
+    expect(own?.pids["web-2"]).toBe(102);
+    expect(Object.values(own?.pids ?? {}).sort((a, b) => a - b)).toEqual([101, 102, 103, 104, 105]);
+  });
+
   it("translates collisions, stale main paths/slots and dev-only reservations without losing PIDs", async () => {
     writeOldRegistry({
       "8100": oldEntry("/old/main", { main: true }),
@@ -245,18 +308,22 @@ describe("runMigrate", () => {
     const registry = readWorkspaces(mainWorktree, registryDir);
     expect(servers[0].name).toBe(basename(mainWorktree));
     expect(servers[0].worktree).toBe(mainWorktree);
-    expect(servers[1].name).toBe(servers[0].name);
-    expect(servers[1].worktree).toBe(mainWorktree);
-    expect(servers[2].name).toBe("wt");
-    expect(registry.workspaces[servers[3].name].worktree).toBe("/second/wt");
-    expect(new Set(servers.slice(2).map((entry) => entry.name)).size).toBe(5);
-    expect(servers[6].name).toBe("custom-name");
+    expect(servers[0].main).toBe(true);
+    expect(Object.values(servers[0].pids)).toEqual([process.pid, process.pid + 1]);
+    expect(findOwnEntry(mainWorktree, registryDir, mainWorktree)).toEqual(servers[0]);
+    expect(servers[1].name).toBe("wt");
+    expect(registry.workspaces[servers[2].name].worktree).toBe("/second/wt");
+    expect(new Set(servers.map((entry) => entry.name)).size).toBe(6);
+    expect(new Set(servers.map((entry) => entry.worktree)).size).toBe(6);
+    expect(servers[5].name).toBe("custom-name");
     expect(Object.keys(registry.workspaces)).toHaveLength(3);
-    servers.forEach((entry, index) => {
-      expect(entry.pids).toEqual({ web: process.pid + index });
-      expect(entry.startedAt).toBe("2026-05-10T00:00:00.000Z");
+    servers.slice(1).forEach((entry, index) => {
+      expect(entry.pids).toEqual({ web: process.pid + index + 2 });
     });
-    expect(output).toContain("Translated 7 dev-server");
+    for (const entry of servers) {
+      expect(entry.startedAt).toBe("2026-05-10T00:00:00.000Z");
+    }
+    expect(output).toContain("Translated 6 dev-server");
     expect(output).toContain("no longer be derived");
   });
 

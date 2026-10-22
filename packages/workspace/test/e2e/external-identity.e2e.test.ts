@@ -9,30 +9,45 @@ import { createFixtureRepo, type FixtureRepo, readWorkspaces, runCli, runDev } f
 
 const TEST_TIMEOUT_MS = 60_000;
 const fixtures: ExternalFixture[] = [];
+const barriers: string[] = [];
 
 interface ExternalFixture extends FixtureRepo {
   first: string;
   second: string;
 }
 
-afterEach(() => {
+afterEach(async () => {
+  for (const barrier of barriers.splice(0)) writeFileSync(barrier, "release\n");
   const joined: { error: Error | undefined; status: string }[] = [];
+  const failures: unknown[] = [];
   for (const fixture of fixtures.splice(0)) {
     // Join detached finalizers even when an assertion failed before the scenario's explicit wait.
     try {
       const registry = join(fixture.repo, ".wt", "workspace-registry", "workspaces.json");
-      if (!existsSync(registry)) continue;
-      for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
-        const waited = runCli(fixture.repo, ["wait", entry.worktree]);
-        joined.push({
-          error: waited.error,
-          status: entryAt(fixture, entry.worktree).entry.status,
-        });
+      if (existsSync(registry)) {
+        for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
+          const waited = runCli(fixture.repo, ["wait", entry.worktree]);
+          joined.push({
+            error: waited.error,
+            status: entryAt(fixture, entry.worktree).entry.status,
+          });
+        }
       }
+    } catch (error) {
+      failures.push(error);
     } finally {
+      const log = join(fixture.repo, "finalize-pids.jsonl");
+      if (existsSync(log)) {
+        const pids = readFileSync(log, "utf-8").trim().split("\n").map(Number);
+        const results = await Promise.allSettled(pids.map(waitForExit));
+        for (const result of results) {
+          if (result.status === "rejected") failures.push(result.reason);
+        }
+      }
       rmSync(fixture.root, { recursive: true, force: true });
     }
   }
+  expect(failures).toEqual([]);
   for (const result of joined) {
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe("pending");
@@ -88,24 +103,28 @@ describe("externally created same-basename worktrees", () => {
 
   it(
     "refuses pending suffixed setup and joins detached success without touching its competitor",
-    () => {
+    async () => {
       const fixture = externalFixture();
       const { repo, first, second } = fixture;
       expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
       const original = entryAt(fixture, first).entry;
+      const barrier = join(fixture.root, "finalize.release");
+      barriers.push(barrier);
       const detached = runCli(
         repo,
         ["setup", "--detached"],
-        { E2E_FINALIZE_DELAY_MS: "1800" },
+        { E2E_FINALIZE_BARRIER: barrier, E2E_FINALIZE_PID_LOG: "1" },
         second,
       );
       expect(detached.status).toBe(0);
       expect(detached.stdout).toContain("Setup continuing in background");
+      await waitForFile(`${barrier}.entered`);
       const target = entryAt(fixture, second);
       expect(target.entry.status).toBe("pending");
       const refused = runCli(repo, ["setup"], undefined, second);
       expect(refused.status).toBe(1);
       expect(refused.stderr).toContain(`already in progress for workspace ${target.name}`);
+      writeFileSync(barrier, "release\n");
       expect(runCli(repo, ["wait", target.name]).status).toBe(0);
       expect(entryAt(fixture, second).entry.status).toBe("ready");
       expect(finalizeContext(second).name).toBe(target.name);
@@ -116,7 +135,7 @@ describe("externally created same-basename worktrees", () => {
 
   it(
     "skips ready finalize unless forced and keeps the suffixed force run isolated",
-    () => {
+    async () => {
       const fixture = externalFixture();
       const { repo, first, second } = fixture;
       expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
@@ -127,14 +146,18 @@ describe("externally created same-basename worktrees", () => {
       expect(runCli(repo, ["setup"], undefined, second).status).toBe(0);
       expect(readFileSync(join(second, "finalized.txt"), "utf-8")).toBe("unchanged\n");
 
+      const barrier = join(fixture.root, "finalize.release");
+      barriers.push(barrier);
       const forced = runCli(
         repo,
         ["setup", "--force", "--detached"],
-        { E2E_FINALIZE_DELAY_MS: "1000" },
+        { E2E_FINALIZE_BARRIER: barrier, E2E_FINALIZE_PID_LOG: "1" },
         second,
       );
       expect(forced.status).toBe(0);
+      await waitForFile(`${barrier}.entered`);
       expect(entryAt(fixture, second)).toMatchObject({ name, entry: { status: "pending" } });
+      writeFileSync(barrier, "release\n");
       expect(runCli(repo, ["wait", name]).status).toBe(0);
       expect(readFileSync(join(second, "finalized.txt"), "utf-8")).toBe("finalized\n");
       expect(finalizeContext(second).name).toBe(name);
@@ -150,7 +173,12 @@ describe("externally created same-basename worktrees", () => {
       const { repo, first, second } = fixture;
       expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
       const original = entryAt(fixture, first).entry;
-      const failed = runCli(repo, ["setup", "--detached"], { E2E_FINALIZE_FAIL: "1" }, second);
+      const failed = runCli(
+        repo,
+        ["setup", "--detached"],
+        { E2E_FINALIZE_FAIL: "1", E2E_FINALIZE_PID_LOG: "1" },
+        second,
+      );
       expect(failed.status).toBe(0);
       const name = entryAt(fixture, second).name;
       const wait = runCli(repo, ["wait", name]);
@@ -236,4 +264,29 @@ function entryAt(fixture: FixtureRepo, path: string): { name: string; entry: Wor
 
 function finalizeContext(worktree: string): Record<string, string | boolean> {
   return JSON.parse(readFileSync(join(worktree, "finalize-context.json"), "utf-8"));
+}
+
+async function waitForFile(file: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!existsSync(file)) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${file}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+async function waitForExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (isAlive(pid)) {
+    if (Date.now() > deadline) throw new Error(`Fixture process ${pid} did not exit`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

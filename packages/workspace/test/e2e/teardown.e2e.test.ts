@@ -315,6 +315,51 @@ describe("workspace teardown (e2e)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it.each(["noWrapper", "wrapperFailure", "wrapperUnregisters", "missingWorktree"])(
+    "retains a dev-only cleanup identity through purge failure: %s",
+    (mode) => {
+      const fx = fixture({ portless: mode === "noWrapper" });
+      const linked = addWorktree(fx, "outside/review", "review");
+      mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
+      const pid = startSleeper(fx.repo);
+      writeDevEntries(fx.repo, [devEntry("recorded-infra", linked, pid)]);
+      if (mode === "missingWorktree") rmSync(linked, { recursive: true, force: true });
+      const failed = runCli(fx.repo, ["teardown", linked], {
+        E2E_PURGE_FAIL: "1",
+        E2E_CALLBACK_RECORD: "1",
+        ...(mode === "wrapperFailure" ? { E2E_DEV_EXIT: "1" } : {}),
+      });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("e2e purge boom");
+      expect(isAlive(pid)).toBe(false);
+      expect(devEntries(fx.repo)).toEqual([]);
+      expect(requiredEntry(fx.repo, linked)).toMatchObject({
+        name: "recorded-infra",
+        entry: { status: "failed" },
+      });
+      if (mode === "wrapperUnregisters") {
+        expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual([
+          { event: "stop", name: "recorded-infra", cwd: linked, ports: {} },
+        ]);
+      }
+      const retained = requiredEntry(fx.repo, linked);
+      const listed = runCli(fx.repo, ["list"]);
+      expect(listed.status, listed.stderr).toBe(0);
+      expect(requiredEntry(fx.repo, linked)).toEqual(retained);
+      expect(purges(fx.repo)).toHaveLength(1);
+      if (mode === "missingWorktree") expect(listed.stdout).toContain("prune");
+      const retry = runCli(fx.repo, ["teardown", "recorded-infra"]);
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(purges(fx.repo).map((ctx) => ctx.name)).toEqual(["recorded-infra", "recorded-infra"]);
+      if (mode !== "missingWorktree") {
+        expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+        expect(purges(fx.repo)).toHaveLength(2);
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it.each(["path", "name"])(
     "cleans a dev-only orphan with dead PIDs by its recorded %s without Git pruning",
     (selector) => {
@@ -339,6 +384,44 @@ describe("workspace teardown (e2e)", () => {
       ]);
       expect(devEntries(fx.repo)).toEqual([]);
       expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toBe(before);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.each([false, true])(
+    "stops all migrated historical main-slot PIDs, without a stop wrapper=%s",
+    (portless) => {
+      const fx = fixture({ portless });
+      mkdirSync(dirname(registryFile(fx.repo, "slots.json")), { recursive: true });
+      const pids = [startSleeper(fx.repo), startSleeper(fx.repo)];
+      const paths = [join(fx.root, "historical-main"), fx.repo];
+      writeFileSync(
+        registryFile(fx.repo, "slots.json"),
+        JSON.stringify({
+          slots: Object.fromEntries(
+            paths.map((worktree, index) => [
+              String(8100 + index),
+              { worktree, main: true, status: "ready", createdAt: "2026-01-01T00:00:00.000Z" },
+            ]),
+          ),
+        }),
+      );
+      writeDevEntries(
+        fx.repo,
+        paths.map((path, index) => devEntry(`historical-${index}`, path, pids[index])),
+      );
+      const migrated = runCli(fx.repo, ["migrate-registry-0.30"]);
+      expect(migrated.status, migrated.stderr).toBe(0);
+      const entries = devEntries(fx.repo);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].worktree).toBe(fx.repo);
+      expect(Object.values(entries[0].pids)).toEqual(pids);
+      const result = runCli(fx.repo, ["teardown"]);
+      expect(result.status, result.stderr).toBe(0);
+      expect(pids.map(isAlive)).toEqual([false, false]);
+      expect(devEntries(fx.repo)).toEqual([]);
+      expect(entryAt(fx.repo, fx.repo)).toBeUndefined();
+      expect(purges(fx.repo).map((ctx) => ctx.name)).toEqual(["fixrepo"]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -443,6 +526,47 @@ describe("workspace teardown (e2e)", () => {
       expect(purges(fx.repo).map((ctx) => ctx.name)).toEqual([name]);
       expect(git(fx.repo, ["worktree", "list", "--porcelain"])).not.toContain(second);
       expect(entryAt(fx.repo, first)).toBeDefined();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "prunes an abandoned pending orphan after its detached finalizer is killed",
+    async () => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "outside/review", "review");
+      const barrier = join(fx.root, "finalize.release");
+      barriers.push(barrier);
+      expect(
+        runCli(fx.repo, ["setup", "--detached"], { E2E_FINALIZE_BARRIER: barrier }, linked).status,
+      ).toBe(0);
+      await waitForFile(`${barrier}.entered`);
+      const finalizer = Number(readFileSync(`${barrier}.entered`, "utf-8"));
+      process.kill(finalizer, "SIGKILL");
+      await waitForExit(finalizer);
+      const before = requiredEntry(fx.repo, linked);
+      const pid = startSleeper(fx.repo);
+      writeDevEntries(fx.repo, [devEntry(before.name, linked, pid)]);
+      rmSync(linked, { recursive: true, force: true });
+      for (const command of [
+        ["teardown", before.name],
+        ["remove", before.name],
+      ]) {
+        expect(runCli(fx.repo, command).stderr).toContain("still in progress");
+        expect(isAlive(pid)).toBe(true);
+        expect(purges(fx.repo)).toEqual([]);
+      }
+      const failed = runCli(fx.repo, ["prune"], { E2E_PURGE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("e2e purge boom");
+      expect(requiredEntry(fx.repo, linked)).toEqual(before);
+      const result = runCli(fx.repo, ["prune"]);
+      expect(result.status, result.stderr).toBe(0);
+      expect(isAlive(pid)).toBe(false);
+      expect(devEntries(fx.repo)).toEqual([]);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(purges(fx.repo).map((ctx) => ctx.name)).toEqual([before.name, before.name]);
+      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).not.toContain(linked);
     },
     TEST_TIMEOUT_MS,
   );
