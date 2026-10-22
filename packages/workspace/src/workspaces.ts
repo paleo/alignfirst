@@ -1,10 +1,10 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 
-import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./package-manager.js";
 import { withRegistryLock } from "./registry-lock.js";
+import { detectWorktree } from "./worktree.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
 
@@ -12,7 +12,7 @@ const WORKSPACES_FILENAME = "workspaces.json";
 /** The registry format with on-demand ports. A file without `version` was written by 0.36 or older. */
 const REGISTRY_VERSION = 2;
 
-/** The registry: one entry per workspace, keyed by its worktree directory basename. */
+/** One entry per normalized worktree path, keyed by its opaque registered workspace name. */
 export interface WorkspacesRegistry {
   workspaces: Record<string, WorkspaceEntry>;
 }
@@ -61,6 +61,7 @@ interface StoredWorkspaceEntry extends WorkspaceEntry {
 
 /** The workspace a command acts on, resolved from the cwd. */
 export interface ResolvedWorkspace {
+  /** Registered workspace name; it may differ from the directory basename. */
   name: string;
   worktree: string;
   /** `true` when this workspace is the main worktree. */
@@ -78,44 +79,52 @@ export function workspacesFilePath(mainWorktree: string, registryDir: string): s
 /**
  * Reads the registry, repairing each `worktree` in memory into an absolute path: the main entry
  * points to the current main worktree, a relative path is resolved against the main worktree, and
- * a missing linked worktree points to its sibling of the same name. The next
- * {@link writeWorkspaces} persists the repair. A legacy `portIndex` is dropped: those workspaces get
+ * missing linked paths remain orphans. The next locked update persists the repair.
+ * A legacy `portIndex` is dropped: those workspaces get
  * new ports at their next `dev setup`.
  */
 export function readWorkspaces(mainWorktree: string, registryDir: string): WorkspacesRegistry {
+  return loadWorkspaces(mainWorktree, registryDir).registry;
+}
+
+interface LoadedRegistry {
+  registry: WorkspacesRegistry;
+  originalMainPath?: string;
+}
+
+function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegistry {
   const filePath = workspacesFilePath(mainWorktree, registryDir);
-  if (!existsSync(filePath)) return { workspaces: {} };
+  if (!existsSync(filePath)) return { registry: { workspaces: {} } };
   const stored = JSON.parse(readFileSync(filePath, "utf-8")) as StoredRegistry;
   const legacy = stored.version === undefined;
   const workspaces: Record<string, WorkspaceEntry> = {};
   for (const [name, entry] of Object.entries(stored.workspaces)) {
-    workspaces[name] = loadEntry(name, entry, mainWorktree, legacy);
+    workspaces[name] = loadEntry(entry, mainWorktree, legacy);
   }
   dropDuplicateMainEntries(workspaces, mainWorktree);
-  return { workspaces };
+  const main = Object.entries(workspaces).find(([, entry]) => entry.main === true);
+  return {
+    registry: { workspaces },
+    originalMainPath: main === undefined ? undefined : stored.workspaces[main[0]].worktree,
+  };
 }
 
 function loadEntry(
-  name: string,
   stored: StoredWorkspaceEntry,
   mainWorktree: string,
   legacy: boolean,
 ): WorkspaceEntry {
   const { portIndex, ...fields } = stored;
-  const entry: WorkspaceEntry = { ...fields, worktree: repairWorktree(name, stored, mainWorktree) };
+  const entry: WorkspaceEntry = { ...fields, worktree: repairWorktree(stored, mainWorktree) };
   // The old `finalizeWorkspace` of a ready legacy entry already provisioned its infrastructure.
   if (legacy && entry.status === "ready") entry.devSetupAt ??= entry.createdAt;
   return entry;
 }
 
-function repairWorktree(name: string, stored: StoredWorkspaceEntry, mainWorktree: string): string {
-  if (stored.main === true) return mainWorktree;
-  // A relative path, as an earlier build wrote it, is relative to the main worktree, not the cwd.
-  const worktree = resolve(mainWorktree, stored.worktree);
-  if (existsSync(worktree)) return worktree;
-  // A project moved together with its worktrees.
-  const sibling = join(dirname(mainWorktree), name);
-  return existsSync(sibling) ? sibling : worktree;
+function repairWorktree(stored: StoredWorkspaceEntry, mainWorktree: string): string {
+  if (stored.main === true) return resolve(mainWorktree);
+  // Missing paths remain orphans: a same-named directory need not belong to this repository.
+  return resolve(mainWorktree, stored.worktree);
 }
 
 /**
@@ -162,7 +171,8 @@ export async function updateWorkspaces<T>(
   mutate: (registry: WorkspacesRegistry) => T | Promise<T>,
 ): Promise<T> {
   return withRegistryLock(mainWorktree, registryDir, async () => {
-    const registry = readWorkspaces(mainWorktree, registryDir);
+    const { registry, originalMainPath } = loadWorkspaces(mainWorktree, registryDir);
+    reconcileMainIdentity(registry, mainWorktree, originalMainPath);
     const result = await mutate(registry);
     writeWorkspaces(mainWorktree, registryDir, registry);
     return result;
@@ -186,15 +196,14 @@ export interface RegisteredWorkspace {
 export async function registerWorkspace(
   input: RegisterWorkspaceInput,
 ): Promise<RegisteredWorkspace> {
-  const name = basename(input.currentWorktree);
+  const worktree = resolve(input.currentWorktree);
   return updateWorkspaces(input.mainWorktree, input.registryDir, (registry) => {
-    const oldMainName = rekeyMainEntry(registry, input.mainWorktree);
-    if (oldMainName !== undefined) warnMainRenamed(oldMainName, basename(input.mainWorktree));
-    const existing = registry.workspaces[name];
-    refuseNameCollision(name, existing, input.currentWorktree);
+    const found = findWorkspaceByPath(registry, worktree);
+    const name = found?.name ?? allocateWorkspaceName(registry.workspaces, worktree);
+    const existing = found?.entry;
 
     const entry: WorkspaceEntry = {
-      worktree: input.currentWorktree,
+      worktree,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       // Re-runs of `workspace setup` keep a previously finalized workspace ready, unless `--force`
       // is set — then we reset to pending so `workspace wait` blocks and `dev` refuses during the
@@ -216,28 +225,28 @@ function isFinalized(entry: WorkspaceEntry | undefined): boolean {
   return entry?.status === "ready" && entry.neverFinalized !== true;
 }
 
-/**
- * Moves the main entry (`main: true`) under `basename(mainWorktree)` when the main directory was
- * renamed, and returns the old name. Clears `devSetupAt` and `runFilesWrittenWith` so the next
- * `dev setup` updates run files and provisions infrastructure under the new name. Leaves
- * the registry untouched when another entry already holds the new name.
- */
-export function rekeyMainEntry(
+/** Reconciles before a locked writer can persist repaired paths and discard rename evidence. */
+function reconcileMainIdentity(
   registry: WorkspacesRegistry,
   mainWorktree: string,
-): string | undefined {
-  const newName = basename(mainWorktree);
+  originalMainPath: string | undefined,
+): void {
   const found = Object.entries(registry.workspaces).find(([, entry]) => entry.main === true);
-  if (!found || found[0] === newName || registry.workspaces[newName]) return;
+  if (!found || originalMainPath === undefined) return;
   const [oldName, entry] = found;
+  const oldBasename = isAbsolute(originalMainPath) ? basename(originalMainPath) : oldName;
+  if (oldBasename === basename(mainWorktree)) return;
   delete registry.workspaces[oldName];
-  delete entry.devSetupAt;
-  delete entry.runFilesWrittenWith;
+  const newName = allocateWorkspaceName(registry.workspaces, mainWorktree);
+  if (newName !== oldName) {
+    delete entry.devSetupAt;
+    delete entry.runFilesWrittenWith;
+    warnMainRenamed(oldName, newName);
+  }
   registry.workspaces[newName] = entry;
-  return oldName;
 }
 
-export function warnMainRenamed(oldName: string, newName: string): void {
+function warnMainRenamed(oldName: string, newName: string): void {
   console.error(
     `Warning: The main worktree directory was renamed from "${oldName}" to "${newName}". ` +
       `Infrastructure named after "${oldName}" is not reused: rename the directory back to ` +
@@ -245,25 +254,54 @@ export function warnMainRenamed(oldName: string, newName: string): void {
   );
 }
 
-function refuseNameCollision(
-  name: string,
-  existing: WorkspaceEntry | undefined,
-  currentWorktree: string,
-): void {
-  if (!existing || resolve(existing.worktree) === resolve(currentWorktree)) return;
-  throw new WorkspaceError(
-    `The workspace name "${name}" is already taken by ${existing.worktree}. ` +
-      "Worktree directory names must be unique.",
+export interface WorkspacePathMatch {
+  name: string;
+  entry: WorkspaceEntry;
+}
+
+/** Exact normalized path lookup; names are never interpreted as directory basenames. */
+export function findWorkspaceByPath(
+  registry: WorkspacesRegistry,
+  worktree: string,
+): WorkspacePathMatch | undefined {
+  const target = resolve(worktree);
+  const found = Object.entries(registry.workspaces).find(
+    ([, entry]) => resolve(entry.worktree) === target,
   );
+  if (found) return { name: found[0], entry: found[1] };
+}
+
+/** Pure allocation; callers insert under the same registry lock. Existing names stay stable. */
+export function allocateWorkspaceName(
+  workspaces: Record<string, { worktree: string }>,
+  worktree: string,
+): string {
+  const target = resolve(worktree);
+  const existing = Object.entries(workspaces).find(
+    ([, entry]) => resolve(entry.worktree) === target,
+  );
+  if (existing) return existing[0];
+  const base = basename(target);
+  if (!Object.hasOwn(workspaces, base)) return base;
+  const digest = createHash("sha256").update(target).digest("hex");
+  for (let length = 8; length <= digest.length; ++length) {
+    const candidate = `${base}-${digest.slice(0, length)}`;
+    if (!Object.hasOwn(workspaces, candidate)) return candidate;
+  }
+  for (let discriminator = 2; ; ++discriminator) {
+    const candidate = `${base}-${digest}-${discriminator}`;
+    if (!Object.hasOwn(workspaces, candidate)) return candidate;
+  }
 }
 
 export async function markWorkspaceReady(
   mainWorktree: string,
   registryDir: string,
-  name: string,
+  worktree: string,
 ): Promise<void> {
+  const target = resolve(worktree);
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    const entry = registry.workspaces[name];
+    const entry = findWorkspaceByPath(registry, target)?.entry;
     if (!entry) return;
     entry.status = "ready";
     delete entry.failure;
@@ -273,11 +311,12 @@ export async function markWorkspaceReady(
 export async function markWorkspaceFailed(
   mainWorktree: string,
   registryDir: string,
-  name: string,
+  worktree: string,
   message: string,
 ): Promise<void> {
+  const target = resolve(worktree);
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    const entry = registry.workspaces[name];
+    const entry = findWorkspaceByPath(registry, target)?.entry;
     if (!entry) return;
     entry.status = "failed";
     entry.failure = { at: new Date().toISOString(), message };
@@ -290,42 +329,25 @@ export function storedPortsOf(
   registryDir: string,
   worktree: string,
 ): Record<string, number> {
-  const target = resolve(worktree);
-  const entry = Object.values(readWorkspaces(mainWorktree, registryDir).workspaces).find(
-    (candidate) => resolve(candidate.worktree) === target,
+  return (
+    findWorkspaceByPath(readWorkspaces(mainWorktree, registryDir), worktree)?.entry.ports ?? {}
   );
-  return entry?.ports ?? {};
 }
 
 export function resolveCurrentWorkspace(
   mainWorktree: string,
   registryDir: string,
+  currentWorktree: string = detectWorktree().currentWorktree,
 ): ResolvedWorkspace {
-  const workspace =
-    lookupWorkspaceForCwd(mainWorktree, registryDir) ?? synthesizeMainWorkspace(mainWorktree);
+  const found = findWorkspaceByPath(readWorkspaces(mainWorktree, registryDir), currentWorktree);
+  const workspace: ResolvedWorkspace | undefined = found
+    ? { name: found.name, worktree: found.entry.worktree, main: found.entry.main }
+    : resolve(mainWorktree) === resolve(currentWorktree)
+      ? { name: basename(mainWorktree), worktree: resolve(mainWorktree), main: true }
+      : undefined;
   if (!workspace) {
     console.error(`Error: No workspace here. Run \`${wsCmd("setup")}\` first.`);
     process.exit(1);
   }
   return workspace;
-}
-
-function lookupWorkspaceForCwd(
-  mainWorktree: string,
-  registryDir: string,
-): ResolvedWorkspace | undefined {
-  const cwd = resolve(process.cwd());
-  const registry = readWorkspaces(mainWorktree, registryDir);
-  for (const [name, entry] of Object.entries(registry.workspaces)) {
-    if (resolve(entry.worktree) !== cwd) continue;
-    const resolved: ResolvedWorkspace = { name, worktree: entry.worktree };
-    if (entry.main) resolved.main = true;
-    return resolved;
-  }
-}
-
-function synthesizeMainWorkspace(mainWorktree: string): ResolvedWorkspace | undefined {
-  const cwd = resolve(process.cwd());
-  if (resolve(mainWorktree) !== cwd) return;
-  return { name: basename(cwd), worktree: cwd, main: true };
 }

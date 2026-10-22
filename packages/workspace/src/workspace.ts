@@ -14,7 +14,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import {
   parseWorkspaceArgs,
@@ -45,6 +45,7 @@ import { devCmd, wsCmd } from "./package-manager.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
+  findWorkspaceByPath,
   markWorkspaceFailed,
   markWorkspaceReady,
   readWorkspaces,
@@ -257,7 +258,7 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
     switch (command.kind) {
       case "finalize":
-        await runFinalize(command, kernel);
+        await runFinalize(command, kernel, ctx);
         return;
       case "wait":
         await runWait(command, kernel, verbose);
@@ -288,13 +289,13 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
         // `--detached` skips the wait and returns as soon as the worktree exists — the caller joins
         // later with `wait`.
         if (!command.detached) {
-          await waitForWorkspace(name, kernel, {
+          await waitForWorkspace({ name, worktree }, kernel, {
             formatSummary: false,
             verbose,
             full: command.full && !devStepHere,
           });
         }
-        if (devStepHere) await runDevStepHere(kernel, ctx.mainWorktree, name, worktree);
+        if (devStepHere) await runDevStepHere(kernel, ctx.mainWorktree, worktree);
         // The worktree exists once `runSetup` returns, so `--enter` can enter in either mode.
         if (command.enter) enterWorktree(worktree);
         return;
@@ -323,13 +324,11 @@ function refuseOldConfig(config: WorkspaceConfig): void {
 async function runDevStepHere(
   kernel: Kernel,
   mainWorktree: string,
-  name: string,
   worktree: string,
 ): Promise<void> {
   const failure = await runDevSetupChild({
     kernel,
     mainWorktree,
-    name,
     worktree,
     fromFinalize: false,
   });
@@ -345,7 +344,6 @@ function devSetupFailedMessage(message: string): string {
 interface DevSetupChildInput {
   kernel: Kernel;
   mainWorktree: string;
-  name: string;
   worktree: string;
   /** Passes `--from-finalize`, so the dev setup accepts the `pending` workspace. */
   fromFinalize: boolean;
@@ -357,7 +355,7 @@ interface DevSetupChildInput {
  * `dev setup exited with code <n>`.
  */
 async function runDevSetupChild(input: DevSetupChildInput): Promise<string | undefined> {
-  const { kernel, mainWorktree, name, worktree } = input;
+  const { kernel, mainWorktree, worktree } = input;
   const { devServerScript } = kernel.config;
   if (devServerScript === undefined) return;
   const startedAt = new Date().toISOString();
@@ -369,7 +367,7 @@ async function runDevSetupChild(input: DevSetupChildInput): Promise<string | und
     ? `dev setup could not run: ${result.error.message}`
     : `dev setup exited with code ${result.status ?? result.signal}`;
   return updateWorkspaces(mainWorktree, kernel.registryDir, (registry) => {
-    const entry = registry.workspaces[name];
+    const entry = findWorkspaceByPath(registry, worktree)?.entry;
     if (!entry) return fallback;
     const recorded = entry.devSetupFailure;
     if (recorded !== undefined && recorded.at >= startedAt) return recorded.message;
@@ -438,7 +436,12 @@ async function runSetup(
     if (err instanceof Error && err.stack !== undefined) log.append(err.stack);
     closeSync(log.fd);
     if (status !== "ready") {
-      await markWorkspaceFailed(setupCtx.mainWorktree, registryDir, name, message);
+      await markWorkspaceFailed(
+        setupCtx.mainWorktree,
+        registryDir,
+        setupCtx.currentWorktree,
+        message,
+      );
     }
     throw err;
   }
@@ -446,7 +449,7 @@ async function runSetup(
   log.tee(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch}`);
   if (command.detached && status !== "ready") {
     log.tee(`Setup continuing in background. Tail: ${log.path}`);
-    log.tee(`Join it with \`${wsCmd("wait")}\`.`);
+    log.tee(`Join it with \`${waitCommand(setupCtx.currentWorktree, ctx.currentWorktree)}\`.`);
   }
 
   const finalizeArgs = [config.workspaceScript, "__finalize"];
@@ -525,19 +528,21 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
 
 /**
  * The `wait` command to suggest for a worktree: no argument when it is the current worktree (the
- * common case), otherwise selected by its directory name.
+ * common case), otherwise selected by its absolute path.
  */
 function waitCommand(worktree: string, currentWorktree: string): string {
   if (resolve(worktree) === resolve(currentWorktree)) return wsCmd("wait");
-  return wsCmd(`wait ${basename(worktree)}`);
+  return wsCmd(`wait '${worktree.replaceAll("'", "'\\''")}'`);
 }
 
 function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, force: boolean): void {
   if (force) return;
-  const name = basename(ctx.currentWorktree);
-  const entry = readWorkspaces(ctx.mainWorktree, registryDir).workspaces[name];
-  if (entry?.status !== "pending") return;
-  if (resolve(entry.worktree) !== resolve(ctx.currentWorktree)) return;
+  const found = findWorkspaceByPath(
+    readWorkspaces(ctx.mainWorktree, registryDir),
+    ctx.currentWorktree,
+  );
+  if (found?.entry.status !== "pending") return;
+  const { name } = found;
   console.error(
     `Error: Setup is already in progress for workspace ${name}. ` +
       `Run \`${wsCmd("wait")}\` to wait for it to finish (or fail), then retry. ` +
@@ -548,10 +553,12 @@ function refuseIfFinalizePending(ctx: WorktreeContext, registryDir: string, forc
 
 type FinalizeCommand = Extract<WorkspaceCommand, { kind: "finalize" }>;
 
-async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<void> {
+async function runFinalize(
+  command: FinalizeCommand,
+  kernel: Kernel,
+  ctx: WorktreeContext,
+): Promise<void> {
   const { config, registryDir } = kernel;
-  const ctx = detectWorktree();
-  const name = basename(ctx.currentWorktree);
   const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
   const progressPath = setupProgressPath(ctx.currentWorktree, config.runtimeDir);
   const appendLog = (message: string): void => {
@@ -563,11 +570,12 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
   };
 
   const registry = readWorkspaces(ctx.mainWorktree, registryDir);
-  const entry = registry.workspaces[name];
-  if (!entry || resolve(entry.worktree) !== resolve(ctx.currentWorktree)) {
-    appendLog(`FAILED: No workspace "${name}" registered for worktree ${ctx.currentWorktree}.`);
+  const found = findWorkspaceByPath(registry, ctx.currentWorktree);
+  if (!found) {
+    appendLog(`FAILED: No workspace registered for worktree ${ctx.currentWorktree}.`);
     process.exit(1);
   }
+  const { name, entry } = found;
 
   const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
 
@@ -600,7 +608,7 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
-    await markWorkspaceFailed(ctx.mainWorktree, registryDir, name, message);
+    await markWorkspaceFailed(ctx.mainWorktree, registryDir, ctx.currentWorktree, message);
     rmSync(progressPath, { force: true });
     appendLog(`FAILED: ${message}`);
     if (stack) appendLog(stack);
@@ -613,13 +621,12 @@ async function runFinalize(command: FinalizeCommand, kernel: Kernel): Promise<vo
     const failure = await runDevSetupChild({
       kernel,
       mainWorktree: ctx.mainWorktree,
-      name,
       worktree: ctx.currentWorktree,
       fromFinalize: true,
     });
     if (failure !== undefined) appendLog(`DEV SETUP FAILED: ${failure}`);
   }
-  await markWorkspaceReady(ctx.mainWorktree, registryDir, name);
+  await markWorkspaceReady(ctx.mainWorktree, registryDir, ctx.currentWorktree);
   rmSync(progressPath, { force: true });
   appendLog("============================================================");
   appendLog(`READY: branch ${branch} (workspace ${name})`);
@@ -642,7 +649,7 @@ function resolveTarget(
   if (dir !== undefined) {
     return targetFromDir(dir, readWorkspaces(ctx.mainWorktree, registryDir));
   }
-  const resolved = resolveCurrentWorkspace(ctx.mainWorktree, registryDir);
+  const resolved = resolveCurrentWorkspace(ctx.mainWorktree, registryDir, ctx.currentWorktree);
   return { name: resolved.name, worktree: resolved.worktree, main: resolved.main ?? false };
 }
 
@@ -650,7 +657,7 @@ function targetFromDir(dir: string, registry: WorkspacesRegistry): ResolvedTarge
   const name = matchWorktreeByDir(dir, registry, process.cwd());
   if (name === undefined) {
     console.error(
-      `Error: No workspace matching "${dir}" (by path or directory name). Run \`${wsCmd("list")}\`.`,
+      `Error: No workspace matching "${dir}" (by path or registered name). Run \`${wsCmd("list")}\`.`,
     );
     process.exit(1);
   }
@@ -667,18 +674,17 @@ export function matchWorktreeByDir(
   registry: WorkspacesRegistry,
   cwd: string,
 ): string | undefined {
-  const resolvedPath = resolve(cwd, dir);
-  for (const [name, entry] of Object.entries(registry.workspaces)) {
-    if (resolve(entry.worktree) === resolvedPath) return name;
-  }
-  return registry.workspaces[dir] ? dir : undefined;
+  return (
+    findWorkspaceByPath(registry, resolve(cwd, dir))?.name ??
+    (Object.hasOwn(registry.workspaces, dir) ? dir : undefined)
+  );
 }
 
 function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLog: string): void {
   const { config, registryDir } = kernel;
   const ctx = detectWorktree();
-  const entry: WorkspaceEntry | undefined = readWorkspaces(ctx.mainWorktree, registryDir)
-    .workspaces[target.name];
+  const found = findWorkspaceByPath(readWorkspaces(ctx.mainWorktree, registryDir), target.worktree);
+  const entry = found?.entry;
 
   const status: WorkspaceStatus = entry?.status ?? "pending";
   const setupLog = setupLogPath(worktreeForLog, config.runtimeDir);
@@ -688,7 +694,7 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
   const branch = getWorktreeBranch(targetWorktree) ?? "(detached)";
   console.log(
     config.formatSummary({
-      name: target.name,
+      name: found?.name ?? target.name,
       branch,
       currentWorktree: targetWorktree,
       mainWorktree: ctx.mainWorktree,
@@ -930,7 +936,7 @@ async function runWait(command: WaitCommand, kernel: Kernel, verbose: boolean): 
   // standalone `workspace wait` (no prior setup in this invocation) → print the full summary on success.
   const ctx = detectWorktree();
   const target = resolveTarget(command.selector, ctx, kernel.registryDir);
-  await waitForWorkspace(target.name, kernel, { verbose, replayLog: true, full: true });
+  await waitForWorkspace(target, kernel, { verbose, replayLog: true, full: true });
 }
 
 interface WaitOptions {
@@ -942,14 +948,18 @@ interface WaitOptions {
 }
 
 async function waitForWorkspace(
-  name: string,
+  target: Pick<ResolvedTarget, "name" | "worktree">,
   kernel: Kernel,
   options: WaitOptions = {},
 ): Promise<void> {
+  const { name, worktree } = target;
   const { config, registryDir } = kernel;
   const formatSummary = options.formatSummary ?? true;
   const ctx = detectWorktree();
-  const initial = readWorkspaces(ctx.mainWorktree, registryDir).workspaces[name];
+  const initial = findWorkspaceByPath(
+    readWorkspaces(ctx.mainWorktree, registryDir),
+    worktree,
+  )?.entry;
   if (!initial) {
     console.error(`Error: No workspace "${name}" in registry.`);
     process.exit(1);
@@ -968,12 +978,16 @@ async function waitForWorkspace(
   // Poll workspaces.json — the finalize child writes `status` on success or failure. Tiny file, no
   // log-tailing race.
   for (;;) {
-    const entry = readWorkspaces(ctx.mainWorktree, registryDir).workspaces[name];
-    if (!entry) {
+    const found = findWorkspaceByPath(
+      readWorkspaces(ctx.mainWorktree, registryDir),
+      initial.worktree,
+    );
+    if (!found) {
       ticker.stop();
       console.error(`Error: Workspace "${name}" disappeared from registry.`);
       process.exit(1);
     }
+    const { entry } = found;
     if (entry.status === "ready") {
       ticker.stop();
       if (options.full && entry.devSetupFailure !== undefined) {
@@ -983,7 +997,7 @@ async function waitForWorkspace(
       console.log("… ready");
       if (formatSummary) {
         const target: ResolvedTarget = {
-          name,
+          name: found.name,
           worktree: entry.worktree,
           main: entry.main ?? false,
         };
@@ -1123,7 +1137,7 @@ async function handleRemove(
       purgeData: registry.workspaces[name]?.purgeData,
       verbose: run.verbose,
     });
-    await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, name);
+    await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, worktree);
     pruneGitWorktrees(ctx.mainWorktree);
     console.log(`Removed registry entry for workspace ${name} (branch "${branch}").`);
     return;
@@ -1161,7 +1175,7 @@ async function handleRemove(
     verbose: run.verbose,
   });
 
-  await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, name);
+  await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, worktree);
 
   if (removeHere) process.chdir(ctx.mainWorktree);
 
@@ -1179,10 +1193,11 @@ async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext
 async function deleteWorkspaceEntry(
   mainWorktree: string,
   registryDir: string,
-  name: string,
+  worktree: string,
 ): Promise<void> {
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    delete registry.workspaces[name];
+    const found = findWorkspaceByPath(registry, worktree);
+    if (found) delete registry.workspaces[found.name];
   });
 }
 

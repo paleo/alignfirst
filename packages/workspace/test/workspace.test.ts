@@ -15,9 +15,9 @@ describe("resolveFileSource", () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "workspace-source-test-"));
     const mainWorktree = join(root, "main");
-    const currentWorktree = join(root, "feat");
+    const currentWorktree = join(root, "external", "nested", "feat");
     mkdirSync(mainWorktree);
-    mkdirSync(currentWorktree);
+    mkdirSync(currentWorktree, { recursive: true });
     ctx = {
       name: "repo-feat",
       mainWorktree,
@@ -142,6 +142,20 @@ describe("matchWorktreeByDir", () => {
 
   it("matches an orphan by name even when its directory is gone", () => {
     expect(matchWorktreeByDir("repo-feat-b", registry, "/tmp")).toBe("repo-feat-b");
+  });
+
+  it("prefers an exact path over an exact registered name", () => {
+    const colliding: WorkspacesRegistry = {
+      workspaces: {
+        wt: { worktree: "/first/wt", createdAt: "", status: "ready" },
+        "wt-deadbeef": { worktree: "/second/wt", createdAt: "", status: "ready" },
+      },
+    };
+    expect(matchWorktreeByDir("wt", colliding, "/second")).toBe("wt-deadbeef");
+    expect(matchWorktreeByDir("wt", colliding, "/elsewhere")).toBe("wt");
+    expect(matchWorktreeByDir("wt-deadbeef", colliding, "/elsewhere")).toBe("wt-deadbeef");
+    expect(matchWorktreeByDir("/unknown/wt", colliding, "/elsewhere")).toBeUndefined();
+    expect(matchWorktreeByDir("../unknown/wt", colliding, "/elsewhere")).toBeUndefined();
   });
 
   it("returns undefined when nothing matches", () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,14 +14,17 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  allocateWorkspaceName,
+  findWorkspaceByPath,
+  markWorkspaceFailed,
   markWorkspaceReady,
   readWorkspaces,
   registerWorkspace,
   registryDirFor,
   type RegisterWorkspaceInput,
-  rekeyMainEntry,
   resolveCurrentWorkspace,
   storedPortsOf,
+  updateWorkspaces,
   type WorkspaceEntry,
   workspacesFilePath,
   writeWorkspaces,
@@ -100,13 +104,13 @@ describe("registerWorkspace", () => {
     expect(readEntries()[name].main).toBe(true);
   });
 
-  it("refuses a name already taken by another worktree", async () => {
-    writeWorkspaces(mainWorktree, registryDir, {
-      workspaces: { "myrepo-feat-a": entry("/elsewhere/myrepo-feat-a") },
-    });
-    await expect(register("/repo/myrepo-feat-a")).rejects.toThrow(
-      "already taken by /elsewhere/myrepo-feat-a",
-    );
+  it("allocates distinct names for two external paths sharing a basename", async () => {
+    const first = await register("/elsewhere/myrepo-feat-a");
+    const second = await register("/repo/myrepo-feat-a");
+    expect(first.name).toBe("myrepo-feat-a");
+    expect(second.name).toBe(`myrepo-feat-a-${digestOf("/repo/myrepo-feat-a").slice(0, 8)}`);
+    expect(readEntries()[first.name].worktree).toBe("/elsewhere/myrepo-feat-a");
+    expect(readEntries()[second.name].worktree).toBe("/repo/myrepo-feat-a");
   });
 
   it("keeps createdAt, purgeData, ports, devSetupAt and a ready status across a re-register", async () => {
@@ -198,10 +202,10 @@ describe("readWorkspaces repair", () => {
     expect(readEntries()["wt-a"].worktree).toBe(worktree);
   });
 
-  it("points a missing path at the sibling of the main worktree with the same name", () => {
+  it("keeps a missing external path beside an unrelated same-named sibling", () => {
     mkdirSync(join(root, "wt-a"));
     writeStored({ "wt-a": entry("/old/place/wt-a") });
-    expect(readEntries()["wt-a"].worktree).toBe(join(root, "wt-a"));
+    expect(readEntries()["wt-a"].worktree).toBe("/old/place/wt-a");
   });
 
   it("keeps a missing path without a sibling, as an orphan", () => {
@@ -277,7 +281,7 @@ describe("readWorkspaces repair", () => {
     writeWorkspaces(mainWorktree, registryDir, readWorkspaces(mainWorktree, registryDir));
     expect(readStored()).toEqual({
       version: 2,
-      workspaces: { "wt-a": { ...entry(join(root, "wt-a")), devSetupAt: CREATED_AT } },
+      workspaces: { "wt-a": { ...entry("/old/place/wt-a"), devSetupAt: CREATED_AT } },
     });
   });
 });
@@ -314,10 +318,10 @@ describe("main-entry re-key", () => {
     });
   });
 
-  it("returns nothing when the main entry already has the current name", () => {
-    const registry = { workspaces: { main: { ...entry(mainWorktree), main: true } } };
-    expect(rekeyMainEntry(registry, mainWorktree)).toBeUndefined();
-    expect(Object.keys(registry.workspaces)).toEqual(["main"]);
+  it("keeps an unchanged main identity during a locked write", async () => {
+    writeStored({ main: { ...entry(mainWorktree), main: true } }, 2);
+    await updateWorkspaces(mainWorktree, registryDir, () => {});
+    expect(Object.keys(readEntries())).toEqual(["main"]);
   });
 });
 
@@ -328,7 +332,7 @@ describe("markWorkspaceReady", () => {
         "wt-a": { ...entry("/repo/wt-a", "failed"), failure: { at: CREATED_AT, message: "boom" } },
       },
     });
-    await markWorkspaceReady(mainWorktree, registryDir, "wt-a");
+    await markWorkspaceReady(mainWorktree, registryDir, "/repo/wt-a");
     const stored = readEntries()["wt-a"];
     expect(stored.status).toBe("ready");
     expect(stored.failure).toBeUndefined();
@@ -338,7 +342,7 @@ describe("markWorkspaceReady", () => {
     writeWorkspaces(mainWorktree, registryDir, {
       workspaces: { "wt-a": { ...entry("/repo/wt-a", "pending"), purgeData: { volume: "v1" } } },
     });
-    await markWorkspaceReady(mainWorktree, registryDir, "wt-a");
+    await markWorkspaceReady(mainWorktree, registryDir, "/repo/wt-a");
     expect(readEntries()["wt-a"].purgeData).toEqual({ volume: "v1" });
   });
 });
@@ -357,13 +361,242 @@ describe("storedPortsOf", () => {
   });
 });
 
+function digestOf(path: string): string {
+  return createHash("sha256").update(path).digest("hex");
+}
+
+describe("collision-safe identity", () => {
+  it("reuses normalized paths and preserves a suffix and state after its competitor disappears", async () => {
+    await register("/first/wt");
+    const { name } = await register("/second/wt");
+    const basis = { ports: { web: 8200 }, inputs: { host: "localhost" } };
+    await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+      delete registry.workspaces.wt;
+      Object.assign(registry.workspaces[name], {
+        createdAt: CREATED_AT,
+        status: "ready",
+        ports: basis.ports,
+        runFilesWrittenWith: basis,
+        devSetupAt: CREATED_AT,
+        purgeData: { volume: "legacy" },
+        devSetupFailure: { at: CREATED_AT, message: "old" },
+      });
+    });
+    expect(await register("/second/other/../wt")).toEqual({ name, status: "ready" });
+    expect(readEntries()[name]).toEqual({
+      worktree: "/second/wt",
+      createdAt: CREATED_AT,
+      status: "ready",
+      ports: basis.ports,
+      runFilesWrittenWith: basis,
+      devSetupAt: CREATED_AT,
+      purgeData: { volume: "legacy" },
+    });
+    await markWorkspaceFailed(mainWorktree, registryDir, "/second/wt", "retry");
+    expect(await register("/second/wt")).toEqual({ name, status: "pending" });
+    expect(readEntries()[name].failure).toBeUndefined();
+  });
+
+  it("allocates atomically across concurrent registrations", async () => {
+    const paths = Array.from({ length: 12 }, (_, index) => `/external/${index}/wt`);
+    const results = await Promise.all(paths.map((path) => register(path)));
+    expect(new Set(results.map((result) => result.name)).size).toBe(paths.length);
+    expect(
+      Object.values(readEntries())
+        .map((entry) => entry.worktree)
+        .sort(),
+    ).toEqual(paths.sort());
+  });
+
+  it("extends occupied hash candidates and falls back beyond the full digest", () => {
+    const path = "/second/wt";
+    const digest = digestOf(path);
+    const workspaces: Record<string, WorkspaceEntry> = { wt: entry("/first/wt") };
+    workspaces[`wt-${digest.slice(0, 8)}`] = entry("/occupied/8");
+    expect(allocateWorkspaceName(workspaces, path)).toBe(`wt-${digest.slice(0, 9)}`);
+    for (let length = 9; length <= digest.length; ++length) {
+      workspaces[`wt-${digest.slice(0, length)}`] = entry(`/occupied/${length}`);
+    }
+    workspaces[`wt-${digest}-2`] = entry("/occupied/numeric");
+    expect(allocateWorkspaceName(workspaces, path)).toBe(`wt-${digest}-3`);
+  });
+
+  it("inserts beyond a full occupied digest without overwriting reservations", async () => {
+    const path = "/second/wt";
+    const digest = digestOf(path);
+    const reservations: Record<string, WorkspaceEntry> = { wt: entry("/first/wt") };
+    for (let length = 8; length <= digest.length; ++length) {
+      reservations[`wt-${digest.slice(0, length)}`] = entry(`/occupied/${length}`);
+    }
+    reservations[`wt-${digest}-2`] = entry("/occupied/numeric");
+    writeWorkspaces(mainWorktree, registryDir, { workspaces: reservations });
+    const registered = await register(path);
+    expect(registered.name).toBe(`wt-${digest}-3`);
+    const entries = readEntries();
+    for (const [name, reserved] of Object.entries(reservations)) {
+      expect(entries[name]).toEqual(reserved);
+    }
+    expect((await register("/second/../second/wt")).name).toBe(registered.name);
+  });
+
+  it("keeps version 2 and adds no stored identity fields", async () => {
+    await register("/first/wt");
+    const { name } = await register("/second/wt");
+    expect(readStored().version).toBe(2);
+    expect(Object.keys(readStored().workspaces[name]).sort()).toEqual([
+      "createdAt",
+      "status",
+      "worktree",
+    ]);
+  });
+
+  it("never repairs a missing path from a suffixed registry key", () => {
+    mkdirSync(join(root, "wt-deadbeef"));
+    writeStored({ "wt-deadbeef": entry("/missing/external/wt") }, 2);
+    expect(readEntries()["wt-deadbeef"].worktree).toBe("/missing/external/wt");
+  });
+});
+
+describe("main identity reconciliation", () => {
+  it("allocates main and linked collisions in registration order", async () => {
+    const linked = await register("/external/main");
+    const main = await registerMain();
+    expect(linked.name).toBe("main");
+    expect(main.name).toBe(`main-${digestOf(mainWorktree).slice(0, 8)}`);
+    expect(readEntries()[main.name].main).toBe(true);
+    expect(findWorkspaceByPath(readWorkspaces(mainWorktree, registryDir), mainWorktree)?.name).toBe(
+      main.name,
+    );
+    writeWorkspaces(mainWorktree, registryDir, { workspaces: {} });
+    expect((await registerMain()).name).toBe("main");
+    expect((await register("/external/main")).name).toMatch(/^main-[a-f0-9]{8}$/);
+  });
+
+  it("keeps an unchanged suffixed main after removing its competitor and moving parents", async () => {
+    await register("/external/main");
+    const { name } = await registerMain();
+    await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+      delete registry.workspaces.main;
+      Object.assign(registry.workspaces[name], {
+        status: "ready",
+        devSetupAt: CREATED_AT,
+        runFilesWrittenWith: { ports: {}, inputs: {} },
+      });
+    });
+    const moved = join(root, "parent", "main");
+    mkdirSync(join(root, "parent"));
+    renameSync(mainWorktree, moved);
+    mainWorktree = moved;
+    expect(await registerMain()).toEqual({ name, status: "ready" });
+    expect(readEntries()[name].devSetupAt).toBe(CREATED_AT);
+    expect(readEntries()[name].runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
+  });
+
+  it("reconciles an actual rename before an unrelated write can discard its evidence", async () => {
+    writeStored(
+      {
+        old: {
+          ...entry("/previous/old"),
+          main: true,
+          ports: { web: 8200 },
+          devSetupAt: CREATED_AT,
+          runFilesWrittenWith: { ports: {}, inputs: {} },
+          purgeData: { volume: "legacy" },
+        },
+        main: entry("/linked/main"),
+      },
+      2,
+    );
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+        registry.workspaces.other = entry("/linked/other");
+      });
+      const name = `main-${digestOf(mainWorktree).slice(0, 8)}`;
+      expect(readEntries().main.worktree).toBe("/linked/main");
+      expect(readEntries()[name]).toEqual({
+        ...entry(mainWorktree),
+        main: true,
+        ports: { web: 8200 },
+        purgeData: { volume: "legacy" },
+      });
+      expect(warn.mock.calls.join("\n")).toContain(`renamed from "old" to "${name}"`);
+      expect((await registerMain()).name).toBe(name);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("updates by path when the captured main name was reconciled and then reused by a foreign path", async () => {
+    writeStored({ old: { ...entry("/previous/old", "pending"), main: true } }, 2);
+    const captured = findWorkspaceByPath(readWorkspaces(mainWorktree, registryDir), mainWorktree);
+    expect(captured?.name).toBe("old");
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await updateWorkspaces(mainWorktree, registryDir, (registry) => {
+        registry.workspaces.old = entry("/foreign/old", "failed");
+      });
+      await markWorkspaceReady(mainWorktree, registryDir, mainWorktree);
+      expect(readEntries().main.status).toBe("ready");
+      expect(readEntries().old.status).toBe("failed");
+      await markWorkspaceFailed(mainWorktree, registryDir, mainWorktree, "boom");
+      expect(readEntries().main.failure?.message).toBe("boom");
+      expect(readEntries().old.failure).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("preserves infrastructure state when a real rename leaves the registered name unchanged", async () => {
+    writeStored(
+      {
+        main: {
+          ...entry("/previous/different-basename"),
+          main: true,
+          devSetupAt: CREATED_AT,
+          runFilesWrittenWith: { ports: {}, inputs: {} },
+        },
+      },
+      2,
+    );
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect((await registerMain()).name).toBe("main");
+      expect(readEntries().main.devSetupAt).toBe(CREATED_AT);
+      expect(readEntries().main.runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("retains the winning duplicate's original path until rename reconciliation", async () => {
+    writeStored(
+      {
+        older: { ...entry("/prior/older"), main: true },
+        newest: { ...entry("/prior/newest"), main: true, createdAt: "2026-09-01T00:00:00.000Z" },
+      },
+      2,
+    );
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await updateWorkspaces(mainWorktree, registryDir, () => {});
+      expect(Object.keys(readEntries())).toEqual(["main"]);
+      expect(readEntries().main.createdAt).toBe("2026-09-01T00:00:00.000Z");
+      expect(warn.mock.calls.join("\n")).toContain('renamed from "newest"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("resolveCurrentWorkspace", () => {
   it("resolves the entry whose worktree is the cwd", () => {
     const cwd = process.cwd();
     writeWorkspaces(mainWorktree, registryDir, {
       workspaces: { here: entry(cwd), elsewhere: entry("/repo/wt-b") },
     });
-    const resolved = resolveCurrentWorkspace(mainWorktree, registryDir);
+    const resolved = resolveCurrentWorkspace(mainWorktree, registryDir, cwd);
     expect(resolved).toEqual({ name: "here", worktree: cwd });
   });
 });

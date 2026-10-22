@@ -8,7 +8,7 @@ import { getWorktreeBranch } from "./worktree.js";
 const DEV_SERVERS_FILENAME = "dev-servers.json";
 
 export interface DevServerEntry {
-  /** Workspace name: the worktree directory basename, and the workspaces-registry key. */
+  /** Registered workspace name: the workspaces-registry key. */
   name: string;
   worktree: string;
   pids: Record<string, number>;

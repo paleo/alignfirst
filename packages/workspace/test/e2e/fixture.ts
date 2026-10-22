@@ -84,6 +84,8 @@ export interface FixtureOptions {
   fallbackSeeding?: boolean;
   /** Declares the `ports` key that 0.37.0 removed from the workspace config. */
   oldConfig?: boolean;
+  /** Shared directories for external-worktree link coverage. */
+  sharedDirs?: string[];
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
@@ -95,7 +97,7 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   mkdirSync(join(repo, "scripts"), { recursive: true });
   writeFileSync(
     join(repo, "scripts", "workspace.mjs"),
-    workspaceMjsSource(portless, fallbackSeeding, oldConfig),
+    workspaceMjsSource(portless, fallbackSeeding, oldConfig, options.sharedDirs ?? []),
   );
   if (fallbackSeeding) {
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
@@ -117,6 +119,7 @@ function workspaceMjsSource(
   portless: boolean,
   fallbackSeeding: boolean,
   oldConfig: boolean,
+  sharedDirs: string[],
 ): string {
   const devSetup = portless
     ? ""
@@ -149,14 +152,19 @@ import { runWorkspace } from "${distIndexUrl}";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-${devSetup}${oldPorts}  sharedDirs: [],
+${devSetup}${oldPorts}  sharedDirs: ${JSON.stringify(sharedDirs)},
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
   formatSummary: () => "Workspace ready.",
-  finalizeWorkspace: (ctx) => {
+  finalizeWorkspace: async (ctx) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(process.env.E2E_FINALIZE_DELAY_MS ?? 0)));
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");
     writeFileSync(join(ctx.currentWorktree, "finalized.txt"), "finalized\\n");
+    writeFileSync(join(ctx.currentWorktree, "finalize-context.json"), JSON.stringify({
+      name: ctx.name, currentWorktree: ctx.currentWorktree, mainWorktree: ctx.mainWorktree,
+      isMainWorktree: ctx.isMainWorktree, branch: ctx.branch,
+    }));
   },
 });
 `;
@@ -167,9 +175,10 @@ export function runCli(
   repo: string,
   args: string[],
   env?: Record<string, string>,
+  cwd: string = repo,
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [join("scripts", "workspace.mjs"), ...args], {
-    cwd: repo,
+  return spawnSync(process.execPath, [join(repo, "scripts", "workspace.mjs"), ...args], {
+    cwd,
     encoding: "utf-8",
     env: { ...process.env, ...env },
     stdio: "pipe",

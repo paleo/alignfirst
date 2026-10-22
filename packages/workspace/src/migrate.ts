@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   type DevServerEntry,
@@ -11,6 +11,8 @@ import { wsCmd } from "./package-manager.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { getWorktreeBranch, type WorktreeContext } from "./worktree.js";
 import {
+  allocateWorkspaceName,
+  findWorkspaceByPath,
   type WorkspaceEntry,
   type WorkspacesRegistry,
   workspacesFilePath,
@@ -59,13 +61,26 @@ export async function runMigrate(ctx: WorktreeContext, input: MigrateInput): Pro
         "and update that branch (merge the base branch, then reinstall dependencies).",
     );
   }
-  const old = JSON.parse(readFileSync(slotsPath, "utf-8")) as OldSlotsRegistry;
-  const registry = convertSlotsRegistry({ old, mainWorktree: ctx.mainWorktree });
-  await withRegistryLock(ctx.mainWorktree, input.registryDir, () =>
-    writeWorkspaces(ctx.mainWorktree, input.registryDir, registry),
+  const { registry, translatedDevServers } = await withRegistryLock(
+    ctx.mainWorktree,
+    input.registryDir,
+    () => {
+      if (existsSync(workspacesFilePath(ctx.mainWorktree, input.registryDir))) {
+        throw new WorkspaceError("The registry is already migrated. No files were changed.");
+      }
+      const old = JSON.parse(readFileSync(slotsPath, "utf-8")) as OldSlotsRegistry;
+      const registry = convertSlotsRegistry({ old, mainWorktree: ctx.mainWorktree });
+      const translatedDevServers = translateDevServers(
+        ctx.mainWorktree,
+        input.registryDir,
+        old,
+        registry,
+      );
+      writeWorkspaces(ctx.mainWorktree, input.registryDir, registry);
+      rmSync(slotsPath);
+      return { registry, translatedDevServers };
+    },
   );
-  const translatedDevServers = translateDevServers(ctx.mainWorktree, input.registryDir);
-  rmSync(slotsPath);
   printMigrationReport(registry, translatedDevServers, input.hasPurgeInfrastructure);
 }
 
@@ -78,11 +93,10 @@ export interface ConvertInput {
 export function convertSlotsRegistry({ old, mainWorktree }: ConvertInput): WorkspacesRegistry {
   const workspaces: Record<string, WorkspaceEntry> = {};
   const mainEntry = collapseMainEntries(old, mainWorktree);
-  if (mainEntry) workspaces[basename(mainWorktree)] = mainEntry;
+  if (mainEntry) workspaces[allocateWorkspaceName(workspaces, mainWorktree)] = mainEntry;
   for (const entry of newestLinkedEntries(old, mainWorktree)) {
-    const name = basename(entry.worktree);
-    refuseDuplicateName(name, workspaces[name], entry.worktree);
-    workspaces[name] = migratedEntry(entry);
+    const name = allocateWorkspaceName(workspaces, resolve(mainWorktree, entry.worktree));
+    workspaces[name] = migratedEntry(entry, mainWorktree);
   }
   return { workspaces };
 }
@@ -99,14 +113,14 @@ function collapseMainEntries(
   const mains = Object.values(old.slots).filter((entry) => isMainSlot(entry, mainWorktree));
   if (mains.length === 0) return;
   const newest = mains.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
-  const entry = migratedEntry(newest);
-  entry.worktree = mainWorktree;
+  const entry = migratedEntry(newest, mainWorktree);
+  entry.worktree = resolve(mainWorktree);
   entry.main = true;
   return entry;
 }
 
 function isMainSlot(entry: OldSlotEntry, mainWorktree: string): boolean {
-  return entry.main === true || resolve(entry.worktree) === resolve(mainWorktree);
+  return entry.main === true || resolve(mainWorktree, entry.worktree) === resolve(mainWorktree);
 }
 
 /**
@@ -117,28 +131,16 @@ function newestLinkedEntries(old: OldSlotsRegistry, mainWorktree: string): OldSl
   const byPath = new Map<string, OldSlotEntry>();
   for (const entry of Object.values(old.slots)) {
     if (isMainSlot(entry, mainWorktree)) continue;
-    const kept = byPath.get(resolve(entry.worktree));
-    if (!kept || entry.createdAt > kept.createdAt) byPath.set(resolve(entry.worktree), entry);
+    const path = resolve(mainWorktree, entry.worktree);
+    const kept = byPath.get(path);
+    if (!kept || entry.createdAt > kept.createdAt) byPath.set(path, entry);
   }
   return [...byPath.values()];
 }
 
-function refuseDuplicateName(
-  name: string,
-  existing: WorkspaceEntry | undefined,
-  worktree: string,
-): void {
-  if (!existing) return;
-  throw new WorkspaceError(
-    `Two worktrees share the directory name "${name}": ${existing.worktree} and ${worktree}. ` +
-      "Worktree directory names must be unique. Remove one of the worktrees, delete its entry " +
-      `from slots.json, then re-run \`${wsCmd("migrate-registry-0.30")}\`.`,
-  );
-}
-
-function migratedEntry(old: OldSlotEntry): WorkspaceEntry {
+function migratedEntry(old: OldSlotEntry, mainWorktree: string): WorkspaceEntry {
   const entry: WorkspaceEntry = {
-    worktree: old.worktree,
+    worktree: resolve(mainWorktree, old.worktree),
     createdAt: old.createdAt,
     status: old.status,
   };
@@ -159,22 +161,75 @@ interface OldDevServerEntry {
 }
 
 /** Rekeys `dev-servers.json` entries from `slot` to the workspace name. Running PIDs stay valid. */
-function translateDevServers(mainWorktree: string, registryDir: string): number {
+function translateDevServers(
+  mainWorktree: string,
+  registryDir: string,
+  slots: OldSlotsRegistry,
+  registry: WorkspacesRegistry,
+): number {
   const filePath = devServersFilePath(mainWorktree, registryDir);
   if (!existsSync(filePath)) return 0;
   const data = JSON.parse(readFileSync(filePath, "utf-8")) as { servers: OldDevServerEntry[] };
+  const { paths, bySlot } = convertedIdentities(slots, registry, mainWorktree);
+  const reserved: Record<string, { worktree: string }> = { ...registry.workspaces };
   const servers = data.servers.map((old): DevServerEntry => {
-    const entry: DevServerEntry = {
-      name: old.name ?? basename(old.worktree),
-      worktree: old.worktree,
-      pids: old.pids,
-      startedAt: old.startedAt,
-    };
-    if (old.main === true) entry.main = true;
+    const path = resolve(mainWorktree, old.worktree);
+    const converted =
+      paths.get(path) ?? (old.slot === undefined ? undefined : bySlot.get(String(old.slot)));
+    const worktree = converted?.worktree ?? (old.main === true ? resolve(mainWorktree) : path);
+    const name = converted?.name ?? reserveDevOnlyName(reserved, old.name, worktree);
+    reserved[name] = { worktree };
+    paths.set(path, { name, worktree, main: converted?.main ?? old.main });
+    const entry: DevServerEntry = { name, worktree, pids: old.pids, startedAt: old.startedAt };
+    if ((converted?.main ?? old.main) === true) entry.main = true;
     return entry;
   });
   writeDevServers(mainWorktree, registryDir, { servers });
   return servers.length;
+}
+
+interface ConvertedIdentities {
+  paths: Map<string, DevIdentity>;
+  bySlot: Map<string, DevIdentity>;
+}
+
+interface DevIdentity {
+  name: string;
+  worktree: string;
+  main?: boolean;
+}
+
+function convertedIdentities(
+  slots: OldSlotsRegistry,
+  registry: WorkspacesRegistry,
+  mainWorktree: string,
+): ConvertedIdentities {
+  const paths = new Map<string, DevIdentity>();
+  const bySlot = new Map<string, DevIdentity>();
+  for (const [slot, old] of Object.entries(slots.slots)) {
+    const path = resolve(mainWorktree, old.worktree);
+    const target = isMainSlot(old, mainWorktree) ? mainWorktree : path;
+    const found = findWorkspaceByPath(registry, target);
+    if (!found) continue;
+    const identity = { name: found.name, worktree: found.entry.worktree, main: found.entry.main };
+    paths.set(path, identity);
+    bySlot.set(slot, identity);
+  }
+  for (const [name, entry] of Object.entries(registry.workspaces)) {
+    paths.set(entry.worktree, { name, worktree: entry.worktree, main: entry.main });
+  }
+  return { paths, bySlot };
+}
+
+function reserveDevOnlyName(
+  reserved: Record<string, { worktree: string }>,
+  recordedName: string | undefined,
+  worktree: string,
+): string {
+  const existing = Object.entries(reserved).find(([, entry]) => entry.worktree === worktree);
+  if (existing) return existing[0];
+  if (recordedName !== undefined && !Object.hasOwn(reserved, recordedName)) return recordedName;
+  return allocateWorkspaceName(reserved, worktree);
 }
 
 function printMigrationReport(

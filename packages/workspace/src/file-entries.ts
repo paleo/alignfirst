@@ -10,7 +10,7 @@ import {
 
 /** Shared core of the setup-side callback contexts. */
 export interface SetupContextBase {
-  /** Workspace name: the worktree directory basename. */
+  /** Registered workspace name; it may differ from the worktree directory basename. */
   name: string;
   currentWorktree: string;
   mainWorktree: string;

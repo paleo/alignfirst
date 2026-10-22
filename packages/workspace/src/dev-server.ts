@@ -248,7 +248,7 @@ function printStatus(kernel: DevKernel): void {
   console.log("Dev-server status: UP.");
   printStartSummary(
     kernel.config,
-    resolveCurrentWorkspace(worktree.mainWorktree, registryDir),
+    resolveCurrentWorkspace(worktree.mainWorktree, registryDir, worktree.currentWorktree),
     resolveSpawnPorts(kernel.config.servers, portsLookup(kernel)(cwd)),
     entry.pids,
   );
@@ -293,7 +293,7 @@ async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   await spawnWithRollback(config, ctx, state);
 
-  const workspace = registerStartedServer(worktree.mainWorktree, registryDir, state.spawnPids);
+  const workspace = registerStartedServer(worktree, registryDir, state.spawnPids);
   printStartSummary(config, workspace, servers, state.spawnPids);
 }
 
@@ -340,7 +340,7 @@ async function runForeground(kernel: DevKernel, options: StartOptions): Promise<
     await new Promise<never>(() => {});
   }
 
-  const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
+  const workspace = registerStartedServer(worktree, registryDir, state.spawnPids);
   started = true;
   printStartSummary(config, workspace, servers, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
@@ -499,11 +499,12 @@ async function spawnAndAwait(
 }
 
 function registerStartedServer(
-  mainWorktree: string,
+  worktree: WorktreeContext,
   registryDir: string,
   spawnPids: Record<string, number>,
 ): ResolvedWorkspace {
-  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
+  const { mainWorktree, currentWorktree } = worktree;
+  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir, currentWorktree);
   const devEntry: DevServerEntry = {
     name: workspace.name,
     worktree: workspace.worktree,
