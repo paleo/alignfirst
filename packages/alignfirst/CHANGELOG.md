@@ -1,5 +1,15 @@
 # alignfirst
 
+## 0.14.0
+
+### Minor Changes
+
+- d094c7d: Refused effective work files tracked by the project's own repository and added `plans check --json`.
+
+### Patch Changes
+
+- d094c7d: Clarified that specs and plans should be concise and proportionate to the task.
+
 ## 0.13.2
 
 ### Patch Changes
