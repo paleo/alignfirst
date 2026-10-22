@@ -431,8 +431,8 @@ describe("aligndev guide playbook", () => {
       expect(result.stdout, topic).toContain("aligndev worktree");
     }
     const lifecycle = (await runGuide(fixture, ["project-lifecycle"])).stdout;
-    expect(lifecycle).toContain("Full workspace installation is optional");
-    expect(lifecycle).toContain("A guide's existence alone does not prove readiness");
+    expect(lifecycle).toContain("The workspace system is optional");
+    expect(lifecycle).toContain("The project is prepared when DEVELOPERS_PATH exists");
     expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
     expect(lifecycle).toContain("Stop immediately if any removal fails");
     expect(lifecycle).toContain("No coding launch or plans preparation is needed");
@@ -662,42 +662,40 @@ describe("work-files and lightweight worktree runbooks", () => {
         capture.indexOf("--next request.md"),
       );
       for (const text of [
-        "The assistant directly invokes",
+        "You run",
         `${forms.aligndev} worktree list/add/remove`,
         "A branch worked on in place stays checked out",
-        "No coding launch or work-files preparation is required for direct cleanup",
-        "Remove only when that PR/MR is merged",
-        "workspaces with no PR/MR, and unmerged PR/MRs intact",
-        "Refuse dirty removal and stop on failure",
+        "needs no coding launch or work-files preparation",
+        "only when that PR/MR is merged",
+        "Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR",
+        "Stop on the first failed removal",
       ])
         expect(working, text).toContain(text);
       const setup = guides["project-workspace-setup"];
       for (const text of [
-        "including non-Node implementations",
-        "A missing npm dependency is not proof",
+        "whatever its implementation",
+        "absent from `package.json`",
         `${forms.aligndev} worktree list --json`,
         `${forms.aligndev} worktree add <path> <existing-branch> --json`,
         `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
-        "you invoke the lightweight commands directly as orchestration",
+        `run \`${forms.aligndev} worktree add\` yourself`,
         "absolute sibling path",
-        "including dangling symlinks",
-        "Reuse the listed path for an occupied branch",
+        "a dangling symlink included",
+        "reuse the path it reports for an occupied branch",
         "for a status request, end the turn",
         "create nothing",
         "Creating from that ref requires no checkout or clean main worktree",
-        "Tracked `.local` stays branch-local with a warning",
+        "a tracked `.local` that stays branch-local",
         "before any `git` inspection or prose",
         "`ready` covers the worktree and work files only",
         "documented install/build/test preparation separately",
-        "A symlink is not a sandbox permission grant",
+        "a symlink grants no sandbox permission",
         "matches the explicit user choice",
         "rather than choosing another ticket branch",
       ])
         expect(setup, text).toContain(text);
       if (platform === "codingAgent") {
-        expect(setup).toContain(
-          "Missing workspace tooling alone is never a reason for an extra workplace question",
-        );
+        expect(setup).toContain("These cases apply with or without workspace tooling");
         expect(setup).toContain("**The session's branch carries TICKET_ID**");
         expect(setup).toContain("**Any other branch**");
       }
@@ -710,10 +708,6 @@ describe("work-files and lightweight worktree runbooks", () => {
       );
       expect(delegate.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
         delegate.indexOf(`${forms.aligndev} code new`),
-      );
-      const record = consultation.slice(consultation.indexOf("## Step 5"));
-      expect(record.indexOf(`${forms.aligndev} guide work-files-setup`)).toBeLessThan(
-        record.indexOf(`${forms.alignfirst} ticket --side`),
       );
     },
   );

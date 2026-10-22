@@ -1,6 +1,6 @@
 # Runbook: Project lifecycle
 
-Use this procedure only to create a project, onboard a repository to clone, or physically remove a project. Project-workspace creation and cleanup follow `{{ALIGNDEV}} guide project-workspace-setup` and its selected tooling: project workspace commands when provided, otherwise `{{ALIGNDEV}} worktree list/add/remove`.
+Use this procedure only to create a project, onboard a repository to clone, or physically remove a project. Project-workspace creation and cleanup follow `{{ALIGNDEV}} guide project-workspace-setup`.
 
 ## Start with the project guide
 
@@ -22,7 +22,7 @@ Creation has a hard user-input gate. Before any filesystem, Git, port-allocation
 2. Create the main-worktree directory under the selected allowed parent. Initialize its Git repository on `main`.
 3. Once the directory contains its `.git` directory, retain the canonical path as PROJECT_PATH. When the project declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <port names × concurrent workspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`. The selected parent's marker owns its port range. Report that `.alignfirst.json` was written and name the block.
 4. Complete `{{ALIGNDEV}} guide work-files-setup` with the approved bootstrap scope, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from the starter and every later human message that supplied the gate's values. Record the project name, selected parent, stack, port requirements, and requested stopping point; never copy only the starter's task line. Then run `{{ALIGNFIRST}} sync`. The bot chooses the identifier and writes the request; the agent does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
-5. Before delegating the bootstrap, run `{{ALIGNDEV}} guide code`. On a takeover turn, apply the pre-delegation race checkpoint in the playbook (`{{ALIGNDEV}} guide`) immediately before `{{ALIGNDEV}} code new`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Full workspace installation is optional. When selected, include `.local/` as a gitignored shared directory in its mechanism; otherwise use lightweight worktrees after bootstrap and document separate install/build/test preparation. Follow the selected stack and the host-specific guide.
+5. Before delegating the bootstrap, run `{{ALIGNDEV}} guide code`. On a takeover turn, apply the pre-delegation race checkpoint in the playbook (`{{ALIGNDEV}} guide`) immediately before `{{ALIGNDEV}} code new`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. The workspace system is optional. When the project installs it, include `.local/` as a gitignored shared directory in its mechanism; otherwise the project uses `{{ALIGNDEV}} worktree` and documents its install/build/test preparation. Follow the selected stack and the host-specific guide.
 6. Verify the project through the setup guide, run `{{ALIGNFIRST}} sync`, and make its initial commit on `main` in PROJECT_PATH. Do not ask for confirmation before committing.
 7. When a remote destination is known from the request, environment, or host instructions, configure it when needed and push `main`. Do not ask for confirmation before pushing. When no destination is known, or the user requested a local-only project, leave the committed project local and report that no remote was configured.
 8. After that commit and push when applicable, return to the normal working-session flow. Every subsequent branch change uses a linked project workspace.
@@ -44,7 +44,7 @@ Before any discussion:
 
 ### Step 2 — Check the AlignDev contract
 
-Inspect the contract the `alignfirst-setup-guide` lists under "Prepare a Project for an Assistant": project context, usable non-project-tracked effective work files, documentation, runtime commands, and a project-specific developer guide. Full workspace installation is optional; existing documented tooling, including non-Node implementations, remains authoritative. Without it, use lightweight worktrees and separate repository preparation. A guide's existence alone does not prove readiness. If the contract is met, continue with the normal working-session flow; otherwise continue to Step 3.
+The contract is the one the `alignfirst-setup-guide` lists under "Prepare a Project for an Assistant": project context, usable work files outside the project's tracked tree, documentation, runtime commands, and a developer guide. The workspace system is optional. The project is prepared when DEVELOPERS_PATH exists and `{{ALIGNDEV}} guide work-files-setup` passes without preparation: continue with the normal working-session flow for the user's request. Otherwise, continue to Step 3.
 
 ### Step 3 — Warn and ask
 
@@ -70,34 +70,34 @@ When the user reports the merge, or you observe it while checking the PR:
 
 1. In the main worktree, switch back to the default branch, pull, and delete the local setup branch.
 2. Install dependencies and build.
-3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there (the projects guide names the repository), then run `{{ALIGNFIRST}} plans setup {{PROJECTS_ROOT}}/<clone>` from PROJECT_PATH at the effective location. Otherwise retain the prepared plans. Verify through `{{ALIGNDEV}} guide work-files-setup`.
+3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there (the projects guide names the repository), then run `{{ALIGNFIRST}} plans setup {{PROJECTS_ROOT}}/<clone>` from PROJECT_PATH. Otherwise keep the prepared plans. Then verify with `{{ALIGNDEV}} guide work-files-setup`.
 4. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
-5. When project workspace tooling is installed, run its documented main-worktree setup. Otherwise follow the repository's install/build/test commands separately.
+5. Run the project's documented main-worktree workspace setup when it has one, otherwise its install/build/test commands.
 6. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`.
 
 ### Prepare through the companion
 
 The preparation targets the project's companion directory. It writes nothing in the repository and creates no branch, commit or pull request.
 
-1. Run `{{ALIGNFIRST}} companion register` from PROJECT_PATH under the user's authorization for companion preparation, even when existing project plans are usable. Registration is independent of the work-files readiness gate and preserves an existing companion or profile selection.
-2. Complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH, starting at section 3 under that authorization. Explicitly select and verify companion plans before any ticket or coding-launch effect. Preserve existing work files without copying them.
+1. Run `{{ALIGNFIRST}} companion register` from PROJECT_PATH. It keeps an existing registration and profile selection.
+2. Complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH, starting at section 3: the Step 3 approval authorizes it, even when existing project plans are usable. It selects companion plans and leaves the existing work files in place without copying them.
 3. Reread `{{ALIGNFIRST}} config --json`. Verify that `.plans` and every item to write resolve inside `companion.dir`. Missing `.alignfirst.json` and `DEVELOPERS.md` must have companion destinations. If an explicit item selection points a required write into the project, stop and resolve that selection with the user. Retain the reported companion `DEVELOPERS.md` path as DEVELOPERS_PATH.
 4. Unless the user already said, ask whether `.plans` must be shared through a work-files repository, and for its URL if so. Wait for the answer.
 5. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there.
 6. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and follow its procedure "Set up a project through its companion" for an assistant, with the work-files clone path when there is one.
 7. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
-8. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`. Without project workspace tooling, it creates or reuses lightweight worktrees; companion plans need no worktree link.
+8. Continue with the normal working-session flow for the original request through `{{ALIGNDEV}} guide project-workspace-setup`.
 
 ## Remove a project
 
 Removal requires the listed PROJECT_PATH selected before the thread opened or supplied by the user.
 
 1. Run and read `{{ALIGNDEV}} guide project`, then refresh `{{ALIGNDEV}} project list --json` and resolve the listed project at PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, and its companion directory when it reports one. Read DEVELOPERS_PATH, then run and read the project workspace guide it names, if any.
-2. Use the project's documented workspace list when present, including non-Node tooling. Otherwise directly run `{{ALIGNDEV}} worktree list --json` from PROJECT_PATH. Enumerate every linked worktree and its exact absolute path, including externally created ones. Include the exact PROJECT_PATH for the main worktree. Check all live worktrees for staged, unstaged, and untracked nonignored changes; refuse dirty removal before unregistering the companion or deleting anything. Missing or locked registrations remain obstacles to resolve, not permission to skip a path.
+2. List every linked worktree with its exact absolute path, through the project's workspace list or, without workspace tooling, `{{ALIGNDEV}} worktree list --json` from PROJECT_PATH. Add the exact PROJECT_PATH for the main worktree. Check every worktree, the main one included, for staged, unstaged, or untracked unignored changes. A dirty worktree stops the removal before anything is unregistered or deleted, and so does a missing or locked registration until it is resolved.
 3. Show the user the complete linked-worktree path list and the main-worktree path. When the project status reports a companion directory, show it too and ask whether to keep or delete it. Wait for explicit confirmation of those exact paths, and for the answer about the companion directory.
-4. Remove each confirmed linked workspace through the selected tooling. For lightweight worktrees, stop project-specific activity separately, then directly run `{{ALIGNDEV}} worktree remove <exact-path>`. It refuses dirty or locked worktrees and does not stop processes or tear down infrastructure. No coding launch or plans preparation is needed merely to remove worktrees. Stop immediately if any removal fails; keep the main worktree intact.
+4. Remove each confirmed linked workspace through the project's workspace tooling or, without it, stop whatever the project runs there and run `{{ALIGNDEV}} worktree remove <exact-path>` yourself. No coding launch or plans preparation is needed for that. Stop immediately if any removal fails; keep the main worktree intact.
 5. When the project status reports a companion, run `{{ALIGNFIRST}} companion unregister` from PROJECT_PATH. It removes the registry entry and keeps the companion directory. Add `--remove-dir --force` when the user chose to delete the companion directory.
-6. Check the main worktree for staged, unstaged, and untracked nonignored changes; refuse dirty removal. Remove only the confirmed main-worktree directory at PROJECT_PATH. Leave every additional directory reported by the inventory untouched.
+6. Recheck that the main worktree is clean, then remove only the confirmed main-worktree directory at PROJECT_PATH. Leave every additional directory reported by the inventory untouched.
 7. Refresh `{{ALIGNDEV}} project list --json`: the path must be absent from `projects`. Report any remaining workspace or filesystem discrepancy, and name the companion directory when it was kept.
 
 Apply the host-specific and project-specific constraints read earlier throughout the sequence.

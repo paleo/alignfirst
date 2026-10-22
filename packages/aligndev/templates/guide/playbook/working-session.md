@@ -131,7 +131,7 @@ Resolve what the request leaves open:
 Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/openclaw}}
 
-For changes, protocol requests, and ticket status requests, run and complete `{{ALIGNDEV}} guide work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture. When an existing linked workplace is recorded, check its actual effective location too; do not create another history or repair its links silently. Cleanup and project removal need no preparation or coding launch merely to remove worktrees.
+For changes, protocol requests, and ticket status requests, complete `{{ALIGNDEV}} guide work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture.
 
 After that gate, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `{{ALIGNDEV}} code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
 
@@ -161,7 +161,7 @@ Skip this step for read-only questions, project lifecycle, and operational work.
 Skip this step for read-only questions and operational work.
 {{/codingAgent}}
 
-For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, first complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH. Then preserve this order:
+For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH, then:
 
 {{#openclaw}}
 1. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
@@ -262,7 +262,7 @@ A request for a ticket's progress follows "Status update" instead; it needs that
 
 When one project owns a detailed change request, preserve it before delegation:
 
-1. Complete `{{ALIGNDEV}} guide work-files-setup` before request capture or ticket creation. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
+1. Complete `{{ALIGNDEV}} guide work-files-setup`, then establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
 2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the request-file path.
 {{#openclaw}}
 3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
@@ -282,28 +282,28 @@ When Step 5 reserved a side ticket `side-N`, the request is already captured. Co
 {{/codingAgent}}
 
 {{#openclaw}}
-Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh. Cleanup follows "Cleanup requests" directly; delegate other operations without an AlignFirst protocol.
+Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh.
 {{/openclaw}}
 {{#codingAgent}}
-Skip this capture workflow for operational work such as workspace cleanup or base-branch refresh. Cleanup follows "Cleanup requests" directly; delegate other operations without an AlignFirst protocol.
+Skip this capture workflow for operational work such as workspace cleanup or base-branch refresh.
 {{/codingAgent}}
 
 {{#openclaw}}
 ### Multi-project and operational work
 
-Handle lightweight workspace cleanup directly as described below. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 {{/openclaw}}
 {{#codingAgent}}
 ### Operational work
 
-Handle lightweight workspace cleanup directly as described below. Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
 {{/codingAgent}}
 
 ### What you delegate vs do
 
 Lean toward delegating; the less you touch the project directly, the better.
 
-Delegate to the agent: project-specific workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. The assistant directly invokes `{{ALIGNDEV}} worktree list/add/remove` for lightweight orchestration and performs the separately authorized work-files preparation. These operations need no coding launch.
+Delegate to the agent: the project's workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. You run `{{ALIGNDEV}} worktree list/add/remove` and `{{ALIGNDEV}} guide work-files-setup` yourself; neither needs a coding launch.
 
 Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
@@ -386,7 +386,7 @@ Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-Follow `{{ALIGNDEV}} guide project-workspace-setup` to select or create the workplace. Use the project's documented workspace tooling when present, including non-Node implementations; otherwise use `{{ALIGNDEV}} worktree list/add/remove` directly. Git's registry makes lightweight worktrees visible without a separate workspace registry. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds. Explicit in-place choices and matching-ticket reuse remain valid.
+`{{ALIGNDEV}} guide project-workspace-setup` selects or creates the workplace: through the project's workspace tooling when it has one, through `{{ALIGNDEV}} worktree list/add/remove` otherwise. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds.
 
 ### Updating a branch with the base branch
 
@@ -579,9 +579,9 @@ After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
 Whenever you observe that a PR/MR is merged:
 
-1. Remove the source branch's linked workspace through the selected tooling. Use project workspace removal when present, or invoke `{{ALIGNDEV}} worktree remove <exact-path>` directly after stopping project-specific activity. Lightweight removal refuses dirty or locked worktrees and preserves shared targets and the branch; it does not stop processes or tear down infrastructure. A branch worked on in place stays checked out: the user decides when to leave it.
-2. Delegate refresh of the merge target without a protocol, from the main worktree on its base branch. Fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when required. Guard the main checkout before modifying it.
-3. Report the removed workspace and refreshed branch. If unsuitable plans block the refresh delegation, report that separately; do not require a coding launch just to perform direct cleanup.
+1. Remove the source branch's linked workspace as "Cleanup requests" describes. A branch worked on in place stays checked out: the user decides when to leave it.
+2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when required.
+3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
 
 ### Protected directories
 
@@ -596,20 +596,23 @@ When the user asks to tear down one named project workspace (or worktree) from i
 When the user asks to tear down one named project workspace (or worktree):
 {{/codingAgent}}
 
-1. Resolve the recorded exact linked-worktree path through the selected tooling and confirm the target with the user if it is ambiguous. Preserve in-place work. With project workspace tooling, have the agent use its removal procedure, including its lifecycle teardown. Without it, stop project-specific activity separately, then directly invoke `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH. It refuses dirty/locked worktrees and preserves branches, shared targets, and companion registration. Never force removal. No coding launch or work-files preparation is required for direct cleanup, even when plans are unsuitable.
-2. Confirm what was removed. Lightweight removal does not stop processes or tear down infrastructure.
+1. Resolve the exact linked-worktree path through the selected tooling; ask the user when it is ambiguous. With workspace tooling, have the agent run its removal procedure, which also tears down the dev environment. Without it, stop whatever the project runs there, then run `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH yourself: it refuses a dirty or locked worktree, and you never force it. This direct removal needs no coding launch or work-files preparation, even when plans are unsuitable.
+2. Confirm what was removed.
 {{#openclaw}}
 3. Reset the thread session.
 {{/openclaw}}
 
 {{#openclaw}}
-When the user asks to clean the workspaces, apply the following policy to each affected PROJECT_PATH. Delegate the project-tooling route without a protocol; perform the lightweight list and removal directly:
+When the user asks to clean the workspaces, for each affected PROJECT_PATH:
 {{/openclaw}}
 {{#codingAgent}}
-When the user asks to clean the workspaces, apply the following policy from PROJECT_PATH. Delegate the project-tooling route without a protocol; perform the lightweight list and removal directly:
+When the user asks to clean the workspaces, from PROJECT_PATH:
 {{/codingAgent}}
 
-> List worktrees through the selected tooling: the project's workspace list, or `{{ALIGNDEV}} worktree list --json`. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove only when that PR/MR is merged. Leave in-place work, workspaces with no PR/MR, and unmerged PR/MRs intact. Use project workspace removal or `{{ALIGNDEV}} worktree remove <exact-path>` as selected; stop project activity separately before lightweight removal. Refuse dirty removal and stop on failure. Then delegate the merge target's guarded fetch/fast-forward and required dependency/build/migration refresh in the main worktree, installing from the committed lockfile without rewriting it (`npm ci` with npm). Report every decision, any blocked refresh, and the final base-branch state.
+1. List the worktrees through the selected tooling: the project's workspace list, or `{{ALIGNDEV}} worktree list --json`.
+2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
+3. When a workspace was removed, delegate the merge target's refresh as after a merge above, installing from the committed lockfile without rewriting it (`npm ci` with npm).
+4. Report every decision, any blocked refresh, and the final base-branch state.
 
 {{#openclaw}}
 ### Resetting a thread session
@@ -631,4 +634,4 @@ Creating a project, onboarding a repository to clone, or physically removing a p
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-- Create and remove worktrees only through the selected project tooling or the lightweight `{{ALIGNDEV}} worktree` fallback.
+- Create and remove worktrees only through the project's workspace tooling or `{{ALIGNDEV}} worktree`.

@@ -48,7 +48,7 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 
 ## Step 3 — Delegate
 
-Before delegation needs session files, complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH and verify the selected worktree's actual effective location too. Preparation requires authorization when plans are missing or project-tracked. It needs no temporary ticket, branch, or worktree.
+Delegation creates session files under the work files, so complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH first.
 
 {{#openclaw}}
 Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
@@ -91,7 +91,7 @@ A request for changes ends the consultation: return to the ticket and workspace 
 
 A single question answered in one turn ends at Step 4. Nothing is written.
 
-Record the exchange when it produced something worth keeping: the user asked for ideas, an opinion, or a decision, or the topic continued past your first answer. Before reservation, `sync`, or recording, complete `{{ALIGNDEV}} guide work-files-setup` if it has not already passed. Then:
+Record the exchange when it produced something worth keeping: the user asked for ideas, an opinion, or a decision, or the topic continued past your first answer. Then:
 
 1. **Ask about the ticket, without waiting for it.** Add one sentence to the answer you are already sending, in the user's language: *"Is there a ticket to attach this discussion to, or do we continue without one?"* Ask it once in the session, then carry on regardless of the reply.
 2. **Establish TICKET_ID** on the turn that states a decision, or when the user asks to wrap up or changes topic. Use the ticket the user named, or run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH and take the `side-N` it reports.

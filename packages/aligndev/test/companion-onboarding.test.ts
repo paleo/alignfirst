@@ -68,7 +68,7 @@ describe("explicit companion-only onboarding", () => {
       expect(verify).toBeGreaterThan(select);
       expect(delegate).toBeGreaterThan(verify);
       expect(route).toContain("even when existing project plans are usable");
-      expect(route).toContain("starting at section 3 under that authorization");
+      expect(route).toContain("starting at section 3");
       expect(route).toContain("every item to write resolve inside `companion.dir`");
       expect(route).toContain("Missing `.alignfirst.json` and `DEVELOPERS.md`");
       expect(route).toContain("stop and resolve that selection with the user");
