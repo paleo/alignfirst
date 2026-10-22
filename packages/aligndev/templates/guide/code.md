@@ -52,7 +52,7 @@ Any heartbeat received while an `{{ALIGNDEV}} code` run is **still pending** ent
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
 
-   For a read-only question, answer it directly from the findings; include a failure or uncertainty when relevant. The coding-run template above is for change reports.
+   For a consultation, answer it directly from the findings; include a failure or uncertainty when relevant. The coding-run template above is for change reports.
 
    The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
 3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
@@ -193,26 +193,7 @@ The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profi
 
 Effective profile: `{{PROFILE}}`; agent: `{{AGENT}}`; native configuration: `{{NATIVE_CONFIG}}`. Environment values are omitted. Login must use the same effective environment as the child: apply profile `unset/env/configDir`, including HOME, PATH and credential routing, from the same working directory. A bare login in another shell may use a different account.
 
-New-session, help, guide and quota selection: explicit `--profile` → project's registry selection → global `code.profile` → automatic resolution. Resume inserts the latest run's recorded named profile before the global selection. A missing selected profile is an error; profiles never merge. Named choices bypass parent detection. Help, guide and quota use the actual cwd and require neither Git nor `.plans`.
-
-Automatic resolution uses a sole profile matching the detected agent, or that agent's unique `default: true` among several profiles. Omitted and false flags are equivalent; at most one true flag per agent is allowed. With no matching profile, use that agent's built-ins. A profile for another agent never overrides the detected parent. Without a detected parent, only a sole total profile is inferred; several detected kinds require a named choice. A per-agent flag never chooses the agent kind.
-
-Historical resumes with a null or missing profile use detected built-ins unless an explicit, project or global named choice replaces them. They ignore profile counts and flags, still require one detected parent and keep null in the new record. Original transcripts remain unchanged. A deleted recorded name requires an explicit or project replacement; global settings and inference cannot rescue it.
-
-Profiles select native configuration/authentication through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. For ordinary setup, omit `configDir`: inherit the caller's variable unless `env` or `unset` changes it; otherwise native defaults apply. `configDir: null` deliberately removes the variable to force native-default directory behavior. A string resolves and sets it, even when naming the default path. `~/` uses the configured home; relative paths use the settings directory. A string or null conflicts with the matching variable in `env` or `unset`. `env` values are literal non-secret configuration; credentials remain in native stores or provisioned process environments. Parent identities are stripped after these overrides. Environment values are never recorded in session metadata.
-
-On macOS, explicitly setting Claude's default path can select different Keychain credentials from leaving `CLAUDE_CONFIG_DIR` unset. Strings remain valid deliberate selections; confirm the intended mode before changing one. A null reset changes only directory routing, not HOME, PATH or API-key precedence. There is no automatic login, credential transfer or settings rewrite.
-{{#openclaw}}
-Deployment settings require null or an explicit string for every coding profile and enabled explicit quota source. Generated service defaults use null. Inventory paths remain absolute filesystem paths; native commands must unset the directory variable for null or set its resolved value for a string. Shared paths do not imply the same invocation mode.
-{{/openclaw}}
-
-Select a user-facing model name, validate it against the accepted names, expand one `modelAliases` mapping, then apply native handling. Without a nonempty `models` override, Claude/Codex add alias names to their native default names; Pi accepts any nonblank selector. Pi exact provider-qualified IDs pin models; fuzzy selectors and thinking suffixes pass through to Pi. Use separate Pi profiles for Codex-backed and Anthropic-backed choices; AlignDev never guesses providers or accounts. Omitted quota uses a native Claude/Codex profile's environment; Pi needs explicit `quota.source: "codex"` or `"claude"`. `"none"` disables quota. Explicit quota starts from the caller environment, applies only quota `unset/env/configDir` and strips parent identities. It never copies coding-profile overrides or Pi credentials. Choose quota storage only when needed: omitted `configDir` inherits independently from the original caller, null removes the source's directory variable, and a string selects explicit storage. Coding and explicit-quota resets do not affect each other. Disabled quota accepts no other fields, including `configDir: null`. Quota paths follow profile expansion rules. Do not infer account pairing from model selection or retry against a different account after failure.
-
-Resume keeps the latest user-facing model unless `--model` replaces it; new-session defaults are ignored. A retained name disallowed by the selected profile requires an explicit accepted replacement. Null keeps the native conversation model. Retained aliases use current mappings, which can change their native targets. Resume requires the same agent and native identity; Pi also requires its recorded real directory. An unavailable conversation fails under the selected account with no fallback, copying or replacement conversation. Run metadata records the effective profile (or null), agent, model name, native ID and cwd. Historical records stay readable; status does not validate launch profiles.
-
-Unknown or obsolete settings keys are ignored with value-free warnings on stderr at each fixed settings/profile/quota shape; profile, environment and alias dictionaries remain maps. Recognized invalid values and duplicate defaults still fail. Settings are never rewritten.
-
-Direct launch keys and `code.defaultProfiles` are retired and ignored; they supply no legacy behavior. Move launch keys into `code.profiles.<name>`. Move needed per-agent preferences onto matching profiles as `default: true`, omitting singleton flags, and remove the map. Keep profile names unchanged; no automatic conversion occurs. Unique-profile inference can now select configured storage, model, environment and permission settings for new runs that previously used built-ins. Historical null-profile resumes retain their built-in fallback.
+Profile selection, native configuration directories, quota sources and settings migration are configured outside this guide and documented in the `aligndev` README. A selection or settings error fails with the CLI's own diagnostic: report it, and never retry against another account.
 
 `contextTokens` is what the run left in the agent's context window, measured from its last model response. It describes the conversation, so resuming a session carries the figure forward and each run reports a larger one.
 
@@ -244,8 +225,9 @@ For large work, do not rush. Decompose it yourself only when the concerns are tr
 
 1. **Spec** — `{{ALIGNDEV}} code new --protocol spec --ticket AB-123 --message "Feature description"`. The agent investigates and asks questions; save the session id. Iterate until it writes the spec file.
 2. **Plan** — the spec run's context decides where planning happens. Read `contextTokens` from `{{ALIGNDEV}} code status`, then follow "Where the plan runs" below.
-3. **Execute** — `{{ALIGNDEV}} code new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file. Given a main plan, it spawns one subagent per sub-plan and writes a main summary; when the working tree is clean, append to the message: *"Feel free to commit between each plan."*
-4. **Commit** — use the suggested commit message from the spec file.
+3. **Execute** — `{{ALIGNDEV}} code new --message "Execute the plan: \`.plans/AB-123/A2-plan.md\`"`. The agent implements and writes a summary file.
+   For a main plan, end the message with *"Commit at each step."*: the agent spawns one subagent per sub-plan, commits after each, and writes a main summary.
+4. **Commit** — use the suggested commit message from the spec file. After a main plan, the commits already exist; only commit what the subagents left uncommitted.
 
 Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
 
@@ -274,8 +256,6 @@ Then start the planning session, naming the spec so the agent does not have to g
 ```
 
 Either way the agent writes the plan file, or several sub-plans and a main plan for large work.
-
-Plan files are the agent's material: never read one, main plans included. When the user hands you a plan to execute, pass its path in the message as-is; for context, read the spec that shares the plan's leading letter in the same directory (`A1-spec.md` for `A2-plan.md`), when there is one.
 
 ## Light workflow (AAD)
 

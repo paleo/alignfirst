@@ -60,8 +60,6 @@ The workplace is the first case that matches:
 3. **The session's branch is long-lived** — the default branch, or a name such as `main`, `master`, `develop`, `release` or `production`: open or create the ticket's workspace in Step 4, without asking.
 4. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
 
-These cases apply with or without workspace tooling.
-
 ## Step 3 — Post the setup signal
 
 Post the signal only when Step 2 opens or creates a workspace.
@@ -103,7 +101,7 @@ That single call is the whole exception. The post right after it, and every one 
 When the user named a directory, or a recorded workplace's branch already carries TICKET_ID, use that worktree as it is: post its banner and go to Step 5. When the user named a branch, find or attach it below rather than choosing another ticket branch.
 {{/openclaw}}
 
-The project has workspace tooling when its documentation describes one, whatever its implementation: a non-Node tool, or one absent from `package.json`, still counts. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/remove`. This selection also governs consultation lookup and cleanup. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion.
+The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion.
 
 First, fetch remote refs from PROJECT_PATH with `git fetch --prune` when a remote is configured. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
@@ -196,7 +194,7 @@ The workspace is ready. Announce what you're about to do in one line and do it. 
 When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `{{ALIGNDEV}} code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 {{/openclaw}}
 {{#codingAgent}}
-When the work is an `{{ALIGNDEV}} code` run, follow the delegation guide's parent-host route, then end the launch turn on the acknowledgement. A Pi parent first requires the available `background` tool and a persistent session; if either is missing, explain the setup problem instead of launching or promising completion.
+When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes for your parent host, then end the launch turn on the acknowledgement.
 {{/codingAgent}}
 
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

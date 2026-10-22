@@ -320,8 +320,6 @@ describe("Pi parent delegation", () => {
           ? "A new session defaults to `provider/custom:high`"
           : "A new session defaults to the coding agent's default",
       );
-      expect(guide).toContain('Pi needs explicit `quota.source: "codex"` or `"claude"`');
-      expect(guide).toContain('`"none"` disables quota');
       expect(guide).toContain("with optional thinking suffix");
       expect(guide).toContain("Saved project trust is honored; no forced approval is passed");
       expect(guide).not.toContain("{{");
@@ -375,7 +373,7 @@ describe("aligndev guide playbook", () => {
     expect(result.stdout).toContain("run `aligndev guide channel-handling`");
     expect(result.stdout).toContain("run `aligndev guide code`");
     expect(result.stdout).toContain(
-      "**The agent** — the coding agent (Claude Code or Codex) you launch in a project with `aligndev code`.",
+      "**The agent** is the coding agent you launch in a project with `aligndev code`: it reads and changes the codebase; you guide it.",
     );
   });
 
@@ -560,7 +558,7 @@ describe("work-files and lightweight worktree runbooks", () => {
     expect(guide).toContain("The question arises within ongoing work");
     expect(guide).toContain("keep that work's workflow, ticket, and workplace");
     expect(guide).toContain(
-      "Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow",
+      "Single-project changes, code reviews, protocol requests, and ticket status requests require",
     );
     expect(guide).toContain("Consultations require only PROJECT and PROJECT_PATH to start");
     expect(guide).toContain("Consultation delegations omit the ticket option");
@@ -674,8 +672,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         expect(working, text).toContain(text);
       const setup = guides["project-workspace-setup"];
       for (const text of [
-        "whatever its implementation",
-        "absent from `package.json`",
+        "whatever the implementation",
         `${forms.aligndev} worktree list --json`,
         `${forms.aligndev} worktree add <path> <existing-branch> --json`,
         `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
@@ -695,7 +692,6 @@ describe("work-files and lightweight worktree runbooks", () => {
       ])
         expect(setup, text).toContain(text);
       if (platform === "codingAgent") {
-        expect(setup).toContain("These cases apply with or without workspace tooling");
         expect(setup).toContain("**The session's branch carries TICKET_ID**");
         expect(setup).toContain("**Any other branch**");
       }
@@ -920,22 +916,13 @@ describe("codingAgent guides", () => {
     expect(playbook).toContain("never your own subagents, `subagent` tool or tasks");
     expect(playbook).toContain("A Pi child can use its own `subagent` tool");
     const working = (await runGuide(fixture, ["working-session"])).stdout;
-    expect(working).toContain(
-      "without them, explain installation instead of promising a later report",
-    );
-    expect(working).toContain(
-      "validate the job handle and retrieve the exact run with `status --result`",
-    );
-    expect(working).toContain(
-      "for Pi without a finite ordered allowlist, use the configured/default model",
-    );
+    expect(working).toContain("handled as the delegation guide describes for your parent host");
+    expect(working).toContain("the default one when the child has no model list");
     const consultation = (await runGuide(fixture, ["consultation"])).stdout;
     expect(consultation).toContain("child session id, from authoritative completion retrieval");
     expect(consultation).not.toContain("Retain the printed session id");
     const setup = (await runGuide(fixture, ["project-workspace-setup"])).stdout;
-    expect(setup).toContain(
-      "if either is missing, explain the setup problem instead of launching or promising completion",
-    );
+    expect(setup).toContain("launch it as the delegation guide describes for your parent host");
   });
 
   it("routes the dispatcher to the working session", async () => {
