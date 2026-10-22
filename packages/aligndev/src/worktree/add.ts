@@ -256,9 +256,9 @@ function createLinks(
 ): void {
   const links = Object.entries(directories).filter(([, directory]) => directory.mode === "symlink");
   if (links.length === 0) return;
-  for (const [, directory] of links) {
+  for (const [name, directory] of links) {
     if (directory.target === null) throw new Error("Missing symlink target.");
-    symlinkSync(directory.target, directory.path, "dir");
+    symlinkSync(join(repo.mainWorktree, name), directory.path, "dir");
   }
   const exclude = git(
     { ...ctx, cwd: repo.mainWorktree },

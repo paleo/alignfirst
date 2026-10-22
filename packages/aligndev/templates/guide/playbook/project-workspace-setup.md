@@ -103,7 +103,7 @@ When the user named a directory, or a recorded workplace's branch already carrie
 
 The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion.
 
-First, fetch remote refs from PROJECT_PATH with `git fetch --prune` when a remote is configured. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
+First, select the base ref from the project or user instructions, otherwise use the base branch's configured upstream. Use the local base ref when the repository has no remote; ask when the choice is unclear. Fetch its remote from PROJECT_PATH with `git fetch --prune <remote>` when applicable, and retain the selected base ref for creation and synchronization. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
 - **Branch**: from PROJECT_PATH, list the branches, local and remote (`git branch -a`), and look for one matching the {TICKET_ID}. No match means no branch yet — an answer, not a failure.
 - **Worktrees**: the project's workspace list command, or `{{ALIGNDEV}} worktree list --json` from PROJECT_PATH. Report a missing, locked, or prunable entry instead of repairing it.
@@ -114,7 +114,7 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 1. **Branch + workspace already registered** → use it (no setup needed).
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
-3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: name a new branch `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Start it from an explicit base: the freshly fetched `origin/<base>`, or the local base ref when the repository has no remote. Creating from that ref requires no checkout or clean main worktree.
+3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: name a new branch `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Start it from the selected base ref. Creating from that ref requires no checkout or clean main worktree.
 
 With workspace tooling, delegate the setup through its documented commands. Without it, run `{{ALIGNDEV}} worktree add` yourself, before any coding delegation, on an absolute sibling path derived from PROJECT and the branch (branch slashes become dashes): `{{ALIGNDEV}} worktree add <path> <existing-branch> --json` for sub-path 2, `{{ALIGNDEV}} worktree add <path> -b <new-branch> <explicit-base-ref> --json` for sub-path 3.
 
@@ -155,12 +155,12 @@ The lines below the tag report the workspace: after `Status:`, add what the setu
 In place on an existing branch, fetch first. A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking: do it, then report it in one line. Anything else — uncommitted changes, a remote branch that does not fast-forward, a base-branch catch-up that needs a merge commit — ends the turn on one message stating what will happen ("I'll commit your changes as WIP and merge `main`, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
 {{/codingAgent}}
 
-Skip on sub-path 3 (no branch — nothing to sync). Otherwise, once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
+Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, select and fetch the base ref as described there. Once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 
 1. **Confirm the branch and the work files.** Check the worktree's checked-out branch matches the explicit user choice, or otherwise carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch. Then run `{{ALIGNFIRST}} plans check` from the worktree.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
-3. **Merge the remote branch.** If the branch has a remote counterpart, merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
-4. **Catch up with the base branch.** If the freshly fetched base branch (`origin/<base>`) has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
+3. **Merge the remote branch.** If the branch has a remote counterpart, fetch its remote if it differs from the base's, then merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
+4. **Catch up with the base branch.** If the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
 5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
 6. **Check for an open MR/PR** on this branch and note its state.
 7. **Report what changed.** If either merge brought in new commits, post a one-line summary so the user knows the ground shifted.

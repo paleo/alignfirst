@@ -40,12 +40,16 @@ export function assertPlansNotProjectTracked(
   const logicalTracked = hasProjectTrackedFiles(dirname(logicalPath), logicalPath, identity);
   const target =
     !logicalTracked && existsSync(location.path) ? realpathSync(location.path) : undefined;
-  const realTracked = target !== undefined && hasProjectTrackedFiles(target, target, identity);
-  if (!logicalTracked && !realTracked) return;
+  const trackedPath = logicalTracked
+    ? logicalPath
+    : target !== undefined && hasProjectTrackedFiles(target, target, identity)
+      ? target
+      : undefined;
+  if (trackedPath === undefined) return;
   throw new CliError(
-    `Effective .plans contains files tracked by this project's repository: ${location.path}.\n` +
-      "Local work files: git rm -r --cached .plans && echo .plans >> .gitignore, then commit the change.\n" +
-      `Team work files: ${form} plans setup <clone-dir>\n` +
+    `Effective .plans contains files tracked by this project's repository: ${trackedPath}.\n` +
+      "Untrack and ignore these work files in their containing worktree, then commit " +
+      `before retrying or running ${form} plans setup <clone-dir>.\n` +
       `Companion work files: ${form} companion register, then set items[".plans"] to "companion" in the registry.`,
   );
 }

@@ -603,8 +603,12 @@ describe("work-files and lightweight worktree runbooks", () => {
       }
       const preparation = guides["work-files-setup"];
       for (const text of [
-        `Run \`${forms.alignfirst} plans check\` from PROJECT_PATH`,
-        `Run \`${forms.alignfirst} plans check\` again from PROJECT_PATH`,
+        `Run \`${forms.alignfirst} plans check --json\` from PROJECT_PATH`,
+        `Run \`${forms.alignfirst} plans check --json\` again from PROJECT_PATH`,
+        "If `--json` is rejected",
+        "selected AlignFirst CLI needs upgrading alongside AlignDev",
+        "project's local `alignfirst` dependency, which takes precedence",
+        "Retry the JSON check after upgrading",
         `${forms.alignfirst} config --json`,
         "existing companion copy wins over an existing project copy",
         "separate work-files repository may track its contents",
@@ -629,6 +633,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         "needs no ticket, branch, or new worktree",
       ])
         expect(preparation, text).toContain(text);
+      expect(preparation).not.toContain(`${forms.alignfirst} plans check\``);
       expect(preparation.indexOf("Wait for approval")).toBeLessThan(
         preparation.indexOf(`${forms.alignfirst} companion register`),
       );
@@ -696,6 +701,11 @@ describe("work-files and lightweight worktree runbooks", () => {
         "for a status request, end the turn",
         "create nothing",
         "Creating from that ref requires no checkout or clean main worktree",
+        "base branch's configured upstream",
+        "local base ref when the repository has no remote",
+        "retain the selected base ref for creation and synchronization",
+        "fetch its remote if it differs from the base's",
+        "If Step 4 was skipped, select and fetch the base ref as described there",
         "a tracked `.local` that stays branch-local",
         "before any `git` inspection or prose",
         "`ready` covers the worktree and work files only",
@@ -704,7 +714,10 @@ describe("work-files and lightweight worktree runbooks", () => {
         "rather than choosing another ticket branch",
       ])
         expect(setup, text).toContain(text);
+      expect(setup).not.toContain("origin/<base>");
       if (platform === "codingAgent") {
+        expect(working).toContain("default branch identified by the project's instructions");
+        expect(working).not.toContain("refs/remotes/origin/HEAD");
         expect(setup).toContain("**The session's branch carries TICKET_ID**");
         expect(setup).toContain("**Any other branch**");
       }

@@ -53,8 +53,10 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
     mkdirSync(home);
     mkdirSync(repo);
     mkdirSync(bin);
+    // Keep npm test from selecting npx instead of the built-source PATH shim.
+    const { npm_config_user_agent: _userAgent, ...baseEnv } = process.env;
     const env = {
-      ...process.env,
+      ...baseEnv,
       HOME: home,
       PATH: `${bin}${delimiter}${process.env.PATH}`,
       GIT_CONFIG_GLOBAL: join(base, "gitconfig"),

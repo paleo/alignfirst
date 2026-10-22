@@ -54,7 +54,7 @@ Outside a git repository, tell the user to start the session inside the project'
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else `git symbolic-ref --short refs/remotes/origin/HEAD` without its `origin/` prefix. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{#developers}}
 - Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.
 {{/developers}}

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { main } from "../../src/cli.js";
 import { listSessionRecords } from "../../src/code/session-file.js";
-import { ALIGNFIRST_BIN, writeConfig } from "../helpers.js";
+import { ALIGNFIRST_BIN, installGit, writeConfig } from "../helpers.js";
 
 const ALIGNDEV_BIN = fileURLToPath(new URL("../../bin/aligndev.mjs", import.meta.url));
 
@@ -23,6 +23,7 @@ beforeEach(() => {
   home = join(dir, "home");
   writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
   env = { PATH: dir, HOME: home };
+  installGit(dir);
   writeFileSync(
     join(dir, "claude"),
     `#!${process.execPath}

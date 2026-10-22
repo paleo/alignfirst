@@ -40,6 +40,7 @@ import type { ItemLocation, ItemName, ProjectReport } from "../../src/project/la
 import {
   ALIGNFIRST_BIN,
   type CompanionProject,
+  installGit,
   makeCompanionProject,
   makeSink,
   writeConfig,
@@ -1649,7 +1650,8 @@ describe("quiet execution", () => {
   });
 
   it("reports a missing executable and preserves the durable failure", async () => {
-    const result = await launch(["new", "-m", "go", "--quiet"], "");
+    installGit(base);
+    const result = await launch(["new", "-m", "go", "--quiet"], base);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("claude could not start; check its installation and PATH");
     expect(result.stderr).toContain("Session file:");
@@ -1894,7 +1896,8 @@ describe("pi launches", () => {
   );
 
   it("reports a missing pi executable with installation guidance", async () => {
-    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: "" });
+    installGit(base);
+    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: base });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("pi could not start; check its installation and PATH");
     expect(readCompletion(newest().path).result).toContain("ENOENT");

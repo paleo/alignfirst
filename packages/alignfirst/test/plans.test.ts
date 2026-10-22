@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { findStoppedRebase } from "../src/plans/rebase.js";
 import { configureGit, git, makeTempDir, runMain, writeRegistry } from "./helpers.js";
@@ -21,6 +21,7 @@ import { configureGit, git, makeTempDir, runMain, writeRegistry } from "./helper
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -662,7 +663,10 @@ describe("project-tracked plans gate", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expectTrackingRemedies(result.stderr, plans);
+      expectTrackingRemedies(
+        result.stderr,
+        kind === "alias" || kind === "linkedAlias" ? source : plans,
+      );
       expect(snapshotTree(fixture.product)).toEqual(before);
       expect(snapshotTree(source)).toEqual(sourceBefore);
       expect(readFileSync(join(fixture.product, ".git", "index"))).toEqual(index);
@@ -741,6 +745,33 @@ describe("project-tracked plans gate", () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
     expect(readFileSync(index, "utf8")).toBe("corrupt index\n");
+  });
+
+  it.each([
+    ["plans", "check", "--json"],
+    ["sync", "--auto-archive"],
+  ])("refuses Git ownership errors before work-file effects: %j", async (...args) => {
+    const fixture = makeFixture();
+    const ticket = join(fixture.product, ".plans", "78");
+    mkdirSync(ticket, { recursive: true });
+    const request = join(ticket, "A1-request.md");
+    writeFileSync(request, "tracked request\n");
+    const stale = new Date(Date.now() - 30 * 86_400_000);
+    utimesSync(request, stale, stale);
+    git(fixture.product, "add", ".plans");
+    git(fixture.product, "commit", "--quiet", "-m", "track request");
+    const before = snapshotTree(fixture.product);
+    const index = join(fixture.product, ".git", "index");
+    const indexBefore = readFileSync(index);
+    vi.stubEnv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1");
+
+    const result = await runMain(args, { cwd: fixture.product, home: fixture.root });
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("dubious ownership");
+    expect(snapshotTree(fixture.product)).toEqual(before);
+    expect(readFileSync(index)).toEqual(indexBefore);
   });
 });
 
@@ -946,8 +977,9 @@ describe("plans setup tracking protection", () => {
 function expectTrackingRemedies(stderr: string, path: string): void {
   expect(stderr).toContain(path);
   expect(stderr).toContain("tracked by this project's repository");
-  expect(stderr).toContain("git rm -r --cached .plans && echo .plans >> .gitignore");
-  expect(stderr).toMatch(/commit/i);
+  expect(stderr).toContain("Untrack and ignore these work files in their containing worktree");
+  expect(stderr).toContain("then commit before retrying or running");
+  expect(stderr).not.toContain("git rm -r --cached .plans");
   expect(stderr).toContain("plans setup <clone-dir>");
   expect(stderr).toContain("companion register");
   expect(stderr).toContain('items[".plans"]');

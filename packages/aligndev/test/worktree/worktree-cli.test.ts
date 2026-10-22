@@ -1,9 +1,11 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -11,7 +13,7 @@ import {
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { writeConfig, writeRegistry, writeSettings } from "../helpers.js";
+import { ALIGNFIRST_BIN, writeConfig, writeRegistry, writeSettings } from "../helpers.js";
 import {
   addWorktree,
   execGit,
@@ -45,6 +47,14 @@ function companion(fixture: Fixture, repo: string, items: object = {}): string {
   mkdirSync(join(path, ".plans"), { recursive: true });
   writeRegistry(fixture.home, { projects: { [repo]: { dir: "app", items } } });
   return path;
+}
+
+function plans(fixture: Fixture, cwd: string, ...args: string[]): string {
+  return execFileSync(process.execPath, [ALIGNFIRST_BIN, "plans", ...args], {
+    cwd,
+    env: { ...process.env, HOME: fixture.home },
+    encoding: "utf8",
+  });
 }
 
 describe("worktree discovery and arguments", () => {
@@ -279,7 +289,35 @@ describe("worktree add", () => {
     expect(result.code, result.stderr).toBe(0);
     expect(realpathSync(join(destination, ".plans"))).toBe(join(workfiles, "app"));
     expect(realpathSync(join(destination, ".local"))).toBe(local);
+    const report = JSON.parse(result.stdout);
+    expect(report.directories[".plans"].target).toBe(join(workfiles, "app"));
+    expect(report.directories[".local"].target).toBe(local);
+    const replacement = join(fixture.root, "replacement local");
+    mkdirSync(replacement);
+    rmSync(join(repo, ".local"));
+    symlinkSync(replacement, join(repo, ".local"));
+    expect(realpathSync(join(destination, ".local"))).toBe(replacement);
   });
+
+  it.each(["relocate", "retarget"])(
+    "keeps shared plans usable after the main link is repaired to %s its source",
+    async (kind) => {
+      const { fixture, repo, destination } = project();
+      const original = makeRepository(fixture.root, "original work files");
+      plans(fixture, repo, "setup", original, "--folder", "app");
+      const added = await run(fixture, repo, ["add", destination, "-b", "ticket", "--json"]);
+      expect(added.code, added.stderr).toBe(0);
+      expect(JSON.parse(added.stdout).directories[".plans"].target).toBe(join(original, "app"));
+      const replacement = join(fixture.root, "replacement work files");
+      if (kind === "relocate") renameSync(original, replacement);
+      else makeRepository(fixture.root, "replacement work files");
+      plans(fixture, repo, "setup", replacement, "--folder", "app");
+      for (const cwd of [repo, destination]) {
+        const report = JSON.parse(plans(fixture, cwd, "check", "--json"));
+        expect(report.plans.target).toBe(join(replacement, "app"));
+      }
+    },
+  );
 
   it("surfaces AlignFirst's effective-plans refusal before creating a branch or destination", async () => {
     const { fixture, repo, destination } = project();
@@ -290,7 +328,9 @@ describe("worktree add", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(plans);
     expect(result.stderr).toContain("tracked");
-    expect(result.stderr).toContain("git rm -r --cached .plans && echo .plans >> .gitignore");
+    expect(result.stderr).toContain(
+      "Untrack and ignore these work files in their containing worktree",
+    );
     expect(result.stderr).toContain("plans setup <clone-dir>");
     expect(result.stderr).toContain("guide work-files-setup");
     expect(result.stdout).toBe("");
@@ -479,6 +519,41 @@ describe("companion resolution", () => {
 });
 
 describe("safe removal", () => {
+  it.each([".local", ".plans"])(
+    "removes a clean worktree despite a dangling %s link",
+    async (name) => {
+      const { fixture, repo, destination } = project();
+      const added = await run(fixture, repo, ["add", destination, "-b", "ticket"]);
+      expect(added.code, added.stderr).toBe(0);
+      if (name === ".plans") rmSync(join(repo, name), { recursive: true });
+      else symlinkSync(join(fixture.root, "missing local"), join(repo, name));
+      const result = await run(fixture, repo, ["remove", destination, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(existsSync(destination)).toBe(false);
+      expect(execGit(repo, "branch", "--list", "ticket")).toContain("ticket");
+    },
+  );
+
+  it("removes with a missing directory target but refuses other resolution errors", async () => {
+    const { fixture, repo, destination } = project();
+    const added = await run(fixture, repo, ["add", destination, "-b", "ticket"]);
+    expect(added.code, added.stderr).toBe(0);
+    const local = join(repo, ".local");
+    symlinkSync(".local", local);
+    const refused = await run(fixture, repo, ["remove", destination, "--json"]);
+    expect(refused.code).toBe(1);
+    expect(refused.stdout).toBe("");
+    expect(refused.stderr).toContain("ELOOP");
+    expect(existsSync(destination)).toBe(true);
+    rmSync(local);
+    const file = join(fixture.root, "file");
+    writeFileSync(file, "not a directory");
+    symlinkSync(join(file, "missing"), local);
+    const removed = await run(fixture, repo, ["remove", destination, "--json"]);
+    expect(removed.code, removed.stderr).toBe(0);
+    expect(existsSync(destination)).toBe(false);
+  });
+
   it("removes from the target itself, preserving branch, sources and companion registration", async () => {
     const { fixture, repo, destination } = project();
     mkdirSync(join(repo, ".local"));

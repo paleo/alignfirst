@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { isNodeError } from "../errors.js";
 import { readProjectReport } from "../project/layout.js";
 import { canonicalPath, git, isInside, pathExists, type Repository } from "./git.js";
 import type { WorktreeContext } from "./worktree-cli.js";
@@ -52,12 +53,12 @@ function protectSharedDirectories(ctx: WorktreeContext, repo: Repository, target
     if (report.companion !== null) protectedPaths.push(canonicalPath(report.companion.dir));
     for (const name of [".plans", "_aligndev"] as const) {
       const location = report.locations[name];
-      if (location.exists) protectedPaths.push(realpathSync(location.path));
+      if (location.exists) protectExistingTarget(protectedPaths, location.path);
     }
     if (tree.path !== target) {
       for (const name of [".local", ".plans"]) {
         const source = join(tree.path, name);
-        if (pathExists(source)) protectedPaths.push(realpathSync(source));
+        if (pathExists(source)) protectExistingTarget(protectedPaths, source);
       }
     }
     for (const path of protectedPaths) {
@@ -67,5 +68,13 @@ function protectSharedDirectories(ctx: WorktreeContext, repo: Repository, target
         );
       }
     }
+  }
+}
+
+function protectExistingTarget(paths: string[], path: string): void {
+  try {
+    paths.push(realpathSync(path));
+  } catch (error) {
+    if (!isNodeError(error) || (error.code !== "ENOENT" && error.code !== "ENOTDIR")) throw error;
   }
 }

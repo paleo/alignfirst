@@ -49,8 +49,8 @@ export function assertMainWorktreeRoot(cwd: string): void {
 export function linkedMainWorktree(cwd: string): string | undefined {
   const mainWorktree = findMainWorktree(cwd);
   if (mainWorktree === undefined) return;
-  const root = gitOutputOrUndefined(cwd, "rev-parse", "--show-toplevel");
-  if (root === undefined || realpathSync(root) === mainWorktree) return;
+  const root = gitOutput(cwd, "rev-parse", "--show-toplevel");
+  if (realpathSync(root) === mainWorktree) return;
   return mainWorktree;
 }
 
@@ -62,14 +62,18 @@ export function findMainWorktree(cwd: string): string | undefined {
 }
 
 export function optionalRepositoryId(dir: string): string | undefined {
-  const commonDir = gitOutputOrUndefined(
-    dir,
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-common-dir",
-  );
-  if (commonDir === undefined) return;
-  return realpathSync(commonDir);
+  const args = ["rev-parse", "--path-format=absolute", "--git-common-dir"];
+  const result = spawnSync("git", ["-C", dir, ...args], {
+    encoding: "utf8",
+    // Git has no distinct exit status for discovery failure versus a non-repository.
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  if (result.error !== undefined) throw gitFailure(args, result.error.message);
+  if (result.status !== 0) {
+    if (result.stderr.startsWith("fatal: not a git repository (or any ")) return;
+    throw gitFailure(args, result.stderr);
+  }
+  return realpathSync(result.stdout.trim());
 }
 
 export function gitOutput(dir: string, ...args: string[]): string {
