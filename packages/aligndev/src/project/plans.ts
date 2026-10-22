@@ -20,7 +20,8 @@ export function validateEffectivePlans(ctx: PlansContext): string {
       ctx.env,
     );
     if (result.status !== 0) {
-      throw new Error(result.stderr.trimEnd() || "alignfirst plans check failed");
+      const diagnostic = result.stderr.trimEnd();
+      throw new Error(diagnostic === "" ? "alignfirst plans check failed" : diagnostic);
     }
     let value: unknown;
     try {

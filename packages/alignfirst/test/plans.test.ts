@@ -567,6 +567,23 @@ describe("plans check contract", () => {
     });
   });
 
+  it("classifies a link into a work-files clone as shared from a project outside Git", async () => {
+    const fixture = makeFixture();
+    const cwd = join(fixture.root, "plain");
+    mkdirSync(cwd);
+    const folder = join(fixture.clone, "plain-plans");
+    mkdirSync(folder);
+    const plans = join(cwd, ".plans");
+    symlinkSync(folder, plans);
+    const result = await runMain(["plans", "check", "--json"], { cwd, home: fixture.root });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      mode: "shared",
+      plans: { in: "project", path: plans, target: realpathSync(folder) },
+      mainWorktree: null,
+    });
+  });
+
   it.each(["missing", "broken", "file", "outsideGit"])(
     "preserves the %s refusal without partial JSON",
     async (kind) => {
