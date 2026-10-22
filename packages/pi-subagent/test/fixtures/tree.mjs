@@ -1,14 +1,14 @@
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 const [dir, mode, role = "leader"] = process.argv.slice(2);
 const stat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
 const identity = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
-writeFileSync(
-  join(dir, `${process.pid}.json`),
-  JSON.stringify({ pid: process.pid, identity, role }),
-);
+const record = join(dir, `${process.pid}.json`);
+// Readers must never observe an empty or partially written PID record.
+writeFileSync(`${record}.tmp`, JSON.stringify({ pid: process.pid, identity, role }));
+renameSync(`${record}.tmp`, record);
 if (role === "leaf") {
   if (mode !== "cooperative") process.on("SIGTERM", () => {});
   setInterval(() => {}, 1_000);
