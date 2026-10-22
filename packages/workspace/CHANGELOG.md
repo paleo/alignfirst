@@ -1,5 +1,11 @@
 # @alignfirst/workspace
 
+## 0.40.0
+
+### Minor Changes
+
+- 08bbe9e: Added adoption of externally created worktrees with duplicate-basename identities and `workspace teardown` to clean infrastructure without deleting worktree files or Git state.
+
 ## 0.39.0
 
 ### Minor Changes
