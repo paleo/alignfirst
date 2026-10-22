@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { main } from "../../src/cli.js";
 import { listSessionRecords } from "../../src/code/session-file.js";
-import { ALIGNFIRST_BIN, writeConfig } from "../helpers.js";
+import { ALIGNFIRST_BIN, installGit, writeConfig } from "../helpers.js";
 
 const ALIGNDEV_BIN = fileURLToPath(new URL("../../bin/aligndev.mjs", import.meta.url));
 
@@ -23,6 +23,7 @@ beforeEach(() => {
   home = join(dir, "home");
   writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
   env = { PATH: dir, HOME: home };
+  installGit(dir);
   writeFileSync(
     join(dir, "claude"),
     `#!${process.execPath}
@@ -42,12 +43,12 @@ process.stdout.write("- .plans/29/A1-spec.md (40000 bytes)\\nContent omitted: to
 `);
 });
 
-// The fake answers `config` through the real CLI and runs `body` for any other command.
+// Configuration and plans validation use the real CLI; ticket history uses `body`.
 function writeFakeAlignfirst(body: string): void {
   writeFileSync(
     join(dir, "alignfirst"),
     `#!${process.execPath}
-if (process.argv[2] === "config") {
+if (process.argv[2] === "config" || process.argv[2] === "plans") {
   const { spawnSync } = require("node:child_process");
   const args = [${JSON.stringify(ALIGNFIRST_BIN)}, ...process.argv.slice(2)];
   process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status);

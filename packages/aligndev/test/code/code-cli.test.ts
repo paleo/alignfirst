@@ -40,6 +40,7 @@ import type { ItemLocation, ItemName, ProjectReport } from "../../src/project/la
 import {
   ALIGNFIRST_BIN,
   type CompanionProject,
+  installGit,
   makeCompanionProject,
   makeSink,
   writeConfig,
@@ -1309,8 +1310,10 @@ describe("companion projects", () => {
     const gated = await run(project, ["new", "-m", "go"]);
     expect(gated.code).toBe(1);
     expect(gated.stderr).toBe(
-      `Error: no .plans/ directory at ${plans}. ` +
-        "Create it, or run `alignfirst plans setup <clone>`.\n",
+      `No .plans/ directory at ${plans} (companion).\n` +
+        `Local work files:  mkdir -p ${plans}\n` +
+        "Team work files:   alignfirst plans setup <clone-dir>\n" +
+        "See `aligndev guide work-files-setup` for authorized preparation.\n",
     );
 
     mkdirSync(plans, { recursive: true });
@@ -1647,7 +1650,8 @@ describe("quiet execution", () => {
   });
 
   it("reports a missing executable and preserves the durable failure", async () => {
-    const result = await launch(["new", "-m", "go", "--quiet"], "");
+    installGit(base);
+    const result = await launch(["new", "-m", "go", "--quiet"], base);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("claude could not start; check its installation and PATH");
     expect(result.stderr).toContain("Session file:");
@@ -1892,7 +1896,8 @@ describe("pi launches", () => {
   );
 
   it("reports a missing pi executable with installation guidance", async () => {
-    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: "" });
+    installGit(base);
+    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: base });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("pi could not start; check its installation and PATH");
     expect(readCompletion(newest().path).result).toContain("ENOENT");

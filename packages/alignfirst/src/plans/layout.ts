@@ -1,8 +1,9 @@
-import { existsSync, lstatSync, type Stats, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, realpathSync, type Stats, statSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 
 import { CliError } from "../cli-error.js";
-import type { ItemLocation } from "../project-layout.js";
+import { gitBuffer, gitOutput, linkedMainWorktree, optionalRepositoryId } from "../git.js";
+import { type ItemLocation, resolveProjectLayout } from "../project-layout.js";
 
 export const ARCHIVES_DIR = "_archives";
 
@@ -15,7 +16,56 @@ export function archivesDir(plansPath: string): string {
 }
 
 /** Returns the lstat of `.plans`, so callers can tell a symlink from a directory. */
-export function assertPlansGate(location: ItemLocation, form: string): Stats {
+export function assertPlansGate(
+  cwd: string,
+  location: ItemLocation,
+  form: string,
+  home: string,
+): Stats {
+  assertPlansNotProjectTracked(cwd, location, form);
+  const stats = assertUsablePlans(location, form);
+  assertMainWorktreePlans(cwd, location, form, home);
+  return stats;
+}
+
+/** Setup uses only this rule, so absent directories and broken untracked links remain repairable. */
+export function assertPlansNotProjectTracked(
+  cwd: string,
+  location: ItemLocation,
+  form: string,
+): void {
+  const identity = optionalRepositoryId(cwd);
+  if (identity === undefined || !existsSync(dirname(location.path))) return;
+  const logicalPath = join(realpathSync(dirname(location.path)), basename(location.path));
+  const logicalTracked = hasProjectTrackedFiles(dirname(logicalPath), logicalPath, identity);
+  const target =
+    !logicalTracked && existsSync(location.path) ? realpathSync(location.path) : undefined;
+  const trackedPath = logicalTracked
+    ? logicalPath
+    : target !== undefined && hasProjectTrackedFiles(target, target, identity)
+      ? target
+      : undefined;
+  if (trackedPath === undefined) return;
+  throw new CliError(
+    `Effective .plans contains files tracked by this project's repository: ${trackedPath}.\n` +
+      "Untrack and ignore these work files in their containing worktree, then commit " +
+      `before retrying or running ${form} plans setup <clone-dir>.\n` +
+      `Companion work files: ${form} companion register, then set items[".plans"] to "companion" in the registry.`,
+  );
+}
+
+function hasProjectTrackedFiles(dir: string, path: string, identity: string): boolean {
+  const containingDir = statSync(dir).isDirectory() ? dir : dirname(dir);
+  if (optionalRepositoryId(containingDir) !== identity) return false;
+  const root = realpathSync(gitOutput(containingDir, "rev-parse", "--show-toplevel"));
+  const pathspec = relative(root, path);
+  return (
+    gitBuffer(root, "--literal-pathspecs", "ls-files", "-z", "--", pathspec === "" ? "." : pathspec)
+      .length > 0
+  );
+}
+
+function assertUsablePlans(location: ItemLocation, form: string): Stats {
   const { path } = location;
   const stats = lstatSync(path, { throwIfNoEntry: false });
   if (!stats) throw new CliError(missingPlansMessage(location, form));
@@ -28,6 +78,26 @@ export function assertPlansGate(location: ItemLocation, form: string): Stats {
       `.plans is not a directory. Remove it, then run ${form} plans setup (see the project documentation).`,
     );
   return stats;
+}
+
+function assertMainWorktreePlans(
+  cwd: string,
+  location: ItemLocation,
+  form: string,
+  home: string,
+): void {
+  const mainWorktree = linkedMainWorktree(cwd);
+  if (mainWorktree === undefined) return;
+  const main = resolveProjectLayout(mainWorktree, home).locations[".plans"];
+  assertPlansNotProjectTracked(mainWorktree, main, form);
+  assertUsablePlans(main, form);
+  const target = realpathSync(location.path);
+  const mainTarget = realpathSync(main.path);
+  if (target === mainTarget && location.in === main.in) return;
+  throw new CliError(
+    `Effective .plans differs between this worktree (${target}, ${location.in}) and the main worktree ${mainWorktree} (${mainTarget}, ${main.in}).\n` +
+      "Linked worktrees reach .plans through the main worktree.",
+  );
 }
 
 export function missingPlansMessage(location: ItemLocation, form: string): string {

@@ -21,7 +21,7 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
         : (ctx.projectConfig?.config.plans?.autoArchive ?? false);
   const thresholdDays = enabled ? archiveThresholdDays(ctx.env) : undefined;
   const layout = layoutOf(ctx);
-  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form, ctx.home);
   if (mode.kind === "local") {
     if (thresholdDays !== undefined) autoArchive(layout, thresholdDays, ctx.stdout);
     ctx.stdout.write("(local mode, nothing to sync)\n");

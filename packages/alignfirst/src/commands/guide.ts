@@ -190,7 +190,7 @@ function renderPlansState(ctx: CommandContext): string {
   const plans = layoutOf(ctx).locations[".plans"];
   if (!plans.exists) return `\`\`\`text\n${missingPlansMessage(plans, ctx.form)}\n\`\`\``;
   try {
-    return resolvePlansMode(ctx.cwd, plans, ctx.form).kind === "shared"
+    return resolvePlansMode(ctx.cwd, plans, ctx.form, ctx.home).kind === "shared"
       ? "After every change in TICKET_DIR, run `{{CMD}} sync`."
       : "";
   } catch {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -23,6 +23,20 @@ import {
 useProjectFixtures();
 
 describe("projects command surface", () => {
+  it("keeps stale Git registrations readable with the existing project JSON shape", async () => {
+    const fixture = makeFixture({});
+    const repo = makeRepository(fixture.root, "app");
+    const stale = join(fixture.base, "stale");
+    addWorktree(repo, stale, "stale");
+    rmSync(stale, { recursive: true });
+    const result = await runProjects(fixture, ["status", repo, "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).worktrees).toEqual([
+      { path: repo, name: "app", branch: "main" },
+      { path: stale, name: "stale", branch: "stale" },
+    ]);
+  });
+
   it("renders help without a coding-agent selection", async () => {
     const fixture = makeFixture();
     for (const args of [["--help"], []]) {

@@ -6,9 +6,9 @@ Supported systems: Linux and macOS, and Windows through WSL.
 
 ## 1. Prepare the project
 
-The project needs a `.plans` directory, in its repository or in its companion directory. Follow [AlignFirst setup](alignfirst-skills-setup.md#configure-the-project), with [plans-setup.md](plans-setup.md) for a work-files repository, or [companion-setup.md](companion-setup.md) for a repository that must stay untouched.
+The project needs usable effective work files, untracked by its own repository or in its companion directory. A separate work-files repository may track them. Missing or project-tracked effective plans follow `aligndev guide work-files-setup` before ticket or session effects; companion selection requires authorization and preserves old project content without copying it. Follow [AlignFirst setup](alignfirst-skills-setup.md#configure-the-project), with [plans-setup.md](plans-setup.md) for a work-files repository, or [companion-setup.md](companion-setup.md) for a repository that must stay untouched.
 
-[Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) applies: skip the command skills and the global bootstrap line. It also describes the content of `DEVELOPERS.md`, which the assistant reads when it exists, else the `README.md` at the repository root.
+[Prepare a Project for an Assistant](../SKILL.md#prepare-a-project-for-an-assistant) applies: skip the command skills and the global bootstrap line. Full workspace installation is optional; existing project tooling remains authoritative, otherwise the assistant uses `aligndev worktree` and follows repository install/build/test commands separately. It also describes the content of `DEVELOPERS.md`, which the assistant reads when it exists, else the `README.md` at the repository root.
 
 ## 2. Configure `aligndev` (recommended)
 

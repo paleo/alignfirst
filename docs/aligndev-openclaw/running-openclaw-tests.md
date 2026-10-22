@@ -107,9 +107,13 @@ The root and its nested `external-projects` and `lifecycle-projects` directories
 
 `aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
+A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes the project workspace/dev scripts and provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
+
+The lightweight flow discovers worktrees through Git-backed `aligndev worktree list`, not directory naming. The assistant creates the worktree before coding delegation. Its `onPrompt` mock checks the request and branch, writes a small label change, runs the actual test and reports that result without server claims. Companion inspection runs in the gateway; those paths are not runner-local mounts.
+
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 23 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 25 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
@@ -138,6 +142,8 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A21 | One native starter delivery fails; retry reuses the target and automatically starts the work. |
 | A22 | A question about an explicit branch reuses its registered workspace for read-only investigation. |
 | A23 | A human opens the thread and tags the bot inside it: no starter, no handoff. The fresh session reacts to the latest message, resolves the project itself, opens no second thread, and leaves the author's thread name alone. |
+| A24 | No workspace tooling, missing plans and explicit no-ticket work. Snapshots registration, plans and Git state before approval; requires separate companion preparation, explicit selection, side-ticket/request capture before real worktree creation, then coding from that worktree. |
+| A25 | No workspace tooling and tracked project plans. Uses the same approval gate; old history remains byte-identical in the repository and absent from the companion, with no copying offer or operation. New request/session files use the selected companion without a generated plans link. |
 
 A04, A10 and A15 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A18 distinguish a missing task description from a complete detailed request. A20 keeps its startup race separate from A08's explicit hold.
 
@@ -174,6 +180,40 @@ Select `CODING_AGENT=claude` or `CODING_AGENT=pi` for the other children as need
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
+### side-29 acceptance — 2026-10-21
+
+The final selected Slack cells used Terra and Haiku through OpenRouter, one iteration each:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A24 missing plans | Passed | `2026-10-21T08-44-40-side29-B5` |
+| A25 tracked plans | Failed before the approval gate: the starter omitted the detailed request | `2026-10-21T08-50-02-side29-B5` |
+| A02 full-workspace control | Passed | `2026-10-21T08-53-04-side29-B5` |
+
+A24's earlier diagnostic runs remain preserved. They exposed target-session observation and localized-question matching defects, overly literal request comparisons, and loss of the no-ticket instruction in short starters. The final fixture uses an itemized request and structurally checks every requirement while tolerating presentation and grammatical changes. The short-starter loss remains unresolved. The work-files guide now explicitly identifies `projects[companion.key]` after a model initially guessed the registry shape.
+
+Discord was not run because the required Slack pass gate was not met. Tracked-plan approval remains unverified by a live conversation; the offline companion lifecycle covers its filesystem invariants. Offline suites, typechecks, lint and both manual disposable lifecycles passed. Evidence and diagnostic notes are under `.local/side-29/B5`; mocked child access does not establish native sandbox permissions.
+
+### side-29 review corrections — 2026-10-21
+
+The earlier results above describe the pre-review source. The corrected starter always carries the original Request block, short requests included. Side-ticket capture uses that block without losing explicit no-ticket intent. Rendered-guide tests and offline bootstrap negative controls reject omitted short or itemized constraints; the existing live assertions remain unchanged.
+
+A focused A25 Slack rerun preserved the complete request but failed the approval judge because the question omitted the all-worktree scope (`2026-10-21T09-48-18-side29-C2`). Inspection confirmed that the guide was read and no preparation effects preceded approval. A narrow consent-question form now carries the scope and preservation promise together. One diagnosis-driven A25-only retry passed all approval/history/request/worktree/session assertions (`2026-10-21T09-55-57-side29-C2`). Both used Terra and the Haiku/OpenRouter judge on recreated gateways. Once that Slack gate passed, only the two planned A24 follow-ups ran:
+
+| Final-source case | Result | Artifact run |
+| --- | --- | --- |
+| A25 tracked plans, Slack | Passed | `2026-10-21T09-55-57-side29-C2` |
+| A24 missing plans, Discord | Passed | `2026-10-21T10-01-19-side29-C2` |
+| A24 missing plans, Slack parity | Passed, including the final inventory/path assertion | `2026-10-21T10-06-06-side29-C2` |
+
+No full matrix or extra short-request conversation cell ran. The owned stack and volumes were removed after all runners settled; artifacts were retained.
+
+Final-source offline checks passed: 2,000 root package tests, four AlignDev built-CLI integration tests and 260 standalone harness tests. The broader 61-test integration run also passed; only guide prose changed afterward, and the affected AlignDev integration suite was rerun. Manual shared/companion lifecycles and nested locked/dirty/missing-child refusal passed. Evidence and conversation selection are under `.local/side-29/C2/`, separately from model artifacts. Initial `/tmp` quota failures were resolved by using private home-filesystem scratch directories, without deleting unrelated data.
+
+Actual native Pi 1.3.0 with Terra read and wrote parent-verified nonce markers through ordinary shared project plans, a separate Git work-files repository and a prepared companion. These checks ran as host user `hop`, outside temporary-directory allowances. Pi uses ordinary OS access; this proves neither sandbox confinement nor deployment/service-account parity.
+
+A separate native Codex 0.162.1/Terra probe used verified `--sandbox workspace-write` with no bypass. Worktree writes passed, but shared project `.plans` and `.local` writes returned `Errno 30` (read-only filesystem). The prepared-companion control passed through the existing narrow `--add-dir <companion>` grant; shared `.local` and outside-root writes remained denied. Shared Codex work-file access remains a limitation; no permission remedy or broad main-repository grant was introduced. Native Codex saved disposable-project trust records; read-only comparison confirmed the companion control changed no sandbox, approval or profile value. Native evidence, exact argv, marker verification, cleanup and limitations are in `.local/side-29/C2/native/evidence.md`.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
@@ -186,7 +226,7 @@ fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test
 sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 ```
 
-The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Lightweight fixture checks additionally run real AlignFirst/AlignDev worktree commands for shared, missing and tracked plans, discovery/reuse, branch consultation and no-branch status policies, and cleanup. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
 
 The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
 

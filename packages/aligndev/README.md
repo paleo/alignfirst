@@ -34,9 +34,13 @@ For a coding-agent assistant, parent host and delegated child are independent: a
 
 ## Start in Claude Code, Codex or Pi
 
-The project needs an AlignFirst `.plans` directory, in its repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it.
+The project needs usable AlignFirst work files, untracked by the project's own repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). A separate work-files repository may track them. The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it. `alignfirst plans check --json` verifies them, from the main worktree or a linked one. AlignFirst refuses effective plans tracked by the project's own repository. Missing or project-tracked effective plans require authorized companion preparation through `aligndev guide work-files-setup`; existing project content stays untouched and is not copied.
 
-The child needs network access and writes outside the repository. Claude Code/Codex parents request their established sandbox bypass or elevation; approve that request when it comes. Pi uses ordinary OS permissions and saved project trust. It has no implied sandbox or per-command approval boundary, and A profile's `skipPermissions` has no effect on Pi.
+Full workspace tooling is optional. The assistant follows the project's documented tooling when present; otherwise `aligndev worktree` creates or reuses an isolated Git worktree without installation or tracked configuration changes. It shares usable untracked project plans and optional `.local` through locally excluded symlinks, or uses companion plans directly. Readiness covers Git and work files only; dependency installation, builds, tests and application lifecycle follow the repository's commands separately. Removal refuses dirty worktrees, preserves branches and shared targets, and does not stop processes or tear down infrastructure. See `aligndev worktree --help` for the command reference.
+
+The child needs network access and access to its selected work files. Parent-host elevation and the child's permission policy are separate. A shared symlink grants no sandbox permission. In native Codex 0.162.1 host probes, normal `workspace-write` denied writes through shared project `.plans` and `.local` links (`Errno 30`). Prepared companion plans passed through the existing `--add-dir <companion>` route; shared `.local` and outside-root writes remained denied. Report denied real paths. For companion plans, obtain approval through `aligndev guide work-files-setup`, preserving existing project files. Do not silently bypass the sandbox or grant the whole main repository write access.
+
+Pi uses ordinary OS permissions and saved project trust; a profile's `skipPermissions` has no effect. Native Pi 1.3.0 host probes passed for shared plans, a separate work-files repository, companion plans and `.local`. These results establish OS access, not sandbox confinement. Neither agent's host-user probes establish production service-account or deployment support.
 
 ### With the Skill
 
@@ -177,7 +181,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirs
 
 Deployments require null or a string for every coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the full preparation contract: the `alignfirst context` section in its `AGENTS.md`, an optional work-files repository, docmap, isolated workspaces and a project-specific `DEVELOPERS.md`.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and a project-specific `DEVELOPERS.md`, in the repository or its companion. Full workspace tooling is optional; lightweight worktrees provide isolation when it is absent.
 
 ## Under the Hood
 

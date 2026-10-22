@@ -63,7 +63,11 @@ describe("real AlignDev CLI through manifest-loaded background in public Pi runt
       const second = await h.launch("question", h.worktree);
       expect(first.id).not.toBe(second.id);
       writeFileSync(second.gate, "go");
-      expect((await waitJob(h, second.id)).status).toBe("succeeded");
+      const secondTerminal = await waitJob(h, second.id);
+      expect(
+        secondTerminal.status,
+        JSON.stringify(await h.call({ action: "output", id: second.id })),
+      ).toBe("succeeded");
       expect(jobFrom(await h.call({ action: "status", id: first.id })).status).toBe("running");
       const secondResult = h.status(second.key, h.worktree);
       expect(secondResult).toContain("FINAL:question");
@@ -191,7 +195,7 @@ async function fixture() {
   );
   git("-C", project, "worktree", "add", "--quiet", "-b", "fixture-worktree", worktree);
   mkdirSync(join(project, ".plans"));
-  mkdirSync(join(worktree, ".plans"));
+  symlinkSync(join(project, ".plans"), join(worktree, ".plans"), "dir");
   const companion = join(home, "companion");
   writeJson(join(home, ".alignfirst/companions/registry.json"), {
     projects: {

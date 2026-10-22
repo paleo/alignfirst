@@ -42,7 +42,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clear": "rimraf dist/*",
     "lint": "biome check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "devDependencies": {
     "@types/node": "~26.6.5",

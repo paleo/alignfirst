@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 import { CliError } from "./cli-error.js";
 import type { Streams } from "./context.js";
@@ -44,6 +44,36 @@ export function assertMainWorktreeRoot(cwd: string): void {
     throw new CliError(
       "Run this command from the main worktree. Linked worktrees reach .plans through it.",
     );
+}
+
+export function linkedMainWorktree(cwd: string): string | undefined {
+  const mainWorktree = findMainWorktree(cwd);
+  if (mainWorktree === undefined) return;
+  const root = gitOutput(cwd, "rev-parse", "--show-toplevel");
+  if (realpathSync(root) === mainWorktree) return;
+  return mainWorktree;
+}
+
+/** The main worktree is the parent of the common `.git` directory; a bare repository has none. */
+export function findMainWorktree(cwd: string): string | undefined {
+  const identity = optionalRepositoryId(cwd);
+  if (identity === undefined || basename(identity) !== ".git") return;
+  return realpathSync(dirname(identity));
+}
+
+export function optionalRepositoryId(dir: string): string | undefined {
+  const args = ["rev-parse", "--path-format=absolute", "--git-common-dir"];
+  const result = spawnSync("git", ["-C", dir, ...args], {
+    encoding: "utf8",
+    // Git has no distinct exit status for discovery failure versus a non-repository.
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  if (result.error !== undefined) throw gitFailure(args, result.error.message);
+  if (result.status !== 0) {
+    if (result.stderr.startsWith("fatal: not a git repository (or any ")) return;
+    throw gitFailure(args, result.stderr);
+  }
+  return realpathSync(result.stdout.trim());
 }
 
 export function gitOutput(dir: string, ...args: string[]): string {

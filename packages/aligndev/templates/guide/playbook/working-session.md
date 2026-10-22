@@ -24,11 +24,12 @@ A runbook is a procedure you read fully when its situation arises. Claim first, 
 A runbook is a procedure you read fully when its situation arises.
 {{/codingAgent}}
 
+- `{{ALIGNDEV}} guide work-files-setup` — the shared preparation gate before any operation that needs work files; requires only PROJECT_PATH.
 - `{{ALIGNDEV}} guide project-workspace-setup` — single-project changes, protocol requests, and ticket status requests, before project work.
 {{#openclaw}}
 - `{{ALIGNDEV}} guide project-lifecycle` — creating a project, onboarding a repository to clone, physically removing a project.
 {{/openclaw}}
-- `{{ALIGNDEV}} guide consultation` — questions, advice, brainstorming: read-only work that produces understanding rather than code.
+- `{{ALIGNDEV}} guide consultation` — a standalone question, advice, or brainstorming: read-only work that produces understanding.
 
 {{#openclaw}}
 ## Take over a working session
@@ -53,7 +54,7 @@ Outside a git repository, tell the user to start the session inside the project'
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else `git symbolic-ref --short refs/remotes/origin/HEAD` without its `origin/` prefix. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{#developers}}
 - Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.
 {{/developers}}
@@ -117,19 +118,21 @@ Resolve what the request leaves open:
 {{#openclaw}}
 - A request may need no project. Do not ask for one until the work itself requires project files.
 {{/openclaw}}
-- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions, advice and brainstormings require PROJECT and PROJECT_PATH only. Follow `{{ALIGNDEV}} guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
 {{#openclaw}}
-- Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
+- Single-project changes, code reviews, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 {{/openclaw}}
 {{#codingAgent}}
-- Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
+- Single-project changes, code reviews, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 {{/codingAgent}}
+- Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{ALIGNDEV}} guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
 
 {{#openclaw}}
 Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/openclaw}}
 
-For changes, protocol requests, and ticket status requests, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `{{ALIGNDEV}} code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
+For changes, protocol requests, and ticket status requests, complete `{{ALIGNDEV}} guide work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture.
+
+After that gate, as soon as PROJECT_PATH and TICKET_ID are known, and before project work, run `{{ALIGNFIRST}} sync`, then `{{ALIGNFIRST}} ticket {TICKET_ID}` from PROJECT_PATH. The second command validates the id and creates or restores TICKET_DIR before `{{ALIGNDEV}} code` can create session artifacts. Stop if either command fails. If either value becomes known later in the session, run the preflight then.
 
 TICKET_DIR lies in the work-files directory, `.plans/`, which may live in the project's companion. Use TICKET_DIR exactly as `{{ALIGNFIRST}} ticket` prints it, resolved from PROJECT_PATH when relative.
 
@@ -151,13 +154,13 @@ Project-workspace cleanup is not physical project removal; follow "Cleanup reque
 ### Step 5 — Reserve a side ticket for explicit no-ticket work
 
 {{#openclaw}}
-Skip this step for read-only questions, project lifecycle, and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
+Skip this step for consultations, project lifecycle, and operational work. A new project's bootstrap through its initial commit stays in the lifecycle procedure.
 {{/openclaw}}
 {{#codingAgent}}
-Skip this step for read-only questions and operational work.
+Skip this step for consultations and operational work.
 {{/codingAgent}}
 
-For new single-project work where the user explicitly says there is no ticket or asks for a side ticket:
+For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH, then:
 
 {{#openclaw}}
 1. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
@@ -176,7 +179,7 @@ For new single-project work where the user explicitly says there is no ticket or
 3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH. It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
 {{/codingAgent}}
 {{#openclaw}}
-4. Write `{TICKET_DIR}A1-request.md` with the complete recorded request. For a short request, use the starter's task line and the message that explicitly confirmed no ticket.
+4. Write `{TICKET_DIR}A1-request.md` with the complete original request from the starter's Request block, short requests included. Preserve every requirement and the explicit no-ticket choice, together with any later human corrections.
 {{/openclaw}}
 {{#codingAgent}}
 4. Write `{TICKET_DIR}A1-request.md` with the complete request. For a short request, use the user's request and the message that explicitly confirmed no ticket.
@@ -184,7 +187,7 @@ For new single-project work where the user explicitly says there is no ticket or
 5. Run `{{ALIGNFIRST}} sync`.
 
 {{#openclaw}}
-The bot owns this reservation and the request capture; the agent receives TICKET_ID. Do not use `{{ALIGNDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
+You own this reservation and the request capture; the agent receives TICKET_ID. Do not use `{{ALIGNDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
 {{/openclaw}}
 {{#codingAgent}}
 You own this reservation and the request capture; the agent receives TICKET_ID. Do not use `{{ALIGNDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue with `{{ALIGNDEV}} guide project-workspace-setup`, which decides the workplace with the side ticket as TICKET_ID, then run the coding protocol from that workplace.
@@ -200,20 +203,21 @@ You own this reservation and the request capture; the agent receives TICKET_ID. 
 The question on every turn is not a mode but a fact: does this request need a project workspace?
 
 - **The request is a code review or names an AlignFirst protocol** — follow the ticket and workspace flow below.
-- **The request is another read-only question, advice, or a brainstorming** — run `{{ALIGNDEV}} guide consultation`, read it fully, and follow it.
+- **The question arises within ongoing work** — keep that work's workflow, ticket, and workplace.
+- **The request is a consultation** — run `{{ALIGNDEV}} guide consultation`, read it fully, and follow it. A ticket's progress is a status request, handled by the next case.
 {{#openclaw}}
-- **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A starter with a request block is filed first ("Detailed requests" below). Then run `{{ALIGNDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
+- **The request is a single-project change, protocol request, or ticket status request** — a detailed change request is filed first ("Detailed requests" below). Then run `{{ALIGNDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
 {{/openclaw}}
 {{#codingAgent}}
-- **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A detailed request is filed first ("Detailed requests" below). Then run `{{ALIGNDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. The procedure decides the workplace (in place, a workspace, or a question to the user) and posts the `[WORKSPACE]` banner once it is known.
+- **The request is a single-project change, protocol request, or ticket status request** — a detailed change request is filed first ("Detailed requests" below). Then run `{{ALIGNDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. The procedure decides the workplace (in place, a workspace, or a question to the user) and posts the `[WORKSPACE]` banner once it is known.
 {{/codingAgent}}
 - **A required value is missing** — go to Step 7. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
 {{#openclaw}}
-Changes to an existing project happen inside a linked workspace. Read-only questions use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
+Changes to an existing project happen inside a linked workspace unless the user explicitly chose in-place work. Consultations use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
 {{/openclaw}}
 {{#codingAgent}}
-Changes happen in the workplace the setup procedure decides. Read-only questions use the session's worktree as it is.
+Changes happen in the workplace the setup procedure decides. Consultations use the session's worktree as it is.
 {{/codingAgent}}
 
 ### Step 7 — Handle the actual request
@@ -237,6 +241,7 @@ On Discord the rename travels with a post: `message` `action: "send"` with the c
 Interpret every user message in the context of the current project — something to do, investigate, challenge, or advise on inside the codebase. The user is rarely asking you to perform the action _in the chat_; they're asking about the project.
 
 - **Code change.** "Set this text bolder" → bold it in the project, not in the chat reply.
+- **Question, advice, or a design opinion.** Delegate to the agent in the workflow selected in Step 6. It grounds the answer in the repository. No code change unless asked.
 
 {{#openclaw}}
 Only when the message is unambiguously about chat content ("summarize this thread", "what does this mean") should you treat it as a regular conversation.
@@ -245,19 +250,11 @@ Only when the message is unambiguously about chat content ("summarize this threa
 Only when the message is unambiguously about chat content ("summarize this conversation", "what does this mean") should you treat it as a regular conversation.
 {{/codingAgent}}
 
-**Question, advice, or a design opinion.** The substance comes from the agent, which reads the repository. Follow `{{ALIGNDEV}} guide consultation`. No code change unless asked.
-
-### Read-only questions
-
-A codebase question, advice, or a brainstorming follows `{{ALIGNDEV}} guide consultation`. Read it fully. It resolves the project, delegates the complete question to the agent, and records the discussion when one is worth keeping.
-
-A request for a ticket's progress follows "Status update" instead; it needs that ticket's history and workspace state.
-
 ### Detailed requests
 
 When one project owns a detailed change request, preserve it before delegation:
 
-1. Establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
+1. Complete `{{ALIGNDEV}} guide work-files-setup`, then establish TICKET_ID. When project or deployment instructions provide ticket-system access, create a ticket with a very short description in the user's language. When no access is provided, ask the user for the ticket ID.
 2. If this step established TICKET_ID, complete the known-ticket preflight now. Then run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the request-file path.
 {{#openclaw}}
 3. Write the complete request text recorded in the starter's request block to that path. Keep its language. You may fix typos; preserve every detail.
@@ -277,41 +274,45 @@ When Step 5 reserved a side ticket `side-N`, the request is already captured. Co
 {{/codingAgent}}
 
 {{#openclaw}}
-Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh. Delegate those requests to the agent without an AlignFirst protocol.
+Skip this capture workflow for a multi-project request with no main project and for operational work such as workspace cleanup or base-branch refresh.
 {{/openclaw}}
 {{#codingAgent}}
-Skip this capture workflow for operational work such as workspace cleanup or base-branch refresh. Delegate those requests to the agent without an AlignFirst protocol.
+Skip this capture workflow for operational work such as workspace cleanup or base-branch refresh.
 {{/codingAgent}}
 
 {{#openclaw}}
 ### Multi-project and operational work
 
-Delegate a multi-project request with no main project, workspace cleanup, base-branch refresh, and similar operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/openclaw}}
 {{#codingAgent}}
 ### Operational work
 
-Delegate workspace cleanup, base-branch refresh, and similar operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/codingAgent}}
 
 ### What you delegate vs do
 
 Lean toward delegating; the less you touch the project directly, the better.
 
-Delegate to the agent: workspace/branch/worktree creation, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs.
+Delegate to the agent: the project's workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. You run `{{ALIGNDEV}} worktree list/add/remove` and `{{ALIGNDEV}} guide work-files-setup` yourself; neither needs a coding launch.
 
-Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to the agent and build on its answer. Never brainstorm alone: the agent grounds its ideas in the codebase; yours would come from memory. `{{ALIGNDEV}} guide consultation` is the procedure.
+Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
 {{#openclaw}}
-Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree.
 {{/openclaw}}
 {{#codingAgent}}
-Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory.
 {{/codingAgent}}
 
-Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Consultation delegations omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
+
+### What the message carries
+
+The agent reads the project's instructions, documentation and work files on its own. The message carries what it cannot read: the task, the user's requirements and decisions, and the globally installed tools the task needs, each named as **globally installed**. Point at a review, a spec or a plan by its path instead of restating it. Your playbook stays with you, except where it says to pass a rule to the agent. A task you would have kept because it needs a global tool is one more thing to delegate.
 
 ### A background run moves the report
 
@@ -319,7 +320,7 @@ Feel free to do the rest yourself (except coding) when it's more practical.
 Launching a background run ends the turn: the closing message is the launch acknowledgement, and the report moves to the run's completion turn. Each further run launched from that turn moves the report again.
 {{/openclaw}}
 {{#codingAgent}}
-Launching a background run ends the turn on its acknowledgement. For a Pi parent, first verify the `background` capability and a persistent parent, as the delegation guide requires; without them, explain installation instead of promising a later report. On a Pi notice, validate the job handle and retrieve the exact run with `status --result`. Continue authorized work or report genuine questions/blockers. A child's completed turn is not completion of the whole request. Further runs use the same launch procedure; repeated notices must not duplicate successor work. Claude Code and Codex retain their host-specific completion/fallback routes in the delegation guide.
+Launching a background run ends the turn on its acknowledgement; the report moves to the run's completion, handled as the delegation guide describes for your parent host. A child's completed turn does not complete the whole request.
 {{/codingAgent}}
 
 ### The plan is not a gate
@@ -330,7 +331,7 @@ The agent usually has no question. When it does, answer it: a technical question
 
 ### Plan files are the agent's material
 
-Before acting on any file the user names under `.plans/`, run `{{ALIGNFIRST}} sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to the agent, as the delegation guide describes.
+Before acting on any file the user names under `.plans/`, complete `{{ALIGNDEV}} guide work-files-setup`, then run `{{ALIGNFIRST}} sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to the agent, as the delegation guide describes.
 
 For the `.plans/` directory's task directories, cycles, filenames, and artifact conventions, run `{{ALIGNFIRST}} guide` from PROJECT_PATH; its output ends with the ticket directory and work file rules. Project instructions only define whether and how the directory is shared.
 
@@ -365,19 +366,11 @@ A project can have documentation files. List them all from PROJECT_PATH, the ful
 ### Main worktree and base branch
 
 {{#openclaw}}
-A project in main-worktree mode (`{{ALIGNDEV}} guide project-workspace-setup`) is the exception to this section: its main worktree leaves the base branch while a working thread holds it, and the edits happen there, on the thread's branch.
-{{/openclaw}}
-
-{{#openclaw}}
-The main worktree at PROJECT_PATH stays on the base branch, except for the repository-onboarding setup branch defined in `{{ALIGNDEV}} guide project-lifecycle`. It is shared across sessions.
+The main worktree at PROJECT_PATH is shared across sessions. It stays on the base branch, and no codebase file is edited there, with three exceptions: bootstrapping a new project before its initial commit and the repository-onboarding setup branch, both defined in `{{ALIGNDEV}} guide project-lifecycle`, and an explicit user choice to work in place.
 {{/openclaw}}
 {{#codingAgent}}
 The main worktree at PROJECT_PATH belongs to the user. Edits on the base branch happen only when the user chose to work there.
 {{/codingAgent}}
-
-{{#openclaw}}
-Never edit files while the base branch is checked out, except while bootstrapping a new project before its initial commit as defined in `{{ALIGNDEV}} guide project-lifecycle`.
-{{/openclaw}}
 
 Install dependencies in the main worktree from the committed lockfile, without rewriting it: `npm ci` with npm, or the frozen-lockfile install of the project's package manager. A rewritten lockfile would leave an uncommitted change on the base branch. Every prompt to the agent that installs dependencies in the main worktree states this rule.
 
@@ -385,18 +378,7 @@ Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-{{#openclaw}}
-A project in main-worktree mode has no linked worktree: its branches are created and checked out in the main worktree with plain `git switch`, and the rule against a hand-made checkout does not apply to it. `git worktree add`/`remove`/`prune` stay out of bounds.
-
-After a project's initial commit exists, editing the codebase happens on another branch in a linked worktree. If you need one and it doesn't exist yet, follow the `{{ALIGNDEV}} guide project-workspace-setup` instructions to set it up.
-
-Worktrees belong to the workspace tooling. Every creation, reuse, and teardown goes through its commands — run the guide `DEVELOPERS.md` points to (`workspace --guide`) to get them. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds, and so is a hand-made branch checkout outside a workspace. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
-{{/openclaw}}
-{{#codingAgent}}
-A project with workspace tooling (Step 2 of `{{ALIGNDEV}} guide project-workspace-setup`) owns its worktrees through it. Every creation, reuse, and teardown goes through the commands its guide (`workspace --guide`) gives. `git worktree add`/`remove`/`prune` and deleting a worktree directory are out of bounds. The registry is what makes a worktree visible to the other sessions and to the dev-server tooling.
-
-Without workspace tooling, create a worktree with `git worktree add` only when the user asks for one.
-{{/codingAgent}}
+`{{ALIGNDEV}} guide project-workspace-setup` selects or creates the workplace: through the project's workspace tooling when it has one, through `{{ALIGNDEV}} worktree list/add/remove` otherwise. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds.
 
 ### Updating a branch with the base branch
 
@@ -431,13 +413,7 @@ Delegate the sequence to the agent.
 
 ### Status update
 
-{{#openclaw}}
-- Check status from the recorded linked-worktree path. The takeover sync in `{{ALIGNDEV}} guide project-workspace-setup` has already fetched and merged the remote branch, so you are reporting the latest state.
-{{/openclaw}}
-{{#codingAgent}}
-- Check status from the workplace. The sync in `{{ALIGNDEV}} guide project-workspace-setup` has already fetched and merged the remote branch, so you are reporting the latest state.
-{{/codingAgent}}
-- Report where the work stands, drawing on two complementary sources: repo/workflow metadata you gather directly (`git log`/`status`/branch, `gh` PR state), and the ticket's AlignFirst artifacts via `{{ALIGNDEV}} code new --ticket <id> --catchup` (the agent synthesizes the ticket history). Don't browse the source to describe the code; that's a separate delegation.
+A request for a ticket's progress goes through `{{ALIGNDEV}} guide project-workspace-setup`: its Step 5 brings the branch current and its Step 6 reports the work content.
 
 ### Dev-server while working
 
@@ -476,12 +452,7 @@ Either way, the report states the error and your decision.
 
 #### Dev-server log review
 
-{{#openclaw}}
-After using a dev-server, have a separate no-protocol agent run with the smallest available model inspect its logs: give it the log locations and ask for errors or unusual behavior. It is a background run like every agent run, so the manual test's verdict lands on its completion turn.
-{{/openclaw}}
-{{#codingAgent}}
-After using a dev-server, have a separate no-protocol agent run inspect its logs: give it the log locations and ask for errors or unusual behavior. Choose the smallest available model from the child's ordered list; for Pi without a finite ordered allowlist, use the configured/default model instead. Launch and retrieve its result through the delegation guide's parent-host route before reporting the manual test's verdict.
-{{/codingAgent}}
+After using a dev-server, have a separate no-protocol agent run with the smallest available model (the default one when the child has no model list) inspect its logs: give it the log locations and ask for errors or unusual behavior. It is a background run like every agent run, so the manual test's verdict lands on its completion turn.
 
 Clean logs are required for the manual test to pass.
 
@@ -587,16 +558,11 @@ After creating the MR/PR (via `{{ALIGNDEV}} code`):
 - Post the MR/PR link.
 - Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.
 
-Whenever you observe that a PR/MR is merged, delegate the post-merge maintenance to the agent without a protocol:
+Whenever you observe that a PR/MR is merged:
 
-{{#openclaw}}
-1. Remove the source branch's registered project workspace through the project's workspace tooling, when one exists. In main-worktree mode, switch the main worktree back to the merge target instead.
-{{/openclaw}}
-{{#codingAgent}}
-1. Remove the source branch's registered project workspace through the project's workspace tooling, when one exists. A branch worked on in place stays checked out: the user decides when to leave it.
-{{/codingAgent}}
-2. Refresh the merge target in the main worktree without switching the main worktree away from its base branch. Fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when the project requires them.
-3. Report the removed workspace and refreshed branch.
+1. Remove the source branch's linked workspace as "Cleanup requests" describes. A branch worked on in place stays checked out: the user decides when to leave it.
+2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when required.
+3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
 
 ### Protected directories
 
@@ -611,20 +577,23 @@ When the user asks to tear down one named project workspace (or worktree) from i
 When the user asks to tear down one named project workspace (or worktree):
 {{/codingAgent}}
 
-1. Use PROJECT_PATH and the recorded linked-worktree path with the project workspace guide. Have the agent remove the *workspace*. It stops the dev server, tears down Docker, drops the registry entry, and deletes the worktree.
-2. Confirm the teardown to the user.
+1. Resolve the exact linked-worktree path through the selected tooling; ask the user when it is ambiguous. With workspace tooling, have the agent run its removal procedure, which also tears down the dev environment. Without it, stop whatever the project runs there, then run `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH yourself: it refuses a dirty or locked worktree, and you never force it. This direct removal needs no coding launch or work-files preparation, even when plans are unsuitable.
+2. Confirm what was removed.
 {{#openclaw}}
 3. Reset the thread session.
 {{/openclaw}}
 
 {{#openclaw}}
-When the user asks to clean the workspaces, run a no-protocol delegation from each affected PROJECT_PATH with this instruction:
+When the user asks to clean the workspaces, for each affected PROJECT_PATH:
 {{/openclaw}}
 {{#codingAgent}}
-When the user asks to clean the workspaces, run a no-protocol delegation from PROJECT_PATH with this instruction:
+When the user asks to clean the workspaces, from PROJECT_PATH:
 {{/codingAgent}}
 
-> List every registered workspace for this project. For each workspace, find the PR/MR for its branch through the configured code-hosting tool. Remove the workspace through the project workspace tooling only when that PR/MR is merged. Leave workspaces with no PR/MR or an unmerged PR/MR intact. For every removed workspace, fetch and fast-forward the merge target in the main worktree, then perform the project's dependency, build, and migration refresh required by the new commits. Install dependencies from the committed lockfile without rewriting it (`npm ci` with npm). Report every decision and the final base-branch state.
+1. List the worktrees through the selected tooling: the project's workspace list, or `{{ALIGNDEV}} worktree list --json`.
+2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
+3. When a workspace was removed, delegate the merge target's refresh as after a merge above, installing from the committed lockfile without rewriting it (`npm ci` with npm).
+4. Report every decision, any blocked refresh, and the final base-branch state.
 
 {{#openclaw}}
 ### Resetting a thread session
@@ -646,9 +615,4 @@ Creating a project, onboarding a repository to clone, or physically removing a p
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-{{#openclaw}}
-- Never touch a worktree outside the workspace tooling. The main worktree of a project in main-worktree mode is the exception.
-{{/openclaw}}
-{{#codingAgent}}
-- Never touch a worktree outside the workspace tooling when the project has it. Without tooling, create or remove a worktree only when the user asks.
-{{/codingAgent}}
+- Create and remove worktrees only through the project's workspace tooling or `{{ALIGNDEV}} worktree`.

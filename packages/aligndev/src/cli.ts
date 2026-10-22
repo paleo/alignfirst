@@ -10,6 +10,7 @@ import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
 import { readPackageVersion } from "./package-version.js";
 import { runProject } from "./project/project-cli.js";
+import { runWorktree } from "./worktree/worktree-cli.js";
 
 export interface MainOptions {
   argv?: string[];
@@ -46,13 +47,19 @@ export async function main(options?: MainOptions): Promise<number> {
     ctx.stdout.write(`${readPackageVersion()}\n`);
     return 0;
   }
-  if (command !== "code" && command !== "project" && command !== "guide") {
+  if (
+    command !== "code" &&
+    command !== "project" &&
+    command !== "guide" &&
+    command !== "worktree"
+  ) {
     const error =
       command === undefined ? "Error: no command given." : `Error: unknown command "${command}".`;
     ctx.stderr.write(`${error}\n\n${renderHelp(ctx.forms.aligndev)}`);
     return 1;
   }
   try {
+    if (command === "worktree") return runWorktree(tokens, ctx);
     if (command === "code") return await runCode(tokens, () => loadConfig(ctx.home), ctx);
     const config = loadConfig(ctx.home);
     if (command === "project") return runProject(tokens, config, ctx);
@@ -69,6 +76,10 @@ function renderHelp(aligndev: string): string {
     [
       `${aligndev} project <command> [<options>]`,
       "List projects, check their inventory, claim port ranges.",
+    ],
+    [
+      `${aligndev} worktree <command> [<options>]`,
+      "Create, list and safely remove lightweight Git worktrees.",
     ],
     [`${aligndev} guide [<topic>]`, "Print the assistant's playbook and guides."],
     [`${aligndev} -h, --help`],

@@ -87,7 +87,7 @@ preSetup: ({ isMainWorktree, currentWorktree }) => {
 
 Keep the `isMainWorktree` gate. `preSetup` runs before the kernel creates shared-directory symlinks,
 so a fresh linked worktree has no `.plans` yet. The check accepts a usable `.plans` symlink and a local
-directory.
+directory, both untracked by the project.
 
 Document these new-machine steps in `README.md` before workspace setup:
 

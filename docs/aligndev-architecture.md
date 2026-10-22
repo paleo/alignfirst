@@ -1,17 +1,18 @@
 ---
 title: aligndev Architecture
-summary: How `aligndev` works internally — the foreground run and its session file, termination and authentication handling, coding-agent adapters, the project inventory and port claims.
+summary: How `aligndev` works internally — coding sessions and adapters, lightweight worktrees, project inventory and port claims.
 read_when:
   - onboarding to the aligndev codebase
   - changing how `aligndev code` launches, tracks or terminates a coding agent
   - changing session files, `aligndev code status` or the `_aligndev` location
+  - changing lightweight worktree creation, inventory or removal
   - changing the project inventory, its marker or port claims
   - adding a coding agent
 ---
 
 # aligndev Architecture
 
-`aligndev` is the CLI an assistant uses: it prints the playbook (`guide`), delegates work to a coding agent (`code`), and inventories the host's projects (`project`). Its users are agents, so its `--help` and guides are the user reference. This document covers what they leave out. The [README](../packages/aligndev/README.md) covers setup and configuration.
+`aligndev` is the CLI an assistant uses: it prints the playbook (`guide`), delegates work to a coding agent (`code`), inventories the host's projects (`project`), and manages lightweight Git worktrees (`worktree`). Its users are agents, so its `--help` and guides are the user reference. This document covers what they leave out. The [README](../packages/aligndev/README.md) covers setup and configuration.
 
 ## Source Structure
 
@@ -21,7 +22,8 @@ read_when:
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
-| `src/project/` | `aligndev project`: discovery, markers, status, port allocation. |
+| `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
+| `src/worktree/` | Lightweight Git-backed worktree inventory, add, directory policy and non-force removal. |
 | `templates/guide/` | The playbook and guides, rendered per platform. |
 
 Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for the command forms. Under `npx`, both commands print as `npx -y …`. Variants sit in blocks, each marker alone on its line:
@@ -110,6 +112,20 @@ fnm exec --using=.nvmrc npm run test:coding-profiles
 The command runs [`scripts/coding-profiles-smoke.mjs`](../scripts/coding-profiles-smoke.mjs). It checks profile selection, real CLI reports, linked worktrees, companion placement, resume identity and independent quota routing. Stale settings must warn only on stderr while help, guide, JSON reports and a launch succeed; invalid recognized fields must still fail. Reads preserve the settings bytes. Disposable homes, projects and native CLI shims keep it offline and isolate settings, synthetic identities and process cleanup. Native agents, credentials and providers are not required.
 
 This is CLI integration, not OpenClaw deployment, Docker, conversation or provider acceptance. Run it deliberately; it is outside root `npm test`, CI, release smoke and all test matrices.
+
+## Lightweight Worktrees
+
+`aligndev worktree` dispatches before coding settings, model discovery and project-marker checks. Git's worktree registry is its only inventory, including externally created, detached, missing, locked and prunable entries. `src/worktree/git.ts` parses Git's NUL-delimited output; project status adapts it to its existing report shape. CLI help owns command forms and JSON schemas.
+
+Add resolves the main worktree even from a linked worktree or subdirectory. It validates branch, destination and effective plans before creating anything. It shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. Tracked `.local` stays branch-local with a warning. Companion plans resolve directly, without a link or exclusion. The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Late failures retain the branch and worktree and name manual recovery actions.
+
+`src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
+
+The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
+
+Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
+
+Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown.
 
 ## Project Inventory
 

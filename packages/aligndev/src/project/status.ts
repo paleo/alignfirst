@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 
+import { readWorktrees } from "../worktree/git.js";
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
 import type {
@@ -74,7 +75,11 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     aligndev: project.description.aligndev,
     locations: project.description.locations,
     workspaces: project.workspaces,
-    worktrees: readWorktrees(project.path),
+    worktrees: readWorktrees({ cwd: project.path, env: process.env }, project.path).map((tree) => ({
+      branch: tree.branch,
+      name: basename(tree.path),
+      path: tree.path,
+    })),
   };
 }
 
@@ -111,31 +116,6 @@ function scpRemoteHost(remoteUrl: string): string | null {
   if (/^[A-Za-z]:[\\/]/u.test(remoteUrl)) return null;
   const match = /^(?:[^@/:\s]+@)?(\[[^\]]+\]|[^/:\s]+):/u.exec(remoteUrl);
   return match?.[1] ?? null;
-}
-
-function readWorktrees(projectPath: string): ProjectWorktree[] {
-  return runGit(projectPath, "worktree", "list", "--porcelain", "-z")
-    .split("\0\0")
-    .filter((record) => record.length > 0)
-    .map(parseWorktree);
-}
-
-function parseWorktree(record: string): ProjectWorktree {
-  const fields = record.split("\0");
-  const pathField = fields.find((field) => field.startsWith("worktree "));
-  if (pathField === undefined) throw new Error("Git returned a worktree record without a path");
-  const path = realpathSync(pathField.slice("worktree ".length));
-  const branchField = fields.find((field) => field.startsWith("branch "));
-  return {
-    branch: branchField === undefined ? null : shortBranch(branchField.slice("branch ".length)),
-    name: basename(path),
-    path,
-  };
-}
-
-function shortBranch(branch: string): string {
-  const prefix = "refs/heads/";
-  return branch.startsWith(prefix) ? branch.slice(prefix.length) : branch;
 }
 
 function runGit(projectPath: string, ...args: string[]): string {

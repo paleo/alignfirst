@@ -5,10 +5,10 @@ import { parseArgs } from "node:util";
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { displayPath } from "../format.js";
-import { assertMainWorktreeRoot } from "../git.js";
+import { assertMainWorktreeRoot, linkedMainWorktree } from "../git.js";
 import { parseBareCommandArgs, parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, archiveTicket, autoArchive } from "../plans/archive.js";
-import { isTicketName } from "../plans/layout.js";
+import { assertPlansNotProjectTracked, isTicketName } from "../plans/layout.js";
 import { linkPlans } from "../plans/link.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase } from "../plans/rebase.js";
@@ -39,7 +39,7 @@ export function runPlans(ctx: CommandContext, args: string[]): number {
 function plansUsage(ctx: CommandContext): string {
   return `Usage:
   ${ctx.form} plans setup <clone-dir> [--folder <name>]
-  ${ctx.form} plans check
+  ${ctx.form} plans check [--json]
   ${ctx.form} plans archive <ticket-id | path>
   ${ctx.form} plans auto-archive
 `;
@@ -52,8 +52,10 @@ function runSetup(ctx: CommandContext, args: string[]): number {
   assertMainWorktreeRoot(ctx.cwd);
   const cloneDir = resolve(ctx.cwd, parsed.dir);
   checkClone(ctx, cloneDir);
+  const plans = layoutOf(ctx).locations[".plans"];
+  assertPlansNotProjectTracked(ctx.cwd, plans, ctx.form);
   const projectDir = createPlansDirectory(cloneDir, parsed.folder);
-  linkPlans(ctx, layoutOf(ctx).locations[".plans"].path, projectDir);
+  linkPlans(ctx, plans.path, projectDir);
   return 0;
 }
 
@@ -132,12 +134,37 @@ function checkClone(ctx: CommandContext, cloneDir: string): void {
 }
 
 function runCheck(ctx: CommandContext, args: string[]): number {
-  const usage = `Usage: ${ctx.form} plans check\n`;
-  if (parseBareCommandArgs(ctx, args, usage)) return 0;
-  const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form);
+  const usage = `Usage: ${ctx.form} plans check [--json]\n`;
+  const { values, positionals } = parseCommandArgs(usage, () =>
+    parseArgs({
+      args,
+      options: {
+        json: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      strict: true,
+      allowPositionals: true,
+    } as const),
+  );
+  if (values.help) {
+    ctx.stdout.write(usage);
+    return 0;
+  }
+  if (positionals.length !== 0) throw new CliError(usage.trimEnd());
+  const plans = layoutOf(ctx).locations[".plans"];
+  const mode = resolvePlansMode(ctx.cwd, plans, ctx.form, ctx.home);
   if (mode.kind === "shared") {
     const stopped = findStoppedRebase(mode.repoToplevel);
     if (stopped !== undefined) throw new CliError(renderStoppedRebase(stopped, ctx.form));
+  }
+  if (values.json) {
+    const report = {
+      mode: mode.kind,
+      plans: { in: plans.in, path: plans.path, target: realpathSync(plans.path) },
+      mainWorktree: linkedMainWorktree(ctx.cwd) ?? null,
+    };
+    ctx.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`);
+    return 0;
   }
   if (mode.kind === "shared") ctx.stdout.write(".plans is linked to the work-files repository.\n");
   else ctx.stdout.write(".plans is a local directory (local mode): synchronization is disabled.\n");
@@ -148,7 +175,7 @@ function runAutoArchive(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} plans auto-archive\n`;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const layout = layoutOf(ctx);
-  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form, ctx.home);
   const archived = autoArchive(layout, archiveThresholdDays(ctx.env), ctx.stdout);
   if (mode.kind === "shared" && archived) ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;
@@ -159,7 +186,7 @@ function runArchive(ctx: CommandContext, args: string[]): number {
   const ticket = resolveArchiveTicket(ctx, args, usage);
   if (ticket === undefined) return 0;
   const layout = layoutOf(ctx);
-  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form);
+  const mode = resolvePlansMode(ctx.cwd, layout.locations[".plans"], ctx.form, ctx.home);
   archiveTicket(layout, ticket, ctx.stdout);
   if (mode.kind === "shared") ctx.stdout.write(`Publish with: ${ctx.form} sync\n`);
   return 0;

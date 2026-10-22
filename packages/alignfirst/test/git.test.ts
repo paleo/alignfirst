@@ -1,18 +1,31 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { git as runGit } from "../src/git.js";
+import { optionalRepositoryId, git as runGit } from "../src/git.js";
 import { configureGit, git, makeSink, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("git failures", () => {
+  it("propagates a missing Git executable instead of treating the directory as outside Git", () => {
+    const dir = makeFixture();
+    vi.stubEnv("PATH", dir);
+    expect(() => optionalRepositoryId(dir)).toThrow("ENOENT");
+  });
+
+  it("propagates an invalid explicit Git directory instead of treating it as discovery absence", () => {
+    const dir = makeFixture();
+    vi.stubEnv("GIT_DIR", join(dir, "missing"));
+    expect(() => optionalRepositoryId(dir)).toThrow("not a git repository:");
+  });
+
   it("carries git's own message when nothing was printed", async () => {
     const dir = makeFixture();
     const result = await runMain(["plans", "setup", "clone", "--folder", "product"], { cwd: dir });

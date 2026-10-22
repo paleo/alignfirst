@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +41,12 @@ export function makeSink(): Sink {
     },
     text: () => buffer,
   };
+}
+
+// Keep Git available when a fixture isolates PATH to exclude coding-agent executables.
+export function installGit(directory: string): void {
+  const git = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  symlinkSync(git, join(directory, "git"));
 }
 
 export function writeRegistry(home: string, value: object): void {

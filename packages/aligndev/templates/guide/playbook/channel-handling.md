@@ -48,7 +48,7 @@ From the user's message and the retained inventory result:
 - **TICKET_ID** — the ticket the user gave.
 - **TASK** — a one-line restatement, in your own words, of what the user wants. Preserve every
   resource URL verbatim in this line so the working session can inspect it.
-- **REQUEST** — for a detailed explanation (several requirements, constraints, or itemized points), the complete user message, unchanged, its opening sentence included even when the task line restates it. The working session files this text verbatim; a condensed task line is not a substitute. Omit it for a short request.
+- **REQUEST** — the complete original user message, unchanged, even for a short request. Include its opening sentence and every itemized point or constraint; the task line is only a summary.
 
 A value the user did not supply and the lookup did not resolve stays missing. Step 3 turns it into a question. Run no project inspection or work command.
 
@@ -70,7 +70,7 @@ Pass no `message`: content on `thread-create` would post ahead of the starter. T
 
 A fresh thread session inherits nothing from this channel: not the transcript, the project listing, or the message that named the project. The starter is the visible record the thread session reads after the service activates it.
 
-Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Add the request block only for a detailed explanation. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
+Template. One labelled line per value. Start with the task line. Add one adjacent project / project-path pair for each resolved project, omitting the path when it is unresolved. Add the ticket line only when known. Always include the original request block. Bold project values with your surface's markers rather than literal `**`. Write the starter in the user's language, labels included; keep the line structure, and copy each canonical path, ticket id, and URL exactly.
 
 ```text
 Task: {TASK}
@@ -86,7 +86,7 @@ Request:
 
 Omit unknown project, path, and ticket fields instead of filling them with placeholder text. Write the task value as "to be defined" in the user's language when the user gave no scope. The request block preserves the original language and every detail; do not condense or translate it.
 
-Earlier channel context that the thread session would otherwise lose belongs in the task line, condensed and rephrased. A detailed request also carries the original message in the request block. Do not narrate in third person ("the user is asking…").
+Earlier channel context that the thread session would otherwise lose belongs in the task line, condensed and rephrased. Do not narrate in third person ("the user is asking…").
 
 The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 
@@ -94,7 +94,7 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 - No PROJECT_PATH for project removal → ask which listed canonical path to remove.
 - A clearly single-project task with no PROJECT → ask which project it belongs to, restating the ticket id when present.
 - An unresolved PROJECT for ordinary single-project work → state that the name is not in the project inventory, then ask for the path of a listed project.
-- No TICKET_ID for single-project work → ask for the ticket id, unless the request is a read-only question, advice or a brainstorming without a code review or requested protocol, contains a resource URL that can provide it, carries a detailed request, explicitly says there is no ticket or asks for a side ticket, or is operational work handled without an AlignFirst protocol. The working session handles ticket creation or collection for a detailed request.
+- No TICKET_ID for a brief single-project change, code review, or named protocol → ask for the ticket id, unless a resource URL can provide it or the request explicitly says there is no ticket or asks for a side ticket. A detailed request, a consultation (question, advice, brainstorming), and operational work leave the ticket to the working session.
 - No TASK → ask what needs to be done.
 - A resource URL that may provide the project or ticket → ask for neither; state that the working session will inspect the URL.
 - A request explicitly spanning several projects, or work independent of any project → ask for no main project; state `Ready for the work session.` in the user's language.
@@ -103,6 +103,8 @@ The `{ask}` is one sentence, and it reflects the first unresolved requirement:
 Whichever case applies, the `{ask}` never says that this channel session handles the work, and never says that work has begun.
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
+
+Before sending the starter, compare it with the original message. You lack the project context to judge which details matter. The Request block must be complete.
 
 Once the starter's delivery is confirmed, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end the turn on exactly `NO_REPLY`: the starter is this turn's reply, and the thread shows under the user's message. Do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, end the turn on the concise actionable error. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
 
