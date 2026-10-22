@@ -133,6 +133,7 @@ describe("renderCodeGuide", () => {
       expect(guide).toContain("`models`");
       expect(guide).toContain("`profile.skipPermissions: true` in the aligndev settings");
       expect(guide).toContain("in the repository or in its companion directory");
+      expect(guide).toContain("a symlink grants no sandbox permission");
       expect(guide).toContain(
         "plus `--add-dir <companion>` for a project with a companion directory.",
       );
@@ -689,7 +690,6 @@ describe("work-files and lightweight worktree runbooks", () => {
         "before any `git` inspection or prose",
         "`ready` covers the worktree and work files only",
         "documented install/build/test preparation separately",
-        "a symlink grants no sandbox permission",
         "matches the explicit user choice",
         "rather than choosing another ticket branch",
       ])

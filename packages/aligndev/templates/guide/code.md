@@ -9,9 +9,7 @@ Run a coding agent through AlignFirst protocols with `{{ALIGNDEV}} code`. It wra
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
-Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable effective `.plans/`, in the repository or in its companion directory. AlignDev refuses work files tracked by the project's own repository before new/resumed launches; a separate work-files repository and an unused tracked project copy remain supported. Follow `{{ALIGNDEV}} guide work-files-setup` before ticket or session effects when preparation is needed. Historical status remains readable.
-
-Shared project plans may be reached through a symlink; companion plans resolve directly. A symlink grants no sandbox access. Verify the agent's read/write access under its existing permission policy and report missing access rather than enabling bypass permissions or granting the whole main repository.
+Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNDEV}} guide work-files-setup` verifies it.
 
 {{ALIGNFIRST_SETUP}}
 
@@ -220,7 +218,7 @@ Direct launch keys and `code.defaultProfiles` are retired and ignored; they supp
 
 {{ALIGNFIRST_USE}}
 
-{{PERMISSIONS}}.
+{{PERMISSIONS}}. The agent needs read and write access to the work files under that policy. A worktree's `.plans` may be a symlink to the main worktree's, and a symlink grants no sandbox permission. Report missing access instead of enabling bypass permissions or granting the whole main repository.
 
 {{#openclaw}}
 For `new` runs, the `Session ID:` is printed to stdout and written with `agent: {{AGENT}}` in the session file frontmatter. Save it to resume the conversation later. Resume requires the same selected agent; agentless legacy sessions require a new session.

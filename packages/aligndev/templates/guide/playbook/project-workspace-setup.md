@@ -146,8 +146,6 @@ Status: {running | ready | failed}
 
 The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on. For a worktree from `{{ALIGNDEV}} worktree add`, say that `ready` covers the worktree and work files only, and delegate the repository's documented install/build/test preparation separately before coding needs it.
 
-The agent must be able to read and write the shared work files under its existing permission policy: a symlink grants no sandbox permission. Report missing access instead of enabling bypass permissions or granting the whole main repository.
-
 {{#openclaw}}
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
 {{/openclaw}}
