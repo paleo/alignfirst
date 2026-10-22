@@ -1,8 +1,9 @@
 /** Context threaded into every callback-managed server lifecycle hook. */
 export interface ServerContext {
+  /** Target's registered workspace name, independent of the callback server's label. */
+  name: string;
   /**
-   * Worktree directory for this lifecycle call. Equals `process.cwd()` at start time for local
-   * starts/stops; equals the victim entry's worktree for cross-worktree stops (eviction,
+   * Target worktree root for this lifecycle call, including cross-worktree stops (eviction,
    * `dev down --all`). Callbacks MUST thread this into every child-process call
    * (`{ cwd: ctx.cwd }` on `execSync`, `spawn`, etc.) and resolve relative paths against it.
    */

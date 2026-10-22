@@ -282,6 +282,7 @@ describe("workspace teardown (e2e)", () => {
       expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual([
         {
           event: "stop",
+          name: target.name,
           cwd: linked,
           ports: target.entry.ports,
         },
