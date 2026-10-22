@@ -283,12 +283,12 @@ Skip this capture workflow for operational work such as workspace cleanup or bas
 {{#openclaw}}
 ### Multi-project and operational work
 
-Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/openclaw}}
 {{#codingAgent}}
 ### Operational work
 
-Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces and name every configured global tool the run can use. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/codingAgent}}
 
 ### What you delegate vs do
@@ -300,15 +300,19 @@ Delegate to the agent: the project's workspace setup, writing code (`alignfirst`
 Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
 {{#openclaw}}
-Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree.
 {{/openclaw}}
 {{#codingAgent}}
-Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
+Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory.
 {{/codingAgent}}
 
 Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Consultation delegations omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
+
+### What the message carries
+
+The agent reads the project's instructions, documentation and work files on its own. The message carries what it cannot read: the task, the user's requirements and decisions, and the globally installed tools the task needs, each named as **globally installed**. Point at a review, a spec or a plan by its path instead of restating it. Your playbook stays with you, except where it says to pass a rule to the agent. A task you would have kept because it needs a global tool is one more thing to delegate.
 
 ### A background run moves the report
 
