@@ -7,8 +7,8 @@
 // (`setup`). `dev setup` brings them, explicitly or before every start.
 //
 // Two-tier shutdown: `dev down` kills dev processes and runs callback stop()
-// (e.g. `docker compose down`); `workspace remove` re-execs this script's
-// `down` in the target worktree and then runs `purgeInfrastructure`
+// (e.g. `docker compose down`); `workspace teardown` and `remove` re-exec its
+// `down` in the target worktree, then run `purgeInfrastructure`
 // (workspace.mjs) to drop volumes.
 //
 // NOTE: this wrapper is wired to the `dev` npm script, so a spawn server must
@@ -16,7 +16,7 @@
 // (e.g. `dev:app`) for the app's own dev command.
 // =============================================================================
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { helpers, runDevServer } from "@alignfirst/workspace";
@@ -116,7 +116,11 @@ await runDevServer({
   setup: async ({ name, currentWorktree, mainWorktree, ports }) => {
     // `docker compose up -d` is already idempotent. A reused workspace name maps to
     // the same compose project, so `up` takes over a container leaked by an orphan.
-    execSync("docker compose up -d", { stdio: "inherit", cwd: currentWorktree });
+    const project = helpers.composeProjectName(name);
+    execFileSync("docker", ["compose", "-p", project, "up", "-d"], {
+      stdio: "inherit",
+      cwd: currentWorktree,
+    });
     const deadline = Date.now() + 30_000;
     let ready = false;
     while (Date.now() < deadline) {
@@ -125,10 +129,12 @@ await runDevServer({
         // throwaway Unix-socket-only server for initdb that answers a plain pg_isready,
         // then restarts the real server. A socket-side probe passes too early, so the
         // next step connects to that init server and loses the connection on handoff.
-        execSync("docker compose exec -T database pg_isready -h 127.0.0.1 -q", {
-          stdio: "pipe",
-          cwd: currentWorktree,
-        });
+        execFileSync(
+          "docker",
+          ["compose", "-p", project, "exec", "-T", "database",
+            "pg_isready", "-h", "127.0.0.1", "-q"],
+          { stdio: "pipe", cwd: currentWorktree },
+        );
         ready = true;
         break;
       } catch {
@@ -136,9 +142,11 @@ await runDevServer({
       }
     }
     if (!ready) throw new Error("Database did not become ready within 30s.");
-    // Migrations are idempotent; seeds typically guard on existing rows.
-    execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree });
-    execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree });
+    // Scripts invoking Compose inherit the same project. ADAPT any explicit
+    // project overrides inside those scripts to use this registered identity.
+    const env = { ...process.env, COMPOSE_PROJECT_NAME: project };
+    execSync("npm run migrate", { stdio: "inherit", cwd: currentWorktree, env });
+    execSync("npm run seed", { stdio: "inherit", cwd: currentWorktree, env });
 
     // ADAPT: an external resource, here a public dev tunnel, opened under a
     // name derived from the workspace. This provider returns only a random id,
@@ -177,13 +185,19 @@ await runDevServer({
     // {
     //   kind: "callback",
     //   name: "docker",
-    //   start: async ({ cwd }) => {
+    //   start: async ({ name, cwd }) => {
+    //     const project = helpers.composeProjectName(name); // Registered name, not "docker".
     //     // `inherit` so docker's output/error is visible; a failure throws and aborts the start.
-    //     execSync("docker compose up -d", { stdio: "inherit", cwd });
+    //     execFileSync("docker", ["compose", "-p", project, "up", "-d"], { stdio: "inherit", cwd });
     //     const deadline = Date.now() + 30_000;
     //     while (Date.now() < deadline) {
     //       try {
-    //         execSync("docker compose exec -T database pg_isready -h 127.0.0.1 -q", { stdio: "pipe", cwd });
+    //         execFileSync(
+    //           "docker",
+    //           ["compose", "-p", project, "exec", "-T", "database",
+    //             "pg_isready", "-h", "127.0.0.1", "-q"],
+    //           { stdio: "pipe", cwd },
+    //         );
     //         return;
     //       } catch {
     //         await new Promise((r) => setTimeout(r, 1000));
@@ -191,8 +205,9 @@ await runDevServer({
     //     }
     //     throw new Error("PostgreSQL did not become ready within 30s.");
     //   },
-    //   stop: async ({ cwd }) => {
-    //     execSync("docker compose down", { stdio: "inherit", cwd });
+    //   stop: async ({ name, cwd }) => {
+    //     const project = helpers.composeProjectName(name);
+    //     execFileSync("docker", ["compose", "-p", project, "down"], { stdio: "inherit", cwd });
     //   },
     // },
     {
@@ -239,17 +254,18 @@ await runDevServer({
   //
   // Needs `import { readFileSync } from "node:fs";`.
   // formatSummary: ({ workspace, servers }) => {
-  //   const env = readFileSync(".env", "utf8");
+  //   const env = readFileSync(join(workspace.worktree, ".env"), "utf8");
   //   const read = (name) => env.match(new RegExp(`^${name}=(.+)$`, "m"))?.[1];
   //   const rows = servers
   //     .filter(({ pid }) => pid !== undefined) // Callback servers have none.
   //     .map(({ server, pid }) => `  ${server.name}: PID ${pid}  log: .local-wt/logs/${server.name}.log`);
   //   const db = `${read("DB_USER")}@127.0.0.1:${read("DB_PORT")}/${read("DB_NAME")}`;
-  //   const container = `${helpers.composeProjectName(workspace.name)}-database-1`;
+  //   const project = helpers.composeProjectName(workspace.name);
+  //   const container = `${project}-database-1`;
   //   return [
   //     `Dev server up for ${workspace.name}: ${read("API_URL")}`,
   //     ...rows,
-  //     `  database: ${db}  (${container})  log: docker compose logs -f database`,
+  //     `  database: ${db}  (${container})  log: docker compose -p '${project}' logs -f database`,
   //   ].join("\n");
   // },
 });

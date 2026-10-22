@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
 import {
@@ -94,8 +94,8 @@ export interface DevServerConfig {
   formatSummary?: (ctx: DevServerSummaryContext) => string;
 }
 
-function logFileFor(runtimeDir: string, name: string): string {
-  return join(runtimeDir, "logs", `${name}.log`);
+function logFileFor(cwd: string, runtimeDir: string, name: string): string {
+  return resolve(cwd, runtimeDir, "logs", `${name}.log`);
 }
 
 /**
@@ -239,7 +239,7 @@ function portsLookup(kernel: DevKernel): PortsLookup {
 
 function printStatus(kernel: DevKernel): void {
   const { worktree, registryDir } = kernel;
-  const cwd = process.cwd();
+  const cwd = worktree.currentWorktree;
   const entry = findOwnEntry(worktree.mainWorktree, registryDir, cwd);
   if (!entry || !Object.values(entry.pids).some(isProcessAlive)) {
     console.log("Dev-server status: DOWN.");
@@ -248,7 +248,7 @@ function printStatus(kernel: DevKernel): void {
   console.log("Dev-server status: UP.");
   printStartSummary(
     kernel.config,
-    resolveCurrentWorkspace(worktree.mainWorktree, registryDir),
+    resolveCurrentWorkspace(worktree.mainWorktree, registryDir, worktree.currentWorktree),
     resolveSpawnPorts(kernel.config.servers, portsLookup(kernel)(cwd)),
     entry.pids,
   );
@@ -286,14 +286,14 @@ interface StartOptions {
 
 async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
   const { config, worktree, registryDir } = kernel;
-  const ctx: ServerContext = { cwd: process.cwd(), ports: {} };
-  const servers = await runStartChecks(kernel, ctx, options);
-  if (!servers) return;
+  const prepared = await runStartChecks(kernel, options);
+  if (!prepared) return;
+  const { workspace, ctx, servers } = prepared;
 
   const state: StartState = { spawnPids: {}, startedCallbacks: [] };
   await spawnWithRollback(config, ctx, state);
 
-  const workspace = registerStartedServer(worktree.mainWorktree, registryDir, state.spawnPids);
+  registerStartedServer(worktree.mainWorktree, registryDir, workspace, state.spawnPids);
   printStartSummary(config, workspace, servers, state.spawnPids);
 }
 
@@ -305,9 +305,9 @@ async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
 async function runForeground(kernel: DevKernel, options: StartOptions): Promise<void> {
   const { config, worktree, registryDir } = kernel;
   const { mainWorktree } = worktree;
-  const ctx: ServerContext = { cwd: process.cwd(), ports: {} };
+  let ctx: ServerContext | undefined;
   if (!options.restart) {
-    const running = findOwnLiveEntry(mainWorktree, registryDir, ctx.cwd);
+    const running = findOwnLiveEntry(mainWorktree, registryDir, worktree.currentWorktree);
     if (running) return attachForeground(config, running);
   }
 
@@ -320,27 +320,33 @@ async function runForeground(kernel: DevKernel, options: StartOptions): Promise<
     shuttingDown = true;
     if (started) {
       void shutdownForeground(kernel);
-    } else {
+    } else if (ctx) {
       void rollbackStart(state.spawnPids, state.startedCallbacks, ctx).then(() =>
         process.exit(130),
       );
+    } else {
+      process.exit(130);
     }
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
-  const servers = await runStartChecks(kernel, ctx, options);
-  if (!servers) process.exit(0);
+  const prepared = await runStartChecks(kernel, options);
+  if (shuttingDown) await new Promise<never>(() => {});
+  if (!prepared) process.exit(0);
+  const { workspace, servers } = prepared;
+  ctx = prepared.ctx;
 
   // Stream logs from the first byte so the whole startup (e.g. a slow build) is visible live.
-  const streamLogs = (): void => tailLogs(config, state.spawnPids, { fromStart: true });
+  const streamLogs = (): void =>
+    tailLogs(config, workspace.worktree, state.spawnPids, { fromStart: true });
   // A signal during startup hands teardown to onSignal (rollback + exit 130); block so we
   // neither roll back twice nor register a server that is being torn down.
   if (!(await spawnWithRollback(config, ctx, state, () => shuttingDown, streamLogs))) {
     await new Promise<never>(() => {});
   }
 
-  const workspace = registerStartedServer(mainWorktree, registryDir, state.spawnPids);
+  registerStartedServer(mainWorktree, registryDir, workspace, state.spawnPids);
   started = true;
   printStartSummary(config, workspace, servers, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
@@ -385,7 +391,7 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
-  tailLogs(config, entry.pids, { replayLines: LOG_TAIL_LINES });
+  tailLogs(config, entry.worktree, entry.pids, { replayLines: LOG_TAIL_LINES });
   watchForExternalStop(Object.values(entry.pids).filter(isProcessAlive), () => {
     if (detaching) return;
     detaching = true;
@@ -402,17 +408,19 @@ async function shutdownForeground(kernel: DevKernel): Promise<void> {
   process.exit(0);
 }
 
-/**
- * Runs the implicit `dev setup` and the start checks, and sets `ctx.ports`. Returns the servers with
- * their ports resolved, or `undefined` when a dev-server already runs here and the start must stop.
- */
+interface PreparedStart {
+  workspace: ResolvedWorkspace;
+  ctx: ServerContext;
+  servers: ResolvedServerDescriptor[];
+}
+
+/** Prepares the authoritative identity and ports before any server callback can run. */
 async function runStartChecks(
   kernel: DevKernel,
-  ctx: ServerContext,
   { evict, restart }: StartOptions,
-): Promise<ResolvedServerDescriptor[] | undefined> {
-  const { mainWorktree } = kernel.worktree;
-  if (await handleAlreadyRunning(kernel, ctx.cwd, restart)) return;
+): Promise<PreparedStart | undefined> {
+  const { mainWorktree, currentWorktree } = kernel.worktree;
+  if (await handleAlreadyRunning(kernel, currentWorktree, restart)) return;
   const { workspace, ports } = await runDevSetup(
     devSetupInput(kernel, {
       force: false,
@@ -421,13 +429,13 @@ async function runStartChecks(
       beforeStart: true,
     }),
   );
-  ctx.ports = ports;
+  const ctx: ServerContext = { name: workspace.name, cwd: workspace.worktree, ports };
   await enforceCap(kernel, evict);
   checkNoLocalRegistryConflict(mainWorktree, kernel.registryDir, ctx.cwd);
   const servers = resolveSpawnPorts(kernel.config.servers, ports);
   const pins = workspace.main === true ? (kernel.ports?.mainWorktree ?? {}) : {};
   await checkPortsFree(servers, ctx.cwd, pins);
-  return servers;
+  return { workspace, ctx, servers };
 }
 
 /**
@@ -490,7 +498,7 @@ async function spawnAndAwait(
   const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
   const pollables: PollableServer[] = spawnEntries.map((s) => ({
     name: s.name,
-    logFile: logFileFor(config.runtimeDir, s.name),
+    logFile: logFileFor(ctx.cwd, config.runtimeDir, s.name),
     detectReady: s.detectReady,
     detectError: s.detectError ?? detectCommonJsError,
   }));
@@ -501,9 +509,9 @@ async function spawnAndAwait(
 function registerStartedServer(
   mainWorktree: string,
   registryDir: string,
+  workspace: ResolvedWorkspace,
   spawnPids: Record<string, number>,
-): ResolvedWorkspace {
-  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
+): void {
   const devEntry: DevServerEntry = {
     name: workspace.name,
     worktree: workspace.worktree,
@@ -512,7 +520,6 @@ function registerStartedServer(
   };
   if (workspace.main) devEntry.main = true;
   registerDevServer(mainWorktree, registryDir, devEntry);
-  return workspace;
 }
 
 function printStartSummary(
@@ -542,13 +549,14 @@ type TailMode = { fromStart: true } | { replayLines: number };
 
 function tailLogs(
   config: DevServerConfig,
+  cwd: string,
   spawnPids: Record<string, number>,
   mode: TailMode,
 ): void {
   const names = Object.keys(spawnPids);
   const prefixed = names.length > 1;
   for (const name of names) {
-    const path = join(process.cwd(), logFileFor(config.runtimeDir, name));
+    const path = logFileFor(cwd, config.runtimeDir, name);
     const prefix = prefixed ? `[${name}] ` : "";
     const offset = "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines);
     followLogFile(path, prefix, offset);
@@ -750,16 +758,17 @@ function checkNoLocalRegistryConflict(
 
 async function stopLocal(kernel: DevKernel): Promise<void> {
   const { config, registryDir } = kernel;
-  const { mainWorktree } = kernel.worktree;
-  const cwd = process.cwd();
-  const ctx: ServerContext = { cwd, ports: portsLookup(kernel)(cwd) };
-  const servers = resolveSpawnPorts(config.servers, ctx.ports);
-  const entry = findOwnEntry(mainWorktree, registryDir, ctx.cwd);
+  const { mainWorktree, currentWorktree } = kernel.worktree;
+  const entry = findOwnEntry(mainWorktree, registryDir, currentWorktree);
+  const cwd = entry?.worktree ?? currentWorktree;
+  const ports = portsLookup(kernel)(cwd);
+  const servers = resolveSpawnPorts(config.servers, ports);
   if (!entry) {
     console.log("No dev-server running in this worktree.");
-    await sweepStalePorts(servers, ctx.cwd);
+    await sweepStalePorts(servers, cwd);
     return;
   }
+  const ctx: ServerContext = { name: entry.name, cwd, ports };
   for (const [name, pid] of Object.entries(entry.pids)) {
     if (!isProcessAlive(pid)) continue;
     console.log(`Stopping ${name} (PID ${pid})...`);
@@ -792,13 +801,13 @@ function defaultPrintSummary(
     }
     const target = port === undefined ? `PID ${pid}` : `http://localhost:${port}/  (PID ${pid})`;
     console.log(`  ${server.name}: ${target}`);
-    console.log(`    log: ${join(process.cwd(), logFileFor(runtimeDir, server.name))}`);
+    console.log(`    log: ${logFileFor(workspace.worktree, runtimeDir, server.name)}`);
   }
   console.log("");
 }
 
 function spawnServer(server: SpawnServer, runtimeDir: string, cwd: string): number {
-  const logFile = logFileFor(runtimeDir, server.name);
+  const logFile = logFileFor(cwd, runtimeDir, server.name);
   mkdirSync(dirname(logFile), { recursive: true });
   const logFd = openSync(logFile, "w");
   const child = spawn(server.exec.command, server.exec.args, {

@@ -158,28 +158,38 @@ describe("evictOldest", () => {
     expect(remaining).toEqual(["b"]);
   });
 
-  it("invokes callback stop() with the victim's worktree and ports", async () => {
-    writeDevServers(mainWorktree, registryDir, {
-      servers: [entry("a", { main: 4 }, "2026-05-10T00:00:00.000Z")],
-    });
-    const seen: ServerContext[] = [];
-    const docker: CallbackServer = {
+  it("reverse-stops callbacks with each victim's registered name, root and ports", async () => {
+    const victims = [
+      { ...entry("review-a1b2c3d4", { main: 4 }), worktree: "/external/one/review" },
+      { ...entry("review-e5f6a7b8", { main: 6 }), worktree: "/external/two/review" },
+    ];
+    writeDevServers(mainWorktree, registryDir, { servers: victims });
+    const seen: { label: string; ctx: ServerContext }[] = [];
+    const callbacks: CallbackServer[] = ["docker", "cache"].map((label) => ({
       kind: "callback",
-      name: "docker",
+      name: label,
       start: async () => {},
       stop: async (ctx) => {
-        seen.push(ctx);
+        seen.push({ label, ctx });
       },
-    };
+    }));
     await evictOldest({
       mainWorktree,
       registryDir,
-      count: 1,
-      callbackServers: [docker],
-      portsOf: (worktree): Record<string, number> => (worktree === "/tmp/wt-a" ? { db: 8101 } : {}),
+      count: 2,
+      callbackServers: callbacks,
+      portsOf: (worktree) => ({ db: worktree === victims[0].worktree ? 8101 : 8102 }),
       isAlive,
       stop,
     });
-    expect(seen).toEqual([{ cwd: "/tmp/wt-a", ports: { db: 8101 } }]);
+    expect(seen).toEqual(
+      victims.flatMap((victim, i) =>
+        ["cache", "docker"].map((label) => ({
+          label,
+          ctx: { name: victim.name, cwd: victim.worktree, ports: { db: 8101 + i } },
+        })),
+      ),
+    );
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([]);
   });
 });

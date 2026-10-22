@@ -67,6 +67,11 @@ describe("extractHost", () => {
 });
 
 describe("composeProjectName", () => {
+  it("keeps ordinary projects compatible and distinguishes a collision suffix", () => {
+    expect(composeProjectName("Review-ABC")).toBe("review-abc");
+    expect(composeProjectName("Review-ABC-deadbeef")).toBe("review-abc-deadbeef");
+  });
+
   it("lowercases the name", () => {
     expect(composeProjectName("myrepo-feat-ABC-123")).toBe("myrepo-feat-abc-123");
   });

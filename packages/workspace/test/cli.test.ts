@@ -165,6 +165,25 @@ describe("parseWorkspaceArgs", () => {
     expect(command).toEqual({ kind: "remove", selector: { dir: "../my-wt" }, force: true });
   });
 
+  it.each([undefined, "../my-wt", "/external/review", "review-deadbeef"])(
+    "parses teardown selector %s with verbosity",
+    (dir) => {
+      const selector = dir === undefined ? [] : [dir];
+      expect(parseWorkspaceArgs(["teardown", ...selector])).toEqual({
+        command: { kind: "teardown", selector: { dir } },
+        verbose: false,
+      });
+      expect(parseWorkspaceArgs(["teardown", ...selector, "--verbose"]).verbose).toBe(true);
+    },
+  );
+
+  it.each([["--force"], ["--all"], ["one", "two"], ["--nope"]])(
+    "rejects teardown arguments %s",
+    (...args) => {
+      expect(() => parseWorkspaceArgs(["teardown", ...args])).toThrow(ConfigError);
+    },
+  );
+
   it("rejects the removed `--slot` flag on remove", () => {
     expect(() => parseWorkspaceArgs(["remove", "--slot", "8110"])).toThrow(ConfigError);
   });
@@ -258,6 +277,14 @@ describe("parseWorkspaceArgs", () => {
 });
 
 describe("renderWorkspaceHelp", () => {
+  it("describes teardown preservation and registered selectors", () => {
+    const help = renderWorkspaceHelp();
+    expect(help).toContain("teardown [<dir>] [--verbose]");
+    expect(help).toContain("Keep worktree files and Git registration");
+    expect(help).toContain("path or registered name");
+    expect(help).not.toContain("basename");
+  });
+
   it("documents `setup --full` and no `--profile`", () => {
     const help = renderWorkspaceHelp();
     expect(help).toContain("[--enter] [--full]");

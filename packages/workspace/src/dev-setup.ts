@@ -1,5 +1,3 @@
-import { basename } from "node:path";
-
 import { findOwnEntry } from "./dev-servers-registry.js";
 import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
@@ -13,13 +11,13 @@ import { devCmd, type PackageManagerCommands, packageManagerCommands } from "./p
 import { formatPorts, isPortFree, type ResolvedDevPorts, reconcilePorts } from "./ports.js";
 import { isProcessAlive } from "./process-control.js";
 import {
+  allocateWorkspaceName,
+  findWorkspaceByPath,
   readWorkspaces,
-  rekeyMainEntry,
   resolveCurrentWorkspace,
   type ResolvedWorkspace,
   type RunFilesBasis,
   updateWorkspaces,
-  warnMainRenamed,
   type WorkspaceEntry,
   type WorkspacesRegistry,
 } from "./workspaces.js";
@@ -69,9 +67,10 @@ export interface DevSetupResult {
 export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult> {
   const { worktree, registryDir, options } = input;
   const { mainWorktree } = worktree;
-  if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir);
-  if (worktree.isMainWorktree) await ensureMainEntry(mainWorktree, registryDir);
-  const workspace = resolveCurrentWorkspace(mainWorktree, registryDir);
+  if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
+  const workspace = worktree.isMainWorktree
+    ? await ensureMainEntry(mainWorktree, registryDir)
+    : resolveCurrentWorkspace(mainWorktree, registryDir, worktree.currentWorktree);
   const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   if (!entry) throw new WorkspaceError(`No workspace "${workspace.name}" in the registry.`);
   checkReady(input, workspace, entry);
@@ -88,13 +87,13 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
     await runSetupHook(input, { ...base, ports, force: options.force, log: console.log }, entry);
     return { workspace, ports };
   } catch (err) {
-    await recordDevSetupFailure(mainWorktree, registryDir, workspace.name, errorMessage(err));
+    await recordDevSetupFailure(mainWorktree, registryDir, workspace.worktree, errorMessage(err));
     throw asKernelError(err);
   }
 }
 
-function refuseWhileRunning(mainWorktree: string, registryDir: string): void {
-  const entry = findOwnEntry(mainWorktree, registryDir, process.cwd());
+function refuseWhileRunning(mainWorktree: string, registryDir: string, worktree: string): void {
+  const entry = findOwnEntry(mainWorktree, registryDir, worktree);
   if (!entry || !Object.values(entry.pids).some(isProcessAlive)) return;
   throw new WorkspaceError(
     `The dev-server of this worktree is running. Stop it with \`${devCmd("down")}\`, then run ` +
@@ -103,19 +102,16 @@ function refuseWhileRunning(mainWorktree: string, registryDir: string): void {
 }
 
 /** Re-keys a renamed main entry, or creates a `ready` main entry when there is none. */
-async function ensureMainEntry(mainWorktree: string, registryDir: string): Promise<void> {
-  await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    const name = basename(mainWorktree);
-    const oldName = rekeyMainEntry(registry, mainWorktree);
-    if (oldName !== undefined) warnMainRenamed(oldName, name);
-    if (Object.values(registry.workspaces).some((entry) => entry.main === true)) return;
-    const taken = registry.workspaces[name];
-    if (taken) {
-      throw new WorkspaceError(
-        `The workspace name "${name}" is already taken by ${taken.worktree}. ` +
-          "Worktree directory names must be unique.",
-      );
+async function ensureMainEntry(
+  mainWorktree: string,
+  registryDir: string,
+): Promise<ResolvedWorkspace> {
+  return updateWorkspaces(mainWorktree, registryDir, (registry) => {
+    const existing = findWorkspaceByPath(registry, mainWorktree);
+    if (existing?.entry.main === true) {
+      return { name: existing.name, worktree: existing.entry.worktree, main: true };
     }
+    const name = allocateWorkspaceName(registry.workspaces, mainWorktree);
     registry.workspaces[name] = {
       worktree: mainWorktree,
       createdAt: new Date().toISOString(),
@@ -123,6 +119,7 @@ async function ensureMainEntry(mainWorktree: string, registryDir: string): Promi
       main: true,
       neverFinalized: true,
     };
+    return { name, worktree: mainWorktree, main: true };
   });
 }
 
@@ -203,14 +200,15 @@ async function reconcileWorkspacePorts(
     mainWorktree,
     input.registryDir,
     async (registry) => {
-      const current = registry.workspaces[workspace.name];
-      if (!current) throw new WorkspaceError(`Workspace "${workspace.name}" left the registry.`);
+      const found = findWorkspaceByPath(registry, workspace.worktree);
+      if (!found) throw new WorkspaceError(`Workspace "${workspace.name}" left the registry.`);
+      const current = found.entry;
       const previous = current.ports ?? {};
       const next = await reconcilePorts({
         config,
         isMainWorktree: workspace.main === true,
         stored: input.options.resetPorts ? {} : previous,
-        others: portsOfOtherEntries(registry, workspace.name),
+        others: portsOfOtherEntries(registry, found.name),
         isFree: isPortFree,
       });
       current.ports = next;
@@ -258,14 +256,14 @@ async function writeRunFiles(
   const tee = beforeStart
     ? (msg: string) => console.warn(rewriteWarning(written, basis, msg))
     : console.log;
-  await storeRunFilesBasis(input, ctx.name, undefined);
+  await storeRunFilesBasis(input, ctx.currentWorktree, undefined);
   await seedFiles({
     entries,
     ctx,
     existing: rewrite ? "patch" : "keep",
     log: { tee, verbose: noop },
   });
-  await storeRunFilesBasis(input, ctx.name, basis);
+  await storeRunFilesBasis(input, ctx.currentWorktree, basis);
 }
 
 /** The inputs without their `undefined` values, as the registry stores them. */
@@ -315,11 +313,11 @@ function rewriteWarning(
 
 async function storeRunFilesBasis(
   input: DevSetupInput,
-  name: string,
+  worktree: string,
   basis: RunFilesBasis | undefined,
 ): Promise<void> {
   await updateWorkspaces(input.worktree.mainWorktree, input.registryDir, (registry) => {
-    const current = registry.workspaces[name];
+    const current = findWorkspaceByPath(registry, worktree)?.entry;
     if (!current) return;
     if (basis === undefined) delete current.runFilesWrittenWith;
     else current.runFilesWrittenWith = basis;
@@ -342,7 +340,7 @@ async function runSetupHook(
   if (runs) await setup(ctx);
   if (!runs && entry.devSetupFailure === undefined) return;
   await updateWorkspaces(input.worktree.mainWorktree, input.registryDir, (registry) => {
-    const current = registry.workspaces[ctx.name];
+    const current = findWorkspaceByPath(registry, ctx.currentWorktree)?.entry;
     if (!current) return;
     if (runs) current.devSetupAt = new Date().toISOString();
     delete current.devSetupFailure;
@@ -352,11 +350,11 @@ async function runSetupHook(
 async function recordDevSetupFailure(
   mainWorktree: string,
   registryDir: string,
-  name: string,
+  worktree: string,
   message: string,
 ): Promise<void> {
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    const entry = registry.workspaces[name];
+    const entry = findWorkspaceByPath(registry, worktree)?.entry;
     if (entry) entry.devSetupFailure = { at: new Date().toISOString(), message };
   });
 }

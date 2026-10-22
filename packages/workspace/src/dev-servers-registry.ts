@@ -8,7 +8,7 @@ import { getWorktreeBranch } from "./worktree.js";
 const DEV_SERVERS_FILENAME = "dev-servers.json";
 
 export interface DevServerEntry {
-  /** Workspace name: the worktree directory basename, and the workspaces-registry key. */
+  /** Target's registered workspace name, also passed to its server callbacks. */
   name: string;
   worktree: string;
   pids: Record<string, number>;
@@ -46,7 +46,7 @@ export interface StopAllInput {
   mainWorktree: string;
   registryDir: string;
   /** Callback-managed servers from the current process's config. Their `stop()` is invoked for each
-   *  victim with `ctx.cwd = entry.worktree`. */
+   *  victim with its recorded workspace name, worktree root and allocated ports. */
   callbackServers: CallbackServer[];
   /** The ports of a victim worktree, for its `ServerContext`. */
   portsOf: PortsLookup;
@@ -103,7 +103,7 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
 }
 
 function victimContext(entry: DevServerEntry, portsOf: PortsLookup): ServerContext {
-  return { cwd: entry.worktree, ports: portsOf(entry.worktree) };
+  return { name: entry.name, cwd: entry.worktree, ports: portsOf(entry.worktree) };
 }
 
 async function stopCallbacksForVictim(

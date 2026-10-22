@@ -100,14 +100,40 @@ function commandBlocks(
       },
       {
         command: `${ws} status ../my-worktree`,
-        comment: "another worktree (by path or dir name)",
+        comment: "another worktree (exact path or registered name)",
+      },
+    ],
+    hooks: [
+      {
+        command: `${installCommand(pm)} && ${ws} setup`,
+        comment: "post-creation: install, then adopt the current worktree",
+      },
+      ...(layout.hasDevServer
+        ? [
+            {
+              command: `${installCommand(pm)} && ${ws} setup --full`,
+              comment: "also provision dev infrastructure",
+            },
+          ]
+        : []),
+      {
+        command: `${ws} teardown`,
+        comment: "pre-deletion: clean infrastructure, keep files and Git state",
+      },
+    ],
+    teardown: [
+      { command: `${ws} teardown`, comment: "clean the current worktree without deleting it" },
+      { command: `${ws} teardown ../my-worktree`, comment: "select by exact path" },
+      {
+        command: `${ws} teardown <registered-name>`,
+        comment: "select the opaque name shown by list",
       },
     ],
     remove: [
       { command: `${ws} remove`, comment: "remove the current worktree (run from inside it)" },
       {
         command: `${ws} remove ../my-worktree`,
-        comment: "remove another (by path or dir name)",
+        comment: "remove another (exact path or registered name)",
       },
     ],
     prune: [
@@ -151,6 +177,11 @@ function commandBlocks(
       },
     ],
   };
+}
+
+function installCommand(pm: PackageManagerCommands): string {
+  const manager = pm.workspace.base.split(" ")[0];
+  return manager === "pnpm" ? "pnpm i" : `${manager} install`;
 }
 
 function driveDevSnippet(pm: PackageManagerCommands): string {

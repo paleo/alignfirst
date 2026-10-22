@@ -22,7 +22,7 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. New branches have no upstream; set one when you first push. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
-`setup` creates the worktree (branch, symlinks, config files), then runs the project's finalize step: install dependencies and build.
+With a branch argument, `setup` creates a worktree. Without one, it adopts the current Git worktree, including externally created worktrees under any parent directory. It preserves the path and branch, links shared directories, seeds config files, then runs the project's finalize step: install dependencies and build.
 
 It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
 
@@ -32,6 +32,16 @@ It streams to the setup log and **blocks until the log ends with `READY:` or `FA
 `setup --full` also runs the dev setup once the workspace is ready: ports, run files and infrastructure. A dev failure leaves the workspace ready and makes the command exit 1; `{{DEV}} setup` retries it.
 
 {{/DEV}}
+### External-tool hooks
+
+Configure these generic hooks in the tool that creates and deletes your worktrees. Each runs **inside the target worktree**, using the project's runtime:
+
+```sh
+{{COMMANDS:hooks}}
+```
+
+Installation-first works when dependencies do not need seeded files. It uses the new branch's own wrapper. Blocking setup is the hook default; detached setup is an explicit alternative that must be joined with `wait` before cleanup.
+
 ### Recovery from a failed setup
 
 If setup fails (check the setup log), do **not** delete the worktree. From inside it, `setup` is idempotent. Fix the issues and repeat until the log ends with `READY:`:
@@ -40,12 +50,15 @@ If setup fails (check the setup log), do **not** delete the worktree. From insid
 {{COMMANDS:recovery}}
 ```
 
-**Edge case** — if setup errors with `ERR_MODULE_NOT_FOUND: Cannot find package '@alignfirst/workspace'`, the worktree never got `node_modules/` (setup failed before the install). Fall back to the main worktree's wrapper directly:
+When seeding must precede installation, or local dependencies are missing after a failure, stay inside the target worktree and discover the main wrapper through Git:
 
 ```sh
-cd <failed-worktree>
-node <main-worktree>/<path-to>/workspace.mjs setup
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
+main_worktree=$(dirname "$common_dir")
+node "$main_worktree/<path-to>/workspace.mjs" setup
 ```
+
+Replace `<path-to>` with this project's wrapper location and apply its runtime selection. The main wrapper needs usable installed dependencies/build output. This fallback runs the **main worktree's recipe** against the target, rather than the new branch's recipe.
 
 ## Inspecting workspaces
 
@@ -53,6 +66,26 @@ node <main-worktree>/<path-to>/workspace.mjs setup
 {{COMMANDS:inspect}}
 ```
 
+Names in `list` are opaque **registered names**, usually directory basenames and suffixed when another path already owns that name. Paths select exactly; there is no basename-search fallback. A registered name also selects an orphan whose directory is gone. Independent clones have independent registries.
+
+All participating duplicate-basename worktrees need the upgraded package. Consumer Compose wrappers must explicitly select the registered project before relying on this isolation. Ordinary names and default resource names stay compatible; there is no automatic bulk upgrade or teardown.
+
+## Cleaning up without deletion
+
+```sh
+{{COMMANDS:teardown}}
+```
+
+`teardown` stops recorded services, purges configured infrastructure (including volumes where configured), and releases registration and ports. It preserves worktree files, installed dependencies, seeded/runtime files, shared links and Git state, even when dirty. Main-worktree teardown preserves the shared registry directory and other entries. It is not a filesystem reset.
+
+Wait for pending setup before cleanup. Failed or partial setups are eligible; teardown has no force or all mode. After success, repeating it succeeds without purging again. A thrown purge error retains the registered name for retry. Hooks that swallow purge errors remain best-effort; a zero exit does not prove external-resource deletion.
+
+Run `setup` afterward to adopt and finalize the retained worktree again. Former names, collision suffixes and ports are not reserved after removal from the registry.
+
+{{#DEV}}
+Subsequent `{{DEV}} setup` provisions it again.
+
+{{/DEV}}
 ## Removing a workspace
 
 ```sh
@@ -69,13 +102,13 @@ Tears down infrastructure, drops the registry entry, and removes the worktree. T
 {{/DEV}}
 Removal refuses on uncommitted changes. Pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
 
-`remove` and `status` pick a workspace the same way: omit to act on the current worktree, or target another by its **directory** (a path or just the basename). The basename is the workspace name in the registry, so it still reaches an orphan whose directory is already gone.
+`remove`, `teardown` and `status` default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`. Removal adds Git worktree deletion to cleanup; teardown leaves deletion to you or your external tool.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 
 ### Healing orphaned workspaces
 
-A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server). For the rest:
+A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server and no failed state). Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
 
 ```sh
 {{COMMANDS:prune}}
@@ -98,7 +131,7 @@ A workspace's ports are allocated at its first dev start, stay fixed, and are li
 
 **Concurrent cap.** `dev` / `dev up` cap simultaneously running dev-servers. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
 
-**Two-tier shutdown.** `down` (and a foreground CTRL+C) only kill dev-server processes. They leave infrastructure (Docker containers, databases) running so restarts stay fast. Full infrastructure cleanup happens via `workspace remove` when tearing the worktree down entirely.
+**Two-tier shutdown.** `down` (and a foreground CTRL+C) stops dev processes and configured callbacks, which may stop containers. Destructive infrastructure purge belongs to `workspace teardown`, `remove` and `prune`.
 
 ### Driving the dev server in another worktree
 

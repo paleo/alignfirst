@@ -1,11 +1,18 @@
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { writeDevServers } from "../src/dev-servers-registry.js";
 import { type DevSetupInput, runDevSetup } from "../src/dev-setup.js";
-import { readWorkspaces, registryDirFor } from "../src/workspaces.js";
+import {
+  findWorkspaceByPath,
+  readWorkspaces,
+  registerWorkspace,
+  registryDirFor,
+  updateWorkspaces,
+} from "../src/workspaces.js";
 
 let root: string;
 let input: DevSetupInput;
@@ -173,9 +180,74 @@ describe("run-file write batches", () => {
   });
 });
 
+describe("registered main identity", () => {
+  it("shares allocation with registration and preserves a suffix, ports and setup state", async () => {
+    const { mainWorktree } = input.worktree;
+    await registerWorkspace({
+      currentWorktree: "/external/main",
+      mainWorktree,
+      registryDir: input.registryDir,
+      isMainWorktree: false,
+    });
+    const provisioned: string[] = [];
+    input.setup = (ctx) => {
+      provisioned.push(ctx.name);
+    };
+    input.runFiles = [
+      { path: "name.env", source: { kind: "content", content: (ctx) => ctx.name } },
+    ];
+    const first = await runDevSetup(input);
+    expect(first.workspace.name).toMatch(/^main-[a-f0-9]{8}$/);
+    expect(currentEntry().neverFinalized).toBe(true);
+    await updateWorkspaces(mainWorktree, input.registryDir, (registry) => {
+      delete registry.workspaces.main;
+      registry.workspaces[first.workspace.name].ports = { web: 8200 };
+    });
+    const moved = join(root, "elsewhere", "main");
+    mkdirSync(join(root, "elsewhere"));
+    renameSync(mainWorktree, moved);
+    input.worktree = { currentWorktree: moved, mainWorktree: moved, isMainWorktree: true };
+    const second = await runDevSetup(input);
+    expect(second.workspace.name).toBe(first.workspace.name);
+    expect(second.ports).toEqual({ web: 8200 });
+    expect(provisioned).toEqual([first.workspace.name]);
+    expect(fileContent("name.env")).toBe(first.workspace.name);
+    const registered = await registerWorkspace({
+      ...input.worktree,
+      registryDir: input.registryDir,
+    });
+    expect(registered).toEqual({ name: first.workspace.name, status: "pending" });
+    expect(currentEntry().neverFinalized).toBeUndefined();
+  });
+
+  it("checks the detected root for reset-ports even when invoked from a nested directory", async () => {
+    await runDevSetup(input);
+    const { mainWorktree } = input.worktree;
+    mkdirSync(join(mainWorktree, "nested"));
+    vi.mocked(process.cwd).mockReturnValue(join(mainWorktree, "nested"));
+    writeDevServers(mainWorktree, input.registryDir, {
+      servers: [
+        {
+          name: "main",
+          worktree: mainWorktree,
+          pids: { web: process.pid },
+          startedAt: new Date().toISOString(),
+        },
+      ],
+    });
+    input.options.resetPorts = true;
+    await expect(runDevSetup(input)).rejects.toThrow("dev-server of this worktree is running");
+  });
+});
+
 function currentEntry() {
-  const { mainWorktree } = input.worktree;
-  return readWorkspaces(mainWorktree, input.registryDir).workspaces[basename(mainWorktree)];
+  const { mainWorktree, currentWorktree } = input.worktree;
+  const found = findWorkspaceByPath(
+    readWorkspaces(mainWorktree, input.registryDir),
+    currentWorktree,
+  );
+  if (!found) throw new Error("No current entry");
+  return found.entry;
 }
 
 function fileContent(path: string): string {

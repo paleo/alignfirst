@@ -1,5 +1,5 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { resolve } from "node:path";
 
 import { StartupError } from "./errors.js";
 import { lastLines } from "./helpers.js";
@@ -39,7 +39,7 @@ export interface StartupFailureOptions {
 export function handleStartupFailure(err: StartupError, options: StartupFailureOptions = {}): void {
   console.error(`\nError: ${err.label} ${err.reason}.`);
   if (!err.logFile || !existsSync(err.logFile)) return;
-  const fullLog = join(process.cwd(), err.logFile);
+  const fullLog = resolve(err.logFile);
   if (options.includeTail ?? true) {
     console.error(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
     console.error(lastLines(readFileSync(err.logFile, "utf-8"), LOG_TAIL_LINES));

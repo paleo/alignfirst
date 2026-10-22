@@ -4,8 +4,7 @@ import { basename, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readDevServers } from "../src/dev-servers-registry.js";
-import { WorkspaceError } from "../src/errors.js";
+import { findOwnEntry, readDevServers } from "../src/dev-servers-registry.js";
 import {
   convertSlotsRegistry,
   type OldSlotEntry,
@@ -70,6 +69,23 @@ describe("convertSlotsRegistry", () => {
     expect(entry.ports).toBeUndefined();
   });
 
+  it("allocates main first when a linked directory shares its basename", () => {
+    const name = basename(mainWorktree);
+    const registry = convert({
+      "8110": oldEntry(`/external/${name}`),
+      "8120": oldEntry(mainWorktree, { main: true }),
+    });
+    expect(registry.workspaces[name].main).toBe(true);
+    expect(Object.keys(registry.workspaces)).toEqual([
+      name,
+      expect.stringMatching(new RegExp(`^${name}-[a-f0-9]{8}$`)),
+    ]);
+    expect(Object.values(registry.workspaces).map((entry) => entry.worktree)).toEqual([
+      mainWorktree,
+      `/external/${name}`,
+    ]);
+  });
+
   it("treats an unflagged entry pointing at the main worktree as main", () => {
     const registry = convert({ "8100": oldEntry(mainWorktree) });
     expect(registry.workspaces[basename(mainWorktree)].main).toBe(true);
@@ -84,13 +100,31 @@ describe("convertSlotsRegistry", () => {
     expect(registry.workspaces["wt-a"].createdAt).toBe("2026-06-01T00:00:00.000Z");
   });
 
-  it("throws when two distinct worktrees share a directory name", () => {
-    expect(() =>
-      convert({
-        "8110": oldEntry("/repo/wt-a"),
-        "8120": oldEntry("/elsewhere/wt-a"),
+  it("keeps distinct worktrees sharing a directory name", () => {
+    const registry = convert({
+      "8110": oldEntry("/repo/wt-a"),
+      "8120": oldEntry("/elsewhere/wt-a"),
+    });
+    expect(Object.keys(registry.workspaces)).toEqual([
+      "wt-a",
+      expect.stringMatching(/^wt-a-[a-f0-9]{8}$/),
+    ]);
+    expect(Object.values(registry.workspaces).map((entry) => entry.worktree)).toEqual([
+      "/repo/wt-a",
+      "/elsewhere/wt-a",
+    ]);
+  });
+
+  it("normalizes relative paths against main and deduplicates them", () => {
+    const registry = convert({
+      "8110": oldEntry("../linked/wt"),
+      "8120": oldEntry(join(mainWorktree, "..", "linked", "wt"), {
+        createdAt: "2026-08-01T00:00:00.000Z",
       }),
-    ).toThrow(WorkspaceError);
+    });
+    expect(Object.keys(registry.workspaces)).toEqual(["wt"]);
+    expect(registry.workspaces.wt.worktree).toBe(join(mainWorktree, "..", "linked", "wt"));
+    expect(registry.workspaces.wt.createdAt).toBe("2026-08-01T00:00:00.000Z");
   });
 });
 
@@ -176,6 +210,121 @@ describe("runMigrate", () => {
         startedAt: "2026-05-10T00:00:00.000Z",
       },
     ]);
+  });
+
+  it.each([
+    { target: "main", worktree: ".", main: true },
+    { target: "linked", worktree: "../linked/wt", main: false },
+    { target: "dev-only", worktree: "../dev-only/wt", main: false },
+  ])("consolidates same-path $target dev-server records", async ({ target, worktree, main }) => {
+    writeOldRegistry(
+      target === "dev-only"
+        ? {}
+        : {
+            "8110": oldEntry(worktree, { main }),
+            "8120": oldEntry(worktree, { main, createdAt: "2026-06-01T00:00:00.000Z" }),
+          },
+    );
+    const path = join(mainWorktree, worktree);
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-servers.json"),
+      JSON.stringify({
+        servers: [
+          { slot: 8110, worktree, pids: { web: 101 }, startedAt: "2026-06-01T00:00:00.000Z" },
+          { slot: 8120, worktree: path, pids: { api: 102 }, startedAt: "2026-05-10T00:00:00.000Z" },
+        ],
+      }),
+    );
+    const output = await migrate();
+    const { servers } = readDevServers(mainWorktree, registryDir);
+    expect(servers).toEqual([
+      {
+        name: basename(path),
+        worktree: path,
+        pids: { web: 101, api: 102 },
+        startedAt: "2026-05-10T00:00:00.000Z",
+        ...(main ? { main: true } : {}),
+      },
+    ]);
+    expect(findOwnEntry(mainWorktree, registryDir, path)).toEqual(servers[0]);
+    expect(output).toContain("Translated 1 dev-server entry");
+  });
+
+  it("preserves every distinct PID when labels and generated labels collide", async () => {
+    writeOldRegistry({ "8110": oldEntry("/repo/wt-a") });
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-servers.json"),
+      JSON.stringify({
+        servers: [
+          { pids: { web: 101, "web-2": 102 } },
+          { pids: { web: 103, "web-2": 104, alias: 101 } },
+          { pids: { web: 105, duplicate: 103 } },
+        ].map((entry) => ({
+          ...entry,
+          worktree: "/repo/wt-a",
+          startedAt: "2026-05-10T00:00:00.000Z",
+        })),
+      }),
+    );
+    await migrate();
+    const { servers } = readDevServers(mainWorktree, registryDir);
+    expect(servers).toHaveLength(1);
+    const own = findOwnEntry(mainWorktree, registryDir, "/repo/wt-a");
+    expect(own?.pids.web).toBe(101);
+    expect(own?.pids["web-2"]).toBe(102);
+    expect(Object.values(own?.pids ?? {}).sort((a, b) => a - b)).toEqual([101, 102, 103, 104, 105]);
+  });
+
+  it("translates collisions, stale main paths/slots and dev-only reservations without losing PIDs", async () => {
+    writeOldRegistry({
+      "8100": oldEntry("/old/main", { main: true }),
+      "8101": oldEntry("/older/main", { main: true }),
+      "8110": oldEntry("/first/wt"),
+      "8120": oldEntry("/second/wt"),
+    });
+    const paths = [
+      "/old/main",
+      "/missing/main",
+      "/first/wt",
+      "/second/wt",
+      "/dev-only/wt",
+      "/another/wt",
+      "/custom/other",
+    ];
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-servers.json"),
+      JSON.stringify({
+        servers: paths.map((worktree, index) => ({
+          slot: index === 1 ? 8101 : undefined,
+          name: index === 6 ? "custom-name" : "wt",
+          worktree,
+          pids: { web: process.pid + index },
+          startedAt: "2026-05-10T00:00:00.000Z",
+        })),
+      }),
+    );
+    const output = await migrate(true);
+    const { servers } = readDevServers(mainWorktree, registryDir);
+    const registry = readWorkspaces(mainWorktree, registryDir);
+    expect(servers[0].name).toBe(basename(mainWorktree));
+    expect(servers[0].worktree).toBe(mainWorktree);
+    expect(servers[0].main).toBe(true);
+    expect(Object.values(servers[0].pids)).toEqual([process.pid, process.pid + 1]);
+    expect(findOwnEntry(mainWorktree, registryDir, mainWorktree)).toEqual(servers[0]);
+    expect(servers[1].name).toBe("wt");
+    expect(registry.workspaces[servers[2].name].worktree).toBe("/second/wt");
+    expect(new Set(servers.map((entry) => entry.name)).size).toBe(6);
+    expect(new Set(servers.map((entry) => entry.worktree)).size).toBe(6);
+    expect(servers[5].name).toBe("custom-name");
+    expect(Object.keys(registry.workspaces)).toHaveLength(3);
+    servers.slice(1).forEach((entry, index) => {
+      expect(entry.pids).toEqual({ web: process.pid + index + 2 });
+    });
+    for (const entry of servers) {
+      expect(entry.startedAt).toBe("2026-05-10T00:00:00.000Z");
+    }
+    expect(output).toContain("Translated 6 dev-server");
+    expect(output).toContain("no longer be derived");
   });
 
   it("warns about slot-named infrastructure only when purgeInfrastructure is declared", async () => {

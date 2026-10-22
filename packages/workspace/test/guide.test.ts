@@ -82,7 +82,41 @@ describe("renderGuide", () => {
     expect(guide).not.toContain("**Concurrent cap.**");
     expect(guide).not.toContain("npm run dev");
     expect(guide).not.toContain("--full");
-    expect(guide).toContain("`setup` creates the worktree (branch, symlinks, config files)");
+    expect(guide).toContain("Without one, it adopts the current Git worktree");
+  });
+
+  it.each([NPM, PNPM])("renders external hooks and teardown in both modes: %j", (pm) => {
+    for (const layout of [LAYOUT, SETUP_ONLY]) {
+      const guide = renderGuide(pm, layout);
+      const install = pm === NPM ? "npm install" : "pnpm i";
+      expect(guide).toContain(`${install} && ${pm.workspace.withArgs} setup`);
+      expect(guide).toContain(`${pm.workspace.withArgs} teardown <registered-name>`);
+      expect(guide).toContain(`${pm.workspace.withArgs} teardown ../my-worktree`);
+      expect(guide).toContain("Paths select exactly; there is no basename-search fallback");
+      expect(guide).toContain("names, collision suffixes and ports are not reserved");
+      expect(guide).toContain('node "$main_worktree/<path-to>/workspace.mjs" setup');
+      expect(guide).toContain("Main-worktree teardown preserves the shared registry");
+      expect(guide).not.toContain("{{");
+      expect(guide).not.toMatch(/\n\n\n/);
+      if (layout.hasDevServer) {
+        expect(guide).toContain(`${install} && ${pm.workspace.withArgs} setup --full`);
+        expect(guide).toContain("stops dev processes and configured callbacks");
+      } else {
+        expect(guide).not.toContain("--full");
+        expect(guide).not.toContain(pm.dev.base);
+      }
+    }
+  });
+
+  it.each(["yarn run", "bun run"])("renders %s install hooks", (prefix) => {
+    const pm = {
+      workspace: { base: `${prefix} workspace`, withArgs: `${prefix} workspace` },
+      dev: { base: `${prefix} dev`, withArgs: `${prefix} dev` },
+    };
+    const manager = prefix.split(" ")[0];
+    expect(renderGuide(pm, SETUP_ONLY)).toContain(
+      `${manager} install && ${prefix} workspace setup`,
+    );
   });
 
   it("says nothing of setup profiles", () => {

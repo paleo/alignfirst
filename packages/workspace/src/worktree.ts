@@ -16,14 +16,16 @@ export interface RunCtx {
   verbose: boolean;
 }
 
-export function detectWorktree(): WorktreeContext {
+export function detectWorktree(cwd: string = process.cwd()): WorktreeContext {
   const currentWorktree = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd,
     encoding: "utf-8",
+    stdio: "pipe",
   }).trim();
   const gitCommonDir = execFileSync(
     "git",
     ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    { encoding: "utf-8" },
+    { cwd, encoding: "utf-8", stdio: "pipe" },
   ).trim();
   const mainWorktree = dirname(gitCommonDir);
   const isMainWorktree = resolve(currentWorktree) === resolve(mainWorktree);

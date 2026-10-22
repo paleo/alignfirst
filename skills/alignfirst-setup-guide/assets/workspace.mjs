@@ -20,7 +20,7 @@ await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
 
   // ADAPT (optional): absolute path to your dev-server script. On `workspace
-  // remove`, the kernel shells out to `node <devServerScript> down` with cwd set
+  // teardown` or `remove`, the kernel runs `node <devServerScript> down` with cwd set
   // to the target worktree; `setup --full` runs its `setup`. Drop this field —
   // and `dev-server.mjs` itself — in a setup-only project.
   devServerScript: fileURLToPath(new URL("./dev-server.mjs", import.meta.url)),
@@ -56,8 +56,8 @@ await runWorkspace({
     },
   ],
 
-  // ADAPT: Detached finalization step. Runs in the background after the
-  // worktree is created and the foreground command has returned. Infrastructure
+  // ADAPT: Finalization runs in a detached child after creation or adoption.
+  // Ordinary setup waits for it; only `--detached` returns early. Infrastructure
   // (database, seed) belongs in `setup` (dev-server.mjs).
   //
   // MUST BE IDEMPOTENT — `workspace setup` is the documented retry
@@ -71,7 +71,7 @@ await runWorkspace({
   },
 
   // ADAPT: destructive infrastructure teardown — typically `docker compose
-  // down -v` to wipe volumes. Runs on `workspace remove`, `workspace prune`,
+  // down -v` to wipe volumes. Runs on `workspace teardown`, `remove`, `prune`,
   // and orphan removal, whether or not `dev setup` ever succeeded. Drop on a
   // stack without infrastructure.
   //
@@ -82,7 +82,10 @@ await runWorkspace({
   purgeInfrastructure: ({ name, mainWorktree }) => {
     try {
       const project = helpers.composeProjectName(name);
-      execFileSync("docker", ["compose", "-p", project, "down", "-v"], { stdio: "pipe" });
+      execFileSync("docker", ["compose", "-p", project, "down", "-v"], {
+        stdio: "pipe",
+        cwd: mainWorktree,
+      });
     } catch {
       // infra may already be gone
     }

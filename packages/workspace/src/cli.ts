@@ -16,6 +16,7 @@ export type WorkspaceCommand =
       full: boolean;
     }
   | { kind: "remove"; selector: WorkspaceSelector; force: boolean }
+  | { kind: "teardown"; selector: WorkspaceSelector }
   | { kind: "list" }
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
@@ -28,7 +29,7 @@ export type WorkspaceCommand =
 
 /** Picks an existing workspace. Empty = the current worktree. */
 export interface WorkspaceSelector {
-  /** Path to the target worktree, or just its directory basename. */
+  /** Path to the target worktree, or its registered workspace name. */
   dir?: string;
 }
 
@@ -63,6 +64,8 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseSetup(tokens);
     case "remove":
       return parseRemove(tokens);
+    case "teardown":
+      return parseTeardown(tokens);
     case "list":
       return parseList(tokens);
     case "prune":
@@ -145,6 +148,20 @@ function parseRemove(tokens: string[]): ParsedWorkspaceArgs {
       selector: { dir },
       force: values.force ?? false,
     },
+    verbose: values.verbose ?? false,
+  };
+}
+
+function parseTeardown(tokens: string[]): ParsedWorkspaceArgs {
+  const { values, positionals } = parseArgs({
+    args: tokens,
+    options: { verbose: { type: "boolean" } },
+    allowPositionals: true,
+    strict: true,
+  });
+  const dir = takeOptionalPositional(positionals, "teardown");
+  return {
+    command: { kind: "teardown", selector: { dir } },
     verbose: values.verbose ?? false,
   };
 }
@@ -264,8 +281,12 @@ export function renderWorkspaceHelp(): string {
     "      --full: also run the dev setup (ports, run files, infrastructure); a dev failure leaves",
     "      the workspace ready.",
     "  remove [<dir>] [--force]",
-    "      Remove a workspace, selected by directory (path or basename);",
+    "      Remove a workspace, selected by path or registered name;",
     "      the current worktree when omitted. Refuses on uncommitted changes unless --force.",
+    "  teardown [<dir>] [--verbose]",
+    "      Purge configured infrastructure and drop the target's records and ports.",
+    "      Keep worktree files and Git registration. Select by path or registered name;",
+    "      the current worktree when omitted. Supports main and linked worktrees.",
     "  list",
     "      List all registered workspaces (name, status, branch, path, created).",
     "  prune",
@@ -273,7 +294,7 @@ export function renderWorkspaceHelp(): string {
     "      and drop their registry entries, then run `git worktree prune`.",
     "  status [<dir>]",
     "      Print a workspace summary (branch, readiness, allocated ports, dev-server).",
-    "      Selected by directory (path or basename); the current worktree when omitted.",
+    "      Selected by path or registered name; the current worktree when omitted.",
     "  wait [<dir>]",
     "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
     "  migrate-registry-0.30",

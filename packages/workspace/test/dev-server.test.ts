@@ -1,7 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toCallbackStartupError, watchForExternalStop } from "../src/dev-server.js";
 import { StartupError } from "../src/errors.js";
+import { handleStartupFailure } from "../src/log-polling.js";
 
 describe("watchForExternalStop", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -37,6 +42,25 @@ describe("watchForExternalStop", () => {
     vi.advanceTimersByTime(1000);
     expect(onStopped).not.toHaveBeenCalled();
     expect(timer).toBeUndefined();
+  });
+});
+
+describe("startup failure log location", () => {
+  it("keeps a root-resolved absolute log path in both background and foreground reports", () => {
+    const root = mkdtempSync(join(tmpdir(), "dev-log-test-"));
+    const log = join(root, "ready.log");
+    writeFileSync(log, "startup failed\n");
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const includeTail of [true, false]) {
+        report.mockClear();
+        handleStartupFailure(new StartupError("ready", "failed", log), { includeTail });
+        expect(report.mock.calls.flat().join("\n")).toContain(`Full log: ${log}`);
+      }
+    } finally {
+      report.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

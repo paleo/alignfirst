@@ -21,10 +21,12 @@ export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
  * `E2E_HOST` input (default `localhost`). Its `setup`
  * hook appends one line per run to `setup-runs.log`, and throws with `E2E_DEV_SETUP_FAIL=1`, with a
  * message that ends with a period. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording
- * anything.
+ * anything. `E2E_CALLBACK_LIFECYCLE=1` enables logging callbacks and a ready-marker spawn server;
+ * `E2E_READY_BARRIER` and `E2E_DEV_SETUP_BARRIER` hold readiness and setup respectively.
  */
-const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+const DEV_SERVER_MJS_SOURCE = `import { execFileSync } from "node:child_process";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { helpers, runDevServer } from "${distIndexUrl}";
 
@@ -58,12 +60,80 @@ await runDevServer({
     },
   ],
   runFilesInputs: () => ({ E2E_HOST: process.env.E2E_HOST }),
-  setup: (ctx) => {
+  setup: async (ctx) => {
+    if (process.env.E2E_DEV_SETUP_BARRIER !== undefined) {
+      const barrier = process.env.E2E_DEV_SETUP_BARRIER;
+      writeFileSync(barrier + ".entered", String(process.pid));
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(barrier)) {
+        if (Date.now() > deadline) throw new Error("e2e dev setup barrier timed out");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
     if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
     appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
   },
-  servers: [],
+  maxConcurrentDevServers: process.env.E2E_DEV_CAP === undefined
+    ? undefined : Number(process.env.E2E_DEV_CAP),
+  servers: process.env.E2E_CALLBACK_LIFECYCLE === "1" ? [
+    ...["docker", "cache"].map((label) => ({
+      kind: "callback",
+      name: label,
+      start: async (ctx) => {
+        recordCallback("start", ctx, label);
+        if (process.env.E2E_CALLBACK_START_FAIL === label) throw new Error("e2e callback start boom");
+      },
+      stop: async (ctx) => recordCallback("stop", ctx, label),
+    })),
+    {
+      kind: "callback",
+      name: "legacy",
+      start: async ({ cwd, ports }) => recordCallback("legacyStart", { cwd, ports }),
+      stop: async ({ cwd, ports }) => recordCallback("legacyStop", { cwd, ports }),
+    },
+    {
+      kind: "spawn",
+      name: "ready",
+      exec: { command: process.execPath, args: ["scripts/ready-server.mjs"] },
+      detectReady: (log) => log.includes("FIXTURE_READY"),
+    },
+  ] : process.env.E2E_CALLBACK_RECORD === "1" ? [{
+    kind: "callback",
+    name: "fixture",
+    start: (ctx) => recordCallback("start", ctx),
+    stop: (ctx) => recordCallback("stop", ctx),
+  }] : [],
 });
+
+function recordCallback(event, ctx, label) {
+  const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: ctx.cwd, encoding: "utf-8",
+  }).trim();
+  appendFileSync(join(dirname(common), "callback-runs.jsonl"), JSON.stringify({ event, ...ctx, ...(label === undefined ? {} : { label }) }) + "\\n");
+  if (event === "stop" && process.env.E2E_CALLBACK_STOP_FAIL === "1") {
+    throw new Error("e2e callback stop boom");
+  }
+}
+`;
+
+// Opt-in lifecycle server: records its actual cwd and waits on a controllable readiness barrier.
+const READY_SERVER_MJS_SOURCE = `import { execFileSync } from "node:child_process";
+import { appendFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+  encoding: "utf-8",
+}).trim();
+appendFileSync(join(dirname(common), "spawn-runs.jsonl"), JSON.stringify({
+  pid: process.pid, cwd: process.cwd(),
+}) + "\\n");
+const deadline = Date.now() + 30_000;
+while (process.env.E2E_READY_BARRIER !== undefined && !existsSync(process.env.E2E_READY_BARRIER)) {
+  if (Date.now() > deadline) throw new Error("e2e readiness barrier timed out");
+  await new Promise((resolve) => setTimeout(resolve, 25));
+}
+console.log("FIXTURE_READY");
+setInterval(() => {}, 1000);
 `;
 
 export interface FixtureRepo {
@@ -84,6 +154,8 @@ export interface FixtureOptions {
   fallbackSeeding?: boolean;
   /** Declares the `ports` key that 0.37.0 removed from the workspace config. */
   oldConfig?: boolean;
+  /** Shared directories for external-worktree link coverage. */
+  sharedDirs?: string[];
 }
 
 export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
@@ -95,7 +167,7 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
   mkdirSync(join(repo, "scripts"), { recursive: true });
   writeFileSync(
     join(repo, "scripts", "workspace.mjs"),
-    workspaceMjsSource(portless, fallbackSeeding, oldConfig),
+    workspaceMjsSource(portless, fallbackSeeding, oldConfig, options.sharedDirs ?? []),
   );
   if (fallbackSeeding) {
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
@@ -104,7 +176,10 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
     join(repo, ".gitignore"),
     "workspace.local\nports.env\nports.txt\nsetup-runs.log\n",
   );
-  if (!portless) writeFileSync(join(repo, "scripts", "dev-server.mjs"), DEV_SERVER_MJS_SOURCE);
+  if (!portless) {
+    writeFileSync(join(repo, "scripts", "dev-server.mjs"), DEV_SERVER_MJS_SOURCE);
+    writeFileSync(join(repo, "scripts", "ready-server.mjs"), READY_SERVER_MJS_SOURCE);
+  }
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.email", "e2e@example.com"]);
   git(repo, ["config", "user.name", "E2E"]);
@@ -117,6 +192,7 @@ function workspaceMjsSource(
   portless: boolean,
   fallbackSeeding: boolean,
   oldConfig: boolean,
+  sharedDirs: string[],
 ): string {
   const devSetup = portless
     ? ""
@@ -141,7 +217,7 @@ function workspaceMjsSource(
       : []),
   ]`
     : "[]";
-  return `import { writeFileSync } from "node:fs";
+  return `import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -149,14 +225,36 @@ import { runWorkspace } from "${distIndexUrl}";
 
 await runWorkspace({
   workspaceScript: fileURLToPath(import.meta.url),
-${devSetup}${oldPorts}  sharedDirs: [],
+${devSetup}${oldPorts}  sharedDirs: ${JSON.stringify(sharedDirs)},
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
   formatSummary: () => "Workspace ready.",
-  finalizeWorkspace: (ctx) => {
+  purgeInfrastructure: (ctx) => {
+    appendFileSync(join(ctx.mainWorktree, "purge-runs.jsonl"), JSON.stringify(ctx) + "\\n");
+    if (process.env.E2E_PURGE_FAIL === "1") throw new Error("e2e purge boom");
+    if (process.env.E2E_PURGE_RECREATE_WORKTREE === "1") mkdirSync(ctx.worktree, { recursive: true });
+  },
+  finalizeWorkspace: async (ctx) => {
+    if (process.env.E2E_FINALIZE_PID_LOG === "1") {
+      appendFileSync(join(ctx.mainWorktree, "finalize-pids.jsonl"), JSON.stringify(process.pid) + "\\n");
+    }
+    if (process.env.E2E_FINALIZE_BARRIER !== undefined) {
+      const barrier = process.env.E2E_FINALIZE_BARRIER;
+      writeFileSync(barrier + ".entered", String(process.pid));
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(barrier)) {
+        if (Date.now() > deadline) throw new Error("e2e finalize barrier timed out");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, Number(process.env.E2E_FINALIZE_DELAY_MS ?? 0)));
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");
     writeFileSync(join(ctx.currentWorktree, "finalized.txt"), "finalized\\n");
+    writeFileSync(join(ctx.currentWorktree, "finalize-context.json"), JSON.stringify({
+      name: ctx.name, currentWorktree: ctx.currentWorktree, mainWorktree: ctx.mainWorktree,
+      isMainWorktree: ctx.isMainWorktree, branch: ctx.branch,
+    }));
   },
 });
 `;
@@ -167,9 +265,10 @@ export function runCli(
   repo: string,
   args: string[],
   env?: Record<string, string>,
+  cwd: string = repo,
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [join("scripts", "workspace.mjs"), ...args], {
-    cwd: repo,
+  return spawnSync(process.execPath, [join(repo, "scripts", "workspace.mjs"), ...args], {
+    cwd,
     encoding: "utf-8",
     env: { ...process.env, ...env },
     stdio: "pipe",
@@ -182,9 +281,10 @@ export function runDev(
   worktree: string,
   args: string[],
   env?: Record<string, string>,
+  cwd: string = worktree,
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [join("scripts", "dev-server.mjs"), ...args], {
-    cwd: worktree,
+  return spawnSync(process.execPath, [join(worktree, "scripts", "dev-server.mjs"), ...args], {
+    cwd,
     encoding: "utf-8",
     env: { ...process.env, ...env },
     stdio: "pipe",
