@@ -23,8 +23,9 @@ export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
  * message that ends with a period. With `E2E_DEV_EXIT=1`, it exits with code 3 before recording
  * anything.
  */
-const DEV_SERVER_MJS_SOURCE = `import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+const DEV_SERVER_MJS_SOURCE = `import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { helpers, runDevServer } from "${distIndexUrl}";
 
@@ -62,8 +63,23 @@ await runDevServer({
     if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
     appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
   },
-  servers: [],
+  servers: process.env.E2E_CALLBACK_RECORD === "1" ? [{
+    kind: "callback",
+    name: "fixture",
+    start: (ctx) => recordCallback("start", ctx),
+    stop: (ctx) => recordCallback("stop", ctx),
+  }] : [],
 });
+
+function recordCallback(event, ctx) {
+  const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: ctx.cwd, encoding: "utf-8",
+  }).trim();
+  appendFileSync(join(dirname(common), "callback-runs.jsonl"), JSON.stringify({ event, ...ctx }) + "\\n");
+  if (event === "stop" && process.env.E2E_CALLBACK_STOP_FAIL === "1") {
+    throw new Error("e2e callback stop boom");
+  }
+}
 `;
 
 export interface FixtureRepo {
@@ -144,7 +160,7 @@ function workspaceMjsSource(
       : []),
   ]`
     : "[]";
-  return `import { writeFileSync } from "node:fs";
+  return `import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -156,7 +172,21 @@ ${devSetup}${oldPorts}  sharedDirs: ${JSON.stringify(sharedDirs)},
   gitignoredFiles: ${gitignoredFiles},
   runtimeDir: ".wt",
   formatSummary: () => "Workspace ready.",
+  purgeInfrastructure: (ctx) => {
+    appendFileSync(join(ctx.mainWorktree, "purge-runs.jsonl"), JSON.stringify(ctx) + "\\n");
+    if (process.env.E2E_PURGE_FAIL === "1") throw new Error("e2e purge boom");
+    if (process.env.E2E_PURGE_RECREATE_WORKTREE === "1") mkdirSync(ctx.worktree, { recursive: true });
+  },
   finalizeWorkspace: async (ctx) => {
+    if (process.env.E2E_FINALIZE_BARRIER !== undefined) {
+      const barrier = process.env.E2E_FINALIZE_BARRIER;
+      writeFileSync(barrier + ".entered", String(process.pid));
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(barrier)) {
+        if (Date.now() > deadline) throw new Error("e2e finalize barrier timed out");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, Number(process.env.E2E_FINALIZE_DELAY_MS ?? 0)));
     if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
     ctx.progress("step-one");
