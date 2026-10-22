@@ -104,7 +104,7 @@ Whichever case applies, the `{ask}` never says that this channel session handles
 
 For project creation or repository onboarding, a proposed PROJECT with no PROJECT_PATH is complete enough for handoff. The lifecycle procedure establishes its path.
 
-Before sending the starter, compare it with the original message: the Request block must be complete, including explicit no-ticket choices (such as `sans ticket`), authorizations, prohibitions and stopping points. Keep these instructions even in a short request.
+Before sending the starter, compare it with the original message. You lack the project context to judge which details matter. The Request block must be complete.
 
 Once the starter's delivery is confirmed, call `thread_handoff` with `action: "start"` and the bare THREAD_ID. A tool result `Skipped due to queued user message.` means OpenClaw skipped the call because a new message was steered into this turn; call `start` again for the same thread. On `queued` or `alreadyStarted`, end the turn on exactly `NO_REPLY`: the starter is this turn's reply, and the thread shows under the user's message. Do no project work and send no second starter. On a partial or ambiguous delivery, do not call `start`. If delivery or handoff fails, end the turn on the concise actionable error. Retry against the original confirmed thread; never create a replacement merely because activation failed. Missing plugin/tool access is a deployment failure, not a reason to ask for a mechanical follow-up.
 

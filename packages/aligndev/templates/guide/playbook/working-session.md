@@ -29,7 +29,7 @@ A runbook is a procedure you read fully when its situation arises.
 {{#openclaw}}
 - `{{ALIGNDEV}} guide project-lifecycle` — creating a project, onboarding a repository to clone, physically removing a project.
 {{/openclaw}}
-- `{{ALIGNDEV}} guide consultation` — questions, advice, brainstorming: read-only work that produces understanding rather than code.
+- `{{ALIGNDEV}} guide consultation` — a standalone question, advice, or brainstorming: read-only work that produces understanding.
 
 {{#openclaw}}
 ## Take over a working session
@@ -118,7 +118,8 @@ Resolve what the request leaves open:
 {{#openclaw}}
 - A request may need no project. Do not ask for one until the work itself requires project files.
 {{/openclaw}}
-- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow. Other read-only questions, advice and brainstormings require PROJECT and PROJECT_PATH only. Follow `{{ALIGNDEV}} guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context, not a requirement to create or update ticket artifacts.
+- Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow.
+- Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{ALIGNDEV}} guide consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
 {{#openclaw}}
 - Single-project changes, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 {{/openclaw}}
@@ -203,7 +204,8 @@ You own this reservation and the request capture; the agent receives TICKET_ID. 
 The question on every turn is not a mode but a fact: does this request need a project workspace?
 
 - **The request is a code review or names an AlignFirst protocol** — follow the ticket and workspace flow below.
-- **The request is another read-only question, advice, or a brainstorming** — run `{{ALIGNDEV}} guide consultation`, read it fully, and follow it.
+- **The question arises within ongoing work** — keep that work's workflow, ticket, and workplace.
+- **The request is a consultation** — run `{{ALIGNDEV}} guide consultation`, read it fully, and follow it.
 {{#openclaw}}
 - **The request is a single-project change, protocol request, or ticket status request** — require PROJECT, PROJECT_PATH, and TICKET_ID. A starter with a request block is filed first ("Detailed requests" below). Then run `{{ALIGNDEV}} guide project-workspace-setup`, read it fully, and complete it before any other action, `git log` and codebase inspection included. Your first post is its setup signal (Step 2); the procedure attaches or sets up the workspace, whatever exists, and posts the `[WORKSPACE]` banner.
 {{/openclaw}}
@@ -213,10 +215,10 @@ The question on every turn is not a mode but a fact: does this request need a pr
 - **A required value is missing** — go to Step 7. Resolve or ask for it there. The moment the required values are known, follow the matching path above.
 
 {{#openclaw}}
-Changes to an existing project happen inside a linked workspace unless the user explicitly chose in-place work. Read-only questions use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
+Changes to an existing project happen inside a linked workspace unless the user explicitly chose in-place work. Consultations use the main worktree by default. The lifecycle procedure also uses it for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
 {{/openclaw}}
 {{#codingAgent}}
-Changes happen in the workplace the setup procedure decides. Read-only questions use the session's worktree as it is.
+Changes happen in the workplace the setup procedure decides. Consultations use the session's worktree as it is.
 {{/codingAgent}}
 
 ### Step 7 — Handle the actual request
@@ -248,11 +250,11 @@ Only when the message is unambiguously about chat content ("summarize this threa
 Only when the message is unambiguously about chat content ("summarize this conversation", "what does this mean") should you treat it as a regular conversation.
 {{/codingAgent}}
 
-**Question, advice, or a design opinion.** The substance comes from the agent, which reads the repository. Follow `{{ALIGNDEV}} guide consultation`. No code change unless asked.
+**Question, advice, or a design opinion.** Delegate to the agent in the workflow selected in Step 6. It grounds the answer in the repository. No code change unless asked.
 
-### Read-only questions
+### Consultations
 
-A codebase question, advice, or a brainstorming follows `{{ALIGNDEV}} guide consultation`. Read it fully. It resolves the project, delegates the complete question to the agent, and records the discussion when one is worth keeping.
+The consultation runbook resolves the project, delegates the complete question to the agent, and records discussions worth keeping.
 
 A request for a ticket's progress follows "Status update" instead; it needs that ticket's history and workspace state.
 
@@ -303,7 +305,7 @@ Lean toward delegating; the less you touch the project directly, the better.
 
 Delegate to the agent: project-specific workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. The assistant directly invokes `{{ALIGNDEV}} worktree list/add/remove` for lightweight orchestration and performs the separately authorized work-files preparation. These operations need no coding launch.
 
-Thinking is delegated too. When you need *ideas*, a *design* direction, an *opinion*, or an approach — for the user or for your own next step — put the question to the agent and build on its answer. Never brainstorm alone: the agent grounds its ideas in the codebase; yours would come from memory. `{{ALIGNDEV}} guide consultation` is the procedure.
+Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
 {{#openclaw}}
 Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_PATH only when the procedure explicitly works in the main worktree. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
@@ -312,7 +314,7 @@ Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the linked workspace
 Global tools go in the prompt. Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory. The agent knows only that directory's project context: it can run the globally installed tools your own context lists, but it doesn't know they exist. When a delegated task can use one, name it in the prompt as **globally installed**. A task you would have kept because it needs such a tool is one more thing to delegate.
 {{/codingAgent}}
 
-Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Read-only questions omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Consultation delegations omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 

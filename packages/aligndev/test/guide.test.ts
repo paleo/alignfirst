@@ -460,7 +460,7 @@ describe("aligndev guide playbook", () => {
   });
 
   it.each([false, true])(
-    "preserves the complete starter request, including short no-ticket choices (npx=%s)",
+    "renders the starter's handoff fields and original-request slot (npx=%s)",
     async (viaNpx) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, OPENCLAW_CONFIG);
@@ -469,24 +469,18 @@ describe("aligndev guide playbook", () => {
       });
       expect(result.code, result.stderr).toBe(0);
       const guide = result.stdout;
-      expect(guide).toContain(
-        "the complete original user message, unchanged, even for a short request",
-      );
-      expect(guide).toContain(
-        "Include its opening sentence and every itemized point or constraint",
-      );
-      expect(guide).toContain("Always include the original request block.");
-      expect(guide).toContain("Request:\n{REQUEST}");
-      expect(guide).toContain("do not condense or translate it");
-      expect(guide).toContain(
-        "Before sending the starter, compare it with the original message: the Request block must be complete",
-      );
-      expect(guide).toContain("explicit no-ticket choices (such as `sans ticket`)");
-      expect(guide).toContain("authorizations, prohibitions and stopping points");
-      expect(guide).toContain("Keep these instructions even in a short request.");
-      expect(guide).toContain("explicitly says there is no ticket or asks for a side ticket");
-      expect(guide).not.toContain("Omit it for a short request");
-      expect(guide).not.toContain("Add the request block only");
+      const starter = guide.match(/```text\n([\s\S]*?)\n```/);
+      expect(starter?.[1]?.split("\n")).toEqual([
+        "Task: {TASK}",
+        "Project: **{PROJECT}**",
+        "Project path: `{PROJECT_PATH}`",
+        "Ticket: `{TICKET_ID}`",
+        "",
+        "Request:",
+        "{REQUEST}",
+        "",
+        "{ask}",
+      ]);
       expect(guide).not.toContain("{{");
     },
   );
@@ -552,6 +546,29 @@ describe("aligndev guide playbook", () => {
 });
 
 describe("work-files and lightweight worktree runbooks", () => {
+  it.each(PLATFORMS)("keeps coding discussions out of consultation for %s", async (platform) => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, {
+      platform,
+      ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
+    });
+    const result = await runGuide(fixture, ["working-session"]);
+    expect(result.code, result.stderr).toBe(0);
+    const guide = result.stdout;
+    expect(guide).toContain("a standalone question, advice, or brainstorming");
+    expect(guide).toContain("The question arises within ongoing work");
+    expect(guide).toContain("keep that work's workflow, ticket, and workplace");
+    expect(guide).toContain(
+      "Code reviews and explicitly requested AlignFirst protocols follow the ticket and workspace flow",
+    );
+    expect(guide).toContain("Consultations require only PROJECT and PROJECT_PATH to start");
+    expect(guide).toContain("Consultation delegations omit the ticket option");
+    expect(guide).toContain("No code change unless asked");
+    expect(guide).not.toContain("Read-only questions omit the ticket option");
+    expect(guide).not.toContain("Read-only questions use the main worktree");
+    expect(guide).toContain("Delegate reasoning too, whether for the user or your own next step");
+  });
+
   it.each(
     PLATFORMS.flatMap((platform) =>
       (["developers", "readme", "noGuide"] as const).flatMap((variant) =>
