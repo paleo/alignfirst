@@ -12,15 +12,16 @@ You talk to an **assistant**, the way you would to a developer on your team. It 
 
 For each task, the assistant:
 
-1. Discusses the task with the agent and has it write a **spec**.
-2. Has it write the **plans**.
-3. Has the plans **executed** in a fresh session.
-4. Has a **code review** done in another session.
-5. Has the review findings **fixed** in yet another session.
-6. For UI changes, **tests manually** and checks the dev-server logs.
+1. Sets up the task's **workspace**.
+2. Refreshes the default branch and **merges** it into the task branch.
+3. Discusses the task with the agent and has it write a **spec**.
+4. Has it write the **plans**.
+5. Has the plans **executed** in a fresh session.
+6. **Tests manually**, takes **screenshots** of UI changes, and checks the dev-server logs.
 7. Has fixes made as needed.
-8. Takes **screenshots** for good measure.
-9. Has the agent **open a draft PR**.
+8. Has a **code review** done in another session.
+9. Has the review findings **fixed** in yet another session.
+10. Has the agent **open a PR**.
 
 A task can also start at any intermediate step.
 
